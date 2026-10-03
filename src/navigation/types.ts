@@ -13,6 +13,8 @@ export type RootStackParamList = {
   Learning: { agentId?: string } | undefined;
   Emergency: undefined;
   OfflineLibrary: undefined;
+  SurvivalManual: undefined;
+  Phrases: undefined;
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };

@@ -157,6 +157,11 @@ export const EmergencyScreen: React.FC = () => {
             );
           })}
         </View>
+        <TouchableOpacity onPress={() => navigation.navigate('SurvivalManual')} style={{ marginTop: 14, padding: 16, borderRadius: 12, borderWidth: 2, borderColor: '#3F6212', flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name="book-open" size={22} color="#3F6212" />
+          <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', marginLeft: 12, flex: 1 }}>Full Survival Manual (water, fire, shelter, food, plants, first aid...)</Text>
+          <Icon name="chevron-right" size={20} color={colors.textMuted} />
+        </TouchableOpacity>
         {shown.length === 0 && <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 12 }}>No card matches. Try a simpler word, or ask the Atlas agent in a chat.</Text>}
       </ScrollView>
     </SafeAreaView>

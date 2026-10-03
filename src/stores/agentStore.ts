@@ -50,6 +50,22 @@ Rules:
     updatedAt: now(),
   },
   {
+    id: 'field-id',
+    name: 'Field Identifier',
+    description: 'Photo questions: plants, mushrooms, snakes, insects, rashes, wounds (needs a vision model)',
+    systemPrompt: `You help identify things from photos: plants, mushrooms, berries, insects, spiders, snakes, animal tracks, rashes, bites, wounds and objects.
+Rules:
+1. First describe what you actually see (shape, color, size clues, leaves, markings).
+2. Give the 1-3 most likely possibilities and say how sure you are (low / medium / high). Photos are often not enough.
+3. NEVER say a wild plant, berry or mushroom is safe to eat from a photo. Say which features to check and that, if not certain, it should not be eaten. Many deadly mushrooms look like edible ones.
+4. For snakes, spiders and insects: say whether it could be dangerous and what to do if bitten or stung.
+5. For skin, rashes, bites and wounds: list the danger signs that need urgent care. This is a hint, not a diagnosis.
+6. Keep it short. Put any danger warning first.`,
+    temperature: 0.3,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
     id: 'assistant',
     name: 'Assistant',
     description: 'General helpful assistant',
@@ -63,6 +79,8 @@ interface AgentState {
   agents: Agent[];
   /** null = no agent: the project's prompt or the default prompt is used. */
   activeAgentId: string | null;
+  /** Built-in agent ids already offered (so deleted ones do not come back). */
+  seenDefaults?: string[];
   createAgent: (a: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>> & Pick<Agent, 'name' | 'description' | 'systemPrompt'>) => Agent;
   updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteAgent: (id: string) => void;
@@ -97,7 +115,18 @@ export const useAgentStore = create<AgentState>()(
       },
       getAgent: (id) => (id ? get().agents.find((x) => x.id === id) : undefined),
     }),
-    { name: 'atlas-agent-storage', storage: createJSONStorage(() => AsyncStorage) },
+    {
+      name: 'atlas-agent-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      // New built-in agents appear in existing installs once; deleting one keeps it deleted.
+      merge: (persisted: any, current: any) => {
+        const p = persisted || {};
+        const agents: Agent[] = Array.isArray(p.agents) ? p.agents : current.agents;
+        const seen: string[] = Array.isArray(p.seenDefaults) ? p.seenDefaults : agents.map((a) => a.id);
+        const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
+        return { ...current, ...p, agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id) };
+      },
+    },
   ),
 );
 
@@ -105,8 +134,9 @@ export const useAgentStore = create<AgentState>()(
 export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: string): string {
   const { activeAgentId, agents } = useAgentStore.getState();
   const agent = agents.find((a) => a.id === activeAgentId);
-  if (!agent || !agent.systemPrompt.trim()) return projectPrompt?.trim() || fallback;
-  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '');
+  const lp = lowPowerNote();
+  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp;
+  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp;
 }
 
 /** An agent's system prompt with its learned lessons underneath. */
@@ -119,11 +149,20 @@ export function agentPromptWithLessons(agent: Agent): string {
 export function activeAgentOverrides(): { temperature?: number; topP?: number; maxTokens?: number; repeatPenalty?: number } {
   const { activeAgentId, agents } = useAgentStore.getState();
   const a = agents.find((x) => x.id === activeAgentId);
-  if (!a) return {};
   const o: any = {};
+  // Low-battery mode caps answer length for every agent.
+  try {
+    const lp = require('../atlasTools/lowPower');
+    if (lp.lowPowerActive()) {
+      const cap = lp.useLowPower.getState().maxTokens;
+      const base = (a && typeof a.maxTokens === 'number') ? a.maxTokens : cap;
+      o.maxTokens = Math.min(base, cap);
+    }
+  } catch { /* ignore */ }
+  if (!a) return o;
   if (typeof a.temperature === 'number') o.temperature = a.temperature;
   if (typeof a.topP === 'number') o.topP = a.topP;
-  if (typeof a.maxTokens === 'number') o.maxTokens = a.maxTokens;
+  if (typeof a.maxTokens === 'number' && o.maxTokens === undefined) o.maxTokens = a.maxTokens;
   if (typeof a.repeatPenalty === 'number') o.repeatPenalty = a.repeatPenalty;
   return o;
 }
@@ -142,4 +181,11 @@ function applyContextLength(ctx: number): void {
     const st = useAppStore.getState();
     if (st.settings?.contextLength !== ctx) st.updateSettings({ contextLength: ctx });
   } catch { /* ignore */ }
+}
+
+function lowPowerNote(): string {
+  try {
+    const lp = require('../atlasTools/lowPower');
+    return lp.lowPowerActive() ? `\n\n${lp.LOW_POWER_NOTE}` : '';
+  } catch { return ''; }
 }

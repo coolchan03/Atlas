@@ -26,6 +26,9 @@ function ensureListeners(): void {
       s.markDone(); // hands-free mode listens for this to open the mic again
     }
   });
+  emitter.addListener('AtlasTtsNoLanguage', (e: { utteranceId: string }) => {
+    noLangHandler?.(e.utteranceId);
+  });
   emitter.addListener('AtlasTtsStopped', (e: { utteranceId: string }) => {
     const s = useAtlasVoiceStore.getState();
     if (s.speakingKey === e.utteranceId) s.setSpeaking(null);
@@ -62,4 +65,17 @@ export function stop(): void {
 export function keepScreenOn(on: boolean): void {
   if (!ttsAvailable()) return;
   Native.keepScreenOn?.(on).catch(() => undefined);
+}
+
+/** Speak in another language (BCP-47 like 'es-ES'). Calls onNoLanguage if the phone lacks that voice. */
+let noLangHandler: ((lang: string) => void) | null = null;
+export function onMissingLanguage(fn: ((lang: string) => void) | null): void { noLangHandler = fn; }
+export function speakIn(text: string, lang: string, messageId = 'phrase'): void {
+  if (!ttsAvailable() || !text.trim()) return;
+  ensureListeners();
+  const key = `${messageId}~${++counter}`;
+  const s = useAtlasVoiceStore.getState();
+  s.setSpeaking(key, messageId);
+  Native.setRate(Math.min(s.rate, 0.9)).catch(() => undefined);
+  (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => s.setSpeaking(null));
 }

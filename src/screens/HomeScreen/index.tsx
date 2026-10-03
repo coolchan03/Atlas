@@ -146,14 +146,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Text style={styles.title}>Off Grid Atlas</Text>
               {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
-            <TouchableOpacity
-              onPress={() => (navigation as any).navigate('Emergency')}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#DC2626', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 }}
-              accessibilityLabel="Emergency cards"
-            >
-              <Icon name="alert-octagon" size={16} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 6 }}>Emergency</Text>
-            </TouchableOpacity>
+          </View>
+
+          {/* Atlas quick access: works with no model loaded */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+            {[
+              { label: 'Emergency', icon: 'alert-octagon', color: '#DC2626', to: 'Emergency' },
+              { label: 'Survival Manual', icon: 'book-open', color: '#3F6212', to: 'SurvivalManual' },
+              { label: 'Phrases', icon: 'globe', color: '#2563EB', to: 'Phrases' },
+            ].map((b) => (
+              <TouchableOpacity
+                key={b.to}
+                onPress={() => (navigation as any).navigate(b.to)}
+                style={{ flex: 1, backgroundColor: b.color, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center' }}
+                accessibilityLabel={b.label}
+              >
+                <Icon name={b.icon} size={22} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '700', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>{b.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {/* Collapsed Models summary — tap to open the manager sheet. Both the

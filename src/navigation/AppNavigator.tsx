@@ -31,6 +31,8 @@ import {
   LearningScreen,
   EmergencyScreen,
   OfflineLibraryScreen,
+  SurvivalManualScreen,
+  PhrasesScreen,
   ProjectChatsScreen,
   KnowledgeBaseScreen,
   DocumentPreviewScreen,
@@ -252,6 +254,8 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Learning" component={LearningScreen} />
         <RootStack.Screen name="Emergency" component={EmergencyScreen} />
         <RootStack.Screen name="OfflineLibrary" component={OfflineLibraryScreen} />
+        <RootStack.Screen name="SurvivalManual" component={SurvivalManualScreen} />
+        <RootStack.Screen name="Phrases" component={PhrasesScreen} />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />

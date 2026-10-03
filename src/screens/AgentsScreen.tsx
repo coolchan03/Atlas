@@ -25,7 +25,7 @@ export const AgentsScreen: React.FC = () => {
     setInstalling(true);
     try {
       const r = await installAtlasStarter(setStarterMsg);
-      setStarterMsg(`Done: ${r.added} cards added${r.skipped ? `, ${r.skipped} already there` : ''}. Open the "Atlas - Emergency" project to chat with them.`);
+      setStarterMsg(`Done: ${r.added} documents added${r.skipped ? `, ${r.skipped} already there` : ''}. Open the "Atlas - Emergency" project to chat with them.`);
     } catch (e: any) {
       setStarterMsg(`Could not add the cards: ${String(e?.message || e)}`);
     } finally {
@@ -73,7 +73,7 @@ export const AgentsScreen: React.FC = () => {
         <Icon name="download" size={18} color={colors.primary} />
         <View style={styles.cardText}>
           <Text style={styles.name}>{installing ? 'Adding emergency cards...' : 'Add Atlas emergency cards'}</Text>
-          <Text style={styles.desc}>{starterMsg ?? 'Creates the "Atlas - Emergency" project with the built-in cards (bleeding, water, wounds, snakebite...) and turns on the Atlas agent.'}</Text>
+          <Text style={styles.desc}>{starterMsg ?? 'Creates the "Atlas - Emergency" project with the built-in cards and the whole Survival Manual, and turns on the Atlas agent. Takes a minute.'}</Text>
         </View>
       </TouchableOpacity>
       <FlatList data={agents} keyExtractor={(a) => a.id} renderItem={renderItem} contentContainerStyle={[styles.list, wide.column]} />

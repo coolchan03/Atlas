@@ -21,7 +21,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private var tts: TextToSpeech? = null
     private var ready = false
     private var rate = 1.0f
-    private val pending = mutableListOf<Pair<String, String>>()
+    private val pending = mutableListOf<Triple<String, String, String>>()
 
     override fun getName(): String = "AtlasTts"
 
@@ -55,12 +55,12 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     }
                 })
                 synchronized(pending) {
-                    for ((text, id) in pending) doSpeak(text, id)
+                    for ((text, id, lang) in pending) doSpeak(text, id, lang)
                     pending.clear()
                 }
             } else {
                 synchronized(pending) {
-                    for ((_, id) in pending) emit("AtlasTtsDone", id)
+                    for ((_, id, _) in pending) emit("AtlasTtsDone", id)
                     pending.clear()
                 }
             }
@@ -79,9 +79,14 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         return out.filter { it.isNotBlank() }
     }
 
-    private fun doSpeak(text: String, id: String) {
+    private fun doSpeak(text: String, id: String, lang: String = "") {
         val engine = tts ?: return
         engine.setSpeechRate(rate)
+        try {
+            val loc = if (lang.isBlank()) Locale.getDefault() else Locale.forLanguageTag(lang)
+            val r = engine.setLanguage(loc)
+            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) emit("AtlasTtsNoLanguage", lang)
+        } catch (_: Exception) {}
         val max = (TextToSpeech.getMaxSpeechInputLength() - 100).coerceAtLeast(500)
         val parts = chunks(text, max)
         if (parts.isEmpty()) { emit("AtlasTtsDone", id); return }
@@ -94,10 +99,14 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     }
 
     @ReactMethod
-    fun speak(text: String, utteranceId: String, promise: Promise) {
+    fun speak(text: String, utteranceId: String, promise: Promise) = speakIn(text, utteranceId, "", promise)
+
+    /** Speak in a given language (BCP-47 tag like "es-ES"); "" = phone default. */
+    @ReactMethod
+    fun speakIn(text: String, utteranceId: String, lang: String, promise: Promise) {
         try {
             ensure()
-            if (ready) doSpeak(text, utteranceId) else synchronized(pending) { pending.add(Pair(text, utteranceId)) }
+            if (ready) doSpeak(text, utteranceId, lang) else synchronized(pending) { pending.add(Triple(text, utteranceId, lang)) }
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
     }

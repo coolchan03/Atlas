@@ -3,6 +3,7 @@ import { ragService } from '../services/rag';
 import { useProjectStore } from '../stores/projectStore';
 import { useAgentStore } from '../stores/agentStore';
 import { ATLAS_CARDS } from './atlasCards';
+import { SURVIVAL_CHAPTERS } from '../survival/content';
 
 export const ATLAS_PROJECT_NAME = 'Atlas - Emergency';
 
@@ -25,14 +26,20 @@ export async function installAtlasStarter(onProgress?: (msg: string) => void): P
   await RNFS.mkdir(dir);
   let added = 0;
   let skipped = 0;
-  const names = Object.keys(ATLAS_CARDS);
+  // The built-in cards plus every Survival Manual chapter (pictures removed, text kept).
+  const docs: Record<string, string> = { ...ATLAS_CARDS };
+  for (const c of SURVIVAL_CHAPTERS) {
+    if (c.id === 'Credits' || c.id === 'Apps') continue;
+    docs[`SurvivalManual_${c.id}.md`] = `# Survival Manual: ${c.title}\n(Source: Survival Manual, based on US Army FM 21-76)\n\n${c.md.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`;
+  }
+  const names = Object.keys(docs);
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
-    onProgress?.(`Adding card ${i + 1} of ${names.length}: ${name.replace(/_/g, ' ').replace('.md', '')}`);
+    onProgress?.(`Adding ${i + 1} of ${names.length}: ${name.replace(/_/g, ' ').replace('.md', '')}`);
     const path = `${dir}/${name}`;
-    await RNFS.writeFile(path, ATLAS_CARDS[name], 'utf8');
+    await RNFS.writeFile(path, docs[name], 'utf8');
     try {
-      await ragService.indexDocument({ projectId: project.id, filePath: path, fileName: name, fileSize: ATLAS_CARDS[name].length });
+      await ragService.indexDocument({ projectId: project.id, filePath: path, fileName: name, fileSize: docs[name].length });
       added++;
     } catch (e: any) {
       if (/already in the knowledge base/.test(String(e?.message))) skipped++;

@@ -32,9 +32,11 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { registerAtlasVoice } from './src/atlasVoice';
+import { startLowPowerMonitor } from './src/atlasTools/lowPower';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
+startLowPowerMonitor();
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { exportBackup, importBackup } from '../atlasTools/backup';
+import { LowPowerCard } from '../components/LowPowerCard';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
@@ -216,6 +217,9 @@ export const SettingsScreen: React.FC = () => {
             ))}
           </View>
         </AttachStep>
+
+        {/* Atlas: low-battery mode */}
+        <LowPowerCard />
 
         {/* Atlas: backup & restore */}
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>

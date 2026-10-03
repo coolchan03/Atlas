@@ -1,0 +1,120 @@
+/**
+ * Atlas phrase cards. Written by an AI, not checked by native speakers yet:
+ * the meaning should be clear, but wording may be imperfect.
+ * Each entry: [text, romanization (only for non-Latin scripts)].
+ */
+export const PHRASES_EN: string[] = [
+  'Help!',
+  'I need a doctor.',
+  'Call an ambulance.',
+  'Where is the hospital?',
+  'Where is the pharmacy?',
+  'I am allergic to penicillin.',
+  'I have diabetes.',
+  'I take this medicine every day.',
+  'It hurts here.',
+  'I am lost.',
+  'I need water.',
+  'Is this water safe to drink?',
+  'Where is the police station?',
+  "I don't understand.",
+  'Do you speak English?',
+  'Please speak slowly.',
+  'Thank you.',
+  'How much does it cost?',
+  'I need a place to sleep.',
+  'Can I charge my phone here?',
+  'Fire!',
+  'Danger!',
+  'Stop!',
+  'Yes / No',
+];
+
+export type Phrase = [string, string?];
+export interface PhraseLanguage { code: string; name: string; native: string; phrases: Phrase[] }
+
+export const PHRASE_LANGUAGES: PhraseLanguage[] = [
+  { code: 'es-ES', name: 'Spanish', native: 'Español', phrases: [
+    ['¡Ayuda!'], ['Necesito un médico.'], ['Llame a una ambulancia.'], ['¿Dónde está el hospital?'], ['¿Dónde está la farmacia?'],
+    ['Soy alérgico a la penicilina.'], ['Tengo diabetes.'], ['Tomo este medicamento todos los días.'], ['Me duele aquí.'], ['Estoy perdido.'],
+    ['Necesito agua.'], ['¿Esta agua es potable?'], ['¿Dónde está la comisaría de policía?'], ['No entiendo.'], ['¿Habla inglés?'],
+    ['Por favor, hable más despacio.'], ['Gracias.'], ['¿Cuánto cuesta?'], ['Necesito un lugar para dormir.'], ['¿Puedo cargar mi teléfono aquí?'],
+    ['¡Fuego!'], ['¡Peligro!'], ['¡Alto!'], ['Sí / No'],
+  ] },
+  { code: 'fr-FR', name: 'French', native: 'Français', phrases: [
+    ['Au secours !'], ["J'ai besoin d'un médecin."], ['Appelez une ambulance.'], ["Où est l'hôpital ?"], ['Où est la pharmacie ?'],
+    ['Je suis allergique à la pénicilline.'], ['Je suis diabétique.'], ['Je prends ce médicament tous les jours.'], ["J'ai mal ici."], ['Je suis perdu.'],
+    ["J'ai besoin d'eau."], ['Cette eau est-elle potable ?'], ['Où est le commissariat de police ?'], ['Je ne comprends pas.'], ['Parlez-vous anglais ?'],
+    ["Parlez plus lentement, s'il vous plaît."], ['Merci.'], ['Combien ça coûte ?'], ["J'ai besoin d'un endroit pour dormir."], ['Puis-je recharger mon téléphone ici ?'],
+    ['Au feu !'], ['Danger !'], ['Arrêtez !'], ['Oui / Non'],
+  ] },
+  { code: 'de-DE', name: 'German', native: 'Deutsch', phrases: [
+    ['Hilfe!'], ['Ich brauche einen Arzt.'], ['Rufen Sie einen Krankenwagen.'], ['Wo ist das Krankenhaus?'], ['Wo ist die Apotheke?'],
+    ['Ich bin allergisch gegen Penicillin.'], ['Ich habe Diabetes.'], ['Ich nehme dieses Medikament jeden Tag.'], ['Es tut hier weh.'], ['Ich habe mich verlaufen.'],
+    ['Ich brauche Wasser.'], ['Ist dieses Wasser trinkbar?'], ['Wo ist die Polizeiwache?'], ['Ich verstehe nicht.'], ['Sprechen Sie Englisch?'],
+    ['Bitte sprechen Sie langsamer.'], ['Danke.'], ['Wie viel kostet das?'], ['Ich brauche einen Schlafplatz.'], ['Kann ich hier mein Handy aufladen?'],
+    ['Feuer!'], ['Gefahr!'], ['Halt!'], ['Ja / Nein'],
+  ] },
+  { code: 'pt-BR', name: 'Portuguese (Brazil)', native: 'Português', phrases: [
+    ['Socorro!'], ['Preciso de um médico.'], ['Chame uma ambulância.'], ['Onde fica o hospital?'], ['Onde fica a farmácia?'],
+    ['Sou alérgico à penicilina.'], ['Tenho diabetes.'], ['Tomo este remédio todos os dias.'], ['Dói aqui.'], ['Estou perdido.'],
+    ['Preciso de água.'], ['Esta água é potável?'], ['Onde fica a delegacia de polícia?'], ['Não entendo.'], ['Você fala inglês?'],
+    ['Por favor, fale mais devagar.'], ['Obrigado.'], ['Quanto custa?'], ['Preciso de um lugar para dormir.'], ['Posso carregar meu celular aqui?'],
+    ['Fogo!'], ['Perigo!'], ['Pare!'], ['Sim / Não'],
+  ] },
+  { code: 'it-IT', name: 'Italian', native: 'Italiano', phrases: [
+    ['Aiuto!'], ['Ho bisogno di un medico.'], ["Chiami un'ambulanza."], ["Dov'è l'ospedale?"], ["Dov'è la farmacia?"],
+    ['Sono allergico alla penicillina.'], ['Ho il diabete.'], ['Prendo questo farmaco ogni giorno.'], ['Mi fa male qui.'], ['Mi sono perso.'],
+    ["Ho bisogno d'acqua."], ["Quest'acqua è potabile?"], ["Dov'è la polizia?"], ['Non capisco.'], ['Parla inglese?'],
+    ['Parli più lentamente, per favore.'], ['Grazie.'], ['Quanto costa?'], ['Ho bisogno di un posto per dormire.'], ['Posso ricaricare il telefono qui?'],
+    ['Al fuoco!'], ['Pericolo!'], ['Alt!'], ['Sì / No'],
+  ] },
+  { code: 'ja-JP', name: 'Japanese', native: '日本語', phrases: [
+    ['助けて！', 'Tasukete!'], ['医者が必要です。', 'Isha ga hitsuyō desu.'], ['救急車を呼んでください。', 'Kyūkyūsha o yonde kudasai.'],
+    ['病院はどこですか？', 'Byōin wa doko desu ka?'], ['薬局はどこですか？', 'Yakkyoku wa doko desu ka?'],
+    ['私はペニシリンアレルギーです。', 'Watashi wa penishirin arerugī desu.'], ['糖尿病があります。', 'Tōnyōbyō ga arimasu.'],
+    ['この薬を毎日飲んでいます。', 'Kono kusuri o mainichi nonde imasu.'], ['ここが痛いです。', 'Koko ga itai desu.'], ['道に迷いました。', 'Michi ni mayoimashita.'],
+    ['水が必要です。', 'Mizu ga hitsuyō desu.'], ['この水は飲めますか？', 'Kono mizu wa nomemasu ka?'], ['警察署はどこですか？', 'Keisatsusho wa doko desu ka?'],
+    ['わかりません。', 'Wakarimasen.'], ['英語を話せますか？', 'Eigo o hanasemasu ka?'], ['ゆっくり話してください。', 'Yukkuri hanashite kudasai.'],
+    ['ありがとうございます。', 'Arigatō gozaimasu.'], ['いくらですか？', 'Ikura desu ka?'], ['寝る場所が必要です。', 'Neru basho ga hitsuyō desu.'],
+    ['ここで携帯を充電できますか？', 'Koko de keitai o jūden dekimasu ka?'], ['火事だ！', 'Kaji da!'], ['危ない！', 'Abunai!'], ['止まれ！', 'Tomare!'],
+    ['はい / いいえ', 'Hai / Iie'],
+  ] },
+  { code: 'zh-CN', name: 'Chinese (Mandarin)', native: '中文', phrases: [
+    ['救命！', 'Jiùmìng!'], ['我需要医生。', 'Wǒ xūyào yīshēng.'], ['请叫救护车。', 'Qǐng jiào jiùhùchē.'], ['医院在哪里？', 'Yīyuàn zài nǎlǐ?'],
+    ['药店在哪里？', 'Yàodiàn zài nǎlǐ?'], ['我对青霉素过敏。', 'Wǒ duì qīngméisù guòmǐn.'], ['我有糖尿病。', 'Wǒ yǒu tángniàobìng.'],
+    ['我每天吃这种药。', 'Wǒ měitiān chī zhè zhǒng yào.'], ['这里疼。', 'Zhèlǐ téng.'], ['我迷路了。', 'Wǒ mílù le.'], ['我需要水。', 'Wǒ xūyào shuǐ.'],
+    ['这水能喝吗？', 'Zhè shuǐ néng hē ma?'], ['警察局在哪里？', 'Jǐngchájú zài nǎlǐ?'], ['我不明白。', 'Wǒ bù míngbai.'],
+    ['你会说英语吗？', 'Nǐ huì shuō Yīngyǔ ma?'], ['请说慢一点。', 'Qǐng shuō màn yìdiǎn.'], ['谢谢。', 'Xièxie.'], ['多少钱？', 'Duōshao qián?'],
+    ['我需要一个睡觉的地方。', 'Wǒ xūyào yí gè shuìjiào de dìfang.'], ['我可以在这里给手机充电吗？', 'Wǒ kěyǐ zài zhèlǐ gěi shǒujī chōngdiàn ma?'],
+    ['着火了！', 'Zháohuǒ le!'], ['危险！', 'Wēixiǎn!'], ['停！', 'Tíng!'], ['是 / 不是', 'Shì / Bú shì'],
+  ] },
+  { code: 'ar', name: 'Arabic', native: 'العربية', phrases: [
+    ['النجدة!', 'an-najda!'], ['أحتاج إلى طبيب.', 'aḥtāju ilā ṭabīb.'], ['اتصل بالإسعاف.', 'ittaṣil bil-isʿāf.'], ['أين المستشفى؟', 'ayna al-mustashfā?'],
+    ['أين الصيدلية؟', 'ayna aṣ-ṣaydaliyya?'], ['عندي حساسية من البنسلين.', 'ʿindī ḥassāsiyya min al-binisilīn.'], ['عندي مرض السكري.', 'ʿindī maraḍ as-sukkarī.'],
+    ['آخذ هذا الدواء كل يوم.', 'ākhudhu hādhā ad-dawāʾ kulla yawm.'], ['يؤلمني هنا.', 'yuʾlimunī hunā.'], ['أنا تائه.', 'anā tāʾih.'],
+    ['أحتاج إلى ماء.', 'aḥtāju ilā māʾ.'], ['هل هذا الماء صالح للشرب؟', 'hal hādhā al-māʾ ṣāliḥ lish-shurb?'], ['أين مركز الشرطة؟', 'ayna markaz ash-shurṭa?'],
+    ['لا أفهم.', 'lā afham.'], ['هل تتكلم الإنجليزية؟', 'hal tatakallam al-injilīziyya?'], ['من فضلك تكلم ببطء.', 'min faḍlik takallam bi-buṭʾ.'],
+    ['شكرا.', 'shukran.'], ['كم السعر؟', 'kam as-siʿr?'], ['أحتاج إلى مكان للنوم.', 'aḥtāju ilā makān lin-nawm.'],
+    ['هل يمكنني شحن هاتفي هنا؟', 'hal yumkinunī shaḥn hātifī hunā?'], ['حريق!', 'ḥarīq!'], ['خطر!', 'khaṭar!'], ['قف!', 'qif!'], ['نعم / لا', 'naʿam / lā'],
+  ] },
+  { code: 'hi-IN', name: 'Hindi', native: 'हिन्दी', phrases: [
+    ['बचाओ!', 'Bachao!'], ['मुझे डॉक्टर चाहिए।', 'Mujhe doctor chahiye.'], ['एम्बुलेंस बुलाइए।', 'Ambulance bulaiye.'], ['अस्पताल कहाँ है?', 'Aspatal kahan hai?'],
+    ['दवा की दुकान कहाँ है?', 'Dawa ki dukaan kahan hai?'], ['मुझे पेनिसिलिन से एलर्जी है।', 'Mujhe penicillin se allergy hai.'], ['मुझे डायबिटीज़ है।', 'Mujhe diabetes hai.'],
+    ['मैं यह दवा रोज़ लेता हूँ।', 'Main yeh dawa roz leta hoon.'], ['यहाँ दर्द हो रहा है।', 'Yahan dard ho raha hai.'], ['मैं रास्ता भटक गया हूँ।', 'Main rasta bhatak gaya hoon.'],
+    ['मुझे पानी चाहिए।', 'Mujhe paani chahiye.'], ['क्या यह पानी पीने लायक है?', 'Kya yeh paani peene laayak hai?'], ['पुलिस स्टेशन कहाँ है?', 'Police station kahan hai?'],
+    ['मुझे समझ नहीं आया।', 'Mujhe samajh nahin aaya.'], ['क्या आप अंग्रेज़ी बोलते हैं?', 'Kya aap angrezi bolte hain?'], ['कृपया धीरे बोलिए।', 'Kripya dheere boliye.'],
+    ['धन्यवाद।', 'Dhanyavaad.'], ['यह कितने का है?', 'Yeh kitne ka hai?'], ['मुझे सोने की जगह चाहिए।', 'Mujhe sone ki jagah chahiye.'],
+    ['क्या मैं यहाँ फ़ोन चार्ज कर सकता हूँ?', 'Kya main yahan phone charge kar sakta hoon?'], ['आग!', 'Aag!'], ['ख़तरा!', 'Khatra!'], ['रुको!', 'Ruko!'],
+    ['हाँ / नहीं', 'Haan / Nahin'],
+  ] },
+  { code: 'ru-RU', name: 'Russian', native: 'Русский', phrases: [
+    ['Помогите!', 'Pomogite!'], ['Мне нужен врач.', 'Mne nuzhen vrach.'], ['Вызовите скорую помощь.', 'Vyzovite skoruyu pomoshch.'], ['Где больница?', 'Gde bolnitsa?'],
+    ['Где аптека?', 'Gde apteka?'], ['У меня аллергия на пенициллин.', 'U menya allergiya na penitsillin.'], ['У меня диабет.', 'U menya diabet.'],
+    ['Я принимаю это лекарство каждый день.', 'Ya prinimayu eto lekarstvo kazhdyy den.'], ['Здесь болит.', 'Zdes bolit.'], ['Я заблудился.', 'Ya zabludilsya.'],
+    ['Мне нужна вода.', 'Mne nuzhna voda.'], ['Эту воду можно пить?', 'Etu vodu mozhno pit?'], ['Где полицейский участок?', 'Gde politseyskiy uchastok?'],
+    ['Я не понимаю.', 'Ya ne ponimayu.'], ['Вы говорите по-английски?', 'Vy govorite po-angliyski?'], ['Говорите медленнее, пожалуйста.', 'Govorite medlenneye, pozhaluysta.'],
+    ['Спасибо.', 'Spasibo.'], ['Сколько это стоит?', 'Skolko eto stoit?'], ['Мне нужно где-то переночевать.', 'Mne nuzhno gde-to perenochevat.'],
+    ['Можно здесь зарядить телефон?', 'Mozhno zdes zaryadit telefon?'], ['Пожар!', 'Pozhar!'], ['Опасно!', 'Opasno!'], ['Стой!', 'Stoy!'], ['Да / Нет', 'Da / Net'],
+  ] },
+];
