@@ -23,6 +23,8 @@ export interface Agent {
   repeatPenalty?: number;
   /** Context length takes effect when the model next loads (it is set when the agent is chosen). */
   contextLength?: number;
+  /** Preferred text model: chosen automatically when this agent is picked. Unset = keep the current model. */
+  modelId?: string;
   /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
   enabledTools?: string[];
   createdAt: string;
@@ -87,8 +89,11 @@ export const useAgentStore = create<AgentState>()(
         })),
       setActiveAgent: (activeAgentId) => {
         set({ activeAgentId });
-        const ctx = get().agents.find((a) => a.id === activeAgentId)?.contextLength;
-        if (ctx) applyContextLength(ctx);
+        const agent = get().agents.find((a) => a.id === activeAgentId);
+        if (agent?.contextLength) applyContextLength(agent.contextLength);
+        if (agent?.modelId) {
+          try { require('../atlasTools/models').switchToModelInBackground(agent.modelId); } catch { /* ignore */ }
+        }
       },
       getAgent: (id) => (id ? get().agents.find((x) => x.id === id) : undefined),
     }),

@@ -11,6 +11,7 @@ import { useProjectStore } from '../stores';
 import { useLearningStore, LearnEvent } from '../learning/store';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow } from '../learning/engine';
 import { keepScreenOn } from '../atlasVoice/tts';
+import { ModelChips } from '../components/ModelChips';
 
 const KIND_ICON: Record<string, string> = {
   question: 'help-circle', report: 'edit-3', judge: 'check-square', manager: 'briefcase', info: 'info', error: 'alert-triangle',
@@ -97,6 +98,24 @@ export const LearningScreen: React.FC = () => {
         <Stepper label="Reports per judge" value={cfg.reportsPerJudge} onChange={(v: number) => setConfig(agentId, { reportsPerJudge: v })} colors={colors} styles={styles} />
         <Stepper label="Judge turns per manager" value={cfg.judgesPerManager} onChange={(v: number) => setConfig(agentId, { judgesPerManager: v })} colors={colors} styles={styles} />
       </View>
+
+      <Text style={styles.label}>Models for each role</Text>
+      <Text style={styles.note}>
+        Optional. A bigger model as judge or manager checks better. Different models mean the app swaps models at each hand-over, which is slower.
+      </Text>
+      {(['learner', 'judge', 'manager'] as const).map((role) => (
+        <View key={role} style={styles.roleRow}>
+          <Text style={styles.roleName}>{role[0].toUpperCase() + role.slice(1)}</Text>
+          <View style={styles.roleChips}>
+            <ModelChips
+              value={(cfg as any)[`${role}ModelId`] || ''}
+              onChange={(id) => setConfig(agentId, { [`${role}ModelId`]: id } as any)}
+              colors={colors}
+              disabled={running}
+            />
+          </View>
+        </View>
+      ))}
 
       <View style={styles.statusBox}>
         <Text style={styles.statusText}>{running ? statusText : 'Idle'}</Text>
@@ -210,6 +229,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   statusBox: { marginTop: SPACING.lg, padding: SPACING.md, borderRadius: 8, backgroundColor: colors.surface },
   statusText: { ...TYPOGRAPHY.body, color: colors.text, fontWeight: '600' as const },
   counts: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: 4 },
+  roleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 6 },
+  roleName: { ...TYPOGRAPHY.bodySmall, color: colors.text, width: 70 },
+  roleChips: { flex: 1 },
   scoreRow: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, marginTop: 6, flexWrap: 'wrap' as const },
   bar: { width: 8, marginRight: 3, borderRadius: 2 },
   direction: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: 6 },

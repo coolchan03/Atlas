@@ -20,6 +20,7 @@ import { useAgentStore, Agent, agentPromptWithLessons } from '../stores/agentSto
 import { useLearningStore } from './store';
 import type { Message } from '../types';
 import logger from '../utils/logger';
+import { ensureTextModel } from '../atlasTools/models';
 
 let running = false;
 let stopRequested = false;
@@ -51,11 +52,20 @@ async function ensureModel(): Promise<void> {
 }
 
 /** One model call. Waits politely if a chat is generating. */
-async function ask(system: string, user: string): Promise<string> {
+type Role = 'learner' | 'judge' | 'manager';
+let roleModels: Record<Role, string> = { learner: '', judge: '', manager: '' };
+/** The model that was selected when learning started; roles without their own model use it. */
+let baseModel = '';
+
+async function ask(system: string, user: string, role: Role = 'learner'): Promise<string> {
   for (let i = 0; llmService.isCurrentlyGenerating(); i++) {
     if (stopRequested) throw new Error('stopped');
     if (i === 0) status('Waiting for the chat to finish...');
     await sleep(1500);
+  }
+  if (new Set([roleModels.learner, roleModels.judge, roleModels.manager]).size > 1 || roleModels[role] !== baseModel) {
+    // A role may use its own model; '' means the model the learner/chat uses.
+    await ensureTextModel(roleModels[role] || null, status);
   }
   await ensureModel();
   const out = await llmService.generateResponse([msg('system', system), msg('user', user)], { disableThinking: true });
@@ -122,6 +132,7 @@ async function judgeTurn(agent: Agent): Promise<void> {
   const verdict = await ask(
     `You are a strict but fair judge. You check another assistant's answers for wrong facts, unsafe advice, invented numbers, missing urgent steps, and answers that ignore the sources.${st.judgeNote ? `\nNote from the manager about your judging: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
     `Reports:\n\n${pendingReports.join('\n\n---\n\n').slice(0, 6000)}\n\nFor each report give "SCORE: n/10" and one sentence why. Then write 1 to 3 lines starting "LESSON:" with a short, concrete rule the assistant should follow next time. Only lessons supported by the sources or by basic safety.`,
+    'judge',
   );
   const lessons = linesStarting(verdict, 'LESSON');
   const nums = [...verdict.matchAll(/SCORE\s*:?\s*(\d+(?:\.\d+)?)\s*\/\s*10/gi)].map((m) => Math.min(10, parseFloat(m[1])));
@@ -143,6 +154,7 @@ async function managerTurn(agent: Agent, topic: string): Promise<void> {
   const out = await ask(
     'You are the manager. You audit the judge, keep the lesson list short and correct, and steer the team back on course when it drifts. You never add lessons that are unsafe or not supported.',
     `Topic: ${topic}\nCurrent lessons:\n${agent.lessons?.trim() || '(none)'}\n\nJudge findings since your last audit:\n${st.pendingFindings.join('\n').slice(0, 5000)}\n\nPrevious direction: ${st.direction || '(none)'}\n\nReply with exactly these parts:\nLESSON: (one line each, at most 12 total, merge duplicates, drop wrong ones)\nDIRECTION: (one sentence: what the learner should focus on next)\nJUDGE NOTE: (one sentence: is the judge too harsh, too lenient, or missing something)`,
+    'manager',
   );
   const lessons = linesStarting(out, 'LESSON').slice(0, 12);
   const direction = linesStarting(out, 'DIRECTION')[0] || st.direction;
@@ -165,12 +177,14 @@ export async function startLearning(agentId: string): Promise<void> {
   running = true;
   stopRequested = false;
   pendingReports = [];
+  baseModel = useAppStore.getState().activeModelId || '';
   const L = useLearningStore.getState();
   L.log({ agentId, kind: 'info', title: 'Learning started', body: '' });
   try {
     while (!stopRequested) {
       const agent = useAgentStore.getState().getAgent(agentId);
       const cfg = useLearningStore.getState().getConfig(agentId);
+      roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
       if (!agent) throw new Error('Agent not found');
       if (!cfg.topic.trim()) throw new Error('Set a topic first');
       // Several topics (one per line) are practiced in rotation.
@@ -200,6 +214,10 @@ export async function startLearning(agentId: string): Promise<void> {
     running = false;
     stopRequested = false;
     useLearningStore.getState().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
+    // Put back the model the user had before learning swapped models around.
+    if (baseModel && useAppStore.getState().loadedTextModelId !== baseModel) {
+      ensureTextModel(baseModel).catch(() => undefined);
+    }
     status('Stopped');
   }
 }
@@ -216,5 +234,7 @@ export async function auditNow(agentId: string): Promise<void> {
   const cfg = useLearningStore.getState().getConfig(agentId);
   if (!agent || running) return;
   running = true;
+  baseModel = useAppStore.getState().activeModelId || '';
+  roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
   try { await managerTurn(agent, cfg.topic || 'general'); } finally { running = false; status('Idle'); }
 }

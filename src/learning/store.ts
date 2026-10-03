@@ -11,6 +11,10 @@ export interface LearnConfig {
   projectId: string;
   reportsPerJudge: number;
   judgesPerManager: number;
+  /** Model per role ('' = the current model). Different models mean a model swap at each hand-over. */
+  learnerModelId?: string;
+  judgeModelId?: string;
+  managerModelId?: string;
 }
 
 interface PerAgent {

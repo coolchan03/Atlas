@@ -19,6 +19,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
 import { useAppStore } from '../stores/appStore';
 import { SliderSetting } from '../components/SliderSetting';
+import { ModelChips } from '../components/ModelChips';
 import { Switch } from 'react-native';
 
 const TOOL_CHOICES: { id: string; label: string }[] = [
@@ -62,6 +63,7 @@ export const AgentEditScreen: React.FC = () => {
     repeatPenalty: g?.repeatPenalty ?? 1.1,
     contextLength: g?.contextLength ?? 2048,
     toolsCustom: false,
+    modelId: '',
     tools: (g?.enabledTools as string[]) ?? ['search_knowledge_base'],
   });
 
@@ -78,6 +80,7 @@ export const AgentEditScreen: React.FC = () => {
         repeatPenalty: a.repeatPenalty ?? p.repeatPenalty,
         contextLength: a.contextLength ?? p.contextLength,
         toolsCustom: Array.isArray(a.enabledTools),
+        modelId: a.modelId ?? '',
         tools: a.enabledTools ?? p.tools,
       }));
     }
@@ -90,6 +93,7 @@ export const AgentEditScreen: React.FC = () => {
     repeatPenalty: adv.custom ? adv.repeatPenalty : undefined,
     contextLength: adv.custom ? adv.contextLength : undefined,
     enabledTools: adv.toolsCustom ? adv.tools : undefined,
+    modelId: adv.modelId || undefined,
   });
 
   useEffect(() => {
@@ -195,6 +199,11 @@ export const AgentEditScreen: React.FC = () => {
           <Text style={styles.tip}>
             Tip: Be specific about what you want the AI to do, how it should respond, and any context it needs.
           </Text>
+
+          {/* Preferred model */}
+          <Text style={styles.label}>Model</Text>
+          <Text style={styles.hint}>Picking this agent switches to this model (loading takes a few seconds). "Current model" = don't switch.</Text>
+          <ModelChips value={adv.modelId} onChange={(id) => setAdv((p) => ({ ...p, modelId: id }))} colors={colors} />
 
           {/* Per-agent model settings */}
           <View style={styles.switchRow}>
