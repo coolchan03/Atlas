@@ -28,6 +28,7 @@ import {
   ProjectEditScreen,
   AgentsScreen,
   AgentEditScreen,
+  LearningScreen,
   ProjectChatsScreen,
   KnowledgeBaseScreen,
   DocumentPreviewScreen,
@@ -246,6 +247,7 @@ export const AppNavigator: React.FC = () => {
           component={AgentEditScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <RootStack.Screen name="Learning" component={LearningScreen} />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />

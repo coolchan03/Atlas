@@ -14,6 +14,8 @@ export interface Agent {
   name: string;
   description: string;
   systemPrompt: string;
+  /** Learned by learning mode (manager-approved). Added under the system prompt. Editable. */
+  lessons?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,11 +29,11 @@ export const DEFAULT_AGENTS: Agent[] = [
     description: 'Offline emergency, medical and survival helper',
     systemPrompt: `You are ATLAS, an offline emergency and survival helper.
 Rules:
-1. For any medical, safety, food, water or survival question, FIRST call search_knowledge_base with a short search (for example "severe bleeding" or "snakebite").
-2. Answer ONLY from what the search returns. Never invent doses, amounts or times.
+1. Use the knowledge-base excerpts you are given. If they do not answer the question and you have the search_knowledge_base tool, search with a few short words (for example "severe bleeding" or "snakebite").
+2. Answer ONLY from the excerpts and search results. Never invent doses, amounts or times.
 3. Reply in short numbered steps. Most urgent step first.
 4. Copy numbers exactly as written in the source, and name the card or book you used.
-5. If the search finds nothing useful, say: "Atlas does not cover that." Then give only general safety advice and say it is not from Atlas.
+5. If nothing in the knowledge base answers it, say: "Atlas does not cover that." Then give only general safety advice and say it is not from Atlas.
 6. Keep answers short. Do not think out loud at length.`,
     createdAt: now(),
     updatedAt: now(),
@@ -51,7 +53,7 @@ interface AgentState {
   /** null = no agent: the project's prompt or the default prompt is used. */
   activeAgentId: string | null;
   createAgent: (a: Pick<Agent, 'name' | 'description' | 'systemPrompt'>) => Agent;
-  updateAgent: (id: string, updates: Partial<Pick<Agent, 'name' | 'description' | 'systemPrompt'>>) => void;
+  updateAgent: (id: string, updates: Partial<Pick<Agent, 'name' | 'description' | 'systemPrompt' | 'lessons'>>) => void;
   deleteAgent: (id: string) => void;
   setActiveAgent: (id: string | null) => void;
   getAgent: (id: string | null | undefined) => Agent | undefined;
@@ -86,7 +88,11 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const { activeAgentId, agents } = useAgentStore.getState();
   const agent = agents.find((a) => a.id === activeAgentId);
   if (!agent || !agent.systemPrompt.trim()) return projectPrompt?.trim() || fallback;
-  return projectPrompt?.trim()
-    ? `${agent.systemPrompt.trim()}\n\nProject notes:\n${projectPrompt.trim()}`
-    : agent.systemPrompt.trim();
+  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '');
+}
+
+/** An agent's system prompt with its learned lessons underneath. */
+export function agentPromptWithLessons(agent: Agent): string {
+  const lessons = agent.lessons?.trim();
+  return lessons ? `${agent.systemPrompt.trim()}\n\nLessons learned from practice (follow these):\n${lessons}` : agent.systemPrompt.trim();
 }

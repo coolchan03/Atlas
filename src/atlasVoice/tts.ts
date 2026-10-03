@@ -57,3 +57,9 @@ export function stop(): void {
   useAtlasVoiceStore.getState().setSpeaking(null);
   Native.stop().catch(() => undefined);
 }
+
+/** Keep the screen awake (learning mode). */
+export function keepScreenOn(on: boolean): void {
+  if (!ttsAvailable()) return;
+  Native.keepScreenOn?.(on).catch(() => undefined);
+}

@@ -116,6 +116,18 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun isSpeaking(promise: Promise) { promise.resolve(tts?.isSpeaking ?: false) }
 
+    /** Keep the screen on (used while learning mode runs, so Android does not pause the app). */
+    @ReactMethod
+    fun keepScreenOn(on: Boolean, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) { promise.resolve(false); return }
+        activity.runOnUiThread {
+            if (on) activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        promise.resolve(true)
+    }
+
     // Required by NativeEventEmitter on Android.
     @ReactMethod fun addListener(eventName: String) {}
     @ReactMethod fun removeListeners(count: Int) {}

@@ -10,6 +10,7 @@ export { ProjectDetailScreen } from './ProjectDetailScreen';
 export { ProjectEditScreen } from './ProjectEditScreen';
 export { AgentsScreen } from './AgentsScreen';
 export { AgentEditScreen } from './AgentEditScreen';
+export { LearningScreen } from './LearningScreen';
 export { KnowledgeBaseScreen } from './KnowledgeBaseScreen';
 export { ProjectChatsScreen } from './ProjectChatsScreen';
 export { DocumentPreviewScreen } from './DocumentPreviewScreen';

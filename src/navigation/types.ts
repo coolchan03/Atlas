@@ -10,6 +10,7 @@ export type RootStackParamList = {
   ProjectDetail: { projectId: string };
   ProjectEdit: { projectId?: string };
   AgentEdit: { agentId?: string };
+  Learning: { agentId?: string } | undefined;
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
