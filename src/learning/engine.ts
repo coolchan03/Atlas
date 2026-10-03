@@ -124,11 +124,14 @@ async function judgeTurn(agent: Agent): Promise<void> {
     `Reports:\n\n${pendingReports.join('\n\n---\n\n').slice(0, 6000)}\n\nFor each report give "SCORE: n/10" and one sentence why. Then write 1 to 3 lines starting "LESSON:" with a short, concrete rule the assistant should follow next time. Only lessons supported by the sources or by basic safety.`,
   );
   const lessons = linesStarting(verdict, 'LESSON');
+  const nums = [...verdict.matchAll(/SCORE\s*:?\s*(\d+(?:\.\d+)?)\s*\/\s*10/gi)].map((m) => Math.min(10, parseFloat(m[1])));
+  const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
   L.log({ agentId: agent.id, kind: 'judge', title: `Judge (${lessons.length} lesson${lessons.length === 1 ? '' : 's'})`, body: verdict.slice(0, 2500) });
   pendingReports = [];
   L.patch(agent.id, {
     reportsSinceJudge: 0,
     judgesSinceManager: st.judgesSinceManager + 1,
+    scores: avg === null ? st.scores : [...st.scores, Math.round(avg * 10) / 10].slice(-50),
     pendingFindings: [...st.pendingFindings, ...lessons, `(judge summary) ${verdict.slice(0, 400)}`].slice(-30),
   });
 }
@@ -170,15 +173,19 @@ export async function startLearning(agentId: string): Promise<void> {
       const cfg = useLearningStore.getState().getConfig(agentId);
       if (!agent) throw new Error('Agent not found');
       if (!cfg.topic.trim()) throw new Error('Set a topic first');
+      // Several topics (one per line) are practiced in rotation.
+      const topics = cfg.topic.split('\n').map((t) => t.trim()).filter(Boolean);
+      const ti = useLearningStore.getState().get(agentId).topicIndex % topics.length;
+      useLearningStore.getState().patch(agentId, { topicIndex: ti + 1 });
       try {
-        await learnerTurn(agent, cfg.topic, cfg.projectId);
+        await learnerTurn(agent, topics[ti], cfg.projectId);
         if (stopRequested) break;
         let st = useLearningStore.getState().get(agentId);
         if (st.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) && pendingReports.length) {
           await judgeTurn(useAgentStore.getState().getAgent(agentId)!);
           st = useLearningStore.getState().get(agentId);
           if (st.judgesSinceManager >= Math.max(1, cfg.judgesPerManager) && !stopRequested) {
-            await managerTurn(useAgentStore.getState().getAgent(agentId)!, cfg.topic);
+            await managerTurn(useAgentStore.getState().getAgent(agentId)!, topics.join('; '));
           }
         }
       } catch (e: any) {

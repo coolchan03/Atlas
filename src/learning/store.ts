@@ -25,9 +25,13 @@ interface PerAgent {
   /** Judge findings waiting for the manager's audit. */
   pendingFindings: string[];
   recentQuestions: string[];
+  /** Average judge score (0-10) of each judge turn, oldest first. */
+  scores: number[];
+  /** Index of the next topic when several topics are given (one per line). */
+  topicIndex: number;
 }
 
-const blank = (): PerAgent => ({ reportsSinceJudge: 0, judgesSinceManager: 0, totalReports: 0, direction: '', judgeNote: '', pendingFindings: [], recentQuestions: [] });
+const blank = (): PerAgent => ({ reportsSinceJudge: 0, judgesSinceManager: 0, totalReports: 0, direction: '', judgeNote: '', pendingFindings: [], recentQuestions: [], scores: [], topicIndex: 0 });
 
 interface LearningState {
   config: Record<string, LearnConfig>;

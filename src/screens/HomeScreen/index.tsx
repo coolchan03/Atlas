@@ -146,6 +146,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Text style={styles.title}>Off Grid Atlas</Text>
               {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
+            <TouchableOpacity
+              onPress={() => (navigation as any).navigate('Emergency')}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#DC2626', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 }}
+              accessibilityLabel="Emergency cards"
+            >
+              <Icon name="alert-octagon" size={16} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 6 }}>Emergency</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Collapsed Models summary — tap to open the manager sheet. Both the

@@ -79,7 +79,7 @@ export const LearningScreen: React.FC = () => {
         value={cfg.topic}
         editable={!running}
         onChangeText={(t) => setConfig(agentId, { topic: t })}
-        placeholder="e.g. wound infections and when to use antibiotics"
+        placeholder={'e.g. wound infections and when to use antibiotics\n(one topic per line to rotate through several)'}
         placeholderTextColor={colors.textMuted}
         multiline
       />
@@ -103,6 +103,15 @@ export const LearningScreen: React.FC = () => {
         <Text style={styles.counts}>
           Reports: {st?.totalReports ?? 0} · until judge: {Math.max(0, cfg.reportsPerJudge - (st?.reportsSinceJudge ?? 0))} · judge turns until manager: {Math.max(0, cfg.judgesPerManager - (st?.judgesSinceManager ?? 0))}
         </Text>
+        {!!st?.scores?.length && (
+          <View style={styles.scoreRow}>
+            <Text style={styles.counts}>Judge scores (last {Math.min(12, st.scores.length)}): </Text>
+            {st.scores.slice(-12).map((v, i) => (
+              <View key={i} style={[styles.bar, { height: 4 + v * 2.6, backgroundColor: v >= 7 ? colors.primary : v >= 5 ? '#D97706' : colors.error }]} />
+            ))}
+            <Text style={styles.counts}>  avg {(st.scores.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, st.scores.length)).toFixed(1)}/10</Text>
+          </View>
+        )}
         {!!st?.direction && <Text style={styles.direction}>Direction: {st.direction}</Text>}
       </View>
 
@@ -201,6 +210,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   statusBox: { marginTop: SPACING.lg, padding: SPACING.md, borderRadius: 8, backgroundColor: colors.surface },
   statusText: { ...TYPOGRAPHY.body, color: colors.text, fontWeight: '600' as const },
   counts: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: 4 },
+  scoreRow: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, marginTop: 6, flexWrap: 'wrap' as const },
+  bar: { width: 8, marginRight: 3, borderRadius: 2 },
   direction: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: 6 },
   bigBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10, gap: 8 },
   bigBtnText: { color: '#fff', fontWeight: '600' as const, fontSize: 15 },

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { exportBackup, importBackup } from '../atlasTools/backup';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
@@ -215,38 +216,47 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AttachStep>
 
-        {/* Community */}
+        {/* Atlas: backup & restore */}
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
-            <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
+            <TouchableOpacity style={styles.navItem} onPress={async () => {
+              try {
+                const name = await exportBackup();
+                if (name) Alert.alert('Backup saved', `Saved as ${name}. Keep a copy somewhere else too (PC, cloud, SD card). Models and knowledge-base documents are not included.`);
+              } catch (e: any) {
+                if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Backup failed', String(e?.message || e));
+              }
+            }}>
               <View style={styles.navItemIcon}>
-                <Icon name="star" size={16} color={colors.textSecondary} />
+                <Icon name="save" size={16} color={colors.textSecondary} />
               </View>
               <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Star on GitHub</Text>
-                <Text style={styles.navItemDesc}>Support the open-source project</Text>
+                <Text style={styles.navItemTitle}>Back up</Text>
+                <Text style={styles.navItemDesc}>Agents, lessons, projects, chats and settings to one file</Text>
               </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} onPress={handleSendFeedback}>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => {
+              Alert.alert('Restore backup?', 'This replaces your current agents, projects, chats and settings with the ones in the backup file.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Choose file', onPress: async () => {
+                  try {
+                    const n = await importBackup();
+                    if (n) Alert.alert('Restored', `${n} items restored. Close the app completely and open it again to finish.`);
+                  } catch (e: any) {
+                    if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Restore failed', String(e?.message || e));
+                  }
+                } },
+              ]);
+            }}>
               <View style={styles.navItemIcon}>
-                <Icon name="mail" size={16} color={colors.textSecondary} />
+                <Icon name="upload" size={16} color={colors.textSecondary} />
               </View>
               <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Send Feedback</Text>
-                <Text style={styles.navItemDesc}>Report a bug or share a suggestion</Text>
+                <Text style={styles.navItemTitle}>Restore</Text>
+                <Text style={styles.navItemDesc}>Load a backup file (from this or another device)</Text>
               </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => shareOnX()}>
-              <View style={styles.navItemIcon}>
-                <Icon name="share-2" size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Share on X</Text>
-                <Text style={styles.navItemDesc}>Tell others about Off Grid AI</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
         </AnimatedEntry>

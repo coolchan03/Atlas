@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { pick, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { importZipPack } from '../atlasTools/packImport';
 import logger from '../utils/logger';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
@@ -125,6 +126,32 @@ export const KnowledgeBaseScreen: React.FC = () => {
     }
   };
 
+  // Atlas: import a whole .zip pack of text files at once.
+  const handleImportPack = async () => {
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
+    setIsPicking(true);
+    setIndexError(null);
+    try {
+      const r = await importZipPack(projectId, (m) => setIndexingFile(m));
+      if (r) {
+        await loadKbDocs();
+        Alert.alert(
+          'Pack imported',
+          `${r.added} added, ${r.skipped} already here${r.failed.length ? `, ${r.failed.length} failed (${r.failed.slice(0, 3).map((f) => f.name).join(', ')}${r.failed.length > 3 ? '...' : ''})` : ''}.`,
+        );
+      }
+    } catch (err: any) {
+      if (!(isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED)) {
+        Alert.alert('Import failed', err?.message || 'Could not import the pack');
+      }
+    } finally {
+      isPickingRef.current = false;
+      setIsPicking(false);
+      setIndexingFile(null);
+    }
+  };
+
   const handleToggleDocument = async (docId: number, enabled: boolean) => {
     try {
       await ragService.toggleDocument(docId, enabled);
@@ -188,6 +215,9 @@ export const KnowledgeBaseScreen: React.FC = () => {
             {project?.name || 'Knowledge Base'}
           </Text>
         </View>
+        <TouchableOpacity onPress={handleImportPack} style={styles.addButton} disabled={isPicking || !!indexingFile} accessibilityLabel="Import a .zip pack">
+          <Icon name="package" size={20} color={colors.primary} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
           {indexingFile ? (
             <ActivityIndicator size="small" color={colors.primary} />
@@ -200,7 +230,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
       {indexingFile && (
         <View style={styles.indexingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.indexingText}>Indexing {indexingFile}...</Text>
+          <Text style={styles.indexingText}>{/^(Adding|Copying|Unpacking)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
         </View>
       )}
 

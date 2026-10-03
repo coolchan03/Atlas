@@ -11,6 +11,7 @@ export type RootStackParamList = {
   ProjectEdit: { projectId?: string };
   AgentEdit: { agentId?: string };
   Learning: { agentId?: string } | undefined;
+  Emergency: undefined;
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };

@@ -1,0 +1,164 @@
+import React, { useMemo, useState } from 'react';
+import { ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions, BackHandler } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme';
+import { ATLAS_CARDS } from '../learning/atlasCards';
+import { speak, stop } from '../atlasVoice/tts';
+import { useAtlasVoiceStore } from '../atlasVoice/store';
+
+/**
+ * Atlas emergency screen: the built-in cards, readable instantly with no model loaded.
+ * Big buttons, large text, read-aloud. Works fully offline.
+ */
+type Card = { file: string; id: string; title: string; zone: string; keywords: string; source: string; status: string; body: string };
+
+const ZONE_COLOR: Record<string, string> = {
+  Emergency: '#DC2626', 'Water and food': '#2563EB', Illness: '#EA580C', Mind: '#7C3AED', 'Power and tools': '#4B5563',
+};
+const ZONE_ICON: Record<string, string> = {
+  Emergency: 'alert-octagon', 'Water and food': 'droplet', Illness: 'thermometer', Mind: 'heart', 'Power and tools': 'battery-charging',
+};
+
+function parse(file: string, raw: string): Card {
+  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const meta: Record<string, string> = {};
+  (m ? m[1] : '').split('\n').forEach((l) => {
+    const i = l.indexOf(':');
+    if (i > 0) meta[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+  });
+  return {
+    file, id: meta.id || file, title: meta.title || file, zone: meta.zone || 'Emergency',
+    keywords: meta.keywords || '', source: meta.source || '', status: meta.status || '', body: (m ? m[2] : raw).trim(),
+  };
+}
+
+const plain = (s: string) => s.replace(/\*\*/g, '');
+
+function Rich({ text, color, size }: { text: string; color: string; size: number }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <Text style={{ color, fontSize: size, lineHeight: size * 1.4 }}>
+      {parts.map((p, i) => (p.startsWith('**') ? <Text key={i} style={{ fontWeight: '700' }}>{p.slice(2, -2)}</Text> : p))}
+    </Text>
+  );
+}
+
+function CardBody({ card, colors, size }: { card: Card; colors: any; size: number }) {
+  return (
+    <View>
+      {card.body.split('\n').map((line, i) => {
+        const l = line.trimEnd();
+        if (!l.trim()) return <View key={i} style={{ height: 8 }} />;
+        if (l.startsWith('## ')) return <Text key={i} style={{ color: colors.text, fontSize: size + 3, fontWeight: '700', marginTop: 14, marginBottom: 6 }}>{plain(l.slice(3))}</Text>;
+        const num = l.match(/^(\d+)\.\s+(.*)$/);
+        if (num) return (
+          <View key={i} style={{ flexDirection: 'row', marginBottom: 6 }}>
+            <Text style={{ color: ZONE_COLOR[card.zone] || colors.primary, fontSize: size, fontWeight: '700', width: 28 }}>{num[1]}.</Text>
+            <View style={{ flex: 1 }}><Rich text={num[2]} color={colors.text} size={size} /></View>
+          </View>
+        );
+        if (l.startsWith('- ')) return (
+          <View key={i} style={{ flexDirection: 'row', marginBottom: 4 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: size, width: 20 }}>•</Text>
+            <View style={{ flex: 1 }}><Rich text={l.slice(2)} color={colors.text} size={size} /></View>
+          </View>
+        );
+        return <View key={i} style={{ marginBottom: 4 }}><Rich text={l} color={colors.text} size={size} /></View>;
+      })}
+    </View>
+  );
+}
+
+export const EmergencyScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const cards = useMemo(() => Object.entries(ATLAS_CARDS).map(([f, r]) => parse(f, r)), []);
+  const [open, setOpen] = useState<Card | null>(null);
+  const [q, setQ] = useState('');
+  const [size, setSize] = useState(width >= 720 ? 20 : 17);
+  const speaking = useAtlasVoiceStore((s) => s.speakingKey !== null && s.speakingMessageId === 'emergency-card');
+  const cols = width >= 1000 ? 3 : width >= 600 ? 2 : 1;
+
+  useFocusEffect(React.useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (open) { stop(); setOpen(null); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [open]));
+
+  const shown = cards.filter((c) => {
+    const s = q.trim().toLowerCase();
+    return !s || `${c.title} ${c.keywords} ${c.zone}`.toLowerCase().includes(s);
+  });
+
+  if (open) {
+    const zc = ZONE_COLOR[open.zone] || colors.primary;
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: zc }}>
+          <TouchableOpacity onPress={() => { stop(); setOpen(null); }} style={{ padding: 6 }}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
+          <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', flex: 1, marginLeft: 8 }} numberOfLines={2}>{open.title}</Text>
+          <TouchableOpacity onPress={() => setSize((s) => Math.max(14, s - 2))} style={{ padding: 8 }}><Text style={{ color: '#fff', fontSize: 16 }}>A-</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setSize((s) => Math.min(30, s + 2))} style={{ padding: 8 }}><Text style={{ color: '#fff', fontSize: 20 }}>A+</Text></TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 120, width: '100%', maxWidth: 900, alignSelf: 'center' }}>
+          <TouchableOpacity
+            onPress={() => (speaking ? stop() : speak(open.body.replace(/\*\*/g, '').replace(/^## /gm, ''), 'emergency-card'))}
+            style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', borderWidth: 2, borderColor: zc, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 }}
+          >
+            <Icon name={speaking ? 'volume-x' : 'volume-2'} size={20} color={zc} />
+            <Text style={{ color: zc, fontSize: 16, fontWeight: '600', marginLeft: 8 }}>{speaking ? 'Stop reading' : 'Read aloud'}</Text>
+          </TouchableOpacity>
+          <CardBody card={open} colors={colors} size={size} />
+          <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 24 }}>Source: {open.source}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 4 }}>{open.status}</Text>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#DC2626' }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginLeft: 8 }}>Emergency</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 120, width: '100%', maxWidth: 1200, alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
+        <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 10 }}>
+          If someone may die (heavy bleeding, not breathing, unconscious): get help if any exists, then open the card. These work with no AI and no internet.
+        </Text>
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="Search: bleeding, snake, water, fever..."
+          placeholderTextColor={colors.textMuted}
+          style={{ backgroundColor: colors.surface, color: colors.text, borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 12 }}
+        />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 }}>
+          {shown.map((c) => {
+            const zc = ZONE_COLOR[c.zone] || colors.primary;
+            return (
+              <View key={c.file} style={{ width: `${100 / cols}%`, padding: 6 }}>
+                <TouchableOpacity
+                  onPress={() => setOpen(c)}
+                  style={{ backgroundColor: zc, borderRadius: 14, padding: 18, minHeight: 92, flexDirection: 'row', alignItems: 'center' }}
+                >
+                  <Icon name={ZONE_ICON[c.zone] || 'alert-circle'} size={30} color="#fff" />
+                  <View style={{ marginLeft: 14, flex: 1 }}>
+                    <Text style={{ color: '#fff', fontSize: 19, fontWeight: '700' }}>{c.title}</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 }}>{c.zone}</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+        {shown.length === 0 && <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 12 }}>No card matches. Try a simpler word, or ask the Atlas agent in a chat.</Text>}
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
