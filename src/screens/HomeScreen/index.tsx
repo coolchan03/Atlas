@@ -1,4 +1,5 @@
 import React from 'react';
+import { OffGridCard } from '../../components/OffGridCard';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -166,6 +167,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </TouchableOpacity>
             ))}
           </View>
+
+          <OffGridCard />
 
           {/* Collapsed Models summary — tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}

@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
  * picked by the user, searches them and returns article text - all on the device.
  */
 class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
-    private class Opened(val uri: String, val pfd: ParcelFileDescriptor, val archive: Archive, val title: String)
+    private class Opened(val uri: String, val pfd: ParcelFileDescriptor?, val archive: Archive, val title: String)
 
     private val io = Executors.newSingleThreadExecutor()
     private val open = LinkedHashMap<String, Opened>()
@@ -37,6 +37,13 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     private fun openUri(uriStr: String): Opened {
         open[uriStr]?.let { return it }
         ensureLibs()
+        // Files downloaded inside the app are plain paths; picked files are content:// URIs.
+        if (uriStr.startsWith("/") || uriStr.startsWith("file://")) {
+            val path = uriStr.removePrefix("file://")
+            val archive = Archive(path)
+            val title = meta(archive, "Title").ifBlank { meta(archive, "Name") }.ifBlank { path.substringAfterLast('/') }
+            return Opened(uriStr, null, archive, title).also { open[uriStr] = it }
+        }
         val uri = Uri.parse(uriStr)
         try {
             ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -69,7 +76,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     @ReactMethod
     fun close(uri: String, promise: Promise) {
         io.execute {
-            open.remove(uri)?.let { try { it.pfd.close() } catch (_: Exception) {} }
+            open.remove(uri)?.let { try { it.pfd?.close() } catch (_: Exception) {} }
             try { ctx.contentResolver.releasePersistableUriPermission(Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             promise.resolve(true)
         }
@@ -141,7 +148,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     }
 
     override fun invalidate() {
-        for (o in open.values) try { o.pfd.close() } catch (_: Exception) {}
+        for (o in open.values) try { o.pfd?.close() } catch (_: Exception) {}
         open.clear()
         io.shutdown()
         super.invalidate()

@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { useTheme } from '../theme';
 import { useWideLayout } from '../hooks/useWideLayout';
+import { AddonsSection } from '../components/AddonsSection';
 import {
   useOfflineLibrary, addLibraryFile, removeLibraryFile, searchLibrary, readArticle, libraryAvailable, LibraryHit,
 } from '../atlasTools/offlineLibrary';
@@ -61,14 +62,16 @@ export const OfflineLibraryScreen: React.FC = () => {
           <View style={card}>
             <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>What this is</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 6 }}>
-              Add Kiwix .zim files (WikiMed, Wikipedia, iFixit, Wikivoyage...) that you copied to this device - the PC build script saves them in the 10_Kiwix folder.
-              They stay where they are; nothing is copied. Then turn on "Offline library" in an agent's tools (or the chat tools menu) and the AI can look things up with no internet.
+              Download add-ons below, or add Kiwix .zim files you already have on this device (the PC build script saves them in the 10_Kiwix folder) - those stay where they are. Then turn on "Offline library" in an agent's tools (or the chat tools menu) and the AI can look things up with no internet.
             </Text>
             <TouchableOpacity onPress={add} disabled={busy} style={{ marginTop: 12, backgroundColor: colors.primary, borderRadius: 8, padding: 12, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Add .zim files</Text>
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Add .zim files from this device</Text>
             </TouchableOpacity>
           </View>
 
+          <AddonsSection />
+
+          {files.length > 0 && <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6 }}>Your library</Text>}
           {files.map((f) => (
             <View key={f.uri} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
               <Icon name="book" size={20} color={colors.primary} />

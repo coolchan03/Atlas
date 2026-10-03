@@ -1,12 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { BackHandler, Image, Linking, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { BackHandler, Image, Linking, Modal, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
+import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { SURVIVAL_CHAPTERS, SurvivalChapter } from '../survival/content';
 import { SURVIVAL_IMAGES } from '../survival/images';
+import { useSurvivalStore } from '../survival/store';
 import { speak, stop } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { prepareMessageForSpeech } from '../utils/messageContent';
@@ -19,24 +21,49 @@ const ICONS: Record<string, string> = {
   DangerousArthropods: 'alert-triangle', 'Poisonous-Plants': 'alert-octagon', FishAndMollusks: 'anchor', ManMadeHazards: 'alert-circle',
 };
 
-function ManualImage({ src, alt, width }: { src: string; alt: string; width: number }) {
+function ManualImage({ src, alt, width, onZoom }: { src: string; alt: string; width: number; onZoom: (src: string, alt: string) => void }) {
   const mod = SURVIVAL_IMAGES[src];
   if (!mod) return null;
   const meta = Image.resolveAssetSource(mod);
   const w = Math.min(width, meta?.width ? meta.width * 1.6 : width);
   const h = meta?.width ? (w * meta.height) / meta.width : w * 0.6;
   return (
-    <View style={{ alignItems: 'center', marginVertical: 10 }}>
+    <TouchableOpacity activeOpacity={0.85} onPress={() => onZoom(src, alt)} style={{ alignItems: 'center', marginVertical: 10 }}>
       <Image source={mod} style={{ width: w, height: h, backgroundColor: '#fff', borderRadius: 6 }} resizeMode="contain" accessibilityLabel={alt} />
-      {!!alt && <Text style={{ fontSize: 12, color: '#888', marginTop: 4, textAlign: 'center' }}>{alt}</Text>}
-    </View>
+      {!!alt && <Text style={{ fontSize: 12, color: '#888', marginTop: 4, textAlign: 'center' }}>{alt} (tap to enlarge)</Text>}
+    </TouchableOpacity>
+  );
+}
+
+/** Own state while typing, saved when you leave the box - so the long chapter does not re-render per key. */
+function NotesBox({ id, colors }: { id: string; colors: any }) {
+  const [text, setText] = useState(() => useSurvivalStore.getState().notes[id] || '');
+  const save = () => useSurvivalStore.getState().setNote(id, text);
+  React.useEffect(() => () => { useSurvivalStore.getState().setNote(id, textRef.current); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const textRef = useRef(text);
+  textRef.current = text;
+  return (
+    <TextInput
+      value={text}
+      onChangeText={setText}
+      onBlur={save}
+      placeholder="Add your own notes for this chapter (saved on this phone)"
+      placeholderTextColor={colors.textMuted}
+      multiline
+      textAlignVertical="top"
+      style={{ backgroundColor: colors.surface, color: colors.text, borderRadius: 8, padding: 12, minHeight: 90, marginTop: 8, fontSize: 15 }}
+    />
   );
 }
 
 /** The Survival Manual (ligi/SurvivalManual, based on US Army FM 21-76), fully offline with pictures. */
 export const SurvivalManualScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors } = useTheme();
+  const { colors: baseColors } = useTheme();
+  const colors = useEmergencyColors(baseColors);
+  const night = useOffGrid((st) => st.nightRed);
+  const setNight = useOffGrid((st) => st.setNightRed);
+  const bar = (c: string) => (night ? '#2A0000' : c);
   const { width } = useWindowDimensions();
   const [chapter, setChapter] = useState<SurvivalChapter | null>(null);
   const [q, setQ] = useState('');
@@ -63,9 +90,27 @@ export const SurvivalManualScreen: React.FC = () => {
       .sort((a, b) => b.count - a.count);
   }, [q]);
 
+  const setPos = useSurvivalStore((st) => st.setPos);
+  const [zoom, setZoom] = useState<{ src: string; alt: string } | null>(null);
+  const lastSave = useRef(0);
+
   const openChapter = (id: string) => {
     const c = SURVIVAL_CHAPTERS.find((x) => x.id === id);
-    if (c) { stop(); setChapter(c); scrollRef.current?.scrollTo({ y: 0, animated: false }); }
+    if (!c) return;
+    stop();
+    setChapter(c);
+    // Pick up where you left off in this chapter.
+    const y = useSurvivalStore.getState().pos[id] || 0;
+    setTimeout(() => scrollRef.current?.scrollTo({ y, animated: false }), 350);
+  };
+
+  const snippetFor = (c: SurvivalChapter, term: string) => {
+    const s = term.trim().toLowerCase();
+    if (!s) return '';
+    const plainMd = c.md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/[#*>_`]/g, '');
+    const i = plainMd.toLowerCase().indexOf(s);
+    if (i < 0) return '';
+    return `...${plainMd.slice(Math.max(0, i - 50), i + s.length + 70).replace(/\s+/g, ' ').trim()}...`;
   };
 
   const mdStyles = useMemo(() => ({
@@ -84,7 +129,7 @@ export const SurvivalManualScreen: React.FC = () => {
   }), [colors, size]);
 
   const rules = useMemo(() => ({
-    image: (node: any) => <ManualImage key={node.key} src={node.attributes?.src || ''} alt={node.attributes?.alt || node.content || ''} width={colW} />,
+    image: (node: any) => <ManualImage key={node.key} src={node.attributes?.src || ''} alt={node.attributes?.alt || node.content || ''} width={colW} onZoom={(src, alt) => setZoom({ src, alt })} />,
   }), [colW]);
 
   const onLink = (url: string) => {
@@ -97,7 +142,7 @@ export const SurvivalManualScreen: React.FC = () => {
   if (chapter) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#3F6212' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: bar('#3F6212') }}>
           <TouchableOpacity onPress={() => { stop(); setChapter(null); }} style={{ padding: 6 }}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
           <Text style={{ color: '#fff', fontSize: 19, fontWeight: '700', flex: 1, marginLeft: 8 }} numberOfLines={1}>{chapter.title}</Text>
           <TouchableOpacity onPress={() => (speaking ? stop() : speak(prepareMessageForSpeech(chapter.md.replace(/!\[[^\]]*\]\([^)]*\)/g, '')), 'survival-chapter'))} style={{ padding: 8 }}>
@@ -106,21 +151,41 @@ export const SurvivalManualScreen: React.FC = () => {
           <TouchableOpacity onPress={() => setSize((s) => Math.max(13, s - 2))} style={{ padding: 8 }}><Text style={{ color: '#fff' }}>A-</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setSize((s) => Math.min(28, s + 2))} style={{ padding: 8 }}><Text style={{ color: '#fff', fontSize: 18 }}>A+</Text></TouchableOpacity>
         </View>
-        <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 18, paddingBottom: 120, width: '100%', maxWidth: 920, alignSelf: 'center' }}>
+        <ScrollView
+          ref={scrollRef}
+          scrollEventThrottle={500}
+          onScroll={(e) => {
+            const now = Date.now();
+            if (now - lastSave.current > 1500) { lastSave.current = now; setPos(chapter.id, e.nativeEvent.contentOffset.y); }
+          }}
+          contentContainerStyle={{ padding: 18, paddingBottom: 120, width: '100%', maxWidth: 920, alignSelf: 'center' }}
+          keyboardShouldPersistTaps="handled"
+        >
           <Markdown style={mdStyles} rules={rules} onLinkPress={onLink}>{chapter.md}</Markdown>
+          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 24 }}>My notes</Text>
+          <NotesBox id={chapter.id} colors={colors} />
           <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 24 }}>
             From the Survival Manual (github.com/ligi/SurvivalManual), based on US Army FM 21-76. Community edited; not medical advice.
           </Text>
         </ScrollView>
+        <Modal visible={!!zoom} transparent={false} animationType="fade" onRequestClose={() => setZoom(null)}>
+          <TouchableOpacity activeOpacity={1} onPress={() => setZoom(null)} style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center' }}>
+            {zoom && SURVIVAL_IMAGES[zoom.src] && (
+              <Image source={SURVIVAL_IMAGES[zoom.src]} style={{ width: '100%', height: '85%' }} resizeMode="contain" />
+            )}
+            <Text style={{ textAlign: 'center', color: '#333', padding: 12 }}>{zoom?.alt} · tap to close (turn the phone sideways for more detail)</Text>
+          </TouchableOpacity>
+        </Modal>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#3F6212' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: bar('#3F6212') }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
-        <Text style={{ color: '#fff', fontSize: 21, fontWeight: '800', marginLeft: 8 }}>Survival Manual</Text>
+        <Text style={{ color: '#fff', fontSize: 21, fontWeight: '800', marginLeft: 8, flex: 1 }}>Survival Manual</Text>
+        <TouchableOpacity onPress={() => setNight(!night)} style={{ padding: 8 }} accessibilityLabel="Red night mode"><Icon name="moon" size={20} color="#fff" /></TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 120, width: '100%', maxWidth: 1200, alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
         <TextInput
@@ -137,6 +202,9 @@ export const SurvivalManualScreen: React.FC = () => {
                 <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', marginLeft: 12, flex: 1 }}>{c.title}</Text>
                 {count > 0 && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{count >= 50 ? 'title' : `${count}×`}</Text>}
               </TouchableOpacity>
+              {!!q.trim() && count > 0 && count < 50 && (
+                <Text style={{ color: colors.textSecondary, fontSize: 12, paddingHorizontal: 8, paddingTop: 4 }} numberOfLines={2}>{snippetFor(c, q)}</Text>
+              )}
             </View>
           ))}
         </View>

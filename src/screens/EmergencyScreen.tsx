@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
+import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { ATLAS_CARDS } from '../learning/atlasCards';
 import { speak, stop } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
@@ -73,7 +74,11 @@ function CardBody({ card, colors, size }: { card: Card; colors: any; size: numbe
 
 export const EmergencyScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors } = useTheme();
+  const { colors: baseColors } = useTheme();
+  const colors = useEmergencyColors(baseColors);
+  const night = useOffGrid((st) => st.nightRed);
+  const setNight = useOffGrid((st) => st.setNightRed);
+  const bar = (c: string) => (night ? '#2A0000' : c);
   const { width } = useWindowDimensions();
   const cards = useMemo(() => Object.entries(ATLAS_CARDS).map(([f, r]) => parse(f, r)), []);
   const [open, setOpen] = useState<Card | null>(null);
@@ -99,7 +104,7 @@ export const EmergencyScreen: React.FC = () => {
     const zc = ZONE_COLOR[open.zone] || colors.primary;
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: zc }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: bar(zc) }}>
           <TouchableOpacity onPress={() => { stop(); setOpen(null); }} style={{ padding: 6 }}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
           <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', flex: 1, marginLeft: 8 }} numberOfLines={2}>{open.title}</Text>
           <TouchableOpacity onPress={() => setSize((s) => Math.max(14, s - 2))} style={{ padding: 8 }}><Text style={{ color: '#fff', fontSize: 16 }}>A-</Text></TouchableOpacity>
@@ -123,9 +128,10 @@ export const EmergencyScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#DC2626' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: bar('#DC2626') }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
-        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginLeft: 8 }}>Emergency</Text>
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginLeft: 8, flex: 1 }}>Emergency</Text>
+        <TouchableOpacity onPress={() => setNight(!night)} style={{ padding: 8 }} accessibilityLabel="Red night mode"><Icon name="moon" size={20} color="#fff" /></TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 120, width: '100%', maxWidth: 1200, alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
         <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 10 }}>
@@ -145,7 +151,7 @@ export const EmergencyScreen: React.FC = () => {
               <View key={c.file} style={{ width: `${100 / cols}%`, padding: 6 }}>
                 <TouchableOpacity
                   onPress={() => setOpen(c)}
-                  style={{ backgroundColor: zc, borderRadius: 14, padding: 18, minHeight: 92, flexDirection: 'row', alignItems: 'center' }}
+                  style={{ backgroundColor: night ? '#1E0202' : zc, borderWidth: night ? 1 : 0, borderColor: '#5A0E0E', borderRadius: 14, padding: 18, minHeight: 92, flexDirection: 'row', alignItems: 'center' }}
                 >
                   <Icon name={ZONE_ICON[c.zone] || 'alert-circle'} size={30} color="#fff" />
                   <View style={{ marginLeft: 14, flex: 1 }}>

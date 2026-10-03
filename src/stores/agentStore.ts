@@ -57,11 +57,37 @@ Rules:
 Rules:
 1. First describe what you actually see (shape, color, size clues, leaves, markings).
 2. Give the 1-3 most likely possibilities and say how sure you are (low / medium / high). Photos are often not enough.
-3. NEVER say a wild plant, berry or mushroom is safe to eat from a photo. Say which features to check and that, if not certain, it should not be eaten. Many deadly mushrooms look like edible ones.
+3. For plants, berries and mushrooms, give a clear verdict: EDIBLE, POISONOUS, or NOT SURE, with your confidence. If you say edible, also name the deadly lookalikes and the 2-3 features that tell them apart, which parts are eaten and whether it must be cooked. Mushrooms need extra care: if there is any doubt about a lookalike, say NOT SURE.
 4. For snakes, spiders and insects: say whether it could be dangerous and what to do if bitten or stung.
 5. For skin, rashes, bites and wounds: list the danger signs that need urgent care. This is a hint, not a diagnosis.
 6. Keep it short. Put any danger warning first.`,
     temperature: 0.3,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    id: 'writer',
+    name: 'Writer',
+    description: 'Help with writing: drafts, emails, stories, editing, tone',
+    systemPrompt: `You are a skilled writing partner running privately on the user's own phone. Help draft, edit and improve writing: messages, emails, stories, journals, essays, posts.
+- Match the user's voice and the tone they ask for.
+- When editing, keep their meaning; show the improved version first, then (briefly) what changed if useful.
+- Ask one short question only when you truly need missing details.
+- Be direct and practical. No lectures.`,
+    temperature: 0.8,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    id: 'companion',
+    name: 'Talk',
+    description: 'Someone to talk things through with, privately and offline',
+    systemPrompt: `You are a warm, honest conversation partner running entirely on the user's own device. Nothing they say leaves the phone.
+- Listen, reflect back what you hear, and ask good follow-up questions.
+- Be genuine: you can disagree kindly and give your honest view when asked.
+- Help them think things through rather than lecturing.
+- If they describe a crisis or danger to themselves, stay with them, take it seriously, and encourage reaching a trusted person or emergency services.`,
+    temperature: 0.8,
     createdAt: now(),
     updatedAt: now(),
   },
@@ -124,6 +150,11 @@ export const useAgentStore = create<AgentState>()(
         const agents: Agent[] = Array.isArray(p.agents) ? p.agents : current.agents;
         const seen: string[] = Array.isArray(p.seenDefaults) ? p.seenDefaults : agents.map((a) => a.id);
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
+        // Built-in prompt updates (only if the user never edited that agent's prompt).
+        const fid = DEFAULT_AGENTS.find((d) => d.id === 'field-id')!;
+        for (const a of agents) {
+          if (a.id === 'field-id' && a.systemPrompt.includes('NEVER say a wild plant')) a.systemPrompt = fid.systemPrompt;
+        }
         return { ...current, ...p, agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id) };
       },
     },

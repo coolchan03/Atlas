@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
+import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { PHRASES_EN, PHRASE_LANGUAGES, Phrase } from '../phrases/data';
 import { speakIn, stop, onMissingLanguage } from '../atlasVoice/tts';
 import { ensureTextModel } from '../atlasTools/models';
@@ -14,7 +15,11 @@ const LAST_LANG = 'atlas-phrases-lang';
 /** Travel phrase cards: show big to the other person, or play aloud in their language. Offline. */
 export const PhrasesScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors } = useTheme();
+  const { colors: baseColors } = useTheme();
+  const colors = useEmergencyColors(baseColors);
+  const night = useOffGrid((st) => st.nightRed);
+  const setNight = useOffGrid((st) => st.setNightRed);
+  const bar = (c: string) => (night ? '#2A0000' : c);
   const { width } = useWindowDimensions();
   const [code, setCode] = useState(PHRASE_LANGUAGES[0].code);
   const [shown, setShown] = useState<{ text: string; roman?: string; en: string } | null>(null);
@@ -71,7 +76,7 @@ export const PhrasesScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#2563EB' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: bar('#2563EB') }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
         <Text style={{ color: '#fff', fontSize: 21, fontWeight: '800', marginLeft: 8 }}>Phrases</Text>
       </View>
