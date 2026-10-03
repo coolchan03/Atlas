@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 /** Tool-calling generation loop. Extracted to keep generationService.ts under the max-lines limit. */
 import { llmService } from './llm';
+import { activeAgentOverrides } from '../stores/agentStore';
 import type { StreamToken } from './llm';
 import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
@@ -345,7 +346,8 @@ function remoteGenerateOnce(
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
   const { messages, tools, thinkingEnabled, onStream } = args;
   const settings = useAppStore.getState().settings;
-  const options: GenerationOptions = { temperature: settings.temperature, maxTokens: settings.maxTokens, topP: settings.topP, tools, enableThinking: thinkingEnabled };
+  const ov = activeAgentOverrides();
+  const options: GenerationOptions = { temperature: ov.temperature ?? settings.temperature, maxTokens: ov.maxTokens ?? settings.maxTokens, topP: ov.topP ?? settings.topP, tools, enableThinking: thinkingEnabled };
   let _fullContent = '';
   let streamed = false;
   let toolCalls: ToolCall[] = [];

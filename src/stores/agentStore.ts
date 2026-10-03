@@ -16,6 +16,15 @@ export interface Agent {
   systemPrompt: string;
   /** Learned by learning mode (manager-approved). Added under the system prompt. Editable. */
   lessons?: string;
+  /** Per-agent model settings. Unset = use the global settings. */
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  repeatPenalty?: number;
+  /** Context length takes effect when the model next loads (it is set when the agent is chosen). */
+  contextLength?: number;
+  /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
+  enabledTools?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -52,8 +61,8 @@ interface AgentState {
   agents: Agent[];
   /** null = no agent: the project's prompt or the default prompt is used. */
   activeAgentId: string | null;
-  createAgent: (a: Pick<Agent, 'name' | 'description' | 'systemPrompt'>) => Agent;
-  updateAgent: (id: string, updates: Partial<Pick<Agent, 'name' | 'description' | 'systemPrompt' | 'lessons'>>) => void;
+  createAgent: (a: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>> & Pick<Agent, 'name' | 'description' | 'systemPrompt'>) => Agent;
+  updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteAgent: (id: string) => void;
   setActiveAgent: (id: string | null) => void;
   getAgent: (id: string | null | undefined) => Agent | undefined;
@@ -76,7 +85,11 @@ export const useAgentStore = create<AgentState>()(
           agents: s.agents.filter((x) => x.id !== id),
           activeAgentId: s.activeAgentId === id ? null : s.activeAgentId,
         })),
-      setActiveAgent: (activeAgentId) => set({ activeAgentId }),
+      setActiveAgent: (activeAgentId) => {
+        set({ activeAgentId });
+        const ctx = get().agents.find((a) => a.id === activeAgentId)?.contextLength;
+        if (ctx) applyContextLength(ctx);
+      },
       getAgent: (id) => (id ? get().agents.find((x) => x.id === id) : undefined),
     }),
     { name: 'atlas-agent-storage', storage: createJSONStorage(() => AsyncStorage) },
@@ -95,4 +108,33 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
 export function agentPromptWithLessons(agent: Agent): string {
   const lessons = agent.lessons?.trim();
   return lessons ? `${agent.systemPrompt.trim()}\n\nLessons learned from practice (follow these):\n${lessons}` : agent.systemPrompt.trim();
+}
+
+/** Sampling overrides of the active agent (only the ones it sets). */
+export function activeAgentOverrides(): { temperature?: number; topP?: number; maxTokens?: number; repeatPenalty?: number } {
+  const { activeAgentId, agents } = useAgentStore.getState();
+  const a = agents.find((x) => x.id === activeAgentId);
+  if (!a) return {};
+  const o: any = {};
+  if (typeof a.temperature === 'number') o.temperature = a.temperature;
+  if (typeof a.topP === 'number') o.topP = a.topP;
+  if (typeof a.maxTokens === 'number') o.maxTokens = a.maxTokens;
+  if (typeof a.repeatPenalty === 'number') o.repeatPenalty = a.repeatPenalty;
+  return o;
+}
+
+/** Tools for the active agent, or null to use the global toggles. */
+export function activeAgentTools(): string[] | null {
+  const { activeAgentId, agents } = useAgentStore.getState();
+  const a = agents.find((x) => x.id === activeAgentId);
+  return a?.enabledTools ?? null;
+}
+
+function applyContextLength(ctx: number): void {
+  // Lazy require: the app store imports a lot; keep this store light at load time.
+  try {
+    const { useAppStore } = require('./appStore');
+    const st = useAppStore.getState();
+    if (st.settings?.contextLength !== ctx) st.updateSettings({ contextLength: ctx });
+  } catch { /* ignore */ }
 }

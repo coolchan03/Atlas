@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -33,6 +34,7 @@ export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const conversations = useChatStore(s => s.conversations);
   const { deleteConversation, setActiveConversation } = useChatStore.getState();
@@ -260,7 +262,7 @@ export const ChatsListScreen: React.FC = () => {
           data={sortedConversations}
           renderItem={renderChat}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, wide.column]}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={Platform.OS !== 'android'}
           testID="conversation-list"

@@ -1,4 +1,5 @@
 import { initLlama, LlamaContext } from 'llama.rn';
+import { activeAgentOverrides } from '../stores/agentStore';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
@@ -454,6 +455,8 @@ const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
 }, options?: { disableCtxShift?: boolean }): Record<string, any> {
+  // Atlas: the active agent's own temperature / top-p / max tokens / repeat penalty win.
+  settings = { ...settings, ...activeAgentOverrides() };
   return {
     n_predict: settings.maxTokens || RESPONSE_RESERVE,
     temperature: settings.temperature ?? 0.7,

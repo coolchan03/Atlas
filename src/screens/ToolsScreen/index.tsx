@@ -1,4 +1,6 @@
 import React from 'react';
+import { useWideLayout } from '../../hooks/useWideLayout';
+import { WebSearchSettings } from '../../components/WebSearchSettings';
 import { View, Text, Switch, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -23,6 +25,7 @@ const TOOL_WARNING_COLOR = '#F59E0B';
 export const ToolsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const openProTools = useOpenProTools();
 
@@ -53,8 +56,10 @@ export const ToolsScreen: React.FC = () => {
         <Text style={styles.headerTitle}>Tools</Text>
       </View>
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, wide.column]}>
         
+
+        <WebSearchSettings />
 
         {showHint && (
           <View style={[styles.hintBanner, { backgroundColor: colors.surface }]}>

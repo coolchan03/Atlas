@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -13,6 +14,7 @@ import { installAtlasStarter } from '../learning/starter';
 export const AgentsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const agents = useAgentStore((s) => s.agents);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
@@ -74,7 +76,7 @@ export const AgentsScreen: React.FC = () => {
           <Text style={styles.desc}>{starterMsg ?? 'Creates the "Atlas - Emergency" project with the built-in cards (bleeding, water, wounds, snakebite...) and turns on the Atlas agent.'}</Text>
         </View>
       </TouchableOpacity>
-      <FlatList data={agents} keyExtractor={(a) => a.id} renderItem={renderItem} contentContainerStyle={styles.list} />
+      <FlatList data={agents} keyExtractor={(a) => a.id} renderItem={renderItem} contentContainerStyle={[styles.list, wide.column]} />
     </SafeAreaView>
   );
 };

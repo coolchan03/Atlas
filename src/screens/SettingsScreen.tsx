@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
   Text,
@@ -46,6 +47,7 @@ export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   // Reactive: Pro sections registered at runtime (license-key activation re-runs
   // loadProFeatures) show up live without an app restart.
@@ -149,7 +151,7 @@ export const SettingsScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
       </View>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, wide.column]}>
 
 
         {/* Theme Selector */}
@@ -187,7 +189,7 @@ export const SettingsScreen: React.FC = () => {
             {[
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
               { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Off Grid AI Desktop, Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
-            //  { icon: 'search', title: 'Web Search', desc: 'Configure search API key for reliable results', screen: 'WebSearchSettings' as const },
+              { icon: 'search', title: 'Tools & Web Search', desc: 'Search provider (SearXNG, DuckDuckGo, Exa, Parallel, Tavily) and tools', screen: 'Tools' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
               { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },

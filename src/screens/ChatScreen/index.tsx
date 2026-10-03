@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Keyboard, InteractionManager, Platform } from 'react-native';
+import { useWideLayout } from '../../hooks/useWideLayout';
+import { FlatList, Keyboard, InteractionManager, Platform, View } from 'react-native';
 // Edge-to-edge-aware KeyboardAvoidingView. RN's own version leaves a residual
 // padding band on Android under edge-to-edge (adjustResize is a no-op there);
 // this one reconciles the keyboard frame against the navigation-bar inset.
@@ -100,6 +101,7 @@ export const ChatScreen: React.FC = () => {
   // (same as main, on both platforms). The custom androidKbPad mechanism that
   // previously lived here floated the input mid-screen, so it was removed.
 
+  const wide = useWideLayout();
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
   // Atlas: no share prompts.
 
@@ -301,6 +303,7 @@ export const ChatScreen: React.FC = () => {
         />
         <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
         <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+        <View style={[{ flex: 1 }, wide.column]}>
         <ChatMessageArea
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}
@@ -311,6 +314,7 @@ export const ChatScreen: React.FC = () => {
           renderItem={renderItem}
           chatSpotlight={chatSpotlight}
         />
+        </View>
         <ChatModalSection
           styles={styles} colors={colors}
           showProjectSelector={chat.showProjectSelector}

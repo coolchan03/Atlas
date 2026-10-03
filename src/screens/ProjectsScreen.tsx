@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
   Text,
@@ -34,6 +35,7 @@ export const ProjectsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const { projects, deleteProject } = useProjectStore();
   const { conversations } = useChatStore();
@@ -165,7 +167,7 @@ export const ProjectsScreen: React.FC = () => {
           data={projects}
           renderItem={renderProject}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, wide.column]}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={Platform.OS !== 'android'}
         />

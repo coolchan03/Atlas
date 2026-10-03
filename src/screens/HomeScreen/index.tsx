@@ -1,4 +1,5 @@
 import React from 'react';
+import { useWideLayout } from '../../hooks/useWideLayout';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
@@ -38,6 +39,7 @@ const stretchStyle = { alignSelf: 'stretch' as const };
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
 
@@ -138,7 +140,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View testID="home-screen" style={styles.scrollView}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, wide.column]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.title}>Off Grid Atlas</Text>

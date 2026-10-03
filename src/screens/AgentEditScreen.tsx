@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
   Text,
@@ -16,6 +17,19 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
+import { useAppStore } from '../stores/appStore';
+import { SliderSetting } from '../components/SliderSetting';
+import { Switch } from 'react-native';
+
+const TOOL_CHOICES: { id: string; label: string }[] = [
+  { id: 'search_knowledge_base', label: 'Search knowledge base' },
+  { id: 'web_search', label: 'Web search' },
+  { id: 'read_url', label: 'Read web page' },
+  { id: 'calculator', label: 'Calculator' },
+  { id: 'get_current_datetime', label: 'Date and time' },
+  { id: 'get_device_info', label: 'Device info' },
+];
+const fmtK = (v: number) => (v >= 1024 ? `${(v / 1024).toFixed(v % 1024 ? 1 : 0)}K` : String(v));
 import { RootStackParamList } from '../navigation/types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'AgentEdit'>;
@@ -27,6 +41,7 @@ export const AgentEditScreen: React.FC = () => {
   const agentId = route.params?.agentId;
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
 
   const { getAgent, createAgent, updateAgent, deleteAgent, setActiveAgent } = useAgentStore();
@@ -36,6 +51,45 @@ export const AgentEditScreen: React.FC = () => {
     name: '',
     description: '',
     systemPrompt: '',
+  });
+
+  const g = useAppStore.getState().settings as any;
+  const [adv, setAdv] = useState({
+    custom: false,
+    temperature: g?.temperature ?? 0.7,
+    topP: g?.topP ?? 0.95,
+    maxTokens: g?.maxTokens ?? 512,
+    repeatPenalty: g?.repeatPenalty ?? 1.1,
+    contextLength: g?.contextLength ?? 2048,
+    toolsCustom: false,
+    tools: (g?.enabledTools as string[]) ?? ['search_knowledge_base'],
+  });
+
+  useEffect(() => {
+    if (existingProject) {
+      const a: any = existingProject;
+      const custom = ['temperature', 'topP', 'maxTokens', 'repeatPenalty', 'contextLength'].some((k) => typeof a[k] === 'number');
+      setAdv((p) => ({
+        ...p,
+        custom,
+        temperature: a.temperature ?? p.temperature,
+        topP: a.topP ?? p.topP,
+        maxTokens: a.maxTokens ?? p.maxTokens,
+        repeatPenalty: a.repeatPenalty ?? p.repeatPenalty,
+        contextLength: a.contextLength ?? p.contextLength,
+        toolsCustom: Array.isArray(a.enabledTools),
+        tools: a.enabledTools ?? p.tools,
+      }));
+    }
+  }, [existingProject]);
+
+  const advFields = () => ({
+    temperature: adv.custom ? adv.temperature : undefined,
+    topP: adv.custom ? adv.topP : undefined,
+    maxTokens: adv.custom ? adv.maxTokens : undefined,
+    repeatPenalty: adv.custom ? adv.repeatPenalty : undefined,
+    contextLength: adv.custom ? adv.contextLength : undefined,
+    enabledTools: adv.toolsCustom ? adv.tools : undefined,
   });
 
   useEffect(() => {
@@ -63,12 +117,15 @@ export const AgentEditScreen: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
+        ...advFields(),
       });
+      if (useAgentStore.getState().activeAgentId === existingProject.id) setActiveAgent(existingProject.id);
     } else {
       const created = createAgent({
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
+        ...advFields(),
       });
       setActiveAgent(created.id);
     }
@@ -97,7 +154,7 @@ export const AgentEditScreen: React.FC = () => {
 
         <ScrollView
           style={styles.content}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, wide.column]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Name */}
@@ -138,6 +195,52 @@ export const AgentEditScreen: React.FC = () => {
           <Text style={styles.tip}>
             Tip: Be specific about what you want the AI to do, how it should respond, and any context it needs.
           </Text>
+
+          {/* Per-agent model settings */}
+          <View style={styles.switchRow}>
+            <View style={styles.switchText}>
+              <Text style={styles.label}>Custom model settings</Text>
+              <Text style={styles.hint}>Off = use the global settings from Settings → Model settings.</Text>
+            </View>
+            <Switch value={adv.custom} onValueChange={(v) => setAdv({ ...adv, custom: v })} />
+          </View>
+          {adv.custom && (
+            <View>
+              <SliderSetting label="Temperature" description="Lower = careful and consistent (good for medical). Higher = creative."
+                value={adv.temperature} min={0} max={2} step={0.05} decimals={2}
+                onChange={(v) => setAdv((p) => ({ ...p, temperature: v }))} />
+              <SliderSetting label="Top P" description="Lower = sticks to the most likely words."
+                value={adv.topP} min={0.05} max={1} step={0.05} decimals={2}
+                onChange={(v) => setAdv((p) => ({ ...p, topP: v }))} />
+              <SliderSetting label="Max tokens" description="Longest reply this agent may write."
+                value={adv.maxTokens} min={64} max={8192} step={64} formatValue={fmtK}
+                onChange={(v) => setAdv((p) => ({ ...p, maxTokens: v }))} />
+              <SliderSetting label="Repeat penalty" description="Higher = repeats itself less."
+                value={adv.repeatPenalty} min={1} max={2} step={0.05} decimals={2}
+                onChange={(v) => setAdv((p) => ({ ...p, repeatPenalty: v }))} />
+              <SliderSetting label="Context length" description="How much the agent can remember in one chat. Takes effect next time the model loads. More uses more memory."
+                warning={adv.contextLength > 8192 ? 'High context uses a lot of RAM' : null}
+                value={adv.contextLength} min={1024} max={32768} step={1024} formatValue={fmtK}
+                onChange={(v) => setAdv((p) => ({ ...p, contextLength: v }))} />
+            </View>
+          )}
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchText}>
+              <Text style={styles.label}>Custom tools</Text>
+              <Text style={styles.hint}>Off = use the tools switched on in the chat's tools menu.</Text>
+            </View>
+            <Switch value={adv.toolsCustom} onValueChange={(v) => setAdv({ ...adv, toolsCustom: v })} />
+          </View>
+          {adv.toolsCustom && TOOL_CHOICES.map((t) => {
+            const on = adv.tools.includes(t.id);
+            return (
+              <View key={t.id} style={styles.toolRow}>
+                <Text style={styles.toolLabel}>{t.label}</Text>
+                <Switch value={on} onValueChange={(v) => setAdv((p) => ({ ...p, tools: v ? [...p.tools, t.id] : p.tools.filter((x) => x !== t.id) }))} />
+              </View>
+            );
+          })}
 
           {existingProject && (
             <TouchableOpacity
@@ -229,6 +332,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginTop: SPACING.md,
     lineHeight: 18,
   },
+  switchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md },
+  switchText: { flex: 1, paddingRight: SPACING.md },
+  toolRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: 6 },
+  toolLabel: { ...TYPOGRAPHY.body, color: colors.text },
   deleteButton: {
     marginTop: SPACING.xl,
     padding: SPACING.md,

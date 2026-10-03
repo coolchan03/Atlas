@@ -3,6 +3,7 @@ import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../rag';
 import logger from '../../utils/logger';
+import { searchWeb } from './webSearchProviders';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -51,10 +52,9 @@ async function dispatchTool(call: ToolCall): Promise<string> {
   }
 }
 
-async function handleWebSearch(query: string): Promise<string> {
+async function braveSearch(query: string): Promise<SearchResult[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
-
   try {
     const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
     const response = await fetch(url, {
@@ -64,23 +64,24 @@ async function handleWebSearch(query: string): Promise<string> {
         'Accept': 'text/html',
       },
     });
-    const html = await response.text();
-    const results = parseBraveResults(html);
-
-    if (results.length === 0) {
-      return `No results found for "${query}".`;
-    }
-
-    return results
-      .slice(0, 5)
-      .map((r, i) => {
-        const heading = r.url ? `[${r.title}](${r.url})` : r.title;
-        return `${i + 1}. ${heading}\n   ${r.snippet}`;
-      })
-      .join('\n\n');
+    return parseBraveResults(await response.text());
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function handleWebSearch(query: string): Promise<string> {
+  // Atlas: provider chosen on the Tools screen (SearXNG, DuckDuckGo, Exa, Parallel, Tavily, Brave).
+  const { results, provider, notes } = await searchWeb(query, braveSearch);
+  if (results.length === 0) {
+    return `No results found for "${query}".${notes.length ? ` (${notes.join('; ')})` : ''}`;
+  }
+  return `Results from ${provider}:\n\n` + results
+    .map((r, i) => {
+      const heading = r.url ? `[${r.title}](${r.url})` : r.title;
+      return `${i + 1}. ${heading}\n   ${r.snippet}`;
+    })
+    .join('\n\n');
 }
 
 type SearchResult = { title: string; snippet: string; url?: string };
