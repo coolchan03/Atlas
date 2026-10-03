@@ -15,10 +15,84 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.io.File
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 /** Atlas assistant access to the phone: all-files permission, opening files, calendar. */
-class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
+class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx), SensorEventListener {
     override fun getName(): String = "AtlasDevice"
+
+    // ---------------- compass ----------------
+    private val sensors by lazy { ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
+    private val rot = FloatArray(9)
+    private val orient = FloatArray(3)
+    private var grav: FloatArray? = null
+    private var mag: FloatArray? = null
+    private var lastEmit = 0L
+    private var listening = false
+
+    /** True only if the phone has a magnetometer (a real compass). */
+    @ReactMethod
+    fun hasCompass(promise: Promise) {
+        promise.resolve(sensors.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null)
+    }
+
+    @ReactMethod
+    fun startCompass(promise: Promise) {
+        if (listening) { promise.resolve(true); return }
+        val rv = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        val m = sensors.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        if (m == null) { promise.resolve(false); return }
+        if (rv != null) sensors.registerListener(this, rv, SensorManager.SENSOR_DELAY_UI)
+        else {
+            sensors.registerListener(this, m, SensorManager.SENSOR_DELAY_UI)
+            sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        }
+        listening = true
+        promise.resolve(true)
+    }
+
+    @ReactMethod
+    fun stopCompass(promise: Promise) {
+        sensors.unregisterListener(this); listening = false; grav = null; mag = null
+        promise.resolve(true)
+    }
+
+    override fun onSensorChanged(e: SensorEvent) {
+        when (e.sensor.type) {
+            Sensor.TYPE_ROTATION_VECTOR -> SensorManager.getRotationMatrixFromVector(rot, e.values)
+            Sensor.TYPE_ACCELEROMETER -> { grav = e.values.clone(); if (mag == null) return; if (!SensorManager.getRotationMatrix(rot, null, grav, mag)) return }
+            Sensor.TYPE_MAGNETIC_FIELD -> { mag = e.values.clone(); if (grav == null) return; if (!SensorManager.getRotationMatrix(rot, null, grav, mag)) return }
+            else -> return
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastEmit < 80) return
+        lastEmit = now
+        SensorManager.getOrientation(rot, orient)
+        val deg = ((Math.toDegrees(orient[0].toDouble()) + 360.0) % 360.0)
+        try {
+            val map = Arguments.createMap(); map.putDouble("heading", deg)
+            ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasCompass", map)
+        } catch (_: Exception) {}
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            try {
+                val map = Arguments.createMap(); map.putInt("accuracy", accuracy)
+                ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasCompassAccuracy", map)
+            } catch (_: Exception) {}
+        }
+    }
+
+    @ReactMethod fun addListener(eventName: String) {}
+    @ReactMethod fun removeListeners(count: Int) {}
+
+    override fun invalidate() { try { sensors.unregisterListener(this) } catch (_: Exception) {}; super.invalidate() }
 
     @ReactMethod
     fun hasAllFilesAccess(promise: Promise) {

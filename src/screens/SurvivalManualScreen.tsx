@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { BackHandler, Image, Linking, Modal, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
@@ -65,7 +65,8 @@ export const SurvivalManualScreen: React.FC = () => {
   const setNight = useOffGrid((st) => st.setNightRed);
   const bar = (c: string) => (night ? '#2A0000' : c);
   const { width } = useWindowDimensions();
-  const [chapter, setChapter] = useState<SurvivalChapter | null>(null);
+  const route = useRoute<any>();
+  const [chapter, setChapter] = useState<SurvivalChapter | null>(() => SURVIVAL_CHAPTERS.find((c) => c.id === route.params?.chapterId) || null);
   const [q, setQ] = useState('');
   const [size, setSize] = useState(width >= 720 ? 18 : 16);
   const scrollRef = useRef<ScrollView>(null);

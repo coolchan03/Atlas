@@ -1,4 +1,5 @@
 import React from 'react';
+import { deviceHasCompass } from '../CompassScreen';
 import { OffGridCard } from '../../components/OffGridCard';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
@@ -41,6 +42,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const wide = useWideLayout();
+  // Compass tile only on devices that actually have a compass sensor.
+  const [hasCompass, setHasCompass] = React.useState(false);
+  React.useEffect(() => { deviceHasCompass().then(setHasCompass); }, []);
   const styles = useThemedStyles(createStyles);
   const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
 
@@ -155,6 +159,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               { label: 'Emergency', icon: 'alert-octagon', color: '#DC2626', to: 'Emergency' },
               { label: 'Survival Manual', icon: 'book-open', color: '#3F6212', to: 'SurvivalManual' },
               { label: 'Phrases', icon: 'globe', color: '#2563EB', to: 'Phrases' },
+              ...(hasCompass ? [{ label: 'Compass', icon: 'compass', color: '#7C3AED', to: 'Compass' }] : []),
             ].map((b) => (
               <TouchableOpacity
                 key={b.to}

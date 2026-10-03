@@ -102,7 +102,7 @@
           tools:node="merge" />
         <!-- Atlas: lets other apps (browser, document viewers) open files the assistant made -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".atlasdevice.AtlasFileProvider"
             android:authorities="${applicationId}.atlasfiles"
             android:exported="false"
             android:grantUriPermissions="true">
