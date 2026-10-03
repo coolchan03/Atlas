@@ -5,12 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /**
  * Atlas: choose where the web_search tool gets results from.
  * Keys and URLs stay on the phone (AsyncStorage). If the chosen provider fails,
- * DuckDuckGo and then Brave are tried so search keeps working.
+ * the built-in metasearch, DuckDuckGo and then Brave are tried so search keeps working.
  */
-export type SearchProvider = 'brave' | 'duckduckgo' | 'searxng' | 'exa' | 'parallel' | 'tavily';
+export type SearchProvider = 'meta' | 'brave' | 'duckduckgo' | 'searxng' | 'exa' | 'parallel' | 'tavily';
 
 export const PROVIDERS: { id: SearchProvider; name: string; needs: 'none' | 'url' | 'key'; note: string }[] = [
-  { id: 'searxng', name: 'SearXNG', needs: 'url', note: 'Your own or a public SearXNG server. JSON output must be enabled on the server (search.formats: json).' },
+  { id: 'meta', name: 'Built-in metasearch', needs: 'none', note: 'Like SearXNG, but inside the app: asks DuckDuckGo, Brave, Mojeek and Wikipedia at the same time and merges the results. No server, no key.' },
+  { id: 'searxng', name: 'SearXNG server', needs: 'url', note: 'Your own or a public SearXNG server. JSON output must be enabled on the server (search.formats: json).' },
   { id: 'duckduckgo', name: 'DuckDuckGo', needs: 'none', note: 'Free, no key.' },
   { id: 'brave', name: 'Brave (web page)', needs: 'none', note: 'Free, no key. The original built-in search.' },
   { id: 'exa', name: 'Exa (AI search)', needs: 'key', note: 'API key from dashboard.exa.ai. Returns page text, good for AI answers.' },
@@ -32,7 +33,7 @@ interface SearchSettings {
 export const useSearchSettings = create<SearchSettings>()(
   persist(
     (set) => ({
-      provider: 'duckduckgo',
+      provider: 'meta',
       searxngUrl: '',
       keys: {},
       results: 5,
@@ -130,6 +131,65 @@ async function tavily(q: string, n: number): Promise<WebResult[]> {
   return (j.results || []).map((x: any) => ({ title: x.title || x.url, url: x.url, snippet: cut(x.content || '') }));
 }
 
+async function mojeek(q: string, n: number): Promise<WebResult[]> {
+  const r = await timed(`https://www.mojeek.com/search?q=${encodeURIComponent(q)}`, { headers: { 'User-Agent': UA, Accept: 'text/html' } });
+  const html = await r.text();
+  const out: WebResult[] = [];
+  const blocks = html.split(/<li class="r\d*"|<li class="r /).slice(1);
+  for (const b of blocks) {
+    if (out.length >= n) break;
+    const a = b.match(/<a[^>]*class="title"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/) || b.match(/<h2>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!a) continue;
+    const sn = b.match(/<p class="s">([\s\S]*?)<\/p>/);
+    out.push({ title: strip(a[2]), url: decode(a[1]), snippet: sn ? strip(sn[1]) : '' });
+  }
+  return out;
+}
+
+async function wikipedia(q: string, n: number): Promise<WebResult[]> {
+  const r = await timed(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=${Math.min(n, 3)}&srsearch=${encodeURIComponent(q)}`, { headers: { 'User-Agent': 'OffGridAtlas/1.0' } });
+  const j: any = await r.json();
+  return (j.query?.search || []).map((x: any) => ({
+    title: `${x.title} - Wikipedia`,
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(String(x.title).replace(/ /g, '_'))}`,
+    snippet: strip(x.snippet || ''),
+  }));
+}
+
+const norm = (u?: string) =>
+  (u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+
+/** SearXNG-style: query several engines in parallel, merge, dedupe, rank by agreement. */
+async function meta(q: string, n: number, braveFallback?: (q: string) => Promise<WebResult[]>): Promise<WebResult[]> {
+  const engines: [string, Promise<WebResult[]>][] = [
+    ['DuckDuckGo', duckduckgo(q, 8)],
+    ['Mojeek', mojeek(q, 8)],
+    ['Wikipedia', wikipedia(q, 3)],
+  ];
+  if (braveFallback) engines.push(['Brave', braveFallback(q)]);
+  const settled = await Promise.allSettled(engines.map((e) => e[1]));
+  const merged = new Map<string, WebResult & { score: number; engines: string[] }>();
+  settled.forEach((res, ei) => {
+    if (res.status !== 'fulfilled') return;
+    res.value.forEach((r, rank) => {
+      const key = norm(r.url) || r.title.toLowerCase();
+      const cur = merged.get(key);
+      const add = 1 / (rank + 1);
+      if (cur) {
+        cur.score += add + 0.5; // found by more than one engine = more trustworthy
+        cur.engines.push(engines[ei][0]);
+        if (r.snippet.length > cur.snippet.length) cur.snippet = r.snippet;
+      } else {
+        merged.set(key, { ...r, score: add, engines: [engines[ei][0]] });
+      }
+    });
+  });
+  return [...merged.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map((r) => ({ title: r.title, url: r.url, snippet: `${r.snippet}${r.snippet ? ' ' : ''}(found by ${r.engines.join(', ')})` }));
+}
+
 const RUNNERS: Partial<Record<SearchProvider, (q: string, n: number) => Promise<WebResult[]>>> = {
   searxng, duckduckgo, exa, parallel, tavily,
 };
@@ -140,11 +200,11 @@ const RUNNERS: Partial<Record<SearchProvider, (q: string, n: number) => Promise<
  */
 export async function searchWeb(q: string, braveFallback: (q: string) => Promise<WebResult[]>): Promise<{ results: WebResult[]; provider: string; notes: string[] }> {
   const { provider, results: n } = useSearchSettings.getState();
-  const order: SearchProvider[] = [provider, 'duckduckgo', 'brave'].filter((p, i, a) => a.indexOf(p) === i) as SearchProvider[];
+  const order: SearchProvider[] = [provider, 'meta', 'duckduckgo', 'brave'].filter((p, i, a) => a.indexOf(p) === i) as SearchProvider[];
   const notes: string[] = [];
   for (const p of order) {
     try {
-      const res = p === 'brave' ? await braveFallback(q) : await RUNNERS[p]!(q, n);
+      const res = p === 'brave' ? await braveFallback(q) : p === 'meta' ? await meta(q, n, braveFallback) : await RUNNERS[p]!(q, n);
       if (res.length) return { results: res.slice(0, n), provider: p, notes };
       notes.push(`${p}: no results`);
     } catch (e: any) {

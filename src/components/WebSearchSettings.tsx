@@ -29,7 +29,7 @@ export function WebSearchSettings() {
   return (
     <View style={[st.card, { backgroundColor: colors.surface }]}>
       <Text style={[st.h, { color: colors.text }]}>Web search provider</Text>
-      <Text style={[st.p, { color: colors.textSecondary }]}>Used by the Web search tool. If it fails, DuckDuckGo and then Brave are tried.</Text>
+      <Text style={[st.p, { color: colors.textSecondary }]}>Used by the Web search tool. If your choice fails, the built-in metasearch, then DuckDuckGo, then Brave are tried.</Text>
       <View style={st.wrap}>
         {PROVIDERS.map((p) => (
           <TouchableOpacity key={p.id} onPress={() => s.setProvider(p.id)} style={[st.pill, { backgroundColor: p.id === s.provider ? colors.primary : colors.background }]}>

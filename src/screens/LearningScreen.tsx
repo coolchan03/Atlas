@@ -43,7 +43,7 @@ export const LearningScreen: React.FC = () => {
   const agent = agents.find((a) => a.id === agentId);
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
-  const cfg = { topic: '', projectId: '', reportsPerJudge: 3, judgesPerManager: 3, ...(rawCfg || {}) };
+  const cfg = Object.assign({ topic: '', projectId: '', reportsPerJudge: 3, judgesPerManager: 3 }, rawCfg || {});
   const setConfig = useLearningStore((s) => s.setConfig);
   const st = useLearningStore((s) => s.state[agentId]);
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
