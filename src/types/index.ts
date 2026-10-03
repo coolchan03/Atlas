@@ -245,6 +245,8 @@ export interface Conversation {
   projectId?: string;
   compactionSummary?: string;
   compactionCutoffMessageId?: string;
+  /** Atlas private chat: never written to storage, gone when the app closes. */
+  isPrivate?: boolean;
 }
 
 

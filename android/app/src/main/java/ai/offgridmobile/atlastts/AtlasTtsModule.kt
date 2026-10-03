@@ -21,6 +21,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private var tts: TextToSpeech? = null
     private var ready = false
     private var rate = 1.0f
+    private var pitch = 1.0f
     private val pending = mutableListOf<Triple<String, String, String>>()
 
     override fun getName(): String = "AtlasTts"
@@ -82,6 +83,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private fun doSpeak(text: String, id: String, lang: String = "") {
         val engine = tts ?: return
         engine.setSpeechRate(rate)
+        engine.setPitch(pitch)
         try {
             val loc = if (lang.isBlank()) Locale.getDefault() else Locale.forLanguageTag(lang)
             val r = engine.setLanguage(loc)
@@ -118,6 +120,10 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
 
     @ReactMethod
     fun setRate(r: Double, promise: Promise) { rate = r.toFloat(); promise.resolve(true) }
+
+    /** Voice pitch (1.0 normal). Used to give the two podcast hosts different voices. */
+    @ReactMethod
+    fun setPitch(p: Double, promise: Promise) { pitch = p.toFloat(); promise.resolve(true) }
 
     @ReactMethod
     fun warmUp(promise: Promise) { try { ensure(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) } }

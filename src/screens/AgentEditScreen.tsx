@@ -27,6 +27,14 @@ const TOOL_CHOICES: { id: string; label: string }[] = [
   { id: 'search_offline_library', label: 'Offline library (Kiwix)' },
   { id: 'web_search', label: 'Web search' },
   { id: 'read_url', label: 'Read web page' },
+  { id: 'list_files', label: 'List files' },
+  { id: 'read_file', label: 'Read files' },
+  { id: 'write_file', label: 'Write / edit files (asks first)' },
+  { id: 'create_web_page', label: 'Build web pages (asks first)' },
+  { id: 'open_file', label: 'Open files in other apps' },
+  { id: 'calendar_events', label: 'Read calendar' },
+  { id: 'add_calendar_event', label: 'Add calendar events' },
+  { id: 'remember', label: 'Remember things you tell it' },
   { id: 'calculator', label: 'Calculator' },
   { id: 'get_current_datetime', label: 'Date and time' },
   { id: 'get_device_info', label: 'Device info' },
@@ -251,6 +259,21 @@ export const AgentEditScreen: React.FC = () => {
               </View>
             );
           })}
+
+          {existingProject && (existingProject as any).memories?.length > 0 && (
+            <View>
+              <Text style={styles.label}>Remembered about you</Text>
+              <Text style={styles.hint}>Stored only on this phone. Tap ✕ to forget one.</Text>
+              {((existingProject as any).memories as string[]).map((m: string, i: number) => (
+                <View key={`${i}-${m}`} style={styles.toolRow}>
+                  <Text style={[styles.toolLabel, { flex: 1 }]}>{m}</Text>
+                  <TouchableOpacity onPress={() => updateAgent(existingProject.id, { memories: ((existingProject as any).memories as string[]).filter((_: string, j: number) => j !== i) })} style={{ padding: 6 }}>
+                    <Text style={{ color: colors.error, fontSize: 16 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
 
           {existingProject && (
             <TouchableOpacity

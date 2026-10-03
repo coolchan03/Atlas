@@ -352,10 +352,12 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'local-llm-chat-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        conversations: state.conversations,
-        activeConversationId: state.activeConversationId,
-      }),
+      partialize: (state) => {
+        // Atlas: private chats are never saved.
+        const conversations = state.conversations.filter((c) => !c.isPrivate);
+        const activeConversationId = conversations.some((c) => c.id === state.activeConversationId) ? state.activeConversationId : null;
+        return { conversations, activeConversationId };
+      },
     }
   )
 );

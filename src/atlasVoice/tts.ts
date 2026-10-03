@@ -22,8 +22,8 @@ function ensureListeners(): void {
   emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
     const s = useAtlasVoiceStore.getState();
     if (s.speakingKey === e.utteranceId || s.speakingKey === null) {
+      s.markDone(); // hands-free mode and podcast playback listen for this
       s.setSpeaking(null);
-      s.markDone(); // hands-free mode listens for this to open the mic again
     }
   });
   emitter.addListener('AtlasTtsNoLanguage', (e: { utteranceId: string }) => {
@@ -78,4 +78,20 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
   s.setSpeaking(key, messageId);
   Native.setRate(Math.min(s.rate, 0.9)).catch(() => undefined);
   (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => s.setSpeaking(null));
+}
+
+/** Speak and wait until finished (resolves false if stopped). Optional pitch for a second voice. */
+export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast'): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
+    ensureListeners();
+    const start = useAtlasVoiceStore.getState().doneTick;
+    Native.setPitch?.(pitch).catch(() => undefined);
+    speak(text, messageId);
+    const myKey = useAtlasVoiceStore.getState().speakingKey;
+    const unsub = useAtlasVoiceStore.subscribe((s) => {
+      if (s.doneTick !== start) { unsub(); Native.setPitch?.(1.0).catch(() => undefined); resolve(true); }
+      else if (s.speakingKey !== myKey) { unsub(); Native.setPitch?.(1.0).catch(() => undefined); resolve(false); }
+    });
+  });
 }

@@ -13,6 +13,7 @@ import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
 import ai.offgridmobile.atlastts.AtlasTtsPackage
 import ai.offgridmobile.atlaskiwix.AtlasKiwixPackage
+import ai.offgridmobile.atlasdevice.AtlasDevicePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -29,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
           add(DeviceMemoryPackage())
           add(AtlasTtsPackage())
           add(AtlasKiwixPackage())
+          add(AtlasDevicePackage())
         },
     )
   }

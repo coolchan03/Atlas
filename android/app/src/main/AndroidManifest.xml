@@ -34,6 +34,8 @@
 
     <!-- For reading and creating calendar events -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Atlas assistant: optional "All files access" so agents can read/write your documents (you grant it in Settings) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
     <!-- Atlas: lets the app find the phone's text-to-speech engine (Android 11+) -->
@@ -98,5 +100,15 @@
           android:name="androidx.work.impl.foreground.SystemForegroundService"
           android:foregroundServiceType="dataSync"
           tools:node="merge" />
+        <!-- Atlas: lets other apps (browser, document viewers) open files the assistant made -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.atlasfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/atlas_file_paths" />
+        </provider>
     </application>
 </manifest>

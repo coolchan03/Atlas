@@ -23,6 +23,8 @@ export interface Agent {
   repeatPenalty?: number;
   /** Context length takes effect when the model next loads (it is set when the agent is chosen). */
   contextLength?: number;
+  /** Facts the user asked this agent to remember (on this phone only). */
+  memories?: string[];
   /** Preferred text model: chosen automatically when this agent is picked. Unset = keep the current model. */
   modelId?: string;
   /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
@@ -62,6 +64,20 @@ Rules:
 5. For skin, rashes, bites and wounds: list the danger signs that need urgent care. This is a hint, not a diagnosis.
 6. Keep it short. Put any danger warning first.`,
     temperature: 0.3,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    id: 'phone-assistant',
+    name: 'Phone Assistant',
+    description: 'Works with your files, calendar and documents; builds web pages; remembers things you tell it',
+    systemPrompt: `You are a private assistant running entirely on the user's phone. You can use tools to work with their files, documents and calendar.
+- Use tools when they help: list_files / read_file to look, write_file to create or edit documents (markdown, text, html, csv), create_web_page to build websites, open_file to show results, calendar_events / add_calendar_event for plans, remember for facts the user wants kept.
+- Writing and adding events always asks the user to approve, so prepare the complete content first.
+- When you edit a document: read it, change only what was asked, then write the whole new version.
+- Keep replies short and say what you did.`,
+    temperature: 0.4,
+    enabledTools: ['list_files', 'read_file', 'write_file', 'create_web_page', 'open_file', 'calendar_events', 'add_calendar_event', 'remember', 'calculator', 'get_current_datetime', 'search_knowledge_base'],
     createdAt: now(),
     updatedAt: now(),
   },
@@ -173,7 +189,9 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
 /** An agent's system prompt with its learned lessons underneath. */
 export function agentPromptWithLessons(agent: Agent): string {
   const lessons = agent.lessons?.trim();
-  return lessons ? `${agent.systemPrompt.trim()}\n\nLessons learned from practice (follow these):\n${lessons}` : agent.systemPrompt.trim();
+  let p = lessons ? `${agent.systemPrompt.trim()}\n\nLessons learned from practice (follow these):\n${lessons}` : agent.systemPrompt.trim();
+  if (agent.memories?.length) p += `\n\nWhat you know about the user (they asked you to remember):\n${agent.memories.map((m) => `- ${m}`).join('\n')}`;
+  return p;
 }
 
 /** Sampling overrides of the active agent (only the ones it sets). */

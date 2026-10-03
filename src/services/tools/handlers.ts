@@ -5,6 +5,7 @@ import type { RagSearchResult } from '../rag';
 import logger from '../../utils/logger';
 import { searchWeb } from './webSearchProviders';
 import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
+import * as DT from '../../atlasTools/deviceTools';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -47,6 +48,34 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');
       return libraryToolAnswer(q);
+    }
+    case 'list_files':
+      return DT.listFiles(call.arguments?.path);
+    case 'read_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      return DT.readFile(p);
+    }
+    case 'write_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      return DT.writeFile(p, String(call.arguments?.content ?? ''), call.arguments?.append === true || call.arguments?.append === 'true');
+    }
+    case 'create_web_page':
+      return DT.createWebPage(String(call.arguments?.name ?? 'site'), String(call.arguments?.html ?? ''));
+    case 'open_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      return DT.openFile(p);
+    }
+    case 'calendar_events':
+      return DT.calendarEvents(Number(call.arguments?.days_ahead ?? 7), Number(call.arguments?.days_back ?? 0));
+    case 'add_calendar_event':
+      return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), call.arguments?.end, call.arguments?.location ?? '');
+    case 'remember': {
+      const f = requireString(call, 'fact');
+      if (!f) throw new Error('Missing required parameter: fact');
+      return DT.rememberFact(f);
     }
     case 'read_url': {
       const url = requireString(call, 'url');

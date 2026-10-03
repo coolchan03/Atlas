@@ -15,6 +15,7 @@ export type RootStackParamList = {
   OfflineLibrary: undefined;
   SurvivalManual: undefined;
   Phrases: undefined;
+  Study: { projectId: string };
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };

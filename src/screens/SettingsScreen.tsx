@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { exportBackup, importBackup } from '../atlasTools/backup';
 import { LowPowerCard } from '../components/LowPowerCard';
+import { AssistantAccessCard } from '../components/AssistantAccessCard';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
   View,
@@ -217,6 +218,8 @@ export const SettingsScreen: React.FC = () => {
             ))}
           </View>
         </AttachStep>
+
+        <AssistantAccessCard />
 
         {/* Atlas: low-battery mode */}
         <LowPowerCard />

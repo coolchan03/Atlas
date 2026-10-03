@@ -184,6 +184,19 @@ export const ProjectDetailScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Atlas: NotebookLM-style study tools for this project's documents */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('Study', { projectId })}
+        style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12, backgroundColor: colors.primary }}
+      >
+        <Icon name="book-open" size={20} color="#fff" />
+        <View style={{ marginLeft: 12, flex: 1 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Study</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Ask with sources, study guide, flashcards, quiz, mind map, podcast, video</Text>
+        </View>
+        <Icon name="chevron-right" size={18} color="#fff" />
+      </TouchableOpacity>
+
       <View style={styles.sectionsContainer}>
         {/* Knowledge Base Section */}
         <View style={styles.sectionHalf}>

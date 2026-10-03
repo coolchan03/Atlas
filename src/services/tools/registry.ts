@@ -86,6 +86,61 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'list_files', name: 'list_files', displayName: 'List files',
+    description: 'List files and folders on the phone. Default is the Atlas workspace folder.', icon: 'folder',
+    parameters: { path: { type: 'string', description: 'Folder path (optional, relative to the workspace or absolute)' } },
+  },
+  {
+    id: 'read_file', name: 'read_file', displayName: 'Read file',
+    description: 'Read a text file (txt, md, html, csv, json, code) or the text of a PDF/Word file on the phone.', icon: 'file-text',
+    parameters: { path: { type: 'string', description: 'File path', required: true } },
+  },
+  {
+    id: 'write_file', name: 'write_file', displayName: 'Write file',
+    description: 'Create or change a text/markdown/html/csv file on the phone. The user is asked to approve first.', icon: 'edit',
+    parameters: {
+      path: { type: 'string', description: 'File path, e.g. notes/plan.md', required: true },
+      content: { type: 'string', description: 'Full file content', required: true },
+      append: { type: 'boolean', description: 'true to add to the end instead of replacing' },
+    },
+  },
+  {
+    id: 'create_web_page', name: 'create_web_page', displayName: 'Build web page',
+    description: 'Build a web page or small website (complete HTML with CSS/JS inside) and open it for preview. The user approves first.', icon: 'globe',
+    parameters: {
+      name: { type: 'string', description: 'Site name', required: true },
+      html: { type: 'string', description: 'Complete HTML document', required: true },
+    },
+  },
+  {
+    id: 'open_file', name: 'open_file', displayName: 'Open file',
+    description: 'Open a file on the phone in the right app (browser, document viewer).', icon: 'external-link',
+    parameters: { path: { type: 'string', description: 'File path', required: true } },
+  },
+  {
+    id: 'calendar_events', name: 'calendar_events', displayName: 'Read calendar',
+    description: "Read the user's calendar events.", icon: 'calendar',
+    parameters: {
+      days_ahead: { type: 'number', description: 'How many days ahead (default 7)' },
+      days_back: { type: 'number', description: 'How many days back (default 0)' },
+    },
+  },
+  {
+    id: 'add_calendar_event', name: 'add_calendar_event', displayName: 'Add calendar event',
+    description: 'Add an event to the calendar (opens the calendar app filled in for the user to save).', icon: 'calendar',
+    parameters: {
+      title: { type: 'string', description: 'Event title', required: true },
+      start: { type: 'string', description: 'Start, ISO format like 2026-10-05T14:00', required: true },
+      end: { type: 'string', description: 'End, ISO format (optional)' },
+      location: { type: 'string', description: 'Location (optional)' },
+    },
+  },
+  {
+    id: 'remember', name: 'remember', displayName: 'Remember',
+    description: 'Save a lasting fact about the user that they want you to remember in future chats (preferences, people, health, plans). Only when the user shares it or asks you to remember.', icon: 'bookmark',
+    parameters: { fact: { type: 'string', description: 'One short fact', required: true } },
+  },
+  {
     id: 'read_url',
     name: 'read_url',
     displayName: 'URL Reader',

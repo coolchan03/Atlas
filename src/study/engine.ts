@@ -1,0 +1,158 @@
+/**
+ * Atlas study mode (NotebookLM-style) for one project's documents. Everything is
+ * generated on the phone with the loaded model, and every item points back to the
+ * exact source passage it came from ([1], [2] ... tap to read the passage).
+ */
+import { ragService } from '../services/rag';
+import { ragDatabase } from '../services/rag/database';
+import { ensureTextModel } from '../atlasTools/models';
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export interface Source { n: number; doc: string; part: number; text: string }
+export interface Card { q: string; a: string; src: number[] }
+export interface QuizItem { q: string; options: string[]; answer: number; why: string; src: number[] }
+export interface PodcastLine { host: 'A' | 'B'; text: string }
+export interface Slide { title: string; bullets: string[]; narration: string; src: number[] }
+
+export interface StudyResult {
+  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline';
+  createdAt: number;
+  topic: string;
+  sources: Source[];
+  text?: string;
+  cards?: Card[];
+  quiz?: QuizItem[];
+  podcast?: PodcastLine[];
+  slides?: Slide[];
+}
+
+interface StudyState {
+  saved: Record<string, StudyResult[]>; // by project
+  add: (projectId: string, r: StudyResult) => void;
+  remove: (projectId: string, createdAt: number) => void;
+}
+export const useStudyStore = create<StudyState>()(
+  persist(
+    (set) => ({
+      saved: {},
+      add: (pid, r) => set((s) => ({ saved: { ...s.saved, [pid]: [r, ...(s.saved[pid] || [])].slice(0, 40) } })),
+      remove: (pid, at) => set((s) => ({ saved: { ...s.saved, [pid]: (s.saved[pid] || []).filter((x) => x.createdAt !== at) } })),
+    }),
+    { name: 'atlas-study', storage: createJSONStorage(() => AsyncStorage) },
+  ),
+);
+
+const SOURCE_CHARS = 700;
+const BUDGET = 5200; // characters of source text per generation (fits small phone context windows)
+
+/** Sources for a topic (search) or, with no topic, a spread across all documents. */
+export async function gatherSources(projectId: string, topic: string): Promise<Source[]> {
+  let raw: { name: string; content: string; position: number }[] = [];
+  if (topic.trim()) {
+    const r: any = await ragService.searchProject(projectId, topic.trim());
+    raw = (r?.chunks || []).slice(0, 8);
+  }
+  if (raw.length < 4) {
+    const all = ragDatabase.getChunksByProject(projectId, 3000) as any[];
+    // Even spread: every document gets a share, evenly spaced through it.
+    const byDoc = new Map<string, any[]>();
+    all.forEach((c) => { if (!byDoc.has(c.name)) byDoc.set(c.name, []); byDoc.get(c.name)!.push(c); });
+    const perDoc = Math.max(1, Math.floor(8 / Math.max(1, byDoc.size)));
+    for (const list of byDoc.values()) {
+      list.sort((a, b) => a.position - b.position);
+      for (let i = 0; i < perDoc && i < list.length; i++) raw.push(list[Math.floor((i * list.length) / perDoc)]);
+    }
+  }
+  const out: Source[] = [];
+  let used = 0;
+  for (const c of raw) {
+    if (used > BUDGET) break;
+    const text = String(c.content).replace(/\s+/g, ' ').trim().slice(0, SOURCE_CHARS);
+    if (!text || out.some((o) => o.text === text)) continue;
+    out.push({ n: out.length + 1, doc: c.name, part: (c.position ?? 0) + 1, text });
+    used += text.length;
+  }
+  return out;
+}
+
+const sourceBlock = (s: Source[]) => s.map((x) => `[${x.n}] (${x.doc}, part ${x.part})\n${x.text}`).join('\n\n');
+const refs = (t: string) => [...new Set([...t.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))];
+
+async function ask(system: string, user: string): Promise<string> {
+  await ensureTextModel(null);
+  const { llmService } = require('../services/llm');
+  for (let i = 0; llmService.isCurrentlyGenerating() && i < 40; i++) await new Promise((r) => setTimeout(r, 1500));
+  const out: string = await llmService.generateResponse(
+    [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
+    { disableThinking: true },
+  );
+  return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+const GROUND = 'Use ONLY the numbered sources. After every fact put the source number in brackets like [2]. If the sources do not cover something, do not invent it.';
+
+export async function generate(projectId: string, kind: StudyResult['kind'], topic: string): Promise<StudyResult> {
+  const sources = await gatherSources(projectId, topic);
+  if (!sources.length) throw new Error('This project has no documents in its knowledge base yet.');
+  const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
+  const about = topic.trim() ? `Focus: ${topic.trim()}\n` : '';
+  const base: StudyResult = { kind, createdAt: Date.now(), topic: topic.trim(), sources };
+
+  if (kind === 'answer') {
+    const t = await ask(`You answer questions from documents. ${GROUND} Be clear and short.`, `${S}QUESTION: ${topic}`);
+    return { ...base, text: t };
+  }
+  if (kind === 'guide') {
+    const t = await ask(`You write study guides. ${GROUND}`, `${S}${about}Write a study guide with: a 3-sentence summary, the key ideas as short bullet points, important terms with one-line definitions, and 3 questions to think about. Use markdown headings.`);
+    return { ...base, text: t };
+  }
+  if (kind === 'outline') {
+    const t = await ask(`You make mind-map outlines. ${GROUND}`, `${S}${about}Make a mind-map style outline: one main topic, 3-6 branches, 2-4 short points under each branch (nested markdown bullets). Cite sources.`);
+    return { ...base, text: t };
+  }
+  if (kind === 'cards') {
+    const t = await ask(`You make flashcards. ${GROUND}`, `${S}${about}Make 8 flashcards. One per line, exactly this format:\nQ: question | A: short answer | SRC: number\nNothing else.`);
+    const cards: Card[] = t.split('\n').map((l) => {
+      const m = l.match(/Q:\s*(.+?)\s*\|\s*A:\s*(.+?)\s*(?:\|\s*SRC:\s*([\d,\s[\]]+))?\s*$/i);
+      return m ? { q: m[1].trim(), a: m[2].trim(), src: refs(`[${(m[3] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) } : null;
+    }).filter(Boolean) as Card[];
+    if (!cards.length) throw new Error('The model did not produce flashcards in the expected format. Try again or use a bigger model.');
+    return { ...base, cards };
+  }
+  if (kind === 'quiz') {
+    const t = await ask(`You write multiple-choice quizzes. ${GROUND}`, `${S}${about}Write 5 questions. For each, exactly:\nQ: question\nA) option\nB) option\nC) option\nD) option\nANSWER: letter\nWHY: one sentence\nSRC: number\n(blank line between questions)`);
+    const quiz: QuizItem[] = t.split(/\n\s*\n/).map((b) => {
+      const q = b.match(/Q:\s*(.+)/i)?.[1]?.trim();
+      const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*${L}[).:]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
+      const ans = 'ABCD'.indexOf((b.match(/ANSWER:\s*([A-D])/i)?.[1] || '').toUpperCase());
+      if (!q || opts.length < 2 || ans < 0) return null;
+      return { q, options: opts, answer: ans, why: b.match(/WHY:\s*(.+)/i)?.[1]?.trim() || '', src: refs(`[${(b.match(/SRC:\s*([\d,\s[\]]+)/i)?.[1] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) };
+    }).filter(Boolean) as QuizItem[];
+    if (!quiz.length) throw new Error('The model did not produce a quiz in the expected format. Try again or use a bigger model.');
+    return { ...base, quiz };
+  }
+  if (kind === 'podcast') {
+    const t = await ask(
+      'You write short, lively two-person podcast conversations that explain documents. Facts must come only from the sources. Do not put source numbers in the dialogue.',
+      `${S}${about}Write a 14-18 line conversation between two hosts: A (curious, asks questions) and B (explains). Natural, friendly, plain spoken English, no sound effects. Exactly this format, one line each:\nA: ...\nB: ...`,
+    );
+    const podcast: PodcastLine[] = t.split('\n').map((l) => {
+      const m = l.match(/^\s*\**\s*(?:HOST\s*)?([AB])\**\s*[:\-]\s*(.+)$/i);
+      return m ? { host: m[1].toUpperCase() as 'A' | 'B', text: m[2].replace(/\[\d+\]/g, '').trim() } : null;
+    }).filter(Boolean) as PodcastLine[];
+    if (podcast.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again.');
+    return { ...base, podcast };
+  }
+  // slides (narrated, like a short explainer video)
+  const t = await ask(`You make short explainer slideshows. ${GROUND}`, `${S}${about}Make 6 slides. For each slide, exactly:\nTITLE: ...\n- bullet\n- bullet\n- bullet\nSAY: one or two spoken sentences explaining the slide\nSRC: number\n(blank line between slides)`);
+  const slides: Slide[] = t.split(/\n\s*\n/).map((b) => {
+    const title = b.match(/TITLE:\s*(.+)/i)?.[1]?.trim();
+    if (!title) return null;
+    const bullets = b.split('\n').filter((l) => /^\s*[-*•]\s+/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).slice(0, 5);
+    return { title, bullets, narration: (b.match(/SAY:\s*(.+)/i)?.[1] || bullets.join('. ')).replace(/\[\d+\]/g, '').trim(), src: refs(b) };
+  }).filter(Boolean) as Slide[];
+  if (!slides.length) throw new Error('The model did not make slides in the expected format. Try again.');
+  return { ...base, slides };
+}
