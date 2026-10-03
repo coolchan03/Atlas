@@ -42,7 +42,7 @@ jobs:
       - name: Type check (informational, Atlas files reported as warnings)
         run: |
           npx tsc --noEmit -p . > tsc.log 2>&1 || true
-          grep -E "error TS" tsc.log | grep -iE "atlas|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
+          grep -E "error TS" tsc.log | grep -iE "atlas|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
           echo "total TS errors: $(grep -c 'error TS' tsc.log)"
       - name: Build release APK
         working-directory: android

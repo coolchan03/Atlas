@@ -137,6 +137,8 @@ android {
             // stores .so files inside the APK zip — File.exists() returns false for them and
             // exec() fails with EACCES (error=13) because you can't fork-exec from a zip entry.
             useLegacyPackaging = true
+            // Atlas: libkiwix ships its own libc++_shared.so like other native libraries.
+            pickFirsts += ['**/libc++_shared.so']
         }
     }
     aaptOptions {
@@ -158,6 +160,9 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Atlas: read Kiwix .zim offline libraries (Wikipedia, WikiMed, iFixit, Wikivoyage)
+    implementation("org.kiwix:libkiwix:2.6.0")
 
     // Coroutines for async operations (used by LocalDreamModule)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

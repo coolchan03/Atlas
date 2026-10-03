@@ -12,6 +12,7 @@ export { AgentsScreen } from './AgentsScreen';
 export { AgentEditScreen } from './AgentEditScreen';
 export { LearningScreen } from './LearningScreen';
 export { EmergencyScreen } from './EmergencyScreen';
+export { OfflineLibraryScreen } from './OfflineLibraryScreen';
 export { KnowledgeBaseScreen } from './KnowledgeBaseScreen';
 export { ProjectChatsScreen } from './ProjectChatsScreen';
 export { DocumentPreviewScreen } from './DocumentPreviewScreen';

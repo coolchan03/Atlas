@@ -72,6 +72,20 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'search_offline_library',
+    name: 'search_offline_library',
+    displayName: 'Offline Library',
+    description: 'Search the offline encyclopedias on this phone (Wikipedia, medical wiki, iFixit repair guides, travel guides) and return article text. Works without internet.',
+    icon: 'book',
+    parameters: {
+      query: {
+        type: 'string',
+        description: 'A few search words, e.g. "tetanus" or "solar charge controller"',
+        required: true,
+      },
+    },
+  },
+  {
     id: 'read_url',
     name: 'read_url',
     displayName: 'URL Reader',

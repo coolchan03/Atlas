@@ -4,6 +4,7 @@ import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../rag';
 import logger from '../../utils/logger';
 import { searchWeb } from './webSearchProviders';
+import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -41,6 +42,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');
       return handleSearchKnowledgeBase(q, call.context?.projectId);
+    }
+    case 'search_offline_library': {
+      const q = requireString(call, 'query');
+      if (!q) throw new Error('Missing required parameter: query');
+      return libraryToolAnswer(q);
     }
     case 'read_url': {
       const url = requireString(call, 'url');
