@@ -1,0 +1,128 @@
+package ai.offgridmobile.atlastts
+
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.util.Locale
+
+/**
+ * Speaks text with the phone's own text-to-speech engine (works offline when the
+ * engine's voice data is installed - Google TTS / Samsung TTS normally are).
+ * Long text is split into chunks; "AtlasTtsDone" fires once the LAST chunk of an
+ * utterance has finished, "AtlasTtsStopped" when speech is cancelled.
+ */
+class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
+    private var tts: TextToSpeech? = null
+    private var ready = false
+    private var rate = 1.0f
+    private val pending = mutableListOf<Pair<String, String>>()
+
+    override fun getName(): String = "AtlasTts"
+
+    private fun emit(event: String, id: String) {
+        try {
+            val map = Arguments.createMap()
+            map.putString("utteranceId", id)
+            ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit(event, map)
+        } catch (_: Exception) {}
+    }
+
+    private fun ensure() {
+        if (tts != null) return
+        tts = TextToSpeech(ctx.applicationContext) { status ->
+            ready = status == TextToSpeech.SUCCESS
+            if (ready) {
+                tts?.language = Locale.getDefault()
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        if (utteranceId != null && utteranceId.endsWith("#0")) emit("AtlasTtsStart", utteranceId.substringBefore("#"))
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        if (utteranceId != null && utteranceId.endsWith("#last")) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
+                    }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        if (utteranceId != null) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
+                    }
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                        if (utteranceId != null) emit("AtlasTtsStopped", utteranceId.substringBefore("#"))
+                    }
+                })
+                synchronized(pending) {
+                    for ((text, id) in pending) doSpeak(text, id)
+                    pending.clear()
+                }
+            } else {
+                synchronized(pending) {
+                    for ((_, id) in pending) emit("AtlasTtsDone", id)
+                    pending.clear()
+                }
+            }
+        }
+    }
+
+    private fun chunks(text: String, max: Int): List<String> {
+        val out = mutableListOf<String>()
+        val sentences = text.split(Regex("(?<=[.!?\\n])\\s+"))
+        val sb = StringBuilder()
+        for (s in sentences) {
+            if (sb.length + s.length + 1 > max && sb.isNotEmpty()) { out.add(sb.toString()); sb.setLength(0) }
+            if (s.length > max) { s.chunked(max).forEach { out.add(it) } } else { if (sb.isNotEmpty()) sb.append(' '); sb.append(s) }
+        }
+        if (sb.isNotEmpty()) out.add(sb.toString())
+        return out.filter { it.isNotBlank() }
+    }
+
+    private fun doSpeak(text: String, id: String) {
+        val engine = tts ?: return
+        engine.setSpeechRate(rate)
+        val max = (TextToSpeech.getMaxSpeechInputLength() - 100).coerceAtLeast(500)
+        val parts = chunks(text, max)
+        if (parts.isEmpty()) { emit("AtlasTtsDone", id); return }
+        engine.stop()
+        parts.forEachIndexed { i, p ->
+            val uid = if (i == parts.size - 1) "$id#last" else "$id#$i"
+            val uidFirst = if (i == 0 && parts.size > 1) "$id#0" else uid
+            engine.speak(p, TextToSpeech.QUEUE_ADD, Bundle(), uidFirst)
+        }
+    }
+
+    @ReactMethod
+    fun speak(text: String, utteranceId: String, promise: Promise) {
+        try {
+            ensure()
+            if (ready) doSpeak(text, utteranceId) else synchronized(pending) { pending.add(Pair(text, utteranceId)) }
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+    }
+
+    @ReactMethod
+    fun stop(promise: Promise) {
+        try { synchronized(pending) { pending.clear() }; tts?.stop(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+    }
+
+    @ReactMethod
+    fun setRate(r: Double, promise: Promise) { rate = r.toFloat(); promise.resolve(true) }
+
+    @ReactMethod
+    fun warmUp(promise: Promise) { try { ensure(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) } }
+
+    @ReactMethod
+    fun isSpeaking(promise: Promise) { promise.resolve(tts?.isSpeaking ?: false) }
+
+    // Required by NativeEventEmitter on Android.
+    @ReactMethod fun addListener(eventName: String) {}
+    @ReactMethod fun removeListeners(count: Int) {}
+
+    override fun invalidate() {
+        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        tts = null
+        super.invalidate()
+    }
+}

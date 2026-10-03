@@ -9,6 +9,12 @@ type AudioInputFormat = 'wav' | 'mp3';
 class AudioRecorderService {
   private recorder: AudioRecorder | null = null;
   private isRecording = false;
+  /** Atlas hands-free mode: receives the loudness (RMS, 0..1) of the mic while recording. */
+  private levelListener: ((rms: number) => void) | null = null;
+
+  setLevelListener(fn: ((rms: number) => void) | null): void {
+    this.levelListener = fn;
+  }
 
   supportsDirectAudioInput(): boolean {
     return true;
@@ -68,6 +74,22 @@ class AudioRecorderService {
         flacCompressionLevel: FlacCompressionLevel.L5,
       },
     });
+    if (this.levelListener) {
+      // Only attached in hands-free mode, so normal voice notes are untouched if this fails.
+      try {
+        (rec as any).onAudioReady({ sampleRate: 16000, bufferLength: 1600, channelCount: 1 }, (event: any) => {
+          try {
+            const data: Float32Array = event.buffer.getChannelData(0);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+            const rms = Math.sqrt(sum / Math.max(1, data.length));
+            this.levelListener?.(rms);
+          } catch { /* ignore a bad buffer */ }
+        });
+      } catch (err) {
+        logger.log(`[AtlasVoice] level metering unavailable: ${String(err)}`);
+      }
+    }
     this.recorder = rec;
     this.isRecording = true;
     const startResult: any = rec.start();
@@ -85,6 +107,7 @@ class AudioRecorderService {
     if (!this.isRecording || !this.recorder) {
       throw new Error('No active recording');
     }
+    try { (this.recorder as any).clearOnAudioReady?.(); } catch { /* not attached */ }
     const result = this.recorder.stop();
     this.isRecording = false;
     this.recorder = null;
@@ -101,6 +124,7 @@ class AudioRecorderService {
 
   cancelRecording(): void {
     if (!this.isRecording || !this.recorder) return;
+    try { (this.recorder as any).clearOnAudioReady?.(); } catch { /* not attached */ }
     this.recorder.stop();
     this.isRecording = false;
     this.recorder = null;

@@ -1,0 +1,36 @@
+import { create } from 'zustand';
+
+interface AtlasVoiceState {
+  /** Native utterance key currently speaking (null = silent). */
+  speakingKey: string | null;
+  /** Message id currently being spoken, for the per-message speaker button. */
+  speakingMessageId: string | null;
+  /** Increments every time a spoken reply finishes on its own (not when stopped). */
+  doneTick: number;
+  /** Hands-free "phone call" mode: after each spoken reply the mic re-opens by itself. */
+  handsFree: boolean;
+  /** Speech speed (1 = normal). */
+  rate: number;
+  /** Also read answers aloud in normal chat mode. */
+  autoSpeakInChat: boolean;
+  setSpeaking: (key: string | null, messageId?: string | null) => void;
+  markDone: () => void;
+  setHandsFree: (v: boolean) => void;
+  setRate: (v: number) => void;
+  setAutoSpeakInChat: (v: boolean) => void;
+}
+
+export const useAtlasVoiceStore = create<AtlasVoiceState>((set) => ({
+  speakingKey: null,
+  speakingMessageId: null,
+  doneTick: 0,
+  handsFree: true,
+  rate: 1,
+  autoSpeakInChat: false,
+  setSpeaking: (key, messageId) =>
+    set(key === null ? { speakingKey: null, speakingMessageId: null } : { speakingKey: key, ...(messageId !== undefined ? { speakingMessageId: messageId } : {}) }),
+  markDone: () => set((s) => ({ doneTick: s.doneTick + 1 })),
+  setHandsFree: (handsFree) => set({ handsFree }),
+  setRate: (rate) => set({ rate }),
+  setAutoSpeakInChat: (autoSpeakInChat) => set({ autoSpeakInChat }),
+}));
