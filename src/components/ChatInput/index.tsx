@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { RewriteButton } from '../RewriteButton';
 import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -384,6 +385,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 blurOnSubmit={false}
                 returnKeyType="default"
               />
+              {hasText && !disabled && <RewriteButton text={message} onResult={setMessage} colors={colors} />}
               <ComposerIconsRow
                 hasText={hasText}
                 iconsAnim={iconsAnim}

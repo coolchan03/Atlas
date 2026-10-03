@@ -6,7 +6,8 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
-import { generate, useStudyStore, StudyResult, Source } from '../study/engine';
+import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
+import { Switch } from 'react-native';
 import { speakAndWait, stop } from '../atlasVoice/tts';
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
@@ -26,7 +27,7 @@ function SourceChips({ nums, sources, onOpen, colors }: { nums: number[]; source
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 }}>
       {list.map((s) => (
         <TouchableOpacity key={s.n} onPress={() => onOpen(s)} style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6, marginTop: 4 }}>
-          <Text style={{ color: colors.primary, fontSize: 12 }}>[{s.n}] {s.doc.replace(/\.(md|txt|pdf)$/i, '').slice(0, 28)}</Text>
+          <Text style={{ color: colors.primary, fontSize: 12 }}>[{s.n}] {s.origin === 'web' ? '🌐 ' : s.origin === 'library' ? '📚 ' : ''}{s.doc.replace(/\.(md|txt|pdf)$/i, '').slice(0, 28)}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -52,8 +53,23 @@ export const StudyScreen: React.FC = () => {
   const [picked, setPicked] = useState<Record<number, number>>({});
   const [playing, setPlaying] = useState<number | null>(null);
   const stopRef = useRef(false);
+  const [podOpen, setPodOpen] = useState(false);
+  const [pod, setPod] = useState<{ prompt: string; length: PodcastLength; style: PodcastStyle; research: boolean }>({ prompt: '', length: 'medium', style: 'casual', research: false });
+
+  const makeEpisode = async () => {
+    setPodOpen(false);
+    setBusy('Podcast');
+    try {
+      const r = await generatePodcast(projectId, pod, (m) => setBusy(m));
+      add(projectId, r);
+      setView(r);
+    } catch (e: any) {
+      Alert.alert('Could not make the episode', String(e?.message || e));
+    } finally { setBusy(null); }
+  };
 
   const run = async (kind: StudyResult['kind']) => {
+    if (kind === 'podcast') { setPod((p) => ({ ...p, prompt: p.prompt || topic })); setPodOpen(true); return; }
     if (kind === 'answer' && !topic.trim()) { Alert.alert('Type a question first'); return; }
     setBusy(kind === 'answer' ? 'Answering' : KINDS.find((k) => k.kind === kind)?.label || kind);
     try {
@@ -105,7 +121,7 @@ export const StudyScreen: React.FC = () => {
     const v = view;
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-        {header(`${KINDS.find((k) => k.kind === v.kind)?.label || 'Answer'}${v.topic ? `: ${v.topic}` : ''}`, () => { halt(); setView(null); })}
+        {header(v.title || `${KINDS.find((k) => k.kind === v.kind)?.label || 'Answer'}${v.topic ? `: ${v.topic}` : ''}`, () => { halt(); setView(null); })}
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120, width: '100%', maxWidth: 920, alignSelf: 'center' }}>
           {!!v.text && (
             <View style={card}>
@@ -209,13 +225,13 @@ export const StudyScreen: React.FC = () => {
             </View>
           ))}
         </View>
-        {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>Working on it - this can take a minute on a phone.</Text>}
+        {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>{/\.\.\.$/.test(busy) ? busy : 'Working on it'} - this can take a few minutes on a phone.</Text>}
         {saved.length > 0 && <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 6 }}>Saved</Text>}
         {saved.map((r) => (
           <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setView(r); }}>
             <Icon name={KINDS.find((k) => k.kind === r.kind)?.icon || 'message-circle'} size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>{KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}{r.topic ? `: ${r.topic}` : ''}</Text>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title ? `🎙 ${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(r.createdAt).toLocaleString()}</Text>
             </View>
             <TouchableOpacity onPress={() => remove(projectId, r.createdAt)} style={{ padding: 6 }}><Icon name="trash-2" size={16} color={colors.textMuted} /></TouchableOpacity>
@@ -223,6 +239,49 @@ export const StudyScreen: React.FC = () => {
         ))}
       </ScrollView>
       {sourceModal}
+      <Modal visible={podOpen} transparent animationType="slide" onRequestClose={() => setPodOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 18, width: '100%', maxWidth: 720, alignSelf: 'center' }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>New podcast episode</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>Leave the prompt empty and it picks the episode itself from your sources.</Text>
+            <TextInput value={pod.prompt} onChangeText={(t) => setPod((p) => ({ ...p, prompt: t }))} multiline
+              placeholder="e.g. Explain how to purify water for a 10-year-old, with examples"
+              placeholderTextColor={colors.textMuted}
+              style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 10, padding: 12, marginTop: 10, minHeight: 60 }} />
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>LENGTH</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              {([['short', 'Short ~3 min'], ['medium', 'Medium ~6 min'], ['long', 'Long ~10 min']] as [PodcastLength, string][]).map(([k, l]) => (
+                <TouchableOpacity key={k} onPress={() => setPod((p) => ({ ...p, length: k }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.length === k ? colors.primary : colors.background }}>
+                  <Text style={{ color: pod.length === k ? '#fff' : colors.text, fontSize: 13 }}>{l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>STYLE</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+              {([['casual', 'Casual'], ['deep', 'Deep dive'], ['debate', 'Debate'], ['interview', 'Interview'], ['beginner', 'For beginners']] as [PodcastStyle, string][]).map(([k, l]) => (
+                <TouchableOpacity key={k} onPress={() => setPod((p) => ({ ...p, style: k }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.style === k ? colors.primary : colors.background }}>
+                  <Text style={{ color: pod.style === k ? '#fff' : colors.text, fontSize: 13 }}>{l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>Extra research</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Also look in your offline library and, when online, the web. Extra sources are marked 📚 / 🌐.</Text>
+              </View>
+              <Switch value={pod.research} onValueChange={(v) => setPod((p) => ({ ...p, research: v }))} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <TouchableOpacity onPress={() => setPodOpen(false)} style={{ flex: 1, padding: 13, borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}>
+                <Text style={{ color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={makeEpisode} style={{ flex: 2, padding: 13, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Make episode</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

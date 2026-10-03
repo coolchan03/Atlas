@@ -10,7 +10,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface Source { n: number; doc: string; part: number; text: string }
+export interface Source { n: number; doc: string; part: number; text: string; origin?: 'project' | 'library' | 'web'; url?: string }
 export interface Card { q: string; a: string; src: number[] }
 export interface QuizItem { q: string; options: string[]; answer: number; why: string; src: number[] }
 export interface PodcastLine { host: 'A' | 'B'; text: string }
@@ -20,6 +20,7 @@ export interface StudyResult {
   kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline';
   createdAt: number;
   topic: string;
+  title?: string;
   sources: Source[];
   text?: string;
   cards?: Card[];
@@ -155,4 +156,93 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
   }).filter(Boolean) as Slide[];
   if (!slides.length) throw new Error('The model did not make slides in the expected format. Try again.');
   return { ...base, slides };
+}
+
+
+// ---------------------------------------------------------------- podcast episodes
+export type PodcastLength = 'short' | 'medium' | 'long';
+export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner';
+export interface PodcastOptions { prompt: string; length: PodcastLength; style: PodcastStyle; research: boolean }
+
+const STYLE_TEXT: Record<PodcastStyle, string> = {
+  casual: 'friendly and relaxed, like two friends chatting',
+  deep: 'a deep dive: careful, detailed, connecting ideas',
+  debate: 'a friendly debate: the hosts take different sides and weigh the evidence',
+  interview: 'an interview: A is the interviewer, B is the expert guest',
+  beginner: 'for complete beginners: simple words, everyday examples, no jargon',
+};
+const SEGMENTS: Record<PodcastLength, number> = { short: 2, medium: 3, long: 5 };
+
+/** Extra research: offline library (Kiwix) first, then the web when online and not in off-grid mode. */
+async function researchSources(query: string, startN: number, onStep: (m: string) => void): Promise<Source[]> {
+  const out: Source[] = [];
+  try {
+    onStep('Researching the offline library...');
+    const { searchLibrary, readArticle } = require('../atlasTools/offlineLibrary');
+    const hits = await searchLibrary(query, 3);
+    for (const h of hits.slice(0, 2)) {
+      try {
+        const a = await readArticle(h.uri, h.path, 900);
+        out.push({ n: startN + out.length, doc: `${h.library}: ${a.title}`, part: 1, text: a.text.replace(/\s+/g, ' ').slice(0, 800), origin: 'library' });
+      } catch { /* skip */ }
+    }
+  } catch { /* no library */ }
+  try {
+    const { offGridOn } = require('../atlasTools/offGrid');
+    if (!offGridOn()) {
+      onStep('Researching the web...');
+      const { searchWeb } = require('../services/tools/webSearchProviders');
+      const r = await searchWeb(query, async () => []);
+      for (const w of r.results.slice(0, 3)) {
+        if (!w.snippet) continue;
+        out.push({ n: startN + out.length, doc: w.title, part: 1, text: w.snippet.slice(0, 600), origin: 'web', url: w.url });
+      }
+    }
+  } catch { /* offline */ }
+  return out;
+}
+
+/**
+ * Makes a podcast episode in steps (plan, then each segment) so it can be longer than the
+ * model's memory: from the project sources, an optional prompt and optional extra research.
+ */
+export async function generatePodcast(projectId: string, opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
+  onStep('Reading your sources...');
+  let sources = await gatherSources(projectId, opts.prompt);
+  if (opts.research) {
+    const extra = await researchSources(opts.prompt || sources.map((x) => x.doc).slice(0, 2).join(' '), sources.length + 1, onStep);
+    sources = [...sources, ...extra];
+  }
+  if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
+  const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
+  const nSeg = SEGMENTS[opts.length];
+  const style = STYLE_TEXT[opts.style];
+
+  onStep('Planning the episode...');
+  const plan = await ask(
+    'You plan podcast episodes based only on the given sources.',
+    `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
+  );
+  const title = plan.match(/TITLE:\s*(.+)/i)?.[1]?.trim() || opts.prompt || 'Episode';
+  const segs = Array.from({ length: nSeg }, (_, i) => plan.match(new RegExp(`SEGMENT\\s*${i + 1}\\s*:\\s*(.+)`, 'i'))?.[1]?.trim()).filter(Boolean) as string[];
+  const topics = segs.length ? segs : [opts.prompt || 'the main ideas'];
+
+  const lines: PodcastLine[] = [];
+  const parse = (t: string) => t.split('\n').map((l) => {
+    const m = l.match(/^\s*\**\s*(?:HOST\s*)?([AB])\**\s*[:\-]\s*(.+)$/i);
+    return m ? { host: m[1].toUpperCase() as 'A' | 'B', text: m[2].replace(/\[\d+\]/g, '').trim() } : null;
+  }).filter(Boolean) as PodcastLine[];
+
+  for (let i = 0; i < topics.length; i++) {
+    onStep(`Writing part ${i + 1} of ${topics.length}...`);
+    const recap = lines.slice(-2).map((l) => `${l.host}: ${l.text}`).join('\n');
+    const where = i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
+    const t = await ask(
+      'You write natural two-host podcast dialogue. Facts must come only from the sources. Never mention source numbers in the dialogue.',
+      `${S}Episode: "${title}". Style: ${style}.\nThis part is about: ${topics[i]}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write 8-10 lines, one line each, exactly in this format:\nA: ...\nB: ...`,
+    );
+    lines.push(...parse(t));
+  }
+  if (lines.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again or use a bigger model.');
+  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources, podcast: lines };
 }
