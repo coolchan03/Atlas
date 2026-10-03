@@ -101,7 +101,7 @@ export const ChatScreen: React.FC = () => {
   // previously lived here floated the input mid-screen, so it was removed.
 
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
-  useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
+  // Atlas: no share prompts.
 
   const [proAhaVisible, setProAhaVisible] = useState(false);
   const proAhaShownThisSession = useRef(false);
@@ -113,7 +113,7 @@ export const ChatScreen: React.FC = () => {
   useEffect(() => subscribeProPrompt(() => {
     if (proAhaShownThisSession.current) return;
     proAhaShownThisSession.current = true;
-    setProAhaVisible(true);
+    // Atlas: no Pro prompts.
   }), []);
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
   // chatSpotlight controls which index is active (3, 12, 15, or 16).

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AtlasVoiceState {
   /** Native utterance key currently speaking (null = silent). */
@@ -20,7 +22,7 @@ interface AtlasVoiceState {
   setAutoSpeakInChat: (v: boolean) => void;
 }
 
-export const useAtlasVoiceStore = create<AtlasVoiceState>((set) => ({
+export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   speakingKey: null,
   speakingMessageId: null,
   doneTick: 0,
@@ -33,4 +35,8 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>((set) => ({
   setHandsFree: (handsFree) => set({ handsFree }),
   setRate: (rate) => set({ rate }),
   setAutoSpeakInChat: (autoSpeakInChat) => set({ autoSpeakInChat }),
+}), {
+  name: 'atlas-voice-settings',
+  storage: createJSONStorage(() => AsyncStorage),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat }),
 }));

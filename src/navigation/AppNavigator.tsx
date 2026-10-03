@@ -26,6 +26,8 @@ import {
   ChatsListScreen,
   ProjectDetailScreen,
   ProjectEditScreen,
+  AgentsScreen,
+  AgentEditScreen,
   ProjectChatsScreen,
   KnowledgeBaseScreen,
   DocumentPreviewScreen,
@@ -54,6 +56,7 @@ const TAB_ICON_MAP: Record<string, string> = {
   HomeTab: 'home',
   ChatsTab: 'message-circle',
   ProjectsTab: 'folder',
+  AgentsTab: 'users',
   ModelsTab: 'cpu',
   SettingsTab: 'settings',
 };
@@ -165,6 +168,14 @@ const MainTabs: React.FC = () => {
           })}
         />
         <Tab.Screen
+          name="AgentsTab"
+          component={AgentsScreen}
+          options={{ tabBarLabel: 'Agents', tabBarButtonTestID: 'agents-tab' }}
+          listeners={() => ({
+            tabPress: () => { triggerHaptic('selection'); },
+          })}
+        />
+        <Tab.Screen
           name="ModelsTab"
           component={ModelsScreen}
           options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
@@ -228,6 +239,11 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen
           name="ProjectEdit"
           component={ProjectEditScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <RootStack.Screen
+          name="AgentEdit"
+          component={AgentEditScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />

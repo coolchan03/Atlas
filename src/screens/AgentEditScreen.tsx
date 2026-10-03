@@ -7,43 +7,30 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { consumePendingSpotlight } from '../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import { useProjectStore } from '../stores';
+import { useAgentStore } from '../stores/agentStore';
 import { RootStackParamList } from '../navigation/types';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProjectEdit'>;
-type RouteProps = RouteProp<RootStackParamList, 'ProjectEdit'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'AgentEdit'>;
+type RouteProps = RouteProp<RootStackParamList, 'AgentEdit'>;
 
-export const ProjectEditScreen: React.FC = () => {
+export const AgentEditScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
-  const projectId = route.params?.projectId;
+  const agentId = route.params?.agentId;
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { goTo } = useSpotlightTour();
-  const { getProject, createProject, updateProject } = useProjectStore();
-  const existingProject = projectId ? getProject(projectId) : null;
-
-  // If user arrived here via onboarding spotlight flow, show name input spotlight
-  useEffect(() => {
-    const pending = consumePendingSpotlight();
-    if (pending !== null) {
-      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-      return () => task.cancel();
-    }
-  }, []);
+  const { getAgent, createAgent, updateAgent, deleteAgent, setActiveAgent } = useAgentStore();
+  const existingProject = agentId ? getAgent(agentId) : null;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -63,22 +50,27 @@ export const ProjectEditScreen: React.FC = () => {
 
   const handleSave = () => {
     if (!formData.name.trim()) {
-      setAlertState(showAlert('Error', 'Please enter a name for the project'));
+      setAlertState(showAlert('Error', 'Please enter a name for the agent'));
       return;
     }
 
+    if (!formData.systemPrompt.trim()) {
+      setAlertState(showAlert('Error', 'Please enter a system prompt'));
+      return;
+    }
     if (existingProject) {
-      updateProject(existingProject.id, {
+      updateAgent(existingProject.id, {
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
       });
     } else {
-      createProject({
+      const created = createAgent({
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
       });
+      setActiveAgent(created.id);
     }
 
     navigation.goBack();
@@ -96,7 +88,7 @@ export const ProjectEditScreen: React.FC = () => {
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {existingProject ? 'Edit Project' : 'New Project'}
+            {existingProject ? 'Edit Agent' : 'New Agent'}
           </Text>
           <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
             <Text style={styles.saveText}>Save</Text>
@@ -110,15 +102,13 @@ export const ProjectEditScreen: React.FC = () => {
         >
           {/* Name */}
           <Text style={styles.label}>Name *</Text>
-          <AttachStep index={8} fill>
-            <TextInput
-              style={styles.input}
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="e.g., Spanish Learning, Code Review"
-              placeholderTextColor={colors.textMuted}
-            />
-          </AttachStep>
+          <TextInput
+            style={styles.input}
+            value={formData.name}
+            onChangeText={(text) => setFormData({ ...formData, name: text })}
+            placeholder="e.g., Atlas Medic, Survival Guide, Tutor"
+            placeholderTextColor={colors.textMuted}
+          />
 
           {/* Description */}
           <Text style={styles.label}>Description</Text>
@@ -126,14 +116,14 @@ export const ProjectEditScreen: React.FC = () => {
             style={styles.input}
             value={formData.description}
             onChangeText={(text) => setFormData({ ...formData, description: text })}
-            placeholder="Brief description of this project"
+            placeholder="What this agent is for"
             placeholderTextColor={colors.textMuted}
           />
 
           {/* System Prompt */}
-          <Text style={styles.label}>Project notes (optional)</Text>
+          <Text style={styles.label}>System Prompt *</Text>
           <Text style={styles.hint}>
-            Extra context for chats in this project. It is added under the active agent's instructions. Who answers and how is set in Agents.
+            These instructions are sent to the AI at the start of every chat while this agent is active.
           </Text>
           <TextInput
             style={[styles.input, styles.textArea]}
@@ -148,6 +138,15 @@ export const ProjectEditScreen: React.FC = () => {
           <Text style={styles.tip}>
             Tip: Be specific about what you want the AI to do, how it should respond, and any context it needs.
           </Text>
+
+          {existingProject && (
+            <TouchableOpacity
+              onPress={() => { deleteAgent(existingProject.id); navigation.goBack(); }}
+              style={styles.deleteButton}
+            >
+              <Text style={[styles.cancelText, { color: colors.error }]}>Delete agent</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.bottomPadding} />
         </ScrollView>
@@ -229,6 +228,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     marginTop: SPACING.md,
     lineHeight: 18,
+  },
+  deleteButton: {
+    marginTop: SPACING.xl,
+    padding: SPACING.md,
+    alignItems: 'center' as const,
   },
   bottomPadding: {
     height: SPACING.xxl,

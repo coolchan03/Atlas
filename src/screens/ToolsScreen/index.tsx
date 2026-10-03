@@ -54,22 +54,7 @@ export const ToolsScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        {/* Pro Tools always sits on top of the listing. */}
-        <TouchableOpacity
-          style={styles.proToolsButton}
-          onPress={openProTools}
-          activeOpacity={0.75}
-          testID="tools-pro-tools"
-        >
-          <View style={styles.proToolsIcon}>
-            <IconMC name="crown" size={20} color={colors.primary} />
-          </View>
-          <View style={styles.toolInfo}>
-            <Text style={styles.toolName}>Pro Tools</Text>
-            <Text style={styles.toolDescription}>Email, calendar and MCP servers</Text>
-          </View>
-          <Icon name="chevron-right" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
+        
 
         {showHint && (
           <View style={[styles.hintBanner, { backgroundColor: colors.surface }]}>

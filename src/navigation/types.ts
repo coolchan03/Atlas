@@ -9,6 +9,7 @@ export type RootStackParamList = {
   // Former ProjectsStack
   ProjectDetail: { projectId: string };
   ProjectEdit: { projectId?: string };
+  AgentEdit: { agentId?: string };
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
@@ -31,6 +32,7 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ChatsTab: undefined;
   ProjectsTab: undefined;
+  AgentsTab: undefined;
   ModelsTab: { initialTab?: 'text' | 'image' | 'voice' | 'transcription'; repairModelId?: string; initialSearchQuery?: string } | undefined;
   SettingsTab: undefined;
 };

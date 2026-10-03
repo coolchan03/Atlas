@@ -7,6 +7,7 @@ import { speak, stop, ttsAvailable, warmUp } from './tts';
 import { useAtlasVoiceStore } from './store';
 import { AtlasAudioInput } from './AudioInput';
 import { AtlasModeToggle, AtlasSpeakButton } from './Buttons';
+import { AtlasVoicePanel } from './VoicePanel';
 import logger from '../utils/logger';
 
 /**
@@ -39,4 +40,5 @@ export function registerAtlasVoice(): void {
   registerSlot(SLOTS.chatInputAudioMode, AtlasAudioInput);
   registerSlot(SLOTS.chatInputModeToggle, AtlasModeToggle);
   registerSlot(SLOTS.messageSpeakButton, AtlasSpeakButton);
+  registerSlot(SLOTS.modelsScreenVoiceTab, AtlasVoicePanel);
 }

@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
 import { Dispatch, SetStateAction } from 'react';
+import { resolveAgentPrompt } from '../../stores/agentStore';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
 import { APP_CONFIG } from '../../constants';
@@ -345,7 +346,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   // The user enables KB search explicitly when they want it.
   const enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
 
-  const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt);
   return { enabledTools, rawPrompt, localToolSupport };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {

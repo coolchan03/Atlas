@@ -15,6 +15,7 @@ import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { AgentChip } from '../../components/AgentChip';
 
 type StylesType = ReturnType<typeof createStyles>;
 type ColorsType = ReturnType<typeof useTheme>['colors'];
@@ -120,6 +121,8 @@ export const ChatHeader: React.FC<{
               {activeProject ? activeProject.name : 'Default'}
             </Text>
           </TouchableOpacity>
+          <Text style={styles.headerSubtitleDivider}>·</Text>
+          <AgentChip styles={styles} colors={colors} />
           {/* Pro-only: Chat/Voice mode dropdown, on the same line as Models ·
               project, pushed to the right. Empty slot in free builds. */}
           {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null; })()}

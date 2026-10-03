@@ -151,8 +151,6 @@ export const SettingsScreen: React.FC = () => {
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
 
-        {/* PRO Banner */}
-        <ProUpsellBanner trigger={focusTrigger} onGetPro={() => navigation.navigate('ProDetail')} />
 
         {/* Theme Selector */}
         <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
@@ -214,69 +212,6 @@ export const SettingsScreen: React.FC = () => {
             ))}
           </View>
         </AttachStep>
-
-        {/* PRO Button */}
-        <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
-          <TouchableOpacity
-            style={styles.proNavButton}
-            onPress={() => navigation.navigate('ProDetail')}
-            activeOpacity={0.75}
-          >
-            <View style={styles.proIconContainer}>
-              <IconMC name="crown" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.proCardText}>
-              <View style={styles.proTitleRow}>
-                <Text style={styles.proNavTitle}>Off Grid AI PRO</Text>
-                <View style={styles.proBadge}>
-                  <Text style={styles.proBadgeText}>PRO</Text>
-                </View>
-              </View>
-              <Text style={styles.proDesc}>{proStatusLabel}</Text>
-            </View>
-            <Icon name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        </AnimatedEntry>
-
-        {/* Stay in the loop */}
-        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
-          <View style={styles.followSection}>
-            <View style={styles.followHeader}>
-              <Text style={styles.followHeaderTitle}>Stay in the loop</Text>
-              <Text style={styles.followHeaderDesc}>
-                New features land here first, subscribers get promo discounts, and your feedback shapes what gets built next.
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.navItem}
-              testID="follow-on-x"
-              onPress={() => Linking.openURL(FOLLOW_X_URL)}
-            >
-              <View style={styles.followItemIcon}>
-                <Icon name="twitter" size={16} color={colors.primary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Follow @alichherawalla on X</Text>
-                <Text style={styles.navItemDesc}>Feature drops, promo discounts, roadmap</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, styles.navItemLast]}
-              testID="join-slack"
-              onPress={() => Linking.openURL(SLACK_INVITE_URL)}
-            >
-              <View style={styles.followItemIcon}>
-                <IconMC name="slack" size={16} color={colors.primary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Join the Slack community</Text>
-                <Text style={styles.navItemDesc}>Issues fixed fast, debug together, early access</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </AnimatedEntry>
 
         {/* Community */}
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
