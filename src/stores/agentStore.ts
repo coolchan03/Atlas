@@ -119,8 +119,8 @@ export const useAgentStore = create<AgentState>()(
       name: 'atlas-agent-storage',
       storage: createJSONStorage(() => AsyncStorage),
       // New built-in agents appear in existing installs once; deleting one keeps it deleted.
-      merge: (persisted: any, current: any) => {
-        const p = persisted || {};
+      merge: (persisted: unknown, current: AgentState): AgentState => {
+        const p = (persisted || {}) as Partial<AgentState>;
         const agents: Agent[] = Array.isArray(p.agents) ? p.agents : current.agents;
         const seen: string[] = Array.isArray(p.seenDefaults) ? p.seenDefaults : agents.map((a) => a.id);
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
