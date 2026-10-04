@@ -153,6 +153,7 @@ export const MyModelsScreen: React.FC = () => {
                 {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <TouchableOpacity style={btn(colors.primary)} disabled={!!busy} onPress={() => navigation.navigate('ModelTest', { modelId: m.id })}><Icon name="activity" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Test</Text></TouchableOpacity>
                 {m.engine === 'llama' && (vision ? (
                   <TouchableOpacity style={btn(colors.border)} onPress={() => removeVision(m)}><Icon name="eye-off" size={14} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, marginLeft: 6 }}>Remove vision file</Text></TouchableOpacity>
                 ) : (
