@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
-import { useChatStore } from '../../stores';
+import { useChatStore, useAppStore } from '../../stores';
+import { selectIsLiteRT } from '../../stores/appStore';
 import { contextCompactionService, llmService } from '../../services';
 import { useChatPrefs } from '../../atlasTools/chatPrefs';
 import { useAgentStore } from '../../stores/agentStore';
@@ -18,13 +19,24 @@ export const ChatContextSection: React.FC = () => {
   const autoCompress = useChatPrefs((s) => s.autoCompress);
   const setPrefs = useChatPrefs((s) => s.set);
   const agentName = useAgentStore((s) => s.agents.find((a) => a.id === s.activeAgentId)?.name);
+  const agentCtx = useAgentStore((s) => s.agents.find((a) => a.id === s.activeAgentId)?.contextLength);
+  const isLiteRT = useAppStore(selectIsLiteRT);
+  const ctxKey = isLiteRT ? 'liteRTMaxTokens' : 'contextLength';
+  const ctxValue = useAppStore((s) => (s.settings as any)[ctxKey] as number) || 4096;
+  const modelMax = useAppStore((s) => s.modelMaxContext);
+  const updateSettings = useAppStore((s) => s.updateSettings);
   useEffect(() => { setText(conv?.instructions || ''); }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Write to the chat a moment after typing stops (not on every key press).
+  useEffect(() => {
+    if (!convId || text === (conv?.instructions || '')) return;
+    const t = setTimeout(() => {
+      useChatStore.setState((s: any) => ({ conversations: s.conversations.map((c: any) => (c.id === convId ? { ...c, instructions: text } : c)) }));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [text, convId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!convId || !conv) return null;
 
-  const save = (v: string) => {
-    setText(v);
-    useChatStore.setState((s: any) => ({ conversations: s.conversations.map((c: any) => (c.id === convId ? { ...c, instructions: v } : c)) }));
-  };
+  const save = (v: string) => setText(v);
   const compress = async () => {
     if (!llmService.isModelLoaded()) { Alert.alert('Load a model first', 'Compressing uses the loaded model to write the summary.'); return; }
     if (llmService.isCurrentlyGenerating()) { Alert.alert('Busy', 'Wait for the answer to finish, then try again.'); return; }
@@ -37,6 +49,21 @@ export const ChatContextSection: React.FC = () => {
   const box = { backgroundColor: colors.surface, borderRadius: 10, padding: 12, marginBottom: 12 };
   return (
     <View>
+      <View style={box}>
+        <Text style={{ color: colors.text, fontWeight: '600' }}>Memory size (context)</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+          How much of the conversation and documents the model can keep in mind. Bigger remembers more but uses more RAM and starts slower. The model reloads after a change.{agentCtx ? ` The ${agentName} agent sets its own size (${agentCtx / 1024}K): change it in Agents.` : ''}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8 }}>
+          {[2048, 4096, 8192, 16384, 32768].filter((n) => !modelMax || n <= Math.max(modelMax, 4096)).map((n) => (
+            <TouchableOpacity key={n} onPress={() => updateSettings({ [ctxKey]: n } as any)}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: ctxValue === n ? colors.primary : colors.background }}>
+              <Text style={{ color: ctxValue === n ? colors.background : colors.text, fontSize: 13 }}>{n / 1024}K{n === 16384 ? ' (8GB+ RAM)' : n === 32768 ? ' (12GB+ RAM)' : ''}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 6 }}>More options (temperature, length, GPU) are under Text generation below.</Text>
+      </View>
       <View style={box}>
         <Text style={{ color: colors.text, fontWeight: '600' }}>Instructions for this chat</Text>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>

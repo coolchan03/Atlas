@@ -107,10 +107,18 @@ def save_pdf(url, dest, rel, depth=0):
         links = set(re.findall(r'href=["\']([^"\']+?\.pdf(?:\?[^"\']*)?)["\']', page, re.I))
         links |= set(re.findall(r'href=["\']([^"\']*(?:/download|/bitstream|/content)[^"\']*)["\']', page, re.I))
         ws = words(rel)
-        scored = sorted(links, key=lambda l: -sum(w in l.lower() for w in ws))
-        for l in scored[:3]:
+        score = lambda l: sum(w in l.lower() for w in ws)
+        pdfs = [l for l in links if ".pdf" in l.lower()]
+        # Only follow links that clearly belong to this document (avoid saving a privacy policy as the book).
+        good = sorted([l for l in links if score(l) >= 2 or (len(pdfs) == 1 and l in pdfs)], key=lambda l: -score(l))
+        wb = re.match(r"(https?://web\.archive\.org/web/[^/]+/)(.*)$", url)
+        base = wb.group(2) if wb else url
+        for l in good[:3]:
+            target = urllib.parse.urljoin(base, l)
+            if wb and not target.startswith("https://web.archive.org"):
+                target = wb.group(1) + target  # stay inside the Internet Archive copy
             try:
-                return save_pdf(urllib.parse.urljoin(url, l), dest, rel, 1)
+                return save_pdf(target, dest, rel, 1)
             except Exception:
                 pass
     raise ValueError("not a PDF (%d bytes)" % size)
@@ -181,9 +189,9 @@ def fallback_specs(rel):
     ws = words(rel)[:6]
     if len(ws) < 2:
         return []
+    # Title must contain the first three distinctive words, so an unrelated book is never used.
     strict = "title:(%s)" % " AND ".join(ws[:3])
-    loose = " AND ".join(ws[:3])
-    return ["iasearch:%s|%s" % (strict, ";".join(ws[:2])), "iasearch:%s|%s" % (loose, ";".join(ws[:2]))]
+    return ["iasearch:%s|%s" % (strict, ";".join(ws[:3]))]
 
 
 def step2():
@@ -208,8 +216,11 @@ def step2():
         for spec in specs + fallback_specs(rel):
             for get in resolve(spec):
                 try:
-                    n = save_pdf(get(), dest, rel)
+                    src_url = get()
+                    n = save_pdf(src_url, dest, rel)
                     log("OK    %s  %.1f MB" % (rel, n / 1e6)); ok += 1; done = True
+                    with open(MAN / "SOURCES_USED.tsv", "a", encoding="utf-8") as su:
+                        su.write("%s\t%s\n" % (rel, src_url))
                     break
                 except Exception as e:
                     print("      (%s: %s)" % (spec[:50], str(e)[:70]))
@@ -218,13 +229,13 @@ def step2():
                 break
         if not done:
             fail += 1; failed.append((rel, specs[0] if specs else "no known source"))
-            fail_why.append("%s: %s" % (rel, " ; ".join(errs[-3:]) or "no source"))
+            fail_why.append("%s: %s" % (rel, " ; ".join(errs[:2] + errs[-1:]) or "no source"))
             log("FAIL  %s" % rel)
     log("\nDownloads: %d new, %d already there, %d failed" % (ok, skip, fail))
     if os.environ.get("GITHUB_ACTIONS"):
         print("::notice title=Atlas downloads %s::%d new, %d already there, %d failed" % (",".join(ONLY) or "all", ok, skip, fail))
+        (MAN / "FAILED_WHY.txt").write_text("\n".join(fail_why) + ("\n" if fail_why else "(nothing failed)\n"), encoding="utf-8")
         if fail_why:
-            (MAN / "FAILED_WHY.txt").write_text("\n".join(fail_why) + "\n", encoding="utf-8")
             print("::notice title=Atlas failed downloads (why)::%s" % "%0A".join(w.replace("%", "%25") for w in fail_why)[:60000])
     with open(MAN / "MANUAL_DOWNLOADS.txt", "w", encoding="utf-8") as f:
         f.write("Get these by hand if you want them (open the link, save the PDF into the folder shown).\n\n")
@@ -365,7 +376,10 @@ def text_parts(src, md, parts_dir):
     for old in parts_dir.glob(src.stem + "_part*.md"):
         old.unlink()
     k, buf = 1, ""
+    paras = []
     for para in body.split("\n\n"):
+        paras += [para[i:i + PART_CHARS - 1000] for i in range(0, len(para), PART_CHARS - 1000)] or [para]
+    for para in paras:
         if buf and len(buf) + len(para) > PART_CHARS:
             (parts_dir / ("%s_part%02d.md" % (src.stem, k))).write_text("# %s (part %d)\n\n%s" % (title, k, buf), encoding="utf-8")
             k, buf = k + 1, ""

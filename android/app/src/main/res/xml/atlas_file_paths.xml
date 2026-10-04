@@ -4,4 +4,6 @@
     <external-files-path name="appfiles" path="." />
     <files-path name="internal" path="." />
     <cache-path name="cache" path="." />
+    <!-- SD-card app folders (maps, library, models moved to the card) -->
+    <root-path name="sdcard_app" path="." />
 </paths>

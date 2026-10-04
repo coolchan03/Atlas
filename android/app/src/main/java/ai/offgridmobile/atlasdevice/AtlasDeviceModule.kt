@@ -75,7 +75,20 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         val now = System.currentTimeMillis()
         if (now - lastEmit < 80) return
         lastEmit = now
-        SensorManager.getOrientation(rot, orient)
+        // Account for the screen being turned (tablets in landscape).
+        val rotation = try {
+            @Suppress("DEPRECATION")
+            (if (android.os.Build.VERSION.SDK_INT >= 30) ctx.currentActivity?.display?.rotation
+             else (ctx.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.rotation) ?: 0
+        } catch (_: Exception) { 0 }
+        val use = if (rotation == android.view.Surface.ROTATION_0) rot else FloatArray(9).also { out ->
+            when (rotation) {
+                android.view.Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(rot, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, out)
+                android.view.Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(rot, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y, out)
+                else -> SensorManager.remapCoordinateSystem(rot, SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X, out)
+            }
+        }
+        SensorManager.getOrientation(use, orient)
         val deg = ((Math.toDegrees(orient[0].toDouble()) + 360.0) % 360.0)
         try {
             val map = Arguments.createMap(); map.putDouble("heading", deg)
@@ -94,7 +107,7 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
 
     // ---------------- GPS (works with no internet or SIM) ----------------
     private val locMgr by lazy { ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager }
-    private var locListener: android.location.LocationListener? = null
+    @Volatile private var locListener: android.location.LocationListener? = null
 
     private fun locMap(l: android.location.Location) = Arguments.createMap().apply {
         putDouble("lat", l.latitude); putDouble("lon", l.longitude); putDouble("accuracy", l.accuracy.toDouble())

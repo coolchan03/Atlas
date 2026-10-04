@@ -100,6 +100,9 @@ export async function downloadAddon(a: Addon): Promise<void> {
     if (old) { await removeLibraryFile(old); await RNFS.unlink(old).catch(() => undefined); }
     await RNFS.moveFile(part, target);
     await addLibraryFile(target);
+  } catch (e) {
+    await RNFS.unlink(part).catch(() => undefined); // don't leave a huge half-download behind
+    throw e;
   } finally {
     useAddonDownloads.getState().set((s) => {
       const jobs = { ...s.jobs }; delete jobs[a.id];

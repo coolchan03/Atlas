@@ -362,9 +362,17 @@ class ModelManager {
     const dir = target.filePath.substring(0, target.filePath.lastIndexOf('/'));
     const stem = target.fileName.replace(/\.gguf$/i, '');
     const dest = `${dir}/${stem}.mmproj-${fileName.replace(/[^\w.-]+/g, '_')}`;
-    if (await RNFS.exists(dest)) await RNFS.unlink(dest);
     const src = sourceUri.startsWith('file://') ? decodeURIComponent(sourceUri.replace('file://', '')) : sourceUri;
-    await copyFileWithProgress(src, dest, { knownTotalBytes: size ?? null, onProgress });
+    if (src === dest) { await this.saveModelWithMmproj(modelId, dest, true); return; }
+    // Copy to a temporary name first, so a failed copy never breaks the existing link.
+    const tmp = `${dest}.tmp`;
+    await RNFS.unlink(tmp).catch(() => {});
+    try {
+      await copyFileWithProgress(src, tmp, { knownTotalBytes: size ?? null, onProgress });
+      if (size && Number((await RNFS.stat(tmp)).size) < size) throw new Error('The copy was incomplete (is there enough space?)');
+      if (await RNFS.exists(dest)) await RNFS.unlink(dest);
+      await RNFS.moveFile(tmp, dest);
+    } catch (e) { await RNFS.unlink(tmp).catch(() => {}); throw e; }
     const old = target.mmProjPath;
     await this.saveModelWithMmproj(modelId, dest, true);
     if (old && old !== dest && !models.some(m => m.id !== modelId && m.engine === 'llama' && m.mmProjPath === old)) await RNFS.unlink(old).catch(() => {});

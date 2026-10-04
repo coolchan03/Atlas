@@ -15,7 +15,7 @@ export function WebSearchSettings() {
     setBusy(true);
     setTest(null);
     try {
-      const r = await searchWeb('water purification boiling time', async () => []);
+      const r = await searchWeb('water purification boiling time', (q: string) => require('../services/tools/handlers').braveSearch(q));
       setTest(r.results.length
         ? `Working - ${r.results.length} results from ${r.provider}${r.provider !== s.provider ? ` (your choice failed: ${r.notes.join('; ')})` : ''}.\nFirst: ${r.results[0].title}`
         : `No results. ${r.notes.join('; ')}`);

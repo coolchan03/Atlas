@@ -192,9 +192,11 @@ class ContextCompactionService {
     const inputBudget = ctxLength - summaryTokenBudget - instructionOverhead;
     const inputCharBudget = inputBudget * CHARS_PER_TOKEN_ESTIMATE;
 
+    // Keep the previous summary whole; trim the oldest part of the new transcript instead.
     let transcriptInput = preamble + transcript;
     if (transcriptInput.length > inputCharBudget) {
-      transcriptInput = transcriptInput.slice(-inputCharBudget);
+      const room = Math.max(1000, inputCharBudget - preamble.length);
+      transcriptInput = preamble.slice(0, Math.max(0, inputCharBudget - room)) + transcript.slice(-room);
     }
 
     const summaryMessages: Message[] = [

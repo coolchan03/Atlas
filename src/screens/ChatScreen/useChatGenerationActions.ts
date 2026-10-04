@@ -294,7 +294,8 @@ async function generateWithCompactionRetry(
       const convo = opts.messages.filter(m => m.role !== 'system' && m.id !== 'compaction-summary');
       const sysChars = opts.messages.filter(m => m.role === 'system' || m.id === 'compaction-summary').reduce((n, m) => n + (m.content?.length || 0), 0);
       const est = convo.reduce((n, m) => n + (m.content?.length || 0), 0) / 3.5;
-      const room = ctx * prefs.compressAt - sysChars / 3.5;
+      // System text (agent prompt, knowledge snippets) counts, but never shrinks the room below 45% of memory.
+      const room = ctx * prefs.compressAt - Math.min(sysChars / 3.5, ctx * prefs.compressAt * 0.35);
       if (convo.length > 10 && est > Math.max(ctx * 0.2, room)) {
         logger.log(`[ChatGen] auto-compress: ~${Math.round(est)} tokens of ${ctx}`);
         if (await contextCompactionService.compactNow(opts.id, 4)) {

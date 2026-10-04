@@ -26,10 +26,11 @@ export async function fetchModelFiles(
     models.map(async (model) => {
       try {
         // Never let one slow request hold up the screen.
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const files = await Promise.race([
           huggingFaceService.getModelFiles(model.id),
-          new Promise<ModelFile[]>((_, rej) => setTimeout(() => rej(new Error('timeout')), timeout)),
-        ]);
+          new Promise<ModelFile[]>((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), timeout); }),
+        ]).finally(() => clearTimeout(timer));
         const q = (name: string) => files.find(f => f.quantization.toUpperCase() === name);
         // Snapdragon GPU/NPU only speed up Q4_0, so offer that there when it exists.
         const pick = (opts.preferQ4_0 && q('Q4_0')) || q('Q4_K_M');

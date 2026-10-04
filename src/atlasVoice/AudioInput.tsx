@@ -5,7 +5,7 @@ import { useTheme } from '../theme';
 import { useUiModeStore } from '../stores/uiModeStore';
 import { audioRecorderService } from '../services/audioRecorderService';
 import { useAtlasVoiceStore } from './store';
-import { stop as stopSpeech } from './tts';
+import { stop as stopSpeech, setEarpieceRoute } from './tts';
 
 /** Silence detection for hands-free mode. */
 const SILENCE_END_MS = 1500;     // this much quiet after speech = you finished talking
@@ -28,7 +28,15 @@ export function AtlasAudioInput(props: any) {
   const speakingKey = useAtlasVoiceStore((s) => s.speakingKey);
   const doneTick = useAtlasVoiceStore((s) => s.doneTick);
   const setMode = useUiModeStore((s) => s.setInterfaceMode);
+  const earpiece = useAtlasVoiceStore((s) => s.earpiece);
+  const setEarpiece = useAtlasVoiceStore((s) => s.setEarpiece);
   const [note, setNote] = useState<string | null>(null);
+
+  // Earpiece ("phone call") output only while voice mode is open; normal speaker everywhere else.
+  useEffect(() => {
+    setEarpieceRoute(earpiece);
+    return () => setEarpieceRoute(false);
+  }, [earpiece]);
 
   const latest = useRef(props);
   latest.current = props;
@@ -114,6 +122,16 @@ export function AtlasAudioInput(props: any) {
           <Text style={[styles.sideText, { color: colors.textSecondary }]}>Hands-free</Text>
         </View>
       </View>
+      <TouchableOpacity
+        onPress={() => setEarpiece(!earpiece)}
+        style={styles.route}
+        accessibilityLabel={earpiece ? 'Playing through the earpiece. Tap for loudspeaker' : 'Playing through the loudspeaker. Tap for earpiece'}
+      >
+        <Icon name={earpiece ? 'phone' : 'volume-2'} size={14} color={colors.primary} />
+        <Text style={[styles.routeText, { color: colors.primary }]}>
+          {earpiece ? 'Earpiece: hold the phone to your ear (tap for speaker)' : 'Speaker (tap to use the earpiece, like a phone call)'}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -125,5 +143,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   side: { width: 84, alignItems: 'center' },
   sideText: { fontSize: 11, marginTop: 2 },
+  route: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 4 },
+  routeText: { fontSize: 12, marginLeft: 6 },
   big: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
 });

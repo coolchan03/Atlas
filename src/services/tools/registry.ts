@@ -93,7 +93,10 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   {
     id: 'read_file', name: 'read_file', displayName: 'Read file',
     description: 'Read a text file (txt, md, html, csv, json, code) or the text of a PDF/Word file on the phone.', icon: 'file-text',
-    parameters: { path: { type: 'string', description: 'File path', required: true } },
+    parameters: {
+      path: { type: 'string', description: 'File path', required: true },
+      offset: { type: 'number', description: 'Character position to start from, for long files (default 0)' },
+    },
   },
   {
     id: 'write_file', name: 'write_file', displayName: 'Write file',

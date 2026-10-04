@@ -157,7 +157,8 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     }
 
     override fun invalidate() {
-        for (u in open.keys.toList()) forget(u)
+        // Free on the same thread that uses the archives, so nothing is freed mid-search.
+        try { io.execute { for (u in open.keys.toList()) forget(u) } } catch (_: Exception) {}
         io.shutdown()
         super.invalidate()
     }

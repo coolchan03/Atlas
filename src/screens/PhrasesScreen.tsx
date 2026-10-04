@@ -49,7 +49,7 @@ export const PhrasesScreen: React.FC = () => {
         { id: 'u', role: 'user', content: custom.trim(), timestamp: 0 },
       ], { disableThinking: true });
       const lines = out.replace(/<think>[\s\S]*?<\/think>/g, '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
-      setShown({ text: lines[0] || '', roman: lines[1], en: `${custom.trim()} (translated by the AI - may contain mistakes)` });
+      setShown({ text: lines[0] || '', roman: /^(ja|zh|ar|hi|ru)/.test(code) ? lines[1] : undefined, en: `${custom.trim()} (translated by the AI - may contain mistakes)` });
     } catch (e: any) {
       Alert.alert('Could not translate', String(e?.message || e));
     } finally { setBusy(false); }

@@ -29,7 +29,8 @@ async function resolvePath(p?: string): Promise<string> {
   path = path.replace(/\/+/g, '/');
   if (path.includes('/../') || path.endsWith('/..')) throw new Error('Paths with .. are not allowed.');
   const root = (await hasAllFiles()) ? await Native.storageRoot() : RNFS.ExternalDirectoryPath;
-  if (!path.startsWith(root) && !path.startsWith(RNFS.ExternalDirectoryPath) && !path.startsWith(RNFS.DocumentDirectoryPath)) {
+  const inside = (r: string) => path === r || path.startsWith(`${r}/`);
+  if (!inside(root) && !inside(RNFS.ExternalDirectoryPath) && !inside(RNFS.DocumentDirectoryPath)) {
     throw new Error(`Outside allowed storage. ${(await hasAllFiles()) ? '' : 'Turn on "All files access" in Settings > Assistant access to reach your other folders.'}`);
   }
   return path;
@@ -54,24 +55,44 @@ export async function listFiles(path?: string): Promise<string> {
   return `${dir}\n` + items.slice(0, 200).map((it: any) => (it.isDirectory() ? `[folder] ${it.name}/` : `${it.name} (${kb(Number(it.size))})`)).join('\n');
 }
 
-export async function readFile(path: string): Promise<string> {
+/** Last time the assistant read one of your files (used to double-check web requests after it). */
+export let lastFileRead = 0;
+
+/** How much file text fits in one tool result for the loaded model (about a third of its memory). */
+function readBudget(): number {
+  try {
+    const { llmService } = require('../services/llm');
+    const ctx = Number(llmService.getPerformanceSettings?.()?.contextLength) || 4096;
+    return Math.max(3000, Math.min(40000, Math.floor(ctx * 4 * 0.35)));
+  } catch { return 6000; }
+}
+
+async function fullText(p: string, ext: string): Promise<string> {
+  const { OFFICE_EXTENSIONS, extractOffice } = require('../services/officeExtract');
+  if (OFFICE_EXTENSIONS.includes(ext)) return extractOffice(p, ext, MAX_READ);
+  if (ext === '.pdf') {
+    const { pdfExtractor } = require('../services/pdfExtractor');
+    const t: string = await pdfExtractor.extractText(p, MAX_READ);
+    if (!t) throw new Error('No text found in this PDF (it may be scanned pictures).');
+    return t;
+  }
+  if (!TEXT_EXT.test(p)) throw new Error('This tool reads text, CSV, JSON, code, PDF, Word, PowerPoint, Excel, OpenDocument, EPUB and RTF files.');
+  return (await RNFS.readFile(p, 'utf8')).slice(0, MAX_READ);
+}
+
+export async function readFile(path: string, offset = 0): Promise<string> {
   const p = await resolvePath(path);
   if (!(await RNFS.exists(p))) return `File not found: ${p}`;
   const ext = `.${p.split('.').pop()?.toLowerCase()}`;
-  const { OFFICE_EXTENSIONS, extractOffice } = require('../services/officeExtract');
-  if (OFFICE_EXTENSIONS.includes(ext)) {
-    try { return await extractOffice(p, ext, MAX_READ); } catch (e: any) { return `Could not read this file: ${e?.message || e}`; }
-  }
-  if (ext === '.pdf') {
-    try {
-      const { pdfExtractor } = require('../services/pdfExtractor');
-      const t: string = await pdfExtractor.extractText(p, MAX_READ);
-      return t ? t.slice(0, MAX_READ) : 'No text found in this PDF (it may be scanned pictures).';
-    } catch (e: any) { return `Could not read this PDF: ${e?.message || e}`; }
-  }
-  if (!TEXT_EXT.test(p)) return 'This tool reads text, CSV, JSON, code, PDF, Word, PowerPoint, Excel, OpenDocument, EPUB and RTF files.';
-  const t = await RNFS.readFile(p, 'utf8');
-  return t.length > MAX_READ ? `${t.slice(0, MAX_READ)}\n...(cut at ${MAX_READ} characters)` : t;
+  let t: string;
+  try { t = await fullText(p, ext); } catch (e: any) { return `Could not read this file: ${e?.message || e}`; }
+  lastFileRead = Date.now();
+  const start = Math.max(0, Math.floor(offset) || 0);
+  const end = Math.min(t.length, start + readBudget());
+  const part = t.slice(start, end);
+  return end < t.length || start > 0
+    ? `${part}\n\n(Showing characters ${start}-${end} of ${t.length}. To read more, call read_file again with offset=${end}.)`
+    : part;
 }
 
 export async function writeFile(path: string, content: string, append = false): Promise<string> {
@@ -136,6 +157,13 @@ export async function rememberFact(fact: string): Promise<string> {
   const st = useAgentStore.getState();
   const agent = st.agents.find((a: any) => a.id === st.activeAgentId);
   if (!agent) return 'No active agent to remember this for.';
+  try {
+    const { useChatStore } = require('../stores/chatStore');
+    const cs = useChatStore.getState();
+    if (cs.conversations.find((c: any) => c.id === cs.activeConversationId)?.isPrivate) {
+      return 'Not saved: this is a private chat, so nothing from it is remembered. (Tell the user they can say it again in a normal chat if they want it remembered.)';
+    }
+  } catch { /* ignore */ }
   const memories: string[] = agent.memories || [];
   if (memories.some((m) => m.toLowerCase() === fact.toLowerCase())) return 'Already remembered.';
   st.updateAgent(agent.id, { memories: [...memories, fact.trim()].slice(-100) });

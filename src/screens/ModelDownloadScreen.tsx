@@ -471,7 +471,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   loadingContainer: { flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 16 },
   loadingText: { ...TYPOGRAPHY.body, color: colors.textSecondary, textAlign: 'center' as const },
   scrollView: { flex: 1 },
-  content: { padding: 16, paddingBottom: 100 },
+  content: { padding: 16, paddingBottom: 150 },
   header: { marginBottom: SPACING.xl },
   title: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 8 },
   subtitle: { ...TYPOGRAPHY.body, color: colors.textSecondary, lineHeight: 24 },

@@ -48,6 +48,7 @@ jobs:
         run: |
           mkdir -p android/app/libs
           curl -sSL --retry 3 -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
           # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
           ls -la android/app/libs

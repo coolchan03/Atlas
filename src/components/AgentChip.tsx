@@ -47,7 +47,7 @@ export function AgentChip({ styles, colors }: { styles: any; colors: any }) {
 
 const local = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
-  sheet: { borderRadius: 12, padding: 16, maxHeight: '70%' },
+  sheet: { borderRadius: 12, padding: 16, maxHeight: '70%', width: '100%', maxWidth: 520, alignSelf: 'center' },
   title: { fontSize: 17, fontWeight: '600', marginBottom: 8 },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },

@@ -54,7 +54,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     case 'read_file': {
       const p = requireString(call, 'path');
       if (!p) throw new Error('Missing required parameter: path');
-      return DT.readFile(p);
+      return DT.readFile(p, Number(call.arguments?.offset) || 0);
     }
     case 'write_file': {
       const p = requireString(call, 'path');
@@ -100,6 +100,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     case 'read_url': {
       const url = requireString(call, 'url');
       if (!url) throw new Error('Missing required parameter: url');
+      // If a file on the phone was just read, double-check before anything is sent to the web.
+      if (Date.now() - DT.lastFileRead < 10 * 60 * 1000) {
+        const ok = await DT.confirm('Open this web page?', `The assistant read a file on your phone and now wants to open:\n\n${url.slice(0, 300)}\n\nOnly allow this if you expected it (a web page could try to trick the assistant into sending your file's contents).`, 'Open');
+        if (!ok) return 'The user declined to open this page.';
+      }
       return handleReadUrl(url);
     }
     default:
@@ -107,7 +112,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
   }
 }
 
-async function braveSearch(query: string): Promise<SearchResult[]> {
+export async function braveSearch(query: string): Promise<SearchResult[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {

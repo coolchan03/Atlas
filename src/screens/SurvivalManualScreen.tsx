@@ -85,11 +85,15 @@ export const SurvivalManualScreen: React.FC = () => {
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return SURVIVAL_CHAPTERS.map((c) => ({ c, count: 0 }));
+    if (!s) return SURVIVAL_CHAPTERS.map((c) => ({ c, count: 0, titleHit: false }));
     return SURVIVAL_CHAPTERS
-      .map((c) => ({ c, count: (c.md.toLowerCase().match(new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length + (c.title.toLowerCase().includes(s) ? 50 : 0) }))
-      .filter((x) => x.count > 0)
-      .sort((a, b) => b.count - a.count);
+      .map((c) => {
+        const titleHit = c.title.toLowerCase().includes(s);
+        const body = (c.md.toLowerCase().match(new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { c, count: body, titleHit, rank: body + (titleHit ? 1000 : 0) };
+      })
+      .filter((x) => x.count > 0 || x.titleHit)
+      .sort((a, b) => b.rank - a.rank);
   }, [q]);
 
   const setPos = useSurvivalStore((st) => st.setPos);
@@ -165,7 +169,7 @@ export const SurvivalManualScreen: React.FC = () => {
         >
           <Markdown style={mdStyles} rules={rules} onLinkPress={onLink}>{chapter.md}</Markdown>
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 24 }}>My notes</Text>
-          <NotesBox id={chapter.id} colors={colors} />
+          <NotesBox key={chapter.id} id={chapter.id} colors={colors} />
           <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 24 }}>
             From the Survival Manual (github.com/ligi/SurvivalManual), based on US Army FM 21-76. Community edited; not medical advice.
           </Text>
@@ -197,14 +201,14 @@ export const SurvivalManualScreen: React.FC = () => {
           style={{ backgroundColor: colors.surface, color: colors.text, borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 12 }}
         />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 }}>
-          {results.map(({ c, count }) => (
+          {results.map(({ c, count, titleHit }) => (
             <View key={c.id} style={{ width: `${100 / cols}%`, padding: 5 }}>
               <TouchableOpacity onPress={() => openChapter(c.id)} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 64 }}>
                 <Icon name={ICONS[c.id] || 'book-open'} size={22} color="#3F6212" />
                 <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', marginLeft: 12, flex: 1 }}>{c.title}</Text>
-                {count > 0 && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{count >= 50 ? 'title' : `${count}×`}</Text>}
+                {(count > 0 || titleHit) && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{titleHit ? 'title' : `${count}×`}</Text>}
               </TouchableOpacity>
-              {!!q.trim() && count > 0 && count < 50 && (
+              {!!q.trim() && count > 0 && !titleHit && (
                 <Text style={{ color: colors.textSecondary, fontSize: 12, paddingHorizontal: 8, paddingTop: 4 }} numberOfLines={2}>{snippetFor(c, q)}</Text>
               )}
             </View>

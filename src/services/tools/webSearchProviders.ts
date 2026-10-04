@@ -200,7 +200,14 @@ const RUNNERS: Partial<Record<SearchProvider, (q: string, n: number) => Promise<
  */
 export async function searchWeb(q: string, braveFallback: (q: string) => Promise<WebResult[]>): Promise<{ results: WebResult[]; provider: string; notes: string[] }> {
   const { provider, results: n } = useSearchSettings.getState();
-  const order: SearchProvider[] = [provider, 'meta', 'duckduckgo', 'brave'].filter((p, i, a) => a.indexOf(p) === i) as SearchProvider[];
+  // Privacy: a provider you chose on purpose (your own SearXNG, or a keyed AI search) never silently
+  // hands the query to someone else. The free public engines back each other up.
+  const order: SearchProvider[] = (
+    provider === 'meta' ? ['meta']
+      : provider === 'duckduckgo' ? ['duckduckgo', 'brave']
+        : provider === 'brave' ? ['brave', 'duckduckgo']
+          : [provider]
+  ) as SearchProvider[];
   const notes: string[] = [];
   for (const p of order) {
     try {

@@ -23,7 +23,7 @@ export const CompassScreen: React.FC = () => {
   const { width, height } = useWindowDimensions();
   const [heading, setHeading] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number>(3);
-  const size = Math.min(width, height) * 0.78;
+  const size = Math.max(160, Math.min(width * 0.82, height - 400, 520));
 
   useEffect(() => {
     if (!Native) return;

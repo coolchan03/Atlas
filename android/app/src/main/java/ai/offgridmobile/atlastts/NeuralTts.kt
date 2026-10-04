@@ -25,7 +25,10 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     private val genExec = Executors.newSingleThreadExecutor()
     @Volatile private var tts: OfflineTts? = null
     @Volatile var loadedDir: String = ""; private set
-    @Volatile private var token = 0
+    private val tokenA = java.util.concurrent.atomic.AtomicInteger(0)
+    private val token: Int get() = tokenA.get()
+    /** Play through the earpiece (phone-call style) instead of the loudspeaker. */
+    @Volatile var earpiece = false
     @Volatile private var track: AudioTrack? = null
     @Volatile private var speakers = 0
 
@@ -33,7 +36,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
 
     /** Loads a voice folder. Blocks the caller (never call from the UI thread). */
     fun load(dir: String) {
-        token++
+        tokenA.incrementAndGet()
         genExec.submit(Callable<Unit> {
             if (dir == loadedDir && tts != null) return@Callable
             freeEngine()
@@ -94,12 +97,12 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     }
 
     fun stop() {
-        token++
+        tokenA.incrementAndGet()
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
     }
 
     fun speak(parts: List<String>, id: String, sid: Int, speed: Float) {
-        val my = ++token
+        val my = tokenA.incrementAndGet()
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
         genExec.execute { run(parts, id, sid, speed, my) }
     }
@@ -131,7 +134,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         try {
             val min = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
             t = AudioTrack.Builder()
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(if (earpiece) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                 .setBufferSizeInBytes(maxOf(min * 2, rate * 4 / 2))
                 .setTransferMode(AudioTrack.MODE_STREAM)

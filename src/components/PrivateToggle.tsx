@@ -16,7 +16,7 @@ export function PrivateToggle({ colors }: { colors: any }) {
         { text: 'Cancel', style: 'cancel' }, { text: 'Save it', onPress: () => set(false) },
       ]);
     } else {
-      Alert.alert('Make this chat private?', 'It will not be saved: it disappears when the app is closed. (The model never sends anything off the phone either way.)', [
+      Alert.alert('Make this chat private?', 'It will not be saved and nothing from it is remembered: it disappears when the app is closed. Local models never send your chat anywhere; web search, web pages and remote servers still use the internet if you use them.', [
         { text: 'Cancel', style: 'cancel' }, { text: 'Make private', onPress: () => set(true) },
       ]);
     }

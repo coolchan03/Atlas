@@ -136,7 +136,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     const T = tidy(t);
     const srcOf = (x?: string) => refs(`[${(x || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`);
     let cards: Card[] = T.split('\n').map((l) => {
-      const m = l.match(/Q:\s*(.+?)\s*\|\s*A:\s*(.+?)\s*(?:\|\s*SRC:\s*([\d,\s[\]]+))?\s*$/i);
+      const m = l.match(/Q:\s*(.+?)\s*\|\s*A:\s*(.+?)\s*(?:\|\s*(?:SRC|SOURCES?)\s*:\s*([\d,\s[\]]+))?[.\s]*$/i);
       return m ? { q: m[1].trim(), a: m[2].trim(), src: srcOf(m[3]) } : null;
     }).filter(Boolean) as Card[];
     if (!cards.length) {
@@ -219,7 +219,7 @@ async function researchSources(query: string, startN: number, onStep: (m: string
     if (!offGridOn()) {
       onStep('Researching the web...');
       const { searchWeb } = require('../services/tools/webSearchProviders');
-      const r = await searchWeb(query, async () => []);
+      const r = await searchWeb(query, (q: string) => require('../services/tools/handlers').braveSearch(q));
       for (const w of r.results.slice(0, 3)) {
         if (!w.snippet) continue;
         out.push({ n: startN + out.length, doc: w.title, part: 1, text: w.snippet.slice(0, 600), origin: 'web', url: w.url });

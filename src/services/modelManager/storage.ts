@@ -152,8 +152,10 @@ async function validateAndResolveModels(
         exists = resolutionResults[idx].exists;
       }
     }
-    // Atlas: keep models that live on an SD card even when the card is out, so they are not forgotten.
-    if (exists || models[i].storage === 'sd') {
+    // Atlas: keep models that live on an SD card while the card is out, so they are not forgotten.
+    // (If the card is in but the file is gone, the model really was removed.)
+    const sdOut = models[i].storage === 'sd' && !(await RNFS.exists(models[i].filePath.split('/Android/')[0]).catch(() => false));
+    if (exists || sdOut) {
       validModels.push(models[i]);
     }
   }

@@ -153,7 +153,7 @@ export const LearningScreen: React.FC = () => {
       ))}
 
       <View style={styles.statusBox}>
-        <Text style={styles.statusText}>{running ? statusText : 'Idle'}</Text>
+        <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
         <Text style={styles.counts}>
           Round {st?.round ?? 0} · {count('answered')} learned · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
         </Text>
@@ -207,7 +207,7 @@ export const LearningScreen: React.FC = () => {
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>This practice session</Text>
           <Text style={styles.counts}>{st?.notes?.length ?? 0} checked answers{st?.sessionLessons ? `\nLessons so far:\n${st.sessionLessons}` : ''}</Text>
-          <TouchableOpacity disabled={running} onPress={async () => Alert.alert('Done', await keepSession(agentId))} style={[styles.smallBtn, { marginTop: 8, alignSelf: 'flex-start' }]}>
+          <TouchableOpacity disabled={running} onPress={async () => { try { Alert.alert('Done', await keepSession(agentId)); } catch (e: any) { Alert.alert('Could not keep it', String(e?.message || e)); } }} style={[styles.smallBtn, { marginTop: 8, alignSelf: 'flex-start' }]}>
             <Text style={styles.smallBtnText}>Keep what it learned</Text>
           </TouchableOpacity>
         </View>

@@ -55,9 +55,9 @@ async function xlsx(dir: string): Promise<string> {
   for (const f of sheets) {
     const x = await RNFS.readFile(f.path, 'utf8');
     const rows: string[] = [];
-    for (const r of x.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+    for (const r of x.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
       const cells: string[] = [];
-      for (const c of r[1].matchAll(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      for (const c of (r[1] || '').matchAll(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
         const attrs = c[1]; const body = c[2] || '';
         const ref = attrs.match(/r="([A-Z]+\d+)"/)?.[1];
         const type = attrs.match(/t="(\w+)"/)?.[1];
@@ -90,7 +90,7 @@ async function epub(dir: string): Promise<string> {
   const items: Record<string, string> = {};
   for (const m of opf.matchAll(/<item [^>]*>/g)) {
     const id = m[0].match(/id="([^"]+)"/)?.[1]; const href = m[0].match(/href="([^"]+)"/)?.[1];
-    if (id && href) items[id] = decodeURIComponent(href);
+    if (id && href && !decodeURIComponent(href).includes('..')) items[id] = decodeURIComponent(href);
   }
   const order = [...opf.matchAll(/<itemref [^>]*idref="([^"]+)"/g)].map((m) => items[m[1]]).filter(Boolean);
   const out: string[] = [];

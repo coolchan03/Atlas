@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -278,7 +279,10 @@ export const AgentEditScreen: React.FC = () => {
 
           {existingProject && (
             <TouchableOpacity
-              onPress={() => { deleteAgent(existingProject.id); navigation.goBack(); }}
+              onPress={() => Alert.alert('Delete agent?', `${existingProject.name} and its lessons and memories will be removed.`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => { deleteAgent(existingProject.id); navigation.goBack(); } },
+              ])}
               style={styles.deleteButton}
             >
               <Text style={[styles.cancelText, { color: colors.error }]}>Delete agent</Text>
@@ -322,7 +326,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   headerTitle: {
     ...TYPOGRAPHY.h2,
-    fontWeight: '400' as const,
+    color: colors.text,
+    fontWeight: '600' as const,
   },
   saveText: {
     ...TYPOGRAPHY.body,

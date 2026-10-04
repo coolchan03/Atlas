@@ -30,6 +30,42 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private val neural by lazy { NeuralTts { e, id -> emit(e, id) } }
     @Volatile private var neuralDir = ""
     @Volatile private var neuralSid = 0
+    @Volatile private var voiceGen = 0
+    /** Phone-call style output: play through the earpiece instead of the loudspeaker. */
+    @Volatile private var earpiece = false
+
+    private fun audioAttrs(): android.media.AudioAttributes = android.media.AudioAttributes.Builder()
+        .setUsage(if (earpiece) android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION else android.media.AudioAttributes.USAGE_MEDIA)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build()
+
+    private fun routeAudio(on: Boolean) {
+        val am = ctx.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (on) {
+            am.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                am.availableCommunicationDevices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }?.let { am.setCommunicationDevice(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                am.isSpeakerphoneOn = false
+            }
+        } else {
+            if (android.os.Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice()
+            am.mode = android.media.AudioManager.MODE_NORMAL
+        }
+    }
+
+    /** true = earpiece (hold the phone to your ear like a call), false = normal speaker / headphones. */
+    @ReactMethod
+    fun setEarpiece(on: Boolean, promise: Promise) {
+        try {
+            if (on == earpiece) { promise.resolve(true); return }
+            earpiece = on
+            neural.earpiece = on
+            try { tts?.setAudioAttributes(audioAttrs()) } catch (_: Exception) {}
+            routeAudio(on)
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("AUDIO_ROUTE", e) }
+    }
     private val cancelled = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     /** Where new voices are saved: the phone (default) or an SD card folder chosen in Settings. */
     @Volatile private var voicesBase = ""
@@ -68,6 +104,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private fun onInit(engine: TextToSpeech, status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             try { engine.language = Locale.getDefault() } catch (_: Exception) {}
+            try { engine.setAudioAttributes(audioAttrs()) } catch (_: Exception) {}
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     if (utteranceId != null && utteranceId.endsWith("#0")) emit("AtlasTtsStart", utteranceId.substringBefore("#"))
@@ -97,9 +134,9 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                 ready = false
                 for ((_, id, _) in pending) emit("AtlasTtsDone", id)
                 pending.clear()
+                if (tts === engine) tts = null // try again next time instead of staying broken
             }
             try { engine.shutdown() } catch (_: Exception) {}
-            if (tts === engine) tts = null // try again next time instead of staying broken
         }
     }
 
@@ -151,7 +188,10 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                 promise.resolve(true); return
             }
             ensure()
-            val now = synchronized(pending) { if (!ready) { pending.add(Triple(text, utteranceId, lang)); false } else true }
+            val now = synchronized(pending) {
+                if (tts == null) null else if (!ready) { pending.add(Triple(text, utteranceId, lang)); false } else true
+            }
+            if (now == null) { promise.reject("NO_TTS_ENGINE", "No text-to-speech engine is installed on this phone. Install Google Speech Services, or download a natural voice in Models > Voice."); return }
             if (now) doSpeak(text, utteranceId, lang)
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
@@ -211,12 +251,16 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun setNeuralVoice(id: String, sid: Int, promise: Promise) {
         neuralSid = sid
+        val g = ++voiceGen
         if (id.isBlank()) { neuralDir = ""; neural.releaseAsync(); promise.resolve(0); return }
         val dir = findVoice(id)
         if (dir == null) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded (if it was on an SD card, put the card back)"); return }
         Thread {
-            try { neural.load(dir.path); neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
-            catch (e: Throwable) { neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }
+            try {
+                neural.load(dir.path)
+                if (g == voiceGen) { neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
+                else promise.resolve(0) // a newer choice was made while this one loaded
+            } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }
         }.start()
     }
 
@@ -234,6 +278,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
 
     @ReactMethod
     fun deleteNeuralVoice(id: String, promise: Promise) {
+        if (id.isBlank() || id.contains('/') || id.contains("..")) { promise.reject("BAD_ID", "Invalid voice"); return }
         Thread {
             val d = findVoice(id) ?: java.io.File(voicesRoot(), id)
             if (d.path == neuralDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
@@ -330,6 +375,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod fun removeListeners(count: Int) {}
 
     override fun invalidate() {
+        try { if (earpiece) routeAudio(false) } catch (_: Exception) {}
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         tts = null
         try { neural.shutdown() } catch (_: Throwable) {}

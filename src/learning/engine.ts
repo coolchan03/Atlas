@@ -98,7 +98,7 @@ async function research(cfg: LearnConfig, query: string): Promise<string> {
       const { offGridOn } = require('../atlasTools/offGrid');
       if (!offGridOn()) {
         const { searchWeb } = require('../services/tools/webSearchProviders');
-        const r = await searchWeb(query, async () => []);
+        const r = await searchWeb(query, (q: string) => require('../services/tools/handlers').braveSearch(q));
         r.results.slice(0, 2).forEach((w: any) => { if (w.snippet) parts.push(`[web: ${w.title}] ${w.snippet.slice(0, 500)}`); });
       }
     } catch { /* offline */ }
@@ -111,7 +111,12 @@ const numbered = (items: { q: string }[]) => items.map((b, i) => `${i + 1}. ${b.
 function rulings(text: string, n: number): Map<number, { ok: boolean; reason: string }> {
   const out = new Map<number, { ok: boolean; reason: string }>();
   for (const line of text.split('\n')) {
-    const m = line.replace(/\*\*/g, '').match(/^\s*(?:[-*•]\s*)?(?:Q(?:uestion)?|R(?:eport)?|#)?\s*(\d{1,2})\s*[:.)\-–]?\s*(?:[-–:]\s*)?(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|OK|REJECT(?:ED)?|FAIL(?:ED)?)\b\s*[:\-–(]*\s*(.*)$/i);
+    const clean = line.replace(/\*\*/g, '');
+    const V = '(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|OK|REJECT(?:ED)?|FAIL(?:ED)?)';
+    const V2 = '(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|REJECT(?:ED)?|FAIL(?:ED)?)'; // later on the line: no bare "ok" (questions use it)
+    // Prefer a verdict right after the number; otherwise the first verdict word later on the line.
+    const m = clean.match(new RegExp(`^\\s*(?:[-*•]\\s*)?(?:Q(?:uestion)?|R(?:eport)?|#)?\\s*(\\d{1,2})\\s*[:.)\\-–—]?\\s*(?:[-–—:]\\s*)?${V}\\b\\s*[:\\-–—(]*\\s*(.*)$`, 'i'))
+      || clean.match(new RegExp(`^\\s*(?:[-*•]\\s*)?(?:Q(?:uestion)?|R(?:eport)?|#)?\\s*(\\d{1,2})\\b[^\\n]*?[\\s:–—-]${V2}\\b\\s*[:\\-–—(]*\\s*(.*)$`, 'i'));
     if (!m) continue;
     const i = Number(m[1]);
     if (i < 1 || i > n) continue;
@@ -195,7 +200,7 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
   );
   const appeals: { item: BankItem; text: string; rewrite: boolean }[] = [];
   for (const line of appeal.split('\n')) {
-    const m = line.match(/^\s*(?:Q)?\s*(\d{1,2})\s*[:.)\-–]?\s*(ACCEPT|APPEAL|REWRITE)\b\s*[:\-–]*\s*(.*)$/i);
+    const m = line.replace(/\*\*/g, '').match(/^\s*(?:[-*•]\s*)?(?:Q)?\s*(\d{1,2})\s*[:.)\-–—]?\s*(ACCEPT|APPEAL|REWRITE)\b\s*[:\-–—]*\s*(.*)$/i);
     if (!m) continue;
     const item = rejected[Number(m[1]) - 1];
     if (!item || /ACCEPT/i.test(m[2]) || !m[3].trim()) continue;

@@ -20,6 +20,9 @@ interface AtlasVoiceState {
   /** Speaker inside a multi-voice model (Kokoro). */
   neuralSid: number;
   setNeural: (id: string, sid?: number) => void;
+  /** Voice mode plays through the earpiece (hold the phone to your ear) instead of the loudspeaker. */
+  earpiece: boolean;
+  setEarpiece: (v: boolean) => void;
   setSpeaking: (key: string | null, messageId?: string | null) => void;
   markDone: () => void;
   setHandsFree: (v: boolean) => void;
@@ -36,6 +39,8 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   autoSpeakInChat: false,
   neuralVoice: '',
   neuralSid: 0,
+  earpiece: false,
+  setEarpiece: (earpiece) => set({ earpiece }),
   setNeural: (neuralVoice, sid) => set((s) => ({ neuralVoice, neuralSid: sid ?? s.neuralSid })),
   setSpeaking: (key, messageId) =>
     set(key === null ? { speakingKey: null, speakingMessageId: null } : { speakingKey: key, ...(messageId !== undefined ? { speakingMessageId: messageId } : {}) }),
@@ -46,5 +51,5 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid }),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, earpiece: s.earpiece }),
 }));

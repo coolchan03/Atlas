@@ -65,6 +65,12 @@ export function stop(): void {
   Native.stop().catch(() => undefined);
 }
 
+/** Play speech through the earpiece (true) or the normal speaker (false). */
+export function setEarpieceRoute(on: boolean): void {
+  if (!ttsAvailable()) return;
+  try { Native.setEarpiece?.(on)?.catch?.(() => undefined); } catch { /* older build */ }
+}
+
 /** Keep the screen awake (learning mode). */
 export function keepScreenOn(on: boolean): void {
   if (!ttsAvailable()) return;

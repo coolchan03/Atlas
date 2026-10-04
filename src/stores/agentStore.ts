@@ -169,6 +169,12 @@ export const useAgentStore = create<AgentState>()(
           activeAgentId: s.activeAgentId === id ? null : s.activeAgentId,
         })),
       setActiveAgent: (activeAgentId) => {
+        // A built-in agent that was deleted (e.g. Atlas, used by off-grid mode) comes back when asked for.
+        if (activeAgentId && !get().agents.some((a) => a.id === activeAgentId)) {
+          const def = DEFAULT_AGENTS.find((d) => d.id === activeAgentId);
+          if (!def) return;
+          set((s) => ({ agents: [...s.agents, { ...def, createdAt: now(), updatedAt: now() }] }));
+        }
         set({ activeAgentId });
         const agent = get().agents.find((a) => a.id === activeAgentId);
         if (agent?.contextLength) applyContextLength(agent.contextLength);
