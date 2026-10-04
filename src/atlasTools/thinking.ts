@@ -5,10 +5,10 @@ export const levelOf = (s: { thinkingEnabled?: boolean; thinkingLevel?: string }
   !s.thinkingEnabled ? 'off' : ((s.thinkingLevel as ThinkingLevel) || 'medium');
 
 /** Off -> Low -> Medium -> High -> Off */
-export function nextLevel(s: { thinkingEnabled?: boolean; thinkingLevel?: string }): { thinkingEnabled: boolean; thinkingLevel?: ThinkingLevel } {
+export function nextLevel(s: { thinkingEnabled?: boolean; thinkingLevel?: string }): { thinkingEnabled: boolean; thinkingLevel?: 'low' | 'medium' | 'high' } {
   const order: ThinkingLevel[] = ['off', 'low', 'medium', 'high'];
   const n = order[(order.indexOf(levelOf(s)) + 1) % order.length];
-  return n === 'off' ? { thinkingEnabled: false } : { thinkingEnabled: true, thinkingLevel: n };
+  return n === 'off' ? { thinkingEnabled: false } : { thinkingEnabled: true, thinkingLevel: n as 'low' | 'medium' | 'high' };
 }
 
 export const LEVEL_LABEL: Record<ThinkingLevel, string> = { off: 'OFF', low: 'LOW', medium: 'MED', high: 'HIGH' };
