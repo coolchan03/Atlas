@@ -60,8 +60,9 @@ def curl(url, out=None, timeout=900):
     cmd = [CURL, "-L", "--fail", "--retry", "1", "--connect-timeout", "25", "--max-time", str(timeout), "-A", UA]
     if out:
         cmd += ["--speed-limit", "5000", "--speed-time", "60", "-#", "-o", str(out), url]
-        if subprocess.run(cmd).returncode != 0:
-            raise RuntimeError("download stopped")
+        rc = subprocess.run(cmd).returncode
+        if rc != 0:
+            raise RuntimeError("download stopped (curl %d%s)" % (rc, {22: " HTTP error/blocked", 28: " timeout", 6: " no DNS", 7: " refused", 35: " TLS", 60: " TLS cert"}.get(rc, "")))
         return b""
     r = subprocess.run(cmd + ["-sS", url], capture_output=True)
     if r.returncode != 0:
@@ -173,6 +174,7 @@ def step2():
         log("curl.exe not found - cannot download."); return
     ok = skip = fail = 0
     failed = []
+    fail_why = []
     for line in SOURCES.strip().splitlines():
         parts = line.split("\t")
         rel, specs = parts[0], [p for p in parts[1:] if p]
@@ -184,6 +186,7 @@ def step2():
         dest.parent.mkdir(parents=True, exist_ok=True)
         print("...   %s" % rel)
         done = False
+        errs = []
         for spec in specs + fallback_specs(rel):
             for get in resolve(spec):
                 try:
@@ -192,16 +195,18 @@ def step2():
                     break
                 except Exception as e:
                     print("      (%s: %s)" % (spec[:50], str(e)[:70]))
+                    errs.append("%s -> %s" % (spec[:60], str(e)[:80]))
             if done:
                 break
         if not done:
             fail += 1; failed.append((rel, specs[0] if specs else "no known source"))
+            fail_why.append("%s: %s" % (rel, " ; ".join(errs[-3:]) or "no source"))
             log("FAIL  %s" % rel)
     log("\nDownloads: %d new, %d already there, %d failed" % (ok, skip, fail))
     if os.environ.get("GITHUB_ACTIONS"):
         print("::notice title=Atlas downloads %s::%d new, %d already there, %d failed" % (",".join(ONLY) or "all", ok, skip, fail))
-        for rel, s_ in failed[:30]:
-            print("::warning title=Atlas download failed::%s" % rel)
+        if fail_why:
+            print("::notice title=Atlas failed downloads (why)::%s" % "%0A".join(w.replace("%", "%25") for w in fail_why)[:60000])
     with open(MAN / "MANUAL_DOWNLOADS.txt", "w", encoding="utf-8") as f:
         f.write("Get these by hand if you want them (open the link, save the PDF into the folder shown).\n\n")
         for t, u in MANUAL:
