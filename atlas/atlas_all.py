@@ -156,7 +156,12 @@ def resolve(spec):
         return [lambda q=q, m=m: who_search_url(q, m.split(";"))]
     if spec.startswith("iasearch:"):
         q, m = spec[9:].split("|")
-        return [lambda q=q, m=m, i=i: archive_url(ia_search_urls(q, m.split(";"))[i]) for i in (0, 1)]
+        def pick(q, m, i):
+            ids = ia_search_urls(q, m.split(";"))
+            if len(ids) <= i:
+                raise ValueError("no archive.org match")
+            return archive_url(ids[i])
+        return [lambda q=q, m=m, i=i: pick(q, m, i) for i in (0, 1)]
     return [lambda s=spec: s]
 
 
@@ -164,8 +169,9 @@ def fallback_specs(rel):
     ws = words(rel)[:6]
     if len(ws) < 2:
         return []
-    q = " AND ".join('title:(%s)' % w for w in ws[:4])
-    return ["iasearch:%s|%s" % (q, ";".join(ws[:2]))]
+    strict = "title:(%s)" % " AND ".join(ws[:3])
+    loose = " AND ".join(ws[:3])
+    return ["iasearch:%s|%s" % (strict, ";".join(ws[:2])), "iasearch:%s|%s" % (loose, ";".join(ws[:2]))]
 
 
 def step2():
@@ -673,7 +679,7 @@ SOURCES = '''
 01_Medical/Wilderness_Medicine/WMS_Basic_Wound_Management_Austere_Environment_2014.pdf	https://apps.dtic.mil/sti/pdfs/ADA614573.pdf	https://apps.dtic.mil/sti/tr/pdf/ADA614573.pdf
 02_Water_Sanitation/EPA_Drinking_Water_Inspector_Field_Reference_2003.pdf	
 02_Water_Sanitation/EPA_Emergency_Disinfection_Drinking_Water_2017.pdf	https://19january2021snapshot.epa.gov/sites/static/files/2017-09/documents/emergency_disinfection_of_drinking_water_sept2017.pdf
-02_Water_Sanitation/EPA_Manual_Small_Public_Water_Systems_1991.pdf	
+02_Water_Sanitation/EPA_Manual_Small_Public_Water_Systems_1991.pdf	https://fr.ircwash.org/sites/default/files/201-91MA-9170.pdf
 02_Water_Sanitation/EPA_Onsite_Wastewater_Design_Manual_1980.pdf	https://www.epa.gov/sites/default/files/2015-06/documents/septic_1980_osdm_all.pdf
 02_Water_Sanitation/EPA_Onsite_Wastewater_Treatment_Systems_Manual_2002.pdf	https://www.epa.gov/sites/default/files/2015-06/documents/septic_2002_osdm_all.pdf
 02_Water_Sanitation/EPA_Small_Water_Systems_1978.pdf	
@@ -682,25 +688,25 @@ SOURCES = '''
 02_Water_Sanitation/Household_Treatment/CAWST_Biosand_Filter_Manual_2009.pdf	https://www.ctahr.hawaii.edu/hawaiirain/Library/Guides&Manuals/CAWST%20files/Biosand%20Filter%20Manual_Version%2010_Sep%2009[1].pdf
 02_Water_Sanitation/Household_Treatment/CAWST_Biosand_Filter_Manual_Echo_Edition.pdf	https://assets-global.echocommunity.org/books/431bc155-e633-4786-a6ff-7bc2a17fd1f0/en/en_biosand-filter-co_screen.pdf
 02_Water_Sanitation/Household_Treatment/CAWST_Introduction_Rainwater_Harvesting_Manual_2011.pdf	https://wedc-knowledge.lboro.ac.uk/resources/pubs/CAWSTRWH_Manual_2011-11_en.pdf
-02_Water_Sanitation/Household_Treatment/CDC_Backcountry_Water_Treatment_Guide.pdf	https://Www.Cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf
+02_Water_Sanitation/Household_Treatment/CDC_Backcountry_Water_Treatment_Guide.pdf	https://www.cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf	https://Www.Cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf
 02_Water_Sanitation/Household_Treatment/EAWAG_SODIS_Manual_2016.pdf	https://www.eawag.ch/fileadmin/Domain1/Abteilungen/sandec/publikationen/SWP/SODIS_manual_2016.pdf
 02_Water_Sanitation/Household_Treatment/SODIS_Manual_Meierhofer_2002.pdf	https://rachel.core2learn.org/modules/en-infonet/export/res/files/871.SODIS_Manual_english.pdf
 02_Water_Sanitation/Household_Treatment/WHO_WPRO_Household_Water_Treatment_Safe_Storage_Trainer_Manual_2013.pdf	https://www.pseau.org/outils/ouvrages/wpro_household_water_treatment_and_safe_storage_manual_for_the_trainer_2013.pdf
-02_Water_Sanitation/India_Mark_II_Major_Maintenance_Guide_InterAide.pdf	https://www.rural-water-supply.net/en/resources/630
+02_Water_Sanitation/India_Mark_II_Major_Maintenance_Guide_InterAide.pdf	https://www.pseau.org/outils/ouvrages/interaide_india_mark2_pump_maintenance_guidelines.pdf	https://www.rural-water-supply.net/en/resources/630
 02_Water_Sanitation/MSF_Public_Health_Engineering_in_Precarious_Situations.pdf	https://medicalguidelines.msf.org/sites/default/files/2022-06/Public_health_engineering_2010.pdf	https://medicalguidelines.msf.org:443/sites/default/files/pdf/guideline-717-en.pdf
-02_Water_Sanitation/RWSN_Afridev_Installation_Maintenance_Manual_2007.pdf	https://www.rural-water-supply.net/en/resources/286-
-02_Water_Sanitation/RWSN_India_Mark_II_Installation_Maintenance_Manual_2008.pdf	https://www.rural-water-supply.net/en/resources/328
+02_Water_Sanitation/RWSN_Afridev_Installation_Maintenance_Manual_2007.pdf	https://susana.org/_resources/documents/default/3-4194-7-1617282174.pdf	https://www.rural-water-supply.net/en/resources/286-
+02_Water_Sanitation/RWSN_India_Mark_II_Installation_Maintenance_Manual_2008.pdf	https://www.engineeringforchange.org/wp-content/uploads/2015/08/mark2.pdf	https://www.rural-water-supply.net/en/resources/328
 02_Water_Sanitation/RWSN_Rope_Pump_Installation_Maintenance_2007.pdf	https://www.rural-water-supply.net/en/resources/338
 02_Water_Sanitation/Small_Community_Water_Supplies_Smet_Van_Wijk_2002.pdf	https://www.ircwash.org/resources/small-community-water-supplies-technology-people-and-partnership
-02_Water_Sanitation/USGS_Ground_Water_Rural_Homeowner.pdf	https://pubs.usgs.gov/gip/gw_ruralhomeowner/gw_ruralhomeowner.pdf
-02_Water_Sanitation/WHO_Compendium_Drinking_Water_Systems_Technologies_2025.pdf	
+02_Water_Sanitation/USGS_Ground_Water_Rural_Homeowner.pdf	https://pubs.usgs.gov/gip/7000053/report.pdf	https://pubs.usgs.gov/gip/gw_ruralhomeowner/gw_ruralhomeowner.pdf
+02_Water_Sanitation/WHO_Compendium_Drinking_Water_Systems_Technologies_2025.pdf	https://wsportal.org/wp-content/uploads/2025/10/Compendium-of-drinking-water-systems-and-technologies-from-source-to-consumer-eng.pdf
 02_Water_Sanitation/WHO_Guidelines_for_Drinking_Water_Quality_2026.pdf	who:10665/352532	https://www.who.int/publications/i/item/9789240045064
 02_Water_Sanitation/WHO_Guidelines_on_Sanitation_and_Health_2018.pdf	who:10665/274939	https://www.ielrc.org/content/e1802.pdf
-02_Water_Sanitation/WHO_Sanitary_Inspection_Dug_Well_Handpump_2026.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---dug-well-with-a-handpump
+02_Water_Sanitation/WHO_Sanitary_Inspection_Dug_Well_Handpump_2026.pdf	https://www.who.int/docs/default-source/wash-documents/sanitary-inspection-packages/2-tfs-dug-well-with-hand-pump-d-200506.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---dug-well-with-a-handpump
 02_Water_Sanitation/WHO_Sanitary_Inspection_Tubewell_Hand_Pump_2026.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---tubewell-with-a-hand-pump
 02_Water_Sanitation/WHO_UNEP_Water_Quality_Monitoring_1996.pdf	
 02_Water_Sanitation/WHO_WASH_TN01_Cleaning_Disinfecting_Wells.pdf	https://wash.ifrc.org/wp-content/uploads/2025/06/d-cleaningwells_WHO.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
-02_Water_Sanitation/WHO_WASH_TN02_Cleaning_Disinfecting_Boreholes.pdf	https://dspace.lboro.ac.uk/2134/14782
+02_Water_Sanitation/WHO_WASH_TN02_Cleaning_Disinfecting_Boreholes.pdf	https://wash.ifrc.org/wp-content/uploads/2025/06/b-cleaningboreholes_WHO.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN03_Water_Storage_Tanks_Tankers.pdf	https://repository.lboro.ac.uk/articles/online_resource/WHO_Technical_Note_No_3_Cleaning_and_disinfecting_water_storage_tanks_and_tankers/27984485	https://wedc-knowledge.lboro.ac.uk/collections/tne/notes_emergencies.html
 02_Water_Sanitation/WHO_WASH_TN04_Piped_Water_Distribution.pdf	https://es.ircwash.org/sites/default/files/Kayaga-2005-Rehabilitating.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN05_Emergency_Drinking_Water_Treatment.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
@@ -726,23 +732,23 @@ SOURCES = '''
 03_Food_Agriculture/FAO_Aquaculture_Technical_Manual_2017.pdf	
 03_Food_Agriculture/FAO_Family_Poultry_Farmer_Field_Schools_2022.pdf	https://openknowledge.fao.org/handle/20.500.14283/i5296e
 03_Food_Agriculture/FAO_Field_Guide_Crop_Water_Productivity_2020.pdf	https://openknowledge.fao.org/server/api/core/bitstreams/0384b28a-1348-43d3-a3b9-cc863157c831/content
-03_Food_Agriculture/FAO_Field_Guide_Water_Use_Efficiency_Small_Scale_Agriculture_2019.pdf	
+03_Food_Agriculture/FAO_Field_Guide_Water_Use_Efficiency_Small_Scale_Agriculture_2019.pdf	https://www.moa.gov.et/wp-content/uploads/2024/11/2019_Field-guide-to-improve-water-use-efficiency-in-small-scale-agriculture-compressed-1.pdf
 03_Food_Agriculture/FAO_Good_Beekeeping_Practices_Sustainable_Apiculture_2021.pdf	https://openknowledge.fao.org/handle/20.500.14283/cb5353en
 03_Food_Agriculture/FAO_Postharvest_Handling_Storage_Grain_Manual.pdf	https://www.fao.org/3/x5027e/x5027e00.htm
 03_Food_Agriculture/FAO_Rabbit_Husbandry_Health_Production_Revised.pdf	https://www.fao.org/4/x5082e/x5082E00.htm
 03_Food_Agriculture/FAO_Save_and_Grow_Cassava_2013.pdf	https://www.fao.org/3/i3278e/i3278e.pdf
 03_Food_Agriculture/FAO_Save_and_Grow_Maize_Rice_Wheat_2016.pdf	https://www.fao.org/3/i4009e/i4009e.pdf
-03_Food_Agriculture/FAO_Seeds_Toolkit_Module_6_Seed_Storage_2018.pdf	
+03_Food_Agriculture/FAO_Seeds_Toolkit_Module_6_Seed_Storage_2018.pdf	https://www.africa-seeds.org/wp-content/uploads/2023/11/CA1495EN.pdf
 03_Food_Agriculture/FAO_Sheep_Goats_Products_Profits.pdf	https://fao.org/docrep/pdf/011/i0524e/i0524e.pdf	https://openknowledge.fao.org/bitstreams/e8118cfb-e90e-45fc-9e40-40be6d21f608/download
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol1.pdf	https://www.fao.org/4/t1265e/t1265e.htm
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol2.pdf	https://www.fao.org/3/t1265e/t1265e.htm
-03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol3.pdf	
+03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol3.pdf	https://www.fao.org/docrep/pdf/011/t1265e/t1275e.pdf
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol4.pdf	https://www.fao.org/4/t1265e/t1265e.htm
-03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol5.pdf	
+03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol5.pdf	https://www.fao.org/docrep/pdf/011/t1265e/t1285e.pdf
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol6.pdf	https://www.fao.org/3/t1265e/t1265e.htm
-03_Food_Agriculture/FAO_Small_Scale_Livestock_Farmer_Field_Schools_2018.pdf	
+03_Food_Agriculture/FAO_Small_Scale_Livestock_Farmer_Field_Schools_2018.pdf	https://resources.peopleinneed.net/documents/357-fao-2018-farmer-field-schools-for-small-scale-livestock-producers.pdf
 03_Food_Agriculture/FAO_Small_Scale_Poultry_Production.pdf	https://www.fao.org/3/y5169e/y5169e00.htm
-03_Food_Agriculture/FAO_Smallholder_Irrigation_Technology_2001.pdf	
+03_Food_Agriculture/FAO_Smallholder_Irrigation_Technology_2001.pdf	https://openknowledge.fao.org/server/api/core/bitstreams/af9092e3-7e5a-49c3-823d-37743e14dede/content
 03_Food_Agriculture/FAO_Visual_Good_Beekeeping_Practices_2021.pdf	https://openknowledge.fao.org/handle/20.500.14283/cd0363en
 03_Food_Agriculture/FDA_Bad_Bug_Book_2e.pdf	https://www.fda.gov/media/83271/download
 03_Food_Agriculture/Foraging_Poisonous/Atkinson_Mushrooms_Edible_Poisonous_1900.pdf	iasearch:title:("mushrooms edible, poisonous")|mushrooms
@@ -775,7 +781,7 @@ SOURCES = '''
 03_Food_Agriculture/Introductory_Animal_Physiology.pdf	https://openlibrary-repo.ecampusontario.ca/jspui/bitstream/123456789/553/12/introductory-animal-physiology-textbook.pdf	https://ecampusontario.pressbooks.pub/animalphysiology/
 03_Food_Agriculture/MSU_Plant_Propagation_Home_Landscape_2025.pdf	
 03_Food_Agriculture/Nutrition/Pellagra_and_its_Prevention_Control_in_Major_Emergencies_WHO_2000.pdf	iasearch:title:("pellagra") AND publisher:WHO|pellagra
-03_Food_Agriculture/Peace_Corps_Improved_Food_Drying_and_Storage.pdf	
+03_Food_Agriculture/Peace_Corps_Improved_Food_Drying_and_Storage.pdf	https://files.peacecorps.gov/documents/T0020_Improved-Food-Drying-and-Storage.pdf
 03_Food_Agriculture/Preservation_Cooking/Bread_Making_Yeast_Sourdough_Book_of_Bread_1900.pdf	iasearch:title:("bread making") OR title:("book of bread") OR title:("yeast")|bread
 03_Food_Agriculture/Preservation_Cooking/Brewing_Home_Brewing_Beer_Mead_Wine_Making_Handbook_1900.pdf	iasearch:title:("home brewing") OR title:("art of brewing") OR title:("mead")|brew
 03_Food_Agriculture/Preservation_Cooking/Cooking_Without_Fuel_Fireless_Cooker_Solar_Cooking_Appropriate_Tech.pdf	iasearch:title:("solar cooker") OR title:("fireless cooker")|cook
@@ -791,7 +797,7 @@ SOURCES = '''
 03_Food_Agriculture/Principles_of_Animal_Nutrition_Cherian.pdf	https://open.oregonstate.education/animalnutrition/
 03_Food_Agriculture/SARE_Building_Soils_for_Better_Crops_4e_2021.pdf	https://www.sare.org/wp-content/uploads/Building-Soils-for-Better-Crops.pdf
 03_Food_Agriculture/The_Science_of_Plants_2022.pdf	https://open.lib.umn.edu/horticulture/	https://publishing.lib.umn.edu/publication/the-science-of-plants
-03_Food_Agriculture/UF_IFAS_Seed_Saving_Open_Pollinated_2024.pdf	
+03_Food_Agriculture/UF_IFAS_Seed_Saving_Open_Pollinated_2024.pdf	https://journals.flvc.org/edis/article/download/135767/142966/270627
 03_Food_Agriculture/USDA_Home_Canning_2015_Introduction.pdf	https://nchfp.uga.edu/resources/entry/about-the-usda-guide-to-home-canning-2015-revision
 03_Food_Agriculture/USDA_Home_Canning_Guide_1_Principles.pdf	https://nchfp.uga.edu/publications/usda/GUIDE01_HomeCan_rev0715.pdf
 03_Food_Agriculture/USDA_Home_Canning_Guide_2_Fruit.pdf	https://nchfp.uga.edu/papers/guide/GUIDE02_HomeCan_rev0715.pdf
@@ -811,7 +817,7 @@ SOURCES = '''
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_07_Solid_State_Devices_Power_Supplies.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2007%20-%20Introduction%20to%20Solid-State%20Devices%20and%20Power%20Supplies.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_19_Technicians_Handbook.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2019%20-%20The%20Technician%2527s%20Handbook.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_21_Test_Methods_Practices.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2021%20-%20Test%20Methods%20and%20Practices.pdf
-04_Engineering_Repair/Essential_Mechanics_Statics_and_Strength_of_Materials.pdf	
+04_Engineering_Repair/Essential_Mechanics_Statics_and_Strength_of_Materials.pdf	https://medlab.cc.uoi.gr/wp-content/uploads/2024/10/EssentialMechanicsStaticsandStrengthofMaterialswithOCTAVE_MATLAB.pdf
 04_Engineering_Repair/FHWA_Gravel_Roads_Construction_Maintenance_Guide_2015.pdf	https://www.fhwa.dot.gov/construction/pubs/ots15002.pdf
 04_Engineering_Repair/Fulton_Classic_ICS_Steam_Gas_IOM_2025.pdf	https://fulton.com/documents/classic-ics-steam-gas-fired-manual/
 04_Engineering_Repair/Machine_Shop_Fundamentals_SAIT_2023.pdf	https://pressbooks.openeducationalberta.ca/saitmachineshop/
@@ -852,7 +858,7 @@ SOURCES = '''
 04_Engineering_Repair/Power_Electricity/Windmills_and_Wind_Motors_Powell.pdf	iasearch:title:("windmills and wind motors")|windmill
 04_Engineering_Repair/UH_Building_Maintenance_Construction_Tools_Tasks_2018.pdf	https://pressbooks.oer.hawaii.edu/buildingmaint/
 04_Engineering_Repair/USDA_FPL_Wood_Handbook_2021.pdf	https://www.fpl.fs.usda.gov/documnts/fplgtr/fplgtr282/fpl_gtr282.pdf	https://research.fs.usda.gov/treesearch/62200
-04_Engineering_Repair/USDA_Hand_Pump_Operation_Maintenance_1999.pdf	
+04_Engineering_Repair/USDA_Hand_Pump_Operation_Maintenance_1999.pdf	https://www.fs.usda.gov/t-d/pubs/pdfpubs/pdf81713801/pdf81713801.pdf
 04_Engineering_Repair/USFS_Standard_Timber_Bridge_Superstructure_Plans_2019.pdf	https://research.fs.usda.gov/download/treesearch/59357.pdf
 04_Engineering_Repair/USFS_Sustainable_Trail_Bridge_Design_2020.pdf	https://www.fs.usda.gov/t-d/pubs/pdfpubs/pdf20232805P/2023-2805P_SustainBridgeDesign__04-28-20_150ppi.pdf
 04_Engineering_Repair/Upstream_Downstream_Bioprocessing_Guajardo_2024.pdf	
@@ -885,7 +891,7 @@ SOURCES = '''
 06_Survival_Navigation/FEMA_CERT_Basic_Training_Participant_Manual_2019.pdf	https://em.uci.edu/training/_pdf/cert-participant-manual-english.pdf
 06_Survival_Navigation/Field_Manuals/Army_FM_21-76_Survival.pdf	iasearch:title:("survival") AND (title:("FM 21-76") OR creator:("United States. Department of the Army"))|survival
 06_Survival_Navigation/Field_Manuals/Army_Field_Hygiene_and_Sanitation_FM_21-10.pdf	iasearch:title:("field hygiene and sanitation")|hygiene
-06_Survival_Navigation/MIT_Sailing_and_the_Tech_Dinghy_2014.pdf	https://sailing.mit.edu/lts/sailing-booklet/
+06_Survival_Navigation/MIT_Sailing_and_the_Tech_Dinghy_2014.pdf	https://ocw.mit.edu/courses/pe-810-sailing-spring-2007/f7fdc138336e2a0437c598c7f789d6d8_booklet.pdf	https://sailing.mit.edu/lts/sailing-booklet/
 06_Survival_Navigation/Modern_Survival/Army_ATTP_3-97.11_Cold_Region_Operations_2011.pdf	https://irp.fas.org/doddir/army/attp3-97-11.pdf
 06_Survival_Navigation/Modern_Survival/Army_FM_3-05.70_Survival_2002.pdf	https://biotech.law.lsu.edu/blaw/DOD/fm3-05-70.pdf
 06_Survival_Navigation/Modern_Survival/Army_TC_3-25.26_Map_Reading_Land_Navigation_2013.pdf	https://armyrotc.mst.edu/media/academic/armyrotc/documents/manualsadpadrpfmetc/TC%203-25.26.pdf
@@ -897,7 +903,7 @@ SOURCES = '''
 06_Survival_Navigation/NWS_Weather_Spotter_Field_Guide.pdf	https://www.weather.gov/media/grr/brochures/nwsbasicspottersfieldguide.pdf
 06_Survival_Navigation/Peace_Corps_Disaster_Preparedness_Mitigation_Idea_Book.pdf	
 06_Survival_Navigation/Practical_Meteorology_Stull.pdf	https://www.eoas.ubc.ca/books/Practical_Meteorology
-06_Survival_Navigation/Sphere_Handbook_Humanitarian_Response_2018.pdf	https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2018-EN.pdf
+06_Survival_Navigation/Sphere_Handbook_Humanitarian_Response_2018.pdf	https://medbox.org/index.php/pdf/5e148832db60a2044c2d513a	https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2018-EN.pdf
 06_Survival_Navigation/USCG_Aux_Rescue_Survival_PPE_2025.pdf	https://wow.uscgaux.info/Uploads_wowII/054/Rescue_and_Survival_PPE_Master_17_April_2025.pdf
 06_Survival_Navigation/USCG_Aux_SABOT_Job_Aid_2025.pdf	https://wow.uscgaux.info/Uploads_wowII/092/CGD9_SABOT_Job_Aid_Manual.pdf
 06_Survival_Navigation/USGS_Topographic_Map_Symbols.pdf	https://pubs.usgs.gov/gip/TopographicMapSymbols/topomapsymbols.pdf
@@ -953,7 +959,7 @@ SOURCES = '''
 07_Civilization_Crafts/Formulas_Chemistry/Wood_Products_Distillates_and_Extracts_Dumesny.pdf	archive:woodproductsdist00dumeuoft
 07_Civilization_Crafts/From_Fiber_to_Fabric_Krishna_2024.pdf	
 07_Civilization_Crafts/GIZ_EnDev_Low_Cost_Tube_Biogas_Digester_2010.pdf	
-07_Civilization_Crafts/GIZ_Micro_Gasification_Wood_Gas_2013.pdf	
+07_Civilization_Crafts/GIZ_Micro_Gasification_Wood_Gas_2013.pdf	https://amper.ped.muni.cz/jenik/gw/uhel/literatura/micro_gasif_cook.pdf
 07_Civilization_Crafts/Heat_Cooking/Aprovecho_Double_Burner_Rocket_Stove_Plans.pdf	https://estufas.bioenergylists.org/stovesdoc/Still/AprovechoPlans/Double%20burner%20rocket%20plans.pdf
 07_Civilization_Crafts/Heat_Cooking/Biomass_Cookstove_Design_Handbook_2017.pdf	https://d-lab.mit.edu/sites/default/files/inline-files/biomass-cookstove-r-d-handbook-screen.pdf
 07_Civilization_Crafts/Heat_Cooking/Charcoal_Production_FAO_Simple_Charcoal_Making.pdf	iasearch:title:(charcoal) AND (publisher:FAO OR creator:FAO)|charcoal
@@ -988,7 +994,7 @@ SOURCES = '''
 07_Civilization_Crafts/Metals/Blacksmiths_Manual_Illustrated_Lillico_1930.pdf	archive:Blacksmiths_Manual_Illustrated_1930_By_J_W_Lillico
 07_Civilization_Crafts/Metals/De_Re_Metallica_Agricola_Hoover_1912.pdf	archive:deremetallicatra00agri
 07_Civilization_Crafts/Metals/Farm_Blacksmithing_Friese.pdf	archive:farmblacksmithi00friegoog
-07_Civilization_Crafts/NREL_Biodiesel_Handling_and_Use_Guide_6e_2023.pdf	
+07_Civilization_Crafts/NREL_Biodiesel_Handling_and_Use_Guide_6e_2023.pdf	https://www.nrel.gov/docs/fy23osti/86939.pdf
 07_Civilization_Crafts/Optics_Instruments/Amateur_Telescope_Making_Advanced_Book2.pdf	archive:in.ernet.dli.2015.233318
 07_Civilization_Crafts/Optics_Instruments/Amateur_Telescope_Making_Advanced_Book2_Alt.pdf	archive:in.ernet.dli.2015.459844
 07_Civilization_Crafts/Optics_Instruments/Amateur_Telescope_Making_Ingalls.pdf	archive:in.ernet.dli.2015.37314
@@ -1025,9 +1031,9 @@ SOURCES = '''
 07_Civilization_Crafts/Textiles_Cordage/Vegetable_Dyes_Natural_Dyeing_Handbook.pdf	iasearch:title:("vegetable dyes" OR "natural dyes" OR "dyeing with plants")|dye
 07_Civilization_Crafts/Textiles_Cordage/Wool_Spinning_and_Weaving_Hand_Spinning_Manual.pdf	iasearch:title:("hand spinning" OR "spinning and weaving")|spinning
 07_Civilization_Crafts/UF_IFAS_Cordage_with_Plant_Fibers_2026.pdf	https://hos.ifas.ufl.edu/media/hosifasufledu/therapeutic-horticulture-activities-database/pdfs/Cordage-with-Plant-Fibers.pdf
-07_Civilization_Crafts/UNIDO_Leather_Manufacturing_Safety_2021.pdf	
+07_Civilization_Crafts/UNIDO_Leather_Manufacturing_Safety_2021.pdf	https://hub.unido.org/sites/default/files/publications/Occupational%20safety%20and%20health%20aspects%20of%20leather%20manufacturing_2021.pdf
 07_Civilization_Crafts/USFS_Chain_Saw_and_Crosscut_Saw_Student_Guidebook.pdf	https://www.fs.usda.gov/t-d/pubs/pdfpubs/pdf06672805/pdf06672805dpi300.pdf
-07_Civilization_Crafts/USFS_Manual_Felling_Danger_Tree_Guide.pdf	
+07_Civilization_Crafts/USFS_Manual_Felling_Danger_Tree_Guide.pdf	https://www.fs.usda.gov/t-d/pubs/pdfpubs/pdf08672325/pdf08672325dpi72.pdf
 07_Civilization_Crafts/USGS_Conventional_Copper_Flotation_Plant_Water_2012.pdf	https://pubs.usgs.gov/of/2012/1089/
 07_Civilization_Crafts/USN_Equipment_Operator_Basic_NAVEDTRA_14081.pdf	
 07_Civilization_Crafts/Woodworking_Tools/Cooperage_Barrel_Making_Coopers_Craft.pdf	iasearch:title:(cooperage OR cooper)|coop
@@ -1072,20 +1078,20 @@ SOURCES = '''
 08_General_Reference/Languages_Travel/Peace_Corps_Language_Manual_Swahili.pdf	iasearch:title:(swahili) AND (peace corps)|swahili
 08_General_Reference/USDA_Forest_Production_for_Tropical_America.pdf	
 08_General_Reference/Websters_Home_School_Office_Dictionary_1916.pdf	archive:webstersnewstand00webs
-09_Visual_Atlases/01_Plants/Alabama_Extension_Poison_Hemlock_2024.pdf	
-09_Visual_Atlases/01_Plants/Alabama_Extension_Poison_Ivy_Oak_Sumac_2025.pdf	
-09_Visual_Atlases/01_Plants/BLM_Recognizing_Plant_Families_of_the_West_2022.pdf	
+09_Visual_Atlases/01_Plants/Alabama_Extension_Poison_Hemlock_2024.pdf	https://aces.edu/wp-content/uploads/2023/06/FOR-2150_PoisonHemlock_050324L-G.pdf
+09_Visual_Atlases/01_Plants/Alabama_Extension_Poison_Ivy_Oak_Sumac_2025.pdf	https://www.aces.edu/wp-content/uploads/2020/08/ANR-1460_TouchMeNots_110525L-G.pdf
+09_Visual_Atlases/01_Plants/BLM_Recognizing_Plant_Families_of_the_West_2022.pdf	https://www.blm.gov/sites/blm.gov/files/docs/2022-01/BLMCO.Plant_.ID_.Guide_.2021_508.pdf
 09_Visual_Atlases/01_Plants/CDC_Foraging_Toxic_vs_Edible_Lookalikes_2026.pdf	
-09_Visual_Atlases/01_Plants/MSU_Common_Purslane_vs_Prostrate_Spurge_2026.pdf	
-09_Visual_Atlases/01_Plants/MSU_Forgotten_Foods_Wild_Edible_Plants_2026.pdf	
+09_Visual_Atlases/01_Plants/MSU_Common_Purslane_vs_Prostrate_Spurge_2026.pdf	https://extension.msstate.edu/sites/default/files/document/2026-02/P4175_web.pdf
+09_Visual_Atlases/01_Plants/MSU_Forgotten_Foods_Wild_Edible_Plants_2026.pdf	https://extension.msstate.edu/sites/default/files/document/2026-02/P4173_web.pdf
 09_Visual_Atlases/01_Plants/MSU_Plant_Identification_Basics_2025.pdf	https://openbooks.lib.msu.edu/plantidentification/
 09_Visual_Atlases/02_Medical_Signs/CDC_Measles_Clinical_Diagnosis_2025.pdf	https://www.cdc.gov/measles/hcp/clinical-overview/index.html
-09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Lyme_Rash_Visual_Poster_2021.pdf	
-09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Tickborne_Diseases_Reference_Manual_2022_6e.pdf	
+09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Lyme_Rash_Visual_Poster_2021.pdf	https://stacks.cdc.gov/view/cdc/118817/cdc_118817_DS1.pdf
+09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Tickborne_Diseases_Reference_Manual_2022_6e.pdf	https://stacks.cdc.gov/view/cdc/121111/cdc_121111_DS1.pdf
 09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/WHO_Rabies_PEP_Protocol_2024.pdf	https://www.who.int/publications/i/item/B09018
 09_Visual_Atlases/02_Medical_Signs/WHO_Integrated_Skin_Conditions_2026.pdf	who:10665/272723
 09_Visual_Atlases/02_Medical_Signs/Wounds_Burns_Trauma/NIAID_Thermal_Burn_Depth_Reference_2025.pdf	
-09_Visual_Atlases/03_Anatomy/Hands_On_Anatomy_Temple_2024.pdf	
+09_Visual_Atlases/03_Anatomy/Hands_On_Anatomy_Temple_2024.pdf	https://temple.manifoldapp.org/system/actioncallout/e/6/7/e6719369-5acf-4794-83ac-7e0420715772/attachment/43db78741c067be2bc7aaafd18c3eb25.pdf
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/American_Foundry_Practice_West_1882.pdf	archive:americanfoundryp00westuoft
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/American_Printer_MacKellar_1889.pdf	archive:0423AMER	https://gutenberg.org/ebooks/56817
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Art_of_Bookbinding_Zaehnsdorf.pdf	https://www.gutenberg.org/ebooks/51213
@@ -1101,12 +1107,12 @@ SOURCES = '''
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Maxims_Instructions_Boiler_Room_Hawkins.pdf	https://www.gutenberg.org/cache/epub/53139/pg53139-images.html
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Modern_Practice_Electric_Telegraph_1869.pdf	archive:modernpracticeof00pope
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Potters_Craft_Binns.pdf	archive:potterscraftprac00binn
-90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Practical_Telephone_Handbook_1906.pdf	
+90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Practical_Telephone_Handbook_1906.pdf	archive:cu31924031233996
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Principles_of_Radio_Communication_1921.pdf	
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Soap_Making_Manual_Thomssen_1922.pdf	https://gutenberg.org/ebooks/34114
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Textbook_of_Tanning_Procter_1885.pdf	archive:textbookoftannin00proc
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Watchmakers_Handbook_Saunier.pdf	
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Blueprint_Reading_and_Sketching.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Blueprint_Reading_and_Sketching.pdf	https://archive.org/download/MManuals/UsNavyBlueprintReadingSketching1994.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Clothing_and_Textiles_Vocational_Guide_Vol2.pdf	
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Peace_Corps_Handbook_Building_Homes_of_Earth.pdf	https://files.peacecorps.gov/documents/R0034_Handbook-for-Building-Homes-of-Earth.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Peace_Corps_How_to_Make_Tools.pdf	https://files.peacecorps.gov/documents/R0035_How-to-Make-Tools.pdf
@@ -1129,7 +1135,7 @@ SOURCES = '''
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol1.pdf	archive:DOE-HDBK-1011-1-92
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1011-92_VOL2.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol3.pdf	https://everyspec.com/DOE/DOE-HDBK/DOE_HDBK_1011v3_3495/
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol4.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol4.pdf	https://digital.library.unt.edu/ark:/67531/metadc1445305/m2/1/high_res_d/7295869.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Engineering_Symbology_Vol1.pdf	archive:DOE-HDBK-1016-1-93
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Engineering_Symbology_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL2.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Instrumentation_Control_Vol1.pdf	https://everyspec.com/DOE/DOE-HDBK/
@@ -1137,19 +1143,19 @@ SOURCES = '''
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Material_Science_Vol1.pdf	archive:DOE-HDBK-1017-1-93
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Material_Science_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1017-93_VOL2.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol1.pdf	https://everyspec.com/DOE/DOE-HDBK/
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol2.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol2.pdf	https://pdhonline.com/courses/m139/Mechanical%20Science%20Vol%202.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol1.pdf	archive:DOE-HDBK-1012-1-92
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1012-92_VOL2.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol3.pdf	https://everyspec.com/DOE/DOE-HDBK/
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/Engineering_in_Emergencies_Davis_Lambert_2e.pdf	https://susana.org/_resources/documents/default/3-4311-7-1621326774.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/Sandia_PV_Power_Systems_and_NEC_Practices_2001.pdf	https://digital.library.unt.edu/ark:/67531/metadc738778/m2/1/high_res_d/808812.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/USN_Fluid_Power.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/USN_Fluid_Power.pdf	https://www.teachengineering.org/content/pur_/lessons/pur_fluidpower_less1/pur_fluidpower_lesson01_trainingmanualfluidpower.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_FM_5-428_Concrete_and_Masonry.pdf	archive:FM5-428
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TC_9-524_Fundamentals_of_Machine_Tools.pdf	
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TM_9-8000_Principles_of_Automotive_Vehicles.pdf	
 90_Human_Read_Only/Legacy_Technical_Manuals/USDA_Home_Fruit_Garden_Southeastern_Southern_States_1965.pdf	archive:homefruitgardeni219unit_1	https://www.archive.org/download/homefruitgardeni219unit_1/homefruitgardeni219unit_1_bw.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_06_Tubes_and_Power_Supplies.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2006%20-%20Introduction%20to%20Electronic%20Emissions%2C%20Tubes%2C%20and%20Power%20Supplies.pdf
-90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_07_Solid_State_Devices_and_Power_Supplies.pdf	
+90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_07_Solid_State_Devices_and_Power_Supplies.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2007%20-%20Introduction%20to%20Solid-State%20Devices%20and%20Power%20Supplies.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_08_Amplifiers.pdf	archive:NEETSModules	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2008%20-%20Introduction%20to%20Amplifiers.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_10_Wave_Propagation_Transmission_Lines_Antennas.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2010%20-%20Wave%20Propagation%2C%20Transmission%20Lines%2C%20and%20Antennas.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_17_Radio_Frequency_Communications.pdf	archive:NEETSModule17	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2017%20-%20Radio-Frequency%20Communications%20Principles.pdf
