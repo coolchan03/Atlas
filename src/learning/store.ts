@@ -2,40 +2,84 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type LearnEventKind = 'question' | 'report' | 'judge' | 'manager' | 'info' | 'error';
+export type LearnEventKind = 'bank' | 'appeal' | 'question' | 'report' | 'judge' | 'manager' | 'info' | 'error';
 export interface LearnEvent { id: string; at: number; kind: LearnEventKind; agentId: string; title: string; body: string }
 
+/** keep = what it learns is saved into the agent (lessons + knowledge). session = practice only, nothing changes unless you tap "Keep". */
+export type LearnMode = 'keep' | 'session';
+
 export interface LearnConfig {
+  /** The task / subject the agent should become good at. */
   topic: string;
-  /** Project whose knowledge base the learner and judge may search ('' = none). */
+  /** Project whose knowledge base is used for research (and where learned notes are saved in keep mode). */
   projectId: string;
+  mode: LearnMode;
+  /** How many questions the learner proposes per round. */
+  bankSize: number;
   reportsPerJudge: number;
   judgesPerManager: number;
-  /** Model per role ('' = the current model). Different models mean a model swap at each hand-over. */
+  /** Research in the offline library (Kiwix) too. */
+  useLibrary: boolean;
+  /** Research on the web too (never in off-grid mode). */
+  useWeb: boolean;
+  /** Keep making new question rounds after the bank is done (keep mode). */
+  continuous: boolean;
   learnerModelId?: string;
   judgeModelId?: string;
   managerModelId?: string;
 }
 
-interface PerAgent {
-  /** Running counters so the cadence survives app restarts. */
+export type BankStatus = 'pending' | 'approved' | 'rejected' | 'answered' | 'failed' | 'dropped';
+export interface BankItem {
+  id: string;
+  q: string;
+  status: BankStatus;
+  /** Judge's reason (rejection or failed report). */
+  reason?: string;
+  /** Learner already argued against a rejection. */
+  appealed?: boolean;
+  /** Report attempts so far. */
+  tries: number;
+  /** Judge feedback for a redo. */
+  feedback?: string;
+  round: number;
+}
+
+export interface PendingReport { itemId: string; q: string; report: string; sources: string }
+export interface LearnedNote { q: string; answer: string; at: number; score?: number }
+
+export interface PerAgent {
+  round: number;
+  bank: BankItem[];
+  pendingReports: PendingReport[];
   reportsSinceJudge: number;
   judgesSinceManager: number;
   totalReports: number;
-  /** The manager's steering note, fed to learner and judge. */
+  /** Manager's steering note for learner and judge. */
   direction: string;
-  /** The manager's calibration note for the judge (too harsh / too lenient / focus). */
+  /** Manager's note about how the judge is judging. */
   judgeNote: string;
-  /** Judge findings waiting for the manager's audit. */
+  /** Judge findings waiting for the manager. */
   pendingFindings: string[];
-  recentQuestions: string[];
-  /** Average judge score (0-10) of each judge turn, oldest first. */
+  /** Average judge score per judge turn. */
   scores: number[];
-  /** Index of the next topic when several topics are given (one per line). */
-  topicIndex: number;
+  /** Judge-approved answers (what it has learned). */
+  notes: LearnedNote[];
+  /** Lessons gathered in session mode (not yet given to the agent). */
+  sessionLessons: string;
+  /** Last manager verdict: on track or drifting. */
+  onTrack: boolean | null;
 }
 
-const blank = (): PerAgent => ({ reportsSinceJudge: 0, judgesSinceManager: 0, totalReports: 0, direction: '', judgeNote: '', pendingFindings: [], recentQuestions: [], scores: [], topicIndex: 0 });
+export const blankState = (): PerAgent => ({
+  round: 0, bank: [], pendingReports: [], reportsSinceJudge: 0, judgesSinceManager: 0, totalReports: 0,
+  direction: '', judgeNote: '', pendingFindings: [], scores: [], notes: [], sessionLessons: '', onTrack: null,
+});
+
+export const defaultLearnConfig = (): LearnConfig => ({
+  topic: '', projectId: '', mode: 'keep', bankSize: 10, reportsPerJudge: 3, judgesPerManager: 2,
+  useLibrary: true, useWeb: false, continuous: true,
+});
 
 interface LearningState {
   config: Record<string, LearnConfig>;
@@ -45,11 +89,11 @@ interface LearningState {
   setConfig: (agentId: string, c: Partial<LearnConfig>) => void;
   get: (agentId: string) => PerAgent;
   patch: (agentId: string, p: Partial<PerAgent>) => void;
+  updateItem: (agentId: string, itemId: string, p: Partial<BankItem>) => void;
+  addItems: (agentId: string, items: BankItem[]) => void;
   log: (e: Omit<LearnEvent, 'id' | 'at'>) => void;
   clearAgent: (agentId: string) => void;
 }
-
-const defaultConfig = (): LearnConfig => ({ topic: '', projectId: '', reportsPerJudge: 3, judgesPerManager: 3 });
 
 export const useLearningStore = create<LearningState>()(
   persist(
@@ -57,20 +101,42 @@ export const useLearningStore = create<LearningState>()(
       config: {},
       state: {},
       events: [],
-      getConfig: (id) => ({ ...defaultConfig(), ...(getS().config[id] || {}) }),
-      setConfig: (id, c) => set((s) => ({ config: { ...s.config, [id]: { ...defaultConfig(), ...(s.config[id] || {}), ...c } } })),
-      get: (id) => ({ ...blank(), ...(getS().state[id] || {}) }),
-      patch: (id, p) => set((s) => ({ state: { ...s.state, [id]: { ...blank(), ...(s.state[id] || {}), ...p } } })),
+      getConfig: (id) => ({ ...defaultLearnConfig(), ...(getS().config[id] || {}) }),
+      setConfig: (id, c) => set((s) => ({ config: { ...s.config, [id]: { ...defaultLearnConfig(), ...(s.config[id] || {}), ...c } } })),
+      get: (id) => ({ ...blankState(), ...(getS().state[id] || {}) }),
+      patch: (id, p) => set((s) => ({ state: { ...s.state, [id]: { ...blankState(), ...(s.state[id] || {}), ...p } } })),
+      updateItem: (id, itemId, p) => set((s) => {
+        const cur = { ...blankState(), ...(s.state[id] || {}) };
+        return { state: { ...s.state, [id]: { ...cur, bank: cur.bank.map((b) => (b.id === itemId ? { ...b, ...p } : b)) } } };
+      }),
+      addItems: (id, items) => set((s) => {
+        const cur = { ...blankState(), ...(s.state[id] || {}) };
+        return { state: { ...s.state, [id]: { ...cur, bank: [...cur.bank, ...items] } } };
+      }),
       log: (e) =>
         set((s) => ({
-          events: [{ ...e, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, at: Date.now() }, ...s.events].slice(0, 300),
+          events: [{ ...e, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, at: Date.now() }, ...s.events].slice(0, 400),
         })),
       clearAgent: (id) =>
         set((s) => ({
-          state: { ...s.state, [id]: blank() },
+          state: { ...s.state, [id]: blankState() },
           events: s.events.filter((e) => e.agentId !== id),
         })),
     }),
-    { name: 'atlas-learning', storage: createJSONStorage(() => AsyncStorage) },
+    {
+      name: 'atlas-learning',
+      version: 2,
+      storage: createJSONStorage(() => AsyncStorage),
+      // v1 kept a different shape: start the per-agent progress fresh, keep the settings.
+      migrate: (persisted: any, version: number) => {
+        if (!persisted) return persisted;
+        if (version < 2) return { ...persisted, state: {}, events: [] };
+        return persisted;
+      },
+    },
   ),
 );
+
+export const newItem = (q: string, round: number, status: BankStatus = 'pending'): BankItem => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, q: q.trim(), status, tries: 0, round,
+});

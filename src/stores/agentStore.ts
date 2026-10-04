@@ -140,8 +140,10 @@ export const useAgentStore = create<AgentState>()(
         set((s) => ({ agents: [...s.agents, agent] }));
         return agent;
       },
-      updateAgent: (id, updates) =>
-        set((s) => ({ agents: s.agents.map((x) => (x.id === id ? { ...x, ...updates, updatedAt: now() } : x)) })),
+      updateAgent: (id, updates) => {
+        set((s) => ({ agents: s.agents.map((x) => (x.id === id ? { ...x, ...updates, updatedAt: now() } : x)) }));
+        if (id === get().activeAgentId && typeof updates.contextLength === 'number') applyContextLength(updates.contextLength);
+      },
       deleteAgent: (id) =>
         set((s) => ({
           agents: s.agents.filter((x) => x.id !== id),

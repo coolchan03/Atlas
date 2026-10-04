@@ -1,23 +1,28 @@
 /**
- * Atlas learning mode: a practice loop that runs entirely on the phone with the loaded model.
+ * Atlas learning mode: a research cycle that runs entirely on the phone with the loaded model(s).
  *
- *   Learner  - answers a practice question on the chosen topic (using the agent's prompt,
- *              its current lessons and, if a project is chosen, that project's knowledge base).
- *   Judge    - after every N learner reports, checks the reasoning against the sources and
- *              proposes concrete lessons.
- *   Manager  - after every M judge turns, audits the judge's findings, rewrites the agent's
- *              lesson list, and sets a short "direction" that steers the learner and the judge
- *              when things drift off course.
+ *  1. Question bank  - the Learner turns the task into a bank of study questions.
+ *                      The Judge approves each one or rejects it (off-topic, vague, unsafe, duplicate).
+ *                      The Learner may fight a rejection once (argue or rewrite); the Judge rules again.
+ *  2. Study          - the Learner works through the approved questions, researching the project's
+ *                      documents (and optionally the offline library / web), and writes a simple report.
+ *                      Every N reports the Judge checks that each report makes logical sense and follows
+ *                      from its sources. Failed reports go back for one redo with the Judge's feedback.
+ *  3. Manager        - every M judge turns the Manager reviews the Learner AND the Judge against the
+ *                      original task: are they on track? It can drop off-task questions, add missing ones,
+ *                      steer the Learner, correct the Judge, and keep the agent's lesson list short.
  *
- * Nothing is fine-tuned: the model's weights never change. What "learns" is the agent's
- * lesson list, which is added under its system prompt in every chat (and is editable).
+ * Nothing is fine-tuned: model weights never change. What the agent keeps (keep mode) is its lesson list
+ * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
+ * In session mode nothing changes until you tap "Keep what it learned".
  */
+import RNFS from 'react-native-fs';
 import { llmService } from '../services/llm';
 import { activeModelService } from '../services/activeModelService';
 import { ragService } from '../services/rag';
 import { useAppStore } from '../stores/appStore';
 import { useAgentStore, Agent, agentPromptWithLessons } from '../stores/agentStore';
-import { useLearningStore } from './store';
+import { useLearningStore, newItem, BankItem, LearnConfig, PerAgent } from './store';
 import type { Message } from '../types';
 import logger from '../utils/logger';
 import { ensureTextModel } from '../atlasTools/models';
@@ -31,16 +36,15 @@ export const onLearningStatus = (fn: ((s: string) => void) | null): void => { st
 const status = (s: string) => statusListener?.(s);
 
 const msg = (role: Message['role'], content: string): Message => ({
-  id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  role,
-  content,
-  timestamp: Date.now(),
+  id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, role, content, timestamp: Date.now(),
 });
-
-const clean = (t: string): string =>
-  t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '').trim();
-
+const clean = (t: string): string => t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '').replace(/\*\*/g, '').trim();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const L = () => useLearningStore.getState();
+
+type Role = 'learner' | 'judge' | 'manager';
+let roleModels: Record<Role, string> = { learner: '', judge: '', manager: '' };
+let baseModel = '';
 
 async function ensureModel(): Promise<void> {
   if (llmService.isModelLoaded()) return;
@@ -51,161 +55,316 @@ async function ensureModel(): Promise<void> {
   if (!llmService.isModelLoaded()) throw new Error('The model could not be loaded.');
 }
 
-/** One model call. Waits politely if a chat is generating. */
-type Role = 'learner' | 'judge' | 'manager';
-let roleModels: Record<Role, string> = { learner: '', judge: '', manager: '' };
-/** The model that was selected when learning started; roles without their own model use it. */
-let baseModel = '';
-
-async function ask(system: string, user: string, role: Role = 'learner'): Promise<string> {
+async function ask(system: string, user: string, role: Role): Promise<string> {
   for (let i = 0; llmService.isCurrentlyGenerating(); i++) {
     if (stopRequested) throw new Error('stopped');
     if (i === 0) status('Waiting for the chat to finish...');
     await sleep(1500);
   }
+  if (stopRequested) throw new Error('stopped');
   if (new Set([roleModels.learner, roleModels.judge, roleModels.manager]).size > 1 || roleModels[role] !== baseModel) {
-    // A role may use its own model; '' means the model the learner/chat uses.
     await ensureTextModel(roleModels[role] || null, status);
   }
   await ensureModel();
-  const out = await llmService.generateResponse([msg('system', system), msg('user', user)], { disableThinking: true });
+  // Keep the prompt inside the model's memory (about 3 characters per token).
+  const ctx = llmService.getPerformanceSettings().contextLength || 2048;
+  const maxChars = Math.max(2500, (ctx - 700) * 3);
+  const u = user.length + system.length > maxChars ? user.slice(0, Math.max(800, maxChars - system.length)) : user;
+  const out = await llmService.generateResponse([msg('system', system), msg('user', u)], { disableThinking: true });
   return clean(out);
 }
 
-async function sources(projectId: string, query: string): Promise<string> {
-  if (!projectId) return '';
-  try {
-    const res: any = await ragService.searchProject(projectId, query);
-    const chunks: any[] = res?.chunks || [];
-    return chunks
-      .slice(0, 3)
-      .map((c) => `[${c.name}] ${String(c.content).slice(0, 900)}`)
-      .join('\n\n');
-  } catch (e) {
-    logger.log(`[Learning] knowledge search failed: ${String(e)}`);
-    return '';
+// ------------------------------------------------------------------ research
+async function research(cfg: LearnConfig, query: string): Promise<string> {
+  const parts: string[] = [];
+  if (cfg.projectId) {
+    try {
+      const res: any = await ragService.searchProject(cfg.projectId, query);
+      (res?.chunks || []).slice(0, 3).forEach((c: any) => parts.push(`[${c.name}] ${String(c.content).replace(/\s+/g, ' ').slice(0, 800)}`));
+    } catch (e) { logger.log(`[Learning] knowledge search failed: ${String(e)}`); }
   }
+  if (cfg.useLibrary) {
+    try {
+      const { searchLibrary, readArticle } = require('../atlasTools/offlineLibrary');
+      const hits = await searchLibrary(query, 2);
+      for (const h of hits.slice(0, 1)) {
+        const a = await readArticle(h.uri, h.path, 900);
+        parts.push(`[${h.library}: ${a.title}] ${a.text.replace(/\s+/g, ' ').slice(0, 800)}`);
+      }
+    } catch { /* no library */ }
+  }
+  if (cfg.useWeb) {
+    try {
+      const { offGridOn } = require('../atlasTools/offGrid');
+      if (!offGridOn()) {
+        const { searchWeb } = require('../services/tools/webSearchProviders');
+        const r = await searchWeb(query, async () => []);
+        r.results.slice(0, 2).forEach((w: any) => { if (w.snippet) parts.push(`[web: ${w.title}] ${w.snippet.slice(0, 500)}`); });
+      }
+    } catch { /* offline */ }
+  }
+  return parts.join('\n\n');
 }
 
-const linesStarting = (text: string, tag: string): string[] =>
-  text
-    .split('\n')
-    .map((l) => l.trim().replace(/^[-*\d.)\s]+/, ''))
-    .filter((l) => l.toUpperCase().startsWith(tag))
-    .map((l) => l.slice(tag.length).replace(/^[:\s-]+/, '').trim())
-    .filter(Boolean);
+const numbered = (items: { q: string }[]) => items.map((b, i) => `${i + 1}. ${b.q}`).join('\n');
+/** Parses lines like "3: APPROVE" / "3 - REJECT: off topic" / "Q3 REJECT (vague)". */
+function rulings(text: string, n: number): Map<number, { ok: boolean; reason: string }> {
+  const out = new Map<number, { ok: boolean; reason: string }>();
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*(?:Q|R|#)?\s*(\d{1,2})\s*[:.)\-–]?\s*(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|OK|REJECT(?:ED)?|FAIL(?:ED)?)\b\s*[:\-–(]*\s*(.*)$/i);
+    if (!m) continue;
+    const i = Number(m[1]);
+    if (i < 1 || i > n) continue;
+    out.set(i, { ok: /^(APPROVE|ACCEPT|PASS|OK)/i.test(m[2]), reason: m[3].replace(/\)\s*$/, '').trim() });
+  }
+  return out;
+}
+const tagged = (text: string, tag: string): string[] =>
+  text.split('\n').map((l) => l.trim().replace(/^[-*\d.)\s]+/, '')).filter((l) => l.toUpperCase().startsWith(tag))
+    .map((l) => l.slice(tag.length).replace(/^[:\s-]+/, '').trim()).filter(Boolean);
 
-async function learnerTurn(agent: Agent, topic: string, projectId: string): Promise<void> {
-  const L = useLearningStore.getState();
-  const st = L.get(agent.id);
-  status('Making a practice question...');
-  const q = (await ask(
-    'You write realistic practice questions. Output ONLY the question, one or two sentences, nothing else.',
-    `Topic: ${topic}\n${st.direction ? `Focus for now: ${st.direction}\n` : ''}Write one new, specific question a person in a real situation might ask. Avoid these recent ones:\n${st.recentQuestions.slice(-8).join('\n') || '(none)'}`,
-  )).split('\n')[0].slice(0, 300);
-  if (!q) return;
-  L.log({ agentId: agent.id, kind: 'question', title: 'Question', body: q });
+function learnerSystem(agent: Agent, st: PerAgent, cfg: LearnConfig): string {
+  let s = agentPromptWithLessons(agent);
+  if (cfg.mode === 'session' && st.sessionLessons.trim()) s += `\n\nLessons from this practice session:\n${st.sessionLessons}`;
+  if (st.direction) s += `\n\nDirection from your manager: ${st.direction}`;
+  return s;
+}
 
-  status('Learner is answering...');
-  const ctx = await sources(projectId, q);
-  const answer = await ask(
-    `${agentPromptWithLessons(agent)}${st.direction ? `\n\nCurrent direction from your manager: ${st.direction}` : ''}`,
-    `${ctx ? `Sources you may use:\n${ctx}\n\n` : ''}Question: ${q}\n\nAnswer it. Then add a line starting "REASONING:" explaining briefly why, and which source you used.`,
+// ------------------------------------------------------------------ 1. question bank
+async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
+  const st = L().get(agent.id);
+  const round = st.round + 1;
+  const done = st.bank.filter((b) => b.status === 'answered').map((b) => b.q).slice(-25);
+  const gaps = st.bank.filter((b) => b.status === 'failed').map((b) => b.q).slice(-8);
+  status(`Learner is writing question bank (round ${round})...`);
+  const raw = await ask(
+    'You plan how to become an expert. You write a bank of specific study questions. Output only the questions, one per line, each starting with "Q: ".',
+    `TASK: ${cfg.topic}\n${st.direction ? `Manager direction: ${st.direction}\n` : ''}${done.length ? `Already learned (do not repeat):\n${done.join('\n')}\n` : ''}${gaps.length ? `Still not answered well (rephrase or split these):\n${gaps.join('\n')}\n` : ''}Write ${cfg.bankSize} study questions that together cover what an expert needs to know to do this task well: the basics first, then practical steps, warning signs, common mistakes and edge cases. Each question must be answerable in a short report.`,
+    'learner',
   );
-  L.log({ agentId: agent.id, kind: 'report', title: 'Learner report', body: answer.slice(0, 2500) });
-  const report = `Q: ${q}\nA: ${answer.slice(0, 1500)}\nSOURCES: ${ctx ? ctx.slice(0, 1200) : '(none)'}`;
-  L.patch(agent.id, {
-    reportsSinceJudge: st.reportsSinceJudge + 1,
-    totalReports: st.totalReports + 1,
-    recentQuestions: [...st.recentQuestions, q].slice(-20),
-    pendingFindings: st.pendingFindings,
-  });
-  pendingReports.push(report);
-}
+  let qs = tagged(raw, 'Q');
+  if (qs.length < 2) qs = raw.split('\n').map((l) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter((l) => l.endsWith('?'));
+  qs = [...new Set(qs.map((q) => q.slice(0, 300)))].slice(0, cfg.bankSize + 2);
+  if (!qs.length) throw new Error('The learner did not write any questions. Try again or use a bigger model.');
+  const items = qs.map((q) => newItem(q, round));
+  L().addItems(agent.id, items);
+  L().patch(agent.id, { round });
+  L().log({ agentId: agent.id, kind: 'bank', title: `Question bank, round ${round} (${items.length})`, body: numbered(items) });
 
-let pendingReports: string[] = [];
-
-async function judgeTurn(agent: Agent): Promise<void> {
-  const L = useLearningStore.getState();
-  const st = L.get(agent.id);
-  status('Judge is checking the learner...');
+  // Judge reviews the bank.
+  status('Judge is reviewing the question bank...');
   const verdict = await ask(
-    `You are a strict but fair judge. You check another assistant's answers for wrong facts, unsafe advice, invented numbers, missing urgent steps, and answers that ignore the sources.${st.judgeNote ? `\nNote from the manager about your judging: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
-    `Reports:\n\n${pendingReports.join('\n\n---\n\n').slice(0, 6000)}\n\nFor each report give "SCORE: n/10" and one sentence why. Then write 1 to 3 lines starting "LESSON:" with a short, concrete rule the assistant should follow next time. Only lessons supported by the sources or by basic safety.`,
+    `You are the judge. You check that study questions stay on the task, are specific, safe and not duplicates.${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}`,
+    `TASK: ${cfg.topic}\n\nQUESTIONS:\n${numbered(items)}\n\nFor EVERY question write one line: "<number>: APPROVE" or "<number>: REJECT - <short reason>". Reject only questions that are off the task, too vague, unsafe, or duplicates.`,
     'judge',
   );
-  const lessons = linesStarting(verdict, 'LESSON');
-  const nums = [...verdict.matchAll(/SCORE\s*:?\s*(\d+(?:\.\d+)?)\s*\/\s*10/gi)].map((m) => Math.min(10, parseFloat(m[1])));
-  const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-  L.log({ agentId: agent.id, kind: 'judge', title: `Judge (${lessons.length} lesson${lessons.length === 1 ? '' : 's'})`, body: verdict.slice(0, 2500) });
-  pendingReports = [];
-  L.patch(agent.id, {
+  const r = rulings(verdict, items.length);
+  const rejected: BankItem[] = [];
+  items.forEach((it, i) => {
+    const v = r.get(i + 1);
+    if (!v || v.ok) L().updateItem(agent.id, it.id, { status: 'approved' });
+    else { L().updateItem(agent.id, it.id, { status: 'rejected', reason: v.reason || 'rejected' }); rejected.push({ ...it, reason: v.reason }); }
+  });
+  L().log({ agentId: agent.id, kind: 'judge', title: `Judge: ${items.length - rejected.length} approved, ${rejected.length} rejected`, body: verdict.slice(0, 2500) });
+  if (!rejected.length || stopRequested) return;
+
+  // Learner may fight back.
+  status('Learner is answering the rejections...');
+  const appeal = await ask(
+    'You defend your study plan honestly. If a rejection is fair, accept it. If it is wrong, argue briefly, or rewrite the question so it is acceptable.',
+    `TASK: ${cfg.topic}\n\nRejected questions:\n${rejected.map((b, i) => `${i + 1}. ${b.q}\n   Judge: ${b.reason}`).join('\n')}\n\nFor each, write one line: "<number>: ACCEPT" or "<number>: APPEAL - <why it belongs>" or "<number>: REWRITE - <new question>".`,
+    'learner',
+  );
+  const appeals: { item: BankItem; text: string; rewrite: boolean }[] = [];
+  for (const line of appeal.split('\n')) {
+    const m = line.match(/^\s*(?:Q)?\s*(\d{1,2})\s*[:.)\-–]?\s*(ACCEPT|APPEAL|REWRITE)\b\s*[:\-–]*\s*(.*)$/i);
+    if (!m) continue;
+    const item = rejected[Number(m[1]) - 1];
+    if (!item || /ACCEPT/i.test(m[2]) || !m[3].trim()) continue;
+    appeals.push({ item, text: m[3].trim().slice(0, 300), rewrite: /REWRITE/i.test(m[2]) });
+  }
+  if (!appeals.length) return;
+  L().log({ agentId: agent.id, kind: 'appeal', title: `Learner appeals ${appeals.length}`, body: appeals.map((a, i) => `${i + 1}. ${a.rewrite ? 'Rewrite' : 'Appeal'}: ${a.text}\n   (was: ${a.item.q})`).join('\n') });
+  status('Judge is ruling on the appeals...');
+  const final = await ask(
+    'You are the judge, ruling on appeals. Be fair: approve if the argument or the rewritten question is reasonable and on the task.',
+    `TASK: ${cfg.topic}\n\n${appeals.map((a, i) => `${i + 1}. Original: ${a.item.q}\n   Your reason: ${a.item.reason}\n   Learner ${a.rewrite ? 'rewrote it as' : 'argues'}: ${a.text}`).join('\n')}\n\nFor each write "<number>: APPROVE" or "<number>: REJECT - <reason>". This decision is final.`,
+    'judge',
+  );
+  const fr = rulings(final, appeals.length);
+  let won = 0;
+  appeals.forEach((a, i) => {
+    const v = fr.get(i + 1);
+    if (v?.ok) { won++; L().updateItem(agent.id, a.item.id, { status: 'approved', q: a.rewrite ? a.text : a.item.q, appealed: true, reason: undefined }); }
+    else L().updateItem(agent.id, a.item.id, { appealed: true, reason: v?.reason || a.item.reason });
+  });
+  L().log({ agentId: agent.id, kind: 'judge', title: `Appeals: ${won} won, ${appeals.length - won} lost`, body: final.slice(0, 1500) });
+}
+
+// ------------------------------------------------------------------ 2. study + reports
+async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Promise<void> {
+  const st = L().get(agent.id);
+  status(`Learner is researching: ${item.q.slice(0, 60)}...`);
+  const src = await research(cfg, item.q);
+  if (stopRequested) return;
+  status('Learner is writing a report...');
+  const report = await ask(
+    learnerSystem(agent, st, cfg),
+    `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it.\nUNSURE: anything you could not confirm (or "nothing").`,
+    'learner',
+  );
+  L().log({ agentId: agent.id, kind: 'report', title: `Report: ${item.q.slice(0, 70)}`, body: report.slice(0, 2500) });
+  L().patch(agent.id, {
+    pendingReports: [...st.pendingReports, { itemId: item.id, q: item.q, report: report.slice(0, 1600), sources: src.slice(0, 1200) }],
+    reportsSinceJudge: st.reportsSinceJudge + 1,
+    totalReports: st.totalReports + 1,
+  });
+  L().updateItem(agent.id, item.id, { tries: item.tries + 1 });
+}
+
+async function saveNote(agent: Agent, cfg: LearnConfig, q: string, answer: string): Promise<void> {
+  if (cfg.mode !== 'keep' || !cfg.projectId) return;
+  try {
+    const dir = `${RNFS.DocumentDirectoryPath}/learned`;
+    await RNFS.mkdir(dir);
+    const slug = q.replace(/[^\w ]+/g, '').trim().split(/\s+/).slice(0, 8).join('_').slice(0, 60) || 'note';
+    const name = `Learned - ${agent.name} - ${slug} ${Date.now() % 100000}.md`;
+    const path = `${dir}/${name.replace(/[\\/:*?"<>|]/g, '')}`;
+    const body = `# ${q}\n\n${answer}\n\n(Learned by the ${agent.name} agent in learning mode on ${new Date().toLocaleDateString()}, checked by the judge.)\n`;
+    await RNFS.writeFile(path, body, 'utf8');
+    await ragService.indexDocument({ projectId: cfg.projectId, filePath: path, fileName: name, fileSize: body.length });
+  } catch (e) { logger.log(`[Learning] could not save note: ${String(e)}`); }
+}
+
+async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
+  const st = L().get(agent.id);
+  const reps = st.pendingReports;
+  if (!reps.length) return;
+  status('Judge is checking the reports...');
+  const verdict = await ask(
+    `You are a strict but fair judge. Check each report: does it answer the question, does the reasoning make logical sense, does it follow from its sources, is anything unsafe or invented?${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
+    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\nFor each report write one line: "<number>: PASS <score>/10 - <why>" or "<number>: FAIL <score>/10 - <what is wrong and how to fix it>". Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
+    'judge',
+  );
+  const r = rulings(verdict, reps.length);
+  const scores: number[] = [];
+  let pass = 0;
+  for (let i = 0; i < reps.length; i++) {
+    const rep = reps[i];
+    const v = r.get(i + 1);
+    const line = verdict.split('\n').find((l) => new RegExp(`^\\s*(?:R)?\\s*${i + 1}\\s*[:.)\\-–]`).test(l)) || '';
+    const sc = line.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
+    if (sc) scores.push(Math.min(10, parseFloat(sc[1])));
+    const item = L().get(agent.id).bank.find((b) => b.id === rep.itemId);
+    if (!item) continue;
+    if (!v || v.ok) {
+      pass++;
+      const answer = (rep.report.match(/ANSWER\s*:\s*([\s\S]*?)(?:\n\s*(?:KEY POINTS|REASONING|UNSURE)\s*:|$)/i)?.[1] || rep.report).trim();
+      L().updateItem(agent.id, item.id, { status: 'answered', reason: undefined });
+      const cur = L().get(agent.id);
+      L().patch(agent.id, { notes: [{ q: rep.q, answer: rep.report, at: Date.now(), score: sc ? parseFloat(sc[1]) : undefined }, ...cur.notes].slice(0, 200) });
+      await saveNote(agent, cfg, rep.q, answer.length > 40 ? rep.report : answer);
+    } else if (item.tries < 2) {
+      L().updateItem(agent.id, item.id, { status: 'approved', feedback: v.reason }); // back in the queue for one redo
+    } else {
+      L().updateItem(agent.id, item.id, { status: 'failed', reason: v.reason });
+    }
+  }
+  const lessons = tagged(verdict, 'LESSON');
+  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+  L().log({ agentId: agent.id, kind: 'judge', title: `Judge: ${pass}/${reps.length} reports pass`, body: verdict.slice(0, 2500) });
+  const cur = L().get(agent.id);
+  L().patch(agent.id, {
+    pendingReports: [],
     reportsSinceJudge: 0,
-    judgesSinceManager: st.judgesSinceManager + 1,
-    scores: avg === null ? st.scores : [...st.scores, Math.round(avg * 10) / 10].slice(-50),
-    pendingFindings: [...st.pendingFindings, ...lessons, `(judge summary) ${verdict.slice(0, 400)}`].slice(-30),
+    judgesSinceManager: cur.judgesSinceManager + 1,
+    scores: avg === null ? cur.scores : [...cur.scores, Math.round(avg * 10) / 10].slice(-50),
+    pendingFindings: [...cur.pendingFindings, ...lessons, `(judge: ${pass}/${reps.length} passed) ${verdict.slice(0, 300)}`].slice(-30),
   });
 }
 
-async function managerTurn(agent: Agent, topic: string): Promise<void> {
-  const L = useLearningStore.getState();
-  const st = L.get(agent.id);
-  status('Manager is auditing...');
+// ------------------------------------------------------------------ 3. manager
+async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
+  const st = L().get(agent.id);
+  status('Manager is reviewing the learner and the judge...');
+  const open = st.bank.filter((b) => b.status === 'approved');
+  const recent = L().events.filter((e) => e.agentId === agent.id && (e.kind === 'judge' || e.kind === 'report')).slice(0, 6).reverse();
+  const currentLessons = cfg.mode === 'keep' ? agent.lessons || '' : st.sessionLessons;
   const out = await ask(
-    'You are the manager. You audit the judge, keep the lesson list short and correct, and steer the team back on course when it drifts. You never add lessons that are unsafe or not supported.',
-    `Topic: ${topic}\nCurrent lessons:\n${agent.lessons?.trim() || '(none)'}\n\nJudge findings since your last audit:\n${st.pendingFindings.join('\n').slice(0, 5000)}\n\nPrevious direction: ${st.direction || '(none)'}\n\nReply with exactly these parts:\nLESSON: (one line each, at most 12 total, merge duplicates, drop wrong ones)\nDIRECTION: (one sentence: what the learner should focus on next)\nJUDGE NOTE: (one sentence: is the judge too harsh, too lenient, or missing something)`,
+    'You are the manager. You make sure the learner and the judge stay on the ORIGINAL task. You catch drift, a judge that is too harsh or too lenient, and gaps in the study plan. You never approve unsafe or unsupported lessons.',
+    `ORIGINAL TASK: ${cfg.topic}\n\nOpen questions:\n${numbered(open).slice(0, 1500) || '(none)'}\n\nRejected by the judge:\n${st.bank.filter((b) => b.status === 'rejected').slice(-6).map((b) => `- ${b.q} (${b.reason})`).join('\n') || '(none)'}\n\nRecent work:\n${recent.map((e) => `${e.title}\n${e.body.slice(0, 450)}`).join('\n\n').slice(0, 3200)}\n\nJudge findings:\n${st.pendingFindings.join('\n').slice(0, 1500)}\n\nCurrent lessons:\n${currentLessons || '(none)'}\n\nReply with exactly these parts:\nSTATUS: ON TRACK or DRIFTING, and one sentence why\nDIRECTION: one sentence telling the learner what to focus on next\nJUDGE NOTE: one sentence on how the judge should judge (too harsh, too lenient, or fine)\nDROP: number of an open question that is off the task (one line each, or none)\nADD: a missing question that matters for the task (0-3 lines)\nLESSON: the full lesson list, one per line, at most 12, merged and corrected`,
     'manager',
   );
-  const lessons = linesStarting(out, 'LESSON').slice(0, 12);
-  const direction = linesStarting(out, 'DIRECTION')[0] || st.direction;
-  const judgeNote = linesStarting(out, 'JUDGE NOTE')[0] || st.judgeNote;
+  const statusLine = tagged(out, 'STATUS')[0] || '';
+  const onTrack = statusLine ? !/DRIFT/i.test(statusLine) : st.onTrack;
+  const direction = tagged(out, 'DIRECTION')[0] || st.direction;
+  const judgeNote = tagged(out, 'JUDGE NOTE')[0] || st.judgeNote;
+  const drops = tagged(out, 'DROP').map((d) => Number(d.match(/\d+/)?.[0])).filter((n) => n >= 1 && n <= open.length);
+  drops.forEach((n) => L().updateItem(agent.id, open[n - 1].id, { status: 'dropped', reason: 'Manager: off the task' }));
+  const adds = tagged(out, 'ADD').filter((a) => a.length > 8 && !/^none/i.test(a)).slice(0, 3);
+  if (adds.length) L().addItems(agent.id, adds.map((q) => newItem(q, st.round, 'approved')));
+  const lessons = tagged(out, 'LESSON').slice(0, 12);
   if (lessons.length) {
-    useAgentStore.getState().updateAgent(agent.id, { lessons: lessons.map((l) => `- ${l}`).join('\n') });
+    const text = lessons.map((l) => `- ${l}`).join('\n');
+    if (cfg.mode === 'keep') useAgentStore.getState().updateAgent(agent.id, { lessons: text });
+    else L().patch(agent.id, { sessionLessons: text });
   }
-  L.log({
-    agentId: agent.id,
-    kind: 'manager',
-    title: `Manager audit: ${lessons.length} lessons kept`,
-    body: `${lessons.map((l) => `- ${l}`).join('\n')}\n\nDirection: ${direction || '-'}\nJudge note: ${judgeNote || '-'}`,
+  L().log({
+    agentId: agent.id, kind: 'manager',
+    title: `Manager: ${onTrack === false ? 'drifting, steering back' : 'on track'}`,
+    body: `${statusLine}\nDirection: ${direction || '-'}\nJudge note: ${judgeNote || '-'}${drops.length ? `\nDropped: ${drops.map((n) => open[n - 1]?.q).join('; ')}` : ''}${adds.length ? `\nAdded: ${adds.join('; ')}` : ''}\n\nLessons${cfg.mode === 'session' ? ' (this session)' : ''}:\n${lessons.map((l) => `- ${l}`).join('\n') || '(unchanged)'}`,
   });
-  L.patch(agent.id, { judgesSinceManager: 0, pendingFindings: [], direction, judgeNote });
+  L().patch(agent.id, { judgesSinceManager: 0, pendingFindings: [], direction, judgeNote, onTrack });
 }
 
-/** Run until stop() is called. Errors are logged and the loop continues after a pause. */
+// ------------------------------------------------------------------ loop
 export async function startLearning(agentId: string): Promise<void> {
   if (running) return;
   running = true;
   stopRequested = false;
-  pendingReports = [];
   baseModel = useAppStore.getState().activeModelId || '';
-  const L = useLearningStore.getState();
-  L.log({ agentId, kind: 'info', title: 'Learning started', body: '' });
+  L().log({ agentId, kind: 'info', title: 'Learning started', body: '' });
+  let problems = 0;
+  const startedRound = L().get(agentId).round;
+  let workedThisRun = false;
   try {
     while (!stopRequested) {
       const agent = useAgentStore.getState().getAgent(agentId);
-      const cfg = useLearningStore.getState().getConfig(agentId);
+      const cfg = L().getConfig(agentId);
       roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
       if (!agent) throw new Error('Agent not found');
-      if (!cfg.topic.trim()) throw new Error('Set a topic first');
-      // Several topics (one per line) are practiced in rotation.
-      const topics = cfg.topic.split('\n').map((t) => t.trim()).filter(Boolean);
-      const ti = useLearningStore.getState().get(agentId).topicIndex % topics.length;
-      useLearningStore.getState().patch(agentId, { topicIndex: ti + 1 });
+      if (!cfg.topic.trim()) throw new Error('Set a task first');
       try {
-        await learnerTurn(agent, topics[ti], cfg.projectId);
+        const st = L().get(agentId);
+        const next = st.bank.find((b) => b.status === 'approved' && !st.pendingReports.some((p) => p.itemId === b.id));
+        if (!next) {
+          if (st.pendingReports.length) { await judgeReports(agent, cfg); continue; }
+          const rounds = st.round;
+          if (rounds > 0 && (rounds > startedRound || workedThisRun) && (cfg.mode === 'session' || !cfg.continuous)) {
+            L().log({ agentId, kind: 'info', title: 'Question bank finished', body: cfg.mode === 'session' ? 'Practice session done. Tap "Keep what it learned" to give the lessons and answers to the agent, or start again for another round.' : 'All questions are done. Start again for a new round.' });
+            if (st.judgesSinceManager > 0 || st.pendingFindings.length) await managerReview(agent, cfg);
+            stopRequested = true;
+            break;
+          }
+          await buildBank(agent, cfg);
+          continue;
+        }
+        await writeReport(agent, cfg, next);
+        workedThisRun = true;
         if (stopRequested) break;
-        let st = useLearningStore.getState().get(agentId);
-        if (st.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) && pendingReports.length) {
-          await judgeTurn(useAgentStore.getState().getAgent(agentId)!);
-          st = useLearningStore.getState().get(agentId);
-          if (st.judgesSinceManager >= Math.max(1, cfg.judgesPerManager) && !stopRequested) {
-            await managerTurn(useAgentStore.getState().getAgent(agentId)!, topics.join('; '));
+        const st2 = L().get(agentId);
+        const noMoreQuestions = !st2.bank.some((b) => b.status === 'approved' && !st2.pendingReports.some((p) => p.itemId === b.id));
+        if (st2.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) || noMoreQuestions) {
+          await judgeReports(useAgentStore.getState().getAgent(agentId)!, cfg);
+          if (L().get(agentId).judgesSinceManager >= Math.max(1, cfg.judgesPerManager) && !stopRequested) {
+            await managerReview(useAgentStore.getState().getAgent(agentId)!, cfg);
           }
         }
+        problems = 0;
       } catch (e: any) {
         if (String(e?.message) === 'stopped') break;
-        useLearningStore.getState().log({ agentId, kind: 'error', title: 'Problem', body: String(e?.message || e) });
-        if (/No model|could not be loaded|Set a topic|not found/.test(String(e?.message))) break;
+        L().log({ agentId, kind: 'error', title: 'Problem', body: String(e?.message || e) });
+        if (/No model|could not be loaded|Set a task|not found/.test(String(e?.message)) || ++problems >= 4) break;
         status('Pausing after a problem...');
         await sleep(5000);
       }
@@ -213,13 +372,16 @@ export async function startLearning(agentId: string): Promise<void> {
   } finally {
     running = false;
     stopRequested = false;
-    useLearningStore.getState().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
-    // Put back the model the user had before learning swapped models around.
-    if (baseModel && useAppStore.getState().loadedTextModelId !== baseModel) {
-      ensureTextModel(baseModel).catch(() => undefined);
-    }
+    L().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
+    if (baseModel && useAppStore.getState().loadedTextModelId !== baseModel) ensureTextModel(baseModel).catch(() => undefined);
     status('Stopped');
   }
+}
+
+/** Mark the current bank as finished so the next start makes a fresh round (and wakes a stopped loop). */
+export function newRound(agentId: string): void {
+  const st = L().get(agentId);
+  L().patch(agentId, { bank: st.bank.map((b) => (b.status === 'approved' || b.status === 'pending' ? { ...b, status: 'dropped' as const, reason: 'New round started' } : b)), pendingReports: [] });
 }
 
 export function stopLearning(): void {
@@ -228,13 +390,30 @@ export function stopLearning(): void {
   status('Stopping after this step...');
 }
 
-/** Run the manager now on whatever the judge has found so far. */
+/** Run the manager now. */
 export async function auditNow(agentId: string): Promise<void> {
   const agent = useAgentStore.getState().getAgent(agentId);
-  const cfg = useLearningStore.getState().getConfig(agentId);
+  const cfg = L().getConfig(agentId);
   if (!agent || running) return;
   running = true;
   baseModel = useAppStore.getState().activeModelId || '';
   roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
-  try { await managerTurn(agent, cfg.topic || 'general'); } finally { running = false; status('Idle'); }
+  try { await managerReview(agent, cfg); } catch (e: any) { L().log({ agentId, kind: 'error', title: 'Problem', body: String(e?.message || e) }); } finally { running = false; status('Idle'); }
+}
+
+/** Session mode: give the session's lessons and judge-approved answers to the agent. */
+export async function keepSession(agentId: string): Promise<string> {
+  const agent = useAgentStore.getState().getAgent(agentId);
+  const cfg = L().getConfig(agentId);
+  const st = L().get(agentId);
+  if (!agent) return 'Agent not found';
+  const merged = [agent.lessons?.trim(), st.sessionLessons.trim()].filter(Boolean).join('\n');
+  const lines = [...new Set(merged.split('\n').map((l) => l.trim()).filter(Boolean))].slice(-16);
+  useAgentStore.getState().updateAgent(agentId, { lessons: lines.join('\n') });
+  let saved = 0;
+  if (cfg.projectId) {
+    for (const n of st.notes.slice(0, 60)) { await saveNote(agent, { ...cfg, mode: 'keep' }, n.q, n.answer); saved++; }
+  }
+  L().patch(agentId, { sessionLessons: '' });
+  return `Kept ${lines.length} lessons${cfg.projectId ? ` and ${saved} answers (saved to the project's knowledge base)` : ''}.`;
 }

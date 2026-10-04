@@ -2,6 +2,7 @@
 import { Dispatch, SetStateAction } from 'react';
 import { resolveAgentPrompt, activeAgentTools } from '../../stores/agentStore';
 import { offGridOn, NETWORK_TOOLS } from '../../atlasTools/offGrid';
+import { useChatPrefs } from '../../atlasTools/chatPrefs';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
 import { APP_CONFIG } from '../../constants';
@@ -284,6 +285,23 @@ async function generateWithCompactionRetry(
     ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
   let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
+  // Atlas: compress older messages BEFORE the context is full, so long chats keep going smoothly.
+  try {
+    const prefs = useChatPrefs.getState();
+    if (prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
+      const ctx = llmService.getPerformanceSettings().contextLength || 2048;
+      const est = opts.messages.reduce((n, m) => n + (m.content?.length || 0), 0) / 3.5;
+      if (est > ctx * prefs.compressAt && opts.messages.filter(m => m.role !== 'system').length > 6) {
+        logger.log(`[ChatGen] auto-compress: ~${Math.round(est)} tokens of ${ctx}`);
+        if (await contextCompactionService.compactNow(opts.id, 4)) {
+          const conv = useChatStore.getState().conversations.find(c => c.id === opts.id);
+          const sys = opts.messages.find(m => m.role === 'system');
+          const { prefix, filtered } = applyCompactionPrefix(conv, sys?.content ?? opts.prompt, opts.messages.filter(m => m.role !== 'system' && m.id !== 'compaction-summary'));
+          opts = { ...opts, messages: [...prefix, ...filtered] };
+        }
+      }
+    }
+  } catch (e) { logger.warn('[ChatGen] auto-compress skipped', e); }
   try { const outcome = await gen(opts.messages); turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted; } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
     await llmService.stopGeneration().catch(() => { });
@@ -348,7 +366,9 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   const enabledTools = (canUseTools ? (activeAgentTools() ?? deps.settings.enabledTools ?? []) : [])
     .filter((t: string) => !(offGridOn() && NETWORK_TOOLS.includes(t))); // off-grid mode: no internet tools
 
-  const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt);
+  const chatNote = (conversation as any)?.instructions?.trim();
+  const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt)
+    + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {

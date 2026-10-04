@@ -216,6 +216,31 @@ class ContextCompactionService {
   }
 
   /** Clear persisted compaction state when a conversation is deleted */
+  /**
+   * Summarize everything except the last few messages right now (the "Compress chat" button,
+   * and automatic compression before the context fills). Returns false if there was nothing to do.
+   */
+  async compactNow(conversationId: string, keepLast = 6): Promise<boolean> {
+    const conv = useChatStore.getState().conversations.find(c => c.id === conversationId);
+    if (!conv) return false;
+    const all = conv.messages.filter(m => m.role !== 'system' && !m.isSystemInfo);
+    const cutIdx = conv.compactionCutoffMessageId ? all.findIndex(m => m.id === conv.compactionCutoffMessageId) : -1;
+    const pending = all.slice(cutIdx + 1);
+    if (pending.length <= keepLast) return false;
+    const old = pending.slice(0, pending.length - keepLast);
+    this.setCompacting(true);
+    try {
+      const ctxLength = llmService.getPerformanceSettings().contextLength || 2048;
+      const summary = await this.summarizeMessages({ oldMessages: old, previousSummary: conv.compactionSummary, summaryTokenBudget: Math.floor(ctxLength * SUMMARY_BUDGET_RATIO) });
+      if (!summary?.trim()) return false;
+      useChatStore.getState().updateCompactionState(conversationId, summary.trim(), old[old.length - 1].id);
+      await llmService.clearKVCache(true).catch(() => undefined);
+      return true;
+    } finally {
+      this.setCompacting(false);
+    }
+  }
+
   clearSummary(conversationId: string): void {
     useChatStore.getState().updateCompactionState(conversationId, undefined, undefined);
   }

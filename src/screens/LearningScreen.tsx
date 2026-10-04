@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -8,13 +8,13 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
 import { useProjectStore } from '../stores';
-import { useLearningStore, LearnEvent } from '../learning/store';
-import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow } from '../learning/engine';
+import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
+import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { keepScreenOn } from '../atlasVoice/tts';
 import { ModelChips } from '../components/ModelChips';
 
 const KIND_ICON: Record<string, string> = {
-  question: 'help-circle', report: 'edit-3', judge: 'check-square', manager: 'briefcase', info: 'info', error: 'alert-triangle',
+  bank: 'list', appeal: 'message-square', question: 'help-circle', report: 'edit-3', judge: 'check-square', manager: 'briefcase', info: 'info', error: 'alert-triangle',
 };
 
 function Stepper({ label, value, onChange, colors, styles }: any) {
@@ -44,7 +44,7 @@ export const LearningScreen: React.FC = () => {
   const agent = agents.find((a) => a.id === agentId);
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
-  const cfg = Object.assign({ topic: '', projectId: '', reportsPerJudge: 3, judgesPerManager: 3 }, rawCfg || {});
+  const cfg = Object.assign(defaultLearnConfig(), rawCfg || {});
   const setConfig = useLearningStore((s) => s.setConfig);
   const st = useLearningStore((s) => s.state[agentId]);
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
@@ -53,6 +53,16 @@ export const LearningScreen: React.FC = () => {
   const [running, setRunning] = useState(isLearning());
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
   const [open, setOpen] = useState<string | null>(null);
+  const [newQ, setNewQ] = useState('');
+  const updateItem = useLearningStore((s) => s.updateItem);
+  const addItems = useLearningStore((s) => s.addItems);
+  const bank = st?.bank || [];
+  const count = (k: BankStatus) => bank.filter((b) => b.status === k).length;
+  const STATUS_COLOR: Record<string, string> = { pending: colors.textMuted, approved: colors.primary, answered: '#4D7C0F', rejected: colors.error, failed: '#B45309', dropped: colors.textMuted };
+  const cycle = (id: string, cur: BankStatus) => {
+    const next: BankStatus = cur === 'approved' || cur === 'pending' ? 'rejected' : cur === 'rejected' || cur === 'dropped' || cur === 'failed' ? 'approved' : cur;
+    updateItem(agentId, id, next === 'approved' ? { status: next, reason: undefined, tries: 0 } : { status: next, reason: 'Rejected by you' });
+  };
 
   useEffect(() => {
     onLearningStatus((s) => { setStatusText(s); setRunning(isLearning()); });
@@ -74,13 +84,13 @@ export const LearningScreen: React.FC = () => {
         ))}
       </ScrollView>
 
-      <Text style={styles.label}>Topic to practice</Text>
+      <Text style={styles.label}>Task to become an expert at</Text>
       <TextInput
         style={styles.input}
         value={cfg.topic}
         editable={!running}
         onChangeText={(t) => setConfig(agentId, { topic: t })}
-        placeholder={'e.g. wound infections and when to use antibiotics\n(one topic per line to rotate through several)'}
+        placeholder={'e.g. Treat wound infections without a hospital, and know when antibiotics are needed'}
         placeholderTextColor={colors.textMuted}
         multiline
       />
@@ -94,7 +104,32 @@ export const LearningScreen: React.FC = () => {
         ))}
       </ScrollView>
 
+      <Text style={styles.label}>Mode</Text>
+      <View style={[styles.row, { marginTop: 0 }]}>
+        {([['keep', 'Keep learning', 'Lessons go into the agent; checked answers are saved to the project'], ['session', 'Practice session', 'Temporary: nothing changes unless you tap Keep at the end']] as const).map(([m, t, d]) => (
+          <TouchableOpacity key={m} disabled={running} onPress={() => setConfig(agentId, { mode: m })} style={[styles.modeCard, cfg.mode === m && { borderColor: colors.primary }]}>
+            <Text style={[styles.chipText, { fontWeight: '700' }]}>{t}</Text>
+            <Text style={styles.counts}>{d}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {cfg.mode === 'keep' && (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchText}>Keep going with new question rounds (constant learning)</Text>
+          <Switch value={cfg.continuous} onValueChange={(v) => setConfig(agentId, { continuous: v })} disabled={running} />
+        </View>
+      )}
+      <View style={styles.switchRow}>
+        <Text style={styles.switchText}>Also research in the offline library (WikiMed, Wikipedia...)</Text>
+        <Switch value={cfg.useLibrary} onValueChange={(v) => setConfig(agentId, { useLibrary: v })} disabled={running} />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchText}>Also research on the web (when online, not in off-grid mode)</Text>
+        <Switch value={cfg.useWeb} onValueChange={(v) => setConfig(agentId, { useWeb: v })} disabled={running} />
+      </View>
+
       <View style={styles.row}>
+        <Stepper label="Questions per round" value={cfg.bankSize} onChange={(v: number) => setConfig(agentId, { bankSize: v })} colors={colors} styles={styles} />
         <Stepper label="Reports per judge" value={cfg.reportsPerJudge} onChange={(v: number) => setConfig(agentId, { reportsPerJudge: v })} colors={colors} styles={styles} />
         <Stepper label="Judge turns per manager" value={cfg.judgesPerManager} onChange={(v: number) => setConfig(agentId, { judgesPerManager: v })} colors={colors} styles={styles} />
       </View>
@@ -120,7 +155,10 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.statusBox}>
         <Text style={styles.statusText}>{running ? statusText : 'Idle'}</Text>
         <Text style={styles.counts}>
-          Reports: {st?.totalReports ?? 0} · until judge: {Math.max(0, cfg.reportsPerJudge - (st?.reportsSinceJudge ?? 0))} · judge turns until manager: {Math.max(0, cfg.judgesPerManager - (st?.judgesSinceManager ?? 0))}
+          Round {st?.round ?? 0} · {count('answered')} learned · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
+        </Text>
+        <Text style={styles.counts}>
+          Until judge: {Math.max(0, cfg.reportsPerJudge - (st?.reportsSinceJudge ?? 0))} reports · until manager: {Math.max(0, cfg.judgesPerManager - (st?.judgesSinceManager ?? 0))} judge turns{st?.onTrack === false ? ' · manager says: drifting' : st?.onTrack ? ' · manager says: on track' : ''}
         </Text>
         {!!st?.scores?.length && (
           <View style={styles.scoreRow}>
@@ -148,6 +186,33 @@ export const LearningScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.label}>Question bank</Text>
+      <Text style={styles.note}>The learner writes it, the judge approves or rejects (the learner can argue back once), the manager can drop or add questions. Tap a question to approve or reject it yourself.</Text>
+      {bank.filter((b) => b.status !== 'dropped').slice(-40).map((b) => (
+        <TouchableOpacity key={b.id} disabled={running && b.status !== 'pending'} onPress={() => cycle(b.id, b.status)} onLongPress={() => Alert.alert('Remove question?', b.q, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => updateItem(agentId, b.id, { status: 'dropped', reason: 'Removed by you' }) }])} style={styles.bankRow}>
+          <View style={[styles.dot, { backgroundColor: STATUS_COLOR[b.status] || colors.textMuted }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chipText}>{b.q}</Text>
+            <Text style={[styles.counts, { color: STATUS_COLOR[b.status] }]}>{b.status}{b.appealed ? ' (appealed)' : ''}{b.reason ? ` - ${b.reason}` : ''}</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
+      <View style={[styles.row, { marginTop: 6 }]}>
+        <TextInput style={[styles.input, { flex: 1 }]} value={newQ} onChangeText={setNewQ} placeholder="Add your own question" placeholderTextColor={colors.textMuted} />
+        <TouchableOpacity onPress={() => { if (newQ.trim()) { addItems(agentId, [newItem(newQ, st?.round || 1, 'approved')]); setNewQ(''); } }} style={styles.smallBtn}><Text style={styles.smallBtnText}>Add</Text></TouchableOpacity>
+        <TouchableOpacity disabled={running} onPress={() => newRound(agentId)} style={styles.smallBtn}><Text style={styles.smallBtnText}>New round</Text></TouchableOpacity>
+      </View>
+
+      {cfg.mode === 'session' && (
+        <View style={styles.statusBox}>
+          <Text style={styles.statusText}>This practice session</Text>
+          <Text style={styles.counts}>{st?.notes?.length ?? 0} checked answers{st?.sessionLessons ? `\nLessons so far:\n${st.sessionLessons}` : ''}</Text>
+          <TouchableOpacity disabled={running} onPress={async () => Alert.alert('Done', await keepSession(agentId))} style={[styles.smallBtn, { marginTop: 8, alignSelf: 'flex-start' }]}>
+            <Text style={styles.smallBtnText}>Keep what it learned</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <Text style={styles.label}>Lessons this agent uses in every chat</Text>
       <TextInput
         style={[styles.input, styles.lessons]}
@@ -163,8 +228,9 @@ export const LearningScreen: React.FC = () => {
         <Text style={styles.resetText}>Reset lessons and history for this agent</Text>
       </TouchableOpacity>
       <Text style={styles.note}>
-        Keep the app open while it learns (the screen stays on). Plugging in is a good idea. It learns rules, not new
-        knowledge: the model itself does not change, but the lessons are added to this agent's instructions.
+        Keep the app open while it learns (the screen stays on). Plugging in is a good idea. The model itself does not
+        change: the agent keeps its lessons (added to its instructions) and, in Keep mode with a project chosen, the
+        judge-checked answers are saved to that project's documents so chats can use them.
       </Text>
     </View>
   );
@@ -172,7 +238,7 @@ export const LearningScreen: React.FC = () => {
   const feed = (
     <View>
       <Text style={styles.label}>Activity</Text>
-      {events.length === 0 && <Text style={styles.note}>Nothing yet. Pick a topic and press Start.</Text>}
+      {events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
       {events.map((e: LearnEvent) => (
         <TouchableOpacity key={e.id} onPress={() => setOpen(open === e.id ? null : e.id)} style={styles.event}>
           <View style={styles.eventHead}>
@@ -219,7 +285,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: colors.surface, marginRight: 8 },
   chipOn: { backgroundColor: colors.primary },
   chipText: { color: colors.text, fontSize: 13 },
-  chipTextOn: { color: '#fff' },
+  chipTextOn: { color: colors.background },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md, gap: 12, flexWrap: 'wrap' as const },
   stepper: { flex: 1, minWidth: 140 },
   stepLabel: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginBottom: 4 },
@@ -240,6 +306,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   smallBtn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   smallBtnText: { color: colors.text, fontSize: 13 },
   resetBtn: { marginTop: SPACING.sm, paddingVertical: 8 },
+  modeCard: { flex: 1, minWidth: 150, borderWidth: 2, borderColor: colors.border, borderRadius: 10, padding: SPACING.md, backgroundColor: colors.surface },
+  switchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md },
+  switchText: { ...TYPOGRAPHY.bodySmall, color: colors.text, flex: 1, paddingRight: 8 },
+  bankRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 10, backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, marginTop: 6 },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
   resetText: { color: colors.error, fontSize: 13 },
   note: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: SPACING.md, lineHeight: 18 },
   event: { backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, marginBottom: SPACING.sm, ...shadows.small },

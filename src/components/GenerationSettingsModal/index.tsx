@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
 import { ConversationActionsSection } from './ConversationActionsSection';
+import { ChatContextSection } from './ChatContextSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
@@ -112,6 +113,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           conversationImageCount={conversationImageCount}
           activeProjectName={activeProjectName}
         />
+        <ChatContextSection />
 
         {/* IMAGE GENERATION SETTINGS */}
         <TouchableOpacity
