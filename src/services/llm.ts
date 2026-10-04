@@ -1,4 +1,5 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
+import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { Message, INFERENCE_BACKENDS } from '../types';
@@ -327,6 +328,7 @@ class LLMService {
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
+      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
       const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent };
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);

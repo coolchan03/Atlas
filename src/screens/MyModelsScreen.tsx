@@ -15,6 +15,7 @@ import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
+import { useSpeedStats } from '../atlasTools/speed';
 
 /** Everything downloaded, in one place: delete, move to the SD card, add a vision file, import. */
 export const MyModelsScreen: React.FC = () => {
@@ -25,6 +26,7 @@ export const MyModelsScreen: React.FC = () => {
   const activeId = useAppStore((s) => s.activeModelId);
   const whisperPresent = useWhisperStore((s) => s.presentModelIds);
   const useSd = useStoragePrefs((s) => s.useSd);
+  const speeds = useSpeedStats((s) => s.byModel);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [busy, setBusy] = useState<{ id: string; label: string; fraction: number } | null>(null);
   const [vols, setVols] = useState<Volume[]>([]);
@@ -150,7 +152,7 @@ export const MyModelsScreen: React.FC = () => {
             <View key={m.id} style={card}>
               <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>{m.name}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}
+                {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}{speeds[m.id]?.decode ? ` · writes ~${Math.max(1, Math.round(speeds[m.id].decode * 0.75))} words/s` : ''}
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 <TouchableOpacity style={btn(colors.primary)} disabled={!!busy} onPress={() => navigation.navigate('ModelTest', { modelId: m.id })}><Icon name="activity" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Test</Text></TouchableOpacity>

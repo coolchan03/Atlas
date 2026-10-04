@@ -4,6 +4,7 @@
  */
 
 import { useAppStore } from '../stores/appStore';
+import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
 import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
@@ -238,6 +239,7 @@ export async function generateWithToolsImpl(
       // (interrupted), which also has stopped_eos:false. Single verdict shared with the plain path.
       lastTruncated: isTruncatedResult(cr),
     });
+    recordLlamaTimings(cr);
     generating = false;
     deps.setIsGenerating(false);
     if (cr?.context_full) {

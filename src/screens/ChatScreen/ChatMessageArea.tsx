@@ -7,6 +7,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } from '../../components';
+import { ReplyEta } from '../../components/ReplyEta';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
@@ -286,6 +287,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
         style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
       >
+        <ReplyEta remote={!!chat.activeModelInfo?.isRemote} />
         <AttachStep index={[3, 15]} fill>
           <ChatInput
             onSend={chat.handleSend}

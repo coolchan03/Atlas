@@ -10,6 +10,7 @@ import { llmService } from '../services/llm';
 import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
+import { useSpeedStats, estimateReply, fmtSec } from '../atlasTools/speed';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
 interface Step { key: string; title: string; status: Status; detail: string }
@@ -85,6 +86,7 @@ export const ModelTestScreen: React.FC = () => {
 
       // 3. Writing speed
       set('speed', 'run', 'Writing a short paragraph...');
+      const keptOutLen = useSpeedStats.getState().byModel[model.id]?.outLen || 0; // the test paragraph isn't a typical answer
       let sample = '';
       if (isLite) {
         liteRTService.invalidateConversation();
@@ -96,8 +98,9 @@ export const ModelTestScreen: React.FC = () => {
         const st = llmService.getPerformanceStats();
         tps = st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0;
       }
+      if (keptOutLen) useSpeedStats.setState((st) => st.byModel[model.id] ? { byModel: { ...st.byModel, [model.id]: { ...st.byModel[model.id], outLen: keptOutLen } } } : st);
       if (!sample.trim()) { set('speed', 'fail', 'The model loaded but wrote nothing. The file may be damaged or not a chat model.'); ok = false; }
-      else set('speed', tps < 3 ? 'warn' : 'ok', `${tps.toFixed(1)} words-pieces per second: ${speedWords(tps)}.\nSample: "${sample.trim().slice(0, 160)}${sample.length > 160 ? '...' : ''}"`);
+      else set('speed', tps < 3 ? 'warn' : 'ok', `${tps.toFixed(1)} word-pieces per second: ${speedWords(tps)}.\nSample: "${sample.trim().slice(0, 160)}${sample.length > 160 ? '...' : ''}"`);
       if (cancelled.current) return;
 
       // 4. Reading speed (prompt processing)
@@ -114,6 +117,7 @@ export const ModelTestScreen: React.FC = () => {
           const t1 = Date.now();
           await llmService.generateWithMaxTokens([msg(`${LONG_TEXT}\n\nIn one word, what was the traveller counting?`)], 4);
           readTps = n / Math.max(0.05, (Date.now() - t1) / 1000);
+          useSpeedStats.getState().record(model.id, { prefill: readTps });
         }
         const pageSec = readTps > 0 ? 500 / readTps : 0; // ~500 tokens per page
         set('read', readTps > 0 && readTps < 40 ? 'warn' : 'ok', readTps > 0
@@ -149,8 +153,11 @@ export const ModelTestScreen: React.FC = () => {
       }
       set('extras', 'ok', abil.join(' · '));
 
+      const q = estimateReply(model.id, 40);
+      const doc = estimateReply(model.id, 3000);
+      const timing = q ? `\n\nA normal answer takes about ${fmtSec(q.totalSec)} (first words after ${fmtSec(q.firstWordsSec)}).${doc ? ` With a 6-page document attached, first words come after about ${fmtSec(doc.firstWordsSec)}.` : ''} Thinking makes answers take 2-4 times longer.` : '';
       setVerdict(ok
-        ? { good: tps >= 3, text: tps >= 3 ? 'This model works well on this device.' : 'This model works, but answers will be slow. A smaller model will feel much faster.' }
+        ? { good: tps >= 3, text: (tps >= 3 ? 'This model works well on this device.' : 'This model works, but answers will be slow. A smaller model will feel much faster.') + timing }
         : { good: false, text: 'This model had a problem. See the red line above.' });
     } catch (e: any) {
       const m = e?.message || String(e || '');

@@ -11,6 +11,7 @@
  */
 
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
+import { recordSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
@@ -369,6 +370,8 @@ class LiteRTService {
           initTimeSeconds: 0,
         };
 
+        if (ttft && ttft > 0 && wallClockStats.prefillTokenCount > 0) wallClockStats.prefillTokensPerSecond = wallClockStats.prefillTokenCount / ttft;
+        recordSpeed({ decode: wallClockStats.decodeTokensPerSecond, prefill: wallClockStats.prefillTokensPerSecond, promptTokens: wallClockStats.prefillTokenCount, outLen: wallClockStats.decodeTokenCount || jsDecodeTokenCount });
         callbacks.onComplete(this.currentContent, this.currentReasoning, wallClockStats);
       }),
       this.emitter!.addListener(EVENT_ERROR, (message: string) => {
