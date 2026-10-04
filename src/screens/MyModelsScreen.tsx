@@ -44,8 +44,16 @@ export const MyModelsScreen: React.FC = () => {
     Alert.alert(title, msg, [{ text: 'Cancel', style: 'cancel' }, { text: action, style: 'destructive', onPress: fn }]);
 
   const delText = (m: DownloadedModel) => confirm('Delete model?', `${m.name} (${fmtBytes((m.fileSize || 0) + ((m as any).mmProjFileSize || 0))}) will be removed from this device.`, 'Delete', async () => {
-    try { await modelDownloadService.remove(uniformDownloadId('text', m.id)); } catch (e: any) {
-      try { await modelManager.deleteModel(m.id); useAppStore.getState().removeDownloadedModel(m.id); } catch (e2: any) { setAlertState(showAlert('Could not delete', String(e2?.message || e?.message || e2))); }
+    try {
+      if (m.id === activeId) {
+        const { activeModelService } = require('../services/activeModelService');
+        await activeModelService.unloadTextModel().catch(() => undefined);
+      }
+      await modelManager.deleteModel(m.id);
+      useAppStore.getState().removeDownloadedModel(m.id);
+      modelDownloadService.remove(uniformDownloadId('text', m.id)).catch(() => undefined); // clear any download record
+    } catch (e: any) {
+      setAlertState(showAlert('Could not delete', String(e?.message || e)));
     }
   });
   const delImage = (m: ONNXImageModel) => confirm('Delete image model?', `${m.name} will be removed from this device.`, 'Delete', async () => {

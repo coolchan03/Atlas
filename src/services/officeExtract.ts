@@ -104,11 +104,26 @@ async function epub(dir: string): Promise<string> {
 }
 
 function rtf(text: string): string {
-  return text
-    .replace(/\\par[d]?/g, '\n').replace(/\\tab/g, '\t')
+  // Drop header groups (fonts, colours, styles, info) with a brace-depth scan.
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{' && /^\{\\(\*|fonttbl|colortbl|stylesheet|info|expandedcolortbl|listtable|listoverridetable|pict)/.test(text.slice(i, i + 24))) {
+      let depth = 0;
+      for (; i < text.length; i++) {
+        if (text[i] === '\\') { i++; continue; }
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}' && --depth === 0) break;
+      }
+      continue;
+    }
+    out += text[i];
+  }
+  return out
+    .replace(/\\u(-?\d+) ?(\\'[0-9a-f]{2}|\?)?/gi, (_, d) => String.fromCharCode((Number(d) + 65536) % 65536))
     .replace(/\\'([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/\\u(-?\d+)\??/g, (_, d) => String.fromCharCode((Number(d) + 65536) % 65536))
-    .replace(/\{\\\*[^{}]*\}/g, '').replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '')
+    .replace(/\\pard?(?![a-z])/g, '\n').replace(/\\line(?![a-z])/g, '\n').replace(/\\tab(?![a-z])/g, '\t')
+    .replace(/\\\n/g, '\n')
+    .replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '')
     .replace(/\n{3,}/g, '\n\n').trim();
 }
 

@@ -92,6 +92,7 @@ class ModelManager {
         // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
         const belongs = m.mmProjManual || m.id.startsWith('local_import/') || mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
         const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
+        if (!fileExists && m.storage === 'sd') continue; // SD card is out: keep the link for when it comes back
         if (!fileExists || !belongs) {
           logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
           // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
@@ -376,24 +377,34 @@ class ModelManager {
     if (!m) throw new Error('Model not found');
     const destDir = toSdBase ? `${toSdBase}/models` : this.modelsDir;
     if (!(await RNFS.exists(destDir))) await RNFS.mkdir(destDir);
-    const move = async (p: string, frac: (f: number) => void) => {
+    // 1) copy (originals untouched until the new paths are saved)
+    const copy = async (p: string, frac: (f: number) => void) => {
       const dest = `${destDir}/${p.substring(p.lastIndexOf('/') + 1)}`;
       if (dest === p) return p;
       const st = await RNFS.stat(p);
       await copyFileWithProgress(p, dest, { knownTotalBytes: Number(st.size), onProgress: frac });
       const a = await RNFS.stat(dest);
       if (Number(a.size) !== Number(st.size)) { await RNFS.unlink(dest).catch(() => {}); throw new Error('Copy was incomplete (is the card full?)'); }
-      await RNFS.unlink(p).catch(() => {});
       return dest;
     };
     const mm = m.engine === 'llama' ? m.mmProjPath : undefined;
-    const filePath = await move(m.filePath, (f) => onProgress?.(mm ? f * 0.85 : f));
-    const mmProjPath = mm && (await RNFS.exists(mm)) ? await move(mm, (f) => onProgress?.(0.85 + f * 0.15)) : mm;
-    const updated = (await this.getDownloadedModels()).map(x => (x.id === modelId
-      ? ({ ...x, filePath, ...(x.engine === 'llama' ? { mmProjPath } : {}), storage: toSdBase ? 'sd' : undefined } as DownloadedModel)
-      : x));
+    const mmExists = !!mm && (await RNFS.exists(mm));
+    const filePath = await copy(m.filePath, (f) => onProgress?.(mmExists ? f * 0.85 : f));
+    let newMm = mm;
+    try {
+      if (mm && mmExists) newMm = await copy(mm, (f) => onProgress?.(0.85 + f * 0.15));
+    } catch (e) { if (filePath !== m.filePath) await RNFS.unlink(filePath).catch(() => {}); throw e; }
+    // 2) save the new paths (every model sharing this vision file follows it)
+    const updated = (await this.getDownloadedModels()).map((x) => {
+      if (x.id === modelId) return ({ ...x, filePath, ...(x.engine === 'llama' ? { mmProjPath: newMm } : {}), storage: toSdBase ? 'sd' : undefined } as DownloadedModel);
+      if (mm && x.engine === 'llama' && x.mmProjPath === mm) return ({ ...x, mmProjPath: newMm } as DownloadedModel);
+      return x;
+    });
     await saveModelsList(updated);
     useAppStore.getState().setDownloadedModels(updated);
+    // 3) only now remove the originals
+    if (filePath !== m.filePath) await RNFS.unlink(m.filePath).catch(() => {});
+    if (mm && newMm && newMm !== mm) await RNFS.unlink(mm).catch(() => {});
   }
 
   async saveModelWithMmproj(modelId: string, mmProjPath: string, manual = false): Promise<void> {
@@ -413,7 +424,7 @@ class ModelManager {
   async clearMmProjLink(modelId: string): Promise<void> {
     const models = await this.getDownloadedModels();
     const updated = models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false } : m
+      m.id === modelId ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false, mmProjManual: undefined } : m
     );
     await saveModelsList(updated);
     useAppStore.getState().setDownloadedModels(updated);

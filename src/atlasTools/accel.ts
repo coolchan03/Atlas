@@ -15,6 +15,8 @@ export function autoPickAcceleration(): void {
       const st = useAppStore.getState();
       const s: any = st.settings;
       if (s.backendUserChosen || s.atlasAccelChecked) return;
+      // Only on a fresh install (no models yet): never change the backend for people already using the app.
+      if (st.downloadedModels.length > 0) { st.updateSettings({ atlasAccelChecked: true } as any); return; }
       const soc = await hardwareService.getSoCInfo();
       const patch: any = { atlasAccelChecked: true };
       if (soc.vendor === 'qualcomm' && s.inferenceBackend === 'cpu') {
