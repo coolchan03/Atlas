@@ -81,17 +81,31 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
 }
 
 /** Speak and wait until finished (resolves false if stopped). Optional pitch for a second voice. */
-export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast'): Promise<boolean> {
+export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', voice = ''): Promise<boolean> {
   return new Promise((resolve) => {
     if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
     ensureListeners();
     const start = useAtlasVoiceStore.getState().doneTick;
     Native.setPitch?.(pitch).catch(() => undefined);
+    Native.setVoice?.(voice).catch(() => undefined);
     speak(text, messageId);
     const myKey = useAtlasVoiceStore.getState().speakingKey;
     const unsub = useAtlasVoiceStore.subscribe((s) => {
-      if (s.doneTick !== start) { unsub(); Native.setPitch?.(1.0).catch(() => undefined); resolve(true); }
-      else if (s.speakingKey !== myKey) { unsub(); Native.setPitch?.(1.0).catch(() => undefined); resolve(false); }
+      const reset = () => { Native.setPitch?.(1.0).catch(() => undefined); Native.setVoice?.('').catch(() => undefined); };
+      if (s.doneTick !== start) { unsub(); reset(); resolve(true); }
+      else if (s.speakingKey !== myKey) { unsub(); reset(); resolve(false); }
     });
   });
+}
+
+export interface TtsVoice { name: string; locale: string; quality: number }
+/** Installed offline voices for a language (empty if the engine is still starting). */
+export async function listVoices(lang = 'en'): Promise<TtsVoice[]> {
+  if (!ttsAvailable() || !Native.listVoices) return [];
+  ensureListeners();
+  try {
+    let v: TtsVoice[] = await Native.listVoices(lang);
+    if (!v.length) { await new Promise((r) => setTimeout(r, 1200)); v = await Native.listVoices(lang); }
+    return v;
+  } catch { return []; }
 }

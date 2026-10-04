@@ -7,6 +7,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { useTheme } from '../theme';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { AddonsSection } from '../components/AddonsSection';
+import { AtlasPacksSection } from '../components/AtlasPacksSection';
 import {
   useOfflineLibrary, addLibraryFile, removeLibraryFile, searchLibrary, readArticle, libraryAvailable, LibraryHit,
 } from '../atlasTools/offlineLibrary';
@@ -69,6 +70,7 @@ export const OfflineLibraryScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
+          <AtlasPacksSection />
           <AddonsSection />
 
           {files.length > 0 && <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6 }}>Your library</Text>}

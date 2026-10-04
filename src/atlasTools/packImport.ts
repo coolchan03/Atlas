@@ -29,7 +29,14 @@ export async function importZipPack(projectId: string, onProgress: (msg: string)
   const f = files[0];
   onProgress('Copying the pack...');
   const local = await resolvePickedFileUri(f.uri, f.name || 'atlas-pack.zip');
-  const target = `${RNFS.DocumentDirectoryPath}/atlas_packs/${(f.name || 'pack').replace(/\.zip$/i, '').replace(/[^A-Za-z0-9._-]/g, '_')}`;
+  const res = await importZipFromPath(projectId, local, f.name || 'pack.zip', onProgress, shouldStop);
+  try { await RNFS.unlink(local.replace(/^file:\/\//, '')); } catch { /* copy may be the original */ }
+  return res;
+}
+
+/** Unpack a .zip that is already on the phone and add its text files to the project's knowledge base. */
+export async function importZipFromPath(projectId: string, local: string, name: string, onProgress: (msg: string) => void, shouldStop: () => boolean = () => false): Promise<PackResult> {
+  const target = `${RNFS.DocumentDirectoryPath}/atlas_packs/${name.replace(/\.zip$/i, '').replace(/[^A-Za-z0-9._-]/g, '_')}`;
   await RNFS.mkdir(target);
   onProgress('Unpacking...');
   await unzip(local.replace(/^file:\/\//, ''), target);
@@ -49,6 +56,5 @@ export async function importZipPack(projectId: string, onProgress: (msg: string)
       else { res.failed.push({ name: it.name, error: m.slice(0, 120) }); logger.warn(`[AtlasPack] ${it.name}: ${m}`); }
     }
   }
-  try { await RNFS.unlink(local.replace(/^file:\/\//, '')); } catch { /* copy may be the original */ }
   return res;
 }

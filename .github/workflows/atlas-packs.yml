@@ -1,0 +1,73 @@
+name: Build Atlas library packs
+
+# Downloads the Atlas source books, converts them to text (with OCR for scans) and
+# publishes one .zip pack per subject on the "atlas-library" release, where the app
+# downloads them (Agents > Atlas library). Run it from the Actions tab, or it runs
+# when the Atlas script changes.
+on:
+  workflow_dispatch:
+  push:
+    branches: [atlas-voice]
+    paths: ['atlas/**', '.github/workflows/atlas-packs.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Make sure the release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view atlas-library >/dev/null 2>&1 || gh release create atlas-library --target "$GITHUB_SHA" \
+            --title "Atlas library packs" --notes "Subject packs for the Off Grid Atlas app (Agents > Atlas library). Built automatically from free, public sources."
+
+  pack:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - only: 01_Medical
+          - only: 06_Survival_Navigation,09_Visual_Atlases
+          - only: 02_Water_Sanitation
+          - only: 03_Food_Agriculture
+          - only: 04_Engineering_Repair
+          - only: 07_Civilization_Crafts
+          - only: 05_Science_Measurement,08_General_Reference
+          - only: 90_Human_Read_Only
+    steps:
+      - uses: actions/checkout@v5
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install converter
+        run: pip install --quiet pymupdf pymupdf4llm rapidocr-onnxruntime numpy
+      - name: Download sources
+        env:
+          ATLAS_ONLY: ${{ matrix.only }}
+        run: python atlas/atlas_all.py "$RUNNER_TEMP/lib" 2
+      - name: Convert to text and make packs
+        env:
+          ATLAS_ONLY: ${{ matrix.only }}
+          OCR_MAX_PAGES: '120'
+        run: python atlas/atlas_all.py "$RUNNER_TEMP/lib" 3
+      - name: Upload packs to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la "$RUNNER_TEMP/lib/ATLAS_for_OffGrid/Packs" || exit 0
+          for f in "$RUNNER_TEMP"/lib/ATLAS_for_OffGrid/Packs/*.zip; do
+            [ -e "$f" ] || continue
+            [ "$(basename "$f")" = "00_Atlas_Cards.zip" ] && continue
+            echo "::notice title=Pack uploaded::$(basename "$f") $(du -h "$f" | cut -f1)"
+            gh release upload atlas-library "$f" --clobber
+          done

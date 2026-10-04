@@ -8,7 +8,7 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { Switch } from 'react-native';
-import { speakAndWait, stop } from '../atlasVoice/tts';
+import { speakAndWait, stop, listVoices, TtsVoice } from '../atlasVoice/tts';
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
@@ -54,7 +54,15 @@ export const StudyScreen: React.FC = () => {
   const [playing, setPlaying] = useState<number | null>(null);
   const stopRef = useRef(false);
   const [podOpen, setPodOpen] = useState(false);
-  const [pod, setPod] = useState<{ prompt: string; length: PodcastLength; style: PodcastStyle; research: boolean }>({ prompt: '', length: 'medium', style: 'casual', research: false });
+  const [pod, setPod] = useState<{ prompt: string; minutes: number; hosts: 1 | 2 | 3; style: PodcastStyle; research: boolean }>({ prompt: '', minutes: 5, hosts: 2, style: 'casual', research: false });
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
+  React.useEffect(() => { listVoices('en').then(setVoices); }, []);
+  // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
+  const castVoice = (host: string, hosts: number) => {
+    const i = host === 'A' ? 0 : host === 'B' ? 1 : 2;
+    if (voices.length >= 2) return { voice: voices[i % voices.length].name, pitch: i >= voices.length ? 0.9 : 1 };
+    return { voice: '', pitch: hosts === 1 ? 1 : [1.12, 0.86, 1.0][i] };
+  };
 
   const makeEpisode = async () => {
     setPodOpen(false);
@@ -82,12 +90,12 @@ export const StudyScreen: React.FC = () => {
     } finally { setBusy(null); }
   };
 
-  const play = async (items: { text: string; pitch: number }[]) => {
+  const play = async (items: { text: string; pitch: number; voice?: string }[]) => {
     stopRef.current = false;
     for (let i = 0; i < items.length; i++) {
       if (stopRef.current) break;
       setPlaying(i);
-      const ok = await speakAndWait(items[i].text, items[i].pitch);
+      const ok = await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
       if (!ok) break;
     }
     setPlaying(null);
@@ -166,14 +174,14 @@ export const StudyScreen: React.FC = () => {
           )}
           {v.podcast && (
             <View>
-              <TouchableOpacity onPress={() => (playing !== null ? halt() : play(v.podcast!.map((l) => ({ text: l.text, pitch: l.host === 'A' ? 1.15 : 0.85 }))))}
+              <TouchableOpacity onPress={() => (playing !== null ? halt() : play(v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }))))}
                 style={{ backgroundColor: colors.primary, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 12, flexDirection: 'row', justifyContent: 'center' }}>
                 <Icon name={playing !== null ? 'square' : 'play'} size={18} color="#fff" />
                 <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 8 }}>{playing !== null ? 'Stop' : 'Play podcast'}</Text>
               </TouchableOpacity>
               {v.podcast.map((l, i) => (
-                <View key={i} style={[card, { borderLeftWidth: 4, borderLeftColor: l.host === 'A' ? '#2563EB' : '#D97706', opacity: playing === null || playing === i ? 1 : 0.55 }]}>
-                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>{l.host === 'A' ? 'Host A' : 'Host B'}</Text>
+                <View key={i} style={[card, { borderLeftWidth: 4, borderLeftColor: l.host === 'A' ? '#2563EB' : l.host === 'B' ? '#D97706' : '#16A34A', opacity: playing === null || playing === i ? 1 : 0.55 }]}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>{(v.hosts ?? 2) === 1 ? 'Narrator' : `Host ${l.host}`}</Text>
                   <Text style={{ color: colors.text, fontSize: 16 }}>{l.text}</Text>
                 </View>
               ))}
@@ -248,14 +256,27 @@ export const StudyScreen: React.FC = () => {
               placeholder="e.g. Explain how to purify water for a 10-year-old, with examples"
               placeholderTextColor={colors.textMuted}
               style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 10, padding: 12, marginTop: 10, minHeight: 60 }} />
-            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>LENGTH</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-              {([['short', 'Short ~3 min'], ['medium', 'Medium ~6 min'], ['long', 'Long ~10 min']] as [PodcastLength, string][]).map(([k, l]) => (
-                <TouchableOpacity key={k} onPress={() => setPod((p) => ({ ...p, length: k }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.length === k ? colors.primary : colors.background }}>
-                  <Text style={{ color: pod.length === k ? '#fff' : colors.text, fontSize: 13 }}>{l}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>ABOUT HOW LONG</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+              {[3, 5, 10, 15, 20].map((m) => (
+                <TouchableOpacity key={m} onPress={() => setPod((p) => ({ ...p, minutes: m }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.minutes === m ? colors.primary : colors.background }}>
+                  <Text style={{ color: pod.minutes === m ? '#fff' : colors.text, fontSize: 13 }}>{m} min</Text>
                 </TouchableOpacity>
               ))}
             </View>
+            {pod.minutes >= 10 && <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>Longer episodes take several minutes to write on a phone.</Text>}
+            {voices.length >= 2 && (
+              <>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>PEOPLE ({voices.length} voices installed)</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  {([1, 2, 3] as const).filter((n) => n <= Math.min(3, voices.length)).map((n) => (
+                    <TouchableOpacity key={n} onPress={() => setPod((p) => ({ ...p, hosts: n }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.hosts === n ? colors.primary : colors.background }}>
+                      <Text style={{ color: pod.hosts === n ? '#fff' : colors.text, fontSize: 13 }}>{n === 1 ? 'Solo narrator' : `${n} hosts`}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
             <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>STYLE</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
               {([['casual', 'Casual'], ['deep', 'Deep dive'], ['debate', 'Debate'], ['interview', 'Interview'], ['beginner', 'For beginners']] as [PodcastStyle, string][]).map(([k, l]) => (

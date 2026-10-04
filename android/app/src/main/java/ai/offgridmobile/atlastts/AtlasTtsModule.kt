@@ -22,6 +22,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private var ready = false
     private var rate = 1.0f
     private var pitch = 1.0f
+    private var voiceName = ""
     private val pending = mutableListOf<Triple<String, String, String>>()
 
     override fun getName(): String = "AtlasTts"
@@ -88,6 +89,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
             val loc = if (lang.isBlank()) Locale.getDefault() else Locale.forLanguageTag(lang)
             val r = engine.setLanguage(loc)
             if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) emit("AtlasTtsNoLanguage", lang)
+            if (voiceName.isNotBlank()) engine.voices?.firstOrNull { it.name == voiceName }?.let { engine.voice = it }
         } catch (_: Exception) {}
         val max = (TextToSpeech.getMaxSpeechInputLength() - 100).coerceAtLeast(500)
         val parts = chunks(text, max)
@@ -120,6 +122,32 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
 
     @ReactMethod
     fun setRate(r: Double, promise: Promise) { rate = r.toFloat(); promise.resolve(true) }
+
+    /** Installed (offline) voices for a language, e.g. "en". Network-only voices are left out. */
+    @ReactMethod
+    fun listVoices(lang: String, promise: Promise) {
+        try {
+            ensure()
+            val engine = tts
+            if (engine == null || !ready) { promise.resolve(Arguments.createArray()); return }
+            val out = Arguments.createArray()
+            val voices = try { engine.voices } catch (_: Exception) { null } ?: emptySet()
+            voices.filter { v ->
+                !v.isNetworkConnectionRequired &&
+                !(v.features?.contains(android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) ?: false) &&
+                (lang.isBlank() || v.locale.language.equals(Locale.forLanguageTag(lang).language, ignoreCase = true))
+            }.sortedBy { it.name }.forEach { v ->
+                out.pushMap(Arguments.createMap().apply {
+                    putString("name", v.name); putString("locale", v.locale.toLanguageTag()); putInt("quality", v.quality)
+                })
+            }
+            promise.resolve(out)
+        } catch (e: Exception) { promise.reject("TTS_VOICES", e) }
+    }
+
+    /** Use a specific voice by name for the next utterances ("" = default voice). */
+    @ReactMethod
+    fun setVoice(name: String, promise: Promise) { voiceName = name; promise.resolve(true) }
 
     /** Voice pitch (1.0 normal). Used to give the two podcast hosts different voices. */
     @ReactMethod

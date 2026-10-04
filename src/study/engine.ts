@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export interface Source { n: number; doc: string; part: number; text: string; origin?: 'project' | 'library' | 'web'; url?: string }
 export interface Card { q: string; a: string; src: number[] }
 export interface QuizItem { q: string; options: string[]; answer: number; why: string; src: number[] }
-export interface PodcastLine { host: 'A' | 'B'; text: string }
+export interface PodcastLine { host: 'A' | 'B' | 'C'; text: string }
 export interface Slide { title: string; bullets: string[]; narration: string; src: number[] }
 
 export interface StudyResult {
@@ -26,6 +26,7 @@ export interface StudyResult {
   cards?: Card[];
   quiz?: QuizItem[];
   podcast?: PodcastLine[];
+  hosts?: number;
   slides?: Slide[];
 }
 
@@ -162,7 +163,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
 // ---------------------------------------------------------------- podcast episodes
 export type PodcastLength = 'short' | 'medium' | 'long';
 export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner';
-export interface PodcastOptions { prompt: string; length: PodcastLength; style: PodcastStyle; research: boolean }
+export interface PodcastOptions { prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean }
 
 const STYLE_TEXT: Record<PodcastStyle, string> = {
   casual: 'friendly and relaxed, like two friends chatting',
@@ -215,13 +216,22 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
   }
   if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
-  const nSeg = SEGMENTS[opts.length];
+  // About 1.5 minutes of speech per written part (10 lines of ~25 words).
+  const minutes = opts.minutes ?? (opts.length === 'short' ? 3 : opts.length === 'long' ? 10 : 6);
+  const nSeg = Math.max(1, Math.min(16, Math.round(minutes / 1.5)));
+  const hosts = opts.hosts ?? 2;
+  const cast = hosts === 1
+    ? 'ONE narrator (A) speaking alone, like a solo podcast'
+    : hosts === 3
+      ? 'THREE hosts: A (curious host), B (explains), C (adds practical tips and examples)'
+      : 'TWO hosts: A (curious, asks questions) and B (explains)';
+  const fmt = hosts === 1 ? 'A: ...' : hosts === 3 ? 'A: ...\nB: ...\nC: ...' : 'A: ...\nB: ...';
   const style = STYLE_TEXT[opts.style];
 
   onStep('Planning the episode...');
   const plan = await ask(
     'You plan podcast episodes based only on the given sources.',
-    `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
+    `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
   );
   const title = plan.match(/TITLE:\s*(.+)/i)?.[1]?.trim() || opts.prompt || 'Episode';
   const segs = Array.from({ length: nSeg }, (_, i) => plan.match(new RegExp(`SEGMENT\\s*${i + 1}\\s*:\\s*(.+)`, 'i'))?.[1]?.trim()).filter(Boolean) as string[];
@@ -229,20 +239,22 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
 
   const lines: PodcastLine[] = [];
   const parse = (t: string) => t.split('\n').map((l) => {
-    const m = l.match(/^\s*\**\s*(?:HOST\s*)?([AB])\**\s*[:\-]\s*(.+)$/i);
-    return m ? { host: m[1].toUpperCase() as 'A' | 'B', text: m[2].replace(/\[\d+\]/g, '').trim() } : null;
+    const m = l.match(/^\s*\**\s*(?:HOST\s*)?([ABC])\**\s*[:\-]\s*(.+)$/i);
+    if (!m) return null;
+    const h = m[1].toUpperCase() as 'A' | 'B' | 'C';
+    return { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text: m[2].replace(/\[\d+\]/g, '').trim() };
   }).filter(Boolean) as PodcastLine[];
 
   for (let i = 0; i < topics.length; i++) {
     onStep(`Writing part ${i + 1} of ${topics.length}...`);
     const recap = lines.slice(-2).map((l) => `${l.host}: ${l.text}`).join('\n');
-    const where = i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
+    const where = topics.length === 1 ? 'This is the WHOLE episode: A welcomes listeners and introduces the title, the topic is covered, then a short wrap-up and goodbye.' : i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
     const t = await ask(
-      'You write natural two-host podcast dialogue. Facts must come only from the sources. Never mention source numbers in the dialogue.',
-      `${S}Episode: "${title}". Style: ${style}.\nThis part is about: ${topics[i]}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write 8-10 lines, one line each, exactly in this format:\nA: ...\nB: ...`,
+      'You write natural podcast scripts. Facts must come only from the sources. Never mention source numbers in the script.',
+      `${S}Episode: "${title}". Style: ${style}. Cast: ${cast}.\nThis part is about: ${topics[i]}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
     );
     lines.push(...parse(t));
   }
   if (lines.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again or use a bigger model.');
-  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources, podcast: lines };
+  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources, podcast: lines, hosts };
 }
