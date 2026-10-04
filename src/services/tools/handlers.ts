@@ -72,6 +72,26 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return DT.calendarEvents(Number(call.arguments?.days_ahead ?? 7), Number(call.arguments?.days_back ?? 0));
     case 'add_calendar_event':
       return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), call.arguments?.end, call.arguments?.location ?? '');
+    case 'my_location': {
+      const M = require('../../atlasMaps/maps');
+      let fix = M.useMaps.getState().lastFix;
+      try {
+        const { NativeModules } = require('react-native');
+        const fresh = await NativeModules.AtlasDevice?.lastLocation?.();
+        if (fresh && (!fix || fresh.time > fix.time)) fix = fresh;
+      } catch { /* no permission yet */ }
+      const imperial = M.useMaps.getState().imperial;
+      const places = M.useMaps.getState().waypoints;
+      if (!fix) return `No GPS position yet. Ask the user to open the Maps screen (Home > Maps) and allow location; GPS works without internet.${places.length ? ` Saved places: ${places.map((w: any) => `${w.name} (${M.fmtCoord(w.lat, w.lon)})`).join('; ')}` : ''}`;
+      const age = Math.round((Date.now() - fix.time) / 60000);
+      const lines = [`Position: ${M.fmtCoord(fix.lat, fix.lon)} (decimal ${fix.lat.toFixed(6)}, ${fix.lon.toFixed(6)}), accuracy about ${M.fmtDistance(fix.accuracy, imperial)}, ${age <= 1 ? 'just now' : `${age} minutes ago`}.`];
+      if (fix.altitude > -99999) lines.push(`Altitude: ${imperial ? `${Math.round(fix.altitude * 3.28084)} ft` : `${Math.round(fix.altitude)} m`}.`);
+      for (const w of places.slice(0, 20)) {
+        const b = M.bearingDeg(fix, w);
+        lines.push(`${w.name}: ${M.fmtDistance(M.distanceM(fix, w), imperial)} to the ${M.compassName(b)} (bearing ${Math.round(b)}° from true north).`);
+      }
+      return lines.join('\n');
+    }
     case 'remember': {
       const f = requireString(call, 'fact');
       if (!f) throw new Error('Missing required parameter: fact');

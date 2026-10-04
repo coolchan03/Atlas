@@ -159,6 +159,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               { label: 'Emergency', icon: 'alert-octagon', color: '#DC2626', to: 'Emergency' },
               { label: 'Survival Manual', icon: 'book-open', color: '#3F6212', to: 'SurvivalManual' },
               { label: 'Phrases', icon: 'globe', color: '#2563EB', to: 'Phrases' },
+              { label: 'Maps', icon: 'map', color: '#0F766E', to: 'Maps' },
               ...(hasCompass ? [{ label: 'Compass', icon: 'compass', color: '#7C3AED', to: 'Compass' }] : []),
             ].map((b) => (
               <TouchableOpacity

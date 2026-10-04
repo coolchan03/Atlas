@@ -136,6 +136,11 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'my_location', name: 'my_location', displayName: 'My location',
+    description: "The user's GPS position (works offline) and the distance and direction to their saved places (camp, car, water...). Use for 'where am I', 'how far to camp', 'which way is the car'.", icon: 'map-pin',
+    parameters: {},
+  },
+  {
     id: 'remember', name: 'remember', displayName: 'Remember',
     description: 'Save a lasting fact about the user that they want you to remember in future chats (preferences, people, health, plans). Only when the user shares it or asks you to remember.', icon: 'bookmark',
     parameters: { fact: { type: 'string', description: 'One short fact', required: true } },

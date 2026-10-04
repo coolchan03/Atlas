@@ -168,6 +168,14 @@ export const EmergencyScreen: React.FC = () => {
           <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', marginLeft: 12, flex: 1 }}>Full Survival Manual (water, fire, shelter, food, plants, first aid...)</Text>
           <Icon name="chevron-right" size={20} color={colors.textMuted} />
         </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+          {[{ label: 'Map & my location', icon: 'map', to: 'Maps' }, { label: 'Phrases', icon: 'globe', to: 'Phrases' }].map((b) => (
+            <TouchableOpacity key={b.to} onPress={() => navigation.navigate(b.to)} style={{ flex: 1, padding: 14, borderRadius: 12, borderWidth: 2, borderColor: night ? '#5A0E0E' : '#0F766E', flexDirection: 'row', alignItems: 'center' }}>
+              <Icon name={b.icon} size={20} color={night ? '#FF3B3B' : '#0F766E'} />
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginLeft: 10, flex: 1 }}>{b.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         {shown.length === 0 && <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 12 }}>No card matches. Try a simpler word, or ask the Atlas agent in a chat.</Text>}
       </ScrollView>
     </SafeAreaView>

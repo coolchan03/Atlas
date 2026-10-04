@@ -89,10 +89,67 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         }
     }
 
+    // ---------------- GPS (works with no internet or SIM) ----------------
+    private val locMgr by lazy { ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager }
+    private var locListener: android.location.LocationListener? = null
+
+    private fun locMap(l: android.location.Location) = Arguments.createMap().apply {
+        putDouble("lat", l.latitude); putDouble("lon", l.longitude); putDouble("accuracy", l.accuracy.toDouble())
+        putDouble("altitude", if (l.hasAltitude()) l.altitude else -99999.0)
+        putDouble("speed", if (l.hasSpeed()) l.speed.toDouble() else -1.0)
+        putDouble("time", l.time.toDouble()); putString("provider", l.provider ?: "")
+    }
+
+    @ReactMethod
+    fun startLocation(promise: Promise) {
+        try {
+            if (locListener != null) { promise.resolve(true); return }
+            val l = android.location.LocationListener { loc ->
+                try { ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasLocation", locMap(loc)) } catch (_: Exception) {}
+            }
+            locListener = l
+            val providers = locMgr.getProviders(true)
+            if (providers.isEmpty()) { locListener = null; promise.reject("NO_GPS", "Location is turned off on this phone"); return }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    for (p in providers) if (p == android.location.LocationManager.GPS_PROVIDER || p == android.location.LocationManager.NETWORK_PROVIDER) {
+                        locMgr.requestLocationUpdates(p, 2000L, 2f, l, android.os.Looper.getMainLooper())
+                    }
+                } catch (_: SecurityException) {}
+            }
+            promise.resolve(true)
+        } catch (e: SecurityException) { locListener = null; promise.reject("NO_PERMISSION", "Location permission not granted")
+        } catch (e: Exception) { locListener = null; promise.reject("GPS_ERROR", e) }
+    }
+
+    @ReactMethod
+    fun stopLocation(promise: Promise) {
+        try { locListener?.let { locMgr.removeUpdates(it) } } catch (_: Exception) {}
+        locListener = null
+        promise.resolve(true)
+    }
+
+    @ReactMethod
+    fun lastLocation(promise: Promise) {
+        try {
+            var best: android.location.Location? = null
+            for (p in locMgr.getProviders(true)) {
+                val l = try { locMgr.getLastKnownLocation(p) } catch (_: SecurityException) { null } ?: continue
+                if (best == null || l.time > best.time) best = l
+            }
+            promise.resolve(best?.let { locMap(it) })
+        } catch (e: Exception) { promise.resolve(null) }
+    }
+
+    @ReactMethod
+    fun locationEnabled(promise: Promise) {
+        try { promise.resolve(locMgr.getProviders(true).any { it == android.location.LocationManager.GPS_PROVIDER || it == android.location.LocationManager.NETWORK_PROVIDER }) } catch (_: Exception) { promise.resolve(false) }
+    }
+
     @ReactMethod fun addListener(eventName: String) {}
     @ReactMethod fun removeListeners(count: Int) {}
 
-    override fun invalidate() { try { sensors.unregisterListener(this) } catch (_: Exception) {}; super.invalidate() }
+    override fun invalidate() { try { sensors.unregisterListener(this) } catch (_: Exception) {}; try { locListener?.let { locMgr.removeUpdates(it) } } catch (_: Exception) {}; super.invalidate() }
 
     @ReactMethod
     fun hasAllFilesAccess(promise: Promise) {

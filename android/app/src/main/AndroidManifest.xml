@@ -37,6 +37,10 @@
     <!-- Atlas assistant: optional "All files access" so agents can read/write your documents (you grant it in Settings) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Atlas: offline maps - GPS works without internet or a SIM -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <!-- Atlas: lets the app find the phone's text-to-speech engine (Android 11+) -->
     <queries>
