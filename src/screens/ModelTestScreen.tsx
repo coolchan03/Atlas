@@ -31,6 +31,7 @@ const LONG_TEXT = Array.from({ length: 40 }, (_, i) =>
 
 const msg = (content: string, role: Message['role'] = 'user'): Message => ({ id: `t${Date.now()}${Math.random()}`, role, content, timestamp: Date.now() });
 
+const tps0 = (v: { text: string }) => /slow/i.test(v.text);
 const speedWords = (tps: number) =>
   tps <= 0 ? 'unknown' : tps < 3 ? 'slow - you will wait for each answer' : tps < 7 ? 'about reading speed - fine for chatting' : tps < 20 ? 'good - faster than you can read' : 'very fast';
 
@@ -45,6 +46,7 @@ export const ModelTestScreen: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [verdict, setVerdict] = useState<{ good: boolean; text: string } | null>(null);
   const [prevId, setPrevId] = useState<string | null>(null);
+  const [faster, setFaster] = useState<string | null>(null);
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
 
@@ -56,6 +58,7 @@ export const ModelTestScreen: React.FC = () => {
     cancelled.current = false;
     setRunning(true);
     setVerdict(null);
+    setFaster(null);
     setSteps(STEPS.map((s) => ({ ...s, status: 'wait', detail: '' })));
     const store = useAppStore.getState();
     const before = store.activeModelId;
@@ -138,7 +141,10 @@ export const ModelTestScreen: React.FC = () => {
         set('accel', be === 'cpu' ? 'warn' : 'ok', be === 'npu' ? 'Running on the NPU' : be === 'gpu' ? 'Running on the GPU' : 'Running on the CPU only');
       } else {
         const g = llmService.getGpuInfo();
-        const quant = /q4_0|q8_0/i.test(model.fileName || '') ? '' : ' This file type speeds up less on the GPU - a Q4_0 or Q8_0 version is fastest on Snapdragon.';
+        let qualcomm = false;
+        try { qualcomm = (await hardwareService.getSoCInfo()).vendor === 'qualcomm'; } catch { /* unknown */ }
+        if (qualcomm && !/q4_0|q8_0/i.test(model.fileName || '')) setFaster('A Q4_0 version of this model can run on the Snapdragon GPU and is usually much faster.');
+        const quant = !qualcomm || /q4_0|q8_0/i.test(model.fileName || '') ? '' : ' This file type speeds up less on the GPU - a Q4_0 or Q8_0 version is fastest on Snapdragon.';
         const note = llmService.getBackendFallbackNotice();
         set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
       }
@@ -214,6 +220,16 @@ export const ModelTestScreen: React.FC = () => {
             {!!verdict && (
               <View style={[card, { borderWidth: 1, borderColor: verdict.good ? (colors.success ?? '#3a9d5d') : ('#d4a017') }]}>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>{verdict.text}</Text>
+                {!!faster && !running && (
+                  <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'ModelsTab', params: { initialTab: 'text', initialSearchQuery: model.name.replace(/[-_. ]?(i?q\d[\w]*|f16|bf16|gguf)$/gi, '').trim() } })} style={{ marginTop: 10 }}>
+                    <Text style={{ color: colors.primary }}>{faster} Find it</Text>
+                  </TouchableOpacity>
+                )}
+                {!!verdict && !verdict.good && tps0(verdict) && !running && (
+                  <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'ModelsTab', params: { initialTab: 'text' } })} style={{ marginTop: 10 }}>
+                    <Text style={{ color: colors.primary }}>Browse smaller models</Text>
+                  </TouchableOpacity>
+                )}
                 {!!prevId && !running && (
                   <TouchableOpacity onPress={goBackToPrev} style={{ marginTop: 10 }}>
                     <Text style={{ color: colors.primary }}>Switch back to {prevName || 'the previous model'}</Text>

@@ -1,13 +1,17 @@
 import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
-import { useLowPower, checkBatteryNow } from '../atlasTools/lowPower';
+import { useLowPower, checkBatteryNow, batteryModel } from '../atlasTools/lowPower';
+import { useAppStore } from '../stores/appStore';
 import { ModelChips } from './ModelChips';
 
 /** Settings card for low-battery mode. */
 export function LowPowerCard() {
   const { colors } = useTheme();
   const s = useLowPower();
+  const models = useAppStore((x) => x.downloadedModels);
+  const best = s.enabled && !s.modelId ? batteryModel() : null;
+  const bestName = best ? models.find((m) => m.id === best.id)?.name : null;
   return (
     <View style={[st.card, { backgroundColor: colors.surface }]}>
       <View style={st.row}>
@@ -17,6 +21,7 @@ export function LowPowerCard() {
             Below {s.threshold}% (not charging): smaller model, short answers, hands-free off.
             {s.battery !== null ? `  Battery now: ${s.battery}%${s.charging ? ' (charging)' : ''}.` : ''}
             {s.enabled && s.active ? '  ACTIVE NOW.' : ''}
+            {'  Always on in off-grid mode.'}
           </Text>
         </View>
         <Switch value={s.enabled} onValueChange={(v) => { s.set({ enabled: v }); setTimeout(() => checkBatteryNow(), 100); }} />
@@ -40,7 +45,12 @@ export function LowPowerCard() {
             ))}
           </View>
           <Text style={[st.label, { color: colors.textSecondary }]}>Switch to this smaller model</Text>
-          <ModelChips value={s.modelId} onChange={(id) => s.set({ modelId: id })} colors={colors} emptyLabel="Don't switch" />
+          <ModelChips value={s.modelId} onChange={(id) => s.set({ modelId: id })} colors={colors} emptyLabel="Automatic" />
+          {!s.modelId && (
+            <Text style={[st.p, { color: colors.textMuted }]}>
+              {bestName ? `Automatic: switches to ${bestName} (${best!.why}).` : 'Automatic: picks your fastest model once Atlas has timed a few answers.'}
+            </Text>
+          )}
         </>
       )}
     </View>

@@ -21,6 +21,7 @@ export { MapsScreen } from './MapsScreen';
 export { AtlasHubScreen } from './AtlasHubScreen';
 export { MyModelsScreen } from './MyModelsScreen';
 export { ModelTestScreen } from './ModelTestScreen';
+export { DailyBriefScreen } from './DailyBriefScreen';
 export { KnowledgeBaseScreen } from './KnowledgeBaseScreen';
 export { ProjectChatsScreen } from './ProjectChatsScreen';
 export { DocumentPreviewScreen } from './DocumentPreviewScreen';

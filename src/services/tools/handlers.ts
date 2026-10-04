@@ -404,8 +404,10 @@ function htmlToMarkdown(html: string): string {
     .trim();
 }
 
-async function handleReadUrl(rawUrl: string): Promise<string> {
-  const MAX_CHARS = 4000;
+/** Read a web page as plain text (used by the daily briefing too). */
+export async function readPage(rawUrl: string, maxChars = 4000): Promise<string> { return handleReadUrl(rawUrl, maxChars); }
+
+async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
   let url = rawUrl.trim();
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);

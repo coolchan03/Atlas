@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Linking, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -40,6 +40,8 @@ export const StudyScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const projectId: string = route.params?.projectId;
+  /** Open one saved item directly (e.g. a daily briefing); back then leaves the screen. */
+  const openAt: number | undefined = route.params?.openAt;
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
@@ -49,7 +51,7 @@ export const StudyScreen: React.FC = () => {
   const remove = useStudyStore((s) => s.remove);
   const [topic, setTopic] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [view, setView] = useState<StudyResult | null>(null);
+  const [view, setView] = useState<StudyResult | null>(() => (openAt ? (useStudyStore.getState().saved[projectId] || []).find((r) => r.createdAt === openAt) ?? null : null));
   const [src, setSrc] = useState<Source | null>(null);
   const [flipped, setFlipped] = useState<Record<number, boolean>>({});
   const [picked, setPicked] = useState<Record<number, number>>({});
@@ -65,7 +67,7 @@ export const StudyScreen: React.FC = () => {
   // Android back button closes the open item (and stops audio) instead of leaving the screen.
   React.useEffect(() => {
     if (!view) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { stopRef.current = true; stop(); setPlaying(null); setView(null); return true; });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { stopRef.current = true; stop(); setPlaying(null); if (openAt) { navigation.goBack(); return true; } setView(null); return true; });
     return () => sub.remove();
   }, [view]);
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
@@ -152,6 +154,11 @@ export const StudyScreen: React.FC = () => {
         <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 16, maxHeight: '75%' }}>
           <Text style={{ color: colors.primary, fontWeight: '700' }}>Source [{src?.n}]</Text>
           <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>{src?.doc} · part {src?.part}</Text>
+          {!!src?.url && (
+            <TouchableOpacity onPress={() => Linking.openURL(src.url!).catch(() => undefined)} style={{ marginBottom: 8 }}>
+              <Text style={{ color: colors.primary }}>Open the full article (needs internet)</Text>
+            </TouchableOpacity>
+          )}
           <ScrollView><Text style={{ color: colors.text, fontSize: 15, lineHeight: 22 }}>{src?.text}</Text></ScrollView>
         </View>
       </TouchableOpacity>
@@ -162,7 +169,7 @@ export const StudyScreen: React.FC = () => {
     const v = view;
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-        {header(v.title || `${KINDS.find((k) => k.kind === v.kind)?.label || 'Answer'}${v.topic ? `: ${v.topic}` : ''}`, () => { halt(); setView(null); })}
+        {header(v.title || `${KINDS.find((k) => k.kind === v.kind)?.label || 'Answer'}${v.topic ? `: ${v.topic}` : ''}`, () => { halt(); if (openAt) navigation.goBack(); else setView(null); })}
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120, width: '100%', maxWidth: 920, alignSelf: 'center' }}>
           {!!v.text && (
             <View style={card}>

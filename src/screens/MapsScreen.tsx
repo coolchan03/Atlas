@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Clipboard, FlatList, Modal, NativeEventEmitter, NativeModules, ScrollView, Switch, Text, TextInput,
+  ActivityIndicator, Alert, Clipboard, FlatList, Linking, Share, Modal, NativeEventEmitter, NativeModules, ScrollView, Switch, Text, TextInput,
   TouchableOpacity, UIManager, View, requireNativeComponent, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,13 @@ import {
 
 const hasNativeMap = !!(UIManager as any).hasViewManagerConfig?.('AtlasMapView') || !!(UIManager as any).getViewManagerConfig?.('AtlasMapView');
 const AtlasMapView: any = hasNativeMap ? requireNativeComponent('AtlasMapView') : null;
+
+/** A message telling someone exactly where you are (works by SMS with no internet). */
+function locationText(h: { lat: number; lon: number; accuracy: number }, imperial: boolean): string {
+  const acc = h.accuracy > 0 ? ` (within about ${imperial ? `${Math.round(h.accuracy * 3.28084)} ft` : `${Math.round(h.accuracy)} m`})` : '';
+  const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `My location at ${time}: ${h.lat.toFixed(5)}, ${h.lon.toFixed(5)}${acc}. Map: https://maps.google.com/?q=${h.lat.toFixed(5)},${h.lon.toFixed(5)}`;
+}
 
 /** Offline maps + GPS + saved places. Part of emergency / travel use: no internet needed once a map is downloaded. */
 export const MapsScreen: React.FC = () => {
@@ -109,6 +116,17 @@ export const MapsScreen: React.FC = () => {
             {here.altitude > -99999 ? ` · Altitude ${imperial ? `${Math.round(here.altitude * 3.28084)} ft` : `${Math.round(here.altitude)} m`}` : ''}
             {here.speed > 0.5 ? ` · ${imperial ? `${(here.speed * 2.23694).toFixed(0)} mph` : `${(here.speed * 3.6).toFixed(0)} km/h`}` : ''}
           </Text>
+          <View style={{ flexDirection: 'row', marginTop: 10 }}>
+            <TouchableOpacity onPress={() => Linking.openURL(`sms:?body=${encodeURIComponent(locationText(here, imperial))}`).catch(() => Alert.alert('No texting app found'))}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: accent, borderRadius: 8, paddingVertical: 8, marginRight: 8 }}>
+              <Icon name="message-square" size={15} color={accent} /><Text style={{ color: accent, marginLeft: 6, fontWeight: '600' }}>Text my location</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Share.share({ message: locationText(here, imperial) }).catch(() => undefined)}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 }}>
+              <Icon name="share-2" size={15} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, marginLeft: 6 }}>Share</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>A text message only needs a phone signal, not internet.</Text>
         </>
       ) : (
         <Text style={{ color: colors.textSecondary, marginTop: 6 }}>{gpsMsg || 'Finding GPS... works with no internet or signal. Outdoors is fastest.'}</Text>

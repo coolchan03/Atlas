@@ -55,7 +55,7 @@ function budget(): number {
     return Math.max(1500, Math.min(12000, (ctx - 900) * 3 - 1200));
   } catch { return 3000; }
 }
-const trimSources = (src: Source[]): Source[] => {
+export const trimSources = (src: Source[]): Source[] => {
   const max = budget(); let used = 0; const out: Source[] = [];
   for (const x of src) { if (used + x.text.length > max) break; used += x.text.length; out.push(x); }
   return out.map((x, i) => ({ ...x, n: i + 1 }));
@@ -188,8 +188,8 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
 
 // ---------------------------------------------------------------- podcast episodes
 export type PodcastLength = 'short' | 'medium' | 'long';
-export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner';
-export interface PodcastOptions { prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean }
+export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner' | 'news';
+export interface PodcastOptions { prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string }
 
 const STYLE_TEXT: Record<PodcastStyle, string> = {
   casual: 'friendly and relaxed, like two friends chatting',
@@ -197,6 +197,7 @@ const STYLE_TEXT: Record<PodcastStyle, string> = {
   debate: 'a friendly debate: the hosts take different sides and weigh the evidence',
   interview: 'an interview: A is the interviewer, B is the expert guest',
   beginner: 'for complete beginners: simple words, everyday examples, no jargon',
+  news: 'a friendly daily news show: story by story, each explained simply with why it matters, upbeat but accurate',
 };
 const SEGMENTS: Record<PodcastLength, number> = { short: 2, medium: 3, long: 5 };
 
@@ -242,6 +243,11 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     sources = trimSources([...sources, ...extra]);
   }
   if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
+  return writeEpisode(sources, opts, onStep);
+}
+
+/** Writes the episode script from ready-made sources (projects, the daily briefing, ...). */
+export async function writeEpisode(sources: Source[], opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
   // About 1.5 minutes of speech per written part (10 lines of ~25 words).
   const minutes = opts.minutes ?? (opts.length === 'short' ? 3 : opts.length === 'long' ? 10 : 6);
@@ -261,7 +267,7 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
   );
   const P = plan.replace(/\*\*|__/g, '');
-  const title = (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
+  const title = opts.title || (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
   const segs = Array.from({ length: nSeg }, (_, i) => P.match(new RegExp(`(?:SEGMENT|PART)\\s*${i + 1}\\s*[:.)\\-–]\\s*(.+)`, 'i'))?.[1]?.replace(/["*]/g, '').trim()).filter(Boolean) as string[];
   const topics = segs.length ? segs : [opts.prompt || 'the main ideas'];
   // Keep the asked-for length even if the plan came back short.
@@ -282,7 +288,7 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     const where = topics.length === 1 ? 'This is the WHOLE episode: A welcomes listeners and introduces the title, the topic is covered, then a short wrap-up and goodbye.' : i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
     const t = await ask(
       'You write natural podcast scripts. Facts must come only from the sources. Never mention source numbers in the script.',
-      `${S}Episode: "${title}". Style: ${style}. Cast: ${cast}.\nThis part is about: ${topics[i]}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
+      `${S}Episode: "${title}". Style: ${style}. Cast: ${cast}.\nThis part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
     );
     lines.push(...parse(t));
   }

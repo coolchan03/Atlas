@@ -13,6 +13,14 @@ import { audioSessionManager } from '../../services/audioSessionManager';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
+import { estimateReply, fmtSec, roughTokens } from '../../atlasTools/speed';
+import { useAppStore } from '../../stores/appStore';
+
+/** Seconds the model in use needs to read this text (null = speed not learned yet). */
+const readSeconds = (chars: number): number | null => {
+  const e = estimateReply(useAppStore.getState().activeModelId, roughTokens(chars));
+  return e ? e.firstWordsSec : null;
+};
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
@@ -103,13 +111,23 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       if (!documentService.isSupported(fileName)) {
         setAlertState(showAlert(
           'Unsupported File',
-          `"${fileName}" is not supported. Supported types: txt, md, csv, json, pdf, and code files.`,
+          `"${fileName}" is not supported. Supported: PDF, Word, Excel, PowerPoint, OpenDocument, EPUB, RTF, text, Markdown, CSV, JSON and code files.`,
           [{ text: 'OK' }],
         ));
         return;
       }
       const attachment = await documentService.processDocumentFromPath(file.uri, fileName);
-      if (attachment) setAttachments(prev => [...prev, attachment]);
+      if (attachment) {
+        setAttachments(prev => [...prev, attachment]);
+        const secs = readSeconds((attachment.textContent || '').length);
+        if (secs !== null && secs > 45) {
+          setAlertState(showAlert(
+            'Big document',
+            `The AI will need about ${fmtSec(secs)} to read "${fileName}" before it starts answering. Very long files may also be cut short to fit its memory.`,
+            [{ text: 'Keep it' }, { text: 'Remove', style: 'destructive', onPress: () => setAttachments(prev => prev.filter(a => a.id !== attachment.id)) }],
+          ));
+        }
+      }
     } catch (pickError: any) {
       if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
       if (isPickerStuck(pickError)) {
@@ -202,6 +220,7 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachment
               <Text style={styles.documentName} numberOfLines={2}>
                 {attachment.fileName || 'Document'}
               </Text>
+              {(() => { const s = readSeconds((attachment.textContent || '').length); return s !== null && s > 5 ? <Text style={[styles.documentName, { opacity: 0.7 }]}>~{fmtSec(s)} to read</Text> : null; })()}
             </View>
           )}
           <TouchableOpacity

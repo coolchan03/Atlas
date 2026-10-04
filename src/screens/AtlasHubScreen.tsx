@@ -32,6 +32,7 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Phrases', sub: 'Show or speak in 10+ languages', icon: 'globe', color: '#1D4ED8', to: 'Phrases' },
     ...(hasCompass ? [{ label: 'Compass', sub: 'Works with no signal', icon: 'compass', color: '#6D28D9', to: 'Compass' }] : []),
     { label: 'Offline Library', sub: 'Atlas packs, WikiMed, Wikipedia', icon: 'database', color: '#92400E', to: 'OfflineLibrary' },
+    { label: 'Daily briefing', sub: 'Your news, read aloud, with fun facts', icon: 'radio', color: '#BE185D', to: 'DailyBrief' },
   ];
 
   const addCards = async () => {

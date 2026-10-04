@@ -15,7 +15,8 @@ export type RootStackParamList = {
   OfflineLibrary: undefined;
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
-  Study: { projectId: string };
+  Study: { projectId: string; openAt?: number };
+  DailyBrief: undefined;
   Compass: undefined;
   Maps: undefined;
   AtlasHub: undefined;

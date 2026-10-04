@@ -39,6 +39,7 @@ import {
   AtlasHubScreen,
   MyModelsScreen,
   ModelTestScreen,
+  DailyBriefScreen,
   ProjectChatsScreen,
   KnowledgeBaseScreen,
   DocumentPreviewScreen,
@@ -268,6 +269,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="AtlasHub" component={AtlasHubScreen} />
         <RootStack.Screen name="MyModels" component={MyModelsScreen} />
         <RootStack.Screen name="ModelTest" component={ModelTestScreen} />
+        <RootStack.Screen name="DailyBrief" component={DailyBriefScreen} />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
