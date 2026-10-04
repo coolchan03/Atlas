@@ -151,8 +151,9 @@ const Native: any = NativeModules.AtlasDevice;
 export async function askLocationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   try {
-    const r = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-    return r === PermissionsAndroid.RESULTS.GRANTED;
+    const P = PermissionsAndroid.PERMISSIONS;
+    const r = await PermissionsAndroid.requestMultiple([P.ACCESS_FINE_LOCATION, P.ACCESS_COARSE_LOCATION]);
+    return r[P.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED || r[P.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
   } catch { return false; }
 }
 

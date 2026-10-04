@@ -104,20 +104,25 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
     fun startLocation(promise: Promise) {
         try {
             if (locListener != null) { promise.resolve(true); return }
-            val l = android.location.LocationListener { loc ->
-                try { ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasLocation", locMap(loc)) } catch (_: Exception) {}
+            val l = object : android.location.LocationListener {
+                override fun onLocationChanged(loc: android.location.Location) {
+                    try { ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasLocation", locMap(loc)) } catch (_: Exception) {}
+                }
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) {}
+                @Deprecated("Deprecated in Java")
+                override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
             }
-            locListener = l
-            val providers = locMgr.getProviders(true)
-            if (providers.isEmpty()) { locListener = null; promise.reject("NO_GPS", "Location is turned off on this phone"); return }
+            val providers = locMgr.getProviders(true).filter { it == android.location.LocationManager.GPS_PROVIDER || it == android.location.LocationManager.NETWORK_PROVIDER }
+            if (providers.isEmpty()) { promise.reject("NO_GPS", "Location is turned off on this phone"); return }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    for (p in providers) if (p == android.location.LocationManager.GPS_PROVIDER || p == android.location.LocationManager.NETWORK_PROVIDER) {
-                        locMgr.requestLocationUpdates(p, 2000L, 2f, l, android.os.Looper.getMainLooper())
-                    }
-                } catch (_: SecurityException) {}
+                var ok = 0
+                for (p in providers) {
+                    try { locMgr.requestLocationUpdates(p, 2000L, 2f, l, android.os.Looper.getMainLooper()); ok++ } catch (_: Exception) {}
+                }
+                if (ok > 0) { locListener = l; promise.resolve(true) }
+                else promise.reject("NO_PERMISSION", "Location permission not granted")
             }
-            promise.resolve(true)
         } catch (e: SecurityException) { locListener = null; promise.reject("NO_PERMISSION", "Location permission not granted")
         } catch (e: Exception) { locListener = null; promise.reject("GPS_ERROR", e) }
     }

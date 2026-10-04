@@ -314,7 +314,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     override fun invalidate() {
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         tts = null
-        try { if (neuralDir.isNotEmpty()) neural.release() } catch (_: Throwable) {}
+        try { neural.shutdown() } catch (_: Throwable) {}
         super.invalidate()
     }
 }

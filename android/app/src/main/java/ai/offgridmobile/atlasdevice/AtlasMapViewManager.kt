@@ -126,7 +126,8 @@ class AtlasMapViewManager : SimpleViewManager<AtlasMapView>() {
             layer.setXmlRenderTheme(theme())
             v.layerManager.layers.add(0, layer)
             v.mapFile = mf; v.cache = cache; v.renderer = layer
-            if (v.lastNonce < 0) {
+            val here = v.model.mapViewPosition.center
+            if (v.lastNonce < 0 || here == null || !mf.boundingBox().contains(here)) {
                 val start = mf.startPosition() ?: mf.boundingBox().centerPoint
                 v.setCenter(start)
                 v.setZoomLevel((mf.startZoomLevel() ?: 12.toByte()))

@@ -414,6 +414,6 @@ export async function keepSession(agentId: string): Promise<string> {
   if (cfg.projectId) {
     for (const n of st.notes.slice(0, 60)) { await saveNote(agent, { ...cfg, mode: 'keep' }, n.q, n.answer); saved++; }
   }
-  L().patch(agentId, { sessionLessons: '' });
+  L().patch(agentId, { sessionLessons: '', notes: [] });
   return `Kept ${lines.length} lessons${cfg.projectId ? ` and ${saved} answers (saved to the project's knowledge base)` : ''}.`;
 }

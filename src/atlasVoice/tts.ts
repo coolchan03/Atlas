@@ -10,6 +10,8 @@ import logger from '../utils/logger';
 const Native: any = NativeModules.AtlasTts;
 let emitter: NativeEventEmitter | null = null;
 let counter = 0;
+/** speakAndWait callers waiting for their own utterance to finish. */
+const waiters = new Map<string, (ok: boolean) => void>();
 
 export const ttsAvailable = (): boolean => Platform.OS === 'android' && !!Native;
 
@@ -18,6 +20,8 @@ function ensureListeners(): void {
   emitter = new NativeEventEmitter(Native);
   emitter.addListener('AtlasTtsStart', () => undefined);
   emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(true); return; } // podcast / video lines: not a chat reply
     const s = useAtlasVoiceStore.getState();
     if (s.speakingKey === e.utteranceId) {
       s.markDone(); // hands-free mode and podcast playback listen for this
@@ -28,6 +32,8 @@ function ensureListeners(): void {
     noLangHandler?.(e.utteranceId);
   });
   emitter.addListener('AtlasTtsStopped', (e: { utteranceId: string }) => {
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(false); }
     const s = useAtlasVoiceStore.getState();
     if (s.speakingKey === e.utteranceId) s.setSpeaking(null);
   });
@@ -78,24 +84,32 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
   (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => s.setSpeaking(null));
 }
 
-/** Speak and wait until finished (resolves false if stopped). Optional pitch for a second voice. */
+/** Speak and wait until finished (resolves false if stopped). Optional pitch / voice for podcast hosts. */
 export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', voice = ''): Promise<boolean> {
   return new Promise((resolve) => {
     if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
     ensureListeners();
-    const start = useAtlasVoiceStore.getState().doneTick;
     Native.setPitch?.(pitch).catch(() => undefined);
     Native.setVoice?.(voice).catch(() => undefined);
     const myKey = `${messageId}~${++counter}`;
     const st = useAtlasVoiceStore.getState();
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      waiters.delete(myKey);
+      unsub();
+      Native.setPitch?.(1.0).catch(() => undefined);
+      Native.setVoice?.('').catch(() => undefined);
+      if (useAtlasVoiceStore.getState().speakingKey === myKey) useAtlasVoiceStore.getState().setSpeaking(null);
+      resolve(ok);
+    };
+    // stop() (or another speech) takes over the speaking key -> this line was stopped
+    const unsub = useAtlasVoiceStore.subscribe((s) => { if (s.speakingKey !== myKey) finish(false); });
+    waiters.set(myKey, finish);
     st.setSpeaking(myKey, messageId);
     Native.setRate(st.rate).catch(() => undefined);
-    (Native.speakIn ? Native.speakIn(text, myKey, 'en-US') : Native.speak(text, myKey)).catch(() => st.setSpeaking(null));
-    const unsub = useAtlasVoiceStore.subscribe((s) => {
-      const reset = () => { Native.setPitch?.(1.0).catch(() => undefined); Native.setVoice?.('').catch(() => undefined); };
-      if (s.doneTick !== start) { unsub(); reset(); resolve(true); }
-      else if (s.speakingKey !== myKey) { unsub(); reset(); resolve(false); }
-    });
+    (Native.speakIn ? Native.speakIn(text, myKey, 'en-US') : Native.speak(text, myKey)).catch(() => finish(false));
   });
 }
 

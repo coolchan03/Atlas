@@ -290,8 +290,11 @@ async function generateWithCompactionRetry(
     const prefs = useChatPrefs.getState();
     if (prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
       const ctx = llmService.getPerformanceSettings().contextLength || 2048;
-      const est = opts.messages.reduce((n, m) => n + (m.content?.length || 0), 0) / 3.5;
-      if (est > ctx * prefs.compressAt && opts.messages.filter(m => m.role !== 'system').length > 6) {
+      const convo = opts.messages.filter(m => m.role !== 'system' && m.id !== 'compaction-summary');
+      const sysChars = opts.messages.filter(m => m.role === 'system' || m.id === 'compaction-summary').reduce((n, m) => n + (m.content?.length || 0), 0);
+      const est = convo.reduce((n, m) => n + (m.content?.length || 0), 0) / 3.5;
+      const room = ctx * prefs.compressAt - sysChars / 3.5;
+      if (convo.length > 10 && est > Math.max(ctx * 0.2, room)) {
         logger.log(`[ChatGen] auto-compress: ~${Math.round(est)} tokens of ${ctx}`);
         if (await contextCompactionService.compactNow(opts.id, 4)) {
           const conv = useChatStore.getState().conversations.find(c => c.id === opts.id);
