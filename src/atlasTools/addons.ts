@@ -27,7 +27,7 @@ export const ADDONS: Addon[] = [
 ];
 
 const BASE = 'https://download.kiwix.org/zim/';
-export const addonDir = () => `${RNFS.ExternalDirectoryPath}/zim`;
+export const addonDir = () => `${require('./storage').bigFilesBase()}/zim`;
 
 interface DlState {
   progress: Record<string, number>; // 0..1
@@ -63,11 +63,15 @@ export async function resolveAddon(a: Addon): Promise<{ file: string; size: stri
 }
 
 export async function installedAddonPath(a: Addon): Promise<string | null> {
-  const dir = addonDir();
-  if (!(await RNFS.exists(dir))) return null;
-  const files = await RNFS.readDir(dir);
-  const f = files.find((x: any) => x.name.startsWith(a.prefix) && x.name.endsWith('.zim'));
-  return f ? f.path : null;
+  // Look on the phone and on the SD card.
+  for (const base of require('./storage').allBases() as string[]) {
+    const dir = `${base}/zim`;
+    if (!(await RNFS.exists(dir))) continue;
+    const files = await RNFS.readDir(dir);
+    const f = files.find((x: any) => x.name.startsWith(a.prefix) && x.name.endsWith('.zim'));
+    if (f) return f.path;
+  }
+  return null;
 }
 
 export async function downloadAddon(a: Addon): Promise<void> {

@@ -1,3 +1,4 @@
+import { nextLevel, levelOf, LEVEL_LABEL } from '../../atlasTools/thinking';
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -165,7 +166,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   style={popoverStyles.row}
                   onPress={() => {
                     triggerHaptic('impactLight');
-                    updateSettings({ thinkingEnabled: !settings.thinkingEnabled });
+                    updateSettings(nextLevel(settings));
                   }}
                 >
                   <Icon name="zap" size={16} color={settings.thinkingEnabled ? colors.primary : colors.textMuted} />
@@ -174,7 +175,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                     backgroundColor: settings.thinkingEnabled ? colors.primary : colors.textMuted,
                   }]}>
                     <Text style={[popoverStyles.badgeText, { color: colors.background }]}>
-                      {settings.thinkingEnabled ? 'ON' : 'OFF'}
+                      {LEVEL_LABEL[levelOf(settings)]}
                     </Text>
                   </View>
                 </TouchableOpacity>

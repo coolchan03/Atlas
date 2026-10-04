@@ -36,6 +36,7 @@ import {
 } from '../services/curatedLiteRTRegistry';
 import { makeModelKey } from '../utils/modelKey';
 import logger from '../utils/logger';
+import { quickImportModel } from './ModelsScreen/quickImport';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'> };
 
@@ -136,6 +137,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [recommendedModels, setRecommendedModels] = useState<typeof RECOMMENDED_MODELS>([]);
   const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [importing, setImporting] = useState<string | null>(null);
   const [connectingServerId, setConnectingServerId] = useState<string | null>(null);
   const [connectedServerId, setConnectedServerId] = useState<string | null>(null);
   const [reachableServerIds, setReachableServerIds] = useState<Set<string>>(new Set());
@@ -427,6 +429,16 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
         </ScrollView>
 
         <View style={styles.footer}>
+          <Button
+            title={importing ?? 'Import a model file from this device'}
+            variant="secondary"
+            disabled={!!importing}
+            onPress={async () => {
+              const ok = await quickImportModel({ setAlertState, setImportProgress: (p) => setImporting(p ? `Importing... ${Math.round(p.fraction * 100)}%` : null) });
+              if (ok) navigation.replace('Main');
+            }}
+            testID="model-download-import"
+          />
           <Button title="Skip for Now" variant="ghost" onPress={() => navigation.replace('Main')} testID="model-download-skip" />
         </View>
 

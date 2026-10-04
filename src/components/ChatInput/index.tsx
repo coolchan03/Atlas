@@ -194,7 +194,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleThinkingToggle = () => {
     triggerHaptic('impactLight');
-    updateAppSettings({ thinkingEnabled: !thinkingEnabled });
+    updateAppSettings(require('../../atlasTools/thinking').nextLevel(appSettings));
   };
 
   const canSend = (message.trim().length > 0 || attachments.length > 0) && !disabled;

@@ -31,7 +31,14 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @Volatile private var neuralDir = ""
     @Volatile private var neuralSid = 0
     private val cancelled = java.util.Collections.synchronizedSet(mutableSetOf<String>())
-    private fun voicesRoot() = java.io.File(ctx.filesDir, "voices").apply { mkdirs() }
+    /** Where new voices are saved: the phone (default) or an SD card folder chosen in Settings. */
+    @Volatile private var voicesBase = ""
+    private fun voicesRoot() = (if (voicesBase.isNotBlank()) java.io.File(voicesBase, "voices") else java.io.File(ctx.filesDir, "voices")).apply { mkdirs() }
+    private fun allVoiceRoots(): List<java.io.File> = listOfNotNull(java.io.File(ctx.filesDir, "voices"), if (voicesBase.isNotBlank()) java.io.File(voicesBase, "voices") else null).distinct()
+    private fun findVoice(id: String): java.io.File? = allVoiceRoots().map { java.io.File(it, id) }.firstOrNull { it.isDirectory }
+
+    @ReactMethod
+    fun setVoicesBase(path: String, promise: Promise) { voicesBase = path; promise.resolve(true) }
     private fun useNeural(lang: String) = neuralDir.isNotEmpty() && neural.ready && (lang.isBlank() || lang.lowercase().startsWith("en"))
 
     override fun getName(): String = "AtlasTts"
@@ -205,8 +212,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     fun setNeuralVoice(id: String, sid: Int, promise: Promise) {
         neuralSid = sid
         if (id.isBlank()) { neuralDir = ""; neural.releaseAsync(); promise.resolve(0); return }
-        val dir = java.io.File(voicesRoot(), id)
-        if (!dir.isDirectory) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded"); return }
+        val dir = findVoice(id)
+        if (dir == null) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded (if it was on an SD card, put the card back)"); return }
         Thread {
             try { neural.load(dir.path); neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
             catch (e: Throwable) { neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }
@@ -219,7 +226,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun installedNeuralVoices(promise: Promise) {
         val out = Arguments.createArray()
-        voicesRoot().listFiles()?.filter { it.isDirectory && !it.name.endsWith(".part") }?.forEach { d ->
+        allVoiceRoots().flatMap { r -> r.listFiles()?.toList() ?: emptyList() }.filter { it.isDirectory && !it.name.endsWith(".part") }.distinctBy { it.name }.forEach { d ->
             out.pushMap(Arguments.createMap().apply { putString("id", d.name); putDouble("bytes", d.walkTopDown().filter { it.isFile }.sumOf { it.length() }.toDouble()) })
         }
         promise.resolve(out)
@@ -228,7 +235,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun deleteNeuralVoice(id: String, promise: Promise) {
         Thread {
-            val d = java.io.File(voicesRoot(), id)
+            val d = findVoice(id) ?: java.io.File(voicesRoot(), id)
             if (d.path == neuralDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
             else if (d.path == neural.loadedDir) { try { neural.release() } catch (_: Throwable) {} }
             d.deleteRecursively(); promise.resolve(true)

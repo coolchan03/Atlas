@@ -3,6 +3,7 @@ import { Dispatch, SetStateAction } from 'react';
 import { resolveAgentPrompt, activeAgentTools } from '../../stores/agentStore';
 import { offGridOn, NETWORK_TOOLS } from '../../atlasTools/offGrid';
 import { useChatPrefs } from '../../atlasTools/chatPrefs';
+import { thinkingNote } from '../../atlasTools/thinking';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
 import { APP_CONFIG } from '../../constants';
@@ -372,7 +373,8 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
 
   const chatNote = (conversation as any)?.instructions?.trim();
   const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt)
-    + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '');
+    + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '')
+    + (llmService.isThinkingEnabled?.() ? thinkingNote(deps.settings as any) : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {

@@ -19,6 +19,7 @@ export type RootStackParamList = {
   Compass: undefined;
   Maps: undefined;
   AtlasHub: undefined;
+  MyModels: undefined;
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };

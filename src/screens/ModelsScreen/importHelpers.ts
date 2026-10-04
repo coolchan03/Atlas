@@ -48,6 +48,10 @@ export async function importGgufFiles(
   if (files.length === 1) {
     const resolvedFileName = files[0].name ?? 'unknown';
     const isLitert = resolvedFileName.toLowerCase().endsWith('.litertlm');
+    if (!isLitert && isMmProj(resolvedFileName)) {
+      setAlertState(showAlert('This is a vision file', `"${resolvedFileName}" is a vision (mmproj) file, not a model. Import the model first, then open My models and tap "Add vision file" on it.`));
+      return;
+    }
 
     let liteRTVision = false;
     if (isLitert) {
@@ -75,6 +79,17 @@ export async function importGgufFiles(
       },
     });
     addDownloadedModel(model);
+    if (!isLitert && looksLikeVisionModel(resolvedFileName)) {
+      const add = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Vision model?',
+          `${model.name} looks like a model that can see pictures. To use pictures it also needs its vision file (a .gguf with "mmproj" in the name, from the same download page). Add it now?`,
+          [{ text: 'Later', style: 'cancel', onPress: () => resolve(false) }, { text: 'Add vision file', onPress: () => resolve(true) }],
+          { cancelable: false },
+        );
+      });
+      if (add) { await pickAndAttachMmProj(model.id, model.name, deps); return; }
+    }
     setAlertState(showAlert('Success', `${model.name} imported successfully!`));
     return;
   }
@@ -113,4 +128,28 @@ export async function importGgufFiles(
   });
   addDownloadedModel(model);
   setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));
+}
+
+/** Names of models that usually come with a separate vision (mmproj) file. */
+export function looksLikeVisionModel(name: string): boolean {
+  return /(^|[-_.\s])(vl|vlm|vision|llava|bakllava|minicpm-?v|smolvlm|moondream|internvl|pixtral|gemma-?3(?!n)|gemma-?4|qwen2\.5-?omni|granite-vision|mistral-small-3\.[12]|llama-?4|kimi-vl|ui-tars|omni)/i.test(name);
+}
+
+/** Pick a vision (mmproj) .gguf from the phone and attach it to a model that is already imported. */
+export async function pickAndAttachMmProj(modelId: string, modelName: string, deps: Pick<GgufImportDeps, 'setAlertState' | 'setImportProgress'>): Promise<boolean> {
+  const { pick, types } = require('@react-native-documents/picker');
+  let file: { uri: string; name: string | null; size: number | null } | undefined;
+  try { file = (await pick({ type: [types.allFiles], allowMultiSelection: false }))?.[0]; } catch { return false; }
+  if (!file) return false;
+  const name = (file.name || decodeURIComponent(file.uri.split('/').pop() || '')).trim();
+  if (!name.toLowerCase().endsWith('.gguf')) { deps.setAlertState(showAlert('Not a vision file', 'Pick the .gguf vision file (it usually has "mmproj" in its name).')); return false; }
+  try {
+    deps.setImportProgress({ fraction: 0, fileName: name });
+    await modelManager.attachMmProj(modelId, file.uri, name, file.size ?? undefined, (f) => deps.setImportProgress({ fraction: f, fileName: name }));
+    deps.setAlertState(showAlert('Vision added', `${modelName} can now look at pictures. Reload the model (or restart the chat) to use it.`));
+    return true;
+  } catch (e) {
+    deps.setAlertState(showAlert('Could not add the vision file', getErrorMessage(e)));
+    return false;
+  } finally { deps.setImportProgress(null); }
 }

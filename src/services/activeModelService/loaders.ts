@@ -37,7 +37,7 @@ export async function resolveMmProjPath(
   if (model.mmProjPath && (await RNFS.exists(model.mmProjPath))) {
     const persistedName = model.mmProjPath.substring(model.mmProjPath.lastIndexOf('/') + 1);
     const modelName = model.filePath.substring(model.filePath.lastIndexOf('/') + 1);
-    if (mmProjBelongsToModel(modelName, persistedName)) {
+    if ((model as any).mmProjManual || modelId.startsWith('local_import/') || mmProjBelongsToModel(modelName, persistedName)) {
       return model.mmProjPath;
     }
     logger.warn(`[LLM] persisted mmproj "${persistedName}" does not belong to model "${modelName}" — rescanning`);

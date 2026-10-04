@@ -161,6 +161,29 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
 
     override fun invalidate() { try { sensors.unregisterListener(this) } catch (_: Exception) {}; try { locListener?.let { locMgr.removeUpdates(it) } } catch (_: Exception) {}; super.invalidate() }
 
+    /** App storage places: the phone, and any SD card (app folders there need no permission). */
+    @ReactMethod
+    fun storageVolumes(promise: Promise) {
+        try {
+            val out = Arguments.createArray()
+            val dirs = ctx.getExternalFilesDirs(null)
+            for ((i, d) in dirs.withIndex()) {
+                if (d == null) continue
+                try { d.mkdirs() } catch (_: Exception) {}
+                val removable = try { Environment.isExternalStorageRemovable(d) } catch (_: Exception) { i > 0 }
+                val stat = try { android.os.StatFs(d.path) } catch (_: Exception) { null }
+                out.pushMap(Arguments.createMap().apply {
+                    putString("path", d.path)
+                    putBoolean("removable", removable)
+                    putString("state", try { Environment.getExternalStorageState(d) } catch (_: Exception) { "unknown" })
+                    putDouble("free", stat?.availableBytes?.toDouble() ?: 0.0)
+                    putDouble("total", stat?.totalBytes?.toDouble() ?: 0.0)
+                })
+            }
+            promise.resolve(out)
+        } catch (e: Exception) { promise.reject("STORAGE", e) }
+    }
+
     @ReactMethod
     fun hasAllFilesAccess(promise: Promise) {
         promise.resolve(if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()

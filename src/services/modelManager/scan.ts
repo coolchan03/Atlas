@@ -446,6 +446,7 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
     llamaModel.mmProjFileName = mmProjFileName;
     llamaModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
     llamaModel.isVisionModel = true;
+    llamaModel.mmProjManual = true; // the user picked this pair: keep the link whatever the names
   }
 
   await persistDownloadedModel(llamaModel, modelsDir);

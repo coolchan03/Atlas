@@ -50,6 +50,8 @@ export interface ModelFile {
 export type ModelEngine = 'llama' | 'litert';
 
 interface DownloadedModelBase {
+  /** Atlas: 'sd' when the user moved the model to the SD card. */
+  storage?: 'sd';
   id: string;
   name: string;
   author: string;
@@ -67,6 +69,8 @@ export interface LlamaDownloadedModel extends DownloadedModelBase {
   mmProjPath?: string;
   mmProjFileName?: string;
   mmProjFileSize?: number;
+  /** Atlas: the user attached this vision file themselves (keep it even if the names don't match). */
+  mmProjManual?: boolean;
 }
 
 export interface LiteRTDownloadedModel extends DownloadedModelBase {

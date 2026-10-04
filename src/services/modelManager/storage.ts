@@ -152,7 +152,8 @@ async function validateAndResolveModels(
         exists = resolutionResults[idx].exists;
       }
     }
-    if (exists) {
+    // Atlas: keep models that live on an SD card even when the card is out, so they are not forgotten.
+    if (exists || models[i].storage === 'sd') {
       validModels.push(models[i]);
     }
   }

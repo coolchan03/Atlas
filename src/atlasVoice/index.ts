@@ -23,7 +23,13 @@ export function registerAtlasVoice(): void {
   }
   warmUp();
   // Re-load the chosen natural voice once saved settings are loaded.
-  const restore = () => { restoreVoice().catch(() => undefined); };
+  const restore = () => {
+    // Voices may live on the SD card: tell the native side where, then reload the chosen voice.
+    const { useStoragePrefs, applyStoragePrefs } = require('../atlasTools/storage');
+    const sp: any = useStoragePrefs.persist;
+    const go = () => { applyStoragePrefs(); restoreVoice().catch(() => undefined); };
+    if (sp?.hasHydrated?.()) go(); else sp?.onFinishHydration?.(go);
+  };
   const ps: any = (useAtlasVoiceStore as any).persist;
   if (ps?.hasHydrated?.()) restore(); else ps?.onFinishHydration?.(restore);
   registerHook(HOOKS.audioCanSpeak, () => true);

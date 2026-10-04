@@ -12,7 +12,7 @@ export const MAP_SERVERS = [
   'https://download.mapsforge.org/maps/v5/',
   'https://ftp-stud.hs-esslingen.de/pub/Mirrors/download.mapsforge.org/maps/v5/',
 ];
-export const mapsDir = () => `${RNFS.ExternalDirectoryPath}/maps`;
+export const mapsDir = () => `${require('../atlasTools/storage').bigFilesBase()}/maps`;
 
 export interface Waypoint { id: string; name: string; lat: number; lon: number; createdAt: number }
 export interface GpsFix { lat: number; lon: number; accuracy: number; altitude: number; speed: number; time: number }
@@ -130,8 +130,11 @@ export function cancelMapDownload(remotePath: string): void {
 
 export interface LocalMap { path: string; name: string; size: number }
 export async function installedMaps(): Promise<LocalMap[]> {
-  if (!(await RNFS.exists(mapsDir()))) return [];
-  const files = await RNFS.readDir(mapsDir());
+  const files: any[] = [];
+  for (const base of require('../atlasTools/storage').allBases() as string[]) {
+    const dir = `${base}/maps`;
+    if (await RNFS.exists(dir)) files.push(...(await RNFS.readDir(dir)));
+  }
   return files.filter((f: any) => f.isFile() && f.name.endsWith('.map'))
     .map((f: any) => ({ path: f.path, name: f.name.replace(/\.map$/, '').split('_').pop()!.replace(/[-_]/g, ' '), size: Number(f.size) }))
     .sort((a, b) => a.name.localeCompare(b.name));

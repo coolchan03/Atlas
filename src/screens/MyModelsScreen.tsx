@@ -1,0 +1,191 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme';
+import { useAppStore } from '../stores';
+import { useWhisperStore } from '../stores/whisperStore';
+import { WHISPER_MODELS } from '../services/whisperService';
+import { modelManager } from '../services';
+import { modelDownloadService } from '../services/modelDownloadService';
+import { uniformDownloadId } from '../services/modelDownloadService/uniformId';
+import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from '../components/CustomAlert';
+import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
+import { quickImportModel } from './ModelsScreen/quickImport';
+import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
+import type { DownloadedModel, ONNXImageModel } from '../types';
+
+/** Everything downloaded, in one place: delete, move to the SD card, add a vision file, import. */
+export const MyModelsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const textModels = useAppStore((s) => s.downloadedModels);
+  const imageModels = useAppStore((s) => s.downloadedImageModels);
+  const activeId = useAppStore((s) => s.activeModelId);
+  const whisperPresent = useWhisperStore((s) => s.presentModelIds);
+  const useSd = useStoragePrefs((s) => s.useSd);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [busy, setBusy] = useState<{ id: string; label: string; fraction: number } | null>(null);
+  const [vols, setVols] = useState<Volume[]>([]);
+  const [sd, setSd] = useState<Volume | undefined>(undefined);
+
+  const refreshVolumes = useCallback(() => {
+    listVolumes().then(setVols).catch(() => undefined);
+    sdCard().then(setSd).catch(() => undefined);
+  }, []);
+  useEffect(() => { refreshVolumes(); useWhisperStore.getState().refreshPresentModels?.().catch?.(() => undefined); }, [refreshVolumes]);
+
+  const phone = vols.find((v) => !v.removable);
+  const card = { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 };
+  const btn = (color: string) => ({ flexDirection: 'row' as const, alignItems: 'center' as const, borderWidth: 1, borderColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, marginRight: 8, marginTop: 8 });
+
+  const confirm = (title: string, msg: string, action: string, fn: () => void) =>
+    Alert.alert(title, msg, [{ text: 'Cancel', style: 'cancel' }, { text: action, style: 'destructive', onPress: fn }]);
+
+  const delText = (m: DownloadedModel) => confirm('Delete model?', `${m.name} (${fmtBytes((m.fileSize || 0) + ((m as any).mmProjFileSize || 0))}) will be removed from this device.`, 'Delete', async () => {
+    try { await modelDownloadService.remove(uniformDownloadId('text', m.id)); } catch (e: any) {
+      try { await modelManager.deleteModel(m.id); useAppStore.getState().removeDownloadedModel(m.id); } catch (e2: any) { setAlertState(showAlert('Could not delete', String(e2?.message || e?.message || e2))); }
+    }
+  });
+  const delImage = (m: ONNXImageModel) => confirm('Delete image model?', `${m.name} will be removed from this device.`, 'Delete', async () => {
+    try { await modelDownloadService.remove(uniformDownloadId('image', m.id)); } catch (e: any) { setAlertState(showAlert('Could not delete', String(e?.message || e))); }
+  });
+  const delWhisper = (id: string, name: string) => confirm('Delete speech model?', `${name} will be removed. Talking to the app needs a speech model.`, 'Delete', async () => {
+    try { await useWhisperStore.getState().deleteModelById(id); } catch (e: any) { setAlertState(showAlert('Could not delete', String(e?.message || e))); }
+  });
+
+  const move = async (m: DownloadedModel, toSd: boolean) => {
+    if (m.id === activeId) {
+      try { const { activeModelService } = require('../services/activeModelService'); await activeModelService.unloadTextModel(true); } catch { /* not loaded */ }
+    }
+    const target = toSd ? await sdCard() : undefined;
+    if (toSd && !target) { setAlertState(showAlert('No SD card', 'Insert an SD card (set up as portable storage) and try again.')); return; }
+    const need = (m.fileSize || 0) + ((m as any).mmProjFileSize || 0);
+    if (toSd && target && target.free < need * 1.05) { setAlertState(showAlert('Not enough space', `The SD card has ${fmtBytes(target.free)} free; this model needs ${fmtBytes(need)}.`)); return; }
+    setBusy({ id: m.id, label: toSd ? 'Moving to SD card' : 'Moving to phone', fraction: 0 });
+    try {
+      await modelManager.moveModel(m.id, toSd && target ? target.path : null, (f) => setBusy((b) => (b ? { ...b, fraction: f } : b)));
+      refreshVolumes();
+    } catch (e: any) {
+      setAlertState(showAlert('Could not move the model', String(e?.message || e)));
+    } finally { setBusy(null); }
+  };
+
+  const addVision = async (m: DownloadedModel) => {
+    await pickAndAttachMmProj(m.id, m.name, {
+      setAlertState,
+      setImportProgress: (p) => setBusy(p ? { id: m.id, label: 'Adding vision file', fraction: p.fraction } : null),
+    });
+  };
+  const removeVision = (m: DownloadedModel) => confirm('Remove vision file?', `${m.name} will no longer look at pictures.`, 'Remove', async () => {
+    const mm = (m as any).mmProjPath as string | undefined;
+    await modelManager.clearMmProjLink(m.id);
+    if (mm && !textModels.some((x) => x.id !== m.id && (x as any).mmProjPath === mm)) {
+      try { const RNFS = require('react-native-fs').default; await RNFS.unlink(mm); } catch { /* already gone */ }
+    }
+  });
+
+  const doImport = async () => {
+    await quickImportModel({ setAlertState, setImportProgress: (p) => setBusy(p ? { id: 'import', label: `Importing ${p.fileName}`, fraction: p.fraction } : null) });
+  };
+
+  const whisperOnDisk = WHISPER_MODELS.filter((w: any) => whisperPresent.includes(w.id));
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
+        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '700', fontFamily: 'serif', marginLeft: 8, flex: 1 }}>My models</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 60, width: '100%', maxWidth: 900, alignSelf: 'center' }}>
+        {/* Storage */}
+        <View style={card}>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>Storage</Text>
+          <Text style={{ color: colors.textSecondary, marginTop: 4 }}>
+            Phone: {phone ? `${fmtBytes(phone.free)} free of ${fmtBytes(phone.total)}` : '...'}
+            {sd ? `\nSD card: ${fmtBytes(sd.free)} free of ${fmtBytes(sd.total)}` : '\nNo SD card found'}
+          </Text>
+          {!!sd && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
+              <Text style={{ color: colors.text, flex: 1, paddingRight: 8 }}>Save new library, maps and voice downloads to the SD card</Text>
+              <Switch value={useSd} onValueChange={async (v) => { const r = await chooseSd(v); if (!r.ok) setAlertState(showAlert('SD card', r.message || '')); }} />
+            </View>
+          )}
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8 }}>
+            Models download to the phone first; use "Move to SD card" on a model to free phone space. Keep the card in: models on it can't load while it's out. Files on the SD card are deleted if Atlas is uninstalled.
+          </Text>
+        </View>
+
+        <TouchableOpacity onPress={doImport} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Icon name="folder-plus" size={20} color={colors.primary} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: colors.text, fontWeight: '600' }}>Import a model file from this device</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>A .gguf model (select its "mmproj" vision file too, if it has one) or a .litertlm model</Text>
+          </View>
+        </TouchableOpacity>
+
+        {!!busy && (
+          <View style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={{ color: colors.text, marginLeft: 10, flex: 1 }}>{busy.label}... {Math.round(busy.fraction * 100)}%</Text>
+          </View>
+        )}
+
+        <Text style={{ color: colors.textSecondary, fontWeight: '700', marginTop: 8, marginBottom: 6 }}>TEXT MODELS ({textModels.length})</Text>
+        {!textModels.length && <Text style={{ color: colors.textMuted, marginBottom: 10 }}>None yet. Download one in the Models tab or import a file.</Text>}
+        {textModels.map((m) => {
+          const vision = m.engine === 'llama' && !!(m as any).mmProjPath;
+          const onSd = (m as any).storage === 'sd';
+          const size = (m.fileSize || 0) + ((m as any).mmProjFileSize || 0);
+          return (
+            <View key={m.id} style={card}>
+              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>{m.name}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {m.engine === 'llama' && (vision ? (
+                  <TouchableOpacity style={btn(colors.border)} onPress={() => removeVision(m)}><Icon name="eye-off" size={14} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, marginLeft: 6 }}>Remove vision file</Text></TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={btn(colors.primary)} onPress={() => addVision(m)}><Icon name="eye" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Add vision file</Text></TouchableOpacity>
+                ))}
+                {(sd || onSd) && (
+                  <TouchableOpacity style={btn(colors.border)} disabled={!!busy} onPress={() => move(m, !onSd)}>
+                    <Icon name={onSd ? 'smartphone' : 'hard-drive'} size={14} color={colors.text} />
+                    <Text style={{ color: colors.text, marginLeft: 6 }}>{onSd ? 'Move to phone' : 'Move to SD card'}</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={btn(colors.error)} disabled={!!busy} onPress={() => delText(m)}><Icon name="trash-2" size={14} color={colors.error} /><Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text></TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+
+        <Text style={{ color: colors.textSecondary, fontWeight: '700', marginTop: 8, marginBottom: 6 }}>IMAGE MODELS ({imageModels.length})</Text>
+        {imageModels.map((m) => (
+          <View key={m.id} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{m.name}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{fmtBytes(m.size || 0)}</Text>
+            </View>
+            <TouchableOpacity style={btn(colors.error)} onPress={() => delImage(m)}><Icon name="trash-2" size={14} color={colors.error} /><Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text></TouchableOpacity>
+          </View>
+        ))}
+
+        <Text style={{ color: colors.textSecondary, fontWeight: '700', marginTop: 8, marginBottom: 6 }}>SPEECH-TO-TEXT ({whisperOnDisk.length})</Text>
+        {whisperOnDisk.map((w: any) => (
+          <View key={w.id} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{w.name || w.id}</Text>
+              {!!w.size && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{w.size} MB</Text>}
+            </View>
+            <TouchableOpacity style={btn(colors.error)} onPress={() => delWhisper(w.id, w.name || w.id)}><Icon name="trash-2" size={14} color={colors.error} /><Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text></TouchableOpacity>
+          </View>
+        ))}
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8 }}>Natural voices are in Models → Voice. Library packs and encyclopedias are in Settings → Offline Library. Maps are in Atlas → Maps.</Text>
+      </ScrollView>
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
+    </SafeAreaView>
+  );
+};

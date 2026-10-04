@@ -197,6 +197,7 @@ export const SettingsScreen: React.FC = () => {
               { icon: 'search', title: 'Tools & Web Search', desc: 'Search provider (SearXNG, DuckDuckGo, Exa, Parallel, Tavily) and tools', screen: 'Tools' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
+              { icon: 'package', title: 'My models', desc: 'Delete models, move them to an SD card, add vision files', screen: 'MyModels' as const },
               { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
             ].map((item, index, arr) => (
               <AnimatedListItem

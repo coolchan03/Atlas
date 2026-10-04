@@ -57,14 +57,19 @@ export async function listFiles(path?: string): Promise<string> {
 export async function readFile(path: string): Promise<string> {
   const p = await resolvePath(path);
   if (!(await RNFS.exists(p))) return `File not found: ${p}`;
-  if (/\.(pdf|docx?|odt|rtf|epub)$/i.test(p)) {
-    try {
-      const { documentService } = require('../services/documentService');
-      const att = await documentService.processDocumentFromPath(p, p.split('/').pop(), MAX_READ);
-      return att?.textContent ? att.textContent.slice(0, MAX_READ) : 'Could not extract text from this file.';
-    } catch (e: any) { return `Could not read this file type: ${e?.message || e}`; }
+  const ext = `.${p.split('.').pop()?.toLowerCase()}`;
+  const { OFFICE_EXTENSIONS, extractOffice } = require('../services/officeExtract');
+  if (OFFICE_EXTENSIONS.includes(ext)) {
+    try { return await extractOffice(p, ext, MAX_READ); } catch (e: any) { return `Could not read this file: ${e?.message || e}`; }
   }
-  if (!TEXT_EXT.test(p)) return 'This tool reads text files (txt, md, html, csv, json, code) and PDFs.';
+  if (ext === '.pdf') {
+    try {
+      const { pdfExtractor } = require('../services/pdfExtractor');
+      const t: string = await pdfExtractor.extractText(p, MAX_READ);
+      return t ? t.slice(0, MAX_READ) : 'No text found in this PDF (it may be scanned pictures).';
+    } catch (e: any) { return `Could not read this PDF: ${e?.message || e}`; }
+  }
+  if (!TEXT_EXT.test(p)) return 'This tool reads text, CSV, JSON, code, PDF, Word, PowerPoint, Excel, OpenDocument, EPUB and RTF files.';
   const t = await RNFS.readFile(p, 'utf8');
   return t.length > MAX_READ ? `${t.slice(0, MAX_READ)}\n...(cut at ${MAX_READ} characters)` : t;
 }

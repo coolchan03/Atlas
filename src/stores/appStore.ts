@@ -66,12 +66,17 @@ type AppSettings = {
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
+  /** Atlas: how much to think when thinking is on. */
+  thinkingLevel?: 'low' | 'medium' | 'high';
   inferenceBackend: InferenceBackend;
   /** True once the user has explicitly picked an inference backend in Settings.
    *  While false, the boot-time backendSync may upgrade the default to the GPU
    *  path when the device supports it; once true, that auto-selection never
    *  overrides the user's choice. Defaults to false (the current default was
    *  auto-selected). */
+  /** Atlas: the user picked the backend themselves (auto GPU never overrides it). */
+  backendUserChosen?: boolean;
+  atlasAccelChecked?: boolean;
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;
   liteRTTopP: number;

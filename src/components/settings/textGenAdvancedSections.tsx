@@ -129,7 +129,7 @@ export const BackendSelector: React.FC = () => {
       description={backends.find(b => b.id === current)?.desc ?? ''}
       options={backends}
       current={current}
-      onSelect={(id) => updateSettings({ inferenceBackend: id })}
+      onSelect={(id) => updateSettings({ inferenceBackend: id, backendUserChosen: true } as any)}
       testIdFor={(id) => `backend-${id}-button`}
     >
       {showLayers && (
@@ -154,15 +154,19 @@ const LITERT_BACKENDS: { id: LiteRTBackend; label: string; desc: string }[] = [
   { id: 'gpu', label: 'GPU', desc: 'Run on GPU via OpenCL. Best performance on most devices.' },
   { id: 'cpu', label: 'CPU', desc: 'Always available. Use for battery savings or thermal relief.' },
 ];
+const LITERT_NPU = { id: 'npu' as LiteRTBackend, label: 'NPU', desc: 'Snapdragon NPU: fastest and most power-efficient for models built for it (falls back to GPU, then CPU, if the model or phone does not support it).' };
 
 export const LiteRTBackendSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
   const current = settings.liteRTBackend ?? 'gpu';
+  const [hasNPU, setHasNPU] = useState(false);
+  useEffect(() => { if (isAndroid) hardwareService.getSoCInfo().then(i => setHasNPU(i.hasNPU)).catch(() => undefined); }, []);
+  const options = hasNPU ? [...LITERT_BACKENDS, LITERT_NPU] : LITERT_BACKENDS;
   return (
     <SegmentedRow<LiteRTBackend>
       label="Acceleration"
-      description={LITERT_BACKENDS.find(b => b.id === current)?.desc ?? ''}
-      options={LITERT_BACKENDS}
+      description={options.find(b => b.id === current)?.desc ?? ''}
+      options={options}
       current={current}
       onSelect={(id) => updateSettings({ liteRTBackend: id })}
       testIdFor={(id) => `litert-backend-${id}-button`}

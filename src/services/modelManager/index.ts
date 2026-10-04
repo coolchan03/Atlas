@@ -28,6 +28,7 @@ import {
   performMmProjRepairDownload,
 } from './download';
 import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
+import { copyFileWithProgress } from './copyFile';
 import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
@@ -89,7 +90,7 @@ class ModelManager {
 
       if (m.mmProjPath) {
         // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
-        const belongs = mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
+        const belongs = m.mmProjManual || m.id.startsWith('local_import/') || mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
         const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
         if (!fileExists || !belongs) {
           logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
@@ -127,14 +128,15 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-    if (!model.filePath.startsWith(this.modelsDir)) {
+    const allowed = (p: string) => p.startsWith(this.modelsDir) || (model.storage === 'sd' && /\/Android\/data\//.test(p));
+    if (!allowed(model.filePath)) {
       throw new Error('Invalid model path: outside app directory');
     }
     const llamaModel = model.engine === 'llama' ? model : null;
-    if (llamaModel?.mmProjPath && !llamaModel.mmProjPath.startsWith(this.modelsDir)) {
+    if (llamaModel?.mmProjPath && !allowed(llamaModel.mmProjPath)) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-    await RNFS.unlink(model.filePath);
+    await RNFS.unlink(model.filePath).catch((e) => { if (model.storage !== 'sd') throw e; }); // SD card may be out
 
     // Only delete mmproj if no other models reference it
     if (llamaModel?.mmProjPath) {
@@ -347,14 +349,61 @@ class ModelManager {
     return true;
   }
 
-  async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {
+  /**
+   * Atlas: attach a vision file (mmproj) the user picked to a model already on the phone.
+   * Copies it next to the model and links it, whatever its file name.
+   */
+  async attachMmProj(modelId: string, sourceUri: string, fileName: string, size?: number, onProgress?: (f: number) => void): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') throw new Error('Vision files can only be added to GGUF (llama) models.');
+    if (!fileName.toLowerCase().endsWith('.gguf')) throw new Error('The vision file must be a .gguf file (usually named mmproj-...).');
+    const dir = target.filePath.substring(0, target.filePath.lastIndexOf('/'));
+    const stem = target.fileName.replace(/\.gguf$/i, '');
+    const dest = `${dir}/${stem}.mmproj-${fileName.replace(/[^\w.-]+/g, '_')}`;
+    if (await RNFS.exists(dest)) await RNFS.unlink(dest);
+    const src = sourceUri.startsWith('file://') ? decodeURIComponent(sourceUri.replace('file://', '')) : sourceUri;
+    await copyFileWithProgress(src, dest, { knownTotalBytes: size ?? null, onProgress });
+    const old = target.mmProjPath;
+    await this.saveModelWithMmproj(modelId, dest, true);
+    if (old && old !== dest && !models.some(m => m.id !== modelId && m.engine === 'llama' && m.mmProjPath === old)) await RNFS.unlink(old).catch(() => {});
+  }
+
+  /** Atlas: move a model (and its vision file) to the SD card folder, or back to the phone. */
+  async moveModel(modelId: string, toSdBase: string | null, onProgress?: (f: number) => void): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const m = models.find(x => x.id === modelId);
+    if (!m) throw new Error('Model not found');
+    const destDir = toSdBase ? `${toSdBase}/models` : this.modelsDir;
+    if (!(await RNFS.exists(destDir))) await RNFS.mkdir(destDir);
+    const move = async (p: string, frac: (f: number) => void) => {
+      const dest = `${destDir}/${p.substring(p.lastIndexOf('/') + 1)}`;
+      if (dest === p) return p;
+      const st = await RNFS.stat(p);
+      await copyFileWithProgress(p, dest, { knownTotalBytes: Number(st.size), onProgress: frac });
+      const a = await RNFS.stat(dest);
+      if (Number(a.size) !== Number(st.size)) { await RNFS.unlink(dest).catch(() => {}); throw new Error('Copy was incomplete (is the card full?)'); }
+      await RNFS.unlink(p).catch(() => {});
+      return dest;
+    };
+    const mm = m.engine === 'llama' ? m.mmProjPath : undefined;
+    const filePath = await move(m.filePath, (f) => onProgress?.(mm ? f * 0.85 : f));
+    const mmProjPath = mm && (await RNFS.exists(mm)) ? await move(mm, (f) => onProgress?.(0.85 + f * 0.15)) : mm;
+    const updated = (await this.getDownloadedModels()).map(x => (x.id === modelId
+      ? ({ ...x, filePath, ...(x.engine === 'llama' ? { mmProjPath } : {}), storage: toSdBase ? 'sd' : undefined } as DownloadedModel)
+      : x));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+  }
+
+  async saveModelWithMmproj(modelId: string, mmProjPath: string, manual = false): Promise<void> {
     const mmProjFileName = mmProjPath.split('/').pop() || mmProjPath;
     const stat = await RNFS.stat(mmProjPath);
     const mmProjFileSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
 
     const models = await this.getDownloadedModels();
     const updated = models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true } : m
+      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true, ...(manual ? { mmProjManual: true } : {}) } : m
     );
     await saveModelsList(updated);
     // Also update the in-memory Zustand store so UI reflects the change immediately.

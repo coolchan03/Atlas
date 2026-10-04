@@ -68,6 +68,15 @@ export const ModelsScreen: React.FC = () => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Models</Text>
+          <TouchableOpacity
+            style={[styles.downloadManagerButton, { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', marginRight: 8 }]}
+            onPress={() => vm.navigation.navigate('MyModels')}
+            testID="my-models"
+            accessibilityLabel="My models: delete, move to SD card, add vision file"
+          >
+            <Icon name="hard-drive" size={18} color={colors.text} />
+            <Text style={{ color: colors.text, marginLeft: 6, fontWeight: '600' }}>My models</Text>
+          </TouchableOpacity>
           <AttachStep index={10}>
             <TouchableOpacity
               style={styles.downloadManagerButton}

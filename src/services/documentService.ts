@@ -9,6 +9,7 @@ import { MediaAttachment } from '../types';
 import { pdfExtractor } from './pdfExtractor';
 import { useAppStore } from '../stores/appStore';
 import { APP_CONFIG } from '../constants';
+import { OFFICE_EXTENSIONS, extractOffice } from './officeExtract';
 
 // File extensions we can read as text
 const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.log', '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.swift', '.kt', '.go', '.rs', '.rb', '.php', '.sql', '.sh', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf'];
@@ -40,7 +41,7 @@ class DocumentService {
     if (extension === PDF_EXTENSION && pdfExtractor.isAvailable()) {
       return true;
     }
-    return TEXT_EXTENSIONS.includes(extension);
+    return TEXT_EXTENSIONS.includes(extension) || OFFICE_EXTENSIONS.includes(extension);
   }
 
   /**
@@ -107,8 +108,8 @@ class DocumentService {
   }
 
   private validateFileType(extension: string, isPdf: boolean): void {
-    if (!isPdf && !TEXT_EXTENSIONS.includes(extension)) {
-      throw new Error(`Unsupported file type: ${extension}. Supported: txt, md, csv, json, pdf, code files`);
+    if (!isPdf && !TEXT_EXTENSIONS.includes(extension) && !OFFICE_EXTENSIONS.includes(extension)) {
+      throw new Error(`Unsupported file type: ${extension}. Supported: PDF, Word, PowerPoint, Excel, OpenDocument, EPUB, RTF, text, CSV, JSON and code files`);
     }
     if (isPdf && !pdfExtractor.isAvailable()) {
       throw new Error('PDF extraction is not available on this device');
@@ -117,6 +118,8 @@ class DocumentService {
 
   private async readContent(resolvedPath: string, isPdf: boolean, maxChars: number): Promise<string> {
     console.log(`[DocumentService] readContent called - path: ${resolvedPath}, isPdf: ${isPdf}, maxChars: ${maxChars}`);
+    const ext = `.${resolvedPath.split('.').pop()?.toLowerCase()}`;
+    if (OFFICE_EXTENSIONS.includes(ext)) return extractOffice(resolvedPath, ext, maxChars);
     try {
       const raw = isPdf
         ? await pdfExtractor.extractText(resolvedPath, maxChars)
@@ -179,8 +182,10 @@ class DocumentService {
 
       const stat = await RNFS.stat(resolvedPath);
       console.log(`[DocumentService] File size: ${stat.size} bytes`);
-      if (stat.size > MAX_FILE_SIZE) {
-        throw new Error(`File is too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+      // Text files are read whole; PDFs and office files are mostly pictures/zip, so allow bigger ones.
+      const limit = isPdf || OFFICE_EXTENSIONS.includes(extension) ? 60 * 1024 * 1024 : MAX_FILE_SIZE;
+      if (stat.size > limit) {
+        throw new Error(`File is too large. Maximum size is ${limit / (1024 * 1024)}MB`);
       }
 
       const maxChars = maxCharsOverride ?? Math.floor((useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength) * 4 * 0.5);
