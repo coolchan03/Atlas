@@ -18,14 +18,22 @@ import logger from '../utils/logger';
 
 export async function fetchModelFiles(
   models: { id: string }[],
+  opts: { preferQ4_0?: boolean; timeoutMs?: number; onEach?: (id: string, files: ModelFile[]) => void } = {},
 ): Promise<Record<string, ModelFile[]>> {
   const filesMap: Record<string, ModelFile[]> = {};
+  const timeout = opts.timeoutMs ?? 10000;
   await Promise.all(
     models.map(async (model) => {
       try {
-        const files = await huggingFaceService.getModelFiles(model.id);
-        const q4km = files.find(f => f.quantization.toUpperCase() === 'Q4_K_M');
-        if (q4km) filesMap[model.id] = [q4km];
+        // Never let one slow request hold up the screen.
+        const files = await Promise.race([
+          huggingFaceService.getModelFiles(model.id),
+          new Promise<ModelFile[]>((_, rej) => setTimeout(() => rej(new Error('timeout')), timeout)),
+        ]);
+        const q = (name: string) => files.find(f => f.quantization.toUpperCase() === name);
+        // Snapdragon GPU/NPU only speed up Q4_0, so offer that there when it exists.
+        const pick = (opts.preferQ4_0 && q('Q4_0')) || q('Q4_K_M');
+        if (pick) { filesMap[model.id] = [pick]; opts.onEach?.(model.id, [pick]); }
       } catch (error) {
         logger.error(`Error fetching files for ${model.id}:`, error);
       }

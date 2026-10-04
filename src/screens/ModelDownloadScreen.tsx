@@ -134,6 +134,7 @@ export function downloadProgressFor(
 
 export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
+  const [filesLoading, setFilesLoading] = useState(true);
   const [recommendedModels, setRecommendedModels] = useState<typeof RECOMMENDED_MODELS>([]);
   const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -171,13 +172,17 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
         const compat = recommendedModelsForDevice(ram);
         if (cancelled) return;
         setRecommendedModels(compat);
-        const files = await fetchModelFiles(compat);
-        if (!cancelled) setModelFiles(files);
+        // Show the screen right away; the download list fills in as each model's details arrive.
+        setIsLoading(false);
+        const soc = await hardwareService.getSoCInfo().catch(() => null);
+        await fetchModelFiles(compat, {
+          preferQ4_0: soc?.vendor === 'qualcomm',
+          onEach: (id, f) => { if (!cancelled) setModelFiles((prev) => ({ ...prev, [id]: f })); },
+        });
       } catch (error) {
         logger.error('Error initializing:', error);
-        if (!cancelled) setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) { setIsLoading(false); setFilesLoading(false); }
       }
     })();
     return () => { cancelled = true; };
@@ -401,6 +406,17 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
             );
           })}
 
+          {filesLoading && !Object.keys(modelFiles).length && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ color: colors.textSecondary, marginLeft: 10 }}>Finding models for your device...</Text>
+            </View>
+          )}
+          {!filesLoading && !Object.keys(modelFiles).length && (
+            <Text style={{ color: colors.textSecondary, paddingVertical: 12 }}>
+              Could not reach the model library (no internet?). You can import a model file from this device below, or skip and download later from the Models tab.
+            </Text>
+          )}
           {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
             const recFile = modelFiles[model.id][0];
             const modelKey = makeModelKey(model.id, recFile.name);
