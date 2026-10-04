@@ -42,7 +42,7 @@ jobs:
       - name: Type check (informational, Atlas files reported as warnings)
         run: |
           npx tsc --noEmit -p . > tsc.log 2>&1 || true
-          grep -E "error TS" tsc.log | grep -iE "atlas|Maps|About|Onboarding|RemoteServers|ModelDownload|Agents|theme/|constants/|sharePrompt|Upsell|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
+          grep -E "error TS" tsc.log | grep -iE "atlas|MyModels|officeExtract|documentService|modelManager|importHelpers|quickImport|textGenAdvanced|Popovers|ChatInput|accel|thinking|storage|loaders|types/index|App.tsx|Maps|About|Onboarding|RemoteServers|ModelDownload|Agents|theme/|constants/|sharePrompt|Upsell|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
           echo "::notice title=TypeScript::total TS errors: $(grep -c 'error TS' tsc.log)"
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
