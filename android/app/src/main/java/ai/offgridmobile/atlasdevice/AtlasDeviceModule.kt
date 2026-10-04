@@ -47,7 +47,10 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         val rv = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         val m = sensors.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         if (m == null) { promise.resolve(false); return }
-        if (rv != null) sensors.registerListener(this, rv, SensorManager.SENSOR_DELAY_UI)
+        if (rv != null) {
+            sensors.registerListener(this, rv, SensorManager.SENSOR_DELAY_UI)
+            sensors.registerListener(this, m, SensorManager.SENSOR_DELAY_NORMAL) // only for accuracy (calibration) updates
+        }
         else {
             sensors.registerListener(this, m, SensorManager.SENSOR_DELAY_UI)
             sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
@@ -81,7 +84,7 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD) {
+        if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD || sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
             try {
                 val map = Arguments.createMap(); map.putInt("accuracy", accuracy)
                 ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasCompassAccuracy", map)
@@ -115,13 +118,15 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
             }
             val providers = locMgr.getProviders(true).filter { it == android.location.LocationManager.GPS_PROVIDER || it == android.location.LocationManager.NETWORK_PROVIDER }
             if (providers.isEmpty()) { promise.reject("NO_GPS", "Location is turned off on this phone"); return }
+            locListener = l
             android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (locListener !== l) { promise.resolve(false); return@post } // stopped before it started
                 var ok = 0
                 for (p in providers) {
                     try { locMgr.requestLocationUpdates(p, 2000L, 2f, l, android.os.Looper.getMainLooper()); ok++ } catch (_: Exception) {}
                 }
-                if (ok > 0) { locListener = l; promise.resolve(true) }
-                else promise.reject("NO_PERMISSION", "Location permission not granted")
+                if (ok > 0) promise.resolve(true)
+                else { locListener = null; promise.reject("NO_PERMISSION", "Location permission not granted") }
             }
         } catch (e: SecurityException) { locListener = null; promise.reject("NO_PERMISSION", "Location permission not granted")
         } catch (e: Exception) { locListener = null; promise.reject("GPS_ERROR", e) }
@@ -158,7 +163,8 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
 
     @ReactMethod
     fun hasAllFilesAccess(promise: Promise) {
-        promise.resolve(if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true)
+        promise.resolve(if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
+            else ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED)
     }
 
     @ReactMethod

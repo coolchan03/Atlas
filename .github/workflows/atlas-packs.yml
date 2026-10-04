@@ -28,7 +28,7 @@ jobs:
   pack:
     needs: release
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 355
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -40,8 +40,10 @@ jobs:
           - only: 03_Food_Agriculture
           - only: 04_Engineering_Repair
           - only: 07_Civilization_Crafts
+            ocr: '40'
           - only: 05_Science_Measurement,08_General_Reference
           - only: 90_Human_Read_Only
+            ocr: '40'
     steps:
       - uses: actions/checkout@v5
       - name: Free disk space
@@ -58,8 +60,19 @@ jobs:
       - name: Convert to text and make packs
         env:
           ATLAS_ONLY: ${{ matrix.only }}
-          OCR_MAX_PAGES: '120'
+          OCR_MAX_PAGES: ${{ matrix.ocr || '120' }}
         run: python atlas/atlas_all.py "$RUNNER_TEMP/lib" 3
+      - name: Upload the list of failed downloads
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view atlas-build-reports >/dev/null 2>&1 || gh release create atlas-build-reports --target "$GITHUB_SHA" --title "Atlas build reports" --notes "Lists of sources the library builder could not download (for fixing links)."
+          f="$RUNNER_TEMP/lib/00_MANIFESTS/FAILED_WHY.txt"
+          [ -e "$f" ] || exit 0
+          name="failed-$(echo '${{ matrix.only }}' | tr ',/' '__').txt"
+          cp "$f" "$name"
+          gh release upload atlas-build-reports "$name" --clobber
       - name: Upload packs to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

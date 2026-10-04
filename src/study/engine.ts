@@ -64,7 +64,7 @@ const trimSources = (src: Source[]): Source[] => {
 const tidy = (t: string) => t.replace(/\*\*|__/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+(?=(?:Q|A|ANSWER|WHY|SRC|TITLE|SAY|[A-D])\s*[:).])/gim, '');
 
 /** Sources for a topic (search) or, with no topic, a spread across all documents. */
-export async function gatherSources(projectId: string, topic: string): Promise<Source[]> {
+export async function gatherSources(projectId: string, topic: string, share = 1): Promise<Source[]> {
   let raw: { name: string; content: string; position: number }[] = [];
   if (topic.trim()) {
     const r: any = await ragService.searchProject(projectId, topic.trim());
@@ -83,7 +83,7 @@ export async function gatherSources(projectId: string, topic: string): Promise<S
   }
   const out: Source[] = [];
   let used = 0;
-  const max = budget();
+  const max = budget() * share;
   for (const c of raw) {
     const text = String(c.content).replace(/\s+/g, ' ').trim().slice(0, SOURCE_CHARS);
     if (!text || out.some((o) => o.text === text)) continue;
@@ -141,7 +141,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     }).filter(Boolean) as Card[];
     if (!cards.length) {
       // Fallback: "Q: ..." and "A: ..." on separate lines.
-      cards = [...T.matchAll(/Q:\s*(.+)\n+\s*A:\s*(.+?)(?:\s*\|?\s*SRC:\s*([\d,\s[\]]+))?\s*$/gim)].map((m) => ({ q: m[1].trim(), a: m[2].trim(), src: srcOf(m[3]) || refs(m[0]) }));
+      cards = [...T.matchAll(/Q:\s*(.+)\n+\s*A:\s*(.+?)(?:\s*\|?\s*SRC:\s*([\d,\s[\]]+))?\s*$/gim)].map((m) => ({ q: m[1].trim(), a: m[2].trim(), src: srcOf(m[3]).length ? srcOf(m[3]) : refs(m[0]) }));
     }
     if (!cards.length) throw new Error('The model did not produce flashcards in the expected format. Try again or use a bigger model.');
     return { ...base, cards };
@@ -149,10 +149,11 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
   if (kind === 'quiz') {
     const t = await ask(`You write multiple-choice quizzes. ${GROUND}`, `${S}${about}Write 5 questions. For each, exactly:\nQ: question\nA) option\nB) option\nC) option\nD) option\nANSWER: letter\nWHY: one sentence\nSRC: number\n(blank line between questions)`);
     const T = tidy(t);
-    const blocks = /\n\s*\n/.test(T.trim()) ? T.split(/\n\s*\n/) : T.split(/\n(?=\s*Q\d*\s*[:.])/i);
+    // Split on each question start (tolerates blank lines between a question and its options).
+    const blocks = T.split(/\n(?=\s*Q(?:uestion)?\s*\d*\s*[:.)])/i);
     const quiz: QuizItem[] = blocks.map((b) => {
-      const q = b.match(/Q\d*\s*[:.]\s*(.+)/i)?.[1]?.trim();
-      const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*${L}[).:]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
+      const q = b.match(/^\s*Q(?:uestion)?\s*\d*\s*[:.)]\s*(.+)/im)?.[1]?.trim();
+      const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*\\(?${L}\\s*[).:\\-–]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
       const ans = 'ABCD'.indexOf((b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase());
       if (!q || opts.length < 2 || ans < 0) return null;
       return { q, options: opts, answer: ans, why: b.match(/WHY:\s*(.+)/i)?.[1]?.trim() || '', src: refs(`[${(b.match(/SRC:\s*([\d,\s[\]]+)/i)?.[1] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) };
@@ -178,7 +179,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     const title = b.match(/TITLE:\s*(.+)/i)?.[1]?.trim();
     if (!title) return null;
     const bullets = b.split('\n').filter((l) => /^\s*[-*•]\s+/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).slice(0, 5);
-    return { title, bullets, narration: (b.match(/SAY:\s*(.+)/i)?.[1] || bullets.join('. ')).replace(/\[\d+\]/g, '').trim(), src: refs(b) };
+    return { title, bullets, narration: (b.match(/SAY:\s*(.+)/i)?.[1] || bullets.join('. ')).replace(/\[\d+\]/g, '').trim(), src: [...new Set([...refs(b), ...(b.match(/SRC:\s*([\d,\s]+)/i)?.[1] || '').split(/[,\s]+/).filter(Boolean).map(Number)])] };
   }).filter(Boolean) as Slide[];
   if (!slides.length) throw new Error('The model did not make slides in the expected format. Try again.');
   return { ...base, slides };
@@ -234,7 +235,8 @@ async function researchSources(query: string, startN: number, onStep: (m: string
  */
 export async function generatePodcast(projectId: string, opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
   onStep('Reading your sources...');
-  let sources = await gatherSources(projectId, opts.prompt);
+  // With extra research on, leave room in the model's memory for the research sources.
+  let sources = await gatherSources(projectId, opts.prompt, opts.research ? 0.6 : 1);
   if (opts.research) {
     const extra = await researchSources(opts.prompt || sources.map((x) => x.doc).slice(0, 2).join(' '), sources.length + 1, onStep);
     sources = trimSources([...sources, ...extra]);

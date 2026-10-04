@@ -18,7 +18,7 @@ import java.util.Locale
  * utterance has finished, "AtlasTtsStopped" when speech is cancelled.
  */
 class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
-    private var tts: TextToSpeech? = null
+    @Volatile private var tts: TextToSpeech? = null
     @Volatile private var ready = false
     @Volatile private var lastErrored = ""
     private var rate = 1.0f
@@ -44,45 +44,55 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         } catch (_: Exception) {}
     }
 
+    @Synchronized
     private fun ensure() {
         if (tts != null) return
-        tts = TextToSpeech(ctx.applicationContext) { status ->
-            val ok = status == TextToSpeech.SUCCESS
-            if (ok) {
-                tts?.language = Locale.getDefault()
-                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        if (utteranceId != null && utteranceId.endsWith("#0")) emit("AtlasTtsStart", utteranceId.substringBefore("#"))
-                    }
-                    override fun onDone(utteranceId: String?) {
-                        if (utteranceId != null && utteranceId.endsWith("#last")) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
-                    }
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        val id = utteranceId?.substringBefore("#") ?: return
-                        if (id == lastErrored) return
-                        lastErrored = id
-                        try { tts?.stop() } catch (_: Exception) {}
-                        emit("AtlasTtsDone", id)
-                    }
-                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                        if (utteranceId != null) emit("AtlasTtsStopped", utteranceId.substringBefore("#"))
-                    }
-                })
-                synchronized(pending) {
-                    ready = true
-                    for ((text, id, lang) in pending) doSpeak(text, id, lang)
-                    pending.clear()
+        val holder = arrayOfNulls<TextToSpeech>(1)
+        val early = arrayOfNulls<Int>(1)
+        val e = TextToSpeech(ctx.applicationContext) { status ->
+            val eng = synchronized(holder) { holder[0] ?: run { early[0] = status; null } }
+            if (eng != null) onInit(eng, status)
+        }
+        tts = e
+        val st = synchronized(holder) { holder[0] = e; early[0] }
+        if (st != null) onInit(e, st) // the engine answered inside its constructor (e.g. no TTS engine installed)
+    }
+
+    private fun onInit(engine: TextToSpeech, status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            try { engine.language = Locale.getDefault() } catch (_: Exception) {}
+            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    if (utteranceId != null && utteranceId.endsWith("#0")) emit("AtlasTtsStart", utteranceId.substringBefore("#"))
                 }
-            } else {
-                synchronized(pending) {
-                    ready = false
-                    for ((_, id, _) in pending) emit("AtlasTtsDone", id)
-                    pending.clear()
-                    try { tts?.shutdown() } catch (_: Exception) {}
-                    tts = null // try again next time instead of staying broken
+                override fun onDone(utteranceId: String?) {
+                    if (utteranceId != null && utteranceId.endsWith("#last")) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
                 }
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    val id = utteranceId?.substringBefore("#") ?: return
+                    if (id == lastErrored) return
+                    lastErrored = id
+                    try { engine.stop() } catch (_: Exception) {}
+                    emit("AtlasTtsDone", id)
+                }
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    if (utteranceId != null) emit("AtlasTtsStopped", utteranceId.substringBefore("#"))
+                }
+            })
+            synchronized(pending) {
+                ready = true
+                for ((text, id, lang) in pending) doSpeak(text, id, lang)
+                pending.clear()
             }
+        } else {
+            synchronized(pending) {
+                ready = false
+                for ((_, id, _) in pending) emit("AtlasTtsDone", id)
+                pending.clear()
+            }
+            try { engine.shutdown() } catch (_: Exception) {}
+            if (tts === engine) tts = null // try again next time instead of staying broken
         }
     }
 
@@ -194,7 +204,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun setNeuralVoice(id: String, sid: Int, promise: Promise) {
         neuralSid = sid
-        if (id.isBlank()) { neuralDir = ""; Thread { try { neural.release() } catch (_: Throwable) {} }.start(); promise.resolve(0); return }
+        if (id.isBlank()) { neuralDir = ""; neural.releaseAsync(); promise.resolve(0); return }
         val dir = java.io.File(voicesRoot(), id)
         if (!dir.isDirectory) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded"); return }
         Thread {
@@ -220,6 +230,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         Thread {
             val d = java.io.File(voicesRoot(), id)
             if (d.path == neuralDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
+            else if (d.path == neural.loadedDir) { try { neural.release() } catch (_: Throwable) {} }
             d.deleteRecursively(); promise.resolve(true)
         }.start()
     }
@@ -244,7 +255,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     val loc = conn.getHeaderField("Location") ?: break
                     conn.disconnect()
                     conn = java.net.URL(conn.url, loc).openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 30000; conn.readTimeout = 60000
+                    conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.setRequestProperty("User-Agent", "Atlas")
                 }
                 if (conn.responseCode >= 400) throw IllegalStateException("HTTP ${conn.responseCode}")
                 val total = conn.contentLengthLong
@@ -267,7 +278,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     var e = zip.nextEntry
                     while (e != null) {
                         val out = java.io.File(tmp, e.name)
-                        if (!out.canonicalPath.startsWith(base)) throw SecurityException("bad zip entry")
+                        if (!out.canonicalPath.startsWith(base + java.io.File.separator)) throw SecurityException("bad zip entry")
                         if (e.isDirectory) out.mkdirs() else { out.parentFile?.mkdirs(); java.io.FileOutputStream(out).use { zip.copyTo(it, 1 shl 16) } }
                         e = zip.nextEntry
                     }

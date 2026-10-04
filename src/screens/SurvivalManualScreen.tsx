@@ -58,6 +58,7 @@ function NotesBox({ id, colors }: { id: string; colors: any }) {
 
 /** The Survival Manual (ligi/SurvivalManual, based on US Army FM 21-76), fully offline with pictures. */
 export const SurvivalManualScreen: React.FC = () => {
+  React.useEffect(() => () => stop(), []); // stop reading aloud when leaving the screen
   const navigation = useNavigation<any>();
   const { colors: baseColors } = useTheme();
   const colors = useEmergencyColors(baseColors);

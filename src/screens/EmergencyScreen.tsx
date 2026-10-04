@@ -73,6 +73,7 @@ function CardBody({ card, colors, size }: { card: Card; colors: any; size: numbe
 }
 
 export const EmergencyScreen: React.FC = () => {
+  React.useEffect(() => () => stop(), []); // stop reading aloud when leaving the screen
   const navigation = useNavigation<any>();
   const { colors: baseColors } = useTheme();
   const colors = useEmergencyColors(baseColors);

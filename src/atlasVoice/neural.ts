@@ -12,7 +12,7 @@ const BASE = 'https://github.com/coolchan03/Off-Grid/releases/download/atlas-voi
 export interface NeuralVoice { id: string; name: string; desc: string; size: string; speakers?: { sid: number; name: string; female: boolean; accent: string }[] }
 
 export const KOKORO_SPEAKERS = [
-  { sid: 0, name: 'Heart (default)', female: true, accent: 'US' },
+  { sid: 0, name: 'Default', female: true, accent: 'US' },
   { sid: 1, name: 'Bella', female: true, accent: 'US' },
   { sid: 2, name: 'Nicole', female: true, accent: 'US' },
   { sid: 3, name: 'Sarah', female: true, accent: 'US' },

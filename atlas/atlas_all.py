@@ -82,6 +82,17 @@ def words(rel):
 
 def save_pdf(url, dest, rel, depth=0):
     """Download url to dest. If it is a web page, look for a PDF link on it that matches the title."""
+    g = re.search(r"gutenberg\.org/(?:ebooks|cache/epub|files)/(\d+)", url)
+    if g:
+        # Project Gutenberg has no PDFs: keep the plain-text edition instead (same name, .txt).
+        n = g.group(1)
+        txt = dest.with_suffix(".txt")
+        tmp = txt.with_name(txt.name + ".partial")
+        curl("https://www.gutenberg.org/cache/epub/%s/pg%s.txt" % (n, n), out=tmp)
+        if tmp.stat().st_size < 5000:
+            tmp.unlink(missing_ok=True); raise ValueError("Gutenberg text too small")
+        tmp.replace(txt)
+        return txt.stat().st_size
     tmp = dest.with_name(dest.name + ".partial")
     tmp.unlink(missing_ok=True)
     curl(url, out=tmp)
@@ -162,7 +173,8 @@ def resolve(spec):
                 raise ValueError("no archive.org match")
             return archive_url(ids[i])
         return [lambda q=q, m=m, i=i: pick(q, m, i) for i in (0, 1)]
-    return [lambda s=spec: s]
+    # Many government sites block cloud servers; the Internet Archive's copy usually works.
+    return [lambda s=spec: s, lambda s=spec: "https://web.archive.org/web/2026id_/" + s]
 
 
 def fallback_specs(rel):
@@ -187,7 +199,7 @@ def step2():
         if not wanted(rel):
             continue
         dest = LIB / rel
-        if dest.exists():
+        if dest.exists() or dest.with_suffix(".txt").exists():
             skip += 1; continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         print("...   %s" % rel)
@@ -212,6 +224,7 @@ def step2():
     if os.environ.get("GITHUB_ACTIONS"):
         print("::notice title=Atlas downloads %s::%d new, %d already there, %d failed" % (",".join(ONLY) or "all", ok, skip, fail))
         if fail_why:
+            (MAN / "FAILED_WHY.txt").write_text("\n".join(fail_why) + "\n", encoding="utf-8")
             print("::notice title=Atlas failed downloads (why)::%s" % "%0A".join(w.replace("%", "%25") for w in fail_why)[:60000])
     with open(MAN / "MANUAL_DOWNLOADS.txt", "w", encoding="utf-8") as f:
         f.write("Get these by hand if you want them (open the link, save the PDF into the folder shown).\n\n")
@@ -339,6 +352,29 @@ def convert_one(fitz, p4l, src, md_path, pdf_path, parts_dir):
     return n, scanned, note
 
 
+def text_parts(src, md, parts_dir):
+    """A plain-text book (Project Gutenberg): strip the licence header/footer and split into parts."""
+    t = src.read_text(encoding="utf-8", errors="ignore")
+    a = re.search(r"\*\*\* ?START OF (?:THE|THIS) PROJECT GUTENBERG[^\n]*\n", t)
+    b = re.search(r"\*\*\* ?END OF (?:THE|THIS) PROJECT GUTENBERG", t)
+    body = t[a.end() if a else 0: b.start() if b else len(t)].strip()
+    title = src.stem.replace("_", " ")
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("# %s\n\n%s\n" % (title, body), encoding="utf-8")
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    for old in parts_dir.glob(src.stem + "_part*.md"):
+        old.unlink()
+    k, buf = 1, ""
+    for para in body.split("\n\n"):
+        if buf and len(buf) + len(para) > PART_CHARS:
+            (parts_dir / ("%s_part%02d.md" % (src.stem, k))).write_text("# %s (part %d)\n\n%s" % (title, k, buf), encoding="utf-8")
+            k, buf = k + 1, ""
+        buf += para + "\n\n"
+    if buf.strip():
+        (parts_dir / ("%s_part%02d.md" % (src.stem, k))).write_text("# %s (part %d)\n\n%s" % (title, k, buf), encoding="utf-8")
+    return k
+
+
 def sort_key(rel):
     for i, p in enumerate(PRIORITY):
         if rel.startswith(p + "/"):
@@ -361,7 +397,8 @@ def step3():
     files = []
     for dp, dn, fn in os.walk(LIB):
         dn[:] = [d for d in dn if d not in SKIP_DIRS]
-        files += [str((Path(dp) / f).relative_to(LIB)).replace("\\", "/") for f in fn if f.lower().endswith(".pdf")]
+        files += [str((Path(dp) / f).relative_to(LIB)).replace("\\", "/") for f in fn if f.lower().endswith((".pdf", ".txt"))
+                  and not (f.lower().endswith(".txt") and not re.match(r"^\d\d_", str(Path(dp).relative_to(LIB)).replace("\\", "/")))]
     files = [f for f in files if wanted(f)]
     files.sort(key=sort_key)
     rep_path = out / "CONVERT_REPORT.csv"
@@ -378,6 +415,13 @@ def step3():
             skipped += 1; continue
         t0 = time.time()
         print("[%d/%d] %s (%.0f MB)" % (k, len(files), rel, src.stat().st_size / 1e6))
+        if rel.lower().endswith(".txt"):
+            try:
+                n = text_parts(src, md, out / "OffGrid_Parts" / Path(rel).parent)
+                w.writerow([rel, n, 0, "ok text", "%.0f" % (time.time() - t0)]); done += 1
+            except Exception as e:
+                failed += 1; w.writerow([rel, "", "", "FAILED: " + str(e)[:100], "0"])
+            continue
         try:
             n, sc, note = convert_one(fitz, p4l, src, md, (out / "OCR_PDFs" / rel).with_suffix(".pdf"),
                                       out / "OffGrid_Parts" / Path(rel).parent)
@@ -539,8 +583,8 @@ SOURCES = '''
 01_Medical/Bleeding_Trauma/IFRC_International_First_Aid_Resuscitation_Education_Guidelines_2020.pdf	https://www.ifrc.org/sites/default/files/2022-02/EN_GFARC_GUIDELINES_2020.pdf
 01_Medical/Bleeding_Trauma/Stop_the_Bleed_Bleeding_Control_Indiana_DHS.pdf	https://secure.in.gov/dhs/get-prepared/files/Bleeding-Control.pdf
 01_Medical/Bleeding_Trauma/Stop_the_Bleed_Lay_Public_Presentation.pdf	https://stopthebleed.org/media/qk5jgpgs/lay-public-stop-the-bleed-presentation-pdf.pdf
-01_Medical/Bleeding_Trauma/TCCC_Guidelines_Student_Materials_USMC.pdf	https://www.tecom.marines.mil/Portals/120/Docs/Student%20Materials/TCCC%20Guidelines.pdf	https://www.fmtbneast.marines.mil/Portals/237/Docs/Student%20Materials/TCCC%20Guidelines.pdf
-01_Medical/Bleeding_Trauma/TCCC_JSOM_Update_2024.pdf	https://www.jsomonline.org/Updates/20241100Deaton.pdf
+01_Medical/Bleeding_Trauma/TCCC_Guidelines_Student_Materials_USMC.pdf	https://learning-media.allogy.com/api/v1/pdf/18ccfdfc-a076-47e9-8a34-376efdd81b43/contents	https://www.fmtbneast.marines.mil/Portals/237/Docs/Student%20Materials/TCCC%20Guidelines.pdf	https://www.tecom.marines.mil/Portals/120/Docs/Student%20Materials/TCCC%20Guidelines.pdf
+01_Medical/Bleeding_Trauma/TCCC_JSOM_Update_2024.pdf	https://jsomonline.org/wp-content/uploads/2024/12/20244135Montgomery.pdf	https://learning-media.allogy.com/api/v1/pdf/4bd1a980-a47e-4d5d-910b-da0a6d536e3d/contents	https://www.jsomonline.org/Updates/20241100Deaton.pdf
 01_Medical/Bleeding_Trauma/TCCC_Module1_Principles_and_Application_CMC.pdf	https://tccc.org.ua/files/downloads/module-1-principles-and-application-of-tccc-cmc.pdf
 01_Medical/Clinical_Guides/Army_Preventive_Medicine_DA_Pam_40-11.pdf	https://irp.fas.org/doddir/milmed/preventive.pdf
 01_Medical/Clinical_Guides/Bastedo_Materia_Medica_Pharmacology_Therapeutics.pdf	archive:materiamedicaph00bastgoog
@@ -560,12 +604,12 @@ SOURCES = '''
 01_Medical/Clinical_Guides/US_Navy_Hospital_Corpsman_Training_Part2.pdf	https://irp.fas.org/doddir/milmed/corpsman-pt2.pdf
 01_Medical/Clinical_Guides/US_Navy_Hospital_Corpsman_Training_Part3.pdf	https://irp.fas.org/doddir/milmed/corpsman-pt3.pdf
 01_Medical/Clinical_Guides/WHO_Essential_Medicines_List.pdf	whosearch:WHO model list of essential medicines|essential medicines
-01_Medical/Clinical_Guides/WHO_IMAI_Acute_Care_Guidelines.pdf	whosearch:Integrated Management of Adolescent and Adult Illness acute care|acute care
+01_Medical/Clinical_Guides/WHO_IMAI_Acute_Care_Guidelines.pdf	https://iris.who.int/server/api/core/bitstreams/a9ce216f-7f3b-411f-b06c-432b8322a8a5/content	https://iris.who.int/bitstream/handle/10665/68535/WHO_CDS_IMAI_2004.1.pdf	https://medbox.org/dl/5e148832db60a2044c2d1e18	whosearch:Integrated Management of Adolescent and Adult Illness acute care|acute care
 01_Medical/Clinical_Guides/WHO_IMAI_District_Clinician_Manual_Hospital_Care_Adolescents_Adults_2011.pdf	who:10665/350623	https://www.who.int/publications/i/item/9789241548281
-01_Medical/Clinical_Guides/WHO_IMCI_Chart_Booklet_2014.pdf	https://www.ncbi.nlm.nih.gov/books/NBK144139/pdf/Bookshelf_NBK144139.pdf	https://apo.who.int/publications/i/item/9789241506823
+01_Medical/Clinical_Guides/WHO_IMCI_Chart_Booklet_2014.pdf	https://iris.who.int/bitstream/handle/10665/104772/9789241506823_Chartbook_eng.pdf	https://medbox.org/dl/5e148832db60a2044c2d1fec	https://www.ncbi.nlm.nih.gov/books/NBK144139/pdf/Bookshelf_NBK144139.pdf	https://apo.who.int/publications/i/item/9789241506823
 01_Medical/Clinical_Guides/WHO_Management_of_Sick_Young_Infant_Chart_Booklet_2019.pdf	https://www.who.int/publications/i/item/9789241516365
 01_Medical/Clinical_Guides/WHO_Model_Formulary_2008.pdf	whosearch:WHO model formulary 2008|model formulary
-01_Medical/Clinical_Guides/WHO_Pocket_Book_Hospital_Care_for_Children_2013.pdf	https://www.ncbi.nlm.nih.gov/books/NBK154447/pdf/Bookshelf_NBK154447.pdf	https://www.who.int/publications/i/item/9789241548373
+01_Medical/Clinical_Guides/WHO_Pocket_Book_Hospital_Care_for_Children_2013.pdf	https://iris.who.int/server/api/core/bitstreams/8f110da0-22e6-4ef1-90e4-c9f1b7daa363/content	https://iris.who.int/bitstream/handle/10665/81170/9789241548373_eng.pdf	https://www.ncbi.nlm.nih.gov/books/NBK154447/pdf/Bookshelf_NBK154447.pdf	https://www.who.int/publications/i/item/9789241548373
 01_Medical/Clinical_Guides/WHO_Pocket_Book_Hospital_Care_for_Children_2e.pdf	whosearch:Pocket book of hospital care for children guidelines for the management of common childhood illnesses|pocket book;children
 01_Medical/Clinical_Guides/WHO_Pocket_Book_Primary_Care_Adults_Adolescents.pdf	whosearch:Pocket book of primary health care for adults and adolescents|pocket book;primary
 01_Medical/Clinical_Guides/WHO_Pregnancy_Childbirth_Postpartum_Newborn_Care_3rd_Ed_2015.pdf	https://www.who.int/publications/i/item/9789241549356
@@ -573,7 +617,7 @@ SOURCES = '''
 01_Medical/Combat_Medic_Specialist_Fieldcraft_Limited_Primary_Care_2023.pdf	
 01_Medical/Eyes_Skin_Teeth/Disinfection_Sterilization_Dental_Instruments_Military.pdf	https://irp.fas.org/doddir/milmed/dental.pdf
 01_Medical/Eyes_Skin_Teeth/Military_Dermatology_Textbook_of_Military_Medicine.pdf	https://irp.fas.org/doddir/milmed/milderm.pdf
-01_Medical/Eyes_Skin_Teeth/WHO_Basic_Malaria_Microscopy_Learners_Guide.pdf	https://saude.arapiraca.al.gov.br/pub/DOC/@40943MI/65872MI705/basic_malaria_microscopy.pdf
+01_Medical/Eyes_Skin_Teeth/WHO_Basic_Malaria_Microscopy_Learners_Guide.pdf	https://iris.who.int/server/api/core/bitstreams/6158d57b-4d10-49e2-b938-4cd12d7b337d/content	https://mesamalaria.org/wp-content/uploads/2025/09/9789241547826_eng.pdf	https://saude.arapiraca.al.gov.br/pub/DOC/@40943MI/65872MI705/basic_malaria_microscopy.pdf
 01_Medical/Germs_Epidemics/Bacteriology_Laboratory_Manual_Early_1900s.pdf	iasearch:title:("laboratory manual" OR "laboratory guide") AND subject:bacteriology AND date:[1900-01-01 TO 1935-12-31]|bacteriolog
 01_Medical/Germs_Epidemics/Jenner_Inquiry_Into_Cowpox_Vaccinae_1798.pdf	iasearch:title:("inquiry into the causes and effects of the variolae vaccinae")|variolae
 01_Medical/Germs_Epidemics/Microscopy_How_To_Early_1900s.pdf	iasearch:title:(microscope) AND (use OR practical OR handbook) AND date:[1900-01-01 TO 1935-12-31]|microscop
@@ -584,9 +628,9 @@ SOURCES = '''
 01_Medical/Germs_Epidemics/Vaccine_Production_Vaccine_Virus_Early_1900s.pdf	iasearch:title:(vaccine OR vaccination) AND (production OR preparation OR lymph OR virus) AND date:[1895-01-01 TO 1935-12-31]|vaccin
 01_Medical/Germs_Epidemics/WHO_Cholera_Outbreak_Control_Guide.pdf	iasearch:title:(cholera) AND (outbreak OR control) AND publisher:("world health organization")|cholera
 01_Medical/Germs_Epidemics/WHO_Malaria_Practical_Handbook.pdf	iasearch:title:(malaria) AND (handbook OR guidelines OR manual) AND publisher:("world health organization")|malaria
-01_Medical/Germs_Epidemics/WHO_Model_Formulary_for_Children_2010.pdf	iasearch:title:("model formulary for children")|formulary
+01_Medical/Germs_Epidemics/WHO_Model_Formulary_for_Children_2010.pdf	https://iris.who.int/server/api/core/bitstreams/ce78cf9a-ab0f-446e-a602-8b7e858cce41/content	https://medbox.org/dl/5e148832db60a2044c2d1be0	iasearch:title:("model formulary for children")|formulary
 01_Medical/Germs_Epidemics/WHO_Plague_Manual_Epidemiology_Control.pdf	iasearch:title:("plague manual")|plague
-01_Medical/Germs_Epidemics/WHO_Typhus_Control_Louse_Borne.pdf	iasearch:title:(typhus) AND (control OR louse) AND publisher:("world health organization")|typhus
+01_Medical/Germs_Epidemics/WHO_Typhus_Control_Louse_Borne.pdf	https://www.acq.osd.mil/eie/afpmb/docs/techguides/tg6.pdf	https://phthiraptera.myspecies.info/sites/phthiraptera.info/files/45552.pdf	iasearch:title:(typhus) AND (control OR louse) AND publisher:("world health organization")|typhus
 01_Medical/Germs_Epidemics/Where_There_Is_No_Doctor_Werner.pdf	iasearch:title:("where there is no doctor")|doctor
 01_Medical/Human_Anatomy_and_Physiology_2026.pdf	https://assets.openstax.org/oscms-prodcms/media/documents/AnatomyandPhysiology2e-WEB.pdf	https://openstax.org/details/books/anatomy-and-physiology-2e
 01_Medical/Human_Nutrition_2020_University_of_Hawaii.pdf	https://pressbooks.oer.hawaii.edu/humannutrition2/
@@ -598,40 +642,40 @@ SOURCES = '''
 01_Medical/Medicinal_Plants/WHO_Monographs_Medicinal_Plants_Vol4.pdf	https://www.survivorlibrary.com/library/who-monographs-on-selected-medicinal-plants-volume-4.pdf
 01_Medical/Mental_Health/NICE_NG222_Depression_in_Adults_Visual_Summaries_2022.pdf	https://www.nice.org.uk/guidance/ng222/resources/visual-summaries-11131007005	https://nice.org.uk/guidance/ng222/evidence/full-guideline-pdf-11131008301
 01_Medical/Mental_Health/PTSD_Coach_Mobile_App_Manual_VA.pdf	https://cdn.orchahealth.com/tenant-data/tenants/54347af5-71fe-42dc-97c8-2ea7acbdd695/packages/7ed4f3b3-c588-493d-a4e4-22ea5651a917/files/PTSD_Coach_1.0-1.pdf
-01_Medical/Mental_Health/WHO_Doing_What_Matters_in_Times_of_Stress_2020.pdf	https://digitallibrary.un.org/record/3861161/files/whodoingwhatmattersntimesstress.pdf	https://www.who.int/PUBLICATIONS/I/ITEM/9789240003927
+01_Medical/Mental_Health/WHO_Doing_What_Matters_in_Times_of_Stress_2020.pdf	https://iris.who.int/server/api/core/bitstreams/65bb7c04-5180-4773-a0d8-0d5be2cc35a0/content	https://apps.who.int/iris/bitstream/handle/10665/331901/9789240011670-eng.pdf	https://digitallibrary.un.org/record/3861161/files/whodoingwhatmattersntimesstress.pdf	https://www.who.int/PUBLICATIONS/I/ITEM/9789240003927
 01_Medical/Mental_Health/WHO_Group_Problem_Management_Plus_Training_Manual_2024.pdf	https://www.who.int/publications/i/item/9789240122185
 01_Medical/Mental_Health/WHO_PM+_Individual_Psychological_Help_Adults_2016.pdf	https://arq.org/sites/default/files/2022-08/WHO%20PM%2B%20handboek.pdf	https://www.who.int/publications/i/item/problem-management-plus-(-pm-)-individual-psychological-help-for-adults-impaired-by-distress-in-communities-exposed-to-adversity
 01_Medical/Mental_Health/WHO_Preventing_Suicide_Community_Engagement_Toolkit_2018.pdf	https://www.drugsandalcohol.ie/29564/1/suicide%20prevention.pdf	https://www.who.int/publications/i/item/9789241513791
-01_Medical/Mental_Health/WHO_Problem_Management_Plus_PM+_Individual_Training_Manual_2024.pdf	https://www.who.int/publications/i/item/9789240109926
+01_Medical/Mental_Health/WHO_Problem_Management_Plus_PM+_Individual_Training_Manual_2024.pdf	https://iris.who.int/server/api/core/bitstreams/b3f85b53-94f4-41ac-a7dc-9596d19c1b57/content	https://medbox.org/dl/5e148832db60a2044c2d380d	https://www.who.int/publications/i/item/9789240109926
 01_Medical/Mental_Health/WHO_Psychological_First_Aid_Field_Workers_2011.pdf	who:10665/44615	http://www.aaptuk.org/downloads/Psychological_first_aid_Guide_for_field_workers.pdf
 01_Medical/Mental_Health/WHO_Thinking_Healthy_Perinatal_Depression_Manual_2015.pdf	https://www.hsph.harvard.edu/wp-content/uploads/sites/2413/2016/12/WHO_MSD_MER_15.1_eng.pdf	https://mhpsshub.org/wp-content/uploads/2023/01/Thinking-Healthy-Interractive-for-web.pdf
 01_Medical/Mental_Health/WHO_mhGAP_Humanitarian_Intervention_Guide_2015.pdf	https://wkc.who.int/resources/publications/i/item/9789241548922	https://www.who.int/westernpacific/publications/i/item/9789241548922
 01_Medical/Mental_Health/WHO_mhGAP_Intervention_Guide_v2_2016.pdf	who:10665/250239	whosearch:mhGAP intervention guide version 2.0|mhgap;intervention guide	https://www.afro.who.int/sites/default/files/2017-06/9789241549790-eng.pdf	https://www.who.int/publications/i/item/9789241549790
-01_Medical/Microbiology_Canadian_Edition_Complete.pdf	https://opentextbc.ca/microbiologycanadianedition/open/download?type=pdf
-01_Medical/Mother_Child/Emergency_Childbirth_Manual.pdf	https://irp.fas.org/doddir/milmed/childbirth.pdf
-01_Medical/Mother_Child/Hesperian_A_Book_for_Midwives.pdf	https://medbox.org/index.php/pdf/5e148832db60a2044c2d24d4
+01_Medical/Microbiology_Canadian_Edition_Complete.pdf	https://ecampusontario.pressbooks.pub/microbio/open/download?type=pdf	https://opentextbc.ca/microbiologycanadianedition/open/download?type=pdf
+01_Medical/Mother_Child/Emergency_Childbirth_Manual.pdf	https://www.gutenberg.org/cache/epub/26923/pg26923-images.html	https://www.gutenberg.org/ebooks/26923.epub.images	https://irp.fas.org/doddir/milmed/childbirth.pdf
+01_Medical/Mother_Child/Hesperian_A_Book_for_Midwives.pdf	https://medbox.org/dl/5e148832db60a2044c2d24d4	https://hesperian.org/wp-content/uploads/pdf/en_midw_2026/en_midw_2026_fm.pdf	https://medbox.org/index.php/pdf/5e148832db60a2044c2d24d4
 01_Medical/Mother_Child/Hesperian_Where_Women_Have_No_Doctor_2024.pdf	https://hesperian.org/wp-content/uploads/pdf/en_wwhnd_2024/en_wwhnd_2024_ob.pdf	https://hesperian.org/wp-content/uploads/pdf/en_wwhnd_2019/en_wwhnd_2019_ob.pdf
 01_Medical/Mother_Child/MSF_Essential_Obstetric_and_Newborn_Care.pdf	https://medicalguidelines.msf.org/sites/default/files/pdf/guideline-449-en.pdf	https://anesthesiologist.msf.org/sites/default/files/imce/GAS/Gynecologue/obstetrics_en.pdf
 01_Medical/Mother_Child/Primary_Child_Care_King.pdf	iasearch:title:("primary child care")|child care
 01_Medical/Mother_Child/WHO_Pregnancy_Childbirth_Postpartum_Newborn_Care_2015.pdf	https://www.hsph.harvard.edu/wp-content/uploads/sites/2413/2016/11/9789241549356-eng.pdf	https://www.afro.who.int/sites/default/files/2017-06/mps%20pcpnc.pdf
 01_Medical/Nutrition/WHO_Iron_Deficiency_Anaemia_Assessment_Prevention_Control_2001.pdf	iasearch:title:("iron deficiency anaemia assessment")|anaemia
 01_Medical/Nutrition/WHO_Management_of_Severe_Malnutrition_Manual_1999.pdf	iasearch:title:("management of severe malnutrition")|malnutrition
-01_Medical/Nutrition/WHO_Nutrition_Famine_Relief_Treatment_of_Malnutrition_in_Emergencies.pdf	iasearch:title:("treatment of malnutrition in emergencies") OR title:("famine")  AND publisher:WHO|malnutrition
-01_Medical/Nutrition/WHO_Pellagra_Prevention_Control_Emergencies_2000.pdf	iasearch:title:("pellagra and its prevention")|pellagra
-01_Medical/Nutrition/WHO_Scurvy_Prevention_Control_Major_Emergencies_1999.pdf	iasearch:title:("scurvy and its prevention")|scurvy
-01_Medical/Nutrition/WHO_Thiamine_Deficiency_Beriberi_Emergencies_1999.pdf	iasearch:title:("thiamine deficiency and its prevention")|thiamine
+01_Medical/Nutrition/WHO_Nutrition_Famine_Relief_Treatment_of_Malnutrition_in_Emergencies.pdf	https://iris.who.int/server/api/core/bitstreams/f3709348-308e-473e-b32e-3908f5671dbf/content	https://www.unhcr.org/uk/sites/uk/files/legacy-pdf/4b7421fd20.pdf	iasearch:title:("treatment of malnutrition in emergencies") OR title:("famine")  AND publisher:WHO|malnutrition
+01_Medical/Nutrition/WHO_Pellagra_Prevention_Control_Emergencies_2000.pdf	https://www.unhcr.org/uk/sites/uk/files/legacy-pdf/4cbeefad9.pdf	https://iris.who.int/bitstream/handle/10665/66704/WHO_NHD_00.10.pdf	iasearch:title:("pellagra and its prevention")|pellagra
+01_Medical/Nutrition/WHO_Scurvy_Prevention_Control_Major_Emergencies_1999.pdf	https://www.unhcr.org/uk/sites/uk/files/legacy-pdf/4cbef0599.pdf	https://iris.who.int/bitstream/handle/10665/66962/WHO_NHD_99.11.pdf	iasearch:title:("scurvy and its prevention")|scurvy
+01_Medical/Nutrition/WHO_Thiamine_Deficiency_Beriberi_Emergencies_1999.pdf	https://www.unhcr.org/ie/sites/en-ie/files/legacy-pdf/4cbef0959.pdf	https://iris.who.int/bitstream/handle/10665/66139/WHO_NHD_99.13.pdf	iasearch:title:("thiamine deficiency and its prevention")|thiamine
 01_Medical/Nutrition/WHO_Vitamin_A_Deficiency_Control_Guide_Xerophthalmia.pdf	iasearch:title:("vitamin a deficiency") AND publisher:WHO|vitamin
 01_Medical/OpenStax_Fundamentals_of_Nursing.pdf	https://assets.openstax.org/oscms-prodcms/media/documents/FundamentalsOfNursing-WEB.pdf	https://med.libretexts.org/Bookshelves/Nursing/Fundamentals_of_Nursing_(OpenStax)
 01_Medical/OpenStax_Maternal_Newborn_Nursing.pdf	https://openstax.org/books/maternal-newborn-nursing/pages/preface	https://med.libretexts.org/Bookshelves/Nursing/Maternal-Newborn_Nursing_(OpenStax)
 01_Medical/OpenStax_Medical_Surgical_Nursing.pdf	https://openstax.org/books/medical-surgical-nursing/pages/preface	https://med.libretexts.org/Bookshelves/Nursing/Medical-Surgical_Nursing_%28OpenStax%29
-01_Medical/OpenStax_Pharmacology_for_Nurses.pdf	https://openstax.org/details/books/pharmacology-nurses
-01_Medical/OpenStax_Psychiatric_Mental_Health_Nursing.pdf	https://assets.openstax.org/oscms-prodcms/media/documents/PsychiatricMentalHealthNursing-WEB.pdf	https://openstax.org/details/books/psychiatric-mental-health
+01_Medical/OpenStax_Pharmacology_for_Nurses.pdf	https://batch.libretexts.org/print/Letter/Finished/med-90305/Full.pdf	https://pdf.infobooks.org/ING/205%20Nursing/Pharmacology-for-Nurses-Openstax.pdf	https://openstax.org/details/books/pharmacology-nurses
+01_Medical/OpenStax_Psychiatric_Mental_Health_Nursing.pdf	https://pdf.infobooks.org/ING/PDF/psychiatric-mental-health-nursing-rebecca-puchkors-jeanne-saunders-david-sharp-4667.pdf	https://assets.openstax.org/oscms-prodcms/media/documents/PsychiatricMentalHealthNursing-WEB.pdf	https://openstax.org/details/books/psychiatric-mental-health
 01_Medical/Pain_Fever/EMA_Willow_Bark_Salicis_Cortex_Herbal_Monograph.pdf	https://www.ema.europa.eu/en/documents/herbal-monograph/final-european-union-herbal-monograph-salix-various-species-including-s-purpurea-l-s-daphnoides-vill-s-fragilis-l-cortex_en.pdf
 01_Medical/Pain_Fever/EMA_Willow_Bark_Salix_Assessment_Report.pdf	https://ema.europa.eu/en/documents/herbal-report/superseded-assessment-report-salix-various-species-including-s-purpurea-l-s-daphnoides-vill-s-fragilis-l-cortex_en.pdf
 01_Medical/Pain_Fever/WHO_Guidelines_Persisting_Pain_in_Children_2012.pdf	https://www.who.int/publications/i/item/9789241548120	https://medbox.org/index.php/dl/5e148832db60a2044c2d212e
 01_Medical/Pharmacy_Historical/Dispensatory_of_the_United_States_1883.pdf	archive:dispensatoryofun00wooduoft
 01_Medical/Pharmacy_Historical/Dispensatory_of_the_United_States_1907.pdf	archive:b21687286
-01_Medical/Pharmacy_Historical/Mercks_1899_Manual_of_the_Materia_Medica.pdf	archive:mercksmanualofth41697gut
+01_Medical/Pharmacy_Historical/Mercks_1899_Manual_of_the_Materia_Medica.pdf	archive:mercksmanualofma00newy	archive:b28087276	https://www.gutenberg.org/cache/epub/41697/pg41697-images.html	archive:mercksmanualofth41697gut
 01_Medical/Pharmacy_Historical/Mercks_1901_Manual.pdf	archive:mercks1901manual00merc
 01_Medical/Pharmacy_Historical/Osler_Principles_and_Practice_of_Medicine.pdf	iasearch:title:("principles and practice of medicine") AND creator:(osler)|practice of medicine
 01_Medical/Pharmacy_Historical/US_Pharmacopoeia_1893.pdf	archive:b24907029
@@ -648,35 +692,35 @@ SOURCES = '''
 01_Medical/Surgery_Emergency/Army_First_Aid_FM_4-25-11.pdf	iasearch:title:("first aid") AND (creator:("United States. Department of the Army") OR title:("FM 4-25.11"))|first aid
 01_Medical/Surgery_Emergency/Emergency_War_Surgery_3rd_US_Revision_2004.pdf	archive:DTIC_ADA428731
 01_Medical/Surgery_Emergency/Emergency_War_Surgery_5th_Edition_2018.pdf	archive:ews5man-mil
-01_Medical/Surgery_Emergency/ICRC_Anaesthesia_Handbook_2017.pdf	https://aap-inclusion-psea.alnap.org/system/files/content/resource/files/main/4270_002_Anaesthesia_Handbook_WEB_1.pdf	https://www.icrc.org/en/publication/anaesthesia-handbook
+01_Medical/Surgery_Emergency/ICRC_Anaesthesia_Handbook_2017.pdf	https://medbox.org/dl/5e148832db60a2044c2d501f	https://aap-inclusion-psea.alnap.org/system/files/content/resource/files/main/4270_002_Anaesthesia_Handbook_WEB_1.pdf	https://www.icrc.org/en/publication/anaesthesia-handbook
 01_Medical/Surgery_Emergency/ICRC_War_Surgery_Volume_1_2010.pdf	https://jp.icrc.org/app/uploads/2016/06/warsurgery_1.pdf	https://www.icrc.org/en/doc/assets/files/other/icrc-002-0973.pdf
 01_Medical/Surgery_Emergency/Primary_Anaesthesia_King.pdf	iasearch:title:("primary anaesthesia")|anaesthesia
 01_Medical/Surgery_Emergency/Primary_Surgery_Vol1_NonTrauma_2e_King.pdf	https://global-help.org/publications/books/_Primary_Surgery_Volume_One_Non_Trauma_2nd_Edition_Full_Book.pdf
 01_Medical/Surgery_Emergency/Primary_Surgery_Vol2_Trauma_2e_King.pdf	https://global-help.org/publications/books/_Primary_Surgery_Volume_Two_Trauma_2nd_Edition.pdf
 01_Medical/Surgery_Emergency/Ships_Medicine_Chest_and_Medical_Aid_at_Sea_USCG.pdf	https://irp.fas.org/doddir/milmed/ships.pdf
 01_Medical/Surgery_Emergency/US_Army_FM_4-25.11_First_Aid.pdf	https://irp.fas.org/doddir/milmed/first.pdf
-01_Medical/Surgery_Emergency/US_Army_FM_8-50_Bandaging_and_Splinting.pdf	https://irp.fas.org/doddir/milmed/bandage.pdf
+01_Medical/Surgery_Emergency/US_Army_FM_8-50_Bandaging_and_Splinting.pdf	https://patcosta.com/wp-content/uploads/2024/08/FM-8-50-Medical-Department-Bandaging-and-Splinting-Sept-1940.pdf	https://irp.fas.org/doddir/milmed/bandage.pdf
 01_Medical/Surgery_Emergency/WHO_Anaesthesia_at_the_District_Hospital.pdf	https://medbox.org/index.php/pdf/5e148832db60a2044c2d1cbc
 01_Medical/Surgery_Emergency/WHO_Guidelines_for_Essential_Trauma_Care_2004.pdf	https://medbox.org/dl/5e148832db60a2044c2d1dec
 01_Medical/Surgery_Emergency/WHO_ICRC_Basic_Emergency_Care_2018.pdf	https://www.who.int/publications/i/item/9789241513081	https://medbox.org/index.php/dl/5e148832db60a2044c2d5292
 01_Medical/Surgery_Emergency/WHO_Surgical_Care_at_the_District_Hospital_2003.pdf	who:10665/42564
 01_Medical/Veterinary/Where_There_Is_No_Animal_Doctor_Handbook_of_Animal_Health.pdf	https://assets-global.echocommunity.org/publicationissues/2ccd7034-97e1-4544-9cc8-2cd136ad43f7/en/en_where-there-is-no_print.pdf
-01_Medical/WHO_AWaRe_Antibiotic_Book_2022.pdf	who:10665/365237
+01_Medical/WHO_AWaRe_Antibiotic_Book_2022.pdf	https://iris.who.int/server/api/core/bitstreams/61517f8b-3a34-413c-ae36-67a059ebe485/content	https://iris.who.int/bitstream/handle/10665/365237/9789240062382-eng.pdf	who:10665/365237
 01_Medical/WHO_Basic_Emergency_Care_2018.pdf	who:10665/275635
 01_Medical/WHO_Burns_Mass_Casualty_Standards_2024.pdf	https://www.who.int/publications/i/item/9789240100237
 01_Medical/WHO_Essential_Newborn_Care_Course_2e.pdf	https://www.who.int/publications/i/item/9789240112698
 01_Medical/WHO_Managing_Complications_Pregnancy_Childbirth_2e_2017.pdf	who:10665/255760
-01_Medical/WHO_Paediatric_Emergency_Triage_Assessment_Treatment_2016.pdf	who:10665/204463	https://www.ncbi.nlm.nih.gov/books/NBK350528
+01_Medical/WHO_Paediatric_Emergency_Triage_Assessment_Treatment_2016.pdf	https://iris.who.int/server/api/core/bitstreams/da37621b-f9ac-4392-9631-718b3d6b253d/content	https://medbox.org/dl/5e148832db60a2044c2d30bb	who:10665/204463	https://www.ncbi.nlm.nih.gov/books/NBK350528
 01_Medical/WHO_Prehospital_Emergency_Care_Operational_Guidance_2025.pdf	https://www.who.int/publications/i/item/9789240114067
 01_Medical/WHO_Prehospital_Trauma_Care_Systems_2005.pdf	who:10665/43167
 01_Medical/WHO_Primary_Eye_Care_Training_Manual_2018.pdf	https://www.afro.who.int/sites/default/files/2018-06/WEB-2835-OMS-Afro-PrimaryEyeCaretrainingmanual-20180406.pdf
 01_Medical/WHO_Primary_Health_Care_Children_Adolescents_2022.pdf	https://iris.who.int/bitstream/handle/10665/352256/9789289057639-eng.pdf
 01_Medical/WHO_Public_Health_Management_Chemical_Incidents_2009.pdf	who:10665/44127	https://www7.nau.edu/itep/main/HazSubMap/docs/EmPlanning/WHOManualforthePublicHealthManagementofChemicalIncidents.pdf
-01_Medical/WHO_Reprocessing_Aide_Memoire_2022.pdf	https://www.who.int/publications/i/item/WHO-UHL-IHS-IPC-2022.4
-01_Medical/WHO_mhGAP_HIG_Training_Manual_2022.pdf	https://www.who.int/publications/i/item/9789240045361	https://iris.who.int/items/948cf4d1-b591-4259-86b6-a759a8df743a
+01_Medical/WHO_Reprocessing_Aide_Memoire_2022.pdf	https://iris.who.int/server/api/core/bitstreams/d9c93a0a-4014-41a1-a8e8-3bc6fdd2ce40/content	https://medbox.org/dl/6384bd35da4aed153a0e0dd3	https://apps.who.int/iris/rest/bitstreams/1479607/retrieve	https://www.who.int/publications/i/item/WHO-UHL-IHS-IPC-2022.4
+01_Medical/WHO_mhGAP_HIG_Training_Manual_2022.pdf	https://iris.who.int/server/api/core/bitstreams/040f67fa-6e0c-4e17-9126-c840380933e1/content	https://medbox.org/dl/624581e34fbabe34e73e69c3	https://www.who.int/publications/i/item/9789240045361	https://iris.who.int/items/948cf4d1-b591-4259-86b6-a759a8df743a
 01_Medical/Where_There_Is_No_Dentist_Hesperian.pdf	archive:Where_There_is_no_Dentist	https://hesperian.org/wp-content/uploads/pdf/en_dent_2024/en_dent_2024_fm.pdf
 01_Medical/Where_There_Is_No_Doctor_David_Werner.pdf	https://languages.hesperian.org/pages/en/pdf.html
-01_Medical/Wilderness_Medicine/WMS_Basic_Wound_Management_Austere_Environment_2014.pdf	https://apps.dtic.mil/sti/pdfs/ADA614573.pdf	https://apps.dtic.mil/sti/tr/pdf/ADA614573.pdf
+01_Medical/Wilderness_Medicine/WMS_Basic_Wound_Management_Austere_Environment_2014.pdf	https://apps.dtic.mil/sti/tr/pdf/ADA614573.pdf	https://www.femecv.com/sites/default/files/uploads/files/WMS%20heridas_2014.pdf	https://apps.dtic.mil/sti/pdfs/ADA614573.pdf
 02_Water_Sanitation/EPA_Drinking_Water_Inspector_Field_Reference_2003.pdf	
 02_Water_Sanitation/EPA_Emergency_Disinfection_Drinking_Water_2017.pdf	https://19january2021snapshot.epa.gov/sites/static/files/2017-09/documents/emergency_disinfection_of_drinking_water_sept2017.pdf
 02_Water_Sanitation/EPA_Manual_Small_Public_Water_Systems_1991.pdf	https://fr.ircwash.org/sites/default/files/201-91MA-9170.pdf
@@ -685,60 +729,60 @@ SOURCES = '''
 02_Water_Sanitation/EPA_Small_Water_Systems_1978.pdf	
 02_Water_Sanitation/EPA_Wastewater_Treatment_Small_Communities_1992.pdf	
 02_Water_Sanitation/Household_Treatment/Biosand_Filter_Construction_Manual_Appendices_2012.pdf	https://www.ideassonline.org/public/pdf/AguasanPeru-BSF_for_Techs_Participant_Manual_BSF_Construction_Manual_With_Appendices_2012-01.pdf
-02_Water_Sanitation/Household_Treatment/CAWST_Biosand_Filter_Manual_2009.pdf	https://www.ctahr.hawaii.edu/hawaiirain/Library/Guides&Manuals/CAWST%20files/Biosand%20Filter%20Manual_Version%2010_Sep%2009[1].pdf
+02_Water_Sanitation/Household_Treatment/CAWST_Biosand_Filter_Manual_2009.pdf	https://sswm.info/sites/default/files/reference_attachments/CAWST%202009%20Biosand%20Filter%20Manual.pdf	https://www.ctahr.hawaii.edu/hawaiirain/Library/Guides&Manuals/CAWST%20files/Biosand%20Filter%20Manual_Version%2010_Sep%2009[1].pdf
 02_Water_Sanitation/Household_Treatment/CAWST_Biosand_Filter_Manual_Echo_Edition.pdf	https://assets-global.echocommunity.org/books/431bc155-e633-4786-a6ff-7bc2a17fd1f0/en/en_biosand-filter-co_screen.pdf
 02_Water_Sanitation/Household_Treatment/CAWST_Introduction_Rainwater_Harvesting_Manual_2011.pdf	https://wedc-knowledge.lboro.ac.uk/resources/pubs/CAWSTRWH_Manual_2011-11_en.pdf
-02_Water_Sanitation/Household_Treatment/CDC_Backcountry_Water_Treatment_Guide.pdf	https://www.cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf	https://Www.Cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf
+02_Water_Sanitation/Household_Treatment/CDC_Backcountry_Water_Treatment_Guide.pdf	https://www.health.state.mn.us/diseases/waterborne/prevention/backcountry.pdf	https://myhealth.alberta.ca/Alberta/AlbertaDocuments/backcountry-water-treatment.pdf	https://www.cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf	https://Www.Cdc.gov/healthywater/pdf/drinking/Backcountry_Water_Treatment-508.pdf
 02_Water_Sanitation/Household_Treatment/EAWAG_SODIS_Manual_2016.pdf	https://www.eawag.ch/fileadmin/Domain1/Abteilungen/sandec/publikationen/SWP/SODIS_manual_2016.pdf
 02_Water_Sanitation/Household_Treatment/SODIS_Manual_Meierhofer_2002.pdf	https://rachel.core2learn.org/modules/en-infonet/export/res/files/871.SODIS_Manual_english.pdf
 02_Water_Sanitation/Household_Treatment/WHO_WPRO_Household_Water_Treatment_Safe_Storage_Trainer_Manual_2013.pdf	https://www.pseau.org/outils/ouvrages/wpro_household_water_treatment_and_safe_storage_manual_for_the_trainer_2013.pdf
 02_Water_Sanitation/India_Mark_II_Major_Maintenance_Guide_InterAide.pdf	https://www.pseau.org/outils/ouvrages/interaide_india_mark2_pump_maintenance_guidelines.pdf	https://www.rural-water-supply.net/en/resources/630
 02_Water_Sanitation/MSF_Public_Health_Engineering_in_Precarious_Situations.pdf	https://medicalguidelines.msf.org/sites/default/files/2022-06/Public_health_engineering_2010.pdf	https://medicalguidelines.msf.org:443/sites/default/files/pdf/guideline-717-en.pdf
 02_Water_Sanitation/RWSN_Afridev_Installation_Maintenance_Manual_2007.pdf	https://susana.org/_resources/documents/default/3-4194-7-1617282174.pdf	https://www.rural-water-supply.net/en/resources/286-
-02_Water_Sanitation/RWSN_India_Mark_II_Installation_Maintenance_Manual_2008.pdf	https://www.engineeringforchange.org/wp-content/uploads/2015/08/mark2.pdf	https://www.rural-water-supply.net/en/resources/328
-02_Water_Sanitation/RWSN_Rope_Pump_Installation_Maintenance_2007.pdf	https://www.rural-water-supply.net/en/resources/338
+02_Water_Sanitation/RWSN_India_Mark_II_Installation_Maintenance_Manual_2008.pdf	https://www.susana.org/downloads?documentID=54294	https://nl.ircwash.org/sites/default/files/232.2-11889.pdf	https://www.engineeringforchange.org/wp-content/uploads/2015/08/mark2.pdf	https://www.rural-water-supply.net/en/resources/328
+02_Water_Sanitation/RWSN_Rope_Pump_Installation_Maintenance_2007.pdf	https://www.susana.org/downloads?documentID=54360	https://nl.ircwash.org/sites/default/files/232.2-12848.pdf	https://www.rural-water-supply.net/en/resources/338
 02_Water_Sanitation/Small_Community_Water_Supplies_Smet_Van_Wijk_2002.pdf	https://www.ircwash.org/resources/small-community-water-supplies-technology-people-and-partnership
 02_Water_Sanitation/USGS_Ground_Water_Rural_Homeowner.pdf	https://pubs.usgs.gov/gip/7000053/report.pdf	https://pubs.usgs.gov/gip/gw_ruralhomeowner/gw_ruralhomeowner.pdf
 02_Water_Sanitation/WHO_Compendium_Drinking_Water_Systems_Technologies_2025.pdf	https://wsportal.org/wp-content/uploads/2025/10/Compendium-of-drinking-water-systems-and-technologies-from-source-to-consumer-eng.pdf
 02_Water_Sanitation/WHO_Guidelines_for_Drinking_Water_Quality_2026.pdf	who:10665/352532	https://www.who.int/publications/i/item/9789240045064
 02_Water_Sanitation/WHO_Guidelines_on_Sanitation_and_Health_2018.pdf	who:10665/274939	https://www.ielrc.org/content/e1802.pdf
 02_Water_Sanitation/WHO_Sanitary_Inspection_Dug_Well_Handpump_2026.pdf	https://www.who.int/docs/default-source/wash-documents/sanitary-inspection-packages/2-tfs-dug-well-with-hand-pump-d-200506.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---dug-well-with-a-handpump
-02_Water_Sanitation/WHO_Sanitary_Inspection_Tubewell_Hand_Pump_2026.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---tubewell-with-a-hand-pump
-02_Water_Sanitation/WHO_UNEP_Water_Quality_Monitoring_1996.pdf	
+02_Water_Sanitation/WHO_Sanitary_Inspection_Tubewell_Hand_Pump_2026.pdf	https://bdd.pseau.org/outils/ouvrages/who_sanitary_inspection_packages_a_supporting_tool_for_the_guidelines_for_drinking_water_quality_small_water_supplies_2024.pdf	https://www.who.int/publications/m/item/sanitary-inspection-packages---tubewell-with-a-hand-pump
+02_Water_Sanitation/WHO_UNEP_Water_Quality_Monitoring_1996.pdf	https://iris.who.int/server/api/core/bitstreams/e56e9957-656f-4dff-9f49-8b16ecb90633/content
 02_Water_Sanitation/WHO_WASH_TN01_Cleaning_Disinfecting_Wells.pdf	https://wash.ifrc.org/wp-content/uploads/2025/06/d-cleaningwells_WHO.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
 02_Water_Sanitation/WHO_WASH_TN02_Cleaning_Disinfecting_Boreholes.pdf	https://wash.ifrc.org/wp-content/uploads/2025/06/b-cleaningboreholes_WHO.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN03_Water_Storage_Tanks_Tankers.pdf	https://repository.lboro.ac.uk/articles/online_resource/WHO_Technical_Note_No_3_Cleaning_and_disinfecting_water_storage_tanks_and_tankers/27984485	https://wedc-knowledge.lboro.ac.uk/collections/tne/notes_emergencies.html
-02_Water_Sanitation/WHO_WASH_TN04_Piped_Water_Distribution.pdf	https://es.ircwash.org/sites/default/files/Kayaga-2005-Rehabilitating.pdf	https://dspace.lboro.ac.uk/2134/14782
+02_Water_Sanitation/WHO_WASH_TN04_Piped_Water_Distribution.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_04_Rehabilitating_small-scale_piped_water_distribution_systems.pdf	https://es.ircwash.org/sites/default/files/Kayaga-2005-Rehabilitating.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN05_Emergency_Drinking_Water_Treatment.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
-02_Water_Sanitation/WHO_WASH_TN06_Rehabilitating_Water_Treatment.pdf	https://dspace.lboro.ac.uk/2134/14782
+02_Water_Sanitation/WHO_WASH_TN06_Rehabilitating_Water_Treatment.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_06_Rehabilitating_water_treatment_works_after_an_emergency.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN07_Solid_Waste_Emergencies.pdf	https://wedc-knowledge.lboro.ac.uk/collections/tne/notes_emergencies.html
 02_Water_Sanitation/WHO_WASH_TN08_Dead_Bodies_Emergencies.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_08_Disposal_of_dead_bodies.pdf
 02_Water_Sanitation/WHO_WASH_TN09_Water_Needs_Emergencies.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
-02_Water_Sanitation/WHO_WASH_TN10_Hygiene_Promotion_Emergencies.pdf	https://dspace.lboro.ac.uk/2134/14782
+02_Water_Sanitation/WHO_WASH_TN10_Hygiene_Promotion_Emergencies.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_10_Hygiene_promotion_in_emergencies.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN11_Measuring_Chlorine.pdf	https://wedc-knowledge.lboro.ac.uk/collections/tne/notes_emergencies.html
 02_Water_Sanitation/WHO_WASH_TN12_Safe_Water_Tanker.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_12_Delivering_safe_water_by_tanker.pdf	https://fr.ircwash.org/sites/default/files/Reed-2005-Delivering.pdf
 02_Water_Sanitation/WHO_WASH_TN13_Excreta_Disposal_Planning.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_ALL.pdf
-02_Water_Sanitation/WHO_WASH_TN14_Excreta_Disposal_Options.pdf	https://dspace.lboro.ac.uk/2134/14782
+02_Water_Sanitation/WHO_WASH_TN14_Excreta_Disposal_Options.pdf	https://wedc-knowledge.lboro.ac.uk/resources/who_notes/WHO_TNE_14_Technical_options_for_excreta_disposal.pdf	https://dspace.lboro.ac.uk/2134/14782
 02_Water_Sanitation/WHO_WASH_TN15_Seawater_Flooded_Wells.pdf	https://wedc-knowledge.lboro.ac.uk/collections/tne/notes_emergencies.html
 03_Food_Agriculture/AFARD_Animal_Traction_Technology_Operation_Guide_2023.pdf	https://afard.net/wp-content/uploads/2026/01/CAM-Project-ANIMAL-TRACTION-TECHNOLOGY-Training-Manual-2023.pdf
 03_Food_Agriculture/Animal_Traction/FAO_Draught_Animal_Power_Training_Manual.pdf	iasearch:title:("draught animal") OR title:("draft animal power")|animal
 03_Food_Agriculture/Animal_Traction/Harness_Making_and_Repair_Handbook_1900.pdf	iasearch:title:("harness") AND mediatype:texts AND date:[1850-01-01 TO 1930-12-31]|harness
 03_Food_Agriculture/Animal_Traction/Oxen_Training_Ox_Driving_Farm_Plows_Implements_USDA_1900.pdf	iasearch:title:("oxen") OR title:("farm implements") AND mediatype:texts|ox
 03_Food_Agriculture/Animal_Traction/Peace_Corps_Animal_Traction_ICE_1981.pdf	iasearch:title:("animal traction") AND peace corps|traction
-03_Food_Agriculture/BMC_Working_Equid_Harnessing_Practices_Ethiopia_2024.pdf	https://doi.org/10.1186/s12917-024-03967-3
-03_Food_Agriculture/Donkey_Sanctuary_Good_Harness_Guide_2017.pdf	https://www.thedonkeysanctuary.org.uk/sites/uk/files/2017-11/the-good-harness-guide-october-2017.pdf
+03_Food_Agriculture/BMC_Working_Equid_Harnessing_Practices_Ethiopia_2024.pdf	https://bmcvetres.biomedcentral.com/counter/pdf/10.1186/s12917-024-03967-3.pdf	https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC10958837&blobtype=pdf	https://doi.org/10.1186/s12917-024-03967-3
+03_Food_Agriculture/Donkey_Sanctuary_Good_Harness_Guide_2017.pdf	https://www.thedonkeysanctuary.org.uk/media/999/download?attachment	https://www.thedonkeysanctuary.org.uk/media/999/download	https://www.thedonkeysanctuary.org.uk/sites/uk/files/2017-11/the-good-harness-guide-october-2017.pdf
 03_Food_Agriculture/FAO_A_Vegetable_Garden_For_All_2013.pdf	https://ebooks.umu.ac.ug/librarian/books-file/Vegetable Garden for All, A - FAO Subregional Office for the Caribbean.pdf	https://www.fao.org/fsnforum/resources/trainings-tools-and-databases/vegetable-garden-all
 03_Food_Agriculture/FAO_Agricultural_Warehouse_Technique.pdf	
 03_Food_Agriculture/FAO_Aquaculture_Technical_Manual_2017.pdf	
-03_Food_Agriculture/FAO_Family_Poultry_Farmer_Field_Schools_2022.pdf	https://openknowledge.fao.org/handle/20.500.14283/i5296e
+03_Food_Agriculture/FAO_Family_Poultry_Farmer_Field_Schools_2022.pdf	https://www.fao.org/3/cc0254en/cc0254en.pdf	https://openknowledge.fao.org/handle/20.500.14283/cc0254en	https://openknowledge.fao.org/handle/20.500.14283/i5296e
 03_Food_Agriculture/FAO_Field_Guide_Crop_Water_Productivity_2020.pdf	https://openknowledge.fao.org/server/api/core/bitstreams/0384b28a-1348-43d3-a3b9-cc863157c831/content
 03_Food_Agriculture/FAO_Field_Guide_Water_Use_Efficiency_Small_Scale_Agriculture_2019.pdf	https://www.moa.gov.et/wp-content/uploads/2024/11/2019_Field-guide-to-improve-water-use-efficiency-in-small-scale-agriculture-compressed-1.pdf
-03_Food_Agriculture/FAO_Good_Beekeeping_Practices_Sustainable_Apiculture_2021.pdf	https://openknowledge.fao.org/handle/20.500.14283/cb5353en
+03_Food_Agriculture/FAO_Good_Beekeeping_Practices_Sustainable_Apiculture_2021.pdf	https://assets-global.echocommunity.org/books/72ccb5ee-12b5-49ca-9b46-50b265bb042b/en/en_good-beekeeping-p_print.pdf	https://www.fao.org/3/cb5353en/cb5353en.pdf	https://openknowledge.fao.org/handle/20.500.14283/cb5353en
 03_Food_Agriculture/FAO_Postharvest_Handling_Storage_Grain_Manual.pdf	https://www.fao.org/3/x5027e/x5027e00.htm
 03_Food_Agriculture/FAO_Rabbit_Husbandry_Health_Production_Revised.pdf	https://www.fao.org/4/x5082e/x5082E00.htm
 03_Food_Agriculture/FAO_Save_and_Grow_Cassava_2013.pdf	https://www.fao.org/3/i3278e/i3278e.pdf
 03_Food_Agriculture/FAO_Save_and_Grow_Maize_Rice_Wheat_2016.pdf	https://www.fao.org/3/i4009e/i4009e.pdf
-03_Food_Agriculture/FAO_Seeds_Toolkit_Module_6_Seed_Storage_2018.pdf	https://www.africa-seeds.org/wp-content/uploads/2023/11/CA1495EN.pdf
+03_Food_Agriculture/FAO_Seeds_Toolkit_Module_6_Seed_Storage_2018.pdf	https://www.fao.org/3/ca1495en/CA1495EN.pdf	https://www.fao.org/3/CA1495EN/ca1495en.pdf	https://www.africa-seeds.org/wp-content/uploads/2023/11/CA1495EN.pdf
 03_Food_Agriculture/FAO_Sheep_Goats_Products_Profits.pdf	https://fao.org/docrep/pdf/011/i0524e/i0524e.pdf	https://openknowledge.fao.org/bitstreams/e8118cfb-e90e-45fc-9e40-40be6d21f608/download
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol1.pdf	https://www.fao.org/4/t1265e/t1265e.htm
 03_Food_Agriculture/FAO_Small_Scale_Dairy_Farming_Vol2.pdf	https://www.fao.org/3/t1265e/t1265e.htm
@@ -749,8 +793,8 @@ SOURCES = '''
 03_Food_Agriculture/FAO_Small_Scale_Livestock_Farmer_Field_Schools_2018.pdf	https://resources.peopleinneed.net/documents/357-fao-2018-farmer-field-schools-for-small-scale-livestock-producers.pdf
 03_Food_Agriculture/FAO_Small_Scale_Poultry_Production.pdf	https://www.fao.org/3/y5169e/y5169e00.htm
 03_Food_Agriculture/FAO_Smallholder_Irrigation_Technology_2001.pdf	https://openknowledge.fao.org/server/api/core/bitstreams/af9092e3-7e5a-49c3-823d-37743e14dede/content
-03_Food_Agriculture/FAO_Visual_Good_Beekeeping_Practices_2021.pdf	https://openknowledge.fao.org/handle/20.500.14283/cd0363en
-03_Food_Agriculture/FDA_Bad_Bug_Book_2e.pdf	https://www.fda.gov/media/83271/download
+03_Food_Agriculture/FAO_Visual_Good_Beekeeping_Practices_2021.pdf	https://www.fao.org/3/cd0363en/cd0363en.pdf	https://assets-global.echocommunity.org/books/aa80ec71-6182-43e4-a4ac-c47795c0b4bb/en/en_good-beekeeping-p_print.pdf	https://openknowledge.fao.org/handle/20.500.14283/cd0363en
+03_Food_Agriculture/FDA_Bad_Bug_Book_2e.pdf	https://www.canr.msu.edu/smprv/uploads/files/Bad_Bug_Book.pdf	https://www.med.navy.mil/Portals/62/Documents/NMFA/NMCPHC/root/Program%20and%20Policy%20Support/Food%20Sanitation%20and%20Safety/BBB-8-9-12.pdf	https://www.fda.gov/media/83271/download
 03_Food_Agriculture/Foraging_Poisonous/Atkinson_Mushrooms_Edible_Poisonous_1900.pdf	iasearch:title:("mushrooms edible, poisonous")|mushrooms
 03_Food_Agriculture/Foraging_Poisonous/Edible_Plants_of_Australia_Maiden_Useful_Native_Plants_1889.pdf	iasearch:title:("useful native plants of australia")|plants
 03_Food_Agriculture/Foraging_Poisonous/Edible_Wild_Plants_of_Eastern_North_America_Fernald_Kinsey_1943.pdf	iasearch:title:("edible wild plants of eastern north america")|edible
@@ -758,7 +802,7 @@ SOURCES = '''
 03_Food_Agriculture/Foraging_Poisonous/Edible_Wild_Plants_of_the_Tropics_Wild_Food_Plants_Philippines_1912.pdf	iasearch:title:("edible wild plants") AND subject:tropics|plants
 03_Food_Agriculture/Foraging_Poisonous/Edible_and_Poisonous_Mushrooms_USDA_Farmers_Bulletin_1911.pdf	iasearch:title:("mushrooms and other common fungi")|fungi
 03_Food_Agriculture/Foraging_Poisonous/Emergency_Food_Plants_Poisonous_Plants_Islands_Pacific_1943.pdf	iasearch:title:("emergency food plants and poisonous plants of the islands of the pacific")|pacific
-03_Food_Agriculture/Foraging_Poisonous/Famine_Foods_Edible_Wild_Plants_Sudan_Africa_1950.pdf	iasearch:title:("wild food plants of africa")|plants
+03_Food_Agriculture/Foraging_Poisonous/Famine_Foods_Edible_Wild_Plants_Sudan_Africa_1950.pdf	http://pdf.usaid.gov/pdf_docs/Pnacg706.pdf	iasearch:title:("wild food plants of africa")|plants
 03_Food_Agriculture/Foraging_Poisonous/Food_Plants_of_the_North_American_Indians_USDA_Misc_Pub_1923.pdf	iasearch:title:("food plants of the north american indians")|indians
 03_Food_Agriculture/Foraging_Poisonous/Mushrooms_and_Toadstools_Cooke_British_Edible_Fungi_1890.pdf	iasearch:title:("british edible fungi")|fungi
 03_Food_Agriculture/Foraging_Poisonous/Mushrooms_of_America_Edible_and_Poisonous_Hard_1908.pdf	iasearch:title:("the mushroom, edible and otherwise")|mushroom
@@ -790,9 +834,9 @@ SOURCES = '''
 03_Food_Agriculture/Preservation_Cooking/FAO_Small_Scale_Food_Preservation_Village_Level_Manual.pdf	iasearch:title:("food preservation") AND publisher:FAO|preserv
 03_Food_Agriculture/Preservation_Cooking/Fermented_Foods_Pickling_Sauerkraut_Vinegar_Cider_Making_1900.pdf	iasearch:title:("pickling") OR title:("sauerkraut") OR title:("vinegar")|pickl
 03_Food_Agriculture/Preservation_Cooking/Grain_Milling_Hand_Mills_Grinding_Cereals_Appropriate_Technology.pdf	iasearch:title:("grain milling") OR title:("village milling") OR title:("hand mills")|mill
-03_Food_Agriculture/Preservation_Cooking/Home_Production_of_Cheese_and_Butter_USDA_Farmers_Bulletin_1914.pdf	iasearch:title:("cheese making") OR title:("making butter on the farm") OR title:("cheese on the farm")|butter
+03_Food_Agriculture/Preservation_Cooking/Home_Production_of_Cheese_and_Butter_USDA_Farmers_Bulletin_1914.pdf	https://openprairie.sdstate.edu/cgi/viewcontent.cgi?article=1163&context=agexperimentsta_bulletins	iasearch:title:("cheese making") OR title:("making butter on the farm") OR title:("cheese on the farm")|butter
 03_Food_Agriculture/Preservation_Cooking/Preserving_Meat_Curing_Pork_Beef_USDA_Farmers_Bulletin_1915.pdf	iasearch:title:("curing meat") OR title:("pork on the farm")|meat
-03_Food_Agriculture/Preservation_Cooking/Salting_Smoking_Meat_Pemmican_Jerky_Drying_Manual_1900.pdf	iasearch:title:("drying fruits and vegetables") OR title:("farm meat curing")|dry
+03_Food_Agriculture/Preservation_Cooking/Salting_Smoking_Meat_Pemmican_Jerky_Drying_Manual_1900.pdf	archive:CAT87203466	iasearch:title:("drying fruits and vegetables") OR title:("farm meat curing")|dry
 03_Food_Agriculture/Preservation_Cooking/USDA_Home_Storage_of_Vegetables_Root_Cellars_1900.pdf	iasearch:title:("storing vegetables") OR title:("home storage of vegetables") OR title:("root cellar")|stor
 03_Food_Agriculture/Principles_of_Animal_Nutrition_Cherian.pdf	https://open.oregonstate.education/animalnutrition/
 03_Food_Agriculture/SARE_Building_Soils_for_Better_Crops_4e_2021.pdf	https://www.sare.org/wp-content/uploads/Building-Soils-for-Better-Crops.pdf
@@ -840,10 +884,10 @@ SOURCES = '''
 04_Engineering_Repair/Power_Electricity/Modern/Bicycle_Generator_Guide.pdf	https://vvvvvvaria.org/~decentral1se/octomode/pdf/bikegen.pdf
 04_Engineering_Repair/Power_Electricity/Modern/IRENA_Battery_Storage_Island_Power_2012.pdf	https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2012/Electricity-Storage-and-RE-for-Island-Power.pdf
 04_Engineering_Repair/Power_Electricity/Modern/IRENA_ETSAP_Tech_Brief_E18_Electricity_Storage_2012.pdf	https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2012/IRENA-ETSAP-Tech-Brief-E18-Electricity-Storage.pdf
-04_Engineering_Repair/Power_Electricity/Modern/NAU_Bicycle_Powered_Charging_Station_Resources.pdf	https://in.nau.edu/wp-content/uploads/sites/156/2018/08/resources-for-building-a-bicycle-powered-charging-station-ek.pdf
+04_Engineering_Repair/Power_Electricity/Modern/NAU_Bicycle_Powered_Charging_Station_Resources.pdf	https://ceias.nau.edu/capstone/projects/ME/2014/BicycleChargingStation/Reports/Final/T22_FinalReport.pdf	https://in.nau.edu/wp-content/uploads/sites/156/2018/08/resources-for-building-a-bicycle-powered-charging-station-ek.pdf
 04_Engineering_Repair/Power_Electricity/Modern/Pedal_Power_Factsheet_Lowimpact.pdf	https://cms.lowimpact.org/wp-content/uploads/factsheetpedalpower.pdf
 04_Engineering_Repair/Power_Electricity/Modern/Pico_Hydro_Documents_Collection.pdf	https://picohydro.org.uk/documents.html
-04_Engineering_Repair/Power_Electricity/Modern/SunSpec_PV_OM_Best_Practices.pdf	https://sunspec.org/wp-content/uploads/2019/10/PVOMBestPracticesv1.pdf
+04_Engineering_Repair/Power_Electricity/Modern/SunSpec_PV_OM_Best_Practices.pdf	https://www.nrel.gov/docs/fy17osti/68281.pdf	https://sunspec.org/wp-content/uploads/2019/09/PVOMbestPractices2.0.pdf	https://www.nrel.gov/docs/fy19osti/73822.pdf	https://sunspec.org/wp-content/uploads/2019/10/PVOMBestPracticesv1.pdf
 04_Engineering_Repair/Power_Electricity/Modern/UNDP_Pico_Hydro_Guide.pdf	https://www.undp.org/sites/g/files/zskgke326/files/2025-10/02_pyco_hydro_webfinal.pdf
 04_Engineering_Repair/Power_Electricity/PMG_Wind_Turbine_Construction_Manual_Piggott_2001.pdf	http://scoraigwind.com/pmgbooklet/itpmg.pdf
 04_Engineering_Repair/Power_Electricity/Pedal_Power_Factsheet_LowImpact.pdf	https://cms.lowimpact.org/wp-content/uploads/factsheetpedalpower.pdf
@@ -862,15 +906,15 @@ SOURCES = '''
 04_Engineering_Repair/USFS_Standard_Timber_Bridge_Superstructure_Plans_2019.pdf	https://research.fs.usda.gov/download/treesearch/59357.pdf
 04_Engineering_Repair/USFS_Sustainable_Trail_Bridge_Design_2020.pdf	https://www.fs.usda.gov/t-d/pubs/pdfpubs/pdf20232805P/2023-2805P_SustainBridgeDesign__04-28-20_150ppi.pdf
 04_Engineering_Repair/Upstream_Downstream_Bioprocessing_Guajardo_2024.pdf	
-04_Engineering_Repair/Welding_Fabrication_LWTech_2024.pdf	https://openwa.pressbooks.pub/lwtechweldingfabrication
-05_Science_Measurement/Crowell_Light_and_Matter_Physics_2020_CC_BY_SA.pdf	https://www.lightandmatter.com/lm.pdf
+04_Engineering_Repair/Welding_Fabrication_LWTech_2024.pdf	https://openwa.pressbooks.pub/lwtechweldingfabrication/open/download?type=pdf	https://ate.community/downloads/40642/Welding-Fabrication-1735331896.pdf	https://openwa.pressbooks.pub/lwtechweldingfabrication
+05_Science_Measurement/Crowell_Light_and_Matter_Physics_2020_CC_BY_SA.pdf	archive:lm_20220102	https://www.lightandmatter.com/lm.pdf
 05_Science_Measurement/DOE_Chemistry_Fundamentals_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1015-93_VOL1.pdf	https://www.navsea.navy.mil/Portals/103/Documents/NNPTC/Chemistry/doe_chemistry_v1.pdf
-05_Science_Measurement/DOE_Chemistry_Fundamentals_Vol2.pdf	https://everyspec.com/DOE/DOE-HDBK/
+05_Science_Measurement/DOE_Chemistry_Fundamentals_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1015-93_VOL2.pdf	https://everyspec.com/DOE/DOE-HDBK/
 05_Science_Measurement/DOE_Classical_Physics.pdf	https://www.navsea.navy.mil/Portals/103/Documents/NNPTC/Physics/doe_phys.pdf
-05_Science_Measurement/DOE_Mathematics_Fundamentals_Vol1.pdf	archive:DOE-HDBK-1014-1-92
+05_Science_Measurement/DOE_Mathematics_Fundamentals_Vol1.pdf	https://www.navsea.navy.mil/Portals/103/Documents/NNPTC/Math/doe_math_v1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1014-92_VOL1.pdf	archive:DOE-HDBK-1014-1-92
 05_Science_Measurement/DOE_Mathematics_Fundamentals_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1014-92_VOL2.pdf
 05_Science_Measurement/NIST_SP811_SI_Guide.pdf	https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication811e2008.pdf
-05_Science_Measurement/OpenStax_Chemistry_2e_Complete.pdf	https://openstax.org/details/books/chemistry-2e
+05_Science_Measurement/OpenStax_Chemistry_2e_Complete.pdf	https://assets.openstax.org/oscms-prodcms/media/documents/Chemistry2e-WEB.pdf	https://openstax.org/details/books/chemistry-2e
 05_Science_Measurement/Teaching_Basics/Anatomy_and_Physiology_OpenStax.pdf	iasearch:title:("anatomy and physiology") AND (openstax)|anatomy
 05_Science_Measurement/Teaching_Basics/Biology_2e_OpenStax.pdf	iasearch:title:(biology) AND (openstax)|biology
 05_Science_Measurement/Teaching_Basics/College_Physics_OpenStax.pdf	iasearch:title:("college physics") AND (openstax)|physics
@@ -880,7 +924,7 @@ SOURCES = '''
 05_Science_Measurement/Teaching_Basics/Prealgebra_2e_OpenStax.pdf	iasearch:title:(prealgebra) AND (openstax)|prealgebra
 05_Science_Measurement/Teaching_Basics/Public_Domain_Arithmetic_Textbook_1900s.pdf	iasearch:title:(arithmetic) AND date:[1890-01-01 TO 1930-12-31] AND (practical OR complete OR elementary)|arithmetic
 05_Science_Measurement/Teaching_Basics/Surveying_Manual_Public_Domain_Raymond_or_Gillespie.pdf	iasearch:title:(surveying) AND (elements OR manual OR plane) AND date:[1880-01-01 TO 1935-12-31]|surveying
-05_Science_Measurement/USGS_Manual_of_Topographic_Methods.pdf	https://pubs.usgs.gov/publication/b1043
+05_Science_Measurement/USGS_Manual_of_Topographic_Methods.pdf	https://pubs.usgs.gov/bul/1043/report.pdf	https://pubs.usgs.gov/publication/b1043
 06_Survival_Navigation/Animals_Predators/NPS_Bear_Safety_Alaska_Brochure.pdf	https://www.nps.gov/wrst/planyourvisit/upload/bear-safe-brochure.pdf
 06_Survival_Navigation/Animals_Predators/NPS_Bear_Safety_Brooks_Camp.pdf	https://www.nps.gov/katm/planyourvisit/upload/Brooks-Camp-Bear-Safety-for-web.pdf
 06_Survival_Navigation/Animals_Predators/Poisonous_Snakes_of_the_World_US_Navy.pdf	archive:poisonoussnakeso00unit
@@ -892,22 +936,22 @@ SOURCES = '''
 06_Survival_Navigation/Field_Manuals/Army_FM_21-76_Survival.pdf	iasearch:title:("survival") AND (title:("FM 21-76") OR creator:("United States. Department of the Army"))|survival
 06_Survival_Navigation/Field_Manuals/Army_Field_Hygiene_and_Sanitation_FM_21-10.pdf	iasearch:title:("field hygiene and sanitation")|hygiene
 06_Survival_Navigation/MIT_Sailing_and_the_Tech_Dinghy_2014.pdf	https://ocw.mit.edu/courses/pe-810-sailing-spring-2007/f7fdc138336e2a0437c598c7f789d6d8_booklet.pdf	https://sailing.mit.edu/lts/sailing-booklet/
-06_Survival_Navigation/Modern_Survival/Army_ATTP_3-97.11_Cold_Region_Operations_2011.pdf	https://irp.fas.org/doddir/army/attp3-97-11.pdf
+06_Survival_Navigation/Modern_Survival/Army_ATTP_3-97.11_Cold_Region_Operations_2011.pdf	https://everyspec.com/ARMY/ARMY-General/download.php?spec=ATTP_3-97x11_2011.035375.pdf	https://everyspec.com/USMC/download.php?spec=MCRP_3-35--1D_2011.035374.pdf	https://irp.fas.org/doddir/army/attp3-97-11.pdf
 06_Survival_Navigation/Modern_Survival/Army_FM_3-05.70_Survival_2002.pdf	https://biotech.law.lsu.edu/blaw/DOD/fm3-05-70.pdf
 06_Survival_Navigation/Modern_Survival/Army_TC_3-25.26_Map_Reading_Land_Navigation_2013.pdf	https://armyrotc.mst.edu/media/academic/armyrotc/documents/manualsadpadrpfmetc/TC%203-25.26.pdf
 06_Survival_Navigation/Modern_Survival/Army_TC_4-02.3_Field_Hygiene_Sanitation_2014.pdf	https://www.armywriter.com/board/references/TC4-02x3.pdf
-06_Survival_Navigation/Modern_Survival/USAF_Survival_Handbook_AFH10-644_2017.pdf	https://irp.fas.org/doddir/usaf/afh10-644.pdf
-06_Survival_Navigation/NGA_Bowditch_American_Practical_Navigator_Vol1_2024_LoRes.pdf	https://msi.nga.mil/Publications/APN
-06_Survival_Navigation/NGA_Bowditch_American_Practical_Navigator_Vol2_2024_LoRes.pdf	https://msi.nga.mil/Publications/APN
+06_Survival_Navigation/Modern_Survival/USAF_Survival_Handbook_AFH10-644_2017.pdf	https://static.e-publishing.af.mil/production/1/af_a3/publication/afh10-644/afh10-644.pdf	https://irp.fas.org/doddir/usaf/afh10-644.pdf
+06_Survival_Navigation/NGA_Bowditch_American_Practical_Navigator_Vol1_2024_LoRes.pdf	https://msi.nga.mil/api/publications/download?key=16693975/SFH00000/Bowditch_Vol_1_LoRes.pdf&type=view	https://csum-dspace.calstate.edu/bitstream/handle/10211.3/205713/Bowditch_Vol_1_2017.pdf	https://msi.nga.mil/Publications/APN
+06_Survival_Navigation/NGA_Bowditch_American_Practical_Navigator_Vol2_2024_LoRes.pdf	https://msi.nga.mil/api/publications/download?key=16693975/SFH00000/Bowditch_Vol_2_LoRes.pdf&type=view	https://msi.nga.mil/Publications/APN
 06_Survival_Navigation/NOAA_NWS_Cloud_Chart.pdf	https://www.weather.gov/media/lmk/soo/cloudchart.pdf
 06_Survival_Navigation/NWS_Weather_Spotter_Field_Guide.pdf	https://www.weather.gov/media/grr/brochures/nwsbasicspottersfieldguide.pdf
-06_Survival_Navigation/Peace_Corps_Disaster_Preparedness_Mitigation_Idea_Book.pdf	
+06_Survival_Navigation/Peace_Corps_Disaster_Preparedness_Mitigation_Idea_Book.pdf	https://corpora.tika.apache.org/base/docs/govdocs1/243/243594.pdf	https://files.peacecorps.gov/documents/T0124_Disaster-Preparedness-and-Mitigation-DPM-IST.pdf
 06_Survival_Navigation/Practical_Meteorology_Stull.pdf	https://www.eoas.ubc.ca/books/Practical_Meteorology
-06_Survival_Navigation/Sphere_Handbook_Humanitarian_Response_2018.pdf	https://medbox.org/index.php/pdf/5e148832db60a2044c2d513a	https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2018-EN.pdf
+06_Survival_Navigation/Sphere_Handbook_Humanitarian_Response_2018.pdf	https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2018-EN.pdf	https://medbox.org/dl/5e148832db60a2044c2d513a	https://medbox.org/index.php/pdf/5e148832db60a2044c2d513a
 06_Survival_Navigation/USCG_Aux_Rescue_Survival_PPE_2025.pdf	https://wow.uscgaux.info/Uploads_wowII/054/Rescue_and_Survival_PPE_Master_17_April_2025.pdf
 06_Survival_Navigation/USCG_Aux_SABOT_Job_Aid_2025.pdf	https://wow.uscgaux.info/Uploads_wowII/092/CGD9_SABOT_Job_Aid_Manual.pdf
 06_Survival_Navigation/USGS_Topographic_Map_Symbols.pdf	https://pubs.usgs.gov/gip/TopographicMapSymbols/topomapsymbols.pdf
-06_Survival_Navigation/US_Army_ATP_3-50.21_Survival_2018.pdf	
+06_Survival_Navigation/US_Army_ATP_3-50.21_Survival_2018.pdf	https://trueprepper.com/wp-content/uploads/ATP-3-50.21-Survival.pdf	https://irp.fas.org/doddir/army/atp3-50-21.pdf
 06_Survival_Navigation/US_Army_FM_21-76_Survival_Manual.pdf	archive:FM21-76Survival1957	https://archive.org/download/FM21-76Survival1957/FM21-76Survival1957.pdf
 06_Survival_Navigation/Woodcraft/Kephart_Book_of_Camping_and_Woodcraft.pdf	archive:bookofcampingwoo00keph
 07_Civilization_Crafts/Aalto_Ceramic_Handbook_From_Clay_to_Ceramics_Firing_2021.pdf	
@@ -1060,13 +1104,13 @@ SOURCES = '''
 08_General_Reference/Languages_Travel/FSI_French_Basic_Course.pdf	iasearch:title:("french basic course") AND (fsi OR "foreign service institute")|french
 08_General_Reference/Languages_Travel/FSI_German_Basic_Course.pdf	iasearch:title:("german basic course") AND (fsi OR "foreign service institute")|german
 08_General_Reference/Languages_Travel/FSI_Hindi_Basic_Course.pdf	iasearch:title:("hindi basic course") AND (fsi OR "foreign service institute")|hindi
-08_General_Reference/Languages_Travel/FSI_Indonesian_Basic_Course.pdf	iasearch:title:("indonesian") AND (fsi OR "foreign service institute") AND subject:course|indonesian
+08_General_Reference/Languages_Travel/FSI_Indonesian_Basic_Course.pdf	https://fsi-language-courses-media.nyc3.cdn.digitaloceanspaces.com/languages-dli/Indonesian/Indonesian-Basic-Course-Texts/WholeText.pdf	https://fsi-language-courses-media.nyc3.cdn.digitaloceanspaces.com/languages-dli/Indonesian/Indonesian-Basic-Course-Texts/Volume%2001%20Lessons%201-8.pdf	iasearch:title:("indonesian") AND (fsi OR "foreign service institute") AND subject:course|indonesian
 08_General_Reference/Languages_Travel/FSI_Italian_Basic_Course.pdf	iasearch:title:("italian basic course") AND (fsi OR "foreign service institute")|italian
 08_General_Reference/Languages_Travel/FSI_Japanese_Basic_Course.pdf	iasearch:title:("japanese basic course") AND (fsi OR "foreign service institute")|japanese
 08_General_Reference/Languages_Travel/FSI_Korean_Basic_Course.pdf	iasearch:title:("korean basic course") AND (fsi OR "foreign service institute")|korean
-08_General_Reference/Languages_Travel/FSI_Mandarin_Chinese_Basic_Course.pdf	iasearch:title:("chinese basic course") AND (fsi OR "foreign service institute" OR "defense language")|chinese
+08_General_Reference/Languages_Travel/FSI_Mandarin_Chinese_Basic_Course.pdf	https://fsi-language-courses-media.nyc3.cdn.digitaloceanspaces.com/languages-dli/Chinese-Mandarin/Book%201.pdf	https://fsi-language-courses-media.nyc3.cdn.digitaloceanspaces.com/languages-dli/Chinese-Mandarin/Book%25201.pdf	iasearch:title:("chinese basic course") AND (fsi OR "foreign service institute" OR "defense language")|chinese
 08_General_Reference/Languages_Travel/FSI_Portuguese_Basic_Course.pdf	iasearch:title:("portuguese basic course") AND (fsi OR "foreign service institute")|portuguese
-08_General_Reference/Languages_Travel/FSI_Russian_Basic_Course.pdf	iasearch:title:("russian basic course") AND (fsi OR "foreign service institute")|russian
+08_General_Reference/Languages_Travel/FSI_Russian_Basic_Course.pdf	https://fsi-language-courses-media.nyc3.cdn.digitaloceanspaces.com/languages-dli/Russian/Russian-Basic/Courses/Phase%201/Mod%2001.pdf	iasearch:title:("russian basic course") AND (fsi OR "foreign service institute")|russian
 08_General_Reference/Languages_Travel/FSI_Spanish_Basic_Course_Vol1.pdf	iasearch:title:("spanish basic course") AND (fsi OR "foreign service institute")|spanish
 08_General_Reference/Languages_Travel/FSI_Standard_Arabic_Basic_Course.pdf	iasearch:title:("arabic basic course") AND (fsi OR "foreign service institute")|arabic
 08_General_Reference/Languages_Travel/FSI_Swahili_Basic_Course.pdf	iasearch:title:("swahili basic course") AND (fsi OR "foreign service institute")|swahili
@@ -1084,11 +1128,11 @@ SOURCES = '''
 09_Visual_Atlases/01_Plants/CDC_Foraging_Toxic_vs_Edible_Lookalikes_2026.pdf	
 09_Visual_Atlases/01_Plants/MSU_Common_Purslane_vs_Prostrate_Spurge_2026.pdf	https://extension.msstate.edu/sites/default/files/document/2026-02/P4175_web.pdf
 09_Visual_Atlases/01_Plants/MSU_Forgotten_Foods_Wild_Edible_Plants_2026.pdf	https://extension.msstate.edu/sites/default/files/document/2026-02/P4173_web.pdf
-09_Visual_Atlases/01_Plants/MSU_Plant_Identification_Basics_2025.pdf	https://openbooks.lib.msu.edu/plantidentification/
-09_Visual_Atlases/02_Medical_Signs/CDC_Measles_Clinical_Diagnosis_2025.pdf	https://www.cdc.gov/measles/hcp/clinical-overview/index.html
-09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Lyme_Rash_Visual_Poster_2021.pdf	https://stacks.cdc.gov/view/cdc/118817/cdc_118817_DS1.pdf
-09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Tickborne_Diseases_Reference_Manual_2022_6e.pdf	https://stacks.cdc.gov/view/cdc/121111/cdc_121111_DS1.pdf
-09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/WHO_Rabies_PEP_Protocol_2024.pdf	https://www.who.int/publications/i/item/B09018
+09_Visual_Atlases/01_Plants/MSU_Plant_Identification_Basics_2025.pdf	https://openbooks.lib.msu.edu/plantidentification/open/download?type=pdf	https://openbooks.lib.msu.edu/plantidentification/
+09_Visual_Atlases/02_Medical_Signs/CDC_Measles_Clinical_Diagnosis_2025.pdf	https://nj.gov/health/measles/documents/clinical_quick_guide.pdf	https://www.cdc.gov/measles/hcp/clinical-overview/index.html
+09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Lyme_Rash_Visual_Poster_2021.pdf	https://nice.org.uk/guidance/ng95/resources/lyme-disease-rash-images-pdf-4792273597	https://stacks.cdc.gov/view/cdc/118817/cdc_118817_DS1.pdf
+09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/CDC_Tickborne_Diseases_Reference_Manual_2022_6e.pdf	https://keap.kdhe.ks.gov/Ephtm/EphtContent/documents/TickborneDiseases-Provider%20Guide.pdf	https://stacks.cdc.gov/view/cdc/121111/cdc_121111_DS1.pdf
+09_Visual_Atlases/02_Medical_Signs/Emergency_Visual_Guides/WHO_Rabies_PEP_Protocol_2024.pdf	https://iris.who.int/server/api/core/bitstreams/0cfa3256-5c56-4ce0-a676-1590e138d89e/content	https://iris.who.int/server/api/core/bitstreams/fca44e4d-ea96-4f86-a3ce-63356441590f/content	https://www.who.int/publications/i/item/B09018
 09_Visual_Atlases/02_Medical_Signs/WHO_Integrated_Skin_Conditions_2026.pdf	who:10665/272723
 09_Visual_Atlases/02_Medical_Signs/Wounds_Burns_Trauma/NIAID_Thermal_Burn_Depth_Reference_2025.pdf	
 09_Visual_Atlases/03_Anatomy/Hands_On_Anatomy_Temple_2024.pdf	https://temple.manifoldapp.org/system/actioncallout/e/6/7/e6719369-5acf-4794-83ac-7e0420715772/attachment/43db78741c067be2bc7aaafd18c3eb25.pdf
@@ -1111,7 +1155,7 @@ SOURCES = '''
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Principles_of_Radio_Communication_1921.pdf	
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Soap_Making_Manual_Thomssen_1922.pdf	https://gutenberg.org/ebooks/34114
 90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Textbook_of_Tanning_Procter_1885.pdf	archive:textbookoftannin00proc
-90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Watchmakers_Handbook_Saunier.pdf	
+90_Human_Read_Only/Historical_Primary_Sources/Civilization_Crafts/Watchmakers_Handbook_Saunier.pdf	https://www.gutenberg.org/cache/epub/76850/pg76850-images.html	https://www.gutenberg.org/ebooks/76850.epub.images
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Blueprint_Reading_and_Sketching.pdf	https://archive.org/download/MManuals/UsNavyBlueprintReadingSketching1994.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Clothing_and_Textiles_Vocational_Guide_Vol2.pdf	
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/Peace_Corps_Handbook_Building_Homes_of_Earth.pdf	https://files.peacecorps.gov/documents/R0034_Handbook-for-Building-Homes-of-Earth.pdf
@@ -1127,31 +1171,31 @@ SOURCES = '''
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Machinery_Repairman_3_and_2.pdf	archive:machineryrepairm003995mbp
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Machinery_Repairman_NAVEDTRA_12204A.pdf	archive:machineryrepairm003995mbp
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Radioman_3_and_2.pdf	
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Steelworker_3_and_2.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Steelworker_3_and_2.pdf	https://everyspec.com/USN/NAVEDTRA/download.php?spec=NAVEDTRA_14250_VOLUME-1_NOV1996.018385.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Tools_and_Their_Uses.pdf	https://everyspec.com/USN/NAVEDTRA/NAVEDTRA_14256_JUN1992_18379/
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Utilitiesman_3_and_2.pdf	
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/US_Army_FM_5-426_Carpentry.pdf	archive:FM5-426
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/US_Army_Machine_Shop_Practice_1973.pdf	
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol1.pdf	archive:DOE-HDBK-1011-1-92
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1011-92_VOL1.pdf	archive:DOE-HDBK-1011-1-92
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1011-92_VOL2.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol3.pdf	https://everyspec.com/DOE/DOE-HDBK/DOE_HDBK_1011v3_3495/
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol4.pdf	https://digital.library.unt.edu/ark:/67531/metadc1445305/m2/1/high_res_d/7295869.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Engineering_Symbology_Vol1.pdf	archive:DOE-HDBK-1016-1-93
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Electrical_Science_Vol4.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1011-92_VOL4.pdf	https://digital.library.unt.edu/ark:/67531/metadc1445305/m2/1/high_res_d/7295869.pdf
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Engineering_Symbology_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93-VOL1.pdf	archive:DOE-HDBK-1016-1-93
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Engineering_Symbology_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL2.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Instrumentation_Control_Vol1.pdf	https://everyspec.com/DOE/DOE-HDBK/
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Instrumentation_Control_Vol2.pdf	
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Material_Science_Vol1.pdf	archive:DOE-HDBK-1017-1-93
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Instrumentation_Control_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1013-92-VOL1.pdf	https://everyspec.com/DOE/DOE-HDBK/
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Instrumentation_Control_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1013-92-VOL2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1013-92_VOL2.pdf
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Material_Science_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1017-93_VOL1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1017-93-VOL1.pdf	archive:DOE-HDBK-1017-1-93
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Material_Science_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1017-93_VOL2.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol1.pdf	https://everyspec.com/DOE/DOE-HDBK/
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1018-93_VOL1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1018-93-VOL1.pdf	https://everyspec.com/DOE/DOE-HDBK/
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Mechanical_Science_Vol2.pdf	https://pdhonline.com/courses/m139/Mechanical%20Science%20Vol%202.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol1.pdf	archive:DOE-HDBK-1012-1-92
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol1.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1012-92_VOL1.pdf	archive:DOE-HDBK-1012-1-92
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol2.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1012-92_VOL2.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol3.pdf	https://everyspec.com/DOE/DOE-HDBK/
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/DOE_Thermodynamics_Fluid_Flow_Vol3.pdf	https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1012-92_VOL3.pdf	https://archive.org/download/MManuals/Thermo-HeatTransfer-FluidFlowVolIii.pdf	https://everyspec.com/DOE/DOE-HDBK/
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/Engineering_in_Emergencies_Davis_Lambert_2e.pdf	https://susana.org/_resources/documents/default/3-4311-7-1621326774.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/Sandia_PV_Power_Systems_and_NEC_Practices_2001.pdf	https://digital.library.unt.edu/ark:/67531/metadc738778/m2/1/high_res_d/808812.pdf
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/Sandia_PV_Power_Systems_and_NEC_Practices_2001.pdf	https://www.osti.gov/servlets/purl/808812	https://digital.library.unt.edu/ark:/67531/metadc738778/m2/1/high_res_d/808812.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/USN_Fluid_Power.pdf	https://www.teachengineering.org/content/pur_/lessons/pur_fluidpower_less1/pur_fluidpower_lesson01_trainingmanualfluidpower.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_FM_5-428_Concrete_and_Masonry.pdf	archive:FM5-428
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TC_9-524_Fundamentals_of_Machine_Tools.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TC_9-524_Fundamentals_of_Machine_Tools.pdf	https://everyspec.com/ARMY/ARMY-General/download.php?spec=TC_9-524_29OCT1996.016321.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TM_9-8000_Principles_of_Automotive_Vehicles.pdf	
 90_Human_Read_Only/Legacy_Technical_Manuals/USDA_Home_Fruit_Garden_Southeastern_Southern_States_1965.pdf	archive:homefruitgardeni219unit_1	https://www.archive.org/download/homefruitgardeni219unit_1/homefruitgardeni219unit_1_bw.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_06_Tubes_and_Power_Supplies.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2006%20-%20Introduction%20to%20Electronic%20Emissions%2C%20Tubes%2C%20and%20Power%20Supplies.pdf

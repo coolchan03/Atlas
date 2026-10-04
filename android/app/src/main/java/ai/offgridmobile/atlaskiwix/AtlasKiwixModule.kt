@@ -32,6 +32,14 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
         if (!libsLoaded) { JNIKiwix(ctx.applicationContext); libsLoaded = true }
     }
 
+    private val searchers = java.util.concurrent.ConcurrentHashMap<String, Searcher>()
+    /** libkiwix objects hold native memory; free them when a file is closed. */
+    private fun dispose(x: Any?) { if (x == null) return; try { x.javaClass.getMethod("dispose").invoke(x) } catch (_: Throwable) {} }
+    private fun forget(uri: String) {
+        dispose(searchers.remove(uri))
+        open.remove(uri)?.let { dispose(it.archive); try { it.pfd?.close() } catch (_: Exception) {} }
+    }
+
     private fun meta(a: Archive, key: String): String = try { a.getMetadata(key) } catch (_: Exception) { "" }
 
     private fun openUri(uriStr: String): Opened {
@@ -49,7 +57,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
             ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) { /* already persisted or not offered */ }
         val pfd = ctx.contentResolver.openFileDescriptor(uri, "r") ?: throw IllegalStateException("Cannot open file")
-        val archive = Archive(pfd.fileDescriptor)
+        val archive = try { Archive(pfd.fileDescriptor) } catch (e: Throwable) { try { pfd.close() } catch (_: Exception) {}; throw e }
         val title = meta(archive, "Title").ifBlank { meta(archive, "Name") }.ifBlank { uri.lastPathSegment ?: "Library" }
         val o = Opened(uriStr, pfd, archive, title)
         open[uriStr] = o
@@ -76,7 +84,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     @ReactMethod
     fun close(uri: String, promise: Promise) {
         io.execute {
-            open.remove(uri)?.let { try { it.pfd?.close() } catch (_: Exception) {} }
+            forget(uri)
             try { ctx.contentResolver.releasePersistableUriPermission(Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             promise.resolve(true)
         }
@@ -93,7 +101,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
                     val o = try { openUri(uri) } catch (_: Exception) { continue }
                     try {
                         if (o.archive.hasFulltextIndex()) {
-                            val searcher = Searcher(o.archive)
+                            val searcher = searchers.getOrPut(uri) { Searcher(o.archive) }
                             val it = searcher.search(Query(query)).getResults(0, limit)
                             while (it.hasNext()) {
                                 val path = it.path
@@ -133,7 +141,8 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
                 val bytes = item.data.data
                 var html = String(bytes, Charsets.UTF_8)
                 if (html.length > 600_000) html = html.substring(0, 600_000)
-                html = html.replace(Regex("(?is)<(script|style|nav|footer|table class=\"infobox[^>]*)[^>]*>.*?</\\1>"), " ")
+                html = html.replace(Regex("(?is)<(script|style|nav|footer)\\b[^>]*>.*?</\\1>"), " ")
+                    .replace(Regex("(?is)<table[^>]*class=\"[^\"]*infobox.*?</table>"), " ")
                 val text = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_COMPACT).toString()
                     .replace(Regex("￼"), "")
                     .replace(Regex("[ \\t]+"), " ")
@@ -148,8 +157,7 @@ class AtlasKiwixModule(private val ctx: ReactApplicationContext) : ReactContextB
     }
 
     override fun invalidate() {
-        for (o in open.values) try { o.pfd?.close() } catch (_: Exception) {}
-        open.clear()
+        for (u in open.keys.toList()) forget(u)
         io.shutdown()
         super.invalidate()
     }

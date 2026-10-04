@@ -69,7 +69,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return DT.openFile(p);
     }
     case 'calendar_events':
-      return DT.calendarEvents(Number(call.arguments?.days_ahead ?? 7), Number(call.arguments?.days_back ?? 0));
+      return DT.calendarEvents(Math.max(1, parseInt(String(call.arguments?.days_ahead ?? 7), 10) || 7), Math.max(0, parseInt(String(call.arguments?.days_back ?? 0), 10) || 0));
     case 'add_calendar_event':
       return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), call.arguments?.end, call.arguments?.location ?? '');
     case 'my_location': {

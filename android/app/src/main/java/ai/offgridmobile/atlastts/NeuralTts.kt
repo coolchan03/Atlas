@@ -27,6 +27,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     @Volatile var loadedDir: String = ""; private set
     @Volatile private var token = 0
     @Volatile private var track: AudioTrack? = null
+    @Volatile private var speakers = 0
 
     val ready: Boolean get() = tts != null
 
@@ -59,17 +60,26 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             val c = OfflineTtsConfig()
             c.model = mc
             c.maxNumSentences = 1
-            tts = OfflineTts(config = c)
+            val e = OfflineTts(config = c)
+            speakers = try { e.numSpeakers() } catch (_: Throwable) { 1 }
+            tts = e
             loadedDir = dir
         }).get()
     }
 
-    fun numSpeakers(): Int = try { genExec.submit(Callable<Int> { tts?.numSpeakers() ?: 0 }).get() } catch (_: Throwable) { 0 }
+    fun numSpeakers(): Int = if (tts != null) speakers else 0
 
     private fun freeEngine() {
         try { tts?.release() } catch (_: Throwable) {}
         tts = null
+        speakers = 0
         loadedDir = ""
+    }
+
+    /** Frees the voice later, in order with any load that follows (never blocks). */
+    fun releaseAsync() {
+        stop()
+        try { genExec.execute { freeEngine() } } catch (_: Throwable) {}
     }
 
     /** Frees the voice (blocks until any sentence being generated is finished). */
@@ -142,13 +152,16 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
                 frames += buf.size
             }
             if (token == my && started) {
-                t.stop() // stream mode: plays out what is buffered, then stops
+                // A little silence makes sure the buffer is full enough to play out, then wait for the end.
+                val tail = FloatArray(rate / 2)
+                t.write(tail, 0, tail.size, AudioTrack.WRITE_NON_BLOCKING)
                 var last = -1; var still = 0L
-                while (token == my && t.playState == AudioTrack.PLAYSTATE_PLAYING && t.playbackHeadPosition < frames) {
+                while (token == my && t.playbackHeadPosition < frames) {
                     val h = t.playbackHeadPosition
                     if (h == last) { still += 40; if (still > 1500) break } else { still = 0; last = h }
                     Thread.sleep(40)
                 }
+                try { t.stop() } catch (_: Throwable) {}
             }
         } catch (_: Throwable) {
         } finally {

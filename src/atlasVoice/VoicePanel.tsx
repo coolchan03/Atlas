@@ -69,7 +69,7 @@ export function AtlasVoicePanel() {
                     ) : have ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                         {inUse ? <Text style={{ color: colors.primary }}>In use</Text> : <TouchableOpacity onPress={() => choose(v.id, 0)}><Text style={{ color: colors.primary }}>Use</Text></TouchableOpacity>}
-                        <TouchableOpacity onPress={() => Alert.alert('Delete voice?', v.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteVoice(v.id) }])}>
+                        <TouchableOpacity onPress={() => Alert.alert('Delete voice?', v.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { deleteVoice(v.id).catch((e) => Alert.alert('Could not delete', String(e?.message || e))); } }])}>
                           <Text style={{ color: colors.textMuted }}>Delete</Text>
                         </TouchableOpacity>
                       </View>

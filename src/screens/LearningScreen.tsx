@@ -71,7 +71,7 @@ export const LearningScreen: React.FC = () => {
   }, []);
   useEffect(() => { keepScreenOn(running); return () => keepScreenOn(false); }, [running]);
 
-  const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).finally(() => setRunning(false)); };
+  const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).catch((e) => setStatusText(String(e?.message || e))).finally(() => setRunning(false)); };
 
   const settings = (
     <View>

@@ -48,7 +48,9 @@ export const MapsScreen: React.FC = () => {
   useEffect(() => {
     let stop: () => void = () => undefined;
     let alive = true;
-    watchPosition((f) => { if (alive) { setFix(f); setGpsMsg(null); } }, (m) => alive && setGpsMsg(m)).then((s) => { if (alive) stop = s; else s(); });
+    watchPosition((f) => { if (alive) { setFix(f); setGpsMsg(null); } }, (m) => alive && setGpsMsg(m))
+      .then((s) => { if (alive) stop = s; else s(); })
+      .catch((e) => alive && setGpsMsg(String(e?.message || e)));
     return () => { alive = false; stop(); };
   }, []);
   useEffect(() => {
@@ -257,8 +259,10 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
   useEffect(() => { if (visible) { refresh(); setPath(null); } }, [visible]);
   useEffect(() => {
     if (path === null) return;
+    let alive = true;
     setLoading(true); setErr(null);
-    browseMaps(path).then(setEntries).catch((e) => setErr(String(e?.message || e))).finally(() => setLoading(false));
+    browseMaps(path).then((e) => { if (alive) setEntries(e); }).catch((e) => { if (alive) setErr(String(e?.message || e)); }).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, [path]);
 
   const get = async (e: RemoteEntry) => {
@@ -297,7 +301,7 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
                   <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', textTransform: 'capitalize' }}>{m.name}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>{mb(m.size)}{current === m.path ? ' · in use' : ' · tap to use'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => Alert.alert('Delete map?', m.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteMap(m.path).then(refresh) }])} style={{ padding: 8 }}>
+                <TouchableOpacity onPress={() => Alert.alert('Delete map?', m.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { deleteMap(m.path).then(refresh).catch(() => undefined); } }])} style={{ padding: 8 }}>
                   <Icon name="trash-2" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>

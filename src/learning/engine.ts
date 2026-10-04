@@ -111,7 +111,7 @@ const numbered = (items: { q: string }[]) => items.map((b, i) => `${i + 1}. ${b.
 function rulings(text: string, n: number): Map<number, { ok: boolean; reason: string }> {
   const out = new Map<number, { ok: boolean; reason: string }>();
   for (const line of text.split('\n')) {
-    const m = line.match(/^\s*(?:Q|R|#)?\s*(\d{1,2})\s*[:.)\-–]?\s*(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|OK|REJECT(?:ED)?|FAIL(?:ED)?)\b\s*[:\-–(]*\s*(.*)$/i);
+    const m = line.replace(/\*\*/g, '').match(/^\s*(?:[-*•]\s*)?(?:Q(?:uestion)?|R(?:eport)?|#)?\s*(\d{1,2})\s*[:.)\-–]?\s*(?:[-–:]\s*)?(APPROVE[D]?|ACCEPT(?:ED)?|PASS(?:ED)?|OK|REJECT(?:ED)?|FAIL(?:ED)?)\b\s*[:\-–(]*\s*(.*)$/i);
     if (!m) continue;
     const i = Number(m[1]);
     if (i < 1 || i > n) continue;
@@ -119,9 +119,27 @@ function rulings(text: string, n: number): Map<number, { ok: boolean; reason: st
   }
   return out;
 }
-const tagged = (text: string, tag: string): string[] =>
-  text.split('\n').map((l) => l.trim().replace(/^[-*\d.)\s]+/, '')).filter((l) => l.toUpperCase().startsWith(tag))
-    .map((l) => l.slice(tag.length).replace(/^[:\s-]+/, '').trim()).filter(Boolean);
+/**
+ * Lines like "LESSON: ...", "Lessons 2 - ...", "Q3: ..." -> their text. A bare "LESSONS:" header
+ * followed by a bullet/numbered list also counts (small models often answer that way).
+ */
+function tagged(text: string, tag: string): string[] {
+  const out: string[] = [];
+  const re = new RegExp(`^${tag.replace(/ /g, '\\s*')}(?:S|ES)?\\s*\\d*\\s*[:\\-–.)]\\s*(.*)$`, 'i');
+  const anyTag = /^[A-Z][A-Z ]{1,15}\s*\d*\s*[:\-–]/;
+  let inList = false;
+  for (const raw of text.replace(/\*\*/g, '').split('\n')) {
+    const l = raw.trim().replace(/^[-*•]\s+/, '');
+    const m = l.replace(/^\d+[.)]\s+/, '').match(re) || l.match(re);
+    if (m) { if (m[1].trim()) out.push(m[1].trim()); inList = !m[1].trim(); continue; }
+    if (inList) {
+      if (!l || anyTag.test(l)) { inList = false; continue; }
+      const item = l.replace(/^\d+[.)]\s*/, '').trim();
+      if (item) out.push(item);
+    }
+  }
+  return out.filter((x) => x.length > 3);
+}
 
 function learnerSystem(agent: Agent, st: PerAgent, cfg: LearnConfig): string {
   let s = agentPromptWithLessons(agent);
@@ -142,7 +160,7 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
     `TASK: ${cfg.topic}\n${st.direction ? `Manager direction: ${st.direction}\n` : ''}${done.length ? `Already learned (do not repeat):\n${done.join('\n')}\n` : ''}${gaps.length ? `Still not answered well (rephrase or split these):\n${gaps.join('\n')}\n` : ''}Write ${cfg.bankSize} study questions that together cover what an expert needs to know to do this task well: the basics first, then practical steps, warning signs, common mistakes and edge cases. Each question must be answerable in a short report.`,
     'learner',
   );
-  let qs = tagged(raw, 'Q');
+  let qs = tagged(raw, 'Q(?:UESTION)?');
   if (qs.length < 2) qs = raw.split('\n').map((l) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter((l) => l.endsWith('?'));
   qs = [...new Set(qs.map((q) => q.slice(0, 300)))].slice(0, cfg.bankSize + 2);
   if (!qs.length) throw new Error('The learner did not write any questions. Try again or use a bigger model.');
@@ -252,18 +270,23 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   for (let i = 0; i < reps.length; i++) {
     const rep = reps[i];
     const v = r.get(i + 1);
-    const line = verdict.split('\n').find((l) => new RegExp(`^\\s*(?:R)?\\s*${i + 1}\\s*[:.)\\-–]`).test(l)) || '';
+    const line = verdict.replace(/\*\*/g, '').split('\n').find((l) => new RegExp(`^\\s*(?:[-*•]\\s*)?(?:R(?:eport)?|#)?\\s*${i + 1}\\s*[:.)\\-–]`, 'i').test(l)) || '';
     const sc = line.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
     if (sc) scores.push(Math.min(10, parseFloat(sc[1])));
     const item = L().get(agent.id).bank.find((b) => b.id === rep.itemId);
     if (!item) continue;
-    if (!v || v.ok) {
+    if (!v) {
+      // No clear verdict: never count it as learned. Try once more, then give up on it.
+      if (item.tries < 2) L().updateItem(agent.id, item.id, { status: 'approved', feedback: 'The judge could not read your report clearly. Use the ANSWER / KEY POINTS / REASONING format.' });
+      else L().updateItem(agent.id, item.id, { status: 'failed', reason: 'No clear verdict from the judge' });
+      continue;
+    }
+    if (v.ok) {
       pass++;
-      const answer = (rep.report.match(/ANSWER\s*:\s*([\s\S]*?)(?:\n\s*(?:KEY POINTS|REASONING|UNSURE)\s*:|$)/i)?.[1] || rep.report).trim();
       L().updateItem(agent.id, item.id, { status: 'answered', reason: undefined });
       const cur = L().get(agent.id);
       L().patch(agent.id, { notes: [{ q: rep.q, answer: rep.report, at: Date.now(), score: sc ? parseFloat(sc[1]) : undefined }, ...cur.notes].slice(0, 200) });
-      await saveNote(agent, cfg, rep.q, answer.length > 40 ? rep.report : answer);
+      await saveNote(agent, cfg, rep.q, rep.report);
     } else if (item.tries < 2) {
       L().updateItem(agent.id, item.id, { status: 'approved', feedback: v.reason }); // back in the queue for one redo
     } else {
@@ -373,7 +396,9 @@ export async function startLearning(agentId: string): Promise<void> {
     running = false;
     stopRequested = false;
     L().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
-    if (baseModel && useAppStore.getState().loadedTextModelId !== baseModel) ensureTextModel(baseModel).catch(() => undefined);
+    // Put back the user's model only if learning itself swapped to a role model.
+    const loaded = useAppStore.getState().loadedTextModelId;
+    if (baseModel && loaded !== baseModel && [roleModels.learner, roleModels.judge, roleModels.manager].includes(loaded || '')) ensureTextModel(baseModel).catch(() => undefined);
     status('Stopped');
   }
 }

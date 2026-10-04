@@ -54,7 +54,7 @@ export function AddonsSection() {
                 <Text style={{ color: colors.textSecondary, marginLeft: 6 }}>{Math.round((p || 0) * 100)}% · Stop</Text>
               </TouchableOpacity>
             ) : installed[a.id] ? (
-              <TouchableOpacity onPress={() => Alert.alert('Remove add-on?', a.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => deleteAddon(a).then(refresh) }])}>
+              <TouchableOpacity onPress={() => Alert.alert('Remove add-on?', a.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => { deleteAddon(a).then(refresh).catch(() => undefined); } }])}>
                 <Text style={{ color: colors.primary }}>Installed ✓</Text>
               </TouchableOpacity>
             ) : (

@@ -315,7 +315,8 @@ async function generateWithCompactionRetry(
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
     });
-    await gen(compacted);
+    const retry = await gen(compacted);
+    turnInterrupted = !!(retry as { interrupted?: boolean } | void)?.interrupted;
   }
   return turnInterrupted;
 }

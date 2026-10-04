@@ -35,6 +35,7 @@ const TOOL_CHOICES: { id: string; label: string }[] = [
   { id: 'calendar_events', label: 'Read calendar' },
   { id: 'add_calendar_event', label: 'Add calendar events' },
   { id: 'remember', label: 'Remember things you tell it' },
+  { id: 'my_location', label: 'My location (GPS) and saved places' },
   { id: 'calculator', label: 'Calculator' },
   { id: 'get_current_datetime', label: 'Date and time' },
   { id: 'get_device_info', label: 'Device info' },
@@ -93,7 +94,7 @@ export const AgentEditScreen: React.FC = () => {
         tools: a.enabledTools ?? p.tools,
       }));
     }
-  }, [existingProject]);
+  }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps -- load once per agent, keep unsaved edits
 
   const advFields = () => ({
     temperature: adv.custom ? adv.temperature : undefined,
@@ -113,7 +114,7 @@ export const AgentEditScreen: React.FC = () => {
         systemPrompt: existingProject.systemPrompt,
       });
     }
-  }, [existingProject]);
+  }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps -- load once per agent, keep unsaved edits
 
   const handleSave = () => {
     if (!formData.name.trim()) {
