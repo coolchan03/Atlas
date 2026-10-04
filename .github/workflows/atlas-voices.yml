@@ -21,8 +21,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          gh release view atlas-voices >/dev/null 2>&1 || gh release create atlas-voices --target "$GITHUB_SHA" \
+          gh release view atlas-voices >/dev/null 2>&1 || gh release create atlas-voices --prerelease --target "$GITHUB_SHA" \
             --title "Atlas voices" --notes "Natural offline voices for the Atlas app (Settings > Models > Voice). Kokoro (Apache-2.0) and Piper voices, packaged from the sherpa-onnx project."
+          gh release edit atlas-voices --prerelease || true
           mkdir -p work && cd work
           for pair in kokoro-en:kokoro-int8-en-v0_19 piper-amy:vits-piper-en_US-amy-medium piper-ryan:vits-piper-en_US-ryan-medium \
                       piper-lessac:vits-piper-en_US-lessac-medium piper-joe:vits-piper-en_US-joe-medium piper-hfc:vits-piper-en_US-hfc_female-medium; do

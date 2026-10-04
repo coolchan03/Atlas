@@ -71,6 +71,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create atlas-${{ github.run_number }} out/*.apk \
+          gh release create atlas-${{ github.run_number }} out/*.apk --latest \
             --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
             --notes "Install this APK on your Android phone or tablet (download it, open it, allow installing from this source)."

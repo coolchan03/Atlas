@@ -851,11 +851,13 @@ SOURCES = '''
 03_Food_Agriculture/USDA_Home_Canning_Guide_6_Fermented_Pickled.pdf	https://nchfp.uga.edu/papers/guide/GUIDE06_HomeCan_rev0715.pdf
 03_Food_Agriculture/USDA_Home_Canning_Guide_7_Jams_Jellies.pdf	https://nchfp.uga.edu/publications/usda/GUIDE07_HomeCan_rev0715.pdf
 03_Food_Agriculture/Veterinary_Preventive_Medicine_Root_Kustritz_2022.pdf	https://open.lib.umn.edu/vetprevmed/
+03_Food_Agriculture/Foraging_Poisonous/Food_Plant_Solutions_Important_Food_Plants_Philippines.pdf	https://assets-global.echocommunity.org/publicationissues/73bd7953-5797-4e2f-9927-6bb7715827bf/en/en_potentially-impor_print.pdf
+03_Food_Agriculture/Preservation_Cooking/SPC_Tuara_Seafood_Salting_Drying_Smoking_1997.pdf	https://spc.int/DigitalLibrary/Doc/FAME/Manuals/Tuara_97_PreservSeafood.pdf
 04_Engineering_Repair/DOE_Small_Wind_Electric_Systems_Guide.pdf	https://www.energy.gov/eere/wind/articles/small-wind-electric-systems-us-consumers-guide
 04_Engineering_Repair/Designing_Renewable_Energy_Systems_2025.pdf	https://link.springer.com/content/pdf/10.1007/978-3-031-69856-9.pdf	https://sites.abo.fi/centre-for-sustainable-ocean-science/publications/designing-renewable-energy-systems-within-planetary-boundaries/
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_01_Matter_Energy_Direct_Current.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2001%20-%20Introduction%20to%20Matter%20Energy%20and%20Direct%20Current.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_02_Alternating_Current_Transformers.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2002%20-%20Introduction%20to%20Alternating%20Current%20and%20Transformers.pdf
-04_Engineering_Repair/Electronics_Basics/NEETS_Module_03_Circuit_Protection_Control_Measurement.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2003%20-%20Introduction%20to%20Circuit%20Protection%2C%20Control%2C%20and%20Measurement.pdf
+04_Engineering_Repair/Electronics_Basics/NEETS_Module_03_Circuit_Protection_Control_Measurement.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2003%20-%20Introduction%20to%20Circuit%20Protection%2C%20Control%2C%20and%20Measurement.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2003%20-%20Introduction%20to%20Circuit%20Protection%2C%20Control%2C%20and%20Measurement.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_04_Conductors_Wiring_Schematics.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2004%20-%20Introduction%20to%20Electrical%20Conductors%2C%20Wiring%20Techniques%2C%20and%20Schematic%20Reading.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_05_Generators_Motors.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2005%20-%20Introduction%20to%20Generators%20and%20Motors.pdf
 04_Engineering_Repair/Electronics_Basics/NEETS_Module_07_Solid_State_Devices_Power_Supplies.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2007%20-%20Introduction%20to%20Solid-State%20Devices%20and%20Power%20Supplies.pdf
@@ -954,6 +956,7 @@ SOURCES = '''
 06_Survival_Navigation/US_Army_ATP_3-50.21_Survival_2018.pdf	https://trueprepper.com/wp-content/uploads/ATP-3-50.21-Survival.pdf	https://irp.fas.org/doddir/army/atp3-50-21.pdf
 06_Survival_Navigation/US_Army_FM_21-76_Survival_Manual.pdf	archive:FM21-76Survival1957	https://archive.org/download/FM21-76Survival1957/FM21-76Survival1957.pdf
 06_Survival_Navigation/Woodcraft/Kephart_Book_of_Camping_and_Woodcraft.pdf	archive:bookofcampingwoo00keph
+06_Survival_Navigation/Peace_Corps_T0123_Disaster_Preparedness_Mitigation_Training.pdf	https://files.peacecorps.gov/documents/T0123_Disaster-Preparedness-and-Mitigation-DPM-PST.pdf
 07_Civilization_Crafts/Aalto_Ceramic_Handbook_From_Clay_to_Ceramics_Firing_2021.pdf	
 07_Civilization_Crafts/Aalto_Ceramic_Handbook_Materials_2021.pdf	
 07_Civilization_Crafts/Aalto_Ceramic_Handbook_Studio_Practices_Equipment_2021.pdf	
@@ -1170,7 +1173,7 @@ SOURCES = '''
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Engineman_3_and_2.pdf	
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Machinery_Repairman_3_and_2.pdf	archive:machineryrepairm003995mbp
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Machinery_Repairman_NAVEDTRA_12204A.pdf	archive:machineryrepairm003995mbp
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Radioman_3_and_2.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Radioman_3_and_2.pdf	https://navy-radio.virhistory.com/manuals/rm32-10228F-1971.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Steelworker_3_and_2.pdf	https://everyspec.com/USN/NAVEDTRA/download.php?spec=NAVEDTRA_14250_VOLUME-1_NOV1996.018385.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Tools_and_Their_Uses.pdf	https://everyspec.com/USN/NAVEDTRA/NAVEDTRA_14256_JUN1992_18379/
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Civilization_Crafts/USN_Utilitiesman_3_and_2.pdf	
@@ -1196,12 +1199,12 @@ SOURCES = '''
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/USN_Fluid_Power.pdf	https://www.teachengineering.org/content/pur_/lessons/pur_fluidpower_less1/pur_fluidpower_lesson01_trainingmanualfluidpower.pdf
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_FM_5-428_Concrete_and_Masonry.pdf	archive:FM5-428
 90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TC_9-524_Fundamentals_of_Machine_Tools.pdf	https://everyspec.com/ARMY/ARMY-General/download.php?spec=TC_9-524_29OCT1996.016321.pdf
-90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TM_9-8000_Principles_of_Automotive_Vehicles.pdf	
+90_Human_Read_Only/Legacy_Core_Cleanup_2026/Engineering_Repair/US_Army_TM_9-8000_Principles_of_Automotive_Vehicles.pdf	https://everyspec.com/ARMY/TM-Tech-Manual/TM_9-8000_CHG-1_48512/
 90_Human_Read_Only/Legacy_Technical_Manuals/USDA_Home_Fruit_Garden_Southeastern_Southern_States_1965.pdf	archive:homefruitgardeni219unit_1	https://www.archive.org/download/homefruitgardeni219unit_1/homefruitgardeni219unit_1_bw.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_06_Tubes_and_Power_Supplies.pdf	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2006%20-%20Introduction%20to%20Electronic%20Emissions%2C%20Tubes%2C%20and%20Power%20Supplies.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_07_Solid_State_Devices_and_Power_Supplies.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2007%20-%20Introduction%20to%20Solid-State%20Devices%20and%20Power%20Supplies.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_08_Amplifiers.pdf	archive:NEETSModules	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2008%20-%20Introduction%20to%20Amplifiers.pdf
-90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_10_Wave_Propagation_Transmission_Lines_Antennas.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2010%20-%20Wave%20Propagation%2C%20Transmission%20Lines%2C%20and%20Antennas.pdf
+90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_10_Wave_Propagation_Transmission_Lines_Antennas.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2010%20-%20Introduction%20to%20Wave%20Propagation%2C%20Transmission%20Lines%2C%20and%20Antennas.pdf	https://archive.org/download/NEETSModules/NEETS%20Module%2010%20-%20Wave%20Propagation%2C%20Transmission%20Lines%2C%20and%20Antennas.pdf
 90_Human_Read_Only/Legacy_Technical_Manuals/USN_NEETS_17_Radio_Frequency_Communications.pdf	archive:NEETSModule17	https://ia600608.us.archive.org/35/items/NEETSModules/NEETS%20Module%2017%20-%20Radio-Frequency%20Communications%20Principles.pdf
 90_Human_Read_Only/Modern_Reference_Pending_License/Civilization_Crafts/AZ_4H_Blacksmithing_2024.pdf	https://extension.arizona.edu/sites/default/files/2024-11/az2051-2024.pdf
 90_Human_Read_Only/Modern_Reference_Pending_License/Civilization_Crafts/Good_Foundations_Mani_Kiln_Manual.pdf	

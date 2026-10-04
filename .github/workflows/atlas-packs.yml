@@ -23,7 +23,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release view atlas-library >/dev/null 2>&1 || gh release create atlas-library --target "$GITHUB_SHA" \
-            --title "Atlas library packs" --notes "Subject packs for the Off Grid Atlas app (Agents > Atlas library). Built automatically from free, public sources."
+            --prerelease --title "Atlas library packs" --notes "Subject packs for the Atlas app (Settings > Offline Library). Built automatically from free, public sources."
+          gh release edit atlas-library --prerelease || true
 
   pack:
     needs: release
@@ -67,7 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view atlas-build-reports >/dev/null 2>&1 || gh release create atlas-build-reports --target "$GITHUB_SHA" --title "Atlas build reports" --notes "Lists of sources the library builder could not download (for fixing links)."
+          gh release view atlas-build-reports >/dev/null 2>&1 || gh release create atlas-build-reports --prerelease --target "$GITHUB_SHA" --title "Atlas build reports" --notes "Lists of sources the library builder could not download (for fixing links)."
           f="$RUNNER_TEMP/lib/00_MANIFESTS/FAILED_WHY.txt"
           [ -e "$f" ] || exit 0
           name="failed-$(echo '${{ matrix.only }}' | tr ',/' '__').txt"
