@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,6 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore, Agent } from '../stores/agentStore';
-import { installAtlasStarter } from '../learning/starter';
 
 /** Agents tab: personas with their own system prompts. Tap the circle to make one active. */
 export const AgentsScreen: React.FC = () => {
@@ -19,19 +18,6 @@ export const AgentsScreen: React.FC = () => {
   const agents = useAgentStore((s) => s.agents);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
-  const [starterMsg, setStarterMsg] = useState<string | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const install = async () => {
-    setInstalling(true);
-    try {
-      const r = await installAtlasStarter(setStarterMsg);
-      setStarterMsg(`Done: ${r.added} documents added${r.skipped ? `, ${r.skipped} already there` : ''}. Open the "Atlas - Emergency" project to chat with them.`);
-    } catch (e: any) {
-      setStarterMsg(`Could not add the cards: ${String(e?.message || e)}`);
-    } finally {
-      setInstalling(false);
-    }
-  };
 
   const renderItem = ({ item }: { item: Agent }) => {
     const active = item.id === activeAgentId;
@@ -69,12 +55,13 @@ export const AgentsScreen: React.FC = () => {
         An agent decides who answers and how (its system prompt). Projects hold your chats and documents.
         Tap the circle to choose the active agent - it is used in every chat. Tap again for no agent.
       </Text>
-      <TouchableOpacity style={styles.starter} onPress={install} disabled={installing}>
-        <Icon name="download" size={18} color={colors.primary} />
+      <TouchableOpacity style={styles.starter} onPress={() => navigation.navigate('AtlasHub')}>
+        <Icon name="compass" size={20} color={colors.primary} />
         <View style={styles.cardText}>
-          <Text style={styles.name}>{installing ? 'Adding emergency cards...' : 'Add Atlas emergency cards'}</Text>
-          <Text style={styles.desc}>{starterMsg ?? 'Creates the "Atlas - Emergency" project with the built-in cards and the whole Survival Manual, and turns on the Atlas agent. Takes a minute.'}</Text>
+          <Text style={styles.name}>Atlas: emergency & travel</Text>
+          <Text style={styles.desc}>Emergency cards, Survival Manual, offline maps, phrases, offline library and off-grid mode.</Text>
         </View>
+        <Icon name="chevron-right" size={18} color={colors.textMuted} />
       </TouchableOpacity>
       <FlatList data={agents} keyExtractor={(a) => a.id} renderItem={renderItem} contentContainerStyle={[styles.list, wide.column]} />
     </SafeAreaView>

@@ -33,7 +33,7 @@ export async function importBackup(): Promise<number | null> {
   const local = await resolvePickedFileUri(files[0].uri, files[0].name || 'backup.json');
   const text = await RNFS.readFile(local.replace(/^file:\/\//, ''), 'utf8');
   const data = JSON.parse(text);
-  if (data?.format !== MAGIC || typeof data.items !== 'object') throw new Error('This is not an Off Grid Atlas backup file.');
+  if (data?.format !== MAGIC || typeof data.items !== 'object') throw new Error('This is not an Atlas backup file.');
   const pairs = Object.entries(data.items).filter(([, v]) => typeof v === 'string') as [string, string][];
   await AsyncStorage.multiSet(pairs);
   return pairs.length;

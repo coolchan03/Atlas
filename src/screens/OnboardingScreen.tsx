@@ -2,13 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   FlatList,
   Dimensions,
   Animated,
   TouchableOpacity,
-  Linking,
-} from 'react-native';
+  } from 'react-native';
 import ReanimatedAnimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,8 +24,7 @@ import {
   SPACING,
   TYPOGRAPHY,
   FONTS,
-  WEDNESDAY_URL,
-} from '../constants';
+  } from '../constants';
 import { useAppStore } from '../stores';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { discoverLANServers } from '../services/networkDiscovery';
@@ -301,23 +298,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             style={styles.nextButton}
             testID="onboarding-next"
           />
-          <TouchableOpacity
-            onPress={() => Linking.openURL(WEDNESDAY_URL)}
-            style={styles.madeWithLove}
-          >
-            <View style={styles.madeWithLoveRow}>
-              <Text style={styles.madeWithLoveText}>
-                {'made with '}
-                <Text style={styles.heart}>{'♥'}</Text>
-                {' by '}
-              </Text>
-              <Image
-                source={require('../assets/wednesday_logo.png')}
-                style={styles.wednesdayLogo}
-              />
-              <Text style={styles.madeWithLoveText}>{'Wednesday'}</Text>
-            </View>
-          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>

@@ -16,10 +16,10 @@ import { useAtlasVoiceStore } from '../atlasVoice/store';
 type Card = { file: string; id: string; title: string; zone: string; keywords: string; source: string; status: string; body: string };
 
 const ZONE_COLOR: Record<string, string> = {
-  Emergency: '#DC2626', 'Water and food': '#2563EB', Illness: '#EA580C', Mind: '#7C3AED', 'Power and tools': '#4B5563',
+  Emergency: '#DC2626', 'Water and food': '#2563EB', Illness: '#EA580C', Mind: '#7C3AED', 'Power and tools': '#4B5563', Survival: '#3F6212',
 };
 const ZONE_ICON: Record<string, string> = {
-  Emergency: 'alert-octagon', 'Water and food': 'droplet', Illness: 'thermometer', Mind: 'heart', 'Power and tools': 'battery-charging',
+  Emergency: 'alert-octagon', 'Water and food': 'droplet', Illness: 'thermometer', Mind: 'heart', 'Power and tools': 'battery-charging', Survival: 'compass',
 };
 
 function parse(file: string, raw: string): Card {

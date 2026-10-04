@@ -1,6 +1,4 @@
 import React from 'react';
-import { deviceHasCompass } from '../CompassScreen';
-import { OffGridCard } from '../../components/OffGridCard';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,9 +40,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const wide = useWideLayout();
-  // Compass tile only on devices that actually have a compass sensor.
-  const [hasCompass, setHasCompass] = React.useState(false);
-  React.useEffect(() => { deviceHasCompass().then(setHasCompass); }, []);
   const styles = useThemedStyles(createStyles);
   const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
 
@@ -148,33 +143,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, wide.column]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Text style={styles.title}>Off Grid Atlas</Text>
+              <Text style={styles.title}>Atlas</Text>
               {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
           </View>
-
-          {/* Atlas quick access: works with no model loaded */}
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-            {[
-              { label: 'Emergency', icon: 'alert-octagon', color: '#DC2626', to: 'Emergency' },
-              { label: 'Survival Manual', icon: 'book-open', color: '#3F6212', to: 'SurvivalManual' },
-              { label: 'Phrases', icon: 'globe', color: '#2563EB', to: 'Phrases' },
-              { label: 'Maps', icon: 'map', color: '#0F766E', to: 'Maps' },
-              ...(hasCompass ? [{ label: 'Compass', icon: 'compass', color: '#7C3AED', to: 'Compass' }] : []),
-            ].map((b) => (
-              <TouchableOpacity
-                key={b.to}
-                onPress={() => (navigation as any).navigate(b.to)}
-                style={{ flex: 1, backgroundColor: b.color, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center' }}
-                accessibilityLabel={b.label}
-              >
-                <Icon name={b.icon} size={22} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', marginTop: 4, textAlign: 'center' }} numberOfLines={2}>{b.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <OffGridCard />
 
           {/* Collapsed Models summary — tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}
@@ -258,9 +230,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
-
-          {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
-          <DesktopPromoCard />
 
           {/* Model Stats row removed — the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}

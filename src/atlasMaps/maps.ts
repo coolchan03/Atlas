@@ -159,7 +159,7 @@ export async function askLocationPermission(): Promise<boolean> {
 /** Starts GPS; calls onFix with each new position. Returns a stop function. */
 export async function watchPosition(onFix: (f: GpsFix) => void, onError: (msg: string) => void): Promise<() => void> {
   if (!Native?.startLocation) { onError('GPS is not available in this build.'); return () => undefined; }
-  if (!(await askLocationPermission())) { onError('Location permission was not given. Allow it in Android Settings > Apps > Off Grid Atlas > Permissions.'); return () => undefined; }
+  if (!(await askLocationPermission())) { onError('Location permission was not given. Allow it in Android Settings > Apps > Atlas > Permissions.'); return () => undefined; }
   const em = new NativeEventEmitter(Native);
   const sub = em.addListener('AtlasLocation', (f: GpsFix) => { useMaps.getState().setFix(f); onFix(f); });
   try {

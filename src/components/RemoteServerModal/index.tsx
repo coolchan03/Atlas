@@ -106,7 +106,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         <Text style={styles.label}>Server Name</Text>
         <TextInput
           style={[styles.input, errors.name && styles.inputError]}
-          placeholder="e.g., Off Grid AI Desktop"
+          placeholder="e.g., My laptop"
           placeholderTextColor={theme.colors.textMuted}
           value={name}
           onChangeText={setName}

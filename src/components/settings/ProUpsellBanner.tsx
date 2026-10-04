@@ -27,6 +27,8 @@ interface Props {
  * weights <= 400 per docs/design.
  */
 export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
+  if (Date.now() > 0) return null; // Atlas: no upsells
+
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   // Never upsell a Pro user — isProActive covers keychain/dev-unlocked Pro too, which

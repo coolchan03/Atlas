@@ -3,18 +3,13 @@ import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { MadeWithLove } from '../components/MadeWithLove';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL } from '../utils/sharePrompt';
-import { withUtm } from '../utils/utm';
 import packageJson from '../../package.json';
 
-const WEDNESDAY_MOBILE_URL = withUtm('https://wednesday.is', 'about');
 
 export const AboutScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -36,10 +31,10 @@ export const AboutScreen: React.FC = () => {
         {/* App identity */}
         <View style={styles.heroSection}>
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
-          <Text style={styles.appName}>Off Grid AI</Text>
+          <Text style={styles.appName}>Atlas</Text>
           <Text style={styles.version}>Version {packageJson.version}</Text>
           <Text style={styles.description}>
-            Local AI that runs entirely on your phone. No cloud, no telemetry, nothing leaves the device.
+            Your offline assistant, library and field guide. Runs on this device and keeps working with no internet.
           </Text>
         </View>
 
@@ -50,7 +45,7 @@ export const AboutScreen: React.FC = () => {
             staggerMs={40}
             trigger={focusTrigger}
             style={[styles.navItem, styles.navItemLast]}
-            onPress={() => Linking.openURL(GITHUB_URL)}
+            onPress={() => Linking.openURL('https://github.com/coolchan03/Off-Grid')}
           >
             <View style={styles.navItemIcon}>
               <Icon name="github" size={16} color={colors.textSecondary} />
@@ -62,68 +57,9 @@ export const AboutScreen: React.FC = () => {
             <Icon name="external-link" size={14} color={colors.textMuted} />
           </AnimatedListItem>
         </View>
-
-        {/* Follow / Community */}
-        <View style={styles.navSection}>
-          <AnimatedListItem
-            index={1}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={styles.navItem}
-            testID="about-follow-on-x"
-            onPress={() => Linking.openURL(FOLLOW_X_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <Icon name="twitter" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Follow @alichherawalla on X</Text>
-              <Text style={styles.navItemDesc}>New features first, promo discounts, roadmap</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-          <AnimatedListItem
-            index={2}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={[styles.navItem, styles.navItemLast]}
-            testID="about-join-slack"
-            onPress={() => Linking.openURL(SLACK_INVITE_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <IconMC name="slack" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Join the Slack community</Text>
-              <Text style={styles.navItemDesc}>Issues fixed fast, debug together, early access</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-        </View>
-
-        {/* Built by Wednesday row */}
-        <View style={styles.navSection}>
-          <AnimatedListItem
-            index={3}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={[styles.navItem, styles.navItemLast]}
-            onPress={() => Linking.openURL(WEDNESDAY_MOBILE_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <Image source={require('../assets/wednesday_logo.png')} style={styles.wednesdayLogo} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Built by Wednesday</Text>
-              <Text style={styles.navItemDesc}>We build mobile apps for enterprise teams</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-        </View>
       </ScrollView>
 
-      {/* Pinned footer */}
-      <MadeWithLove />
+
     </SafeAreaView>
   );
 };

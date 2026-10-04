@@ -150,75 +150,77 @@ export const ONBOARDING_SLIDES = [
 
 // Fonts
 export const FONTS = {
-  mono: 'Menlo',
+  mono: 'sans-serif', // was Menlo (never existed on Android)
+  heading: 'serif', // Atlas look: book-style headings
+  body: 'sans-serif',
 };
 
 // Typography Scale - Centralized font sizes and styles
 export const TYPOGRAPHY = {
   // Display / Hero numbers
   display: {
-    fontSize: 22,
-    fontFamily: FONTS.mono,
-    fontWeight: '200' as const,
+    fontSize: 24,
+    fontFamily: FONTS.heading,
+    fontWeight: '700' as const,
     letterSpacing: -0.5,
   },
 
   // Headings
   h1: {
-    fontSize: 24,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 25,
+    fontFamily: FONTS.heading,
+    fontWeight: '700' as const,
     letterSpacing: -0.5,
   },
   h2: {
-    fontSize: 16,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 17,
+    fontFamily: FONTS.heading,
+    fontWeight: '600' as const,
     letterSpacing: -0.2,
   },
   h3: {
-    fontSize: 13,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 14,
+    fontFamily: FONTS.body,
+    fontWeight: '600' as const,
     letterSpacing: -0.2,
   },
 
   // Body text
   body: {
-    fontSize: 14,
-    fontFamily: FONTS.mono,
+    fontSize: 15,
+    fontFamily: FONTS.body,
     fontWeight: '400' as const,
   },
   bodySmall: {
     fontSize: 13,
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.body,
     fontWeight: '400' as const,
   },
 
   // Labels (whispers)
   label: {
-    fontSize: 10,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    fontWeight: '500' as const,
     letterSpacing: 0.3,
   },
   labelSmall: {
-    fontSize: 9,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 10,
+    fontFamily: FONTS.body,
+    fontWeight: '500' as const,
     letterSpacing: 0.3,
   },
 
   // Metadata / Details
   meta: {
-    fontSize: 10,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    fontWeight: '400' as const,
   },
   metaSmall: {
-    fontSize: 9,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 10,
+    fontFamily: FONTS.body,
+    fontWeight: '400' as const,
   },
 };
 

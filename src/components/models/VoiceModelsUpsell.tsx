@@ -18,6 +18,8 @@ interface VoiceModelsUpsellProps {
  * absent the tab still renders so users can see what Pro adds.
  */
 export const VoiceModelsUpsell: React.FC<VoiceModelsUpsellProps> = ({ onGetPro }) => {
+  if (Date.now() > 0) return null; // Atlas: no upsells
+
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 

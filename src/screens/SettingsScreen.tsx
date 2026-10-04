@@ -93,7 +93,7 @@ export const SettingsScreen: React.FC = () => {
       ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
       : 'Device: Unknown';
 
-    const subject = encodeURIComponent(`[Feedback] Off Grid AI v${packageJson.version}`);
+    const subject = encodeURIComponent(`[Feedback] Atlas v${packageJson.version}`);
     const body = encodeURIComponent(
       `Hi,\n\n[Describe your feedback or issue here]\n\n` +
       `---\n` +
@@ -191,8 +191,9 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.navSection}>
             {[
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
-              { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Off Grid AI Desktop, Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
-              { icon: 'book', title: 'Offline Library & Atlas', desc: 'Download the Atlas library and offline encyclopedias (WikiMed, Wikipedia, iFixit, Wikivoyage)', screen: 'OfflineLibrary' as const },
+              { icon: 'wifi', title: 'Remote Servers', desc: 'Use models running on a computer on your Wi-Fi (Ollama, LM Studio...)', screen: 'RemoteServers' as const },
+              { icon: 'compass', title: 'Atlas', desc: 'Emergency cards, Survival Manual, offline maps, phrases, off-grid mode', screen: 'AtlasHub' as const },
+              { icon: 'book', title: 'Offline Library', desc: 'Download the Atlas library and offline encyclopedias (WikiMed, Wikipedia, iFixit, Wikivoyage)', screen: 'OfflineLibrary' as const },
               { icon: 'search', title: 'Tools & Web Search', desc: 'Search provider (SearXNG, DuckDuckGo, Exa, Parallel, Tavily) and tools', screen: 'Tools' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
@@ -283,20 +284,6 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
-        </AnimatedEntry>
-
-        {/* Privacy */}
-        <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
-          <Card style={styles.privacyCard}>
-            <View style={styles.privacyIconContainer}>
-              <Icon name="shield" size={18} color={colors.textSecondary} />
-            </View>
-            <Text style={styles.privacyTitle}>Privacy First</Text>
-            <Text style={styles.privacyText}>
-              All your data stays on this device. No conversations, prompts, or
-              personal information is ever sent to any server.
-            </Text>
-          </Card>
         </AnimatedEntry>
 
         {/* Pro feature sections registered at runtime by @offgrid/pro */}

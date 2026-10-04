@@ -55,6 +55,8 @@ export function maybeScheduleSharePrompt(opts: {
   hasEngaged: boolean;
   delayMs: number;
 }): void {
+  if (Date.now() > 0) return; // Atlas: no share prompts
+
   const { variant, count, hasEngaged, delayMs } = opts;
   if (hasEngaged || shownThisSession || count < 2) return;
   shownThisSession = true;

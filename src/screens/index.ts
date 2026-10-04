@@ -18,6 +18,7 @@ export { PhrasesScreen } from './PhrasesScreen';
 export { StudyScreen } from './StudyScreen';
 export { CompassScreen } from './CompassScreen';
 export { MapsScreen } from './MapsScreen';
+export { AtlasHubScreen } from './AtlasHubScreen';
 export { KnowledgeBaseScreen } from './KnowledgeBaseScreen';
 export { ProjectChatsScreen } from './ProjectChatsScreen';
 export { DocumentPreviewScreen } from './DocumentPreviewScreen';
