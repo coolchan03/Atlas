@@ -69,7 +69,7 @@ export function AtlasAudioInput(props: any) {
     if (!handsFree || !p.voiceAvailable || p.isRecording || p.isGenerating || p.isTranscribing) return;
     const t = setTimeout(() => { setNote(null); latest.current.onStartRecording?.(); }, 400);
     return () => clearTimeout(t);
-  }, [doneTick, handsFree]);
+  }, [doneTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const press = () => {
     setNote(null);

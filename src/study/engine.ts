@@ -47,7 +47,21 @@ export const useStudyStore = create<StudyState>()(
 );
 
 const SOURCE_CHARS = 700;
-const BUDGET = 5200; // characters of source text per generation (fits small phone context windows)
+/** Characters of source text that fit the loaded model's context (about 3 chars per token, minus room for the answer). */
+function budget(): number {
+  try {
+    const { llmService } = require('../services/llm');
+    const ctx = Number(llmService.getPerformanceSettings?.()?.contextLength) || 2048;
+    return Math.max(1500, Math.min(12000, (ctx - 900) * 3 - 1200));
+  } catch { return 3000; }
+}
+const trimSources = (src: Source[]): Source[] => {
+  const max = budget(); let used = 0; const out: Source[] = [];
+  for (const x of src) { if (used + x.text.length > max) break; used += x.text.length; out.push(x); }
+  return out.map((x, i) => ({ ...x, n: i + 1 }));
+};
+/** Removes markdown decoration small models like to add around the requested format. */
+const tidy = (t: string) => t.replace(/\*\*|__/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+(?=(?:Q|A|ANSWER|WHY|SRC|TITLE|SAY|[A-D])\s*[:).])/gim, '');
 
 /** Sources for a topic (search) or, with no topic, a spread across all documents. */
 export async function gatherSources(projectId: string, topic: string): Promise<Source[]> {
@@ -69,10 +83,11 @@ export async function gatherSources(projectId: string, topic: string): Promise<S
   }
   const out: Source[] = [];
   let used = 0;
+  const max = budget();
   for (const c of raw) {
-    if (used > BUDGET) break;
     const text = String(c.content).replace(/\s+/g, ' ').trim().slice(0, SOURCE_CHARS);
     if (!text || out.some((o) => o.text === text)) continue;
+    if (used + text.length > max) break;
     out.push({ n: out.length + 1, doc: c.name, part: (c.position ?? 0) + 1, text });
     used += text.length;
   }
@@ -86,6 +101,7 @@ async function ask(system: string, user: string): Promise<string> {
   await ensureTextModel(null);
   const { llmService } = require('../services/llm');
   for (let i = 0; llmService.isCurrentlyGenerating() && i < 40; i++) await new Promise((r) => setTimeout(r, 1500));
+  if (llmService.isCurrentlyGenerating()) throw new Error('The AI is busy answering a chat. Wait for it to finish (or stop it), then try again.');
   const out: string = await llmService.generateResponse(
     [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
     { disableThinking: true },
@@ -93,6 +109,7 @@ async function ask(system: string, user: string): Promise<string> {
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
+const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;
 const GROUND = 'Use ONLY the numbered sources. After every fact put the source number in brackets like [2]. If the sources do not cover something, do not invent it.';
 
 export async function generate(projectId: string, kind: StudyResult['kind'], topic: string): Promise<StudyResult> {
@@ -116,19 +133,27 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
   }
   if (kind === 'cards') {
     const t = await ask(`You make flashcards. ${GROUND}`, `${S}${about}Make 8 flashcards. One per line, exactly this format:\nQ: question | A: short answer | SRC: number\nNothing else.`);
-    const cards: Card[] = t.split('\n').map((l) => {
+    const T = tidy(t);
+    const srcOf = (x?: string) => refs(`[${(x || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`);
+    let cards: Card[] = T.split('\n').map((l) => {
       const m = l.match(/Q:\s*(.+?)\s*\|\s*A:\s*(.+?)\s*(?:\|\s*SRC:\s*([\d,\s[\]]+))?\s*$/i);
-      return m ? { q: m[1].trim(), a: m[2].trim(), src: refs(`[${(m[3] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) } : null;
+      return m ? { q: m[1].trim(), a: m[2].trim(), src: srcOf(m[3]) } : null;
     }).filter(Boolean) as Card[];
+    if (!cards.length) {
+      // Fallback: "Q: ..." and "A: ..." on separate lines.
+      cards = [...T.matchAll(/Q:\s*(.+)\n+\s*A:\s*(.+?)(?:\s*\|?\s*SRC:\s*([\d,\s[\]]+))?\s*$/gim)].map((m) => ({ q: m[1].trim(), a: m[2].trim(), src: srcOf(m[3]) || refs(m[0]) }));
+    }
     if (!cards.length) throw new Error('The model did not produce flashcards in the expected format. Try again or use a bigger model.');
     return { ...base, cards };
   }
   if (kind === 'quiz') {
     const t = await ask(`You write multiple-choice quizzes. ${GROUND}`, `${S}${about}Write 5 questions. For each, exactly:\nQ: question\nA) option\nB) option\nC) option\nD) option\nANSWER: letter\nWHY: one sentence\nSRC: number\n(blank line between questions)`);
-    const quiz: QuizItem[] = t.split(/\n\s*\n/).map((b) => {
-      const q = b.match(/Q:\s*(.+)/i)?.[1]?.trim();
+    const T = tidy(t);
+    const blocks = /\n\s*\n/.test(T.trim()) ? T.split(/\n\s*\n/) : T.split(/\n(?=\s*Q\d*\s*[:.])/i);
+    const quiz: QuizItem[] = blocks.map((b) => {
+      const q = b.match(/Q\d*\s*[:.]\s*(.+)/i)?.[1]?.trim();
       const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*${L}[).:]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
-      const ans = 'ABCD'.indexOf((b.match(/ANSWER:\s*([A-D])/i)?.[1] || '').toUpperCase());
+      const ans = 'ABCD'.indexOf((b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase());
       if (!q || opts.length < 2 || ans < 0) return null;
       return { q, options: opts, answer: ans, why: b.match(/WHY:\s*(.+)/i)?.[1]?.trim() || '', src: refs(`[${(b.match(/SRC:\s*([\d,\s[\]]+)/i)?.[1] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) };
     }).filter(Boolean) as QuizItem[];
@@ -141,15 +166,15 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
       `${S}${about}Write a 14-18 line conversation between two hosts: A (curious, asks questions) and B (explains). Natural, friendly, plain spoken English, no sound effects. Exactly this format, one line each:\nA: ...\nB: ...`,
     );
     const podcast: PodcastLine[] = t.split('\n').map((l) => {
-      const m = l.match(/^\s*\**\s*(?:HOST\s*)?([AB])\**\s*[:\-]\s*(.+)$/i);
-      return m ? { host: m[1].toUpperCase() as 'A' | 'B', text: m[2].replace(/\[\d+\]/g, '').trim() } : null;
+      const m = l.match(LINE_RE);
+      return m ? { host: (m[1].toUpperCase() === 'A' ? 'A' : 'B') as 'A' | 'B', text: m[2].replace(/\[\d+\]|\*/g, '').trim() } : null;
     }).filter(Boolean) as PodcastLine[];
     if (podcast.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again.');
     return { ...base, podcast };
   }
   // slides (narrated, like a short explainer video)
   const t = await ask(`You make short explainer slideshows. ${GROUND}`, `${S}${about}Make 6 slides. For each slide, exactly:\nTITLE: ...\n- bullet\n- bullet\n- bullet\nSAY: one or two spoken sentences explaining the slide\nSRC: number\n(blank line between slides)`);
-  const slides: Slide[] = t.split(/\n\s*\n/).map((b) => {
+  const slides: Slide[] = tidy(t).split(/\n(?=\s*(?:#+\s*)?(?:Slide\s*\d+\s*[:.\-]?\s*)?TITLE\s*:)/i).map((b) => {
     const title = b.match(/TITLE:\s*(.+)/i)?.[1]?.trim();
     if (!title) return null;
     const bullets = b.split('\n').filter((l) => /^\s*[-*•]\s+/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).slice(0, 5);
@@ -212,7 +237,7 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
   let sources = await gatherSources(projectId, opts.prompt);
   if (opts.research) {
     const extra = await researchSources(opts.prompt || sources.map((x) => x.doc).slice(0, 2).join(' '), sources.length + 1, onStep);
-    sources = [...sources, ...extra];
+    sources = trimSources([...sources, ...extra]);
   }
   if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
@@ -233,16 +258,20 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     'You plan podcast episodes based only on the given sources.',
     `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
   );
-  const title = plan.match(/TITLE:\s*(.+)/i)?.[1]?.trim() || opts.prompt || 'Episode';
-  const segs = Array.from({ length: nSeg }, (_, i) => plan.match(new RegExp(`SEGMENT\\s*${i + 1}\\s*:\\s*(.+)`, 'i'))?.[1]?.trim()).filter(Boolean) as string[];
+  const P = plan.replace(/\*\*|__/g, '');
+  const title = (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
+  const segs = Array.from({ length: nSeg }, (_, i) => P.match(new RegExp(`(?:SEGMENT|PART)\\s*${i + 1}\\s*[:.)\\-–]\\s*(.+)`, 'i'))?.[1]?.replace(/["*]/g, '').trim()).filter(Boolean) as string[];
   const topics = segs.length ? segs : [opts.prompt || 'the main ideas'];
+  // Keep the asked-for length even if the plan came back short.
+  while (topics.length < nSeg) topics.push(topics.length === nSeg - 1 ? 'key takeaways and wrap-up' : `more about ${topics[topics.length % Math.max(1, segs.length)] || 'the topic'}`);
 
   const lines: PodcastLine[] = [];
   const parse = (t: string) => t.split('\n').map((l) => {
-    const m = l.match(/^\s*\**\s*(?:HOST\s*)?([ABC])\**\s*[:\-]\s*(.+)$/i);
+    const m = l.match(LINE_RE);
     if (!m) return null;
     const h = m[1].toUpperCase() as 'A' | 'B' | 'C';
-    return { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text: m[2].replace(/\[\d+\]/g, '').trim() };
+    const text = m[2].replace(/\[\d+\]|\*/g, '').trim();
+    return text ? { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text } : null;
   }).filter(Boolean) as PodcastLine[];
 
   for (let i = 0; i < topics.length; i++) {

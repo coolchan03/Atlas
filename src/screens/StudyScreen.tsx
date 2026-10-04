@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -8,7 +8,7 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { Switch } from 'react-native';
-import { speakAndWait, stop, listVoices, TtsVoice } from '../atlasVoice/tts';
+import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
@@ -56,7 +56,16 @@ export const StudyScreen: React.FC = () => {
   const [podOpen, setPodOpen] = useState(false);
   const [pod, setPod] = useState<{ prompt: string; minutes: number; hosts: 1 | 2 | 3; style: PodcastStyle; research: boolean }>({ prompt: '', minutes: 5, hosts: 2, style: 'casual', research: false });
   const [voices, setVoices] = useState<TtsVoice[]>([]);
-  React.useEffect(() => { listVoices('en').then(setVoices); }, []);
+  React.useEffect(() => {
+    listVoices('en').then(setVoices);
+    return () => { stopRef.current = true; stop(); keepScreenOn(false); }; // leaving the screen stops playback
+  }, []);
+  // Android back button closes the open item (and stops audio) instead of leaving the screen.
+  React.useEffect(() => {
+    if (!view) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { stopRef.current = true; stop(); setPlaying(null); setView(null); return true; });
+    return () => sub.remove();
+  }, [view]);
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
   const castVoice = (host: string, hosts: number) => {
     const i = host === 'A' ? 0 : host === 'B' ? 1 : 2;
@@ -67,13 +76,14 @@ export const StudyScreen: React.FC = () => {
   const makeEpisode = async () => {
     setPodOpen(false);
     setBusy('Podcast');
+    keepScreenOn(true); // long job: don't let the phone sleep and pause it
     try {
       const r = await generatePodcast(projectId, pod, (m) => setBusy(m));
       add(projectId, r);
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make the episode', String(e?.message || e));
-    } finally { setBusy(null); }
+    } finally { setBusy(null); keepScreenOn(false); }
   };
 
   const run = async (kind: StudyResult['kind']) => {
@@ -92,12 +102,14 @@ export const StudyScreen: React.FC = () => {
 
   const play = async (items: { text: string; pitch: number; voice?: string }[]) => {
     stopRef.current = false;
+    keepScreenOn(true);
     for (let i = 0; i < items.length; i++) {
       if (stopRef.current) break;
       setPlaying(i);
       const ok = await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
       if (!ok) break;
     }
+    keepScreenOn(false);
     setPlaying(null);
   };
   const halt = () => { stopRef.current = true; stop(); setPlaying(null); };

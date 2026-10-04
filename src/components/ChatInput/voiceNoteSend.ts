@@ -70,6 +70,12 @@ export interface VoiceNoteHandlerDeps {
  * the View. Both Audio Mode auto-send and standalone Chat-mode auto-send route
  * through the SAME send path (`sendVoiceNote`).
  */
+/** Whisper's typical output for silence or background noise. */
+export function isNonSpeech(text: string): boolean {
+  const t = (text || '').replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ').replace(/[^\p{L}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  return !t || ['you', 'thank you', 'thanks', 'thanks for watching', 'thank you for watching', 'bye', 'uh', 'um', 'hmm'].includes(t);
+}
+
 export function buildVoiceNoteHandlers(deps: VoiceNoteHandlerDeps) {
   // Single owning send path for every voice-note send (Audio Mode auto-send,
   // standalone Chat-mode audio auto-send, and standalone Chat-mode dictation
@@ -115,8 +121,14 @@ export function buildVoiceNoteHandlers(deps: VoiceNoteHandlerDeps) {
   };
 
   const onAutoSend = deps.isAudioMode
-    ? (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) =>
-        sendVoiceNote(text, buildVoiceAttachment(audio))
+    ? (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => {
+        if (isNonSpeech(text)) {
+          // Silence/noise: don't send a fake message; let hands-free listen again.
+          try { require('../../atlasVoice/store').useAtlasVoiceStore.getState().markDone(); } catch { /* ignore */ }
+          return;
+        }
+        sendVoiceNote(text, buildVoiceAttachment(audio));
+      }
     : undefined;
 
   return { onTranscript, onAudioAttachment, onAutoSend };

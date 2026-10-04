@@ -29,7 +29,11 @@ export function registerAtlasVoice(): void {
     if (!voiceMode && !useAtlasVoiceStore.getState().autoSpeakInChat) return;
     const conv = (useChatStore.getState() as any).conversations?.find((c: any) => c.id === conversationId);
     const last = conv?.messages?.[conv.messages.length - 1];
-    if (!last || last.role !== 'assistant' || !last.content) return;
+    if (!last || last.role !== 'assistant' || !last.content?.trim()) {
+      // Nothing to read out: still let hands-free mode reopen the mic.
+      if (voiceMode && useAtlasVoiceStore.getState().handsFree) setTimeout(() => useAtlasVoiceStore.getState().markDone(), 300);
+      return;
+    }
     speak(prepareMessageForSpeech(last.content), last.id);
   });
   registerHook(HOOKS.audioAugmentPrompt, (base: string) =>

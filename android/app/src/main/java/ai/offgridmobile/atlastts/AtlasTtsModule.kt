@@ -19,7 +19,8 @@ import java.util.Locale
  */
 class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
     private var tts: TextToSpeech? = null
-    private var ready = false
+    @Volatile private var ready = false
+    @Volatile private var lastErrored = ""
     private var rate = 1.0f
     private var pitch = 1.0f
     private var voiceName = ""
@@ -38,8 +39,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private fun ensure() {
         if (tts != null) return
         tts = TextToSpeech(ctx.applicationContext) { status ->
-            ready = status == TextToSpeech.SUCCESS
-            if (ready) {
+            val ok = status == TextToSpeech.SUCCESS
+            if (ok) {
                 tts?.language = Locale.getDefault()
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
@@ -50,20 +51,28 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     }
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {
-                        if (utteranceId != null) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
+                        val id = utteranceId?.substringBefore("#") ?: return
+                        if (id == lastErrored) return
+                        lastErrored = id
+                        try { tts?.stop() } catch (_: Exception) {}
+                        emit("AtlasTtsDone", id)
                     }
                     override fun onStop(utteranceId: String?, interrupted: Boolean) {
                         if (utteranceId != null) emit("AtlasTtsStopped", utteranceId.substringBefore("#"))
                     }
                 })
                 synchronized(pending) {
+                    ready = true
                     for ((text, id, lang) in pending) doSpeak(text, id, lang)
                     pending.clear()
                 }
             } else {
                 synchronized(pending) {
+                    ready = false
                     for ((_, id, _) in pending) emit("AtlasTtsDone", id)
                     pending.clear()
+                    try { tts?.shutdown() } catch (_: Exception) {}
+                    tts = null // try again next time instead of staying broken
                 }
             }
         }
@@ -110,7 +119,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     fun speakIn(text: String, utteranceId: String, lang: String, promise: Promise) {
         try {
             ensure()
-            if (ready) doSpeak(text, utteranceId, lang) else synchronized(pending) { pending.add(Triple(text, utteranceId, lang)) }
+            val now = synchronized(pending) { if (!ready) { pending.add(Triple(text, utteranceId, lang)); false } else true }
+            if (now) doSpeak(text, utteranceId, lang)
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
     }

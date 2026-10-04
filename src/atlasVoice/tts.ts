@@ -16,12 +16,10 @@ export const ttsAvailable = (): boolean => Platform.OS === 'android' && !!Native
 function ensureListeners(): void {
   if (emitter || !ttsAvailable()) return;
   emitter = new NativeEventEmitter(Native);
-  emitter.addListener('AtlasTtsStart', (e: { utteranceId: string }) => {
-    useAtlasVoiceStore.getState().setSpeaking(e.utteranceId);
-  });
+  emitter.addListener('AtlasTtsStart', () => undefined);
   emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
     const s = useAtlasVoiceStore.getState();
-    if (s.speakingKey === e.utteranceId || s.speakingKey === null) {
+    if (s.speakingKey === e.utteranceId) {
       s.markDone(); // hands-free mode and podcast playback listen for this
       s.setSpeaking(null);
     }
@@ -88,8 +86,11 @@ export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', v
     const start = useAtlasVoiceStore.getState().doneTick;
     Native.setPitch?.(pitch).catch(() => undefined);
     Native.setVoice?.(voice).catch(() => undefined);
-    speak(text, messageId);
-    const myKey = useAtlasVoiceStore.getState().speakingKey;
+    const myKey = `${messageId}~${++counter}`;
+    const st = useAtlasVoiceStore.getState();
+    st.setSpeaking(myKey, messageId);
+    Native.setRate(st.rate).catch(() => undefined);
+    (Native.speakIn ? Native.speakIn(text, myKey, 'en-US') : Native.speak(text, myKey)).catch(() => st.setSpeaking(null));
     const unsub = useAtlasVoiceStore.subscribe((s) => {
       const reset = () => { Native.setPitch?.(1.0).catch(() => undefined); Native.setVoice?.('').catch(() => undefined); };
       if (s.doneTick !== start) { unsub(); reset(); resolve(true); }
