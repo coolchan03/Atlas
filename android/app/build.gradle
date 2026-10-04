@@ -170,6 +170,9 @@ dependencies {
     implementation("org.mapsforge:mapsforge-themes:0.21.0")
     implementation("com.caverock:androidsvg:1.4")
 
+    // Atlas: natural offline voices (sherpa-onnx; the AAR is fetched by CI into libs/)
+    implementation(files("libs/sherpa-onnx.aar"))
+
     // Coroutines for async operations (used by LocalDreamModule)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

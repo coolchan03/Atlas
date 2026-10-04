@@ -42,8 +42,15 @@ jobs:
       - name: Type check (informational, Atlas files reported as warnings)
         run: |
           npx tsc --noEmit -p . > tsc.log 2>&1 || true
-          grep -E "error TS" tsc.log | grep -iE "atlas|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
-          echo "total TS errors: $(grep -c 'error TS' tsc.log)"
+          grep -E "error TS" tsc.log | grep -iE "atlas|Maps|About|Onboarding|RemoteServers|ModelDownload|Agents|theme/|constants/|sharePrompt|Upsell|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
+          echo "::notice title=TypeScript::total TS errors: $(grep -c 'error TS' tsc.log)"
+      - name: Get natural-voice engine (sherpa-onnx)
+        run: |
+          mkdir -p android/app/libs
+          curl -sSL --retry 3 -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
+          zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
+          ls -la android/app/libs
       - name: Build release APK
         working-directory: android
         run: |
@@ -55,15 +62,15 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/OffGrid-Atlas-${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas-${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: OffGrid-Atlas-apk
+          name: Atlas-apk
           path: out/*.apk
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create atlas-${{ github.run_number }} out/*.apk \
-            --target ${{ github.sha }} --title "Off Grid Atlas build ${{ github.run_number }}" \
-            --notes "Install this APK on your Android phone. Adds read-aloud, voice mode and hands-free mode."
+            --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
+            --notes "Install this APK on your Android phone or tablet (download it, open it, allow installing from this source)."

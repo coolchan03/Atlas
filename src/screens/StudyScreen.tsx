@@ -9,13 +9,15 @@ import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { Switch } from 'react-native';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
+import { hostVoices } from '../atlasVoice/neural';
+import { useAtlasVoiceStore } from '../atlasVoice/store';
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
   { kind: 'cards', label: 'Flashcards', icon: 'layers', desc: 'Tap to flip' },
   { kind: 'quiz', label: 'Quiz', icon: 'check-square', desc: 'Multiple choice' },
   { kind: 'outline', label: 'Mind map', icon: 'share-2', desc: 'Outline of the topic' },
-  { kind: 'podcast', label: 'Podcast', icon: 'headphones', desc: 'Two hosts explain it aloud' },
+  { kind: 'podcast', label: 'Podcast', icon: 'headphones', desc: 'An episode read aloud, with a time bar' },
   { kind: 'slides', label: 'Video (slides)', icon: 'film', desc: 'Narrated slideshow' },
 ];
 
@@ -69,17 +71,30 @@ export const StudyScreen: React.FC = () => {
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
   const castVoice = (host: string, hosts: number) => {
     const i = host === 'A' ? 0 : host === 'B' ? 1 : 2;
-    if (voices.length >= 2) return { voice: voices[i % voices.length].name, pitch: i >= voices.length ? 0.9 : 1 };
+    if (voices.length >= 2) { const names = hostVoices(voices); return { voice: names[i % names.length], pitch: 1 }; }
     return { voice: '', pitch: hosts === 1 ? 1 : [1.12, 0.86, 1.0][i] };
   };
+  const rate = useAtlasVoiceStore((s) => s.rate);
+  const [itemStart, setItemStart] = useState(0);
+  const [resumeAt, setResumeAt] = useState(0);
+  const [, setTick] = useState(0);
+  const playToken = useRef(0);
+  React.useEffect(() => {
+    if (playing === null) return;
+    const t = setInterval(() => setTick((x) => x + 1), 500);
+    return () => clearInterval(t);
+  }, [playing]);
+  /** Rough speaking time of a text in seconds (about 155 words a minute at normal speed). */
+  const secs = (t: string) => Math.max(1.5, (t.split(/\s+/).filter(Boolean).length / 2.6) / (rate || 1) + 0.4);
 
   const makeEpisode = async () => {
     setPodOpen(false);
     setBusy('Podcast');
     keepScreenOn(true); // long job: don't let the phone sleep and pause it
     try {
-      const r = await generatePodcast(projectId, pod, (m) => setBusy(m));
+      const r = await generatePodcast(projectId, { ...pod, hosts: voices.length >= 2 ? pod.hosts : 1 }, (m) => setBusy(m));
       add(projectId, r);
+      setResumeAt(0);
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make the episode', String(e?.message || e));
@@ -93,26 +108,32 @@ export const StudyScreen: React.FC = () => {
     try {
       const r = await generate(projectId, kind, topic);
       add(projectId, r);
-      setFlipped({}); setPicked({});
+      setFlipped({}); setPicked({}); setResumeAt(0);
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make it', String(e?.message || e));
     } finally { setBusy(null); }
   };
 
-  const play = async (items: { text: string; pitch: number; voice?: string }[]) => {
+  const play = async (items: { text: string; pitch: number; voice?: string }[], from = 0) => {
+    const my = ++playToken.current;
+    stop();
     stopRef.current = false;
     keepScreenOn(true);
-    for (let i = 0; i < items.length; i++) {
-      if (stopRef.current) break;
-      setPlaying(i);
+    let finished = false;
+    for (let i = Math.max(0, from); i < items.length; i++) {
+      if (stopRef.current || playToken.current !== my) break;
+      setPlaying(i); setResumeAt(i); setItemStart(Date.now());
       const ok = await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
-      if (!ok) break;
+      if (!ok || playToken.current !== my) break;
+      if (i === items.length - 1) finished = true;
     }
+    if (playToken.current !== my) return; // a newer play (seek) took over
     keepScreenOn(false);
     setPlaying(null);
+    if (finished) setResumeAt(0);
   };
-  const halt = () => { stopRef.current = true; stop(); setPlaying(null); };
+  const halt = () => { playToken.current++; stopRef.current = true; stop(); keepScreenOn(false); setPlaying(null); };
 
   const openSource = (s: Source) => setSrc(s);
   const card = { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 10 };
@@ -186,27 +207,32 @@ export const StudyScreen: React.FC = () => {
           )}
           {v.podcast && (
             <View>
-              <TouchableOpacity onPress={() => (playing !== null ? halt() : play(v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }))))}
-                style={{ backgroundColor: colors.primary, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 12, flexDirection: 'row', justifyContent: 'center' }}>
-                <Icon name={playing !== null ? 'square' : 'play'} size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 8 }}>{playing !== null ? 'Stop' : 'Play podcast'}</Text>
-              </TouchableOpacity>
+              {(() => {
+                const items = v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }));
+                return (
+                  <MediaBar durations={items.map((x) => secs(x.text))} playing={playing} resumeAt={resumeAt} itemStart={itemStart} colors={colors}
+                    onPlay={(i) => play(items, i)} onPause={halt} label="podcast" />
+                );
+              })()}
               {v.podcast.map((l, i) => (
-                <View key={i} style={[card, { borderLeftWidth: 4, borderLeftColor: l.host === 'A' ? '#2563EB' : l.host === 'B' ? '#D97706' : '#16A34A', opacity: playing === null || playing === i ? 1 : 0.55 }]}>
+                <TouchableOpacity key={i} activeOpacity={0.8} onPress={() => play(v.podcast!.map((x) => ({ text: x.text, ...castVoice(x.host, v.hosts ?? 2) })), i)}
+                  style={[card, { borderLeftWidth: 4, borderLeftColor: l.host === 'A' ? '#2563EB' : l.host === 'B' ? '#D97706' : '#16A34A', opacity: playing === null || playing === i ? 1 : 0.55 }]}>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>{(v.hosts ?? 2) === 1 ? 'Narrator' : `Host ${l.host}`}</Text>
                   <Text style={{ color: colors.text, fontSize: 16 }}>{l.text}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
               <SourceChips nums={v.sources.map((s) => s.n)} sources={v.sources} onOpen={openSource} colors={colors} />
             </View>
           )}
           {v.slides && (
             <View>
-              <TouchableOpacity onPress={() => (playing !== null ? halt() : play(v.slides!.map((s) => ({ text: `${s.title}. ${s.narration}`, pitch: 1 }))))}
-                style={{ backgroundColor: colors.primary, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 12, flexDirection: 'row', justifyContent: 'center' }}>
-                <Icon name={playing !== null ? 'square' : 'play'} size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 8 }}>{playing !== null ? 'Stop' : 'Play video'}</Text>
-              </TouchableOpacity>
+              {(() => {
+                const items = v.slides!.map((x) => ({ text: `${x.title}. ${x.narration}`, pitch: 1 }));
+                return (
+                  <MediaBar durations={items.map((x) => secs(x.text))} playing={playing} resumeAt={resumeAt} itemStart={itemStart} colors={colors}
+                    onPlay={(i) => play(items, i)} onPause={halt} label="video" />
+                );
+              })()}
               {(playing !== null ? [v.slides[playing]] : v.slides).map((s, i) => (
                 <View key={i} style={[card, { minHeight: playing !== null ? Math.min(420, width * 0.7) : undefined, justifyContent: 'center', backgroundColor: playing !== null ? '#0F172A' : colors.surface }]}>
                   <Text style={{ color: playing !== null ? '#fff' : colors.text, fontSize: playing !== null ? 26 : 18, fontWeight: '700' }}>{s.title}</Text>
@@ -248,7 +274,7 @@ export const StudyScreen: React.FC = () => {
         {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>{/\.\.\.$/.test(busy) ? busy : 'Working on it'} - this can take a few minutes on a phone.</Text>}
         {saved.length > 0 && <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 6 }}>Saved</Text>}
         {saved.map((r) => (
-          <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setView(r); }}>
+          <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setResumeAt(0); setView(r); }}>
             <Icon name={KINDS.find((k) => k.kind === r.kind)?.icon || 'message-circle'} size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title ? `🎙 ${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
@@ -316,5 +342,55 @@ export const StudyScreen: React.FC = () => {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+};
+
+const fmtTime = (t: number) => { const s = Math.max(0, Math.round(t)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+/** Player controls: play/pause, skip, a seek bar and elapsed / total time (times are estimates). */
+const MediaBar: React.FC<{
+  durations: number[]; playing: number | null; resumeAt: number; itemStart: number; colors: any;
+  onPlay: (index: number) => void; onPause: () => void; label: string;
+}> = ({ durations, playing, resumeAt, itemStart, colors, onPlay, onPause, label }) => {
+  const [barW, setBarW] = useState(1);
+  const total = durations.reduce((a, b) => a + b, 0);
+  const idx = playing ?? resumeAt;
+  const before = durations.slice(0, idx).reduce((a, b) => a + b, 0);
+  const inItem = playing !== null ? Math.min(durations[idx] || 0, (Date.now() - itemStart) / 1000) : 0;
+  const elapsed = Math.min(total, before + inItem);
+  const seekTo = (x: number) => {
+    const target = (Math.max(0, Math.min(barW, x)) / barW) * total;
+    let acc = 0;
+    for (let i = 0; i < durations.length; i++) { if (acc + durations[i] > target) { onPlay(i); return; } acc += durations[i]; }
+    onPlay(durations.length - 1);
+  };
+  const btn = { padding: 10 };
+  return (
+    <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+        <TouchableOpacity style={btn} onPress={() => onPlay(Math.max(0, idx - 1))} accessibilityLabel="Back"><Icon name="skip-back" size={22} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => (playing !== null ? onPause() : onPlay(resumeAt))} accessibilityLabel={playing !== null ? 'Pause' : 'Play'}
+          style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={playing !== null ? 'pause' : 'play'} size={26} color={colors.background} />
+        </TouchableOpacity>
+        <TouchableOpacity style={btn} onPress={() => onPlay(Math.min(durations.length - 1, idx + 1))} accessibilityLabel="Next"><Icon name="skip-forward" size={22} color={colors.text} /></TouchableOpacity>
+      </View>
+      <View
+        onLayout={(e) => setBarW(e.nativeEvent.layout.width || 1)}
+        onStartShouldSetResponder={() => true}
+        onResponderRelease={(e) => seekTo(e.nativeEvent.locationX)}
+        style={{ height: 28, justifyContent: 'center', marginTop: 8 }}
+      >
+        <View pointerEvents="none" style={{ height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' }}>
+          <View style={{ width: `${total ? (elapsed / total) * 100 : 0}%`, height: 6, backgroundColor: colors.primary }} />
+        </View>
+        <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: Math.max(0, (total ? elapsed / total : 0) * barW - 8), width: 16, height: 16, borderRadius: 8, backgroundColor: colors.primary }} />
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{fmtTime(elapsed)}</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{label} · part {Math.min(idx + 1, durations.length)} of {durations.length}</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{fmtTime(total)}</Text>
+      </View>
+    </View>
   );
 };

@@ -26,6 +26,14 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private var voiceName = ""
     private val pending = mutableListOf<Triple<String, String, String>>()
 
+    // ---- natural (neural) voices ----
+    private val neural by lazy { NeuralTts { e, id -> emit(e, id) } }
+    @Volatile private var neuralDir = ""
+    @Volatile private var neuralSid = 0
+    private val cancelled = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private fun voicesRoot() = java.io.File(ctx.filesDir, "voices").apply { mkdirs() }
+    private fun useNeural(lang: String) = neuralDir.isNotEmpty() && neural.ready && (lang.isBlank() || lang.lowercase().startsWith("en"))
+
     override fun getName(): String = "AtlasTts"
 
     private fun emit(event: String, id: String) {
@@ -118,6 +126,13 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun speakIn(text: String, utteranceId: String, lang: String, promise: Promise) {
         try {
+            if (useNeural(lang)) {
+                try { tts?.stop() } catch (_: Exception) {}
+                val sid = if (voiceName.startsWith("sid:")) voiceName.removePrefix("sid:").toIntOrNull() ?: neuralSid else neuralSid
+                val parts = chunks(text, 380)
+                if (parts.isEmpty()) emit("AtlasTtsDone", utteranceId) else neural.speak(parts, utteranceId, sid, rate)
+                promise.resolve(true); return
+            }
             ensure()
             val now = synchronized(pending) { if (!ready) { pending.add(Triple(text, utteranceId, lang)); false } else true }
             if (now) doSpeak(text, utteranceId, lang)
@@ -127,7 +142,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
 
     @ReactMethod
     fun stop(promise: Promise) {
-        try { synchronized(pending) { pending.clear() }; tts?.stop(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+        try { synchronized(pending) { pending.clear() }; tts?.stop(); if (neuralDir.isNotEmpty()) neural.stop(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
     }
 
     @ReactMethod
@@ -137,6 +152,12 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun listVoices(lang: String, promise: Promise) {
         try {
+            if (neuralDir.isNotEmpty() && neural.ready && (lang.isBlank() || lang.lowercase().startsWith("en"))) {
+                val out = Arguments.createArray()
+                val n = neural.numSpeakers()
+                for (i in 0 until maxOf(1, n)) out.pushMap(Arguments.createMap().apply { putString("name", "sid:$i"); putString("locale", "en-US"); putInt("quality", 500) })
+                promise.resolve(out); return
+            }
             ensure()
             val engine = tts
             if (engine == null || !ready) { promise.resolve(Arguments.createArray()); return }
@@ -169,6 +190,111 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun isSpeaking(promise: Promise) { promise.resolve(tts?.isSpeaking ?: false) }
 
+    /** Use a downloaded natural voice (folder name under voices/), or "" for the phone's voice. Resolves the number of speakers. */
+    @ReactMethod
+    fun setNeuralVoice(id: String, sid: Int, promise: Promise) {
+        neuralSid = sid
+        if (id.isBlank()) { neuralDir = ""; Thread { try { neural.release() } catch (_: Throwable) {} }.start(); promise.resolve(0); return }
+        val dir = java.io.File(voicesRoot(), id)
+        if (!dir.isDirectory) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded"); return }
+        Thread {
+            try { neural.load(dir.path); neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
+            catch (e: Throwable) { neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun setNeuralSpeaker(sid: Int, promise: Promise) { neuralSid = sid; promise.resolve(true) }
+
+    @ReactMethod
+    fun installedNeuralVoices(promise: Promise) {
+        val out = Arguments.createArray()
+        voicesRoot().listFiles()?.filter { it.isDirectory && !it.name.endsWith(".part") }?.forEach { d ->
+            out.pushMap(Arguments.createMap().apply { putString("id", d.name); putDouble("bytes", d.walkTopDown().filter { it.isFile }.sumOf { it.length() }.toDouble()) })
+        }
+        promise.resolve(out)
+    }
+
+    @ReactMethod
+    fun deleteNeuralVoice(id: String, promise: Promise) {
+        Thread {
+            val d = java.io.File(voicesRoot(), id)
+            if (d.path == neuralDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
+            d.deleteRecursively(); promise.resolve(true)
+        }.start()
+    }
+
+    @ReactMethod
+    fun cancelNeuralDownload(id: String, promise: Promise) { cancelled.add(id); promise.resolve(true) }
+
+    /** Downloads a voice .zip and unpacks it into voices/<id> while downloading. Emits AtlasVoiceDownload {id, progress}. */
+    @ReactMethod
+    fun downloadNeuralVoice(id: String, url: String, promise: Promise) {
+        cancelled.remove(id)
+        Thread {
+            val root = voicesRoot()
+            val tmp = java.io.File(root, "$id.part")
+            try {
+                tmp.deleteRecursively(); tmp.mkdirs()
+                var conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent", "Atlas")
+                var hops = 0
+                while (conn.responseCode in 300..399 && hops++ < 5) {
+                    val loc = conn.getHeaderField("Location") ?: break
+                    conn.disconnect()
+                    conn = java.net.URL(conn.url, loc).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 30000; conn.readTimeout = 60000
+                }
+                if (conn.responseCode >= 400) throw IllegalStateException("HTTP ${conn.responseCode}")
+                val total = conn.contentLengthLong
+                var read = 0L
+                var last = 0L
+                val counting = object : java.io.FilterInputStream(java.io.BufferedInputStream(conn.inputStream, 1 shl 16)) {
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        if (cancelled.contains(id)) throw java.io.InterruptedIOException("cancelled")
+                        val n = super.read(b, off, len)
+                        if (n > 0) {
+                            read += n
+                            val now = System.currentTimeMillis()
+                            if (now - last > 500) { last = now; progress(id, if (total > 0) read.toDouble() / total else -1.0) }
+                        }
+                        return n
+                    }
+                }
+                java.util.zip.ZipInputStream(counting).use { zip ->
+                    val base = tmp.canonicalPath
+                    var e = zip.nextEntry
+                    while (e != null) {
+                        val out = java.io.File(tmp, e.name)
+                        if (!out.canonicalPath.startsWith(base)) throw SecurityException("bad zip entry")
+                        if (e.isDirectory) out.mkdirs() else { out.parentFile?.mkdirs(); java.io.FileOutputStream(out).use { zip.copyTo(it, 1 shl 16) } }
+                        e = zip.nextEntry
+                    }
+                }
+                // the zip may contain one top folder: flatten it
+                val kids = tmp.listFiles() ?: emptyArray()
+                val src = if (kids.size == 1 && kids[0].isDirectory) kids[0] else tmp
+                val dest = java.io.File(root, id)
+                dest.deleteRecursively()
+                if (!src.renameTo(dest)) throw IllegalStateException("Could not move voice files")
+                tmp.deleteRecursively()
+                progress(id, 1.0)
+                promise.resolve(dest.path)
+            } catch (e: Throwable) {
+                tmp.deleteRecursively()
+                promise.reject("VOICE_DOWNLOAD", if (cancelled.contains(id)) "cancelled" else (e.message ?: e.toString()))
+            }
+        }.start()
+    }
+
+    private fun progress(id: String, p: Double) {
+        try {
+            val m = Arguments.createMap(); m.putString("id", id); m.putDouble("progress", p)
+            ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasVoiceDownload", m)
+        } catch (_: Exception) {}
+    }
+
     /** Keep the screen on (used while learning mode runs, so Android does not pause the app). */
     @ReactMethod
     fun keepScreenOn(on: Boolean, promise: Promise) {
@@ -188,6 +314,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     override fun invalidate() {
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         tts = null
+        try { if (neuralDir.isNotEmpty()) neural.release() } catch (_: Throwable) {}
         super.invalidate()
     }
 }

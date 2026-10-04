@@ -1,8 +1,9 @@
-import React from 'react';
-import { Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
 import { speak } from './tts';
+import { NEURAL_VOICES, useNeuralVoices, refreshInstalled, downloadVoice, cancelVoiceDownload, deleteVoice, selectVoice, neuralAvailable } from './neural';
 
 const RATES = [0.75, 1, 1.25, 1.5];
 
@@ -17,13 +18,84 @@ export function AtlasVoicePanel() {
     Linking.sendIntent('com.android.settings.TTS_SETTINGS').catch(() => Linking.openSettings());
   };
   const card = [styles.card, { backgroundColor: colors.surface }];
+  const current = useAtlasVoiceStore((s) => s.neuralVoice);
+  const sid = useAtlasVoiceStore((s) => s.neuralSid);
+  const progress = useNeuralVoices((s) => s.progress);
+  const installed = useNeuralVoices((s) => s.installed);
+  const [loading, setLoading] = useState<string | null>(null);
+  useEffect(() => { refreshInstalled().catch(() => undefined); }, []);
+  const choose = async (id: string, speaker?: number) => {
+    setLoading(id || 'phone');
+    try {
+      await selectVoice(id, speaker);
+      speak(id ? 'Hi. This is how I will sound from now on.' : 'This is the phone voice.', 'voice-test');
+    } catch (e: any) { Alert.alert('Could not use this voice', String(e?.message || e)); } finally { setLoading(null); }
+  };
+  const get = async (id: string) => {
+    try { await downloadVoice(id); await choose(id, 0); }
+    catch (e: any) { if (!/cancel/i.test(String(e?.message))) Alert.alert('Download failed', `${String(e?.message || e)}\n\nYou need internet for the download. After that the voice works offline.`); }
+  };
+  const mb = (b: number) => `${Math.round(b / 1e6)} MB`;
   return (
     <ScrollView contentContainerStyle={styles.wrap}>
+      {neuralAvailable() && (
+        <View style={card}>
+          <Text style={[styles.h, { color: colors.text }]}>Natural voices (recommended)</Text>
+          <Text style={[styles.p, { color: colors.textSecondary }]}>
+            Human-sounding voices that run on this device with no internet. Download once (Wi-Fi recommended), then tap to use.
+            Other languages (phrase cards) still use the phone voice.
+          </Text>
+          <TouchableOpacity onPress={() => choose('')} style={[styles.voiceRow, { borderColor: !current ? colors.primary : colors.border }]}>
+            <View style={styles.flex}>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>Phone voice</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>Built in, uses least battery</Text>
+            </View>
+            {loading === 'phone' ? <ActivityIndicator color={colors.primary} /> : !current ? <Text style={{ color: colors.primary }}>In use</Text> : null}
+          </TouchableOpacity>
+          {NEURAL_VOICES.map((v) => {
+            const have = installed[v.id] !== undefined;
+            const p = progress[v.id];
+            const inUse = current === v.id;
+            return (
+              <View key={v.id} style={[styles.voiceRow, { borderColor: inUse ? colors.primary : colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
+                <View style={styles.rowBetween}>
+                  <TouchableOpacity style={styles.flex} disabled={!have} onPress={() => choose(v.id, inUse ? sid : 0)}>
+                    <Text style={{ color: colors.text, fontWeight: '600' }}>{v.name}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>{v.desc} {have ? `(${mb(installed[v.id])} on phone)` : v.size}</Text>
+                  </TouchableOpacity>
+                  {loading === v.id ? <ActivityIndicator color={colors.primary} />
+                    : p !== undefined ? (
+                      <TouchableOpacity onPress={() => cancelVoiceDownload(v.id)}><Text style={{ color: colors.primary }}>{p >= 0 ? `${Math.round(p * 100)}%` : '...'} ✕</Text></TouchableOpacity>
+                    ) : have ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                        {inUse ? <Text style={{ color: colors.primary }}>In use</Text> : <TouchableOpacity onPress={() => choose(v.id, 0)}><Text style={{ color: colors.primary }}>Use</Text></TouchableOpacity>}
+                        <TouchableOpacity onPress={() => Alert.alert('Delete voice?', v.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteVoice(v.id) }])}>
+                          <Text style={{ color: colors.textMuted }}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity onPress={() => get(v.id)}><Text style={{ color: colors.primary, fontWeight: '600' }}>Download</Text></TouchableOpacity>
+                    )}
+                </View>
+                {inUse && v.speakers && (
+                  <View style={[styles.row, { flexWrap: 'wrap', marginTop: 10 }]}>
+                    {v.speakers.map((k) => (
+                      <TouchableOpacity key={k.sid} onPress={() => choose(v.id, k.sid)} style={[styles.pill, { backgroundColor: sid === k.sid ? colors.primary : colors.background }]}>
+                        <Text style={{ color: sid === k.sid ? colors.background : colors.text, fontSize: 13 }}>{k.name} · {k.accent}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
       <View style={card}>
-        <Text style={[styles.h, { color: colors.text }]}>Voice</Text>
+        <Text style={[styles.h, { color: colors.text }]}>Phone voice settings</Text>
         <Text style={[styles.p, { color: colors.textSecondary }]}>
-          Answers are read with your phone's built-in voice. Nothing to download here. For offline use, open the
-          phone's text-to-speech settings, pick an engine (Google or Samsung), and install the voice data for your language.
+          The phone voice is used when no natural voice is chosen, and for other languages. For offline use, open the
+          phone's text-to-speech settings and install the voice data for your languages.
         </Text>
         <TouchableOpacity style={[styles.btn, { borderColor: colors.primary }]} onPress={openTtsSettings}>
           <Text style={{ color: colors.primary }}>Open phone voice settings</Text>
@@ -44,7 +116,7 @@ export function AtlasVoicePanel() {
               onPress={() => setRate(r)}
               style={[styles.pill, { backgroundColor: r === rate ? colors.primary : colors.background }]}
             >
-              <Text style={{ color: r === rate ? '#fff' : colors.text }}>{r}x</Text>
+              <Text style={{ color: r === rate ? colors.background : colors.text }}>{r}x</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -77,4 +149,5 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
   rowBetween: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1, paddingRight: 10 },
+  voiceRow: { borderWidth: 1, borderRadius: 10, padding: 12, marginTop: 10, flexDirection: 'row', alignItems: 'center' },
 });

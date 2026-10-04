@@ -15,6 +15,11 @@ interface AtlasVoiceState {
   rate: number;
   /** Also read answers aloud in normal chat mode. */
   autoSpeakInChat: boolean;
+  /** Natural voice in use (id of a downloaded voice) or '' for the phone's own voice. */
+  neuralVoice: string;
+  /** Speaker inside a multi-voice model (Kokoro). */
+  neuralSid: number;
+  setNeural: (id: string, sid?: number) => void;
   setSpeaking: (key: string | null, messageId?: string | null) => void;
   markDone: () => void;
   setHandsFree: (v: boolean) => void;
@@ -29,6 +34,9 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   handsFree: true,
   rate: 1,
   autoSpeakInChat: false,
+  neuralVoice: '',
+  neuralSid: 0,
+  setNeural: (neuralVoice, sid) => set((s) => ({ neuralVoice, neuralSid: sid ?? s.neuralSid })),
   setSpeaking: (key, messageId) =>
     set(key === null ? { speakingKey: null, speakingMessageId: null } : { speakingKey: key, ...(messageId !== undefined ? { speakingMessageId: messageId } : {}) }),
   markDone: () => set((s) => ({ doneTick: s.doneTick + 1 })),
@@ -38,5 +46,5 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat }),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid }),
 }));

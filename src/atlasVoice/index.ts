@@ -4,6 +4,7 @@ import { useUiModeStore } from '../stores/uiModeStore';
 import { useChatStore } from '../stores/chatStore';
 import { prepareMessageForSpeech } from '../utils/messageContent';
 import { speak, stop, ttsAvailable, warmUp } from './tts';
+import { restoreVoice } from './neural';
 import { useAtlasVoiceStore } from './store';
 import { AtlasAudioInput } from './AudioInput';
 import { AtlasModeToggle, AtlasSpeakButton } from './Buttons';
@@ -21,6 +22,10 @@ export function registerAtlasVoice(): void {
     return;
   }
   warmUp();
+  // Re-load the chosen natural voice once saved settings are loaded.
+  const restore = () => { restoreVoice().catch(() => undefined); };
+  const ps: any = (useAtlasVoiceStore as any).persist;
+  if (ps?.hasHydrated?.()) restore(); else ps?.onFinishHydration?.(restore);
   registerHook(HOOKS.audioCanSpeak, () => true);
   registerHook(HOOKS.audioSpeak, (text: string, messageId: string) => speak(prepareMessageForSpeech(text), messageId));
   registerHook(HOOKS.audioStop, () => stop());
