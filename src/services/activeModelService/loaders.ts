@@ -14,6 +14,7 @@ import { modelManager } from '../modelManager';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
 import logger from '../../utils/logger';
+import { beginLoad, loadWorked, loadFailed } from '../../atlasTools/ctxGuard';
 import RNFS from 'react-native-fs';
 import { isMMProjFile, mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 
@@ -104,7 +105,8 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
 
     const preferredBackend = ctx.store.settings.liteRTBackend;
 
-    const maxTokens = ctx.store.settings.liteRTMaxTokens ?? 4096;
+    await beginLoad('litert', ctx.modelId);
+    const maxTokens = useAppStore.getState().settings.liteRTMaxTokens ?? 4096;
     const contextScalar = Math.max(1, maxTokens / 4096);
     const baseTimeoutMs = 90_000;
     const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
@@ -151,7 +153,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     // instant a LiteRT model loads, with nothing actually changed.
     ctx.store.setLoadedSettings({
       liteRTBackend: ctx.store.settings.liteRTBackend,
-      liteRTMaxTokens: ctx.store.settings.liteRTMaxTokens,
+      liteRTMaxTokens: useAppStore.getState().settings.liteRTMaxTokens,
       // Fields not used by LiteRT — set to current values so llama checks don't misfire
       contextLength: ctx.store.settings.contextLength,
       enableGpu: ctx.store.settings.enableGpu,
@@ -162,6 +164,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       cacheType: ctx.store.settings.cacheType,
     });
 
+    await loadWorked('litert', ctx.modelId);
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
@@ -173,11 +176,19 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
   }
 }
 
+/** Atlas: if a bigger memory size (context) broke the load, go back to the last size that worked and try once more. */
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
-  // Route LiteRT models to the LiteRT loader — existing llama path is untouched below
-  if (ctx.model.engine === 'litert') {
-    return doLoadLiteRTModel(ctx);
+  const engine = ctx.model.engine === 'litert' ? 'litert' : 'llama';
+  try {
+    return await (engine === 'litert' ? doLoadLiteRTModel(ctx) : doLoadTextModelOnce(ctx));
+  } catch (error) {
+    const back = await loadFailed(engine, ctx.modelId);
+    if (back === null) throw error;
+    return engine === 'litert' ? doLoadLiteRTModel(ctx) : doLoadTextModelOnce(ctx);
   }
+}
+
+async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
 
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
@@ -201,6 +212,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       );
     });
 
+    await beginLoad('llama', ctx.modelId);
     try {
       await Promise.race([
         llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override }),
@@ -219,8 +231,9 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 
-    // Capture settings that require model reload
-    const { settings } = ctx.store;
+    await loadWorked('llama', ctx.modelId);
+    // Capture settings that require model reload (read fresh: the memory-size guard may have changed them)
+    const settings = useAppStore.getState().settings;
     const reloadSettings = {
       enableGpu: settings.enableGpu,
       inferenceBackend: settings.inferenceBackend,

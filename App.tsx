@@ -34,11 +34,13 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { registerAtlasVoice } from './src/atlasVoice';
 import { startLowPowerMonitor } from './src/atlasTools/lowPower';
 import { autoPickAcceleration } from './src/atlasTools/accel';
+import { startCtxRecovery } from './src/atlasTools/ctxGuard';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
 startLowPowerMonitor();
 autoPickAcceleration();
+startCtxRecovery();
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 

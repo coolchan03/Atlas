@@ -28,6 +28,33 @@ type ZipImportDeps = {
   setAlertState: (s: AlertState) => void;
 };
 
+/**
+ * Android image models (Stable Diffusion for local-dream). Inside the zip (top level or one folder down):
+ *  - CPU/GPU (MNN): unet.mnn, vae_decoder.mnn, tokenizer.json and clip.mnn (or clip_v2.mnn + its .bin files)
+ *  - NPU (QNN, Snapdragon): unet.bin, vae_decoder.bin, tokenizer.json and clip.bin (or clip.mnn)
+ */
+async function findAndroidImageModel(root: string): Promise<{ dir?: string; backend?: 'mnn' | 'qnn'; problem: string }> {
+  const queue: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
+  while (queue.length) {
+    const { path, depth } = queue.shift()!;
+    let items: any[] = [];
+    try { items = await RNFS.readDir(path); } catch { continue; }
+    const names = new Set(items.filter(f => f.isFile()).map(f => f.name));
+    const kind: 'mnn' | 'qnn' | null = names.has('unet.mnn') ? 'mnn' : names.has('unet.bin') ? 'qnn' : null;
+    if (kind) {
+      const ext = kind === 'mnn' ? 'mnn' : 'bin';
+      const need = [`vae_decoder.${ext}`, 'tokenizer.json'];
+      const missing = need.filter(n => !names.has(n));
+      const hasClip = names.has('clip.mnn') || names.has('clip_v2.mnn') || (kind === 'qnn' && names.has('clip.bin'));
+      if (!hasClip) missing.push(kind === 'mnn' ? 'clip.mnn (or clip_v2.mnn)' : 'clip.bin (or clip.mnn)');
+      if (missing.length) return { problem: `The zip has unet.${ext} but is missing: ${missing.join(', ')}. The download may not have finished - try downloading it again.` };
+      return { dir: path, backend: kind, problem: '' };
+    }
+    if (depth < 3) for (const f of items) if (f.isDirectory()) queue.push({ path: f.path, depth: depth + 1 });
+  }
+  return { problem: 'No image model found in this zip. It needs unet.mnn (CPU/GPU models) or unet.bin (NPU models), plus clip, vae_decoder and tokenizer.json. If you downloaded it, the download may not have finished.' };
+}
+
 async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
   const { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState } = deps;
   const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -45,10 +72,22 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
   setImportProgress({ fraction: 0.85, fileName });
   const dirContents = await RNFS.readDir(modelDir);
   const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
-  const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
+  const hasNestedMLModelC = Platform.OS === 'ios' && !hasMLModelC && dirContents.some(f => f.isDirectory());
   let resolvedModelDir = modelDir;
   let backend: 'mnn' | 'qnn' | 'coreml' | undefined;
-  if (hasMLModelC || hasNestedMLModelC) {
+  if (Platform.OS === 'android') {
+    // Atlas: find the model files even when the zip holds them inside a folder, and say what's missing.
+    const found = await findAndroidImageModel(modelDir);
+    if (!found.dir) {
+      await RNFS.unlink(zipPath).catch(() => { });
+      await RNFS.unlink(modelDir).catch(() => { });
+      setImportProgress(null);
+      setAlertState(showAlert('Not an image model', found.problem));
+      return;
+    }
+    resolvedModelDir = found.dir;
+    backend = found.backend;
+  } else if (hasMLModelC || hasNestedMLModelC) {
     backend = 'coreml';
     resolvedModelDir = await resolveCoreMLModelDir(modelDir);
   } else {

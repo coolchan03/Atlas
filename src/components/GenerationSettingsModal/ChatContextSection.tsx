@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { getMaxContextForDevice } from '../../services/llmHelpers';
+import { hardwareService } from '../../services/hardware';
 import { ActivityIndicator, Alert, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
@@ -24,6 +26,9 @@ export const ChatContextSection: React.FC = () => {
   const ctxKey = isLiteRT ? 'liteRTMaxTokens' : 'contextLength';
   const ctxValue = useAppStore((s) => (s.settings as any)[ctxKey] as number) || 4096;
   const modelMax = useAppStore((s) => s.modelMaxContext);
+  // Same ceiling the loader uses for this phone's RAM (bigger choices would be cut down anyway).
+  const ramGB = hardwareService.getTotalMemoryGB();
+  const deviceCap = ramGB === 4 ? 8192 : getMaxContextForDevice(ramGB * 1024 ** 3); // 4 = "not measured yet"
   const updateSettings = useAppStore((s) => s.updateSettings);
   useEffect(() => { setText(conv?.instructions || ''); }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Write to the chat a moment after typing stops (not on every key press).
@@ -52,13 +57,13 @@ export const ChatContextSection: React.FC = () => {
       <View style={box}>
         <Text style={{ color: colors.text, fontWeight: '600' }}>Memory size (context)</Text>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
-          How much of the conversation and documents the model can keep in mind. Bigger remembers more but uses more RAM and starts slower. The model reloads after a change.{agentCtx ? ` The ${agentName} agent sets its own size (${agentCtx / 1024}K): change it in Agents.` : ''}
+          How much of the conversation and documents the model can keep in mind. Bigger remembers more but uses more RAM and starts slower. The model reloads after a change. If a size is too much for this phone or model, Atlas goes back to the last size that worked.{agentCtx ? ` The ${agentName} agent sets its own size (${agentCtx / 1024}K): change it in Agents.` : ''}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8 }}>
-          {[2048, 4096, 8192, 16384, 32768].filter((n) => !modelMax || n <= Math.max(modelMax, 4096)).map((n) => (
+          {(isLiteRT ? [2048, 4096, 8192] : [2048, 4096, 8192, 16384].filter((n) => n <= deviceCap && (!modelMax || n <= Math.max(modelMax, 4096)))).map((n) => (
             <TouchableOpacity key={n} onPress={() => updateSettings({ [ctxKey]: n } as any)}
               style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: ctxValue === n ? colors.primary : colors.background }}>
-              <Text style={{ color: ctxValue === n ? colors.background : colors.text, fontSize: 13 }}>{n / 1024}K{n === 16384 ? ' (8GB+ RAM)' : n === 32768 ? ' (12GB+ RAM)' : ''}</Text>
+              <Text style={{ color: ctxValue === n ? colors.background : colors.text, fontSize: 13 }}>{n / 1024}K</Text>
             </TouchableOpacity>
           ))}
         </View>
