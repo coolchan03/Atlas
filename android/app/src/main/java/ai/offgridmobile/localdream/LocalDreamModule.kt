@@ -577,6 +577,100 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         isServerReady = false
     }
 
+    // =====================================================================
+    // Atlas: turn a Stable Diffusion 1.5 .safetensors checkpoint into a CPU/GPU (MNN) model on the phone.
+    // Same method as Local Dream: copy the checkpoint + template graphs (assets/cvtbase) into a folder
+    // and run the engine's --convert mode, which writes the weights into the templates.
+    // =====================================================================
+    private val converting = AtomicBoolean(false)
+
+    private fun convertEvent(stage: String, fraction: Double, line: String? = null) {
+        val m = Arguments.createMap()
+        m.putString("stage", stage)
+        m.putDouble("fraction", fraction)
+        if (line != null) m.putString("line", line)
+        try { sendEvent("LocalDreamConvert", m) } catch (_: Exception) { }
+    }
+
+    @ReactMethod
+    fun convertCheckpoint(params: ReadableMap, promise: Promise) {
+        val src = params.getString("uri") ?: return safeReject(promise, "BAD_ARGS", "No file")
+        val outDir = params.getString("modelDir") ?: return safeReject(promise, "BAD_ARGS", "No folder")
+        val clipSkip2 = params.hasKey("clipSkip2") && params.getBoolean("clipSkip2")
+        if (!converting.compareAndSet(false, true)) return safeReject(promise, "BUSY", "Already converting a model")
+        coroutineScope.launch(Dispatchers.IO) {
+            val dir = File(outDir)
+            try {
+                if (dir.exists()) dir.deleteRecursively()
+                dir.mkdirs()
+                val ctx = reactApplicationContext
+                val uri = android.net.Uri.parse(if (src.startsWith("/")) "file://$src" else src)
+                val total = try { ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L } catch (_: Exception) { -1L }
+                val free = dir.usableSpace
+                if (total > 0 && free < total * 2 + 300L * 1024 * 1024) {
+                    throw IOException("Not enough free space: needs about ${(total * 2) / (1024 * 1024)} MB, ${free / (1024 * 1024)} MB free.")
+                }
+                convertEvent("copy", 0.0)
+                val target = File(dir, "model.safetensors")
+                (ctx.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the file")).use { input ->
+                    FileOutputStream(target).use { out ->
+                        val buf = ByteArray(1 shl 20)
+                        var done = 0L; var last = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            if (total > 0 && done - last > 32L * 1024 * 1024) { last = done; convertEvent("copy", done.toDouble() / total) }
+                        }
+                    }
+                }
+                ctx.assets.list("cvtbase")?.forEach { name ->
+                    ctx.assets.open("cvtbase/$name").use { i -> FileOutputStream(File(dir, name)).use { o -> i.copyTo(o) } }
+                }
+                File(dir, if (clipSkip2) "clip_skip_2.mnn" else "clip_skip_1.mnn").copyTo(File(dir, "clip_v2.mnn"), overwrite = true)
+                val nativeDir = ctx.applicationInfo.nativeLibraryDir
+                val exe = File(nativeDir, EXECUTABLE_NAME)
+                if (!exe.exists()) throw IOException("Image engine not found")
+                val cmd = mutableListOf(exe.absolutePath, "--convert", dir.absolutePath)
+                if (clipSkip2) cmd.add("--clip_skip_2")
+                convertEvent("convert", 0.0)
+                val pb = ProcessBuilder(cmd).apply {
+                    directory(File(nativeDir))
+                    redirectErrorStream(true)
+                    environment()["LD_LIBRARY_PATH"] = listOf(nativeDir, "/system/lib64", "/vendor/lib64", "/vendor/lib64/egl").joinToString(":")
+                    environment()["DSP_LIBRARY_PATH"] = nativeDir
+                }
+                val proc = pb.start()
+                val tail = ArrayDeque<String>()
+                proc.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { l ->
+                        Log.i(TAG, "convert: $l")
+                        tail.addLast(l); if (tail.size > 6) tail.removeFirst()
+                        convertEvent("convert", -1.0, l.take(160))
+                    }
+                }
+                val code = proc.waitFor()
+                if (!File(dir, "finished").exists()) {
+                    throw IOException("Conversion failed (code $code). Only Stable Diffusion 1.5 checkpoints can be converted. ${tail.joinToString(" | ").take(400)}")
+                }
+                listOf("model.safetensors", "clip_skip_1.mnn", "clip_skip_2.mnn").forEach { File(dir, it).delete() }
+                val size = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                convertEvent("done", 1.0)
+                val res = Arguments.createMap()
+                res.putString("modelDir", dir.absolutePath)
+                res.putDouble("size", size.toDouble())
+                safeResolve(promise, res)
+            } catch (e: Exception) {
+                Log.e(TAG, "convertCheckpoint failed", e)
+                try { dir.deleteRecursively() } catch (_: Exception) { }
+                safeReject(promise, "CONVERT_FAILED", e.message ?: "Conversion failed", e)
+            } finally {
+                converting.set(false)
+            }
+        }
+    }
+
     @ReactMethod
     fun unloadModel(promise: Promise) {
         try {

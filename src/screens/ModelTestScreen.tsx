@@ -146,7 +146,8 @@ export const ModelTestScreen: React.FC = () => {
         if (qualcomm && !/q4_0|q8_0/i.test(model.fileName || '')) setFaster('A Q4_0 version of this model can run on the Snapdragon GPU and is usually much faster.');
         const quant = !qualcomm || /q4_0|q8_0/i.test(model.fileName || '') ? '' : ' This file type speeds up less on the GPU - a Q4_0 or Q8_0 version is fastest on Snapdragon.';
         const note = llmService.getBackendFallbackNotice();
-        set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
+        if (llmService.isCpuForFileType()) set('accel', 'ok', 'CPU on purpose: the GPU/NPU only speed up Q4_0 and Q8_0 files, so this file type is faster on the CPU. A Q4_0 version of this model can use the GPU.');
+        else set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
       }
 
       // 7. Abilities

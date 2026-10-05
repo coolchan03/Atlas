@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Alert, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
@@ -9,6 +9,7 @@ import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
+import { activeModelService } from '../../services/activeModelService';
 import { isLiteRTAvailable } from '../../services/engines';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -53,6 +54,50 @@ async function findAndroidImageModel(root: string): Promise<{ dir?: string; back
     if (depth < 3) for (const f of items) if (f.isDirectory()) queue.push({ path: f.path, depth: depth + 1 });
   }
   return { problem: 'No image model found in this zip. It needs unet.mnn (CPU/GPU models) or unet.bin (NPU models), plus clip, vae_decoder and tokenizer.json. If you downloaded it, the download may not have finished.' };
+}
+
+/** Atlas: Stable Diffusion 1.5 .safetensors checkpoint -> CPU/GPU image model, converted on the phone. */
+async function importSafetensors(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
+  const { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState } = deps;
+  const Native: any = NativeModules.LocalDreamModule;
+  if (Platform.OS !== 'android' || !Native?.convertCheckpoint) {
+    setAlertState(showAlert('Not supported', 'Converting .safetensors models needs the Android app.'));
+    return;
+  }
+  const clipSkip2 = await new Promise<boolean | null>((resolve) => Alert.alert(
+    'Convert this model?',
+    `"${fileName}" will be turned into an image model on this phone. It must be a Stable Diffusion 1.5 model (like DreamShaper 8). This takes a few minutes and needs about twice the file's size free. Keep Atlas open.\n\nStyle setting ("clip skip"): use Normal unless the model's page says clip skip 2 (common for anime models).`,
+    [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+      { text: 'Clip skip 2', onPress: () => resolve(true) },
+      { text: 'Normal', onPress: () => resolve(false) },
+    ],
+    { cancelable: true, onDismiss: () => resolve(null) },
+  ));
+  if (clipSkip2 === null) return;
+  try { await activeModelService.unloadImageModel(true); } catch { /* not loaded */ }
+  const name = fileName.replace(/\.safetensors$/i, '').replace(/[_-]+/g, ' ').trim();
+  const modelId = `local_${fileName.replace(/\.safetensors$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
+  const modelDir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
+  const sub = new NativeEventEmitter(Native).addListener('LocalDreamConvert', (e: { stage: string; fraction: number }) => {
+    if (e.stage === 'copy') setImportProgress({ fraction: Math.max(0, e.fraction) * 0.3, fileName: `${name}: copying` });
+    else if (e.stage === 'convert') setImportProgress({ fraction: 0.5, fileName: `${name}: converting (a few minutes)` });
+  });
+  try {
+    setImportProgress({ fraction: 0, fileName: `${name}: copying` });
+    const r = await Native.convertCheckpoint({ uri: sourceUri, modelDir, clipSkip2 });
+    const imageModel: ONNXImageModel = {
+      id: modelId, name, description: 'Converted on this phone (CPU/GPU)',
+      modelPath: r.modelDir, downloadedAt: new Date().toISOString(), size: r.size, backend: 'mnn',
+    };
+    await modelManager.addDownloadedImageModel(imageModel);
+    addDownloadedImageModel(imageModel);
+    if (!activeImageModelId) setActiveImageModelId(imageModel.id);
+    setImportProgress({ fraction: 1, fileName: name });
+    setAlertState(showAlert('Ready', `${name} is ready. It runs on the CPU/GPU (converted models can't use the NPU).`));
+  } finally {
+    sub.remove();
+  }
 }
 
 async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
@@ -159,7 +204,7 @@ export function useModelsScreen() {
       return 'litert_unsupported';
     }
     const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-    const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+    const singleZip = resolvedFiles.length === 1 && /\.(zip|safetensors)$/i.test(resolvedFiles[0].name);
     if (!allGguf && !singleZip && !singleLitert) return 'invalid_format';
     if (resolvedFiles.length > 2) return 'too_many';
     return null;
@@ -189,7 +234,7 @@ export function useModelsScreen() {
           'Invalid File',
           resolvedFiles.length > 1
             ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
-            : 'Supported formats: .gguf (text models), .litertlm (LiteRT models), and .zip (image models).',
+            : 'Supported formats: .gguf (text models), .litertlm (LiteRT models), .zip (image models) and .safetensors (Stable Diffusion 1.5 image models, converted on the phone).',
         ));
         return;
       }
@@ -202,6 +247,10 @@ export function useModelsScreen() {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
+      if (resolvedFiles.length === 1 && /\.safetensors$/i.test(firstFileName)) {
+        await importSafetensors(firstUri, firstFileName, { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState });
+        return;
+      }
       const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
       if (singleZip) {
         await handleImportImageModelZip(firstUri, firstFileName);

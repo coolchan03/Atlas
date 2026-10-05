@@ -33,6 +33,7 @@ function resolveGpuBackend(enabled: boolean, devices: string[]): string {
 }
 class LLMService {
   private context: LlamaContext | null = null;
+  private cpuForFileType = false;
   private currentModelPath: string | null = null;
   private isGenerating: boolean = false;
   private activeCompletionPromise: Promise<void> | null = null;
@@ -67,7 +68,14 @@ class LLMService {
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
     const validation = await validateModelFile(modelPath);
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
-    const settings = useAppStore.getState().settings;
+    const rawSettings = useAppStore.getState().settings;
+    // Atlas: the Adreno GPU (OpenCL) and NPU only speed up Q4_0 / Q8_0 files. Other types (Q4_K_M, Q5_K...)
+    // bounce between GPU and CPU and end up much slower than plain CPU - and force a big f16 memory cache.
+    // Run those on the CPU (with flash attention + a compact cache) instead.
+    const accel = rawSettings.inferenceBackend === INFERENCE_BACKENDS.OPENCL || rawSettings.inferenceBackend === INFERENCE_BACKENDS.HTP;
+    this.cpuForFileType = Platform.OS === 'android' && accel && !/q4_0|q8_0/i.test(modelPath.split('/').pop() || '');
+    if (this.cpuForFileType) logger.log('[LLM] Not a Q4_0/Q8_0 file: running on CPU (faster than GPU for this type)');
+    const settings = this.cpuForFileType ? { ...rawSettings, inferenceBackend: INFERENCE_BACKENDS.CPU } : rawSettings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
     // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
@@ -174,7 +182,7 @@ class LLMService {
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
       const settings = useAppStore.getState().settings;
-      const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+      const backend = this.cpuForFileType ? INFERENCE_BACKENDS.CPU : (settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU);
       if (backend === INFERENCE_BACKENDS.HTP) {
         // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
         // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
@@ -456,8 +464,11 @@ class LLMService {
   }
   /** The user-facing notice for a load that silently downgraded to CPU (GPU requested, 0 layers
    *  offloaded — init failure/timeout, capability refusal, or a RAM cap). Null when nothing to report. */
+  /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
+  isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
     if (!this.context) return null;
+    if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
