@@ -189,6 +189,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 }
 
 async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
+  if (ctx.model.engine === 'litert') return doLoadLiteRTModel(ctx); // (narrows the type below)
 
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
