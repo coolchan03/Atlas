@@ -304,7 +304,7 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
           ctx.model.modelPath,
           ctx.imageThreads,
           {
-            backend: 'auto',
+            backend: ctx.cpuOnly ? 'mnn' : (ctx.model.backend === 'mnn' || ctx.model.backend === 'qnn' ? ctx.model.backend : 'auto'),
             cpuOnly: ctx.cpuOnly,
             attentionVariant: ctx.model.attentionVariant,
             preferGpu: ctx.preferGpu,
@@ -319,6 +319,10 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
     ctx.onLoaded(ctx.modelId, ctx.imageThreads);
     ctx.store.setActiveImageModelId(ctx.modelId);
   } catch (error) {
+    // If the outer JS timeout/error wins a race with native startup, explicitly
+    // tear native state down before clearing JS bookkeeping. This prevents a
+    // late native success from leaving an unmanaged image model resident.
+    await onnxImageGeneratorService.unloadModel().catch(() => {});
     ctx.onError();
     throw error;
   } finally {

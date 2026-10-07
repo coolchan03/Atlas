@@ -8,6 +8,7 @@ import { act } from '@testing-library/react-native';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
 import * as httpClient from '../../../src/services/httpClient';
+import { fetchModelsFromServer } from '../../../src/stores/remoteServerHelpers';
 
 // Mock httpClient
 jest.mock('../../../src/services/httpClient', () => ({
@@ -76,6 +77,19 @@ describe('remoteServerStore', () => {
       expect(servers[0].createdAt).toBeDefined();
     });
 
+    it('never stores an API key in persisted server state', () => {
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().addServer({
+          name: 'Protected Server',
+          endpoint: 'http://protected:11434',
+          providerType: 'openai-compatible',
+          apiKey: 'super-secret',
+        } as any);
+      });
+
+      expect((useRemoteServerStore.getState().servers[0] as any).apiKey).toBeUndefined();
+    });
+
     it('should store notes if provided', () => {
       const serverData = {
         name: 'Ollama Server',
@@ -116,6 +130,15 @@ describe('remoteServerStore', () => {
 
       expect(server?.name).toBe('Updated Name');
       expect(server?.endpoint).toBe('http://updated:11434');
+    });
+
+    it('strips an API key from direct store updates', () => {
+      const serverId = addTestServer();
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().updateServer(serverId, { apiKey: 'leak-me-not' } as any);
+      });
+
+      expect((useRemoteServerStore.getState().getServerById(serverId) as any)?.apiKey).toBeUndefined();
     });
 
     it('should not modify other servers', () => {
@@ -630,8 +653,7 @@ describe('remoteServerStore', () => {
       expect(chat?.capabilities.supportsVision).toBe(false);
     });
 
-    it('should handle fetch failure and return empty array', async () => {
-      // Mock fetch to fail
+    it('preserves the cached model list when discovery fails', async () => {
       const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
       (global as any).fetch = mockFetch;
 
@@ -642,12 +664,20 @@ describe('remoteServerStore', () => {
           endpoint: 'http://test:11434',
           providerType: 'openai-compatible',
         });
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+          id: 'cached-model',
+          name: 'Cached Model',
+          serverId,
+          capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+          lastUpdated: new Date().toISOString(),
+        }]);
       });
 
-      // discoverModels returns empty array on fetch failure
-      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+      await expect(useRemoteServerStore.getState().discoverModels(serverId))
+        .rejects.toThrow('Unable to discover models');
 
-      expect(models).toHaveLength(0);
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]?.map(m => m.id))
+        .toEqual(['cached-model']);
       expect(useRemoteServerStore.getState().isLoading).toBe(false);
       expect(useRemoteServerStore.getState().discoveringServerId).toBeNull();
     });
@@ -731,17 +761,14 @@ describe('remoteServerStore', () => {
       });
       (global as any).fetch = mockFetch;
 
-      let serverId = '';
-      actStoreUpdate(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'API Key Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-          apiKey: 'secret-key',
-        });
+      await fetchModelsFromServer({
+        id: 'direct-auth-test',
+        name: 'API Key Server',
+        endpoint: 'http://test:11434',
+        providerType: 'openai-compatible',
+        createdAt: new Date().toISOString(),
+        apiKey: 'secret-key',
       });
-
-      await useRemoteServerStore.getState().discoverModels(serverId);
 
       expect(mockFetch).toHaveBeenCalled();
       const callArgs = mockFetch.mock.calls[0];
@@ -816,7 +843,7 @@ describe('remoteServerStore', () => {
       expect(models[0].id).toBe('ollama-model');
     });
 
-    it('should return empty array when both endpoints fail', async () => {
+    it('should reject when both endpoints fail so callers can preserve cached models', async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: false,
         json: async () => ({}),
@@ -832,9 +859,8 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const models = await useRemoteServerStore.getState().discoverModels(serverId);
-
-      expect(models).toHaveLength(0);
+      await expect(useRemoteServerStore.getState().discoverModels(serverId))
+        .rejects.toThrow('Unable to discover models');
     });
   });
 

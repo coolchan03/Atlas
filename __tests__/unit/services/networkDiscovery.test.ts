@@ -99,19 +99,22 @@ describe('discoverLANServers', () => {
     expect(types).toEqual(['lmstudio', 'ollama']);
   });
 
-  it('only accepts HTTP 200 as a valid server response', async () => {
+  it('accepts 200 plus auth-required 401/403 responses as discovered servers', async () => {
     mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.5:11434/api/tags') { // NOSONAR
-        return Promise.resolve({ status: 200 }); // Explicit 200 required
-      }
-      return Promise.resolve({ status: 401 }); // 4xx (e.g. router admin page) should not match
+      if (url === 'http://192.168.1.5:11434/api/tags') return Promise.resolve({ status: 200 }); // NOSONAR
+      if (url === 'http://192.168.1.6:1234/v1/models') return Promise.resolve({ status: 401 }); // NOSONAR
+      if (url === 'http://192.168.1.7:7878/v1/models') return Promise.resolve({ status: 403 }); // NOSONAR
+      return Promise.resolve({ status: 404 });
     });
 
     const result = await discoverLANServers();
-    expect(result).toHaveLength(1);
-    expect(result[0].endpoint).toBe('http://192.168.1.5:11434'); // NOSONAR
+    expect(result.map(s => s.endpoint).sort()).toEqual([
+      'http://192.168.1.5:11434',
+      'http://192.168.1.6:1234',
+      'http://192.168.1.7:7878',
+    ].sort()); // NOSONAR
   });
 
   it('does not include servers with status >= 500', async () => {

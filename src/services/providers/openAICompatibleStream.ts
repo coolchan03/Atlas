@@ -269,7 +269,7 @@ export async function generateOllamaChatImpl(
   openaiMessages: OpenAIChatMessage[],
   req: OllamaChatRequest,
 ): Promise<void> {
-  const { options, callbacks, signal, endpoint, modelId, abort } = req;
+  const { options, callbacks, signal, endpoint, modelId, apiKey, abort } = req;
   const thinkingEnabled = options.enableThinking !== false;
 
   // Convert to Ollama message format
@@ -339,7 +339,9 @@ export async function generateOllamaChatImpl(
   };
 
   try {
-    await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, timeout: 300000, signal }, (line) => {
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    await createNDJSONStreamingRequest(url, { body: requestBody, headers, timeout: 300000, signal }, (line) => {
       handleOllamaChatLine(line, streamState, { callbacks, signal, abort });
     });
 

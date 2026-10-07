@@ -146,7 +146,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
   const [showServerModal, setShowServerModal] = useState(false);
-  const healthCheckInFlight = useRef(false);
+  const healthCheckGeneration = useRef(0);
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -188,27 +188,26 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     return () => { cancelled = true; };
   }, []);
 
-  // Health-check persisted servers — only show reachable ones.
-  // Returns { ran, reachable }: `ran` is false when the in-flight guard short-circuited this call
-  // (another check is already running), so callers can distinguish "checked and found nothing" from
-  // "did not actually check". The reachable set is only authoritative when `ran` is true.
+  // Health-check persisted servers — only show reachable ones. Checks may overlap when a scan
+  // adds a server while an automatic check is already running. Let them both finish, but only the
+  // newest-started check may update the rendered list so an older failure cannot hide a newer success.
   const refreshServerHealth = useCallback(async (): Promise<{ ran: boolean; reachable: Set<string> }> => {
-    if (healthCheckInFlight.current) return { ran: false, reachable: new Set<string>() };
-    healthCheckInFlight.current = true;
+    const generation = ++healthCheckGeneration.current;
     setIsCheckingNetwork(true);
     const store = useRemoteServerStore.getState();
     const reachable = new Set<string>();
     await Promise.all(
       store.servers.map(async (server) => {
         try {
-          const result = await store.testConnection(server.id);
+          const result = await remoteServerManager.testConnection(server.id);
           if (result.success) reachable.add(server.id);
         } catch { /* offline */ }
       }),
     );
-    setReachableServerIds(reachable);
-    setIsCheckingNetwork(false);
-    healthCheckInFlight.current = false;
+    if (generation === healthCheckGeneration.current) {
+      setReachableServerIds(reachable);
+      setIsCheckingNetwork(false);
+    }
     return { ran: true, reachable };
   }, []);
 
@@ -407,13 +406,13 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
           })}
 
           {filesLoading && !Object.keys(modelFiles).length && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+            <View style={styles.libraryLoadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ color: colors.textSecondary, marginLeft: 10 }}>Finding models for your device...</Text>
+              <Text style={styles.libraryLoadingText}>Finding models for your device...</Text>
             </View>
           )}
           {!filesLoading && !Object.keys(modelFiles).length && (
-            <Text style={{ color: colors.textSecondary, paddingVertical: 12 }}>
+            <Text style={styles.libraryEmptyText}>
               Could not reach the model library (no internet?). You can import a model file from this device below, or skip and download later from the Models tab.
             </Text>
           )}
@@ -483,6 +482,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   warningCard: { backgroundColor: `${colors.warning}20`, borderWidth: 1, borderColor: colors.warning },
   warningTitle: { ...TYPOGRAPHY.h3, color: colors.warning, marginBottom: 8 },
   warningText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, lineHeight: 20 },
+  libraryLoadingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 12 },
+  libraryLoadingText: { color: colors.textSecondary, marginLeft: 10 },
+  libraryEmptyText: { color: colors.textSecondary, paddingVertical: 12 },
   // Vertical padding is intentionally small: the ghost Button carries its own
   // paddingVertical and the SafeAreaView already insets the home-indicator area, so a
   // full 16 here stacked into an oversized gap below "Skip for Now".

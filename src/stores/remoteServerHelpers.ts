@@ -71,8 +71,15 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
       };
     }
 
-    // Try to discover models
-    const models = await fetchModelsFromServer(server);
+    // Reachability and model discovery are separate concerns. A server can be
+    // reachable while model enumeration is temporarily unavailable; do not mark it
+    // unhealthy or erase cached models merely because discovery failed.
+    let models: RemoteModel[] | undefined;
+    try {
+      models = await fetchModelsFromServer(server);
+    } catch (error) {
+      logger.warn('[RemoteServer] Reachable server model discovery failed:', error);
+    }
 
     // Detect server type
     const serverType = await detectServerType(server.endpoint, 5000, server.apiKey);
@@ -118,7 +125,12 @@ export async function testEndpointAndGetModels(
       createdAt: new Date().toISOString(),
       apiKey,
     };
-    const models = await fetchModelsFromServer(tempServer);
+    let models: RemoteModel[] | undefined;
+    try {
+      models = await fetchModelsFromServer(tempServer);
+    } catch (error) {
+      logger.warn('[RemoteServer] Reachable endpoint model discovery failed:', error);
+    }
     const serverType = await detectServerType(endpoint, 5000, apiKey);
 
     return {
@@ -140,6 +152,7 @@ export async function testEndpointAndGetModels(
 
 export async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
   let url = server.endpoint;
+  let hadSuccessfulListResponse = false;
   while (url.endsWith('/')) url = url.slice(0, -1);
 
   // Headers for authentication
@@ -155,18 +168,22 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
 
-    const response = await fetch(`${url}/v1/models`, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${url}/v1/models`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (response.ok) {
+      hadSuccessfulListResponse = true;
       const data = await response.json();
 
-      const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
+      const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability, apiKey: server.apiKey };
 
       // OpenAI format: { object: "list", data: [{ id, object, owned_by, ... }] }
       if (data?.object === 'list' && Array.isArray(data.data)) {
@@ -233,19 +250,23 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
 
     const ollamaUrl = `${new URL(url).origin}/api/tags`;
-    const response = await fetch(ollamaUrl, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(ollamaUrl, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (response.ok) {
+      hadSuccessfulListResponse = true;
       const data = await response.json();
 
       if (Array.isArray(data.models)) {
-        const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
+        const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability, apiKey: server.apiKey };
         const generativeModels = data.models.filter(
           (model: { name: string }) => isGenerativeModel(model.name)
         );
@@ -276,6 +297,9 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     logger.warn('[RemoteServer] Failed to fetch from /api/tags:', error);
   }
 
-  // No models found
-  return [];
+  // An authoritative successful list response with zero compatible models is
+  // different from a network/auth/server failure. Preserve the caller's cached
+  // list on failure by throwing; only return [] after a successful empty response.
+  if (hadSuccessfulListResponse) return [];
+  throw new Error(`Unable to discover models from ${server.endpoint}`);
 }

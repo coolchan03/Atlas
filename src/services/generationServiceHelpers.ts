@@ -443,9 +443,8 @@ export async function generateRemoteResponseImpl(
   } catch (error) {
     if (generationSignal.aborted) return;
     logger.error('[GenerationService] Remote generation error:', error);
-    // Mark server as offline so the Remote Servers screen reflects the failure
-    const failedServerId = useRemoteServerStore.getState().activeServerId;
-    if (failedServerId) useRemoteServerStore.getState().updateServerHealth(failedServerId, false);
+    // A generation/API error does not prove the server is unreachable.
+    // Preserve health here; explicit endpoint probes own reachability status.
     keepShownPartialOnError(svc, conversationId);
     throw error;
   } finally {

@@ -8,6 +8,7 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
+import { fetchModelsFromServer } from '../stores/remoteServerHelpers';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 
@@ -83,9 +84,6 @@ export async function setActiveRemoteTextModelImpl(
   const store = useRemoteServerStore.getState();
   logger.log('[RemoteServerManager] setActiveRemoteTextModel called:', { serverId, modelId });
 
-  store.setActiveServerId(serverId);
-  store.setActiveRemoteTextModelId(modelId);
-
   let provider = providerRegistry.getProvider(serverId);
   if (!provider) {
     const server = store.getServerById(serverId);
@@ -100,7 +98,7 @@ export async function setActiveRemoteTextModelImpl(
     logger.log('[RemoteServerManager] Loading model on provider:', modelId);
     await provider.loadModel(modelId);
     // Apply authoritative vision capability from discovery results
-    const discoveredModel = store.getModelById(serverId, modelId);
+    const discoveredModel = store.getModelById?.(serverId, modelId) ?? null;
     if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
       provider.updateCapabilities({
         supportsVision: discoveredModel.capabilities.supportsVision,
@@ -109,10 +107,21 @@ export async function setActiveRemoteTextModelImpl(
       });
       logger.log('[RemoteServerManager] Applied discovered capabilities for', modelId, '— supportsVision:', discoveredModel.capabilities.supportsVision, 'supportsThinking:', discoveredModel.capabilities.supportsThinking, 'acceptsThinkingKwarg:', discoveredModel.capabilities.acceptsThinkingKwarg);
     }
+    const ready = await provider.isReady();
+    if (!ready) {
+      logger.warn('[RemoteServerManager] Provider is not ready for server:', serverId);
+      return;
+    }
+    // Commit selection only after the provider/model is ready. If creation or load
+    // fails, the previous selection remains valid instead of leaving stale IDs.
+    store.setActiveServerId(serverId);
+    store.setActiveRemoteTextModelId(modelId);
+    store.setActiveRemoteImageModelId(null);
     providerRegistry.setActiveProvider(serverId);
-    logger.log('[RemoteServerManager] Provider ready:', await provider.isReady());
+    logger.log('[RemoteServerManager] Provider ready:', ready);
   } else {
     logger.warn('[RemoteServerManager] Could not create provider for server:', serverId);
+    return;
   }
 
   logger.log('[RemoteServerManager] Active remote text model set:', serverId, modelId);
@@ -122,27 +131,19 @@ export async function setActiveRemoteImageModelImpl(
   serverId: string,
   modelId: string,
 ): Promise<void> {
+  // A remote "vision model" is a VLM on the normal text/chat route; there is no
+  // separate remote image-generation provider. Keep this legacy API as an alias
+  // so older UI call sites cannot mutate the provider to a second hidden model.
+  await setActiveRemoteTextModelImpl(serverId, modelId);
   const store = useRemoteServerStore.getState();
-  store.setActiveServerId(serverId);
-  store.setActiveRemoteImageModelId(modelId);
-
-  let provider = providerRegistry.getProvider(serverId);
-  if (!provider) {
-    const server = store.getServerById(serverId);
-    if (server) {
-      logger.log('[RemoteServerManager] Creating provider for server:', serverId);
-      await createProviderForServerImpl(server);
-      provider = providerRegistry.getProvider(serverId);
-    }
+  const provider = providerRegistry.getProvider(serverId);
+  // Keep the legacy UI projection for compatibility, but only after the shared
+  // text/VLM provider is actually ready. It is not persisted and never drives
+  // a second provider selection.
+  if (provider && await provider.isReady()) {
+    store.setActiveRemoteImageModelId(modelId);
   }
-
-  if (provider) {
-    await provider.loadModel(modelId);
-  } else {
-    logger.warn('[RemoteServerManager] Could not create provider for server:', serverId);
-  }
-
-  logger.log('[RemoteServerManager] Active remote image model set:', serverId, modelId);
+  logger.log('[RemoteServerManager] Remote vision selection routed through text model:', serverId, modelId);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +163,9 @@ export async function initializeProvidersImpl(
       // Re-discover models on startup to refresh capability data from the server
       // (persisted data may be stale if models were added/removed while offline)
       try {
-        const models = await store.discoverModels(server.id);
+        const apiKey = await getApiKeyImpl(server.id);
+        const models = await fetchModelsFromServer({ ...server, apiKey: apiKey || undefined });
+        store.setDiscoveredModels(server.id, models);
         logger.log('[RemoteServerManager] Discovered', models.length, 'models for', server.name);
       } catch (discoverError) {
         logger.warn('[RemoteServerManager] Failed to discover models for', server.name, discoverError);

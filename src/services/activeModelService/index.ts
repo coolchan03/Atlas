@@ -54,15 +54,14 @@ class ActiveModelService {
     return {
       text: {
         model: textModel,
-        // Engine-aware: a text model lives in llmService (GGUF) or liteRTService
-        // (LiteRT). Checking only llmService reported a loaded LiteRT model as
-        // not-loaded, which made the preloader and UI treat it as absent.
-        isLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
+        // Report the SELECTED model as loaded only when that exact model is resident.
+        // A different model can remain resident briefly during a lazy switch.
+        isLoaded: !!store.activeModelId && this.isTextModelCurrent(store.activeModelId),
         isLoading: this.loadingState.text,
       },
       image: {
         model: imageModel,
-        isLoaded: this.loadedImageModelId != null,
+        isLoaded: !!store.activeImageModelId && this.loadedImageModelId === store.activeImageModelId,
         isLoading: this.loadingState.image,
       },
     };
@@ -247,7 +246,7 @@ class ActiveModelService {
   }
   async loadImageModel(
     modelId: string,
-    timeoutMs: number = 180000,
+    timeoutMs: number = 240000,
     opts?: { override?: boolean },
   ): Promise<void> {
     await modelResidencyManager.runExclusive(`load:image:${modelId}`, () =>
@@ -377,7 +376,8 @@ class ActiveModelService {
     const hasTextModel =
       !!store.activeModelId ||
       !!this.loadedTextModelId ||
-      llmService.isModelLoaded();
+      llmService.isModelLoaded() ||
+      liteRTService.isModelLoaded();
     const hasImageModel =
       !!store.activeImageModelId || !!this.loadedImageModelId;
     if (hasTextModel) {
@@ -469,6 +469,12 @@ class ActiveModelService {
         this.loadedImageModelThreads = n;
       },
     });
+    // Native state is authoritative. If a pipeline/engine disappeared (iOS
+    // one-shot image release, memory warning, native crash), remove the matching
+    // residency charge too so future memory decisions are not made against a ghost.
+    if (this.loadedTextModelId == null) modelResidencyManager.release('text');
+    if (this.loadedImageModelId == null) modelResidencyManager.release('image');
+    this.notifyListeners();
   }
   subscribe(listener: ModelChangeListener): () => void {
     this.listeners.add(listener);

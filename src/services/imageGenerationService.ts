@@ -1,7 +1,8 @@
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
+import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
-import { getActiveEngineService, generateStandalone, isRemoteTextModelActive } from './engines';
+import { getActiveEngineService, generateStandalone, isRemoteTextModelActive, stopStandaloneGeneration } from './engines';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
@@ -46,6 +47,7 @@ class ImageGenerationService {
 
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
+  private requestEpoch = 0;
   /** Last generate request, so a failure card's Retry button can re-run it. */
   private _lastParams: GenerateImageParams | null = null;
 
@@ -157,7 +159,7 @@ class ImageGenerationService {
     // stopGeneration is supported by both; binding to llmService left a LiteRT generation
     // running after enhancement.
     try {
-      await getActiveEngineService()?.stopGeneration();
+      await stopStandaloneGeneration();
       logger.log('[ImageGen] ✓ text engine stopGeneration() called');
     } catch (resetError) {
       logger.error('[ImageGen] ❌ Failed to reset text engine:', resetError);
@@ -177,103 +179,116 @@ class ImageGenerationService {
     }
   }
 
-  private async _enhancePrompt(params: GenerateImageParams, steps: number): Promise<string> {
+  private _isRequestCurrent(requestEpoch: number): boolean {
+    return requestEpoch === this.requestEpoch && !this.cancelRequested;
+  }
+
+  private async _ensureEnhancementTextModel(
+    params: GenerateImageParams,
+    steps: number,
+    requestEpoch: number,
+  ): Promise<boolean> {
+    let loaded = isRemoteTextModelActive() || (getActiveEngineService()?.isModelLoaded() ?? false);
+    logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', loaded);
+    if (loaded) return true;
+
+    const { activeModelId, lastTextModelId } = useAppStore.getState();
+    const textModelId = activeModelId ?? lastTextModelId;
+    if (!textModelId) {
+      logger.warn('[ImageGen] No text model available, skipping enhancement');
+      this._noticeEnhancementSkipped('no text model is selected');
+      return false;
+    }
+
+    this.updateState({
+      phase: 'enhancing', prompt: params.prompt, conversationId: params.conversationId || null,
+      status: 'Loading text model to enhance prompt...', previewPath: null,
+      progress: { step: 0, totalSteps: steps }, error: null, result: null,
+    });
+
+    let loadError: unknown = null;
+    try {
+      await activeModelService.loadTextModel(textModelId);
+      if (!this._isRequestCurrent(requestEpoch)) return false;
+      loaded = getActiveEngineService()?.isModelLoaded() ?? false;
+    } catch (error) {
+      loadError = error;
+      logger.warn('[ImageGen] Failed to load text model for enhancement, using original prompt:', error);
+    }
+    if (loaded) return true;
+
+    this._noticeEnhancementSkipped(
+      loadError instanceof Error ? loadError.message : 'the text model could not load',
+    );
+    return false;
+  }
+
+  private _createEnhancementMessage(conversationId?: string): string | null {
+    if (!conversationId) return null;
+    return useChatStore.getState().addMessage(conversationId, {
+      role: 'assistant', content: 'Enhancing your prompt...', isThinking: true,
+    }).id;
+  }
+
+  private _removeEnhancementMessage(conversationId?: string, tempMessageId?: string | null): void {
+    if (conversationId && tempMessageId) {
+      useChatStore.getState().deleteMessage(conversationId, tempMessageId);
+    }
+  }
+
+  private async _streamEnhancedPrompt(params: GenerateImageParams, requestEpoch: number): Promise<string> {
+    const contextMessages = params.conversationId ? getConversationContext(params.conversationId) : [];
+    const tempMessageId = this._createEnhancementMessage(params.conversationId);
+    try {
+      logger.log('[ImageGen] 📤 Calling generateStandalone for enhancement (active engine)...');
+      let streamed = '';
+      const onEnhanceToken = (token: string) => {
+        if (!this._isRequestCurrent(requestEpoch)) return;
+        streamed += token;
+        if (!params.conversationId || !tempMessageId) return;
+        useChatStore.getState().updateMessageContent(
+          params.conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${streamed}</think>`,
+        );
+      };
+      let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages), onEnhanceToken);
+      logger.log('[ImageGen] 📥 generateStandalone returned');
+      if (!this._isRequestCurrent(requestEpoch)) {
+        this._removeEnhancementMessage(params.conversationId, tempMessageId);
+        return params.prompt;
+      }
+
+      raw = cleanEnhancedPrompt(raw);
+      await this._resetLlmAfterEnhancement();
+      const enhancedPrompt = raw || params.prompt;
+      await this._updateEnhancementMessage({
+        conversationId: params.conversationId,
+        tempMessageId,
+        enhancedPrompt,
+        originalPrompt: params.prompt,
+      });
+      return enhancedPrompt;
+    } catch (error: any) {
+      logger.error('[ImageGen] ❌ Prompt enhancement failed:', error);
+      if (this._isRequestCurrent(requestEpoch)) await this._resetLlmAfterEnhancement();
+      this._removeEnhancementMessage(params.conversationId, tempMessageId);
+      return params.prompt;
+    }
+  }
+
+  private async _enhancePrompt(params: GenerateImageParams, steps: number, requestEpoch: number): Promise<string> {
     const { settings } = useAppStore.getState();
     if (!settings.enhanceImagePrompts) {
       logger.log('[ImageGen] Enhancement disabled, using original prompt');
       return params.prompt;
     }
-    // Engine-agnostic loaded check — a LiteRT text model lives in liteRTService, so the
-    // old llmService.isModelLoaded() always read false for it and enhancement was skipped
-    // even though the model was resident. A REMOTE text model has no LOCAL residency at all
-    // (it runs over the network), so "loaded" for it means the remote provider is active —
-    // otherwise the gate below tries a pointless on-demand LOCAL load of a remote model id,
-    // stays "not loaded", and skips enhancement entirely (B30, remote path).
-    let isTextModelLoaded = isRemoteTextModelActive() || (getActiveEngineService()?.isModelLoaded() ?? false);
-    logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded);
-    if (!isTextModelLoaded) {
-      // Text and image models are mutually exclusive (one resident at a time), so
-      // during image gen the text model usually isn't loaded. Load it on demand to
-      // enhance; _ensureImageModelLoaded swaps back to the image model afterwards.
-      // This costs two heavy model loads per enhanced generation — the accepted
-      // price for the feature when one-at-a-time residency is in force.
-      const { activeModelId, lastTextModelId } = useAppStore.getState();
-      const textModelId = activeModelId ?? lastTextModelId;
-      if (!textModelId) {
-        logger.warn('[ImageGen] No text model available, skipping enhancement');
-        this._noticeEnhancementSkipped('no text model is selected');
-        return params.prompt;
-      }
-      this.updateState({
-        phase: 'enhancing', prompt: params.prompt, conversationId: params.conversationId || null,
-        status: 'Loading text model to enhance prompt...', previewPath: null,
-        progress: { step: 0, totalSteps: steps }, error: null, result: null,
-      });
-      let loadError: unknown = null;
-      try {
-        await activeModelService.loadTextModel(textModelId);
-        isTextModelLoaded = getActiveEngineService()?.isModelLoaded() ?? false;
-      } catch (err) {
-        loadError = err;
-        logger.warn('[ImageGen] Failed to load text model for enhancement, using original prompt:', err);
-      }
-      if (!isTextModelLoaded) {
-        logger.warn('[ImageGen] Text model still not loaded after on-demand load, skipping enhancement');
-        // Soft, non-blocking notice: the image still generates from the original
-        // prompt — surfaced on the same dismissible card (never silent), and the
-        // text-model error text lets the card flag memory pressure if that's why.
-        this._noticeEnhancementSkipped(
-          loadError instanceof Error ? loadError.message : 'the text model could not load',
-        );
-        return params.prompt;
-      }
-    }
+    if (!(await this._ensureEnhancementTextModel(params, steps, requestEpoch))) return params.prompt;
+
     this.updateState({
       phase: 'enhancing', prompt: params.prompt, conversationId: params.conversationId || null,
       status: 'Enhancing prompt with AI...', previewPath: null,
       progress: { step: 0, totalSteps: steps }, error: null, result: null,
     });
-    const contextMessages = params.conversationId ? getConversationContext(params.conversationId) : [];
-    let tempMessageId: string | null = null;
-    if (params.conversationId) {
-      const tempMessage = useChatStore.getState().addMessage(params.conversationId, {
-        role: 'assistant', content: 'Enhancing your prompt...', isThinking: true,
-      });
-      tempMessageId = tempMessage.id;
-    }
-    try {
-      logger.log('[ImageGen] 📤 Calling generateStandalone for enhancement (active engine)...');
-      // Stream the partial rewrite into the temp thinking message so the user sees live
-      // progress instead of a frozen "Enhancing..." (B30b) — the enhancement can take a
-      // while and looked hung. Rendered under the same "Enhanced prompt" label the final
-      // result uses, so the partial reads as the answer forming.
-      let streamed = '';
-      const onEnhanceToken = (token: string) => {
-        streamed += token;
-        if (params.conversationId && tempMessageId) {
-          useChatStore.getState().updateMessageContent(
-            params.conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${streamed}</think>`,
-          );
-        }
-      };
-      let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages), onEnhanceToken);
-      logger.log('[ImageGen] 📥 generateStandalone returned');
-      raw = cleanEnhancedPrompt(raw);
-      logger.log('[ImageGen] ✅ Original prompt:', params.prompt);
-      logger.log('[ImageGen] ✅ Enhanced prompt:', raw);
-      await this._resetLlmAfterEnhancement();
-      const enhancedPrompt = raw || params.prompt;
-      await this._updateEnhancementMessage({ conversationId: params.conversationId, tempMessageId, enhancedPrompt, originalPrompt: params.prompt });
-      return enhancedPrompt;
-    } catch (error: any) {
-      logger.error('[ImageGen] ❌ Prompt enhancement failed:', error);
-      logger.error('[ImageGen] Error details:', error?.message || 'Unknown error');
-      await this._resetLlmAfterEnhancement();
-      if (params.conversationId && tempMessageId) {
-        useChatStore.getState().deleteMessage(params.conversationId, tempMessageId);
-      }
-      return params.prompt;
-    }
+    return this._streamEnhancedPrompt(params, requestEpoch);
   }
 
   private async _ensureImageModelLoaded(activeImageModelId: string | null, activeImageModel: ActiveImageModel, opts: { desiredThreads: number; override?: boolean }): Promise<boolean> {
@@ -322,75 +337,84 @@ class ImageGenerationService {
     return result;
   }
 
-  private async _runGenerationAndSave(opts: RunGenerationOptions): Promise<GeneratedImage | null> {
-    const { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL } = opts;
-
-    // The first generation for a model compiles/warms the backend and takes ~120s.
-    // This is platform-agnostic: on iOS the CoreML model compiles on first use, on
-    // Android the OpenCL kernels compile. The persisted `warmedImageModels` flag is
-    // the single cross-platform signal (so the notice shows once on every device);
-    // the OpenCL kernel-cache check is an extra Android signal in case the cache was
-    // cleared after the flag was set.
+  private async _getImageWarmupState(activeImageModel: ActiveImageModel, useOpenCL: boolean) {
+    const actualBackend = await onnxImageGeneratorService.getLoadedBackend?.() ?? null;
+    const runtimeModel = actualBackend ? { ...activeImageModel, backend: actualBackend } : activeImageModel;
     let isFirstRun = !useAppStore.getState().warmedImageModels.includes(activeImageModel.id);
-    if (useOpenCL) {
+    if (Platform.OS === 'android' && useOpenCL && runtimeModel.backend === 'mnn') {
       try {
         const hasCache = await onnxImageGeneratorService.hasKernelCache(activeImageModel.modelPath);
         isFirstRun = isFirstRun || !hasCache;
-      } catch (e) {
-        // If check fails, don't add a false first-run signal (keep the warmed-flag result).
-        logger.warn('[ImageGen] Failed to check for OpenCL kernel cache:', e);
+      } catch (error) {
+        logger.warn('[ImageGen] Failed to check for OpenCL kernel cache:', error);
       }
     }
+    let warmupStatus = 'Optimizing GPU for your device (~120s, one-time)...';
+    if (runtimeModel.backend === 'qnn') warmupStatus = 'Preparing NPU image model (one-time)...';
+    else if (Platform.OS === 'ios') warmupStatus = 'Preparing Core ML image model (one-time)...';
+    return { runtimeModel, isFirstRun, warmupStatus };
+  }
 
-    this.updateState({
-      phase: 'generating',
-      status: isFirstRun
-        ? 'Optimizing GPU for your device (~120s, one-time)...'
-        : 'Starting image generation...',
-    });
+  private _imageProgressHandlers(opts: { steps: number; isFirstRun: boolean; warmupStatus: string; requestEpoch: number }) {
+    const { steps, isFirstRun, warmupStatus, requestEpoch } = opts;
+    return {
+      onProgress: (progress: { step: number }) => {
+        if (!this._isRequestCurrent(requestEpoch)) return;
+        const displayStep = Math.min(progress.step, steps);
+        const suffix = isFirstRun ? ' (one-time warm-up)' : '';
+        const status = displayStep <= 1 && isFirstRun ? warmupStatus : `Generating image (${displayStep}/${steps})...${suffix}`;
+        this.updateState({ progress: { step: displayStep, totalSteps: steps }, status });
+      },
+      onPreview: (preview: { step: number; previewPath: string }) => {
+        if (!this._isRequestCurrent(requestEpoch)) return;
+        const displayStep = Math.min(preview.step, steps);
+        this.updateState({
+          previewPath: `file://${preview.previewPath}?t=${Date.now()}`,
+          status: `Refining image (${displayStep}/${steps})...`,
+        });
+      },
+    };
+  }
+
+  private _handleImageGenerationError(error: any): void {
+    const errorMsg = error?.message || 'Image generation failed';
+    if (errorMsg.toLowerCase().includes('cancel')) {
+      this.resetState();
+      return;
+    }
+    logger.error('[ImageGenerationService] Generation error:', error);
+    const crashMarkers = ['Pipeline failed', 'unloaded', 'ERR_NO_MODEL', 'TextEncoder'];
+    const userMessage = crashMarkers.some(marker => errorMsg.includes(marker))
+      ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
+      : errorMsg;
+    this._fail(userMessage);
+  }
+
+  private async _runGenerationAndSave(opts: RunGenerationOptions, requestEpoch: number): Promise<GeneratedImage | null> {
+    const { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL } = opts;
+    const { runtimeModel, isFirstRun, warmupStatus } = await this._getImageWarmupState(activeImageModel, useOpenCL);
+    if (!this._isRequestCurrent(requestEpoch)) return null;
+
+    this.updateState({ phase: 'generating', status: isFirstRun ? warmupStatus : 'Starting image generation...' });
     const startTime = Date.now();
+    const handlers = this._imageProgressHandlers({ steps, isFirstRun, warmupStatus, requestEpoch });
     try {
       const result = await onnxImageGeneratorService.generateImage(
         { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL },
-        (progress) => {
-          if (this.cancelRequested) return;
-          const displayStep = Math.min(progress.step, steps);
-          // Once steps are advancing it IS generating — don't mislabel it "GPU
-          // optimization" (which read as if generation hadn't started). On the first run
-          // the GPU is still warming, so note that as a one-time aside, not the headline.
-          const status = displayStep <= 1 && isFirstRun
-            ? 'Optimizing GPU for your device (~120s, one-time)...'
-            : `Generating image (${displayStep}/${steps})...${isFirstRun ? ' (optimizing GPU, one-time)' : ''}`;
-          this.updateState({ progress: { step: displayStep, totalSteps: steps }, status });
-        },
-        (preview) => {
-          if (this.cancelRequested) return;
-          const displayStep = Math.min(preview.step, steps);
-          this.updateState({ previewPath: `file://${preview.previewPath}?t=${Date.now()}`, status: `Refining image (${displayStep}/${steps})...` });
-        },
+        handlers.onProgress,
+        handlers.onPreview,
       );
-      if (this.cancelRequested || !result?.imagePath) { this.resetState(); return null; }
-      return this._saveResult(result, { params, activeImageModel, meta: { steps, guidanceScale, useOpenCL, startTime } });
+      if (!this._isRequestCurrent(requestEpoch)) return null;
+      if (!result?.imagePath) { this.resetState(); return null; }
+      return this._saveResult(result, { params, activeImageModel: runtimeModel, meta: { steps, guidanceScale, useOpenCL, startTime } });
     } catch (error: any) {
-      const errorMsg = error?.message || 'Image generation failed';
-      if (errorMsg.includes('cancelled')) {
-        this.resetState();
-      } else {
-        logger.error('[ImageGenerationService] Generation error:', error);
-
-        // If the pipeline crashed or the model was unloaded, surface a
-        // user-friendly message and allow retry (model will auto-reload).
-        const isPipelineCrash = errorMsg.includes('Pipeline failed') ||
-          errorMsg.includes('unloaded') ||
-          errorMsg.includes('ERR_NO_MODEL') ||
-          errorMsg.includes('TextEncoder');
-        const userMessage = isPipelineCrash
-          ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
-          : errorMsg;
-
-        this._fail(userMessage);
-      }
+      if (!this._isRequestCurrent(requestEpoch)) return null;
+      this._handleImageGenerationError(error);
       return null;
+    } finally {
+      if (requestEpoch === this.requestEpoch) {
+        await Promise.resolve(activeModelService.syncWithNativeState?.()).catch(() => {});
+      }
     }
   }
 
@@ -403,6 +427,8 @@ class ImageGenerationService {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
+    const requestEpoch = ++this.requestEpoch;
+    this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
@@ -416,9 +442,9 @@ class ImageGenerationService {
     const imageWidth = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);
     const imageHeight = Math.max(SWEET_SPOT_SIZE, settings.imageHeight || SWEET_SPOT_SIZE);
 
-    const enhancedPrompt = await this._enhancePrompt(params, steps);
+    const enhancedPrompt = await this._enhancePrompt(params, steps, requestEpoch);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
-    this.cancelRequested = false;
+    if (requestEpoch !== this.requestEpoch || this.cancelRequested) return null;
 
     // Establish the generating state unconditionally — not only when enhancement
     // is off. When enhancement is ON but _enhancePrompt bailed early (e.g. no text
@@ -434,14 +460,25 @@ class ImageGenerationService {
 
     const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, { desiredThreads: settings.imageThreads ?? 4, override: opts?.override });
     if (!loaded) return null;
+    if (requestEpoch !== this.requestEpoch) return null;
     if (this.cancelRequested) { this.resetState(); return null; }
 
-    return this._runGenerationAndSave({ params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: settings.imageUseOpenCL ?? true });
+    return this._runGenerationAndSave(
+      { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: settings.imageUseOpenCL ?? true },
+      requestEpoch,
+    );
   }
 
   async cancelGeneration(): Promise<void> {
     if (!isInFlight(this.state.phase)) return;
+    const phase = this.state.phase;
     this.cancelRequested = true;
+    // Invalidate every async continuation belonging to the cancelled request.
+    // A new request may start immediately without allowing the old one to mutate it.
+    this.requestEpoch += 1;
+    if (phase === 'enhancing') {
+      try { await stopStandaloneGeneration(); } catch { /* best-effort */ }
+    }
     try { await onnxImageGeneratorService.cancelGeneration(); } catch { /* Ignore */ }
     this.resetState();
   }

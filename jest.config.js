@@ -14,6 +14,10 @@ const proExists = fs.existsSync(path.resolve(__dirname, 'pro/package.json'));
 // absent. (pro/'s OWN suite is always ignored here — it runs in the pro repo's CI.)
 const proDependentTestPaths = [
   '/__tests__/pro/',
+  '/__tests__/hardening/batch5-kokoroDownloadError.test.ts',
+  '/__tests__/hardening/batch5-playbackPausePreparing.test.ts',
+  '/__tests__/hardening/batch5-speakMessageStateMachine.test.ts',
+  '/__tests__/integration/voiceDownloadManagerRouting.test.tsx',
   '/__tests__/unit/audio/',
   '/__tests__/unit/engine/',
   '/__tests__/integration/audio/',

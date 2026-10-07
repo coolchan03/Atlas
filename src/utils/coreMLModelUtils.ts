@@ -31,19 +31,26 @@ export async function resolveCoreMLModelDir(modelDir: string): Promise<string> {
  */
 export async function downloadCoreMLTokenizerFiles(modelDir: string, repo: string): Promise<void> {
   const files = ['merges.txt', 'vocab.json'];
-  // Download in parallel — these are tiny files and independent of each other
+  // These files are required pipeline resources, not optional decoration. A
+  // package cannot be marked ready until both exist and are non-empty.
   await Promise.all(files.map(async (file) => {
     const destPath = `${modelDir}/${file}`;
-    if (await RNFS.exists(destPath)) return;
+    if (await RNFS.exists(destPath)) {
+      const stat = await RNFS.stat(destPath);
+      if (Number(stat.size) > 0) return;
+      await RNFS.unlink(destPath).catch(() => {});
+    }
     const url = `https://huggingface.co/${repo}/resolve/main/${file}`;
     logger.log(`[CoreML] Downloading tokenizer file: ${file}`);
-    try {
-      const result = await RNFS.downloadFile({ fromUrl: url, toFile: destPath }).promise;
-      if (result.statusCode !== 200) {
-        logger.warn(`[CoreML] Failed to download ${file}: HTTP ${result.statusCode}`);
-      }
-    } catch (e) {
-      logger.warn(`[CoreML] Tokenizer download failed for ${file}:`, e);
+    const result = await RNFS.downloadFile({ fromUrl: url, toFile: destPath }).promise;
+    if (result.statusCode !== 200) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw new Error(`Failed to download required CoreML tokenizer file ${file}: HTTP ${result.statusCode}`);
+    }
+    const stat = await RNFS.stat(destPath);
+    if (Number(stat.size) <= 0) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw new Error(`Required CoreML tokenizer file ${file} is empty`);
     }
   }));
 }

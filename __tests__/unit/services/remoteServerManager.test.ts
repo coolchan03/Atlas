@@ -8,11 +8,16 @@ import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { detectVisionCapability, detectToolCallingCapability } from '../../../src/services/remoteServerManagerUtils';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/providers/registry';
+import { fetchModelsFromServer, testServerConnection } from '../../../src/stores/remoteServerHelpers';
 import * as Keychain from 'react-native-keychain';
 
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/providers/registry');
+jest.mock('../../../src/stores/remoteServerHelpers', () => ({
+  fetchModelsFromServer: jest.fn(),
+  testServerConnection: jest.fn(),
+}));
 jest.mock('../../../src/services/providers/openAICompatibleProvider', () => ({
   createOpenAIProvider: jest.fn().mockReturnValue({ dispose: jest.fn().mockResolvedValue(undefined) }),
   OpenAICompatibleProvider: jest.fn(),
@@ -82,6 +87,37 @@ describe('remoteServerManager', () => {
         expect.objectContaining({ service: expect.stringContaining('server-1') })
       );
       expect(result).toEqual(mockServer);
+    });
+
+    it('updates an auto-discovered duplicate endpoint with a newly supplied API key', async () => {
+      const existing = { id: 'server-1', name: 'Ollama', endpoint: 'http://192.168.1.9:11434', createdAt: Date.now() };
+      const updateServer = jest.fn();
+      const getServerById = jest.fn().mockReturnValue(existing);
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        servers: [existing],
+        getServerById,
+        updateServer,
+      });
+      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+
+      const result = await remoteServerManager.addServer({
+        name: 'Private Ollama',
+        endpoint: 'http://192.168.1.9:11434/',
+        providerType: 'openai-compatible',
+        apiKey: 'secret-key',
+      });
+
+      expect(Keychain.setGenericPassword).toHaveBeenCalledWith(
+        'server_server-1',
+        'secret-key',
+        expect.objectContaining({ service: expect.stringContaining('server-1') }),
+      );
+      expect(updateServer).toHaveBeenCalledWith('server-1', expect.objectContaining({
+        name: 'Private Ollama',
+        endpoint: 'http://192.168.1.9:11434/',
+      }));
+      expect(result).toEqual(existing);
     });
 
     it('should throw when server creation fails', async () => {
@@ -531,60 +567,39 @@ describe('remoteServerManager', () => {
   });
 
   describe('testConnection', () => {
-    it('should return store result as-is (capabilities come from server API, not name patterns)', async () => {
-      const mockModels = [
-        { id: 'llava-v1.6', name: 'LLaVA', capabilities: { supportsVision: true } },
-        { id: 'llama-3-70b', name: 'Llama 3', capabilities: { supportsToolCalling: false } },
-      ];
-      const mockTestConnection = jest.fn().mockResolvedValue({
-        success: true,
-        models: mockModels,
-      });
-
+    it('tests with the saved API key and projects models + health into the store', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
+      const mockModels = [{ id: 'llava-v1.6', name: 'LLaVA', capabilities: { supportsVision: true } }];
+      const updateServerHealth = jest.fn();
+      const setDiscoveredModels = jest.fn();
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        testConnection: mockTestConnection,
+        getServerById: jest.fn().mockReturnValue(mockServer),
+        updateServerHealth,
+        setDiscoveredModels,
       });
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({ username: 'server_server-1', password: 'secret-key' });
+      (testServerConnection as jest.Mock).mockResolvedValue({ success: true, latency: 12, models: mockModels });
 
       const result = await remoteServerManager.testConnection('server-1');
 
-      expect(result.success).toBe(true);
-      expect(result.models).toHaveLength(2);
-      // Capabilities are returned as-is from the store (server-API-derived), not overwritten
-      expect(result.models?.[0].capabilities.supportsVision).toBe(true);
-      expect(result.models?.[1].capabilities.supportsToolCalling).toBe(false);
+      expect(testServerConnection).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'secret-key' }));
+      expect(updateServerHealth).toHaveBeenCalledWith('server-1', true);
+      expect(setDiscoveredModels).toHaveBeenCalledWith('server-1', mockModels);
+      expect(result.models).toEqual(mockModels);
     });
 
-    it('should return result without models when test fails', async () => {
-      const mockTestConnection = jest.fn().mockResolvedValue({
-        success: false,
-        error: 'Connection refused',
-      });
-
+    it('records unhealthy status when authenticated testing fails', async () => {
+      const updateServerHealth = jest.fn();
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        testConnection: mockTestConnection,
+        getServerById: jest.fn().mockReturnValue({ id: 'server-1', endpoint: 'http://localhost:11434' }),
+        updateServerHealth,
+        setDiscoveredModels: jest.fn(),
       });
+      (testServerConnection as jest.Mock).mockResolvedValue({ success: false, error: 'Connection refused' });
 
       const result = await remoteServerManager.testConnection('server-1');
-
-      expect(result.success).toBe(false);
       expect(result.error).toBe('Connection refused');
-      expect(result.models).toBeUndefined();
-    });
-
-    it('should return result without models when none discovered', async () => {
-      const mockTestConnection = jest.fn().mockResolvedValue({
-        success: true,
-        models: [],
-      });
-
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        testConnection: mockTestConnection,
-      });
-
-      const result = await remoteServerManager.testConnection('server-1');
-
-      expect(result.success).toBe(true);
-      expect(result.models).toHaveLength(0);
+      expect(updateServerHealth).toHaveBeenCalledWith('server-1', false);
     });
   });
 
@@ -630,37 +645,42 @@ describe('remoteServerManager', () => {
         .rejects.toThrow('Server not found');
     });
 
-    it('should discover models from server', async () => {
+    it('should discover models from server and store the refreshed list', async () => {
       const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
       const mockModels = [{ id: 'model-1', name: 'Model 1' }];
+      const setDiscoveredModels = jest.fn();
 
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         getServerById: jest.fn().mockReturnValue(mockServer),
-        discoverModels: jest.fn().mockResolvedValue(mockModels),
+        setDiscoveredModels,
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
+      (fetchModelsFromServer as jest.Mock).mockResolvedValue(mockModels);
 
       const models = await remoteServerManager.discoverModels('server-1');
 
+      expect(fetchModelsFromServer).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-1' }));
+      expect(setDiscoveredModels).toHaveBeenCalledWith('server-1', mockModels);
       expect(models).toEqual(mockModels);
     });
 
-    it('should pass API key when discovering models', async () => {
+    it('should pass the saved API key when discovering models', async () => {
       const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
       const mockModels = [{ id: 'model-1', name: 'Model 1' }];
 
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         getServerById: jest.fn().mockReturnValue(mockServer),
-        discoverModels: jest.fn().mockResolvedValue(mockModels),
+        setDiscoveredModels: jest.fn(),
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
         username: 'server_server-1',
         password: 'secret-key', // NOSONAR - test mock value, not a real credential
       });
+      (fetchModelsFromServer as jest.Mock).mockResolvedValue(mockModels);
 
-      const models = await remoteServerManager.discoverModels('server-1');
+      await remoteServerManager.discoverModels('server-1');
 
-      expect(models).toEqual(mockModels);
+      expect(fetchModelsFromServer).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'secret-key' }));
     });
   });
 

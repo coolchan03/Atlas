@@ -89,8 +89,11 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       // Server CRUD
       addServer: (serverData) => {
         const id = generateId();
+        // Defense in depth: even if a caller accidentally includes apiKey, never
+        // let it cross into the persisted Zustand state. Secrets live in Keychain.
+        const { apiKey: _apiKey, ...safeServerData } = serverData as any;
         const server: RemoteServer = {
-          ...serverData,
+          ...safeServerData,
           id,
           createdAt: new Date().toISOString(),
         };
@@ -102,9 +105,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       updateServer: (id, updates) => {
+        const { apiKey: _apiKey, ...safeUpdates } = updates as any;
         set((state) => ({
           servers: state.servers.map((s) =>
-            s.id === id ? { ...s, ...updates } : s
+            s.id === id ? { ...s, ...safeUpdates } : s
           ),
         }));
         logger.log('[RemoteServer] Updated server:', id);
@@ -312,13 +316,30 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       name: 'remote-servers',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        servers: state.servers,
+        servers: state.servers.map((server) => {
+          const { apiKey: _apiKey, ...safe } = server as any;
+          return safe as RemoteServer;
+        }),
         activeServerId: state.activeServerId,
         activeRemoteTextModelId: state.activeRemoteTextModelId,
-        activeRemoteImageModelId: state.activeRemoteImageModelId,
+        // Remote VLMs are text-route models with vision capability; do not
+        // persist a second provider/model selection that can drift independently.
         discoveredModels: state.discoveredModels,
         // Don't persist health status - it should be refreshed
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<RemoteServerState>;
+        const servers = (p.servers ?? current.servers).map((server) => {
+          const { apiKey: _apiKey, ...safe } = server as any;
+          return safe as RemoteServer;
+        });
+        return {
+          ...current,
+          ...p,
+          servers,
+          activeRemoteImageModelId: null,
+        };
+      },
     }
   )
 );

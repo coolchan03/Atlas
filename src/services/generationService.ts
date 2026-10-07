@@ -1,6 +1,7 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
-import { getActiveEngineService, stopAllTextEngines } from './engines';
+import { liteRTService } from './litert';
+import { stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
@@ -9,6 +10,7 @@ import { providerRegistry } from './providers';
 import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
+import { remoteServerManager } from './remoteServerManager';
 import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,
@@ -57,6 +59,7 @@ class GenerationService {
   private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private currentRemoteAbortController: AbortController | null = null;
+  private activeRemoteProviderAtStart: any = null;
   private remoteTimeToFirstToken: number | undefined;
 
   // Token batching — collect tokens and flush to UI at a controlled rate
@@ -74,11 +77,23 @@ class GenerationService {
     return providerRegistry.getProvider('local');
   }
 
+  private async ensurePersistedRemoteProviderReady(): Promise<void> {
+    const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+    if (!activeServerId || !activeRemoteTextModelId || providerRegistry.hasProvider(activeServerId)) return;
+    try {
+      await remoteServerManager.setActiveRemoteTextModel(activeServerId, activeRemoteTextModelId);
+    } catch (error) {
+      // Never silently route a persisted remote selection to an unrelated local
+      // backend merely because startup provider hydration has not finished.
+      logger.error('[GenerationService] Failed to restore selected remote provider:', error);
+    }
+  }
+
   /** Check if using a remote provider */
   private isUsingRemoteProvider(): boolean {
     const { activeServerId } = useRemoteServerStore.getState();
     const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
-    const localLoaded = llmService.isModelLoaded();
+    const localLoaded = llmService.isModelLoaded() || liteRTService.isModelLoaded();
     logger.log(`[REMOTE-SM] isUsingRemoteProvider? activeServerId=${activeServerId ?? 'none'} hasProvider=${hasProvider} localLoaded=${localLoaded}`);
     if (!activeServerId) return false;
     // Provider must be registered (not just persisted from a previous session)
@@ -154,6 +169,7 @@ class GenerationService {
     onFirstToken?: () => void,
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
+    await this.ensurePersistedRemoteProviderReady();
     // Route to remote provider if active
     if (this.isUsingRemoteProvider()) {
       return this.generateRemoteResponse(conversationId, messages, onFirstToken);
@@ -173,6 +189,7 @@ class GenerationService {
       onFirstToken?: () => void;
     },
   ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
+    await this.ensurePersistedRemoteProviderReady();
     // Route to remote provider if active
     if (this.isUsingRemoteProvider()) {
       return this.generateRemoteWithTools(conversationId, messages, options);
@@ -243,9 +260,10 @@ class GenerationService {
   /** Stop the current generation. Returns partial content if any was generated. */
   async stopGeneration(): Promise<string> {
     if (!this.state.isGenerating) {
-      // Stop generation on every engine through the registry — no engine enumeration leaked into the caller.
+      // Defensive stop: terminate every local engine plus the provider that
+      // actually owned the last remote request (which may no longer be selected).
       await stopAllTextEngines();
-      const provider = this.getCurrentProvider();
+      const provider = this.activeRemoteProviderAtStart ?? this.getCurrentProvider();
       if (provider) provider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
@@ -274,11 +292,11 @@ class GenerationService {
 
     this.resetState();
 
-    // Stop both local and remote
-    if (this.isUsingRemoteProvider()) {
-      // Abort the provider's XHR so the server connection is closed immediately
-      const provider = this.getCurrentProvider();
-      if (provider) provider.stopGeneration().catch(() => { });
+    // Stop the backend that actually owns this request, not whatever is
+    // currently selected after a mid-generation model/server switch.
+    const remoteProvider = this.activeRemoteProviderAtStart;
+    if (remoteProvider) {
+      remoteProvider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -286,11 +304,9 @@ class GenerationService {
       return partialContent;
     }
 
-    // Stop the native completion after we've already updated UI state,
-    // so the user sees immediate feedback. Store the promise so new
-    // generations can drain it before starting.
-    const engine = getActiveEngineService();
-    this.pendingStop = (engine?.stopGeneration() ?? Promise.resolve())
+    // Stop every local text engine. Only one may generate at a time and this
+    // avoids selected-vs-resident drift choosing the wrong engine.
+    this.pendingStop = stopAllTextEngines()
       .catch(() => { })
       .finally(() => { this.pendingStop = null; });
 
@@ -303,7 +319,13 @@ class GenerationService {
     messages: Message[],
     onFirstToken?: () => void,
   ): Promise<void> {
-    return generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken });
+    const provider = this.getCurrentProvider();
+    this.activeRemoteProviderAtStart = provider ?? null;
+    try {
+      return await generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken });
+    } finally {
+      if (this.activeRemoteProviderAtStart === provider) this.activeRemoteProviderAtStart = null;
+    }
   }
 
   /** Generate a response with tools using a remote provider */
@@ -312,7 +334,13 @@ class GenerationService {
     messages: Message[],
     options: GenerationWithToolsRequest['options'],
   ): Promise<void> {
-    return generateRemoteWithToolsImpl(this, { conversationId, messages, options });
+    const provider = this.getCurrentProvider();
+    this.activeRemoteProviderAtStart = provider ?? null;
+    try {
+      return await generateRemoteWithToolsImpl(this, { conversationId, messages, options });
+    } finally {
+      if (this.activeRemoteProviderAtStart === provider) this.activeRemoteProviderAtStart = null;
+    }
   }
 
   enqueueMessage(entry: QueuedMessage): void {

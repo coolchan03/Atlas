@@ -12,6 +12,7 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
+import { fetchModelsFromServer, testServerConnection } from '../stores/remoteServerHelpers';
 import {
   storeApiKeyImpl,
   getApiKeyImpl,
@@ -38,13 +39,20 @@ class RemoteServerManager {
       (s) => trimSlashes(s.endpoint) === normalizedEndpoint
     );
     if (existing) {
-      logger.log('[RemoteServerManager] Server already exists:', existing.name);
-      return existing;
+      logger.log('[RemoteServerManager] Server already exists; refreshing configuration:', existing.name);
+      // A LAN scan may have auto-added this endpoint without credentials. Re-adding it
+      // manually must persist the supplied API key instead of silently returning the
+      // credential-less record.
+      await this.updateServer(existing.id, config);
+      return store.getServerById(existing.id) || existing;
     }
 
-    const id = store.addServer(config);
-    if (config.apiKey) {
-      await this.storeApiKey(id, config.apiKey);
+    // Secrets belong in Keychain only. Never pass apiKey across the store
+    // boundary because the Zustand store is persisted to AsyncStorage.
+    const { apiKey, ...persistableConfig } = config;
+    const id = store.addServer(persistableConfig);
+    if (apiKey) {
+      await this.storeApiKey(id, apiKey);
     }
 
     const server = store.getServerById(id);
@@ -121,11 +129,15 @@ class RemoteServerManager {
   /**
    * Test server connection
    */
-  async testConnection(
-    id: string
-  ): Promise<{ success: boolean; error?: string; models?: RemoteModel[] }> {
+  async testConnection(id: string): Promise<ServerTestResult> {
     const store = useRemoteServerStore.getState();
-    return store.testConnection(id);
+    const server = await this.getServerWithApiKey(id);
+    if (!server) return { success: false, error: 'Server not found' };
+
+    const result = await testServerConnection(server);
+    store.updateServerHealth(id, result.success);
+    if (result.success && result.models) store.setDiscoveredModels(id, result.models);
+    return result;
   }
 
   /** Test connection to a server by endpoint (before adding) */
@@ -141,10 +153,12 @@ class RemoteServerManager {
    */
   async discoverModels(id: string): Promise<RemoteModel[]> {
     const store = useRemoteServerStore.getState();
-    const server = store.getServerById(id);
+    const server = await this.getServerWithApiKey(id);
     if (!server) throw new Error(`Server not found: ${id}`);
 
-    return store.discoverModels(id);
+    const models = await fetchModelsFromServer(server);
+    store.setDiscoveredModels(id, models);
+    return models;
   }
 
   /**

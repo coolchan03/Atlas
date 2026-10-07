@@ -95,6 +95,7 @@ jest.mock('../../../src/services/networkDiscovery', () => ({
 }));
 
 const mockDiscoverLANServers = discoverLANServers as jest.Mock;
+const mockManagerTestConnection = remoteServerManager.testConnection as jest.Mock;
 
 jest.mock('../../../src/components/CustomAlert', () =>
   require('../../helpers/mockCustomAlert').customAlertMock,
@@ -116,6 +117,7 @@ function createMockServer(overrides: Partial<any> = {}) {
 describe('RemoteServersScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockManagerTestConnection.mockResolvedValue({ success: true, latency: 10 });
     // Reset store state
     useRemoteServerStore.setState({
       servers: [],
@@ -136,13 +138,13 @@ describe('RemoteServersScreen', () => {
     it('shows empty state description', () => {
       const { getByText } = render(<RemoteServersScreen />);
       expect(
-        getByText(/Connect to Off Grid AI Desktop, Ollama, LM Studio, or other LLM servers/),
+        getByText(/Connect to Ollama, LM Studio, or other LLM servers on your network/),
       ).toBeTruthy();
     });
 
-    it('offers an Off Grid AI Desktop link from the empty state', () => {
-      const { getAllByText } = render(<RemoteServersScreen />);
-      expect(getAllByText('Get Off Grid AI Desktop').length).toBeGreaterThan(0);
+    it('offers network scanning from the empty state', () => {
+      const { getByText } = render(<RemoteServersScreen />);
+      expect(getByText('Scan Network')).toBeTruthy();
     });
 
     it('shows "Add Server" button in empty state', () => {
@@ -246,28 +248,22 @@ describe('RemoteServersScreen', () => {
   // ==========================================================================
   describe('test connection', () => {
     it('calls testConnection when Test button pressed', async () => {
-      const mockTestConnection = jest.fn().mockResolvedValue({ success: true, latency: 50 });
+      mockManagerTestConnection.mockResolvedValue({ success: true, latency: 50 });
       const server = createMockServer();
-      useRemoteServerStore.setState({
-        servers: [server],
-        testConnection: mockTestConnection,
-      });
+      useRemoteServerStore.setState({ servers: [server] });
 
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Test'));
 
       await waitFor(() => {
-        expect(mockTestConnection).toHaveBeenCalledWith(server.id);
+        expect(mockManagerTestConnection).toHaveBeenCalledWith(server.id);
       });
     });
 
     it('shows success alert on successful test', async () => {
-      const mockTestConnection = jest.fn().mockResolvedValue({ success: true, latency: 100 });
+      mockManagerTestConnection.mockResolvedValue({ success: true, latency: 100 });
       const server = createMockServer();
-      useRemoteServerStore.setState({
-        servers: [server],
-        testConnection: mockTestConnection,
-      });
+      useRemoteServerStore.setState({ servers: [server] });
 
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Test'));
@@ -278,15 +274,12 @@ describe('RemoteServersScreen', () => {
     });
 
     it('shows error alert on failed test', async () => {
-      const mockTestConnection = jest.fn().mockResolvedValue({
+      mockManagerTestConnection.mockResolvedValue({
         success: false,
         error: 'Connection refused',
       });
       const server = createMockServer();
-      useRemoteServerStore.setState({
-        servers: [server],
-        testConnection: mockTestConnection,
-      });
+      useRemoteServerStore.setState({ servers: [server] });
 
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Test'));
@@ -297,12 +290,9 @@ describe('RemoteServersScreen', () => {
     });
 
     it('shows error alert on exception', async () => {
-      const mockTestConnection = jest.fn().mockRejectedValue(new Error('Network error'));
+      mockManagerTestConnection.mockRejectedValue(new Error('Network error'));
       const server = createMockServer();
-      useRemoteServerStore.setState({
-        servers: [server],
-        testConnection: mockTestConnection,
-      });
+      useRemoteServerStore.setState({ servers: [server] });
 
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Test'));
@@ -526,9 +516,9 @@ describe('RemoteServersScreen', () => {
       await waitFor(() => {
         expect(mockShowAlert).toHaveBeenCalledWith(
           'No Servers Found',
-          expect.stringContaining('Off Grid AI Desktop'),
+          expect.stringContaining('Ollama or LM Studio'),
           expect.arrayContaining([
-            expect.objectContaining({ text: 'Get Off Grid AI Desktop' }),
+            expect.objectContaining({ text: 'Dismiss' }),
           ]),
         );
       });

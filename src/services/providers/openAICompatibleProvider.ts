@@ -135,6 +135,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           options, callbacks, signal,
           endpoint: this.config.endpoint,
           modelId: this.config.modelId,
+          apiKey: this.config.apiKey,
           abort: () => this.abortController?.abort(),
         });
       }

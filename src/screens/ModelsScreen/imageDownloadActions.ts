@@ -12,13 +12,10 @@ import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { ImageModelDescriptor, ImageDownloadDeps } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
-import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
+import { ensureImageExtractionComplete, validateImageModelDir } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
-
-// ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
-// here). Re-exported for existing importers.
+// ImageDownloadDeps lives in ./types to avoid a cycle; re-export it for existing importers.
 export type { ImageDownloadDeps };
-
 interface ImageMetadata {
   imageDownloadType: 'zip' | 'multifile';
   imageModelName: string;
@@ -354,10 +351,15 @@ export async function downloadCoreMLMultiFile(
     await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
-    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+    if (modelInfo.repo) {
+      await downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo);
+    }
+    assertNotCancelled(modelInfo.id, runtime);
+    // Commit readiness only after every required CoreML resource, including the
+    // tokenizer companions, has landed successfully.
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8');
     await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
-    if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
     await cleanupImageModelDir(modelInfo.id);
     if (isCancelledError(error)) return;
@@ -404,10 +406,17 @@ export async function proceedWithDownload(
   const imageModelsDir = modelManager.getImageModelsDirectory();
   const modelDir = `${imageModelsDir}/${modelInfo.id}`;
   if (await RNFS.exists(modelDir)) {
-    const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
-    logger.log(`[ImageDownload] proceedWithDownload zip - files exist on disk, registering directly modelId=${modelInfo.id}`);
-    await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
-    return;
+    const validExisting = modelInfo.backend === 'mnn' || modelInfo.backend === 'qnn'
+      ? (await validateImageModelDir(modelDir, modelInfo.backend)).complete
+      : true;
+    if (validExisting) {
+      const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
+      logger.log(`[ImageDownload] proceedWithDownload zip - complete files exist on disk, registering directly modelId=${modelInfo.id}`);
+      await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
+      return;
+    }
+    logger.warn(`[ImageDownload] proceedWithDownload zip - incomplete stale model dir, deleting before re-download modelId=${modelInfo.id}`);
+    await RNFS.unlink(modelDir).catch(() => {});
   }
 
   // Publish a QUEUED row IMMEDIATELY, before awaiting the (slot-limited) native start (same
@@ -471,21 +480,14 @@ export async function proceedWithDownload(
   }
 }
 
-export async function handleDownloadImageModel(
-  modelInfo: ImageModelDescriptor,
-  deps: ImageDownloadDeps,
-): Promise<void> {
+export async function handleDownloadImageModel(modelInfo: ImageModelDescriptor, deps: ImageDownloadDeps): Promise<void> {
   if (modelInfo.backend === 'qnn' && Platform.OS === 'android') {
     const socInfo = await hardwareService.getSoCInfo();
     const warningMessage = getQnnWarningMessage(modelInfo, socInfo);
     if (warningMessage) {
       showQnnWarningAlert({
-        warningMessage,
-        hasNPU: socInfo.hasNPU,
-        modelInfo,
-        onDownloadAnyway: () => {
-          proceedWithDownload(modelInfo, deps).catch(() => {});
-        },
+        warningMessage, hasNPU: socInfo.hasNPU, modelInfo,
+        onDownloadAnyway: () => { proceedWithDownload(modelInfo, deps).catch(() => {}); },
       }, deps);
       return;
     }

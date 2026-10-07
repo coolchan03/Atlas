@@ -12,6 +12,7 @@ import { modelManager } from '../../services';
 import { activeModelService } from '../../services/activeModelService';
 import { isLiteRTAvailable } from '../../services/engines';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
+import { ensureImageExtractionComplete, resolveImageModelDir, validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
 import { initialFilterState } from './constants';
@@ -35,25 +36,18 @@ type ZipImportDeps = {
  *  - NPU (QNN, Snapdragon): unet.bin, vae_decoder.bin, tokenizer.json and clip.bin (or clip.mnn)
  */
 async function findAndroidImageModel(root: string): Promise<{ dir?: string; backend?: 'mnn' | 'qnn'; problem: string }> {
-  const queue: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
-  while (queue.length) {
-    const { path, depth } = queue.shift()!;
-    let items: any[] = [];
-    try { items = await RNFS.readDir(path); } catch { continue; }
-    const names = new Set(items.filter(f => f.isFile()).map(f => f.name));
-    const kind: 'mnn' | 'qnn' | null = names.has('unet.mnn') ? 'mnn' : names.has('unet.bin') ? 'qnn' : null;
-    if (kind) {
-      const ext = kind === 'mnn' ? 'mnn' : 'bin';
-      const need = [`vae_decoder.${ext}`, 'tokenizer.json'];
-      const missing = need.filter(n => !names.has(n));
-      const hasClip = names.has('clip.mnn') || names.has('clip_v2.mnn') || (kind === 'qnn' && names.has('clip.bin'));
-      if (!hasClip) missing.push(kind === 'mnn' ? 'clip.mnn (or clip_v2.mnn)' : 'clip.bin (or clip.mnn)');
-      if (missing.length) return { problem: `The zip has unet.${ext} but is missing: ${missing.join(', ')}. The download may not have finished - try downloading it again.` };
-      return { dir: path, backend: kind, problem: '' };
+  for (const backend of ['mnn', 'qnn'] as const) {
+    const dir = await resolveImageModelDir(root, backend);
+    if (!dir) continue;
+    const integrity = await validateImageModelDir(dir, backend);
+    if (!integrity.complete) {
+      return {
+        problem: `The zip contains a ${backend.toUpperCase()} image model but is missing or has empty files: ${integrity.missing.join(', ')}. Re-download the complete model package and try again.`,
+      };
     }
-    if (depth < 3) for (const f of items) if (f.isDirectory()) queue.push({ path: f.path, depth: depth + 1 });
+    return { dir, backend, problem: '' };
   }
-  return { problem: 'No image model found in this zip. It needs unet.mnn (CPU/GPU models) or unet.bin (NPU models), plus clip, vae_decoder and tokenizer.json. If you downloaded it, the download may not have finished.' };
+  return { problem: 'No image model found in this zip. It needs a complete MNN package (unet.mnn) or QNN package (unet.bin). If you downloaded it, the download may not have finished.' };
 }
 
 /** Atlas: Stable Diffusion 1.5 .safetensors checkpoint -> CPU/GPU image model, converted on the phone. */
@@ -86,6 +80,15 @@ async function importSafetensors(sourceUri: string, fileName: string, deps: ZipI
   try {
     setImportProgress({ fraction: 0, fileName: `${name}: copying` });
     const r = await Native.convertCheckpoint({ uri: sourceUri, modelDir, clipSkip2 });
+    const integrity = await validateImageModelDir(r.modelDir, 'mnn');
+    if (!integrity.complete) {
+      await RNFS.unlink(r.modelDir).catch(() => {});
+      throw new Error(`Converted image model is incomplete: ${integrity.missing.join(', ')}`);
+    }
+    // Conversion is transactional: only a validated package receives _ready.
+    // If the app dies after this point but before AsyncStorage registration,
+    // startup reconciliation can recover it safely.
+    await RNFS.writeFile(`${r.modelDir}/_ready`, '', 'utf8');
     const imageModel: ONNXImageModel = {
       id: modelId, name, description: 'Converted on this phone (CPU/GPU)',
       modelPath: r.modelDir, downloadedAt: new Date().toISOString(), size: r.size, backend: 'mnn',
@@ -140,6 +143,9 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
     const hasQNN = dirContents.some(f => f.name.endsWith('.bin') || f.name.includes('qnn'));
     if (hasMNN) backend = 'mnn';
     else if (hasQNN) backend = 'qnn';
+  }
+  if (backend === 'mnn' || backend === 'qnn') {
+    await ensureImageExtractionComplete({ backend, modelDir, zipPath, modelId });
   }
   await RNFS.unlink(zipPath).catch(() => { });
   const totalSize = await getDirectorySize(resolvedModelDir);

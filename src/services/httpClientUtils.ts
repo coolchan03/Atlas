@@ -132,31 +132,33 @@ export async function testEndpoint(
     const authHeaders: Record<string, string> = { Accept: 'application/json' };
     if (apiKey) authHeaders.Authorization = `Bearer ${apiKey}`;
 
-    // Try to reach the base URL first
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const fetchHealth = async (target: string) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      try {
+        return await fetch(target, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: authHeaders,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
 
-    const response = await fetch(`${url}/v1/models`, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: authHeaders,
-    });
-
-    clearTimeout(timeoutId);
+    // Try the OpenAI-compatible model endpoint first.
+    const response = await fetchHealth(`${url}/v1/models`);
     const latency = Date.now() - startTime;
 
     if (!response.ok) {
-      // Try alternate health endpoints
+      // Try alternate health endpoints. Each fallback gets a fresh controller;
+      // an aborted controller cannot be reused and every fallback needs its own timeout.
       const altUrls = ['/api/tags', '/health', '/'];
       for (const alt of altUrls) {
         try {
-          const altResponse = await fetch(`${url}${alt}`, {
-            method: 'GET',
-            signal: controller.signal,
-            headers: authHeaders,
-          });
+          const altResponse = await fetchHealth(`${url}${alt}`);
           if (altResponse.ok) {
-            return { success: true, latency };
+            return { success: true, latency: Date.now() - startTime };
           }
         } catch {
           // Continue to next
@@ -193,8 +195,12 @@ async function checkOllamaEndpoint(
     const origin = new URL(url).origin;
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const response = await fetch(`${origin}/api/tags`, { signal: controller.signal, headers });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${origin}/api/tags`, { signal: controller.signal, headers });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (response.ok) return { type: 'ollama' };
   } catch {
     // Not Ollama
@@ -212,8 +218,12 @@ async function checkLmStudioEndpoint(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (response.ok) {
       const data = await response.json();
       if (data?.data?.some?.((m: { id: string }) => m.id?.includes('gguf'))) {

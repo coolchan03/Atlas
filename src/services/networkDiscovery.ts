@@ -24,7 +24,7 @@ const PROVIDERS = [
   { port: 1234,  type: 'lmstudio' as const, name: 'LM Studio',             probePath: '/v1/models' },
   // Off Grid AI Gateway runs on the user's laptop on the same LAN, so it is
   // probed across the subnet on its fixed port just like the others.
-  { port: 7878,  type: 'gateway' as const,  name: 'AI Gateway',   probePath: '/v1/models' },
+  { port: 7878,  type: 'gateway' as const,  name: 'Off Grid AI Gateway', probePath: '/v1/models' },
 ];
 
 const TIMEOUT_MS = 500;
@@ -38,7 +38,10 @@ async function probe(ip: string, port: number, path: string): Promise<boolean> {
     const timer = setTimeout(() => { controller.abort(); resolve(false); }, TIMEOUT_MS);
 
     fetch(`http://${ip}:${port}${path}`, { signal: controller.signal }) // NOSONAR — LAN-only probe; HTTPS requires certs on private IPs
-      .then(res => { clearTimeout(timer); resolve(res.status === 200); })
+      // Auth-protected LAN servers commonly answer 401/403 before credentials
+      // are supplied. That still proves a compatible service exists at this
+      // endpoint; discovery must not hide it from the user.
+      .then(res => { clearTimeout(timer); resolve(res.status === 200 || res.status === 401 || res.status === 403); })
       .catch(() => { clearTimeout(timer); resolve(false); });
   });
 }

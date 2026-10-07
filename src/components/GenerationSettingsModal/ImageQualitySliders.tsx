@@ -70,14 +70,16 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
 
-      <SliderSetting
-        testID="image-threads"
-        label="Image Threads"
-        description="CPU threads used for image generation. Takes effect next time the image model loads."
-        value={settings.imageThreads ?? 4}
-        min={1} max={8} step={1}
-        onChange={(value) => updateSettings({ imageThreads: value })}
-      />
+      {Platform.OS !== 'android' && (
+        <SliderSetting
+          testID="image-threads"
+          label="Image Threads"
+          description="CPU threads used for image generation. Takes effect next time the image model loads."
+          value={settings.imageThreads ?? 4}
+          min={1} max={8} step={1}
+          onChange={(value) => updateSettings({ imageThreads: value })}
+        />
+      )}
 
       {Platform.OS === 'android' && (
         <View style={styles.settingGroup}>

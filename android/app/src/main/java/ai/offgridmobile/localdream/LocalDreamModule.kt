@@ -217,6 +217,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     private val coroutineScope = CoroutineScope(Dispatchers.Default + Job())
     private var monitorJob: Job? = null
     private val generationCancelled = AtomicBoolean(false)
+    private val generationInProgress = AtomicBoolean(false)
     private var activeGenerationConnection: HttpURLConnection? = null
 
     override fun getName(): String = MODULE_NAME
@@ -692,8 +693,13 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getLoadedBackend(promise: Promise) {
+        safeResolve(promise, currentBackend)
+    }
+
+    @ReactMethod
     fun isGenerating(promise: Promise) {
-        safeResolve(promise, activeGenerationConnection != null)
+        safeResolve(promise, generationInProgress.get())
     }
 
     @ReactMethod
@@ -702,7 +708,9 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         activeGenerationConnection?.let {
             try { it.disconnect() } catch (_: Exception) {}
         }
-        activeGenerationConnection = null
+        // Do not clear the connection reference here. The owning generation's
+        // finally block clears only its own connection, preventing an old
+        // cancelled request from wiping a newer request's connection.
         safeResolve(promise, true)
     }
 
@@ -739,6 +747,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         put("height", if (params.hasKey("height")) params.getInt("height") else 512)
         put("scheduler", "dpm")
         put("show_diffusion_process", true)
+        put("use_opencl", if (params.hasKey("useOpenCL")) params.getBoolean("useOpenCL") else true)
         put("show_diffusion_stride", if (params.hasKey("previewInterval")) params.getInt("previewInterval") else 2)
     }
 
@@ -882,21 +891,25 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun generateImage(params: ReadableMap, promise: Promise) {
         coroutineScope.launch(Dispatchers.IO) {
-            if (!isServerReady || serverProcess?.isAlive != true) {
-                safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
-                return@launch
-            }
-            if (!checkServerHealth()) {
-                isServerReady = false
-                safeReject(promise, "SERVER_NOT_READY",
-                    "Server process is not responsive. Try unloading and reloading the model.")
+            if (!generationInProgress.compareAndSet(false, true)) {
+                safeReject(promise, "BUSY", "Image generation already in progress")
                 return@launch
             }
 
-            generationCancelled.set(false)
             var connection: HttpURLConnection? = null
-
             try {
+                if (!isServerReady || serverProcess?.isAlive != true) {
+                    safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
+                    return@launch
+                }
+                if (!checkServerHealth()) {
+                    isServerReady = false
+                    safeReject(promise, "SERVER_NOT_READY",
+                        "Server process is not responsive. Try unloading and reloading the model.")
+                    return@launch
+                }
+
+                generationCancelled.set(false)
                 val body = buildGenerationBody(params)
                 Log.d(TAG, "Starting generation: ${body.toString().take(200)}...")
 
@@ -924,8 +937,11 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             } catch (e: Exception) {
                 handleGeneralException(e, promise)
             } finally {
-                activeGenerationConnection = null
+                if (activeGenerationConnection === connection) {
+                    activeGenerationConnection = null
+                }
                 connection?.disconnect()
+                generationInProgress.set(false)
             }
         }
     }

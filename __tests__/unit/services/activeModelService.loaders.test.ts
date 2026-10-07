@@ -31,14 +31,16 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import RNFS from 'react-native-fs';
-import { doLoadTextModel, resolveMmProjPath } from '../../../src/services/activeModelService/loaders';
+import { doLoadImageModel, doLoadTextModel, resolveMmProjPath } from '../../../src/services/activeModelService/loaders';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
+import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { useAppStore } from '../../../src/stores';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
 const mockedLlm = llmService as jest.Mocked<typeof llmService>;
+const mockedImage = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
 const mockedGetState = useAppStore.getState as jest.Mock;
 
 function makeStore(overrides: any = {}) {
@@ -47,6 +49,7 @@ function makeStore(overrides: any = {}) {
     downloadedModels: [],
     setDownloadedModels: jest.fn(),
     setActiveModelId: jest.fn(),
+    setActiveImageModelId: jest.fn(),
     setLoadedSettings: jest.fn(),
     ...overrides,
   };
@@ -261,11 +264,51 @@ describe('doLoadTextModel — LiteRT path', () => {
       model: { id: 'model-1', fileName: 'model.litertlm', filePath: '/models/model.litertlm', engine: 'litert' },
     });
     ctx.store = makeStore({ settings: { liteRTBackend: 'gpu', liteRTMaxTokens: 8192 } });
+    mockedGetState.mockReturnValue(ctx.store);
 
     await doLoadTextModel(ctx);
 
     expect(ctx.store.setLoadedSettings).toHaveBeenCalledWith(
       expect.objectContaining({ liteRTMaxTokens: 8192 }),
+    );
+  });
+});
+
+
+describe('doLoadImageModel — backend routing', () => {
+  const makeImageCtx = (overrides: any = {}) => ({
+    model: { id: 'img-1', name: 'Image', modelPath: '/models/image', backend: 'qnn', ...overrides.model },
+    modelId: 'img-1',
+    imageThreads: 4,
+    needsThreadReload: false,
+    cpuOnly: false,
+    preferGpu: false,
+    store: makeStore(),
+    timeoutMs: 1000,
+    loadedImageModelId: null,
+    onLoaded: jest.fn(),
+    onError: jest.fn(),
+    onFinally: jest.fn(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedImage.loadModel.mockResolvedValue(true);
+  });
+
+  it('passes the downloaded QNN backend to the native image engine', async () => {
+    const ctx = makeImageCtx();
+    await doLoadImageModel(ctx as any);
+    expect(mockedImage.loadModel).toHaveBeenCalledWith(
+      '/models/image', 4, expect.objectContaining({ backend: 'qnn' }),
+    );
+  });
+  it('forces MNN when CPU-only mode is requested', async () => {
+    const ctx = makeImageCtx({ cpuOnly: true });
+    await doLoadImageModel(ctx as any);
+    expect(mockedImage.loadModel).toHaveBeenCalledWith(
+      '/models/image', 4, expect.objectContaining({ backend: 'mnn', cpuOnly: true }),
     );
   });
 });

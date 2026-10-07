@@ -9,6 +9,10 @@
 import logger from '../utils/logger';
 import { templateEmitsReasoning, REASONING_DELIMITERS } from '../utils/messageContent';
 
+function authHeaders(apiKey?: string, extra: Record<string, string> = {}): Record<string, string> {
+  return apiKey ? { ...extra, Authorization: `Bearer ${apiKey}` } : extra;
+}
+
 export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
@@ -93,19 +97,23 @@ function extractOllamaCapabilities(data: Record<string, unknown>): RemoteModelIn
 export async function fetchRemoteModelInfo(
   endpoint: string,
   modelName: string,
+  apiKey?: string,
 ): Promise<RemoteModelInfo> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const response = await fetch(`${endpoint}/api/show`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ name: modelName }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${endpoint}/api/show`, {
+        method: 'POST',
+        headers: authHeaders(apiKey, { 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify({ name: modelName }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) return { contextLength: 4096, supportsVision: false };
 
@@ -126,18 +134,22 @@ export async function fetchRemoteModelInfo(
 export async function fetchLmStudioModelInfo(
   endpoint: string,
   modelId: string,
+  apiKey?: string,
 ): Promise<RemoteModelInfo> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const response = await fetch(`${endpoint}/api/v1/models`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${endpoint}/api/v1/models`, {
+        method: 'GET',
+        headers: authHeaders(apiKey, { Accept: 'application/json' }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) return { contextLength: 4096, supportsVision: false };
 
@@ -165,7 +177,7 @@ export async function fetchLmStudioModelInfo(
 
     // LM Studio doesn't expose thinking capability in /api/v1/models.
     // Probe via a 1-token streaming request to learn whether THIS model thinks.
-    const supportsThinking = await probeLmStudioThinking(endpoint, modelId);
+    const supportsThinking = await probeLmStudioThinking(endpoint, modelId, apiKey);
 
     return {
       contextLength,
@@ -215,27 +227,30 @@ function deltaHasThinking(delta: Record<string, unknown>): boolean {
   return false;
 }
 
-async function probeLmStudioThinking(endpoint: string, modelId: string): Promise<boolean> {
+async function probeLmStudioThinking(endpoint: string, modelId: string, apiKey?: string): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     // Use streaming — LM Studio only honours chat_template_kwargs in streaming mode.
     // Read the full SSE response as text (RN fetch supports .text() but not ReadableStream).
-    const response = await fetch(`${endpoint}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [{ role: 'user', content: 'Say hi' }],
-        max_tokens: 2,
-        stream: true,
-        chat_template_kwargs: { enable_thinking: true },
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${endpoint}/v1/chat/completions`, {
+        method: 'POST',
+        headers: authHeaders(apiKey, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: 'user', content: 'Say hi' }],
+          max_tokens: 2,
+          stream: true,
+          chat_template_kwargs: { enable_thinking: true },
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!response.ok) return false;
 
     // response.text() collects the full SSE stream as a string
@@ -278,13 +293,14 @@ async function probeLmStudioThinking(endpoint: string, modelId: string): Promise
  */
 export async function fetchLlamaCppProps(
   endpoint: string,
+  apiKey?: string,
 ): Promise<RemoteModelInfo | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(`${endpoint}/props`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: authHeaders(apiKey, { Accept: 'application/json' }),
       signal: controller.signal,
     });
 
@@ -315,14 +331,15 @@ export async function fetchLlamaCppProps(
 const propsInFlight = new Map<string, Promise<RemoteModelInfo | null>>();
 
 /** De-duplicated wrapper around fetchLlamaCppProps — one /props call per endpoint. */
-export function fetchLlamaCppPropsCached(endpoint: string): Promise<RemoteModelInfo | null> {
+export function fetchLlamaCppPropsCached(endpoint: string, apiKey?: string): Promise<RemoteModelInfo | null> {
   // Deliberate in-flight-promise cache: return the pending promise un-awaited so concurrent
-  // callers share one fetch. Explicit presence check (not a truthiness/await smell) so the
-  // Promise-in-conditional rule (S6544) doesn't misread it as a forgotten await.
-  const existing = propsInFlight.get(endpoint);
+  // callers share one fetch. Include the credential in the in-memory key so simultaneous
+  // authenticated/unauthenticated probes for the same endpoint cannot share a response.
+  const cacheKey = `${endpoint}::${apiKey ?? ''}`;
+  const existing = propsInFlight.get(cacheKey);
   if (existing !== undefined) return existing;
-  const p = fetchLlamaCppProps(endpoint).finally(() => propsInFlight.delete(endpoint));
-  propsInFlight.set(endpoint, p);
+  const p = fetchLlamaCppProps(endpoint, apiKey).finally(() => propsInFlight.delete(cacheKey));
+  propsInFlight.set(cacheKey, p);
   return p;
 }
 
@@ -400,14 +417,15 @@ function hasRealData(info: RemoteModelInfo): boolean {
 export async function fetchModelCapabilities(
   endpoint: string,
   modelId: string,
-  nameBasedDetect: { vision: (id: string) => boolean; toolCalling: (id: string) => boolean },
+  nameBasedDetect: { vision: (id: string) => boolean; toolCalling: (id: string) => boolean; apiKey?: string },
 ): Promise<RemoteModelInfo> {
+  const apiKey = nameBasedDetect.apiKey;
   const [propsInfo, ollamaInfo, lmInfo] = await Promise.all([
     // Deduped per endpoint — /props is server-wide, so all models on one server
     // share a single request instead of firing one each.
-    fetchLlamaCppPropsCached(endpoint),
-    fetchRemoteModelInfo(endpoint, modelId),
-    fetchLmStudioModelInfo(endpoint, modelId),
+    fetchLlamaCppPropsCached(endpoint, apiKey),
+    fetchRemoteModelInfo(endpoint, modelId, apiKey),
+    fetchLmStudioModelInfo(endpoint, modelId, apiKey),
   ]);
 
   // /props wins whenever it answered at all: on a llama.cpp server it is the

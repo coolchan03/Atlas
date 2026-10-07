@@ -68,8 +68,12 @@ if [ -n "$PUSHED_SWIFT" ]; then
     echo "⚠️  SwiftLint not installed — skipping Swift lint. Install: brew install swiftlint"
   fi
 
-  echo "▶ iOS tests..."
-  npm run test:ios
+  if command -v xcodebuild >/dev/null 2>&1; then
+    echo "▶ iOS tests..."
+    npm run test:ios
+  else
+    echo "⚠️  Xcode not available on this machine — skipping iOS tests (CI/macOS must run them)."
+  fi
 fi
 
 if [ -n "$PUSHED_KOTLIN" ]; then

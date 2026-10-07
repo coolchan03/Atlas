@@ -64,6 +64,17 @@ class LocalDreamGeneratorService {
     }
   }
 
+  async getLoadedBackend(): Promise<'mnn' | 'qnn' | 'coreml' | null> {
+    if (!this.isAvailable()) return null;
+    if (Platform.OS === 'ios') return (await this.isModelLoaded()) ? 'coreml' : null;
+    try {
+      const backend = await DiffusionModule.getLoadedBackend?.();
+      return backend === 'mnn' || backend === 'qnn' ? backend : null;
+    } catch {
+      return null;
+    }
+  }
+
   async loadModel(modelPath: string, threads?: number, opts: { backend?: 'mnn' | 'qnn' | 'auto'; cpuOnly?: boolean; attentionVariant?: 'split_einsum' | 'original'; preferGpu?: boolean } = {}): Promise<boolean> {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
@@ -181,9 +192,10 @@ class LocalDreamGeneratorService {
 
     try {
       const result = await DiffusionModule.generateImage(this.buildNativeParams(params, trimmedPrompt));
-      // Native side releases the CoreML pipeline after generation to free
-      // memory, so clear TS-side state so the next request triggers a reload.
-      this.loadedThreads = null;
+      // iOS releases the CoreML pipeline after generation to free memory.
+      // Android keeps the LocalDream server/model resident, so preserve its
+      // thread residency bookkeeping there or every next request looks stale.
+      if (Platform.OS === 'ios') this.loadedThreads = null;
       return this.buildResult(params, result);
     } catch (error: any) {
       const msg = error?.message || '';
@@ -199,7 +211,9 @@ class LocalDreamGeneratorService {
 
   async cancelGeneration(): Promise<boolean> {
     if (!this.isAvailable()) return true;
-    this.generating = false;
+    // Keep the JS busy flag set until the in-flight native promise actually
+    // unwinds. This prevents an immediate retry from overlapping the cancelled
+    // native request; generateImage's finally is the single owner that clears it.
     return await DiffusionModule.cancelGeneration();
   }
 

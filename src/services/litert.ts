@@ -61,6 +61,7 @@ interface LiteRTGenerationCallbacks {
 
 class LiteRTService {
   private loaded = false;
+  private loadedModelPath: string | null = null;
   private modelSupportsAudio = false;
   private activeBackend: LiteRTBackend | null = null;
   private readonly emitter: NativeEventEmitter | null = null;
@@ -122,10 +123,12 @@ class LiteRTService {
       }
       this.activeBackend = actualBackend as LiteRTBackend;
       this.loaded = true;
+      this.loadedModelPath = modelPath;
       this.modelSupportsAudio = supportsAudio;
       logger.log(TAG, `loadModel — loaded on ${this.activeBackend}`);
     } catch (e) {
       this.loaded = false;
+      this.loadedModelPath = null;
       this.activeBackend = null;
       this.modelSupportsAudio = false;
       logger.log(TAG, `loadModel — failed: ${String(e)}`);
@@ -514,6 +517,7 @@ class LiteRTService {
       logger.log(TAG, `unloadModel — error (ignored): ${String(e)}`);
     } finally {
       this.loaded = false;
+      this.loadedModelPath = null;
       this.modelSupportsAudio = false;
       this.activeBackend = null;
     }
@@ -525,6 +529,10 @@ class LiteRTService {
 
   isModelLoaded(): boolean {
     return this.loaded;
+  }
+
+  getLoadedModelPath(): string | null {
+    return this.loaded ? this.loadedModelPath : null;
   }
 
   isNPU(): boolean {

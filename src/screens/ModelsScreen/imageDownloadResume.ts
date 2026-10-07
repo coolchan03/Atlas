@@ -200,6 +200,16 @@ async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
     useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
     return;
   }
+  if (metadata.imageModelBackend === 'mnn' || metadata.imageModelBackend === 'qnn') {
+    const integrity = await validateImageModelDir(modelDir, metadata.imageModelBackend);
+    if (!integrity.complete) {
+      logger.warn(`[ImageDownload] resumeImageDownload multifile - incomplete model dir ${modelId}: ${integrity.missing.join(', ')}`);
+      useDownloadStore.getState().setStatus(entry.downloadId, 'failed', {
+        message: `Download incomplete: missing ${integrity.missing.join(', ')}. Please retry.`,
+      });
+      return;
+    }
+  }
   const imageModel: ONNXImageModel = {
     id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,
     modelPath: modelDir, downloadedAt: new Date().toISOString(),

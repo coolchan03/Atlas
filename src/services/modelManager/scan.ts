@@ -4,6 +4,7 @@ import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
 import { copyFileWithProgress } from './copyFile';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
+import { resolveImageModelDir, validateImageModelDir } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
 import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
@@ -86,6 +87,25 @@ function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
   if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
   if (dirName.includes('coreml')) return 'coreml';
   return 'mnn';
+}
+
+async function inspectImageModelDir(root: string, dirName: string): Promise<{ backend: 'mnn' | 'qnn' | 'coreml'; modelPath: string } | null> {
+  // File markers are authoritative. Folder names are user/download metadata and
+  // can be arbitrary, especially for local imports and recovered directories.
+  for (const backend of ['mnn', 'qnn'] as const) {
+    const modelPath = await resolveImageModelDir(root, backend);
+    if (!modelPath) continue;
+    const integrity = await validateImageModelDir(modelPath, backend);
+    if (integrity.complete) return { backend, modelPath };
+  }
+  if (dirName.toLowerCase().includes('coreml')) {
+    try {
+      return { backend: 'coreml', modelPath: await resolveCoreMLModelDir(root) };
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
@@ -187,21 +207,23 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
       const hasReady = await RNFS.exists(readyPath);
 
       if (hasReady) {
-        // Unzip completed but registerAndNotify was killed — register now.
-        const backend = detectBackend(item.name);
-        let modelPath = item.path;
-        if (backend === 'coreml') {
-          modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
+        // Unzip/conversion completed but registration was killed — register only
+        // after validating the actual files. A stale/partial _ready must never
+        // resurrect a broken model.
+        const inspected = await inspectImageModelDir(item.path, item.name);
+        if (!inspected) {
+          await RNFS.unlink(readyPath).catch(() => {});
+          continue;
         }
         const totalSize = await getDirSize(item.path);
         const newModel: ONNXImageModel = {
           id: item.name,
           name: item.name.replaceAll('_', ' '),
           description: '',
-          modelPath,
+          modelPath: inspected.modelPath,
           size: totalSize,
           downloadedAt: new Date().toISOString(),
-          backend,
+          backend: inspected.backend,
         };
         await addImageModel(newModel);
         recovered.push(newModel);
@@ -220,22 +242,22 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
           if (zipOk) {
             await unzip(zipPath, item.path);
-            await RNFS.unlink(zipPath).catch(() => {});
-            await RNFS.writeFile(readyPath, '', 'utf8').catch(() => {});
-            const backend = detectBackend(item.name);
-            let modelPath = item.path;
-            if (backend === 'coreml') {
-              modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
+            const inspected = await inspectImageModelDir(item.path, item.name);
+            if (!inspected) {
+              await RNFS.unlink(item.path).catch(() => {});
+              continue;
             }
+            await RNFS.unlink(zipPath).catch(() => {});
+            await RNFS.writeFile(readyPath, '', 'utf8');
             const totalSize = await getDirSize(item.path);
             const newModel: ONNXImageModel = {
               id: item.name,
               name: item.name.replaceAll('_', ' '),
               description: '',
-              modelPath,
+              modelPath: inspected.modelPath,
               size: totalSize,
               downloadedAt: new Date().toISOString(),
-              backend,
+              backend: inspected.backend,
             };
             await addImageModel(newModel);
             recovered.push(newModel);
@@ -273,17 +295,23 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
   for (const item of items) {
     if (!item.isDirectory() || registeredPaths.has(item.path)) continue;
 
+    // Generic scans must never register an extraction/conversion that has not
+    // committed its readiness sentinel. Reconciliation owns incomplete work.
+    if (!(await RNFS.exists(`${item.path}/_ready`))) continue;
+    const inspected = await inspectImageModelDir(item.path, item.name);
+    if (!inspected) continue;
+
     const totalSize = await getDirSize(item.path);
     if (totalSize === 0) continue;
 
     const newModel: ONNXImageModel = {
-      id: `recovered_${item.name}_${Date.now()}`,
+      id: item.name,
       name: item.name.replaceAll('_', ' ').replaceAll(/\.(zip|tar|gz)$/gi, ''),
       description: `Recovered ${item.name} model`,
-      modelPath: item.path,
+      modelPath: inspected.modelPath,
       size: totalSize,
       downloadedAt: new Date().toISOString(),
-      backend: detectBackend(item.name),
+      backend: inspected.backend,
     };
 
     await addImageModel(newModel);

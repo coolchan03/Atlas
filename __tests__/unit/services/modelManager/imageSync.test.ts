@@ -8,6 +8,7 @@ jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
   mkdir: jest.fn(),
   unlink: jest.fn(),
+  writeFile: jest.fn(),
 }));
 
 jest.mock('react-native-zip-archive', () => ({
@@ -26,20 +27,29 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
   downloadCoreMLTokenizerFiles: jest.fn(),
 }));
 
+jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
+  ensureImageExtractionComplete: jest.fn(),
+  validateImageModelDir: jest.fn(),
+}));
+
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { backgroundDownloadService } from '../../../../src/services/backgroundDownloadService';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../../../src/utils/coreMLModelUtils';
+import { ensureImageExtractionComplete, validateImageModelDir } from '../../../../src/utils/imageModelIntegrity';
 import { syncCompletedImageDownloads } from '../../../../src/services/modelManager/imageSync';
 
 const mockExists = RNFS.exists as jest.Mock;
 const mockMkdir = RNFS.mkdir as jest.Mock;
 const mockUnlink = RNFS.unlink as jest.Mock;
+const mockWriteFile = RNFS.writeFile as jest.Mock;
 const mockUnzip = unzip as jest.Mock;
 const mockGetActiveDownloads = backgroundDownloadService.getActiveDownloads as jest.Mock;
 const mockMoveCompletedDownload = backgroundDownloadService.moveCompletedDownload as jest.Mock;
 const mockResolveCoreMLModelDir = resolveCoreMLModelDir as jest.Mock;
 const mockDownloadCoreMLTokenizerFiles = downloadCoreMLTokenizerFiles as jest.Mock;
+const mockEnsureImageExtractionComplete = ensureImageExtractionComplete as jest.Mock;
+const mockValidateImageModelDir = validateImageModelDir as jest.Mock;
 
 const baseOpts = {
   imageModelsDir: '/models/images',
@@ -65,10 +75,13 @@ describe('syncCompletedImageDownloads', () => {
     mockExists.mockResolvedValue(true);
     mockMkdir.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
+    mockWriteFile.mockResolvedValue(undefined);
     mockUnzip.mockResolvedValue(undefined);
     mockMoveCompletedDownload.mockResolvedValue(undefined);
-    mockResolveCoreMLModelDir.mockResolvedValue('/models/images/model1/coreml');
+    mockResolveCoreMLModelDir.mockImplementation(async (dir: string) => `${dir}/coreml`);
     mockDownloadCoreMLTokenizerFiles.mockResolvedValue(undefined);
+    mockEnsureImageExtractionComplete.mockResolvedValue(undefined);
+    mockValidateImageModelDir.mockResolvedValue({ complete: true, missing: [] });
   });
 
   it('returns empty array when no active downloads', async () => {
@@ -232,7 +245,7 @@ describe('syncCompletedImageDownloads', () => {
       },
     });
     await syncCompletedImageDownloads(opts);
-    expect(mockDownloadCoreMLTokenizerFiles).toHaveBeenCalledWith('/models/images/model4', 'org/repo');
+    expect(mockDownloadCoreMLTokenizerFiles).toHaveBeenCalledWith('/models/images/model4/coreml', 'org/repo');
   });
 
   it('does not call downloadCoreMLTokenizerFiles when no repo', async () => {

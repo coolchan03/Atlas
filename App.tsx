@@ -12,7 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
+import { hardwareService, modelManager, authService, ragService, remoteServerManager, activeModelService } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
@@ -128,6 +128,11 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
+      // Reconcile JS residency with what native engines actually retained while
+      // the app was backgrounded (or released under memory pressure).
+      activeModelService.syncWithNativeState().catch((error) => {
+        logger.error('[App] Failed to reconcile native model state on foreground:', error);
+      });
       // Rebuild the unified store before reattaching JS listeners so restored
       // progress events map onto current download entries instead of racing hydration.
       // NOTE: restoreQueuedDownloads() is intentionally NOT called here — on a foreground

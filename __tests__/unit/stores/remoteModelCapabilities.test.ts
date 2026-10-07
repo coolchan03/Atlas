@@ -333,6 +333,18 @@ describe('fetchModelCapabilities', () => {
     toolCalling: (id: string) => id.includes('tool'),
   };
 
+  it('sends the saved bearer token to every capability probe', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: false } as any);
+
+    await fetchModelCapabilities('http://192.168.1.9:11434', 'private-model', { ...nameDetect, apiKey: 'secret-key' });
+
+    const calls = (globalThis.fetch as jest.Mock).mock.calls;
+    expect(calls).toHaveLength(3);
+    for (const [, options] of calls) {
+      expect(options?.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer secret-key' }));
+    }
+  });
+
   it('returns ollama info when it has real data', async () => {
     globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,

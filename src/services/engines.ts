@@ -124,7 +124,7 @@ export function invalidateActiveConversation(): void {
 export function isModelReady(model: { engine?: string; filePath?: string } | null | undefined): boolean {
   if (!model) return false;
   return model.engine === 'litert'
-    ? liteRTService.isModelLoaded()
+    ? liteRTService.isModelLoaded() && liteRTService.getLoadedModelPath() === model.filePath
     : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
 }
 
@@ -223,8 +223,12 @@ export function wantsLeadingThinkToken(
  * operations keep the explicit branch — it should be visible at the call site.
  */
 export function getActiveEngineService(): typeof llmService | typeof liteRTService | null {
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const model = downloadedModels.find(m => m.id === activeModelId);
+  const { downloadedModels, activeModelId, loadedTextModelId } = useAppStore.getState();
+  // Runtime operations must follow the model that is actually resident, not a
+  // newly-selected model that has not loaded yet. Falling back to the selection
+  // is useful only when nothing is resident (e.g. readiness checks before load).
+  const modelId = loadedTextModelId ?? activeModelId;
+  const model = downloadedModels.find(m => m.id === modelId);
   if (!model) return null;
   return model.engine === 'litert' ? liteRTService : llmService;
 }
@@ -244,7 +248,7 @@ export function isRemoteTextModelActive(): boolean {
   const { activeServerId } = useRemoteServerStore.getState();
   if (!activeServerId) return false;
   if (!providerRegistry.hasProvider(activeServerId)) return false;
-  if (llmService.isModelLoaded()) return false; // a loaded local model wins over a remote server
+  if (llmService.isModelLoaded() || liteRTService.isModelLoaded()) return false; // any loaded local model wins over a remote server
   return true;
 }
 
@@ -260,6 +264,15 @@ export function isRemoteTextModelActive(): boolean {
  * hardcode llmService, so a LiteRT text model reported "not loaded" and enhancement was
  * skipped even though the model was resident).
  */
+export async function stopStandaloneGeneration(): Promise<void> {
+  const { activeServerId } = useRemoteServerStore.getState();
+  if (isRemoteTextModelActive() && activeServerId) {
+    await providerRegistry.getProvider(activeServerId)?.stopGeneration().catch(() => {});
+    return;
+  }
+  await getActiveEngineService()?.stopGeneration().catch(() => {});
+}
+
 export async function generateStandalone(
   messages: Message[],
   onToken?: (token: string) => void,
