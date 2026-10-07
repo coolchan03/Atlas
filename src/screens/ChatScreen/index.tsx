@@ -33,6 +33,7 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { getTextRuntimeInfo } from '../../services/activeModelService/runtimeInfo';
 import { formatRemoteRuntimeStatus, formatTextRuntimeStatus } from '../../utils/modelRuntimeStatus';
+import { speedHealthLabel, useSpeedStats } from '../../atlasTools/speed';
 
 function countConversationImages(conv: Conversation | undefined): number {
   return (conv?.messages || []).reduce((n: number, m: Message) =>
@@ -81,6 +82,10 @@ export const ChatScreen: React.FC = () => {
   const textRuntime = chat.activeModelInfo?.isRemote
     ? formatRemoteRuntimeStatus(chat.activeModelName)
     : formatTextRuntimeStatus(localRuntimeInfo);
+  const activeSpeed = useSpeedStats((s) => chat.activeModelInfo?.modelId ? s.byModel[chat.activeModelInfo.modelId]?.decode : undefined);
+  const textRuntimeDetail = activeSpeed && activeSpeed > 0
+    ? `${textRuntime.detail} · typical ${activeSpeed.toFixed(1)} tok/s (${speedHealthLabel(activeSpeed)})`
+    : textRuntime.detail;
 
   const pendingModelRowRef = useRef<ModelRowType | null>(null);
   // Eject All — shared with Home via one hook (the unload side-effect lives in the
@@ -318,7 +323,7 @@ export const ChatScreen: React.FC = () => {
             if (pendingEjectRef.current) { pendingEjectRef.current = false; confirmEjectAll(); }
           }}
           labels={modelLabels}
-          details={{ text: textRuntime.detail }}
+          details={{ text: textRuntimeDetail }}
           remote={{ text: !!chat.activeModelInfo?.isRemote }}
           loadingState={{ isLoading: !!chat.isModelLoading, type: 'text' }}
           isEjecting={isEjecting}

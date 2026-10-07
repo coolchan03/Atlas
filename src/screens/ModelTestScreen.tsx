@@ -10,7 +10,7 @@ import { llmService } from '../services/llm';
 import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
-import { useSpeedStats, estimateReply, fmtSec } from '../atlasTools/speed';
+import { useSpeedStats, estimateReply, fmtSec, speedHealthLabel } from '../atlasTools/speed';
 import { localUniqueId } from '../utils/uniqueId';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
@@ -33,8 +33,13 @@ const LONG_TEXT = Array.from({ length: 40 }, (_, i) =>
 const msg = (content: string, role: Message['role'] = 'user'): Message => ({ id: localUniqueId('test'), role, content, timestamp: Date.now() });
 
 const tps0 = (v: { text: string }) => /slow/i.test(v.text);
-const speedWords = (tps: number) =>
-  tps <= 0 ? 'unknown' : tps < 3 ? 'slow - you will wait for each answer' : tps < 7 ? 'about reading speed - fine for chatting' : tps < 20 ? 'good - faster than you can read' : 'very fast';
+const speedWords = (tps: number) => {
+  const health = speedHealthLabel(tps);
+  if (health === 'slow') return 'slow - you will wait for each answer';
+  if (health === 'usable') return 'about reading speed - fine for chatting';
+  if (health === 'good') return 'good - faster than you can read';
+  return health;
+};
 
 /** Runs a model through a quick check: will it fit, does it load, how fast it writes and reads, what it can do. */
 export const ModelTestScreen: React.FC = () => {

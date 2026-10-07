@@ -13,7 +13,8 @@ import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 
-const FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
+// ~12 streamed UI updates/sec stays smooth while reducing redraw competition with inference.
+const FLUSH_INTERVAL_MS = 80;
 
 /**
  * Keep whatever the user has ALREADY seen when a generation errors mid-stream — never discard shown output

@@ -70,6 +70,27 @@ export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens
 /** Rough token count for text (no model needed). */
 export const roughTokens = (chars: number) => Math.ceil(chars / 3.6);
 
+export type SpeedHealth = 'unknown' | 'slow' | 'usable' | 'good' | 'very-fast';
+
+/** Human-facing decode-speed bands for on-device chat. They describe usability,
+ * not a universal hardware benchmark: larger models naturally land lower. */
+export function classifyDecodeSpeed(tps: number | null | undefined): SpeedHealth {
+  if (!sane(tps ?? undefined, 2000)) return 'unknown';
+  if ((tps as number) < 3) return 'slow';
+  if ((tps as number) < 7) return 'usable';
+  if ((tps as number) < 20) return 'good';
+  return 'very-fast';
+}
+
+export function speedHealthLabel(tps: number | null | undefined): string {
+  const health = classifyDecodeSpeed(tps);
+  if (health === 'slow') return 'slow';
+  if (health === 'usable') return 'usable';
+  if (health === 'good') return 'good';
+  if (health === 'very-fast') return 'very fast';
+  return 'unknown';
+}
+
 export interface ReplyEstimate { firstWordsSec: number; totalSec: number; outTokens: number; decode: number }
 
 /** Estimate how long a reply takes. promptTokens = NEW text the model must read this turn. */
