@@ -328,12 +328,12 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
         warning.message,
         [
           { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-          { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceed(); } },
+          { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); void proceed(); } },
         ],
       ));
       return;
     }
-    proceed();
+    void proceed();
   };
 
   // One best-fit trending model per family — shared with the Models screen's scoring.

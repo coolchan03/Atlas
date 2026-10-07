@@ -19,7 +19,7 @@ export const AtlasHubScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
   const [hasCompass, setHasCompass] = useState(false);
-  useEffect(() => { deviceHasCompass().then(setHasCompass); }, []);
+  useEffect(() => { void deviceHasCompass().then(setHasCompass).catch(() => setHasCompass(false)); }, []);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
   const [msg, setMsg] = useState<string | null>(null);

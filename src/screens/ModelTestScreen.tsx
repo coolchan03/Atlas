@@ -11,6 +11,7 @@ import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
 import { useSpeedStats, estimateReply, fmtSec } from '../atlasTools/speed';
+import { localUniqueId } from '../utils/uniqueId';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
 interface Step { key: string; title: string; status: Status; detail: string }
@@ -29,7 +30,7 @@ const LONG_TEXT = Array.from({ length: 40 }, (_, i) =>
   `Section ${i + 1}. A traveller walked along the river, counting stones and noting the weather, the birds and the colour of the water before the evening rain.`,
 ).join(' ');
 
-const msg = (content: string, role: Message['role'] = 'user'): Message => ({ id: `t${Date.now()}${Math.random()}`, role, content, timestamp: Date.now() });
+const msg = (content: string, role: Message['role'] = 'user'): Message => ({ id: localUniqueId('test'), role, content, timestamp: Date.now() });
 
 const tps0 = (v: { text: string }) => /slow/i.test(v.text);
 const speedWords = (tps: number) =>

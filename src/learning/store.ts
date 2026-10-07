@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { localUniqueId } from '../utils/uniqueId';
 
 export type LearnEventKind = 'bank' | 'appeal' | 'question' | 'report' | 'judge' | 'manager' | 'info' | 'error';
 export interface LearnEvent { id: string; at: number; kind: LearnEventKind; agentId: string; title: string; body: string }
@@ -115,7 +116,7 @@ export const useLearningStore = create<LearningState>()(
       }),
       log: (e) =>
         set((s) => ({
-          events: [{ ...e, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, at: Date.now() }, ...s.events].slice(0, 400),
+          events: [{ ...e, id: localUniqueId('event'), at: Date.now() }, ...s.events].slice(0, 400),
         })),
       clearAgent: (id) =>
         set((s) => ({
@@ -138,5 +139,5 @@ export const useLearningStore = create<LearningState>()(
 );
 
 export const newItem = (q: string, round: number, status: BankStatus = 'pending'): BankItem => ({
-  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, q: q.trim(), status, tries: 0, round,
+  id: localUniqueId('item'), q: q.trim(), status, tries: 0, round,
 });

@@ -161,7 +161,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Kick off non-blocking LAN scan so results are ready by ModelDownloadScreen
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const discovered = await discoverLANServers();
         if (cancelled || discovered.length === 0) return;

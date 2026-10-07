@@ -31,6 +31,8 @@ import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
+import { getTextRuntimeInfo } from '../../services/activeModelService/runtimeInfo';
+import { formatRemoteRuntimeStatus, formatTextRuntimeStatus } from '../../utils/modelRuntimeStatus';
 
 function countConversationImages(conv: Conversation | undefined): number {
   return (conv?.messages || []).reduce((n: number, m: Message) =>
@@ -60,6 +62,26 @@ export const ChatScreen: React.FC = () => {
     voice: voiceSummary ?? '—',
     speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
   };
+
+  // Subscribe to the service's reactive residency projection so this status flips
+  // immediately from selected -> loading -> actually loaded (and loaded -> evicted).
+  const loadedTextModelId = useAppStore((s) => s.loadedTextModelId);
+  const textModelEvicted = useAppStore((s) => s.textModelEvicted);
+  let localRuntimeInfo = getTextRuntimeInfo(loadedTextModelId, !!chat.isModelLoading);
+  if (chat.isModelLoading && !chat.activeModelInfo?.isRemote) {
+    localRuntimeInfo = {
+      ...localRuntimeInfo,
+      state: 'loading',
+      modelId: chat.loadingModel?.id ?? localRuntimeInfo.modelId,
+      modelName: chat.loadingModel?.name ?? localRuntimeInfo.modelName,
+    };
+  } else if (chat.activeModelId && loadedTextModelId !== chat.activeModelId && textModelEvicted) {
+    localRuntimeInfo = { ...localRuntimeInfo, state: 'evicted' };
+  }
+  const textRuntime = chat.activeModelInfo?.isRemote
+    ? formatRemoteRuntimeStatus(chat.activeModelName)
+    : formatTextRuntimeStatus(localRuntimeInfo);
+
   const pendingModelRowRef = useRef<ModelRowType | null>(null);
   // Eject All — shared with Home via one hook (the unload side-effect lives in the
   // service, not duplicated per screen). Deferred until the sheet fully closes so
@@ -283,6 +305,8 @@ export const ChatScreen: React.FC = () => {
           setShowSettingsPanel={chat.setShowSettingsPanel}
           setShowProjectSelector={chat.setShowProjectSelector}
           isRemote={chat.activeModelInfo?.isRemote}
+          modelRuntimeLabel={textRuntime.compact}
+          modelRuntimeState={textRuntime.state}
         />
         <ModelsManagerSheet
           visible={modelsManagerOpen}
@@ -294,6 +318,7 @@ export const ChatScreen: React.FC = () => {
             if (pendingEjectRef.current) { pendingEjectRef.current = false; confirmEjectAll(); }
           }}
           labels={modelLabels}
+          details={{ text: textRuntime.detail }}
           remote={{ text: !!chat.activeModelInfo?.isRemote }}
           loadingState={{ isLoading: !!chat.isModelLoading, type: 'text' }}
           isEjecting={isEjecting}

@@ -751,9 +751,9 @@ describe('ChatScreen', () => {
       mockRoute.params = { conversationId: conv.id };
 
       const { getByTestId } = renderChatScreen();
-      // The header no longer embeds the model name — it shows a generic "Models"
-      // selector that opens the shared models manager sheet.
-      expect(getByTestId('model-loaded-indicator').props.children).toBe('Models');
+      // A selected model that has not been loaded yet must be labeled honestly;
+      // selecting a model is not the same thing as having it resident in RAM.
+      expect(getByTestId('model-loaded-indicator').props.children).toBe('Selected · not loaded');
     });
 
     it('navigates back when back button is pressed', () => {

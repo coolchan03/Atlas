@@ -7,11 +7,10 @@ on:
     branches: [atlas-voice]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   apk:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -38,16 +37,16 @@ jobs:
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-
       - name: Install JS dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Type check (informational, Atlas files reported as warnings)
         run: |
-          npx tsc --noEmit -p . > tsc.log 2>&1 || true
+          ./node_modules/.bin/tsc --noEmit -p . > tsc.log 2>&1 || true
           grep -E "error TS" tsc.log | grep -iE "atlas|MyModels|officeExtract|documentService|modelManager|importHelpers|quickImport|textGenAdvanced|Popovers|ChatInput|accel|thinking|storage|loaders|types/index|App.tsx|Maps|About|Onboarding|RemoteServers|ModelDownload|Agents|theme/|constants/|sharePrompt|Upsell|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail|ModelTest|ChatContextSection|AudioInput|contextCompaction|navigation/|ReplyEta|DailyBrief|Attachments|LowPowerCard|ctxGuard|loaders|useModelsScreen|llmHelpers|tools/handlers|ChatMessageArea|services/llm|litert.ts" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
           echo "::notice title=TypeScript::total TS errors: $(grep -c 'error TS' tsc.log)"
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
           mkdir -p android/app/libs
-          curl -sSL --retry 3 -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
           echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
           # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true

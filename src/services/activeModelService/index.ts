@@ -11,6 +11,7 @@ import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { autoPickAccelerationForModel } from '../../atlasTools/accel';
+import { recordTextLoadDuration } from './runtimeInfo';
 import { textOverheadMultiplier } from './types';
 import type {
   ActiveModelInfo,
@@ -29,7 +30,6 @@ import {
   getResourceUsage as _getResourceUsage,
   syncWithNativeState as _syncWithNativeState,
 } from './utils';
-;
 class ActiveModelService {
   private readonly listeners: Set<ModelChangeListener> = new Set();
   private readonly loadingState = { text: false, image: false };
@@ -38,8 +38,7 @@ class ActiveModelService {
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
   private imageLoadPromise: Promise<void> | null = null;
-  /** The SINGLE writer for the loaded-text-model id: keeps the private field and the reactive store
-   *  projection (loadedTextModelId) in lockstep, so every surface reads one truth for "currently loaded". */
+  /** Single writer keeping the private loaded id and reactive store projection in lockstep. */
   private setLoadedText(id: string | null): void {
     this.loadedTextModelId = id;
     useAppStore.getState().setLoadedTextModelId(id);
@@ -95,6 +94,7 @@ class ActiveModelService {
       imageModelId: this.loadedImageModelId,
     };
   }
+
   getPerformanceStats() {
     return llmService.getPerformanceStats();
   }
@@ -179,6 +179,7 @@ class ActiveModelService {
     }
     this.loadingState.text = true;
     this.notifyListeners();
+    const loadStartedAt = Date.now();
     this.textLoadPromise = doLoadTextModel({
       model,
       modelId,
@@ -187,6 +188,7 @@ class ActiveModelService {
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
+        recordTextLoadDuration(id, Date.now() - loadStartedAt);
         this.setLoadedText(id);
         useAppStore.getState().setTextModelEvicted(false); // loaded → clear any prior eviction
         modelResidencyManager.register(

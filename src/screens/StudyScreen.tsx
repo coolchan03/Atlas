@@ -61,7 +61,7 @@ export const StudyScreen: React.FC = () => {
   const [pod, setPod] = useState<{ prompt: string; minutes: number; hosts: 1 | 2 | 3; style: PodcastStyle; research: boolean }>({ prompt: '', minutes: 5, hosts: 2, style: 'casual', research: false });
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
-    listVoices('en').then(setVoices);
+    void listVoices('en').then(setVoices).catch(() => setVoices([]));
     return () => { stopRef.current = true; stop(); keepScreenOn(false); }; // leaving the screen stops playback
   }, []);
   // Android back button closes the open item (and stops audio) instead of leaving the screen.

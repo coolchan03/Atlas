@@ -92,8 +92,8 @@ async function check(): Promise<void> {
 
 export function startLowPowerMonitor(): void {
   if (timer) return;
-  check();
-  timer = setInterval(check, 60000);
+  void check();
+  timer = setInterval(() => { void check(); }, 60000);
 }
 
 export const checkBatteryNow = check;

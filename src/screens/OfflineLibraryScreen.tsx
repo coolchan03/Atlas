@@ -86,10 +86,10 @@ export const OfflineLibraryScreen: React.FC = () => {
               <Switch value={f.enabled} onValueChange={() => toggle(f.uri)} />
               <TouchableOpacity onPress={() => {
                 const downloaded = f.uri.startsWith('/') && f.uri.includes('/zim/');
-                if (!downloaded) { removeLibraryFile(f.uri); return; }
+                if (!downloaded) { void removeLibraryFile(f.uri); return; }
                 Alert.alert('Remove from the library?', f.title, [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete the file', style: 'destructive', onPress: async () => { await removeLibraryFile(f.uri); require('react-native-fs').default.unlink(f.uri).catch(() => undefined); } },
+                  { text: 'Delete the file', style: 'destructive', onPress: async () => { await removeLibraryFile(f.uri); await require('react-native-fs').default.unlink(f.uri).catch(() => undefined); } },
                 ]);
               }} style={{ marginLeft: 8, padding: 4 }}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
             </View>

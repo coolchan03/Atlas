@@ -28,7 +28,7 @@ jobs:
           for pair in kokoro-en:kokoro-int8-en-v0_19 piper-amy:vits-piper-en_US-amy-medium piper-ryan:vits-piper-en_US-ryan-medium \
                       piper-lessac:vits-piper-en_US-lessac-medium piper-joe:vits-piper-en_US-joe-medium piper-hfc:vits-piper-en_US-hfc_female-medium; do
             id=${pair%%:*}; src=${pair#*:}
-            curl -sSL --retry 3 -o "$src.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$src.tar.bz2"
+            curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o "$src.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$src.tar.bz2"
             tar -xjf "$src.tar.bz2" && rm "$src.tar.bz2"
             (cd "$src" && zip -q -r -1 "../$id.zip" .)
             rm -rf "$src"

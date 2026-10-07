@@ -45,8 +45,8 @@ export function autoPickAcceleration(): void {
   };
 
   const persist: any = (useAppStore as any).persist;
-  if (persist?.hasHydrated?.()) run();
-  else persist?.onFinishHydration?.(() => { run(); });
+  if (persist?.hasHydrated?.()) void run();
+  else persist?.onFinishHydration?.(() => { void run(); });
 }
 
 /**

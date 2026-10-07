@@ -15,7 +15,7 @@ const PENDING = 'atlas-ctx-pending';
 const GOOD = 'atlas-ctx-good';
 const DEFAULT: Record<Engine, number> = { llama: 4096, litert: 4096 };
 /** Marks which app run wrote a pending marker (a marker from an earlier run = that run died mid-load). */
-const SESSION = `${Date.now()}-${Math.random()}`;
+const SESSION = `run-${Date.now()}`;
 const key = (engine: Engine) => (engine === 'litert' ? 'liteRTMaxTokens' : 'contextLength');
 
 async function goodMap(): Promise<Record<string, number>> {
@@ -94,5 +94,5 @@ export function startCtxRecovery(): void {
     if (m) require('react-native').Alert.alert('Memory size changed', m);
   }).catch(() => undefined);
   const p: any = (useAppStore as any).persist;
-  if (p?.hasHydrated?.()) run(); else p?.onFinishHydration?.(() => { run(); });
+  if (p?.hasHydrated?.()) void run(); else p?.onFinishHydration?.(() => { void run(); });
 }

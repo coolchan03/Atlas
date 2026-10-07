@@ -176,7 +176,7 @@ export const SurvivalManualScreen: React.FC = () => {
         </ScrollView>
         <Modal visible={!!zoom} transparent={false} animationType="fade" onRequestClose={() => setZoom(null)}>
           <TouchableOpacity activeOpacity={1} onPress={() => setZoom(null)} style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center' }}>
-            {zoom && SURVIVAL_IMAGES[zoom.src] && (
+            {!!zoom && !!SURVIVAL_IMAGES[zoom.src] && (
               <Image source={SURVIVAL_IMAGES[zoom.src]} style={{ width: '100%', height: '85%' }} resizeMode="contain" />
             )}
             <Text style={{ textAlign: 'center', color: '#333', padding: 12 }}>{zoom?.alt} · tap to close (turn the phone sideways for more detail)</Text>

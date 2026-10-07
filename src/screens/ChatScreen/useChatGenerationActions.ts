@@ -388,7 +388,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   generationSession.begin(targetConversationId);
   // For remote models, skip local model loading
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
-      !(await ensureReadyOrAlert(deps, 'startGeneration', () => { startGenerationFn(deps, call); }))) {
+      !(await ensureReadyOrAlert(deps, 'startGeneration', () => { void startGenerationFn(deps, call); }))) {
     generationSession.end('not-ready');
     return;
   }
@@ -478,7 +478,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     reportModelFailure('text', 'The model produced no output', {
       title: 'No response',
       message: 'The model returned nothing. This can happen when it runs on an incompatible backend (a K-quant on NPU/GPU falls back to CPU and may emit nothing). Try again, or switch the backend/model.',
-      onRetry: () => { startGenerationFn(deps, call); },
+      onRetry: () => { void startGenerationFn(deps, call); },
     });
   }
   generationSession.end();
@@ -594,7 +594,7 @@ export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise
   try { await generationService.stopGeneration().catch(() => { }); }
   catch (e) { logger.error('Error stopping generation:', e); }
-  if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => { });
+  if (deps.isGeneratingImage) void imageGenerationService.cancelGeneration().catch(() => { });
 }
 export async function executeDeleteConversationFn(
   deps: Pick<GenerationDeps, 'activeConversationId' | 'isStreaming' | 'clearStreamingMessage' | 'removeImagesByConversationId' | 'deleteConversation' | 'setActiveConversation' | 'navigation' | 'setAlertState'>,
@@ -635,7 +635,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   // model that can't do vision (would crash with "Multimodal support not enabled"). Shared gate → identical UX.
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
-      !(await ensureReadyOrAlert(deps, 'regenerate', () => { regenerateResponseFn(deps, call); }))) return;
+      !(await ensureReadyOrAlert(deps, 'regenerate', () => { void regenerateResponseFn(deps, call); }))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   generationSession.begin(targetConversationId);
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.

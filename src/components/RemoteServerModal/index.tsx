@@ -117,7 +117,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         <Text style={styles.label}>Endpoint URL</Text>
         <TextInput
           style={[styles.input, errors.endpoint && styles.inputError]}
-          placeholder="http://192.168.1.50:7878"
+          placeholder="https://server.example:7878"
           placeholderTextColor={theme.colors.textMuted}
           value={endpoint}
           onChangeText={setEndpoint}

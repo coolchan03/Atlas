@@ -20,8 +20,8 @@ export function AtlasPacksSection() {
     try { setPacks(await listAtlasPacks()); } catch (e: any) { setErr(String(e?.message || e)); }
   };
   useEffect(() => {
-    AsyncStorage.getItem(KEY).then((v) => v && setInstalled(JSON.parse(v))).catch(() => undefined);
-    load();
+    void AsyncStorage.getItem(KEY).then((v) => { if (v) setInstalled(JSON.parse(v)); }).catch(() => undefined);
+    void load();
   }, []);
 
   const install = async (p: AtlasPack) => {
@@ -30,7 +30,7 @@ export function AtlasPacksSection() {
       const r = await installAtlasPack(p, (msg) => setBusy({ name: p.name, msg }));
       const next = { ...installed, [p.name]: p.updated };
       setInstalled(next);
-      AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => undefined);
+      void AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => undefined);
       Alert.alert('Pack added', `${r.added} added, ${r.skipped} already there${r.failed.length ? `, ${r.failed.length} could not be added` : ''}. Chat in the "Atlas - Library" project (Atlas agent) or use Study there.`);
     } catch (e: any) {
       Alert.alert('Could not add the pack', String(e?.message || e));

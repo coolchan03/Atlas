@@ -31,6 +31,8 @@ type Props = {
   /** Fired once the sheet has fully closed — used to open a picker safely after. */
   onClosed?: () => void;
   labels: Record<ModelRowType, string>;
+  /** Optional runtime detail shown beneath a row's selected model name. */
+  details?: Partial<Record<ModelRowType, string>>;
   /** Rows whose active selection lives on a REMOTE server (gateway) — shown with a cloud marker,
    *  matching the chat header's remote indicator, so a remote model is never mistaken for local. */
   remote?: Partial<Record<ModelRowType, boolean>>;
@@ -47,7 +49,7 @@ type Props = {
  * type's picker.
  */
 export const ModelsManagerSheet: React.FC<Props> = ({
-  visible, onClose, onClosed, labels, remote, loadingState, isEjecting, hasActiveModel, onOpenRow, onEject,
+  visible, onClose, onClosed, labels, details, remote, loadingState, isEjecting, hasActiveModel, onOpenRow, onEject,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -104,9 +106,16 @@ export const ModelsManagerSheet: React.FC<Props> = ({
                     <Text style={styles.ramChipText}>{`${(resident.sizeMB / 1024).toFixed(1)} GB`}</Text>
                   </View>
                 )}
-                <Text style={[styles.value, isSet && styles.valueSet]} numberOfLines={1}>
-                  {isLoading ? 'Loading…' : value}
-                </Text>
+                <View style={styles.valueTextBlock}>
+                  <Text style={[styles.value, isSet && styles.valueSet]} numberOfLines={1}>
+                    {isLoading ? 'Loading…' : value}
+                  </Text>
+                  {!!details?.[row.type] && (
+                    <Text style={styles.runtimeDetail} numberOfLines={2} testID={`models-row-${row.type}-runtime-detail`}>
+                      {details[row.type]}
+                    </Text>
+                  )}
+                </View>
                 {!!remote?.[row.type] && isSet && (
                   <Icon name="cloud" size={12} color={colors.primary} testID={`models-row-${row.type}-remote`} />
                 )}
@@ -164,7 +173,9 @@ const createStyles = (colors: ThemeColors) => ({
   // Right-aligned value cluster: the name (shrinks/ellipsizes) with the remote cloud hugging its
   // right edge at the minimum token gap (xs) — the marker reads as part of the name, not the row.
   valueGroup: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: SPACING.xs },
+  valueTextBlock: { flex: 1, alignItems: 'flex-end' as const },
   value: { ...TYPOGRAPHY.body, color: colors.textMuted, flexShrink: 1, textAlign: 'right' as const },
+  runtimeDetail: { ...TYPOGRAPHY.label, color: colors.textMuted, textAlign: 'right' as const, marginTop: 2 },
   valueSet: { color: colors.text },
   ejectButton: {
     flexDirection: 'row' as const,

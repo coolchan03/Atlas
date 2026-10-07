@@ -94,7 +94,9 @@ export const ChatHeader: React.FC<{
   setShowSettingsPanel: (v: boolean) => void;
   setShowProjectSelector: (v: boolean) => void;
   isRemote?: boolean;
-}> = ({ styles, colors, activeConversation, activeProject, navigation, onOpenModels, setShowSettingsPanel, setShowProjectSelector, isRemote }) => (
+  modelRuntimeLabel?: string;
+  modelRuntimeState?: 'none' | 'selected' | 'loading' | 'loaded' | 'evicted' | 'remote';
+}> = ({ styles, colors, activeConversation, activeProject, navigation, onOpenModels, setShowSettingsPanel, setShowProjectSelector, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -106,12 +108,19 @@ export const ChatHeader: React.FC<{
         </Text>
         <View style={styles.headerSubtitleRow}>
           <TouchableOpacity style={styles.modelSelector} onPress={onOpenModels} testID="model-selector">
-            {isRemote && (
+            {modelRuntimeState === 'loading' ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.remoteIcon} />
+            ) : isRemote || modelRuntimeState === 'remote' ? (
               <Icon name="cloud" size={12} color={colors.primary} style={styles.remoteIcon} />
+            ) : modelRuntimeState === 'loaded' ? (
+              <Icon name="check-circle" size={12} color={colors.success ?? colors.primary} style={styles.remoteIcon} />
+            ) : modelRuntimeState === 'evicted' ? (
+              <Icon name="pause-circle" size={12} color={colors.textMuted} style={styles.remoteIcon} />
+            ) : (
+              <Icon name="layers" size={12} color={colors.textSecondary} style={styles.remoteIcon} />
             )}
-            <Icon name="layers" size={12} color={colors.textSecondary} style={styles.remoteIcon} />
             <Text style={styles.headerSubtitle} numberOfLines={1} testID="model-loaded-indicator">
-              Models
+              {modelRuntimeLabel || 'Models'}
             </Text>
             <Text style={styles.modelSelectorArrow}>▼</Text>
           </TouchableOpacity>

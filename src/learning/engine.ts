@@ -17,6 +17,7 @@
  * In session mode nothing changes until you tap "Keep what it learned".
  */
 import RNFS from 'react-native-fs';
+import { localUniqueId } from '../utils/uniqueId';
 import { llmService } from '../services/llm';
 import { activeModelService } from '../services/activeModelService';
 import { ragService } from '../services/rag';
@@ -36,7 +37,7 @@ export const onLearningStatus = (fn: ((s: string) => void) | null): void => { st
 const status = (s: string) => statusListener?.(s);
 
 const msg = (role: Message['role'], content: string): Message => ({
-  id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, role, content, timestamp: Date.now(),
+  id: localUniqueId(role), role, content, timestamp: Date.now(),
 });
 const clean = (t: string): string => t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '').replace(/\*\*/g, '').trim();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

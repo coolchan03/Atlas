@@ -274,12 +274,12 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
   const [err, setErr] = useState<string | null>(null);
 
   const refresh = () => installedMaps().then(setLocal).catch(() => setLocal([]));
-  useEffect(() => { if (visible) { refresh(); setPath(null); } }, [visible]);
+  useEffect(() => { if (visible) { void refresh(); setPath(null); } }, [visible]);
   useEffect(() => {
     if (path === null) return;
     let alive = true;
     setLoading(true); setErr(null);
-    browseMaps(path).then((e) => { if (alive) setEntries(e); }).catch((e) => { if (alive) setErr(String(e?.message || e)); }).finally(() => { if (alive) setLoading(false); });
+    void browseMaps(path).then((e) => { if (alive) setEntries(e); }).catch((e) => { if (alive) setErr(String(e?.message || e)); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [path]);
 

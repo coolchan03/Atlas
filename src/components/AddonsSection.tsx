@@ -14,14 +14,14 @@ export function AddonsSection() {
     for (const a of ADDONS) out[a.id] = !!(await installedAddonPath(a).catch(() => null));
     setInstalled(out);
   };
-  useEffect(() => { refresh(); }, [Object.keys(progress).length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh(); }, [Object.keys(progress).length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const get = async (a: Addon) => {
     try {
       const r = await resolveAddon(a);
       Alert.alert(`Download ${a.name}?`, `${r.file}\nSize: ${r.size || a.approx}\nUse Wi-Fi. You can keep using the app while it downloads (keep the app open).`, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Download', onPress: () => downloadAddon(a).then(refresh).catch((e) => { if (!/abort|stop|cancel/i.test(String(e?.message))) Alert.alert('Download failed', String(e?.message || e)); refresh(); }) },
+        { text: 'Download', onPress: () => { void downloadAddon(a).then(refresh).catch((e) => { if (!/abort|stop|cancel/i.test(String(e?.message))) Alert.alert('Download failed', String(e?.message || e)); return refresh(); }); } },
       ]);
     } catch (e: any) {
       Alert.alert('Could not reach the Kiwix server', String(e?.message || e));
