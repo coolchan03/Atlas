@@ -38,6 +38,8 @@ jobs:
           restore-keys: gradle-
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
+      - name: Install llama.rn native artifacts
+        run: node node_modules/llama.rn/install/download-native-artifacts.js
       - name: Apply audited native dependency patches
         run: ./node_modules/.bin/patch-package
       - name: Type check (informational, Atlas files reported as warnings)
