@@ -1270,6 +1270,15 @@ describe('LLMService', () => {
     beforeEach(() => {
       (hw as any).cachedOpenCLCapability = null;
       jest.spyOn(hw, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+      jest.spyOn(hw, 'getDeviceInfo').mockResolvedValue({
+        totalMemory: 12 * 1024 ** 3,
+        usedMemory: 2 * 1024 ** 3,
+        availableMemory: 10 * 1024 ** 3,
+        deviceModel: 'Test Android',
+        systemName: 'Android',
+        systemVersion: '15',
+        isEmulator: false,
+      });
     });
 
     afterEach(() => {
@@ -1288,7 +1297,7 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       const info = llmService.getGpuInfo();
       expect(info.gpu).toBe(true);
@@ -1309,7 +1318,7 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       const info = llmService.getGpuInfo();
       expect(info.gpu).toBe(true);
@@ -2323,6 +2332,15 @@ describe('LLMService', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       // Clear SoC cache between tests
       (hardwareService as any).cachedSoCInfo = null;
+      jest.spyOn(hardwareService, 'getDeviceInfo').mockResolvedValue({
+        totalMemory: 12 * 1024 ** 3,
+        usedMemory: 2 * 1024 ** 3,
+        availableMemory: 10 * 1024 ** 3,
+        deviceModel: 'Test Snapdragon',
+        systemName: 'Android',
+        systemVersion: '15',
+        isEmulator: false,
+      });
     });
 
     afterEach(() => {
@@ -2342,7 +2360,7 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'htp' as const, gpuLayers: 99 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       expect(mockedInitLlama).toHaveBeenCalledWith(
         expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
