@@ -366,7 +366,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
         }
       }
     };
-    preload();
+    void preload();
     return () => { cancelled = true; };
 
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId]);

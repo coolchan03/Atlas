@@ -493,7 +493,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
 
       mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
+        downloadId: '42',
         fileName: 'bg-model.gguf',
         modelId: 'test/model',
         status: 'pending',
@@ -505,7 +505,7 @@ describe('ModelManager', () => {
       const result = await modelManager.downloadModelBackground('test/model', file);
 
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
-      expect(result.downloadId).toBe(42);
+      expect(result.downloadId).toBe('42');
     });
 
     it('sets up progress listener during start and complete/error via watchDownload', async () => {
@@ -517,7 +517,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true);
 
       mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
+        downloadId: '42',
         fileName: 'bg-model.gguf',
         modelId: 'test/model',
         status: 'pending',
@@ -529,9 +529,9 @@ describe('ModelManager', () => {
       const info = await modelManager.downloadModelBackground('test/model', file);
       modelManager.watchDownload(info.downloadId, jest.fn(), jest.fn());
 
-      expect(mockedBackgroundDownloadService.onProgress).toHaveBeenCalledWith(42, expect.any(Function));
-      expect(mockedBackgroundDownloadService.onComplete).toHaveBeenCalledWith(42, expect.any(Function));
-      expect(mockedBackgroundDownloadService.onError).toHaveBeenCalledWith(42, expect.any(Function));
+      expect(mockedBackgroundDownloadService.onProgress).toHaveBeenCalledWith('42', expect.any(Function));
+      expect(mockedBackgroundDownloadService.onComplete).toHaveBeenCalledWith('42', expect.any(Function));
+      expect(mockedBackgroundDownloadService.onError).toHaveBeenCalledWith('42', expect.any(Function));
     });
 
     it('calls metadata callback with download info', async () => {
@@ -543,7 +543,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true);
 
       mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
+        downloadId: '42',
         fileName: 'bg-model.gguf',
         modelId: 'test/model',
         status: 'pending',
@@ -557,7 +557,7 @@ describe('ModelManager', () => {
 
       await modelManager.downloadModelBackground('test/model', file);
 
-      expect(metadataCallback).toHaveBeenCalledWith(42, expect.objectContaining({
+      expect(metadataCallback).toHaveBeenCalledWith('42', expect.objectContaining({
         modelId: 'test/model',
         fileName: 'bg-model.gguf',
       }));
@@ -581,7 +581,7 @@ describe('ModelManager', () => {
 
       mockedBackgroundDownloadService.startDownload
         .mockResolvedValueOnce({
-          downloadId: 42,
+          downloadId: '42',
           fileName: 'vision.gguf',
           modelId: 'test/model',
           status: 'pending',
@@ -1693,7 +1693,7 @@ describe('ModelManager', () => {
 
       mockedBackgroundDownloadService.startDownload
         .mockResolvedValueOnce({
-          downloadId: 42,
+          downloadId: '42',
           fileName: 'bg-vision.gguf',
           modelId: 'test/model',
           status: 'pending',
