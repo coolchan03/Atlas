@@ -6,7 +6,7 @@ jest.mock('../../../src/services/hardware', () => ({
   hardwareService: { getTotalMemoryGB: jest.fn(() => 8) },
 }));
 
-jest.mock('../../../src/services/llmHelpers', () => ({
+jest.mock('../../../src/utils/contextLimits', () => ({
   getMaxContextForDevice: jest.fn(() => 16384),
 }));
 

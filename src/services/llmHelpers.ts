@@ -10,6 +10,8 @@ import { templateEmitsReasoning } from '../utils/messageContent';
 import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
 
 import { HTP_ENABLED } from '../config/featureFlags';
+import { BYTES_PER_GB } from '../utils/contextLimits';
+export { BYTES_PER_GB, getMaxContextForDevice } from '../utils/contextLimits';
 
 const RESPONSE_RESERVE = 512;
 const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
@@ -400,15 +402,6 @@ export async function fitMessagesInBudget(
     }
   }
   return result;
-}
-/** Max safe context length based on device RAM to prevent OOM on low-RAM devices. */
-export const BYTES_PER_GB = 1024 * 1024 * 1024;
-export function getMaxContextForDevice(totalMemoryBytes: number): number {
-  const gb = totalMemoryBytes / BYTES_PER_GB;
-  if (gb <= 6) return 2048;
-  if (gb <= 8) return 4096;
-  if (gb <= 11) return 8192;
-  return 16384; // Atlas: 12GB+ phones/tablets (a failed load falls back to the last working size)
 }
 // Android Adreno GPU caps (≤4GB/≤6GB→0, ≤8GB→12, >8GB→24).
 const ANDROID_GPU_LAYER_CAPS: { maxGB: number; layers: number }[] = [{ maxGB: 4, layers: 0 }, { maxGB: 6, layers: 0 }, { maxGB: 8, layers: 12 }];

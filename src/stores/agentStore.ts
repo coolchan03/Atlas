@@ -175,7 +175,7 @@ export const useAgentStore = create<AgentState>()(
         // The actual load may remain background/lazy, but any immediate send now routes
         // to the agent's intended model instead of the previously selected one.
         if (agent?.modelId) {
-          try { require('../services/activeModelService').activeModelService.selectTextModel(agent.modelId); } catch { /* ignore */ }
+          try { require('./appStore').useAppStore.getState().setActiveModel(agent.modelId); } catch { /* ignore */ }
         }
         if (agent?.contextLength) applyContextLength(agent.contextLength);
         if (agent?.modelId) {
@@ -269,7 +269,7 @@ function applyContextLength(ctx: number): void {
     } else {
       try {
         const { hardwareService } = require('../services/hardware');
-        const { getMaxContextForDevice } = require('../services/llmHelpers');
+        const { getMaxContextForDevice } = require('../utils/contextLimits');
         const ramGB = hardwareService.getTotalMemoryGB();
         const deviceCap = ramGB === 4 ? 8192 : getMaxContextForDevice(ramGB * 1024 ** 3);
         safeCtx = Math.min(safeCtx, deviceCap);

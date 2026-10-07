@@ -47,12 +47,12 @@ describe('getMaxContextForDevice', () => {
     expect(getMaxContextForDevice(7 * GB)).toBe(4096);
   });
 
-  it('caps at 8192 for 12GB RAM', () => {
-    expect(getMaxContextForDevice(12 * GB)).toBe(8192);
+  it('allows 16384 for 12GB RAM', () => {
+    expect(getMaxContextForDevice(12 * GB)).toBe(16384);
   });
 
-  it('caps at 8192 for 16GB RAM', () => {
-    expect(getMaxContextForDevice(16 * GB)).toBe(8192);
+  it('allows 16384 for 16GB RAM', () => {
+    expect(getMaxContextForDevice(16 * GB)).toBe(16384);
   });
 });
 
