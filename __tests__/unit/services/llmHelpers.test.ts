@@ -15,6 +15,7 @@ import {
   captureGpuInfo,
   logContextMetadata,
   initContextWithFallback,
+  isNativeLlamaRuntimeError,
 } from '../../../src/services/llmHelpers';
 import { Platform } from 'react-native';
 import { INFERENCE_BACKENDS } from '../../../src/types';
@@ -25,6 +26,18 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 const GB = BYTES_PER_GB;
+
+describe('isNativeLlamaRuntimeError', () => {
+  it('detects missing JSI bindings as an app runtime failure', () => {
+    expect(isNativeLlamaRuntimeError('JSI bindings not installed')).toBe(true);
+    expect(isNativeLlamaRuntimeError('Failed to install JSI bindings')).toBe(true);
+  });
+
+  it('does not misclassify normal model-load failures', () => {
+    expect(isNativeLlamaRuntimeError('Failed to load model: unsupported architecture')).toBe(false);
+    expect(isNativeLlamaRuntimeError('Out of memory')).toBe(false);
+  });
+});
 
 describe('getMaxContextForDevice', () => {
   it('caps at 2048 for 3GB RAM', () => {
@@ -519,6 +532,17 @@ describe('initContextWithFallback — HTP device stripping and timeout', () => {
     expect(mockedInitLlama).toHaveBeenCalledWith(
       expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
     );
+  });
+
+  it('fails immediately for missing JSI bindings instead of retrying the model', async () => {
+    const callsBefore = mockedInitLlama.mock.calls.length;
+    mockedInitLlama.mockRejectedValueOnce(new Error('JSI bindings not installed'));
+
+    await expect(initContextWithFallback(baseParams, 8192, 99)).rejects.toThrow(
+      'app installation/build problem',
+    );
+
+    expect(mockedInitLlama.mock.calls.length - callsBefore).toBe(1);
   });
 
   it('strips devices from params on CPU fallback (attempt 2)', async () => {

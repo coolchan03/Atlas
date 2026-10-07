@@ -28,7 +28,7 @@ describe('llama.rn Contract', () => {
       n_threads: 4,
       use_mmap: true,
       vocab_only: false,
-      flash_attn: true,
+      flash_attn_type: 'auto' as const,
       cache_type_k: 'f16' as const,
       cache_type_v: 'f16' as const,
       n_ctx: 4096,

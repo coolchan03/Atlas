@@ -168,6 +168,20 @@ async function tryGpuInit(promise: Promise<LlamaContext>, nGpuLayers: number, is
   catch (e) { timedOut = true; throw e; }
 }
 
+/** Errors that indicate the app's native llama runtime is unavailable, not a bad model. */
+export function isNativeLlamaRuntimeError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('jsi bindings not installed') ||
+    normalized.includes('failed to install jsi') ||
+    normalized.includes('native module') && normalized.includes('rnllama');
+}
+
+function throwNativeLlamaRuntimeError(message: string): never {
+  throw new Error(
+    `Atlas's native LLM runtime is unavailable. This is an app installation/build problem, not a problem with this model.\n\nNative runtime error: ${message}`,
+  );
+}
+
 /** Init llama with GPU/HTP, fall back to CPU, then retry with ctx=2048 on failure. */
 export async function initContextWithFallback(
   params: object,
@@ -192,6 +206,7 @@ export async function initContextWithFallback(
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
     const gpuMsg = gpuError?.message || String(gpuError);
+    if (isNativeLlamaRuntimeError(gpuMsg)) throwNativeLlamaRuntimeError(gpuMsg);
     if (nGpuLayers > 0) {
       logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
       gpuAttemptFailed = true;
@@ -208,6 +223,7 @@ export async function initContextWithFallback(
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
       const cpuMsg = cpuError?.message || String(cpuError);
+      if (isNativeLlamaRuntimeError(cpuMsg)) throwNativeLlamaRuntimeError(cpuMsg);
       logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
       try {
         logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
@@ -218,6 +234,7 @@ export async function initContextWithFallback(
         return { context, gpuAttemptFailed, actualLength: 2048 };
       } catch (finalError: any) {
         const finalMsg = finalError?.message || String(finalError);
+        if (isNativeLlamaRuntimeError(finalMsg)) throwNativeLlamaRuntimeError(finalMsg);
         logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
         logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
         logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);

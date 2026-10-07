@@ -63,6 +63,16 @@ jobs:
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
+      - name: Verify release native runtime
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          unzip -l "$APK" > apk-contents.txt
+          grep -q 'lib/arm64-v8a/librnllama.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/librnllama_v8.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/librnllama_v8_2.so' apk-contents.txt
+          node -e "const p=require('./node_modules/llama.rn/package.json'); if(p.version!=='0.13.0-rc.4') { console.error('Unexpected llama.rn version:',p.version); process.exit(1) } console.log('Verified llama.rn',p.version)"
+          echo "Verified Atlas release contains the ARM64 llama.rn native runtime."
       - name: Rename APK
         run: |
           mkdir -p out

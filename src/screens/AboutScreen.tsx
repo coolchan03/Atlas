@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import packageJson from '../../package.json';
+import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
 
 
 export const AboutScreen: React.FC = () => {
@@ -16,6 +17,22 @@ export const AboutScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const focusTrigger = useFocusTrigger();
+  const [llamaRuntimeStatus, setLlamaRuntimeStatus] = useState('Checking native runtime…');
+
+  useEffect(() => {
+    let active = true;
+    getBackendDevicesInfo()
+      .then(devices => {
+        if (!active) return;
+        setLlamaRuntimeStatus(`Available (${devices.length} backend${devices.length === 1 ? '' : 's'} detected)`);
+      })
+      .catch(error => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setLlamaRuntimeStatus(`Unavailable: ${message}`);
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -33,6 +50,8 @@ export const AboutScreen: React.FC = () => {
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
           <Text style={styles.appName}>Atlas</Text>
           <Text style={styles.version}>Version {packageJson.version}</Text>
+          <Text style={styles.runtimeInfo}>llama.rn {packageJson.dependencies['llama.rn']} · native build {BuildInfo.number}</Text>
+          <Text style={styles.runtimeInfo}>LLM runtime: {llamaRuntimeStatus}</Text>
           <Text style={styles.description}>
             Your offline assistant, library and field guide. Runs on this device and keeps working with no internet.
           </Text>
@@ -103,7 +122,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   version: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  runtimeInfo: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    textAlign: 'center' as const,
+    marginBottom: SPACING.xs,
   },
   description: {
     ...TYPOGRAPHY.body,
