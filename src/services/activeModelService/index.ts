@@ -10,6 +10,7 @@ import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
+import { autoPickAccelerationForModel } from '../../atlasTools/accel';
 import { textOverheadMultiplier } from './types';
 import type {
   ActiveModelInfo,
@@ -149,10 +150,18 @@ class ActiveModelService {
     if (!model) {
       throw new Error('Model not found');
     }
+
+    // Resolve automatic acceleration BEFORE calculating residency cost or native
+    // load params so the memory gate and the engine see the same backend. Explicit
+    // user choices are never changed by this helper.
+    await autoPickAccelerationForModel(model);
+
+    // Re-read the store because automatic backend selection may have updated settings.
+    const loadStore = useAppStore.getState();
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     // GPU-aware overhead: a GPU/NPU backend adds working buffers in system RAM the flat CPU 1.5× misses.
-    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend)) || 0) / (1024 * 1024));
+    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(loadStore.settings.inferenceBackend)) || 0) / (1024 * 1024));
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
@@ -173,7 +182,7 @@ class ActiveModelService {
     this.textLoadPromise = doLoadTextModel({
       model,
       modelId,
-      store,
+      store: loadStore,
       timeoutMs,
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,

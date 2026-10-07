@@ -164,6 +164,25 @@ export function acceleratedBackendFor(
 }
 
 /**
+ * Automatic backend for a locally downloaded llama/GGUF model when the user has NOT
+ * explicitly chosen a backend. K-quants stay on CPU because Android OpenCL/HTP do not
+ * accelerate them reliably; Q4_0/Q8_0 use the safest available accelerator. GPU wins
+ * when present; the experimental HTP/NPU path is used only for the Llama-family case
+ * accepted by recommendedAccelerator().
+ */
+export function automaticBackendForModel(
+  capability: AccelerationCapability,
+  modelName: string | undefined,
+  quantization: string | undefined,
+): InferenceBackend {
+  if (!isAccelerableQuant(quantization)) return INFERENCE_BACKENDS.CPU;
+  const recommended = recommendedAccelerator(capability, modelName);
+  if (recommended === 'gpu') return INFERENCE_BACKENDS.OPENCL;
+  if (recommended === 'npu') return INFERENCE_BACKENDS.HTP;
+  return INFERENCE_BACKENDS.CPU;
+}
+
+/**
  * The HuggingFace search term to prefill on the Models tab so the user can grab an
  * accelerable (Q4_0) build of the model they're on. Strips a trailing quant suffix
  * (…-Q4_K_M) from the model id and its author prefix, then appends the target quant.

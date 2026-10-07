@@ -6,6 +6,7 @@ import {
   recommendedAccelerator,
   planAcceleration,
   acceleratedBackendFor,
+  automaticBackendForModel,
   acceleratedSearchQuery,
 } from '../../../src/utils/acceleration';
 import { INFERENCE_BACKENDS } from '../../../src/types';
@@ -151,6 +152,23 @@ describe('acceleratedBackendFor', () => {
     expect(acceleratedBackendFor({ hasNpu: true, hasGpu: true }, 'gemma')).toBe(INFERENCE_BACKENDS.OPENCL); // GPU-first
     expect(acceleratedBackendFor({ hasNpu: true, hasGpu: false }, 'Llama-3-8B')).toBe(INFERENCE_BACKENDS.HTP);
     expect(acceleratedBackendFor({ hasNpu: false, hasGpu: true }, 'anything')).toBe(INFERENCE_BACKENDS.OPENCL);
+  });
+});
+
+describe('automaticBackendForModel', () => {
+  it('uses GPU/OpenCL for accelerable quants when a GPU is available', () => {
+    expect(automaticBackendForModel({ hasNpu: true, hasGpu: true }, 'Llama-3-8B', 'Q4_0')).toBe(INFERENCE_BACKENDS.OPENCL);
+    expect(automaticBackendForModel({ hasNpu: false, hasGpu: true }, 'gemma-4-E4B-it-GGUF', 'Q8_0')).toBe(INFERENCE_BACKENDS.OPENCL);
+  });
+
+  it('uses HTP/NPU only for an eligible Llama-family model when no GPU is available', () => {
+    expect(automaticBackendForModel({ hasNpu: true, hasGpu: false }, 'Llama-3-8B-Instruct', 'Q4_0')).toBe(INFERENCE_BACKENDS.HTP);
+    expect(automaticBackendForModel({ hasNpu: true, hasGpu: false }, 'gemma-4-E4B-it-GGUF', 'Q4_0')).toBe(INFERENCE_BACKENDS.CPU);
+  });
+
+  it('keeps non-accelerable K-quants on CPU even when accelerators exist', () => {
+    expect(automaticBackendForModel({ hasNpu: true, hasGpu: true }, 'Llama-3-8B', 'Q4_K_M')).toBe(INFERENCE_BACKENDS.CPU);
+    expect(automaticBackendForModel({ hasNpu: false, hasGpu: true }, 'Llama-3-8B', 'Q6_K')).toBe(INFERENCE_BACKENDS.CPU);
   });
 });
 
