@@ -114,28 +114,22 @@ describe('Share Prompt Flow Integration', () => {
       expect(shareListener).not.toHaveBeenCalled();
     });
 
-    it('emits the share prompt on the 2nd text generation (after delay)', async () => {
+    it('does not emit a share prompt on the 2nd text generation in Atlas', async () => {
       useAppStore.setState({ textGenerationCount: 1 });
 
       await runTextGeneration();
-      expect(shareListener).not.toHaveBeenCalled();
       await wait(1600);
-      expect(shareListener).toHaveBeenCalledWith('text');
+      expect(shareListener).not.toHaveBeenCalled();
       expect(getAppState().textGenerationCount).toBe(2);
     });
 
-    it('emits AT MOST ONCE per session across many generations (no 2/10/20 re-show)', async () => {
-      // Second generation triggers it once; later generations in the SAME session must
-      // NOT re-show it (the old cadence re-showed at 10, 20, …).
+    it('does not emit share prompts across repeated text generations in Atlas', async () => {
       useAppStore.setState({ textGenerationCount: 1 });
-      await runTextGeneration(); // count → 2, fires
+      await runTextGeneration(); // count → 2
+      await runTextGeneration(); // → 3
+      await runTextGeneration(); // → 4
       await wait(1600);
-      expect(shareListener).toHaveBeenCalledTimes(1);
-
-      await runTextGeneration(); // → 3, same session
-      await runTextGeneration(); // → 4, same session
-      await wait(1600);
-      expect(shareListener).toHaveBeenCalledTimes(1); // still exactly once
+      expect(shareListener).not.toHaveBeenCalled();
     });
   });
 
@@ -241,29 +235,25 @@ describe('Share Prompt Flow Integration', () => {
       expect(shareListener).not.toHaveBeenCalled();
     });
 
-    it('emits share prompt on 2nd image generation (after delay)', async () => {
+    it('does not emit a share prompt on the 2nd image generation in Atlas', async () => {
       setupImageModel();
       useAppStore.setState({ imageGenerationCount: 1 });
 
       await imageGenerationService.generateImage({ prompt: 'sunset' });
-      expect(shareListener).not.toHaveBeenCalled();
       await wait(2100);
-      expect(shareListener).toHaveBeenCalledWith('image');
+      expect(shareListener).not.toHaveBeenCalled();
       expect(getAppState().imageGenerationCount).toBe(2);
     });
 
-    it('emits AT MOST ONCE per session across image generations (no 20th re-show)', async () => {
+    it('does not emit share prompts across repeated image generations in Atlas', async () => {
       setupImageModel();
       useAppStore.setState({ imageGenerationCount: 1 });
 
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 2, fires
+      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 2
+      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 3
+      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 4
       await wait(2100);
-      expect(shareListener).toHaveBeenCalledTimes(1);
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 3, same session
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 4, same session
-      await wait(2100);
-      expect(shareListener).toHaveBeenCalledTimes(1); // still exactly once
+      expect(shareListener).not.toHaveBeenCalled();
     });
 
     it('does not increment count when image generation fails', async () => {

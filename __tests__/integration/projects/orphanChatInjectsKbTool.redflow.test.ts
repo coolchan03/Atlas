@@ -33,9 +33,11 @@ describe('Q9b — orphaned chat still injects the KB tool (red-flow)', () => {
     boundary.llama!.scriptCompletion({ text: 'Here is a plain answer.' });
     await startGenerationFn(deps, { targetConversationId: convId, messageText: 'what did we discuss?', setDebugInfo: () => {} });
 
-    // Correct: no project exists, so the KB tool is NOT offered to the model. Today it is force-injected
-    // because the check keys on projectId being truthy, not the project existing → RED.
-    const sentToModel = JSON.stringify(boundary.llama!.calls.completion);
-    expect(sentToModel).not.toContain('search_knowledge_base');
+    // Correct: no project exists, so the KB tool is NOT offered to the model. The Atlas system
+    // prompt may still mention the tool by name; what matters is that no native completion request
+    // actually carries a `tools` payload.
+    const requests = boundary.llama!.calls.completion.map(call => call[0] as { tools?: unknown });
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every(request => request.tools == null)).toBe(true);
   });
 });

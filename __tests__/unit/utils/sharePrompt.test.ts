@@ -7,7 +7,7 @@ import {
   shareOnX,
 } from '../../../src/utils/sharePrompt';
 
-describe('maybeScheduleSharePrompt — at most once per session', () => {
+describe('maybeScheduleSharePrompt — Atlas promotional prompts disabled', () => {
   beforeEach(() => { jest.useFakeTimers(); resetSharePromptSession(); });
   afterEach(() => { jest.useRealTimers(); });
 
@@ -18,13 +18,13 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
     try { fn(emits); } finally { unsub(); }
   }
 
-  it('emits ONCE per session even when triggered many times (no 2/10/20 re-show)', () => {
+  it('never emits even when triggered many times', () => {
     withListener(emits => {
       for (const count of [2, 3, 10, 20, 50]) {
         maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: false, delayMs: 0 });
       }
       jest.runOnlyPendingTimers();
-      expect(emits).toEqual(['text']); // exactly one, not one per milestone
+      expect(emits).toEqual([]);
     });
   });
 
@@ -44,14 +44,14 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
     });
   });
 
-  it('emits again in a NEW session (after resetSharePromptSession)', () => {
+  it('remains disabled in a new session after reset', () => {
     withListener(emits => {
       maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
-      resetSharePromptSession(); // relaunch = new session
+      resetSharePromptSession();
       maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
-      expect(emits).toEqual(['image', 'image']); // once each session
+      expect(emits).toEqual([]);
     });
   });
 });

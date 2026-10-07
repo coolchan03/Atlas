@@ -52,6 +52,25 @@ jest.mock('../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn((dir: string) => Promise.resolve(`${dir}/model.mlpackage`)),
 }));
 
+// ModelManager owns discovery/registration; imageModelIntegrity has its own focused tests.
+// Keep these fixtures at the helper-contract level so they represent a completed model
+// without duplicating the full native MNN/QNN file manifest in every scanner test.
+jest.mock('../../../src/utils/imageModelIntegrity', () => {
+  const actual = jest.requireActual('../../../src/utils/imageModelIntegrity');
+  return {
+    ...actual,
+    resolveImageModelDir: async (root: string, backend: 'mnn' | 'qnn' | 'coreml') => {
+      const lower = root.toLowerCase();
+      if (lower.includes('coreml')) return null;
+      const qnn = lower.includes('qnn') || lower.includes('8gen') || lower.includes('npu');
+      if (backend === 'qnn') return qnn ? root : null;
+      if (backend === 'mnn') return qnn ? null : root;
+      return null;
+    },
+    validateImageModelDir: async () => ({ complete: true, missing: [] }),
+  };
+});
+
 import { unzip as mockedUnzip } from 'react-native-zip-archive';
 import { resolveCoreMLModelDir as mockedResolveCoreML } from '../../../src/utils/coreMLModelUtils';
 
@@ -2197,7 +2216,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(true);  // imageModelsDir scan
+        .mockResolvedValueOnce(true)   // imageModelsDir scan
+        .mockResolvedValueOnce(true);  // _ready sentinel
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')  // getDownloadedImageModels
@@ -2242,7 +2262,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // _ready sentinel
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2264,7 +2285,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // _ready sentinel
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2321,7 +2343,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // _ready sentinel
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')

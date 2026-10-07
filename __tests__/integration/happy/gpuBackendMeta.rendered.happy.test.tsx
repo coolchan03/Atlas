@@ -48,12 +48,16 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
 
 describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloaded (heavy entry point)', () => {
   it('selecting OpenCL + reloading renders a GPU-offloaded backend, not CPU', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });
     // Device boundary: an Adreno (Qualcomm) GPU — getOpenCLCapability keys off DeviceInfo.getHardware.
     // The seeded 'unknown' device would (correctly) refuse OpenCL, so seed the real device's SoC family.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
+    // setupChatScreen performs the initial automatic capability probe before this
+    // device-specific override, so clear that cached probe before the manual GPU reload.
+    const { hardwareService } = require('../../../src/services/hardware');
+    (hardwareService as any).cachedOpenCLCapability = null;
 
     h.enableGenerationDetailsViaUI(); // real segmented toggle → the details row renders under each reply
     h.render();
@@ -75,13 +79,20 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     // The per-message Generation Details show a GPU-offloaded backend with a layer count (e.g. "OpenCL (99L)")
     // — the layers reached the GPU, not a silent CPU fallback.
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
-    expect(h.rtl.within(meta).queryByText(/OpenCL \(\d+L\)/)).not.toBeNull();
-    // And it is NOT running on CPU.
+    // Verify the engine itself reports real offload, then verify that non-CPU state
+    // reaches the rendered details. Device labels vary (OpenCL vs concrete GPU name).
+    const { llmService } = require('../../../src/services/llm');
+    const gpuInfo = llmService.getGpuInfo();
+    expect(gpuInfo.gpu).toBe(true);
+    expect(gpuInfo.gpuLayers).toBeGreaterThan(0);
+    expect(h.rtl.within(meta).queryByText(/\(\d+L\)/)).not.toBeNull();
+    // The runtime may report the concrete GPU device name instead of the generic
+    // "OpenCL" label; the invariant is real offloaded layers and no CPU fallback.
     expect(h.rtl.within(meta).queryByText('CPU')).toBeNull();
   }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load
 
   it('falsify: CPU backend renders "CPU" with no offloaded layers', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');

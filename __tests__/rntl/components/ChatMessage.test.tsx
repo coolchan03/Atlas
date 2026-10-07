@@ -743,7 +743,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      expect(getByText('22.3 tok/s')).toBeTruthy();
+      expect(getByText('22.3 tok/s (very fast)')).toBeTruthy();
     });
 
     it('displays time to first token', () => {

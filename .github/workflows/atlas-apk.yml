@@ -38,6 +38,8 @@ jobs:
           restore-keys: gradle-
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
+      - name: Apply audited native dependency patches
+        run: ./node_modules/.bin/patch-package
       - name: Type check (informational, Atlas files reported as warnings)
         run: |
           ./node_modules/.bin/tsc --noEmit -p . > tsc.log 2>&1 || true

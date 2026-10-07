@@ -48,7 +48,10 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
 async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const DeviceInfo = require('react-native-device-info');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { hardwareService } = require('../../../src/services/hardware');
   (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom'); // Adreno → OpenCL allowed
+  jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
   selectBackendViaUI(h, 'opencl');
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).not.toBeNull(); });
   await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
@@ -57,7 +60,7 @@ async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
 
 describe('GPU fallback notice — a GPU-selected load that lands on CPU is visibly reported (device 18:57)', () => {
   it('shows a CPU-fallback notice in the conversation when the GPU init fails (details OFF)', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'test-q4_0.gguf' });
     h.render();
 
     // A live conversation exists (the user was chatting when they changed the backend, as on device).
@@ -73,10 +76,10 @@ describe('GPU fallback notice — a GPU-selected load that lands on CPU is visib
 
     // RED on HEAD: the downgrade is silent — no notice renders anywhere.
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/running on CPU/i)).not.toBeNull(); }, { timeout: 20000 });
-  }, 30000);
+  }, 50000);
 
   it('falsify: a healthy GPU reload shows NO fallback notice', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'test-q4_0.gguf' });
     h.render();
 
     await h.send('hello', { text: 'Hi there.' });

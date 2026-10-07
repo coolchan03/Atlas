@@ -59,8 +59,9 @@ describe('DocumentService', () => {
       expect(documentService.isSupported('document.pdf')).toBe(false);
     });
 
-    it('returns false for .docx files', () => {
-      expect(documentService.isSupported('document.docx')).toBe(false);
+    it('returns true for supported Office files', () => {
+      expect(documentService.isSupported('document.docx')).toBe(true);
+      expect(documentService.isSupported('sheet.xlsx')).toBe(true);
     });
 
     it('returns false for .png files', () => {
@@ -118,7 +119,7 @@ describe('DocumentService', () => {
       mockedRNFS.stat.mockResolvedValue({ size: 500, isFile: () => true } as any);
 
       await expect(
-        documentService.processDocumentFromPath('/path/to/file.docx')
+        documentService.processDocumentFromPath('/path/to/file.png')
       ).rejects.toThrow('Unsupported file type');
     });
 

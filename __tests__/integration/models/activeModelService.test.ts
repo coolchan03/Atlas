@@ -453,7 +453,7 @@ describe('ActiveModelService Integration', () => {
       expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
         imageModel.modelPath,
         4,
-        { backend: 'auto', cpuOnly: false, attentionVariant: undefined },
+        { backend: 'mnn', cpuOnly: false, attentionVariant: undefined, preferGpu: undefined },
       );
 
       expect(getAppState().activeImageModelId).toBe('img-model-1');
@@ -479,7 +479,7 @@ describe('ActiveModelService Integration', () => {
       expect(mockLocalDreamService.loadModel).toHaveBeenLastCalledWith(
         imgModel2.modelPath,
         4,
-        { backend: 'auto', cpuOnly: false, attentionVariant: undefined },
+        { backend: 'mnn', cpuOnly: false, attentionVariant: undefined, preferGpu: undefined },
       );
     });
 
@@ -2001,7 +2001,7 @@ describe('ActiveModelService Integration', () => {
       expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
         imageModel.modelPath,
         4,
-        { backend: 'auto', cpuOnly: false, attentionVariant: undefined },
+        { backend: 'mnn', cpuOnly: false, attentionVariant: undefined, preferGpu: undefined },
       );
     });
 

@@ -232,13 +232,13 @@ describe('Generation Flow Integration', () => {
 
       await flushPromises();
 
-      // Stream tokens (need wait(60) to allow 50ms token buffer flush)
+      // Stream tokens (80ms batching is intentional to reduce UI contention with inference).
       streamCallback?.('Hello');
-      await wait(60);
+      await wait(100);
       expect(getChatState().streamingMessage).toBe('Hello');
 
       streamCallback?.(' world');
-      await wait(60);
+      await wait(100);
       expect(getChatState().streamingMessage).toBe('Hello world');
 
       completeCallback?.('');

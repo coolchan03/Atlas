@@ -129,7 +129,13 @@ export const BackendSelector: React.FC = () => {
       description={backends.find(b => b.id === current)?.desc ?? ''}
       options={backends}
       current={current}
-      onSelect={(id) => updateSettings({ inferenceBackend: id, backendUserChosen: true } as any)}
+      onSelect={(id) => updateSettings({
+        inferenceBackend: id,
+        backendUserChosen: true,
+        ...(id !== INFERENCE_BACKENDS.CPU && (settings.gpuLayers ?? 0) <= 0
+          ? { gpuLayers: gpuLayersEffective }
+          : {}),
+      } as any)}
       testIdFor={(id) => `backend-${id}-button`}
     >
       {showLayers && (

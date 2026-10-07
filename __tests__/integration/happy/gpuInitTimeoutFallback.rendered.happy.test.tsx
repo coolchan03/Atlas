@@ -43,7 +43,10 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
 async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const DeviceInfo = require('react-native-device-info');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { hardwareService } = require('../../../src/services/hardware');
   (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom'); // Adreno → OpenCL supported
+  jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
   selectBackendViaUI(h, 'opencl');
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).not.toBeNull(); });
   await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
@@ -52,7 +55,7 @@ async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
 
 describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV-B24)', () => {
   it('still renders a reply on CPU when the GPU/OpenCL init times out', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });
     h.enableGenerationDetailsViaUI();
     h.render();
 
@@ -71,7 +74,7 @@ describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV
   }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load
 
   it('falsify: without the GPU init failure, OpenCL keeps the GPU offload', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });
     h.enableGenerationDetailsViaUI();
     h.render();
 
@@ -81,6 +84,13 @@ describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
 
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
-    expect(h.rtl.within(meta).queryByText(/OpenCL \(\d+L\)/)).not.toBeNull(); // GPU offload kept
+    // The native runtime may report a concrete GPU device label instead of the generic
+    // "OpenCL" string. The invariant is real offload: GPU=true, layers>0, and no CPU fallback.
+    const { llmService } = require('../../../src/services/llm');
+    const gpuInfo = llmService.getGpuInfo();
+    expect(gpuInfo.gpu).toBe(true);
+    expect(gpuInfo.gpuLayers).toBeGreaterThan(0);
+    expect(h.rtl.within(meta).queryByText(/\(\d+L\)/)).not.toBeNull();
+    expect(h.rtl.within(meta).queryByText('CPU')).toBeNull();
   }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load
 });

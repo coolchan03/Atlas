@@ -270,6 +270,9 @@ export async function proceedWithModelLoadFn(
             isSystemInfo: true,
           });
         }
+        // Manual reloads use this path too; surface any requested-accelerator -> CPU
+        // downgrade just like the initial/lazy load paths do.
+        addBackendFallbackMsg(deps);
       },
     },
   );

@@ -26,8 +26,6 @@ import { Linking } from 'react-native';
 
 import { NetworkSection } from '../../../src/screens/ModelDownloadHelpers';
 import { getTheme } from '../../../src/theme';
-import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
-import { withUtm } from '../../../src/utils/utm';
 
 // Fake ONLY the device boundary — the OS URL opener. openURL returns a resolved promise like the real
 // module does on a device that can handle the link.
@@ -52,29 +50,21 @@ function renderEmptyNetworkSection() {
   );
 }
 
-describe('Onboarding network empty state — leads with Off Grid AI Desktop + Get Desktop link', () => {
+describe('Onboarding network empty state — Atlas neutral server guidance', () => {
   beforeEach(() => {
     openURLSpy.mockClear();
   });
 
-  it('names Off Grid AI Desktop in the empty-state copy and opens the desktop URL when the link is tapped', () => {
+  it('shows neutral Ollama/LM Studio guidance and no upstream desktop promotion', () => {
     const ui = renderEmptyNetworkSection();
 
-    // Terminal artifact 1: the copy the user reads names the first-party server first.
-    expect(ui.getByText(/Off Grid AI Desktop, Ollama, or LM Studio server/)).toBeTruthy();
-
-    // Terminal artifact 2: a tappable link is present.
-    const link = ui.getByTestId('onboarding-get-desktop');
-    expect(ui.getByText('Get Off Grid AI Desktop')).toBeTruthy();
-
-    // Real gesture: tap the link.
-    fireEvent.press(link);
-
-    // Behavior: it opened the UTM-tagged desktop URL through the device boundary.
-    expect(openURLSpy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'model-download'));
+    expect(ui.getByText(/Ollama or LM Studio server/)).toBeTruthy();
+    expect(ui.queryByTestId('onboarding-get-desktop')).toBeNull();
+    expect(ui.queryByText('Get Off Grid AI Desktop')).toBeNull();
+    expect(openURLSpy).not.toHaveBeenCalled();
   });
 
-  it('does not open any URL when an unrelated control (Scan Network) is pressed — falsifier', () => {
+  it('does not open any URL when Scan Network is pressed', () => {
     const ui = renderEmptyNetworkSection();
 
     fireEvent.press(ui.getByText('Scan Network'));

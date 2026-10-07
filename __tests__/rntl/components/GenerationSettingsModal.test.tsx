@@ -42,6 +42,10 @@ let mockStoreValues: any = {};
 
 jest.mock('../../../src/stores', () => ({
   useAppStore: jest.fn((sel?: any) => typeof sel === 'function' ? sel(mockStoreValues) : mockStoreValues),
+  useChatStore: jest.fn((sel?: any) => {
+    const chatState = { activeConversationId: null, conversations: [], updateConversation: jest.fn() };
+    return typeof sel === 'function' ? sel(chatState) : chatState;
+  }),
   selectIsLiteRT: (state: any) =>
     state.downloadedModels?.find((m: any) => m.id === state.activeModelId)?.engine === 'litert',
 }));
@@ -1027,7 +1031,7 @@ describe('GenerationSettingsModal', () => {
 
         fireEvent.press(getByTestId('backend-cpu-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'cpu' });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'cpu', backendUserChosen: true });
       });
 
       it('calls updateSettings with inferenceBackend: opencl when OpenCL button pressed on Android', () => {
@@ -1039,7 +1043,7 @@ describe('GenerationSettingsModal', () => {
 
         fireEvent.press(getByTestId('backend-opencl-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl' });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl', backendUserChosen: true });
       });
 
       it('calls updateSettings with gpuLayers value from GPU layers slider', () => {

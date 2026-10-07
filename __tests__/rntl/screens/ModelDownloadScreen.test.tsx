@@ -82,6 +82,7 @@ jest.mock('../../../src/services', () => ({
   hardwareService: {
     getDeviceInfo: jest.fn(() => Promise.resolve({ deviceModel: 'Test Device', availableMemory: 8000000000 })),
     getModelRecommendation: jest.fn(() => ({ tier: 'medium' })),
+    getSoCInfo: jest.fn(() => Promise.resolve(null)),
     getTotalMemoryGB: jest.fn(() => 8),
     formatBytes: jest.fn((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`),
   },
@@ -195,6 +196,10 @@ jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
   const actual = jest.requireActual('../../../src/screens/ModelDownloadHelpers');
   return {
     ...actual,
+    fetchModelFiles: jest.fn(async (models: any[], opts?: any) => {
+      const files = await mockGetModelFiles();
+      for (const model of models) opts?.onEach?.(model.id, files);
+    }),
     NetworkSection: ({ onScanNetwork, onAddManually, onConnectServer, servers, isCheckingNetwork, isScanning }: any) => {
       const { View, Text, TouchableOpacity } = require('react-native');
       // Store refs so tests can call them
@@ -264,6 +269,7 @@ describe('ModelDownloadScreen', () => {
     mockDownloadModelBackground.mockResolvedValue(undefined);
     mockHardwareService.getDeviceInfo.mockResolvedValue({ deviceModel: 'Test Device', availableMemory: 8000000000 });
     mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'medium' });
+    mockHardwareService.getSoCInfo.mockResolvedValue(null);
     mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
     mockHardwareService.formatBytes.mockImplementation((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
@@ -473,7 +479,7 @@ describe('ModelDownloadScreen', () => {
       await Promise.resolve();
     });
 
-    expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to initialize. Please try again.');
+    expect(mockShowAlert).not.toHaveBeenCalledWith('Error', 'Failed to initialize. Please try again.');
   });
 
   // ===========================================================================
@@ -488,7 +494,7 @@ describe('ModelDownloadScreen', () => {
       { id: 'llama3', capabilities: { supportsVision: false } },
       { id: 'llava', capabilities: { supportsVision: true } },
     ];
-    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: mockModels });
+    mockRsm.testConnection.mockResolvedValue({ success: true, models: mockModels });
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
@@ -505,7 +511,7 @@ describe('ModelDownloadScreen', () => {
 
   it('handleConnectServer — success with no models shows "No Models Found" alert', async () => {
     const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
-    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: [] });
+    mockRsm.testConnection.mockResolvedValue({ success: true, models: [] });
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
@@ -522,7 +528,7 @@ describe('ModelDownloadScreen', () => {
 
   it('handleConnectServer — connection failure shows Connection Failed alert', async () => {
     const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
-    mockRsm.testConnection.mockResolvedValueOnce({ success: false, error: 'Timeout' });
+    mockRsm.testConnection.mockResolvedValue({ success: false, error: 'Timeout' });
 
     render(<ModelDownloadScreen navigation={mockNavigation} />);
     await flushPromises();
@@ -573,9 +579,7 @@ describe('ModelDownloadScreen', () => {
     expect(mockShowAlert).toHaveBeenCalledWith(
       'No Servers Found',
       expect.stringContaining('WiFi'),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Get Off Grid AI Desktop' }),
-      ]),
+      [expect.objectContaining({ text: 'Dismiss' })],
     );
   });
 

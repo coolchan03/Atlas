@@ -137,7 +137,7 @@ describe('NetworkSection', () => {
   it('shows empty text when no servers and not checking', () => {
     const { getByText } = render(<NetworkSection {...defaultNetworkProps} />);
     expect(
-      getByText(/No servers found\. Make sure you're on the same WiFi/),
+      getByText(/No servers found\. Make sure you're on the same Wi-Fi/),
     ).toBeTruthy();
   });
 

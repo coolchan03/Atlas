@@ -7,7 +7,7 @@ let nativeLabel: string | null = null;
 let syncChain: Promise<void> = Promise.resolve();
 
 async function syncNativeState(): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (!Platform || Platform.OS !== 'android') return;
   const enabled = activeReasons.size > 0;
   const label = activeReasons.has('image-generation')
     ? 'Generating an image locally'
@@ -19,10 +19,10 @@ async function syncNativeState(): Promise<void> {
   if (!stateChanged && !labelChanged) return;
   try {
     if (enabled && (stateChanged || labelChanged)) {
-      await NativeModules.AtlasDevice?.setAiWorkActive?.(true, label);
+      await NativeModules?.AtlasDevice?.setAiWorkActive?.(true, label);
     }
-    if (stateChanged) await NativeModules.AtlasDevice?.setKeepScreenOn?.(enabled);
-    if (!enabled && stateChanged) await NativeModules.AtlasDevice?.setAiWorkActive?.(false, null);
+    if (stateChanged) await NativeModules?.AtlasDevice?.setKeepScreenOn?.(enabled);
+    if (!enabled && stateChanged) await NativeModules?.AtlasDevice?.setAiWorkActive?.(false, null);
     nativeEnabled = enabled;
     nativeLabel = enabled ? label : null;
   } catch (error) {

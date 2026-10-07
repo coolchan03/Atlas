@@ -27,6 +27,11 @@ jest.mock('../../src/services/pdfExtractor', () => ({
   pdfExtractor: { isAvailable: jest.fn(() => false), extractText: jest.fn() },
 }));
 
+jest.mock('../../src/services/officeExtract', () => ({
+  OFFICE_EXTENSIONS: ['.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.rtf'],
+  extractOffice: jest.fn(async () => 'office body'),
+}));
+
 import { documentService } from '../../src/services/documentService';
 
 const rnfs = RNFS as jest.Mocked<typeof RNFS>;
@@ -72,21 +77,26 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
   });
 
-  // ── #12: unsupported binary format rejected with a visible error ────────────
-  describe('unsupported binary formats are rejected (#12)', () => {
-    it('isSupported() is false for a .docx binary', () => {
-      expect(documentService.isSupported('report.docx')).toBe(false);
+  // ── Office formats are supported; unrelated binary formats are still rejected ──
+  describe('office support and unsupported binary rejection', () => {
+    it('accepts supported Word and Excel files', () => {
+      expect(documentService.isSupported('report.docx')).toBe(true);
+      expect(documentService.isSupported('sheet.xlsx')).toBe(true);
     });
 
-    it('isSupported() is false for .xlsx and image binaries', () => {
-      expect(documentService.isSupported('sheet.xlsx')).toBe(false);
-      expect(documentService.isSupported('photo.png')).toBe(false);
-    });
-
-    it('processDocumentFromPath() throws an "Unsupported file type" error for .docx (no chip is added)', async () => {
+    it('extracts an Office file into a document attachment', async () => {
       stubReadableFile('ignored');
+      const att = await documentService.processDocumentFromPath('/docs/report.docx', 'report.docx');
+      expect(att).not.toBeNull();
+      expect(att!.fileName).toBe('report.docx');
+      expect(att!.textContent).toBe('office body');
+    });
+
+    it('still rejects unrelated image/binary files', async () => {
+      expect(documentService.isSupported('photo.png')).toBe(false);
+      expect(documentService.isSupported('archive.zip')).toBe(false);
       await expect(
-        documentService.processDocumentFromPath('/docs/report.docx', 'report.docx'),
+        documentService.processDocumentFromPath('/docs/photo.png', 'photo.png'),
       ).rejects.toThrow(/Unsupported file type/);
     });
   });

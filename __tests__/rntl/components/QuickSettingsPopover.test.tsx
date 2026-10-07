@@ -1,13 +1,8 @@
 /**
  * QuickSettingsPopover Tests
  *
- * Covers the chat quick-settings menu rows that recently changed:
- * - The "Tools" row is a neutral utility count (its icon must NOT turn green/primary
- *   when tools are enabled).
- * - The "Pro Tools" row (formerly "MCP") uses a crown icon and shows a count badge
- *   for whatever is active across pro tools + MCP, hidden when nothing is active.
+ * Atlas uses one unified Tools row. There is no separate Pro Tools/MCP row.
  */
-
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { QuickSettingsPopover } from '../../../src/components/ChatInput/Popovers';
@@ -21,22 +16,14 @@ jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
   return ({ name, color }: any) => <Text testID={`feather-${name}`} style={{ color }}>{name}</Text>;
 });
-jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => {
-  const { Text } = require('react-native');
-  return ({ name, color }: any) => <Text testID={`mci-${name}`} style={{ color }}>{name}</Text>;
-});
-
 jest.mock('../../../src/theme', () => ({
   useTheme: () => ({ colors: COLORS }),
 }));
-
 jest.mock('../../../src/utils/haptics', () => ({ triggerHaptic: jest.fn() }));
-
 jest.mock('../../../src/bootstrap/slotRegistry', () => ({
   getSlot: () => null,
   SLOTS: { quickSettingsAudioRow: 'quickSettingsAudioRow' },
 }));
-
 jest.mock('../../../src/stores', () => ({
   useAppStore: () => ({
     settings: { thinkingEnabled: false },
@@ -61,39 +48,29 @@ const baseProps = {
 describe('QuickSettingsPopover', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('keeps the Tools icon neutral (not green) even when tools are enabled', () => {
+  it('renders the unified Tools row and no Pro Tools row', () => {
+    const { getByText, queryByText, getByTestId } = render(<QuickSettingsPopover {...baseProps} />);
+    expect(getByText('Tools')).toBeTruthy();
+    expect(queryByText('Pro Tools')).toBeNull();
+    expect(getByTestId('quick-tools')).toBeTruthy();
+  });
+
+  it('keeps the Tools icon neutral when below the warning threshold', () => {
     const { getByTestId } = render(<QuickSettingsPopover {...baseProps} enabledToolCount={2} />);
-    const toolIcon = getByTestId('feather-tool');
-    // Should be the neutral text color, never the primary/green accent.
-    expect(toolIcon.props.style.color).toBe(COLORS.text);
-    expect(toolIcon.props.style.color).not.toBe(COLORS.primary);
+    expect(getByTestId('feather-tool').props.style.color).toBe(COLORS.text);
   });
 
-  it('renders a Pro Tools row with a crown icon (and no MCP label)', () => {
-    const { getByText, queryByText, getByTestId } = render(
-      <QuickSettingsPopover {...baseProps} mcpToolCount={0} />,
-    );
-    expect(getByText('Pro Tools')).toBeTruthy();
-    expect(queryByText('MCP')).toBeNull();
-    expect(getByTestId('mci-crown')).toBeTruthy();
+  it('shows the enabled tool count badge', () => {
+    const { getByText } = render(<QuickSettingsPopover {...baseProps} enabledToolCount={2} />);
+    expect(getByText('2')).toBeTruthy();
   });
 
-  it('shows the active count badge on Pro Tools when something is active', () => {
-    const { getByText } = render(<QuickSettingsPopover {...baseProps} mcpToolCount={3} />);
-    expect(getByText('3')).toBeTruthy();
-  });
-
-  it('hides the Pro Tools badge when nothing is active', () => {
-    const { queryByText } = render(<QuickSettingsPopover {...baseProps} mcpToolCount={0} />);
-    expect(queryByText('0')).toBeNull();
-  });
-
-  it('invokes onMcpPress when the Pro Tools row is pressed', () => {
-    const onMcpPress = jest.fn();
+  it('invokes onToolsPress from the Tools row', () => {
+    const onToolsPress = jest.fn();
     const { getByTestId } = render(
-      <QuickSettingsPopover {...baseProps} mcpToolCount={1} onMcpPress={onMcpPress} />,
+      <QuickSettingsPopover {...baseProps} onToolsPress={onToolsPress} />,
     );
-    fireEvent.press(getByTestId('quick-pro-tools'));
-    expect(onMcpPress).toHaveBeenCalledTimes(1);
+    fireEvent.press(getByTestId('quick-tools'));
+    expect(onToolsPress).toHaveBeenCalledTimes(1);
   });
 });
