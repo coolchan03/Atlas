@@ -53,6 +53,21 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
 
     /** True only if the phone has a magnetometer (a real compass). */
     @ReactMethod
+    fun setAiWorkActive(enabled: Boolean, label: String?, promise: Promise) {
+        try {
+            val intent = Intent(ctx, AtlasAiWorkService::class.java).apply {
+                action = AtlasAiWorkService.ACTION_START
+                if (enabled && !label.isNullOrBlank()) putExtra(AtlasAiWorkService.EXTRA_LABEL, label)
+            }
+            if (enabled) androidx.core.content.ContextCompat.startForegroundService(ctx, intent)
+            else ctx.stopService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("AI_WORK_SERVICE", e.message ?: "Could not change background AI service state", e)
+        }
+    }
+
+    @ReactMethod
     fun hasCompass(promise: Promise) {
         promise.resolve(sensors.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null)
     }
