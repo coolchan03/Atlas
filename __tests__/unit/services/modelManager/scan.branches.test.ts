@@ -34,6 +34,10 @@ jest.mock('../../../../src/services/modelManager/copyFile', () => ({
 jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn(async (p: string) => `${p}/coreml-resolved`),
 }));
+jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
+  resolveImageModelDir: jest.fn(async (p: string, backend: string) => backend === 'mnn' ? p : null),
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+}));
 jest.mock('../../../../src/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -92,7 +96,9 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
   it('skips registered paths and zero-size directories', async () => {
     const opts = base();
     opts.getImageModels = jest.fn(async () => [{ modelPath: '/img/known' } as any]);
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // empty dir has committed _ready
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('known', '/img/known'), dir('empty', '/img/empty'), file('loose.txt')])
       .mockResolvedValueOnce([]); // getDirSize of 'empty' -> 0
@@ -102,7 +108,9 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
 
   it('recovers a model and sums sizes recursively through a nested subdirectory', async () => {
     const opts = base();
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // recovery sentinel exists
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('Stable_Diffusion.zip', '/img/Stable_Diffusion.zip')]) // top scan
       // getDirSize on the model dir: one file + one nested directory (exercises recursion line 26-27)
@@ -115,13 +123,15 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
     expect(out).toHaveLength(1);
     expect(out[0].size).toBe(1500); // 1000 + nested 500
     expect(out[0].name).toBe('Stable Diffusion'); // .zip stripped, underscores->spaces
-    expect(out[0].id.startsWith('recovered_')).toBe(true);
+    expect(out[0].id).toBe('Stable_Diffusion.zip');
     expect(opts.addImageModel).toHaveBeenCalled();
   });
 
   it('getDirSize swallows a readDir error and returns 0 (dir skipped)', async () => {
     const opts = base();
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // recovery sentinel exists
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('Broken', '/img/Broken')])
       .mockRejectedValueOnce(new Error('cannot read'));

@@ -61,8 +61,8 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
     expect(useAppStore.getState().downloadedImageModels.find((m: any) => m.id === 'sdxl')).toBeUndefined();
     // No in-flight row existed, so no native cancel needed.
     expect(mockCancel).not.toHaveBeenCalled();
-    // Always unload defensively so the ejected model can't stay resident.
-    expect(mockUnload).toHaveBeenCalled();
+    // Deleting an inactive model must not evict a different resident image model.
+    expect(mockUnload).not.toHaveBeenCalled();
   });
 
   it('uninstalling the ACTIVE model clears activeImageModelId (disables image gen — cases 29/38)', async () => {

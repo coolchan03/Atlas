@@ -129,7 +129,7 @@ export const imageProvider: DownloadProvider = {
       useDownloadStore.getState().remove(entry.modelKey);
     }
     const app = useAppStore.getState();
-    const loadedId = activeModelService.getLoadedModelIds().imageModelId;
+    const loadedId = activeModelService.getLoadedModelIds?.().imageModelId ?? null;
     if (app.activeImageModelId === modelId || loadedId === modelId) {
       await activeModelService.unloadImageModel()
         .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));

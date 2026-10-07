@@ -275,7 +275,7 @@ class ImageGenerationService {
     }
   }
 
-  private async _enhancePrompt(params: GenerateImageParams, steps: number, requestEpoch: number): Promise<string> {
+  private async _enhancePrompt(params: GenerateImageParams, steps: number, requestEpoch: number = this.requestEpoch): Promise<string> {
     const { settings } = useAppStore.getState();
     if (!settings.enhanceImagePrompts) {
       logger.log('[ImageGen] Enhancement disabled, using original prompt');
