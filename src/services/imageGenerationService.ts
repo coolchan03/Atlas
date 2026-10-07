@@ -6,6 +6,7 @@ import { getActiveEngineService, generateStandalone, isRemoteTextModelActive, st
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
+import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
 import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
@@ -74,6 +75,8 @@ class ImageGenerationService {
     const { isGenerating: _ignored, ...rest } = partial;
     const prevPhase = this.state.phase;
     this.state = { ...this.state, ...rest };
+    if (!isInFlight(prevPhase) && isInFlight(this.state.phase)) holdScreenAwake('image-generation');
+    else if (isInFlight(prevPhase) && !isInFlight(this.state.phase)) releaseScreenAwake('image-generation');
     // [IMG-SM] state-machine trace (kept forever, like [TTS-SM]): every phase
     // transition logs one line so one repro reads as a linear state machine and a
     // silent stall/flash is never undiagnosable again.

@@ -26,6 +26,22 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx), SensorEventListener {
     override fun getName(): String = "AtlasDevice"
 
+    /** Keep the display awake only while Atlas is actively doing foreground AI work. */
+    @ReactMethod
+    fun setKeepScreenOn(enabled: Boolean, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) { promise.resolve(false); return }
+        activity.runOnUiThread {
+            try {
+                if (enabled) activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("KEEP_SCREEN_ON", e.message ?: "Could not change screen-awake state", e)
+            }
+        }
+    }
+
     // ---------------- compass ----------------
     private val sensors by lazy { ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
     private val rot = FloatArray(9)

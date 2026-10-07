@@ -11,6 +11,7 @@ import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { autoPickAccelerationForModel } from '../../atlasTools/accel';
+import { holdScreenAwake, releaseScreenAwake } from '../../atlasTools/runtimePower';
 import { recordTextLoadDuration } from './runtimeInfo';
 import { textOverheadMultiplier } from './types';
 import type {
@@ -178,6 +179,7 @@ class ActiveModelService {
         : new OverridableMemoryError('Not enough free memory to load this model. Close other apps or choose a smaller model.');
     }
     this.loadingState.text = true;
+    holdScreenAwake('text-model-load');
     this.notifyListeners();
     const loadStartedAt = Date.now();
     this.textLoadPromise = doLoadTextModel({
@@ -202,18 +204,13 @@ class ActiveModelService {
       onFinally: () => {
         this.loadingState.text = false;
         this.textLoadPromise = null;
+        releaseScreenAwake('text-model-load');
         this.notifyListeners();
       },
     });
     await this.textLoadPromise;
   }
-  /**
-   * The ONE owner of the "active text model" write. Selecting a model MARKS it active (the load is
-   * deferred to the first message); this is the single place a selection is recorded, so the View
-   * dispatches this intent instead of poking the store — presentation holds no authoritative state.
-   * activeModelId is then set from exactly three places, all here in the service: select (this),
-   * load-success (loaders), and cleared on load-failure/unload — so it can never drift from reality.
-   */
+  /** Record the selected text model; loading remains lazy until first use. */
   selectTextModel(modelId: string): void {
     const store = useAppStore.getState();
     store.setActiveModelId(modelId);

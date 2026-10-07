@@ -8,6 +8,7 @@ import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
 import logger from '../utils/logger';
+import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
 import { remoteServerManager } from './remoteServerManager';
@@ -145,7 +146,10 @@ class GenerationService {
   private notifyListeners(): void { this.listeners.forEach(l => l(this.getState())); }
 
   private updateState(partial: Partial<GenerationState>): void {
+    const wasGenerating = this.state.isGenerating;
     this.state = { ...this.state, ...partial };
+    if (!wasGenerating && this.state.isGenerating) holdScreenAwake('text-generation');
+    else if (wasGenerating && !this.state.isGenerating) releaseScreenAwake('text-generation');
     this.notifyListeners();
   }
 
