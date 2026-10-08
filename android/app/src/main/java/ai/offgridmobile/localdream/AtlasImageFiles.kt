@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.DataInputStream
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -11,27 +12,42 @@ import java.nio.ByteOrder
 
 /** Streamed, non-converting import for SDXL, SD1.x and FLUX image weights. */
 internal object AtlasImageFiles {
-    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "upscaler", "controlnet", "ip_adapter")
+    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "upscaler")
     fun inspect(ctx: Context, uriText: String, fileName: String): JSONObject {
         val lower = fileName.lowercase()
         val result = JSONObject().put("kind", "unknown").put("family", "unknown")
         val uri = Uri.parse(if (uriText.startsWith("/")) "file://$uriText" else uriText)
         ctx.contentResolver.openInputStream(uri)?.use { input ->
             val first = ByteArray(8)
-            if (input.read(first) != 8) throw IOException("File header is incomplete")
+            try { DataInputStream(input).readFully(first) }
+            catch (_: Exception) { throw IOException("File header is incomplete") }
             if (lower.endsWith(".gguf")) {
                 if (!first.copyOfRange(0, 4).contentEquals("GGUF".toByteArray())) {
                     throw IOException("Invalid GGUF header")
                 }
-                // Architecture appears in the GGUF metadata, not the file suffix.
+                // Read the general.architecture *value* rather than looking for "flux" anywhere
+                // in the vocabulary, which would misclassify some language GGUFs as image models.
                 val peek = ByteArray(262144)
                 val count = input.read(peek).coerceAtLeast(0)
-                val header = String(peek, 0, count, Charsets.ISO_8859_1).lowercase()
-                val flux = header.contains("general.architecture") && header.contains("flux")
-                val image = flux || (header.contains("general.architecture") &&
-                    (header.contains("stable-diffusion") || header.contains("sdxl")))
-                result.put("kind", if (image) "image" else "unknown")
-                result.put("family", if (flux) "flux" else if (image) "sdxl" else "unknown")
+                val key = "general.architecture".toByteArray()
+                val index = (0..(count - key.size)).firstOrNull { start ->
+                    key.indices.all { peek[start + it] == key[it] }
+                } ?: -1
+                var arch = ""
+                if (index >= 0 && index + key.size + 12 <= count) {
+                    val pos = index + key.size
+                    val valueType = ByteBuffer.wrap(peek, pos, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                    val valueLength = ByteBuffer.wrap(peek, pos + 4, 8).order(ByteOrder.LITTLE_ENDIAN).long
+                    if (valueType == 8 && valueLength >= 1L && valueLength <= 64L &&
+                        pos + 12 + valueLength <= count) {
+                        arch = String(peek, pos + 12, valueLength.toInt(), Charsets.UTF_8).lowercase()
+                    }
+                }
+                val flux = arch == "flux"
+                val sdxl = arch == "sdxl" || arch == "stable-diffusion-xl"
+                val sd = arch == "sd" || arch == "stable-diffusion"
+                result.put("kind", if (flux || sdxl || sd) "image" else "unknown")
+                result.put("family", if (flux) "flux" else if (sdxl) "sdxl" else if (sd) "sd15" else "unknown")
             } else if (lower.endsWith(".safetensors") || lower.endsWith(".safetensor")) {
                 val length = ByteBuffer.wrap(first).order(ByteOrder.LITTLE_ENDIAN).long
                 if (length <= 2 || length > 24L * 1024L * 1024L) {

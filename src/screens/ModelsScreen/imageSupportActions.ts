@@ -10,9 +10,13 @@ export type ImageSupportKind = ImageSupport['kind'];
 
 function chooseKind(name: string): Promise<ImageSupportKind | null> {
   const filename = name.toLowerCase();
-  if (/\.(pth|pt)$/i.test(filename) || filename.includes('esrgan') || filename.includes('upscal')) {
-    return Promise.resolve('upscaler');
+  if (/\.(pth|pt)$/i.test(filename)) {
+    return new Promise(resolve => Alert.alert('PTH / PT model', 'Atlas currently supports .pth and .pt files only when they contain a compatible ESRGAN upscaler. Other PyTorch style, ControlNet, or embedding files cannot be loaded this way.', [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+      { text: 'Attach as upscaler', onPress: () => resolve('upscaler') },
+    ], { cancelable: true, onDismiss: () => resolve(null) }));
   }
+  if (filename.includes('esrgan') || filename.includes('upscal')) return Promise.resolve('upscaler');
   if (filename.includes('t5xxl') || filename.includes('t5_xxl')) return Promise.resolve('t5xxl');
   if (filename.includes('clip_l') || filename.includes('clip-l')) return Promise.resolve('clip_l');
   if (filename.includes('vae')) return Promise.resolve('vae');

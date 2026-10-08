@@ -152,7 +152,7 @@ export const MyModelsScreen: React.FC = () => {
           <Icon name="folder-plus" size={20} color={colors.primary} />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={{ color: colors.text, fontWeight: '600' }}>Import a model file from this device</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>A .gguf model (select its "mmproj" vision file too, if it has one) or a .litertlm model</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>.safetensors images, .gguf images/LLMs (including optional mmproj), or .litertlm. Import MNN/QNN ZIPs in Models.</Text>
           </View>
         </TouchableOpacity>
 

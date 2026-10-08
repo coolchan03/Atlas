@@ -406,9 +406,12 @@ export async function proceedWithDownload(
   const imageModelsDir = modelManager.getImageModelsDirectory();
   const modelDir = `${imageModelsDir}/${modelInfo.id}`;
   if (await RNFS.exists(modelDir)) {
-    const validExisting = modelInfo.backend === 'mnn' || modelInfo.backend === 'qnn'
-      ? (await validateImageModelDir(modelDir, modelInfo.backend)).complete
-      : true;
+    const hasReadyMarker = await RNFS.exists(`${modelDir}/_ready`).catch(() => false);
+    const validExisting = hasReadyMarker && (
+      modelInfo.backend === 'mnn' || modelInfo.backend === 'qnn'
+        ? (await validateImageModelDir(modelDir, modelInfo.backend)).complete
+        : true
+    );
     if (validExisting) {
       const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
       logger.log(`[ImageDownload] proceedWithDownload zip - complete files exist on disk, registering directly modelId=${modelInfo.id}`);
