@@ -573,7 +573,7 @@ OFFGRID_HOWTO = """SETTING UP ATLAS IN THE OFF GRID APP (free version is enough)
    ATLAS_for_OffGrid\\Packs\\ (for example 01_Medical.zip) to the phone, open the project's
    knowledge base and tap the package icon to import the whole pack at once.
    Start with 01_Medical and 06_Survival_Navigation - indexing on a phone is slow and too
-   many books make searches worse. (Package icon = Off Grid Atlas app from coolchan03/Off-Grid.)
+   many books make searches worse. (Package icon = Off Grid Atlas app from coolchan03/Atlas.)
 5. TEST it: ask "someone is bleeding badly from the leg, what do I do?" The answer should
    quote card E01. If it answers without searching, try a different model.
 
