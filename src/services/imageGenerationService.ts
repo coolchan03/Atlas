@@ -9,7 +9,8 @@ import logger from '../utils/logger';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
-import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
+import { DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
+import { getImageTuning } from '../utils/nativeImageTuning';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
@@ -437,13 +438,12 @@ class ImageGenerationService {
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
     if (!activeImageModel) return this._fail('No image model selected');
 
-    const steps = params.steps || settings.imageSteps || 8;
+    const preset = getImageTuning(activeImageModel, settings);
+    const steps = params.steps ?? preset.steps;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE;
-    // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
-    // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
-    // this guards the persisted-value + programmatic paths so the user never sees garbage.
-    const imageWidth = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);
-    const imageHeight = Math.max(SWEET_SPOT_SIZE, settings.imageHeight || SWEET_SPOT_SIZE);
+    // Native SDXL defaults differ from compressed, low-resolution mobile models.
+    const imageWidth = preset.width;
+    const imageHeight = preset.height;
 
     const enhancedPrompt = await this._enhancePrompt(params, steps, requestEpoch);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);

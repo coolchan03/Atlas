@@ -18,6 +18,9 @@ const DiffusionModule = Platform.select({
 
 type ProgressCallback = (progress: ImageGenerationProgress) => void;
 type PreviewCallback = (preview: { previewPath: string; step: number; totalSteps: number }) => void;
+type NativeImageParams = ImageGenerationParams & {
+  previewInterval?: number; skipLoRA?: boolean; skipUpscaler?: boolean;
+};
 
 /**
  * LocalDream-based image generator service.
@@ -139,7 +142,7 @@ class LocalDreamGeneratorService {
     );
   }
 
-  private buildNativeParams(params: ImageGenerationParams & { previewInterval?: number }, prompt: string) {
+  private buildNativeParams(params: NativeImageParams, prompt: string) {
     const np = {
       prompt,
       negativePrompt: params.negativePrompt || '',
@@ -150,6 +153,8 @@ class LocalDreamGeneratorService {
       height: params.height || 512,
       previewInterval: params.previewInterval ?? 2,
       useOpenCL: params.useOpenCL ?? true,
+      skipLoRA: params.skipLoRA ?? false,
+      skipUpscaler: params.skipUpscaler ?? false,
     };
     logger.log(`[WIRE-IMAGE-PARAMS] ${JSON.stringify({ requested: { steps: params.steps, guidanceScale: params.guidanceScale, width: params.width, height: params.height }, native: { ...np, prompt: undefined } })}`); // [WIRE] settings→native image params
     return np;
@@ -172,7 +177,7 @@ class LocalDreamGeneratorService {
   }
 
   async generateImage(
-    params: ImageGenerationParams & { previewInterval?: number },
+    params: NativeImageParams,
     onProgress?: ProgressCallback,
     onPreview?: PreviewCallback,
   ): Promise<GeneratedImage> {

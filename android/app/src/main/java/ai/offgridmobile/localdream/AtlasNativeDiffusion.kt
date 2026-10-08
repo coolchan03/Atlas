@@ -56,6 +56,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             if (!path.path.startsWith(File(dir, "support").canonicalPath + File.separator) ||
                 !path.isFile) throw IOException("Missing or unsafe attached $kind file")
             if (kind == "lora") {
+                if (params.hasKey("skipLoRA") && params.getBoolean("skipLoRA")) continue
                 hasLora = true
                 val name = path.name.substringBeforeLast('.')
                 if (!name.matches(Regex("[a-zA-Z0-9_.-]+"))) throw IOException("Unsafe LoRA filename")
@@ -109,7 +110,9 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 if (output.exists()) output.delete()
                 throw IOException("Native image engine failed (exit $code). " + tail.joinToString(" | ").takeLast(900))
             }
-            attachments["upscaler"]?.let { upscale(executable, it, output, cancelled) }
+            if (!params.hasKey("skipUpscaler") || !params.getBoolean("skipUpscaler")) {
+                attachments["upscaler"]?.let { upscale(executable, it, output, cancelled) }
+            }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(output.absolutePath, bounds)
             return Arguments.createMap().apply {

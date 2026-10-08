@@ -4,7 +4,7 @@ import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import { SWEET_SPOT_SIZE } from '../../utils/imageGenAdvice';
+import { getImageTuning, getImageSizeSlider, isDirectSDXL } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
 
 const ClearGPUCacheButton: React.FC = () => {
@@ -27,25 +27,29 @@ const ClearGPUCacheButton: React.FC = () => {
 
 /** Basic controls: Image Steps + Image Size */
 export const ImageQualityBasicSliders: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const model = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const preset = getImageTuning(model, settings);
+  const sizeOptions = getImageSizeSlider(model);
+  const isXL = isDirectSDXL(model);
 
   return (
     <>
       <SliderSetting
         testID="image-steps"
         label="Image Steps"
-        description="4-8 steps for speed, 20-50 for quality"
-        value={settings.imageSteps || 8}
-        min={4} max={50} step={1}
+        description={isXL ? "28 steps recommended for SDXL" : "4-8 steps for speed, 20-50 for quality"}
+        value={preset.steps}
+        min={isXL ? 20 : 4} max={50} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 
       <SliderSetting
         testID="image-size"
         label="Image Size"
-        description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
-        value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? SWEET_SPOT_SIZE)}
-        min={SWEET_SPOT_SIZE} max={512} step={64}
+        description={sizeOptions.description}
+        value={preset.width}
+        min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />

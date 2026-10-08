@@ -54,3 +54,19 @@ The existing optimized MNN/QNN ZIP model catalog is retained.
 The native diffusion executable is built from stable-diffusion.cpp
 by leejet (MIT license) with its upstream third-party dependencies.
 See https://github.com/leejet/stable-diffusion.cpp for source.
+
+## Image benchmark and SDXL settings
+
+- Image model cards in My models include Test, a standalone image benchmark.
+- Fixed smiley face prompt, seed 42, no LLM prompt rewriting.
+- Quality SDXL preset: 1024x1024 at 28 steps; quick check: 512x512 at 8 steps.
+- The UI displays elapsed time and reported steps, can cancel, and warns after
+  90 seconds without any steps. Native init can take time.
+- A nonempty, valid PNG does not automatically prove prompt accuracy. The user
+  must evaluate the actual output.
+- Native LoRAs and ESRGAN upscalers are disabled by default in the test only.
+- SDXL normal generation uses 1024px/28-step defaults when old 256px/8-step
+  settings remain selected. MNN/QNN compact models retain their original values.
+- SDXL image-size sliders support 512 through 1024 pixels.
+- AlbedoBase XL v3.1 Large includes a VAE; RealESRGAN_x4plus.pth is an upscaler.
+- Quality, thermal behavior, and runtime remain to be tested on Android.

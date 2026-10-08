@@ -6,7 +6,7 @@ import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import { SWEET_SPOT_SIZE } from '../../utils/imageGenAdvice';
+import { getImageTuning, getImageSizeSlider, isDirectSDXL } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
 
 // ─── Advanced Sub-Components ─────────────────────────────────────────────────
@@ -161,7 +161,11 @@ const ImageAdvancedSection: React.FC = () => {
 export const ImageGenerationSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const preset = getImageTuning(imageModel, settings);
+  const sizeOptions = getImageSizeSlider(imageModel);
+  const isXL = isDirectSDXL(imageModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const isAutoMode = settings?.imageGenerationMode === 'auto';
@@ -202,21 +206,18 @@ export const ImageGenerationSection: React.FC = () => {
       <SliderSetting
         testID="image-steps"
         label="Image Steps"
-        description="More steps = better quality but slower (4-8 fast, 20-50 high quality)"
-        value={settings?.imageSteps || 8}
-        min={4} max={50} step={1}
+        description={isXL ? "28 steps recommended for SDXL" : "More steps = better quality but slower (4-8 fast, 20-50 high quality)"}
+        value={preset.steps}
+        min={isXL ? 20 : 4} max={50} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 
       <SliderSetting
         testID="image-size"
         label="Image Size"
-        description="Output resolution (smaller = faster, larger = more detail)"
-        // Single source of truth for the floor: SD-class models render garbage below the
-        // sweet spot (256), so both this screen and the chat modal (ImageQualitySliders) share
-        // the SAME min/fallback — the surfaces can't diverge and a sub-256 value is unreachable.
-        value={Math.max(SWEET_SPOT_SIZE, settings?.imageWidth ?? SWEET_SPOT_SIZE)}
-        min={SWEET_SPOT_SIZE} max={512} step={64}
+        description={sizeOptions.description}
+        value={preset.width}
+        min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />

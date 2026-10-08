@@ -12,6 +12,7 @@ import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
 import { useSpeedStats, estimateReply, fmtSec, speedHealthLabel } from '../atlasTools/speed';
 import { localUniqueId } from '../utils/uniqueId';
+import { ImageModelTestScreen } from './ImageModelTestScreen';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
 interface Step { key: string; title: string; status: Status; detail: string }
@@ -42,7 +43,7 @@ const speedWords = (tps: number) => {
 };
 
 /** Runs a model through a quick check: will it fit, does it load, how fast it writes and reads, what it can do. */
-export const ModelTestScreen: React.FC = () => {
+const TextModelTestScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { colors } = useTheme();
@@ -249,4 +250,13 @@ export const ModelTestScreen: React.FC = () => {
       </ScrollView>
     </SafeAreaView>
   );
+};
+
+/** Keep the existing navigation route, but route image models to a real image test. */
+export const ModelTestScreen: React.FC = () => {
+  const route = useRoute<any>();
+  const id: string | undefined = route.params?.modelId;
+  const imageMatch = useAppStore(s => s.downloadedImageModels.some(m => m.id === id));
+  return route.params?.modelType === 'image' || (imageMatch && route.params?.modelType !== 'text')
+    ? <ImageModelTestScreen /> : <TextModelTestScreen />;
 };

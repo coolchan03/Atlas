@@ -50,7 +50,7 @@ jobs:
       - name: TypeScript compile check
         run: |
           ./node_modules/.bin/tsc --noEmit -p . > /tmp/atlas-types.log 2>&1 || true
-          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|MyModelsScreen|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
+          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
             echo 'New Atlas image TypeScript errors were detected'
             exit 1
           fi

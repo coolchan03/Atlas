@@ -204,6 +204,11 @@ export const MyModelsScreen: React.FC = () => {
                   {fmtBytes(m.size || 0)} · {m.backend === 'sdcpp' ? `Original ${m.nativeImageFamily?.toUpperCase() || 'image'} weights` : (m.backend || 'model').toUpperCase()}
                 </Text>
               </View>
+              <TouchableOpacity style={btn(colors.primary)} disabled={!!busy}
+                onPress={() => navigation.navigate('ModelTest', { modelId: m.id, modelType: 'image' })}>
+                <Icon name="activity" size={14} color={colors.primary} />
+                <Text style={{ color: colors.primary, marginLeft: 6 }}>Test</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={btn(colors.error)} disabled={!!busy} onPress={() => delImage(m)}>
                 <Icon name="trash-2" size={14} color={colors.error} />
                 <Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text>
@@ -216,6 +221,9 @@ export const MyModelsScreen: React.FC = () => {
                   <Icon name="plus-circle" size={14} color={colors.primary} />
                   <Text style={{ color: colors.primary, marginLeft: 6 }}>Attach LoRA / support file</Text>
                 </TouchableOpacity>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6 }}>
+                  LoRAs modify style. RealESRGAN .pth is an upscaler, not a style add-on.
+                </Text>
                 {(m.supportFiles || []).map(file => (
                   <View key={file.kind + '/' + file.name} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
                     <Text style={{ color: colors.text, fontWeight: '500', fontSize: 13 }}>{file.name}</Text>
