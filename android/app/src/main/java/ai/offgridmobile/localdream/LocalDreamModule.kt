@@ -213,6 +213,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     private var serverProcess: Process? = null
     private var currentModelPath: String? = null
     private var currentBackend: String? = null
+    private val directDiffusion = AtlasNativeDiffusion(reactApplicationContext)
+    private var directModelDir: File? = null
     private var isServerReady = false
     private val coroutineScope = CoroutineScope(Dispatchers.Default + Job())
     private var monitorJob: Job? = null
@@ -304,6 +306,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         return when (requestedBackend?.lowercase()) {
             "mnn", "cpu" -> "mnn"
             "qnn", "npu" -> "qnn"
+            "sdcpp" -> "sdcpp"
             "auto", null, "" -> "auto"
             else -> "auto"
         }
@@ -366,6 +369,23 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 }
 
                 val normalizedBackend = normalizeBackend(params)
+                if (normalizedBackend == "sdcpp") {
+                    if (!directDiffusion.available()) {
+                        safeReject(promise, "IMAGE_RUNTIME_MISSING", "Atlas native SDXL/FLUX image engine is missing from this APK")
+                        return@launch
+                    }
+                    if (!File(rawModelDir, "atlas-image.json").isFile) {
+                        safeReject(promise, "MODEL_FILES_NOT_FOUND", "Directly imported image model manifest is missing")
+                        return@launch
+                    }
+                    stopServer()
+                    directModelDir = rawModelDir
+                    currentModelPath = modelPath
+                    currentBackend = "sdcpp"
+                    isServerReady = true
+                    safeResolve(promise, true)
+                    return@launch
+                }
                 val (backend, modelDir) = resolveBackendAndDir(normalizedBackend, rawModelDir) ?: run {
                     val contents = rawModelDir.listFiles()?.map { it.name }?.joinToString(", ") ?: "empty"
                     safeReject(promise,
@@ -557,6 +577,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     }
 
     private fun stopServer() {
+        directDiffusion.cancel()
+        directModelDir = null
         monitorJob?.cancel()
         monitorJob = null
 
@@ -591,6 +613,86 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         m.putDouble("fraction", fraction)
         if (line != null) m.putString("line", line)
         try { sendEvent("LocalDreamConvert", m) } catch (_: Exception) { }
+    }
+
+    @ReactMethod
+    fun inspectAtlasImageFile(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val info = AtlasImageFiles.inspect(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("fileName") ?: "")
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("kind", info.getString("kind"))
+                    putString("family", info.getString("family"))
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "INVALID_IMAGE_FILE", e.message ?: "Cannot inspect image model", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun importAtlasImageFile(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val info = AtlasImageFiles.importPrimary(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("modelDir") ?: "",
+                    params.getString("fileName") ?: "") { p -> convertEvent("copy", p) }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("modelDir", info.getString("modelDir"))
+                    putString("family", info.getString("family"))
+                    putDouble("size", info.getDouble("size"))
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_IMPORT_FAILED", e.message ?: "Cannot import image model", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun attachAtlasImageSupport(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val support = AtlasImageFiles.attach(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("modelDir") ?: "",
+                    params.getString("fileName") ?: "", params.getString("kind") ?: "",
+                    if (params.hasKey("strength")) params.getDouble("strength") else 0.75
+                ) { p -> convertEvent("copy", p) }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("kind", support.getString("kind"))
+                    putString("name", support.getString("name"))
+                    putString("path", support.getString("path"))
+                    putDouble("size", support.getDouble("size"))
+                    putDouble("strength", support.getDouble("strength"))
+                    putBoolean("enabled", true)
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_SUPPORT_FAILED", e.message ?: "Cannot attach image support", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun isAtlasNativeDiffusionAvailable(promise: Promise) {
+        safeResolve(promise, directDiffusion.available())
+    }
+
+    @ReactMethod
+    fun modifyAtlasImageSupport(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                AtlasImageFiles.modify(reactApplicationContext,
+                    params.getString("modelDir") ?: "",
+                    params.getString("kind") ?: "",
+                    params.getString("name") ?: "",
+                    params.hasKey("delete") && params.getBoolean("delete"),
+                    !params.hasKey("enabled") || params.getBoolean("enabled"),
+                    if (params.hasKey("strength")) params.getDouble("strength") else 0.75)
+                safeResolve(promise, true)
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_SUPPORT_UPDATE_FAILED", e.message ?: "Cannot update support file", e)
+            }
+        }
     }
 
     @ReactMethod
@@ -652,8 +754,13 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                     }
                 }
                 val code = proc.waitFor()
-                if (!File(dir, "finished").exists()) {
-                    throw IOException("Conversion failed (code $code). Only Stable Diffusion 1.5 checkpoints can be converted. ${tail.joinToString(" | ").take(400)}")
+                if (code != 0 || !File(dir, "finished").exists()) {
+                    val reason = when (code) {
+                        134 -> "Image converter aborted (code 134 / SIGABRT). This may be an unsupported checkpoint architecture, a LoRA/add-on supplied as a full model, or native memory exhaustion."
+                        137 -> "Image converter was killed (code 137). Check available RAM and close other applications."
+                        else -> "Image conversion failed (exit code $code). This importer currently only accepts complete Stable Diffusion 1.5 checkpoints."
+                    }
+                    throw IOException("$reason Converter output: ${tail.joinToString(" | ").take(1000)}")
                 }
                 listOf("model.safetensors", "clip_skip_1.mnn", "clip_skip_2.mnn").forEach { File(dir, it).delete() }
                 val size = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
@@ -684,7 +791,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun isModelLoaded(promise: Promise) {
-        safeResolve(promise, serverProcess?.isAlive == true && isServerReady)
+        safeResolve(promise, (currentBackend == "sdcpp" && directModelDir?.isDirectory == true) ||
+            (serverProcess?.isAlive == true && isServerReady))
     }
 
     @ReactMethod
@@ -705,6 +813,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun cancelGeneration(promise: Promise) {
         generationCancelled.set(true)
+        directDiffusion.cancel()
         activeGenerationConnection?.let {
             try { it.disconnect() } catch (_: Exception) {}
         }
@@ -898,6 +1007,21 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
             var connection: HttpURLConnection? = null
             try {
+                if (currentBackend == "sdcpp") {
+                    val modelDir = directModelDir
+                        ?: throw IOException("No directly imported image model is loaded")
+                    generationCancelled.set(false)
+                    val result = directDiffusion.generate(modelDir.absolutePath, params,
+                        { generationCancelled.get() }, { step, total ->
+                            val m = Arguments.createMap()
+                            m.putInt("step", step)
+                            m.putInt("totalSteps", total)
+                            m.putDouble("progress", if (total > 0) step.toDouble() / total else 0.0)
+                            sendEvent(EVENT_PROGRESS, m)
+                        })
+                    safeResolve(promise, result)
+                    return@launch
+                }
                 if (!isServerReady || serverProcess?.isAlive != true) {
                     safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
                     return@launch

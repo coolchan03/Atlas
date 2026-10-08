@@ -20,6 +20,7 @@ import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
+import { inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 type ZipImportDeps = {
@@ -210,7 +211,7 @@ export function useModelsScreen() {
       return 'litert_unsupported';
     }
     const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-    const singleZip = resolvedFiles.length === 1 && /\.(zip|safetensors)$/i.test(resolvedFiles[0].name);
+    const singleZip = resolvedFiles.length === 1 && /\.(zip|safetensors?|gguf)$/i.test(resolvedFiles[0].name);
     if (!allGguf && !singleZip && !singleLitert) return 'invalid_format';
     if (resolvedFiles.length > 2) return 'too_many';
     return null;
@@ -240,7 +241,7 @@ export function useModelsScreen() {
           'Invalid File',
           resolvedFiles.length > 1
             ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
-            : 'Supported formats: .gguf (text models), .litertlm (LiteRT models), .zip (image models) and .safetensors (Stable Diffusion 1.5 image models, converted on the phone).',
+            : 'Supported formats: .gguf (language or image models), .litertlm, .zip (MNN/QNN image packages), and .safetensors (native image models).',
         ));
         return;
       }
@@ -253,9 +254,16 @@ export function useModelsScreen() {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
-      if (resolvedFiles.length === 1 && /\.safetensors$/i.test(firstFileName)) {
-        await importSafetensors(firstUri, firstFileName, { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState });
+      if (resolvedFiles.length === 1 && /\.safetensors?$/i.test(firstFileName)) {
+        await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });
         return;
+      }
+      if (resolvedFiles.length === 1 && /\.gguf$/i.test(firstFileName)) {
+        const info = await inspectNativeImageFile(firstUri, firstFileName);
+        if (info.kind === 'image' || info.kind === 'lora') {
+          await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });
+          return;
+        }
       }
       const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
       if (singleZip) {

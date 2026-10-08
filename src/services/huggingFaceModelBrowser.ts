@@ -28,8 +28,7 @@ const VARIANT_LABELS: Record<string, string> = {
   '8gen2': 'For Snapdragon 8 Gen 2/3/4/5',
 };
 
-let cachedModels: HFImageModel[] | null = null;
-let cacheTimestamp = 0;
+const cache = new Map<string, { models: HFImageModel[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 function insertSpaces(name: string): string {
@@ -78,11 +77,12 @@ async function fetchRepoFiles(repo: string): Promise<HFTreeEntry[]> {
 }
 
 export async function fetchAvailableModels(forceRefresh = false, opts?: { skipQnn?: boolean }): Promise<HFImageModel[]> {
-  if (!forceRefresh && cachedModels && Date.now() - cacheTimestamp < CACHE_TTL) {
-    return cachedModels;
-  }
-
   const fetchQnn = !opts?.skipQnn;
+  const cacheKey = fetchQnn ? 'mnn+qnn' : 'mnn';
+  const cached = cache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.models;
+  }
   const [mnnFiles, qnnFiles] = await Promise.all([
     fetchRepoFiles(REPOS.mnn),
     fetchQnn ? fetchRepoFiles(REPOS.qnn) : Promise.resolve([] as HFTreeEntry[]),
@@ -120,8 +120,7 @@ export async function fetchAvailableModels(forceRefresh = false, opts?: { skipQn
     return a.name.localeCompare(b.name);
   });
 
-  cachedModels = models;
-  cacheTimestamp = Date.now();
+  cache.set(cacheKey, { models, timestamp: Date.now() });
   return models;
 }
 

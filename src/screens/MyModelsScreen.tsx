@@ -13,6 +13,7 @@ import { uniformDownloadId } from '../services/modelDownloadService/uniformId';
 import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from '../components/CustomAlert';
 import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
+import { pickAndAttachImageSupport, modifyImageSupport, isPickerCancel, ImageSupport } from './ModelsScreen/imageSupportActions';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
 import { useSpeedStats } from '../atlasTools/speed';
@@ -100,6 +101,26 @@ export const MyModelsScreen: React.FC = () => {
     await quickImportModel({ setAlertState, setImportProgress: (p) => setBusy(p ? { id: 'import', label: `Importing ${p.fileName}`, fraction: p.fraction } : null) });
   };
 
+  const addImageSupport = async (model: ONNXImageModel) => {
+    try {
+      const attached = await pickAndAttachImageSupport(model, (label, fraction) =>
+        setBusy({ id: model.id, label, fraction }));
+      if (attached) setAlertState(showAlert('Support file attached', `${attached.name} is linked to ${model.name}.`));
+    } catch (e: any) {
+      if (!isPickerCancel(e)) setAlertState(showAlert('Could not attach image support', String(e?.message || e)));
+    } finally { setBusy(null); }
+  };
+
+  const changeImageSupport = async (model: ONNXImageModel, file: ImageSupport,
+    change: { delete?: boolean; enabled?: boolean; strength?: number }) => {
+    setBusy({ id: model.id, label: 'Updating image support', fraction: 0 });
+    try {
+      await modifyImageSupport(model, file, change);
+    } catch (e: any) {
+      setAlertState(showAlert('Could not update support', String(e?.message || e)));
+    } finally { setBusy(null); }
+  };
+
   const whisperOnDisk = WHISPER_MODELS.filter((w: any) => whisperPresent.includes(w.id));
 
   return (
@@ -175,12 +196,57 @@ export const MyModelsScreen: React.FC = () => {
 
         <Text style={{ color: colors.textSecondary, fontWeight: '700', marginTop: 8, marginBottom: 6 }}>IMAGE MODELS ({imageModels.length})</Text>
         {imageModels.map((m) => (
-          <View key={m.id} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>{m.name}</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{fmtBytes(m.size || 0)}</Text>
+          <View key={m.id} style={card}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{m.name}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                  {fmtBytes(m.size || 0)} · {m.backend === 'sdcpp' ? `Original ${m.nativeImageFamily?.toUpperCase() || 'image'} weights` : (m.backend || 'model').toUpperCase()}
+                </Text>
+              </View>
+              <TouchableOpacity style={btn(colors.error)} disabled={!!busy} onPress={() => delImage(m)}>
+                <Icon name="trash-2" size={14} color={colors.error} />
+                <Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={btn(colors.error)} onPress={() => delImage(m)}><Icon name="trash-2" size={14} color={colors.error} /><Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text></TouchableOpacity>
+            {m.backend === 'sdcpp' && (
+              <View style={{ marginTop: 8 }}>
+                <TouchableOpacity style={[btn(colors.primary), { alignSelf: 'flex-start' }]} disabled={!!busy}
+                  onPress={() => addImageSupport(m)}>
+                  <Icon name="plus-circle" size={14} color={colors.primary} />
+                  <Text style={{ color: colors.primary, marginLeft: 6 }}>Attach LoRA / support file</Text>
+                </TouchableOpacity>
+                {(m.supportFiles || []).map(file => (
+                  <View key={file.kind + '/' + file.name} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
+                    <Text style={{ color: colors.text, fontWeight: '500', fontSize: 13 }}>{file.name}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>{file.kind.toUpperCase()} · {fmtBytes(file.size)}{file.kind === 'lora' ? ` · strength ${file.strength.toFixed(2)}` : ''} · {file.enabled ? 'enabled' : 'disabled'}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                      <TouchableOpacity style={btn(colors.primary)} disabled={!!busy}
+                        onPress={() => changeImageSupport(m, file, { enabled: !file.enabled })}>
+                        <Text style={{ color: colors.primary }}>{file.enabled ? 'Disable' : 'Enable'}</Text>
+                      </TouchableOpacity>
+                      {file.kind === 'lora' && (
+                        <>
+                          <TouchableOpacity style={btn(colors.border)} disabled={!!busy}
+                            onPress={() => changeImageSupport(m, file, { strength: Math.max(0, file.strength - 0.15) })}>
+                            <Icon name="minus" size={15} color={colors.text} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={btn(colors.border)} disabled={!!busy}
+                            onPress={() => changeImageSupport(m, file, { strength: Math.min(2, file.strength + 0.15) })}>
+                            <Icon name="plus" size={15} color={colors.text} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      <TouchableOpacity style={btn(colors.error)} disabled={!!busy}
+                        onPress={() => confirm('Remove support file?', file.name + ' will be detached and deleted from Atlas.', 'Remove',
+                          () => { void changeImageSupport(m, file, { delete: true }); })}>
+                        <Icon name="trash-2" size={14} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         ))}
 

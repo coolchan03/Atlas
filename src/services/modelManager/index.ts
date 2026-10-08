@@ -482,7 +482,8 @@ class ModelManager {
 
   async getImageModelsStorageUsed(): Promise<number> {
     const models = await this.getDownloadedImageModels();
-    return models.reduce((total, model) => total + model.size, 0);
+    return models.reduce((total, model) => total + model.size +
+      (model.supportFiles || []).reduce((sum, file) => sum + file.size, 0), 0);
   }
 
   getImageModelsDirectory(): string {

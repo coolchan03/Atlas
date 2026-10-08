@@ -107,12 +107,12 @@ export function getImageModelCompatibility(
     !imageRec?.compatibleBackends ||
     imageRec.compatibleBackends.includes(model.backend as any);
 
+  // QNN binaries are compiled against device-specific HTP capabilities.
+  // A newer SoC is not proof it can run an older variant (or vice versa).
   const variantCompatible =
     !model.variant ||
     !imageRec?.qnnVariant ||
-    model.variant === imageRec.qnnVariant ||
-    imageRec.qnnVariant === '8gen2' ||
-    (imageRec.qnnVariant === '8gen1' && model.variant !== '8gen2');
+    model.variant === imageRec.qnnVariant;
 
   const isCompatible = backendCompatible && variantCompatible;
 

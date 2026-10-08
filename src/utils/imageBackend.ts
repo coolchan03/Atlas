@@ -21,6 +21,8 @@ export function imageBackendLabel(
       return 'NPU';
     case 'mnn':
       return 'GPU';
+    case 'sdcpp':
+      return 'Native diffusion (GGUF/Safetensors)';
     default:
       return fallback;
   }

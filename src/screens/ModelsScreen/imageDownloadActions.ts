@@ -449,6 +449,11 @@ export async function proceedWithDownload(
         const t0 = Date.now();
         await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
         logger.log(`[ImageDownload] moveCompletedDownload took ${Date.now() - t0}ms modelId=${modelInfo.id}`);
+        const archive = await RNFS.stat(zipPath).catch(() => null);
+        const archiveBytes = Number(archive?.size ?? 0);
+        if (archiveBytes <= 0 || (modelInfo.size > 0 && archiveBytes < modelInfo.size * 0.95)) {
+          throw new Error(`Image model download is incomplete: expected about ${Math.round(modelInfo.size / 1048576)} MB, received ${Math.round(archiveBytes / 1048576)} MB. Retry the download.`);
+        }
         if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
         await RNFS.writeFile(`${modelDir}/_zip_name`, fileName, 'utf8').catch(() => {});
         const t1 = Date.now();
@@ -489,6 +494,20 @@ export async function handleDownloadImageModel(modelInfo: ImageModelDescriptor, 
         warningMessage, hasNPU: socInfo.hasNPU, modelInfo,
         onDownloadAnyway: () => { proceedWithDownload(modelInfo, deps).catch(() => {}); },
       }, deps);
+      return;
+    }
+  }
+  if (modelInfo.size > 0 && Platform.OS === 'android') {
+    // Keep room for both the downloaded ZIP and the extracted MNN/QNN files.
+    const disk = await RNFS.getFSInfo().catch(() => null);
+    const available = Number(disk?.freeSpace ?? 0);
+    const recommended = Math.ceil(modelInfo.size * 2.3 + 300 * 1024 * 1024);
+    if (available > 0 && available < recommended) {
+      deps.setAlertState(showAlert('Low storage for image model',
+        `Atlas needs space for the ZIP and the extracted model. Recommended: ${Math.round(recommended / 1048576)} MB free; available: ${Math.round(available / 1048576)} MB.`, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Try anyway', onPress: () => { void proceedWithDownload(modelInfo, deps); } },
+        ]));
       return;
     }
   }

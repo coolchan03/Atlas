@@ -64,18 +64,18 @@ class LocalDreamGeneratorService {
     }
   }
 
-  async getLoadedBackend(): Promise<'mnn' | 'qnn' | 'coreml' | null> {
+  async getLoadedBackend(): Promise<'mnn' | 'qnn' | 'coreml' | 'sdcpp' | null> {
     if (!this.isAvailable()) return null;
     if (Platform.OS === 'ios') return (await this.isModelLoaded()) ? 'coreml' : null;
     try {
       const backend = await DiffusionModule.getLoadedBackend?.();
-      return backend === 'mnn' || backend === 'qnn' ? backend : null;
+      return backend === 'mnn' || backend === 'qnn' || backend === 'sdcpp' ? backend : null;
     } catch {
       return null;
     }
   }
 
-  async loadModel(modelPath: string, threads?: number, opts: { backend?: 'mnn' | 'qnn' | 'auto'; cpuOnly?: boolean; attentionVariant?: 'split_einsum' | 'original'; preferGpu?: boolean } = {}): Promise<boolean> {
+  async loadModel(modelPath: string, threads?: number, opts: { backend?: 'mnn' | 'qnn' | 'sdcpp' | 'auto'; cpuOnly?: boolean; attentionVariant?: 'split_einsum' | 'original'; preferGpu?: boolean } = {}): Promise<boolean> {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
     }

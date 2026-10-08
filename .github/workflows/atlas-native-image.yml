@@ -1,0 +1,79 @@
+name: Atlas native-image experimental APK
+
+# Deliberately separate from atlas-voice's published/latest APK pipeline.
+on:
+  push:
+    branches: [atlas-image-native]
+  workflow_dispatch:
+
+jobs:
+  native-image-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare Android SDK and available space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc || true
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          NDK=$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          test -n "$NDK"
+          echo "ATLAS_NDK=$NDK" >> "$GITHUB_ENV"
+      - name: Build native ARM64 diffusion CLI from pinned upstream source
+        run: |
+          git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
+          git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
+          git -C /tmp/atlas-sdcpp checkout e16d26a96a1bf59824d12cc26352aa36c25c2252
+          git -C /tmp/atlas-sdcpp submodule update --init --recursive --depth 1
+          cmake -S /tmp/atlas-sdcpp -B /tmp/atlas-sdcpp/build-android -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ATLAS_NDK/build/cmake/android.toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
+            -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF \
+            -DSD_BUILD_EXAMPLES=ON -DSD_BUILD_SHARED_LIBS=OFF -DSD_BUILD_SHARED_GGML_LIB=OFF
+          cmake --build /tmp/atlas-sdcpp/build-android --target sd-cli --parallel 3
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp /tmp/atlas-sdcpp/build-android/bin/sd-cli android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+          file android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+      - name: Install JS dependencies and patched native llama runtime
+        run: |
+          npm ci --ignore-scripts
+          node node_modules/llama.rn/install/download-native-artifacts.js
+          ./node_modules/.bin/patch-package
+      - name: TypeScript compile check
+        run: |
+          ./node_modules/.bin/tsc --noEmit -p . > /tmp/atlas-types.log 2>&1 || true
+          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|MyModelsScreen|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
+            echo 'New Atlas image TypeScript errors were detected'
+            exit 1
+          fi
+      - name: Add sherpa voice dependencies
+        run: |
+          mkdir -p android/app/libs
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            -o android/app/libs/sherpa-onnx.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
+          zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
+      - name: Assemble Android release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+      - name: Verify packaged diffusion and llama runtimes
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -l "$APK" > /tmp/atlas-apk-files.txt
+          grep -q 'lib/arm64-v8a/libatlas_sdcli.so' /tmp/atlas-apk-files.txt
+          grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
+          grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-native-image-experimental-apk
+          path: android/app/build/outputs/apk/release/app-release.apk

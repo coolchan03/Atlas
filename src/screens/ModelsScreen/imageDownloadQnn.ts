@@ -14,14 +14,13 @@ export function getQnnWarningMessage(
 
   const deviceVariant = socInfo.qnnVariant;
   const modelVariant = modelInfo.variant;
-  const compatible =
-    modelVariant === deviceVariant || deviceVariant === '8gen2' ||
-    (deviceVariant === '8gen1' && modelVariant !== '8gen2');
+  // Chip-specific compiled QNN files are only guaranteed for their matching variant.
+  const compatible = modelVariant === deviceVariant;
   if (compatible) return null;
 
-  return `This model is built for ${modelVariant === '8gen2' ? 'flagship' : modelVariant} Snapdragon chips. ` +
-    `Your device uses a ${deviceVariant === 'min' ? 'non-flagship' : deviceVariant} chip and this model will likely crash. ` +
-    `Download the non-flagship variant instead.`;
+  return `This image model uses the ${modelVariant} QNN variant, but your device requires ${deviceVariant}. ` +
+    `An incompatible compiled variant may fail on load even after a complete download. ` +
+    `Choose the ${deviceVariant} variant instead, or use a GPU (MNN) model.`;
 }
 
 export function showQnnWarningAlert(
