@@ -2,7 +2,7 @@
  *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
+import { extractImageModelZip } from '../../utils/imageZipExtractor';
 import { showAlert } from '../../components/CustomAlert';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
@@ -460,7 +460,7 @@ export async function proceedWithDownload(
         if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
         await RNFS.writeFile(`${modelDir}/_zip_name`, fileName, 'utf8').catch(() => {});
         const t1 = Date.now();
-        await unzip(zipPath, modelDir);
+        await extractImageModelZip(zipPath, modelDir);
         logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
         // A partial unzip must NEVER be marked _ready (see ensureImageExtractionComplete).
         await ensureImageExtractionComplete({ backend: modelInfo.backend, modelDir, zipPath, modelId: modelInfo.id });

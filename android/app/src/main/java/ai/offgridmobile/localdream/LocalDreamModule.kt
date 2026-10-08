@@ -673,6 +673,30 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun extractImageZip(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val archive = params.getString("zipPath") ?: throw IOException("zipPath is missing")
+                val modelDir = params.getString("modelDir") ?: throw IOException("modelDir is missing")
+                var last = 0L
+                val result = AtlasZipExtractor.extract(reactApplicationContext, archive, modelDir) { count, bytes ->
+                    if (bytes - last >= 16L * 1024 * 1024) {
+                        last = bytes
+                        convertEvent("extract", -1.0, "Extracted $count files")
+                    }
+                }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putInt("files", result.files)
+                    putDouble("bytes", result.bytes.toDouble())
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "extractImageZip failed", e)
+                safeReject(promise, "IMAGE_UNZIP_FAILED", e.message ?: "Cannot extract image ZIP", e)
+            }
+        }
+    }
+
+    @ReactMethod
     fun isAtlasNativeDiffusionAvailable(promise: Promise) {
         safeResolve(promise, directDiffusion.available())
     }

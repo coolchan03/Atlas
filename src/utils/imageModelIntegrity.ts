@@ -17,7 +17,7 @@
  * coreml (iOS) uses a different layout validated elsewhere, so it's not checked here.
  */
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
+import { extractImageModelZip } from './imageZipExtractor';
 import { ImageModelIncompleteError } from './modelLoadErrors';
 import logger from './logger';
 
@@ -165,7 +165,7 @@ export async function ensureImageExtractionComplete(opts: {
   let result = await validateImageModelDir(modelDir, backend);
   if (!result.complete) {
     logger.warn(`[ImageDownload] incomplete extraction ${modelId} missing=[${result.missing.join(',')}] — re-unzipping once`);
-    await unzip(zipPath, modelDir);
+    await extractImageModelZip(zipPath, modelDir);
     result = await validateImageModelDir(modelDir, backend);
   }
   if (!result.complete) {

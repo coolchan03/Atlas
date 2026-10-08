@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
@@ -26,7 +27,7 @@ export async function quickImportModel(deps: {
       if (/\.safetensors?$/i.test(file.name)) {
         return await importNativeImageFile(file.uri, file.name, deps);
       }
-      if (/\.gguf$/i.test(file.name)) {
+      if (Platform.OS === 'android' && /\.gguf$/i.test(file.name)) {
         const info = await inspectNativeImageFile(file.uri, file.name);
         if (info.kind === 'image' || info.kind === 'lora') {
           return await importNativeImageFile(file.uri, file.name, deps);

@@ -43,6 +43,10 @@ The existing optimized MNN/QNN ZIP model catalog is retained.
 - Run ESRGAN PTH upscaling as a second step.
 - Download DreamShaper V8 MNN and chipset-compatible QNN ZIPs.
 - Check download sizes, extraction, ready marker and generation.
+- Check WorkManager retries and resumes large ZIPs after a stalled network connection,
+  read timeout, and temporary HTTP 429/5xx response (maximum three retries).
+- All Android model ZIP flows now use a streaming native extractor with ZIP path
+  validation instead of relying entirely on the JavaScript ZIP bridge.
 - Confirm existing text-GGUF/mmproj and MNN/QNN paths still work.
 
 ## Attribution

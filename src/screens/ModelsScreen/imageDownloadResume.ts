@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
+import { extractImageModelZip } from '../../utils/imageZipExtractor';
 import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -145,7 +145,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
     await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
     try {
-      await unzip(zipPath, modelDir);
+      await extractImageModelZip(zipPath, modelDir);
       await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
     } catch (error) {
       await RNFS.unlink(modelDir).catch(() => {});
@@ -179,7 +179,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
   await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
   try {
-    await unzip(zipPath, modelDir);
+    await extractImageModelZip(zipPath, modelDir);
     await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
   } catch (error) {
     await RNFS.unlink(modelDir).catch(() => {});

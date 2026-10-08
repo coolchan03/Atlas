@@ -101,6 +101,13 @@ class WorkerDownload(
 
     private suspend fun handleDownloadException(downloadId: String, download: DownloadEntity, e: Exception): Result {
         if (isStopped) return handleStoppedState(downloadId, download, download.downloadedBytes)
+        // Large Hugging Face/Xet transfers can stall briefly on mobile networks.
+        // Keep the partial file and resume using HTTP Range on WorkManager retry.
+        if (e is java.io.IOException && runAttemptCount < 3) {
+            Log.w(TAG, "Transient download error; retrying id=$downloadId attempt=$runAttemptCount", e)
+            downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+            return Result.retry()
+        }
         return failDownload(downloadId, download, DownloadReason.fromThrowable(e))
     }
 
@@ -171,6 +178,11 @@ class WorkerDownload(
             code == 416 -> {
                 if (!targetFile.delete()) Log.w(TAG, "Failed to delete file on 416: ${targetFile.path}")
                 failDownload(downloadId, download, DownloadReason.HTTP_416)
+            }
+            (code == 429 || code in 500..599) && runAttemptCount < 3 -> {
+                Log.w(TAG, "Temporary download HTTP $code; retrying id=$downloadId attempt=$runAttemptCount")
+                downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+                Result.retry()
             }
             !response.isSuccessful -> failDownload(downloadId, download, DownloadReason.fromHttpCode(code))
             else -> null
@@ -289,6 +301,8 @@ class WorkerDownload(
 
         val httpClient: OkHttpClient = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()

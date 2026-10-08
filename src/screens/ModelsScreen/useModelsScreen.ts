@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
+import { extractImageModelZip } from '../../utils/imageZipExtractor';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
@@ -117,7 +117,7 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
   setImportProgress({ fraction: 0.5, fileName });
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
   setImportProgress({ fraction: 0.6, fileName });
-  await unzip(zipPath, modelDir);
+  await extractImageModelZip(zipPath, modelDir);
   setImportProgress({ fraction: 0.85, fileName });
   const dirContents = await RNFS.readDir(modelDir);
   const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
@@ -258,7 +258,7 @@ export function useModelsScreen() {
         await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });
         return;
       }
-      if (resolvedFiles.length === 1 && /\.gguf$/i.test(firstFileName)) {
+      if (Platform.OS === 'android' && resolvedFiles.length === 1 && /\.gguf$/i.test(firstFileName)) {
         const info = await inspectNativeImageFile(firstUri, firstFileName);
         if (info.kind === 'image' || info.kind === 'lora') {
           await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });
