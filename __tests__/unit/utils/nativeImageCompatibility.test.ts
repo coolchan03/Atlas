@@ -1,4 +1,4 @@
-import { getMissingImageSupport, getRequiredImageSupport, isRunnableNativeModel } from '../../../src/utils/nativeImageCompatibility';
+import { getMissingImageSupport, getMissingImageSupportGuides, getRequiredImageSupport, isRunnableNativeModel } from '../../../src/utils/nativeImageCompatibility';
 
 describe('native image family support checks', () => {
   it('requires Z-Image and Anima to have a VAE and Qwen LLM encoder', () => {
@@ -6,6 +6,14 @@ describe('native image family support checks', () => {
     expect(getRequiredImageSupport(model)).toEqual(['vae', 'llm']);
     expect(getRequiredImageSupport({ nativeImageFamily: 'anima' })).toEqual(['vae', 'llm']);
     expect(getMissingImageSupport({ ...model, supportFiles: [] })).toEqual(['vae', 'llm']);
+  });
+  it('gives Anima owners the exact official VAE and Qwen prompt-encoder files', () => {
+    const guides = getMissingImageSupportGuides({nativeImageFamily: 'anima', supportFiles: []});
+    expect(guides).toHaveLength(2);
+    expect(guides[0]).toMatchObject({kind: 'vae', fileName: 'qwen_image_vae.safetensors'});
+    expect(guides[1]).toMatchObject({kind: 'llm', fileName: 'qwen_3_06b_base.safetensors'});
+    expect(guides[1].label).toContain('not a chat LLM');
+    expect(guides.every(guide => guide.downloadUrl?.startsWith('https://huggingface.co/circlestone-labs/Anima/'))).toBe(true);
   });
   it('ignores disabled attachments and prevents missing Chroma T5', () => {
     const model = { nativeImageFamily: 'chroma' as const,

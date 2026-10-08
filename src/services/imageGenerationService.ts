@@ -11,7 +11,7 @@ import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
 
 import { getImageTuning, getImageGuidance } from '../utils/nativeImageTuning';
-import { getMissingImageSupport, imageFamilyDisplay, isRunnableNativeModel } from '../utils/nativeImageCompatibility';
+import { getMissingImageSupportGuides, imageFamilyDisplay, isRunnableNativeModel } from '../utils/nativeImageCompatibility';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
@@ -443,10 +443,10 @@ class ImageGenerationService {
         '. Use a compatible checkpoint instead of attempting incorrect inference.');
     }
     if (activeImageModel.backend === 'sdcpp') {
-      const missing = getMissingImageSupport(activeImageModel);
+      const missing = getMissingImageSupportGuides(activeImageModel);
       if (missing.length) return this._fail(imageFamilyDisplay(activeImageModel.nativeImageFamily) +
-        ' requires additional files: ' + missing.join(', ') +
-        '. Attach them to this image model under My models before generating.');
+        ' needs these supporting files: ' + missing.map(item => item.label).join(', ') +
+        '. In My models, download the listed files and attach them to this image model before generating.');
     }
 
     const preset = getImageTuning(activeImageModel, settings);

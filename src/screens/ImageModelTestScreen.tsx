@@ -11,7 +11,7 @@ import { imageGenerationService } from '../services/imageGenerationService';
 import { localDreamGeneratorService } from '../services/localDreamGenerator';
 import type { GeneratedImage, ONNXImageModel } from '../types';
 import { imageTestPreset } from '../utils/nativeImageTuning';
-import { getMissingImageSupport, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
+import { getMissingImageSupportGuides, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail';
 type TestItem = { key: string; title: string; status: Status; detail: string };
@@ -86,10 +86,11 @@ export const ImageModelTestScreen: React.FC = () => {
       if (!isRunnableNativeModel(model)) {
         throw new Error('Unsupported architecture: ' + imageFamilyDisplay(model.nativeImageFamily));
       }
-      const missing = getMissingImageSupport(model);
+      const missing = getMissingImageSupportGuides(model);
       if (missing.length) {
         throw new Error(imageFamilyDisplay(model.nativeImageFamily) +
-          ' needs these support files: ' + missing.join(', ') + '. Attach them first.');
+          ' needs: ' + missing.map(item => item.label).join(', ') +
+          '. Open My models for direct links and attachment controls.');
       }
       update('files', model.nativeImageFamily === 'unknown' ? 'warn' : 'ok',
         (model.nativeImageFamily || model.backend || 'image').toUpperCase() +

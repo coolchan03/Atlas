@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -14,7 +14,7 @@ import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from
 import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
 import { pickAndAttachImageSupport, modifyImageSupport, isPickerCancel, ImageSupport } from './ModelsScreen/imageSupportActions';
-import { getMissingImageSupport, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
+import { getMissingImageSupportGuides, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
 import { useSpeedStats } from '../atlasTools/speed';
@@ -215,10 +215,33 @@ export const MyModelsScreen: React.FC = () => {
                 <Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text>
               </TouchableOpacity>
             </View>
-            {m.backend === 'sdcpp' && getMissingImageSupport(m).length > 0 && (
-              <Text style={{ color: colors.error, fontSize: 12, marginTop: 8 }}>
-                Required to generate: {getMissingImageSupport(m).join(', ')}. Attach these files below.
-              </Text>
+            {m.backend === 'sdcpp' && getMissingImageSupportGuides(m).length > 0 && (
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ color: colors.error, fontSize: 12, fontWeight: '600' }}>
+                  Missing components. Download and attach these to {m.name}:
+                </Text>
+                {getMissingImageSupportGuides(m).map(guide => (
+                  <View key={guide.kind} style={{ marginTop: 7 }}>
+                    <Text style={{ color: colors.text, fontSize: 12 }}>
+                      {guide.label}{guide.fileName ? ' ? ' + guide.fileName : ''}
+                    </Text>
+                    {guide.downloadUrl && (
+                      <TouchableOpacity
+                        accessibilityRole="link"
+                        onPress={() => Linking.openURL(guide.downloadUrl!).catch((err: unknown) =>
+                          setAlertState(showAlert('Could not open download', String(err))))}
+                        style={{ paddingVertical: 5 }}>
+                        <Text style={{ color: colors.primary, fontSize: 12 }}>
+                          Open official file on Hugging Face
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 5 }}>
+                  After downloading, tap Attach LoRA / support file below. These are not chat models or style LoRAs.
+                </Text>
+              </View>
             )}
             {m.backend === 'sdcpp' && (
               <View style={{ marginTop: 8 }}>
