@@ -3,7 +3,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { importZipFromPath, PackResult } from './packImport';
 
 /** Atlas library packs, built automatically on GitHub (release "atlas-library") and downloaded on demand. */
-export const ATLAS_REPO = 'coolchan03/Off-Grid';
+export const ATLAS_REPO = 'coolchan03/Atlas';
 export const ATLAS_LIBRARY_PROJECT = 'Atlas - Library';
 
 export interface AtlasPack { name: string; label: string; size: number; url: string; updated: string }

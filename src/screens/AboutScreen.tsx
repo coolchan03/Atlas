@@ -64,7 +64,7 @@ export const AboutScreen: React.FC = () => {
             staggerMs={40}
             trigger={focusTrigger}
             style={[styles.navItem, styles.navItemLast]}
-            onPress={() => Linking.openURL('https://github.com/coolchan03/Off-Grid')}
+            onPress={() => Linking.openURL('https://github.com/coolchan03/Atlas')}
           >
             <View style={styles.navItemIcon}>
               <Icon name="github" size={16} color={colors.textSecondary} />

@@ -7,7 +7,7 @@ import { useAtlasVoiceStore } from './store';
  * "atlas-voices" release) and run on the phone. Much more human than the phone's built-in voice.
  */
 const Native: any = NativeModules.AtlasTts;
-const BASE = 'https://github.com/coolchan03/Off-Grid/releases/download/atlas-voices/';
+const BASE = 'https://github.com/coolchan03/Atlas/releases/download/atlas-voices/';
 
 export interface NeuralVoice { id: string; name: string; desc: string; size: string; speakers?: { sid: number; name: string; female: boolean; accent: string }[] }
 

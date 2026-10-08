@@ -8,7 +8,7 @@
 
 **For emergencies, travel and life off the grid, for becoming an expert at anything, and for a private assistant you can talk to. Everything runs on the device. No internet needed once it is set up.**
 
-[**Download the latest Android app (APK)**](https://github.com/coolchan03/Off-Grid/releases/latest)
+[**Download the latest Android app (APK)**](https://github.com/coolchan03/Atlas/releases/latest)
 
 </div>
 
@@ -16,7 +16,7 @@
 
 ## Install
 
-1. On your Android phone or tablet, open the [latest release](https://github.com/coolchan03/Off-Grid/releases/latest) and download the `Atlas-<number>.apk` file.
+1. On your Android phone or tablet, open the [latest release](https://github.com/coolchan03/Atlas/releases/latest) and download the `Atlas-<number>.apk` file.
 2. Open it and allow installing from this source when Android asks. New versions install over the old one and keep your chats and settings.
 3. Open **Models** and download a text model (a small one like Qwen or Gemma 1-4B runs well on most phones). Do this on Wi-Fi.
 4. Optional, while you still have internet: download a natural voice (**Models → Voice**), the Atlas library packs and offline encyclopedias (**Settings → Offline Library**), and a map of your area (**Atlas → Maps**).

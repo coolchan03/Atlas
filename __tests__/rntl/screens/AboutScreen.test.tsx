@@ -12,7 +12,11 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({
     return <TouchableOpacity style={style} onPress={onPress} testID={testID}>{children}</TouchableOpacity>;
   },
 }));
-jest.mock('../../../package.json', () => ({ version: '1.0.0' }), { virtual: true });
+jest.mock('../../../package.json', () => ({ version: '1.0.0', dependencies: { 'llama.rn': 'test' } }), { virtual: true });
+jest.mock('llama.rn', () => ({
+  BuildInfo: { number: 'test' },
+  getBackendDevicesInfo: jest.fn().mockResolvedValue([]),
+}));
 
 import { AboutScreen } from '../../../src/screens/AboutScreen';
 
@@ -30,6 +34,6 @@ describe('AboutScreen — Atlas identity', () => {
     const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
     const { getByText } = render(<AboutScreen />);
     fireEvent.press(getByText('Open Source'));
-    expect(openURL).toHaveBeenCalledWith('https://github.com/coolchan03/Off-Grid');
+    expect(openURL).toHaveBeenCalledWith('https://github.com/coolchan03/Atlas');
   });
 });
