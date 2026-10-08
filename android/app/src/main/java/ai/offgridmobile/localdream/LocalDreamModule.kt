@@ -641,6 +641,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 safeResolve(promise, Arguments.createMap().apply {
                     putString("modelDir", info.getString("modelDir"))
                     putString("family", info.getString("family"))
+                    putString("variant", info.getString("variant"))
                     putDouble("size", info.getDouble("size"))
                 })
             } catch (e: Exception) {

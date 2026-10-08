@@ -10,7 +10,7 @@ type Deps = {
   setImportProgress: (progress: Progress) => void;
 };
 
-export type ImageFileInfo = { kind: 'image' | 'lora' | 'unknown'; family: 'sd15' | 'sdxl' | 'flux' | 'unknown' };
+export type ImageFileInfo = { kind: 'image' | 'lora' | 'unsupported' | 'unknown'; family: NonNullable<ONNXImageModel['nativeImageFamily']> };
 
 export async function inspectNativeImageFile(uri: string, name: string): Promise<ImageFileInfo> {
   if (Platform.OS !== 'android' || !NativeModules.LocalDreamModule?.inspectAtlasImageFile) {
@@ -30,6 +30,11 @@ export async function importNativeImageFile(uri: string, fileName: string, deps:
   const info = await inspectNativeImageFile(uri, fileName);
   if (info.kind === 'lora') {
     deps.setAlertState(showAlert('Style add-on', 'This is a LoRA. Open My models, then attach it to a compatible image model.'));
+    return false;
+  }
+  if (info.kind === 'unsupported') {
+    deps.setAlertState(showAlert('Unsupported architecture',
+      'Pony V7 uses AuraFlow. This native engine does not support AuraFlow yet, so Atlas will not incorrectly import it as SDXL or a language GGUF.'));
     return false;
   }
   if (info.kind !== 'image') {
@@ -56,6 +61,7 @@ export async function importNativeImageFile(uri: string, fileName: string, deps:
       modelPath: r.modelDir,
       backend: 'sdcpp',
       nativeImageFamily: r.family || info.family,
+      nativeImageVariant: r.variant === 'turbo' ? 'turbo' : 'base',
       downloadedAt: new Date().toISOString(),
       size: r.size,
       supportFiles: [],

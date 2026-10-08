@@ -6,7 +6,7 @@ import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import { getImageTuning, getImageSizeSlider, isDirectSDXL } from '../../utils/nativeImageTuning';
+import { getImageTuning, getImageSizeSlider, isDirectSDXL, getImageGuidance } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
 
 // ─── Advanced Sub-Components ─────────────────────────────────────────────────
@@ -124,7 +124,8 @@ const DetectionMethodRow: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
 
   return (
     <>
@@ -132,7 +133,7 @@ const ImageAdvancedSection: React.FC = () => {
         testID="image-guidance-scale"
         label="Guidance Scale"
         description="Higher = follows prompt more strictly"
-        value={settings?.imageGuidanceScale || 7.5}
+        value={getImageGuidance(imageModel, settings?.imageGuidanceScale)}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />

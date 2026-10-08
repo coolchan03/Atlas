@@ -299,8 +299,9 @@ export interface ONNXImageModel {
   size: number;
   style?: string;
   backend?: 'mnn' | 'qnn' | 'coreml' | 'sdcpp';
-  nativeImageFamily?: 'sd15' | 'sdxl' | 'flux' | 'unknown';
-  supportFiles?: Array<{ kind: 'lora' | 'vae' | 'clip_l' | 't5xxl' | 'upscaler'; name: string; path: string; size: number; enabled: boolean; strength: number }>;
+  nativeImageFamily?: 'sd15' | 'sdxl' | 'flux' | 'z_image' | 'anima' | 'chroma' | 'auraflow' | 'unknown';
+  nativeImageVariant?: 'base' | 'turbo';
+  supportFiles?: Array<{ kind: 'lora' | 'vae' | 'clip_l' | 't5xxl' | 'llm' | 'upscaler'; name: string; path: string; size: number; enabled: boolean; strength: number }>;
   attentionVariant?: 'split_einsum' | 'original';
 }
 

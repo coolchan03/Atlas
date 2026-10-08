@@ -14,6 +14,7 @@ import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from
 import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
 import { pickAndAttachImageSupport, modifyImageSupport, isPickerCancel, ImageSupport } from './ModelsScreen/imageSupportActions';
+import { getMissingImageSupport, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
 import { useSpeedStats } from '../atlasTools/speed';
@@ -201,7 +202,7 @@ export const MyModelsScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontWeight: '600' }}>{m.name}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                  {fmtBytes(m.size || 0)} · {m.backend === 'sdcpp' ? `Original ${m.nativeImageFamily?.toUpperCase() || 'image'} weights` : (m.backend || 'model').toUpperCase()}
+                  {fmtBytes(m.size || 0)} · {m.backend === 'sdcpp' ? `Original ${imageFamilyDisplay(m.nativeImageFamily)} weights` : (m.backend || 'model').toUpperCase()}
                 </Text>
               </View>
               <TouchableOpacity style={btn(colors.primary)} disabled={!!busy}
@@ -214,6 +215,11 @@ export const MyModelsScreen: React.FC = () => {
                 <Text style={{ color: colors.error, marginLeft: 6 }}>Delete</Text>
               </TouchableOpacity>
             </View>
+            {m.backend === 'sdcpp' && getMissingImageSupport(m).length > 0 && (
+              <Text style={{ color: colors.error, fontSize: 12, marginTop: 8 }}>
+                Required to generate: {getMissingImageSupport(m).join(', ')}. Attach these files below.
+              </Text>
+            )}
             {m.backend === 'sdcpp' && (
               <View style={{ marginTop: 8 }}>
                 <TouchableOpacity style={[btn(colors.primary), { alignSelf: 'flex-start' }]} disabled={!!busy}

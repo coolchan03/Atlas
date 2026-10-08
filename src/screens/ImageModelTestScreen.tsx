@@ -10,6 +10,8 @@ import { activeModelService } from '../services/activeModelService';
 import { imageGenerationService } from '../services/imageGenerationService';
 import { localDreamGeneratorService } from '../services/localDreamGenerator';
 import type { GeneratedImage, ONNXImageModel } from '../types';
+import { imageTestPreset } from '../utils/nativeImageTuning';
+import { getMissingImageSupport, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail';
 type TestItem = { key: string; title: string; status: Status; detail: string };
@@ -24,17 +26,7 @@ const emptyItems = (): TestItem[] => TITLES.map(([key, title]) => ({ key, title,
 const SMILE = 'A single simple flat yellow smiley face icon: one bright yellow round circle with two small black dot eyes and one curved black smiling mouth, centered on a plain white background, clean vector art, no text.';
 const fmt = (s: number) => Math.floor(s / 60) + 'm ' + s % 60 + 's';
 function settingsFor(model: ONNXImageModel, quality: boolean) {
-  const family = model.nativeImageFamily;
-  if (model.backend !== 'sdcpp') {
-    const settings = useAppStore.getState().settings;
-    return { steps: quality ? Math.max(20, settings.imageSteps || 8) : 8,
-      width: settings.imageWidth || 256, height: settings.imageHeight || 256,
-      guidanceScale: settings.imageGuidanceScale || 7.5 };
-  }
-  const size = family === 'sdxl' ? (quality ? 1024 : 512) :
-    family === 'flux' ? (quality ? 768 : 512) : 512;
-  return { steps: quality ? (family === 'flux' ? 24 : 28) : 8,
-    width: size, height: size, guidanceScale: family === 'flux' ? 1 : 7 };
+  return imageTestPreset(model, quality, useAppStore.getState().settings);
 }
 
 export const ImageModelTestScreen: React.FC = () => {
@@ -91,11 +83,13 @@ export const ImageModelTestScreen: React.FC = () => {
         throw new Error('An image is already being generated. Finish or cancel it first.');
       }
       update('files', 'run', 'Checking model family and attached components...');
-      const enabled = (model.supportFiles || []).filter(file => file.enabled);
-      if (model.backend === 'sdcpp' && model.nativeImageFamily === 'flux') {
-        const missing = (['vae', 'clip_l', 't5xxl'] as const).filter(kind =>
-          !enabled.some(file => file.kind === kind));
-        if (missing.length) throw new Error('FLUX requires these attached components: ' + missing.join(', '));
+      if (!isRunnableNativeModel(model)) {
+        throw new Error('Unsupported architecture: ' + imageFamilyDisplay(model.nativeImageFamily));
+      }
+      const missing = getMissingImageSupport(model);
+      if (missing.length) {
+        throw new Error(imageFamilyDisplay(model.nativeImageFamily) +
+          ' needs these support files: ' + missing.join(', ') + '. Attach them first.');
       }
       update('files', model.nativeImageFamily === 'unknown' ? 'warn' : 'ok',
         (model.nativeImageFamily || model.backend || 'image').toUpperCase() +

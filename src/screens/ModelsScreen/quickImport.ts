@@ -29,7 +29,7 @@ export async function quickImportModel(deps: {
       }
       if (Platform.OS === 'android' && /\.gguf$/i.test(file.name)) {
         const info = await inspectNativeImageFile(file.uri, file.name);
-        if (info.kind === 'image' || info.kind === 'lora') {
+        if (info.kind === 'image' || info.kind === 'lora' || info.kind === 'unsupported') {
           return await importNativeImageFile(file.uri, file.name, deps);
         }
       }

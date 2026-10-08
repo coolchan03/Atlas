@@ -9,8 +9,9 @@ import logger from '../utils/logger';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
-import { DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
-import { getImageTuning } from '../utils/nativeImageTuning';
+
+import { getImageTuning, getImageGuidance } from '../utils/nativeImageTuning';
+import { getMissingImageSupport, imageFamilyDisplay, isRunnableNativeModel } from '../utils/nativeImageCompatibility';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
@@ -437,10 +438,20 @@ class ImageGenerationService {
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
     if (!activeImageModel) return this._fail('No image model selected');
+    if (!isRunnableNativeModel(activeImageModel)) {
+      return this._fail('Unsupported image architecture: ' + imageFamilyDisplay(activeImageModel.nativeImageFamily) +
+        '. Use a compatible checkpoint instead of attempting incorrect inference.');
+    }
+    if (activeImageModel.backend === 'sdcpp') {
+      const missing = getMissingImageSupport(activeImageModel);
+      if (missing.length) return this._fail(imageFamilyDisplay(activeImageModel.nativeImageFamily) +
+        ' requires additional files: ' + missing.join(', ') +
+        '. Attach them to this image model under My models before generating.');
+    }
 
     const preset = getImageTuning(activeImageModel, settings);
     const steps = params.steps ?? preset.steps;
-    const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE;
+    const guidanceScale = params.guidanceScale || getImageGuidance(activeImageModel, settings.imageGuidanceScale);
     // Native SDXL defaults differ from compressed, low-resolution mobile models.
     const imageWidth = preset.width;
     const imageHeight = preset.height;

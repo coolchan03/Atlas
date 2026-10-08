@@ -50,10 +50,13 @@ jobs:
       - name: TypeScript compile check
         run: |
           ./node_modules/.bin/tsc --noEmit -p . > /tmp/atlas-types.log 2>&1 || true
-          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
+          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|nativeImageCompatibility|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|quickImport|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
             echo 'New Atlas image TypeScript errors were detected'
             exit 1
           fi
+      - name: Run image model compatibility tests
+        run: |
+          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts
       - name: Add sherpa voice dependencies
         run: |
           mkdir -p android/app/libs
@@ -62,6 +65,9 @@ jobs:
             https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
           echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
+      - name: Test native image family classifier
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --no-daemon --console=plain
       - name: Assemble Android release APK
         working-directory: android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon

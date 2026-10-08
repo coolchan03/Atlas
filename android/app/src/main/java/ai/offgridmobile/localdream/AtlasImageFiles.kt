@@ -12,7 +12,7 @@ import java.nio.ByteOrder
 
 /** Streamed, non-converting import for SDXL, SD1.x and FLUX image weights. */
 internal object AtlasImageFiles {
-    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "upscaler")
+    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "llm", "upscaler")
     fun inspect(ctx: Context, uriText: String, fileName: String): JSONObject {
         val lower = fileName.lowercase()
         val result = JSONObject().put("kind", "unknown").put("family", "unknown")
@@ -43,11 +43,13 @@ internal object AtlasImageFiles {
                         arch = String(peek, pos + 12, valueLength.toInt(), Charsets.UTF_8).lowercase()
                     }
                 }
-                val flux = arch == "flux"
-                val sdxl = arch == "sdxl" || arch == "stable-diffusion-xl"
-                val sd = arch == "sd" || arch == "stable-diffusion"
-                result.put("kind", if (flux || sdxl || sd) "image" else "unknown")
-                result.put("family", if (flux) "flux" else if (sdxl) "sdxl" else if (sd) "sd15" else "unknown")
+                val family = AtlasImageArchitecture.classify(fileName, arch)
+                result.put("kind", when {
+                    family == "auraflow" -> "unsupported"
+                    AtlasImageArchitecture.supported(family) -> "image"
+                    else -> "unknown"
+                })
+                result.put("family", family)
             } else if (lower.endsWith(".safetensors") || lower.endsWith(".safetensor")) {
                 val length = ByteBuffer.wrap(first).order(ByteOrder.LITTLE_ENDIAN).long
                 if (length <= 2 || length > 24L * 1024L * 1024L) {
@@ -76,13 +78,14 @@ internal object AtlasImageFiles {
                 val lora = header.contains("lora_up") || header.contains("lora_down") ||
                     header.contains("lora_a.weight") || header.contains("lora_b.weight") ||
                     header.contains("lora_unet") || header.contains("lycoris")
-                val flux = header.contains("double_blocks.") && header.contains("single_blocks.")
-                val sdxl = header.contains("conditioner.embedders.1.") ||
-                    header.contains("text_encoder_2.") || header.contains("clip_g.")
-                val sd = header.contains("model.diffusion_model.") ||
-                    header.contains("diffusion_model.") || header.contains("unet.")
-                result.put("kind", if (lora) "lora" else if (flux || sdxl || sd) "image" else "unknown")
-                result.put("family", if (flux) "flux" else if (sdxl) "sdxl" else if (sd) "sd15" else "unknown")
+                val family = AtlasImageArchitecture.classify(fileName, tensorKeys = header)
+                result.put("kind", when {
+                    lora -> "lora"
+                    family == "auraflow" -> "unsupported"
+                    AtlasImageArchitecture.supported(family) -> "image"
+                    else -> "unknown"
+                })
+                result.put("family", family)
             } else throw IOException("Unsupported image weight extension")
         } ?: throw IOException("Cannot read selected file")
         return result
@@ -135,6 +138,12 @@ internal object AtlasImageFiles {
         if (info.getString("kind") == "lora") {
             throw IOException("This file is a LoRA. Attach it to an image model instead of importing it as a checkpoint.")
         }
+        val family = info.getString("family")
+        if (!AtlasImageArchitecture.supported(family)) {
+            throw IOException(if (family == "auraflow")
+                "AuraFlow / Pony V7 is not supported by this Atlas native engine yet."
+                else "Cannot identify a supported image architecture. Atlas will not guess and render corrupt images.")
+        }
         val folder = privateDir(ctx, dir)
         val ext = if (name.lowercase().endsWith(".gguf")) "gguf" else "safetensors"
         val target = File(folder, "model.$ext")
@@ -144,12 +153,14 @@ internal object AtlasImageFiles {
             target.delete()
             throw IOException("Incomplete safetensors checkpoint: expected $expected bytes but copied $size. Redownload the full file.")
         }
-        val manifest = JSONObject().put("family", info.getString("family"))
+        val manifest = JSONObject().put("family", family)
+            .put("variant", AtlasImageArchitecture.variant(name))
             .put("primary", target.name).put("support", JSONArray())
         File(folder, "atlas-image.json").writeText(manifest.toString())
         File(folder, "_ready").writeText("")
         return JSONObject().put("modelDir", folder.absolutePath).put("size", size)
-            .put("family", info.getString("family")).put("kind", info.getString("kind"))
+            .put("family", family).put("variant", AtlasImageArchitecture.variant(name))
+            .put("kind", info.getString("kind"))
     }
 
     fun modify(ctx: Context, dir: String, kind: String, name: String,
@@ -190,8 +201,8 @@ internal object AtlasImageFiles {
         if (kind !in kinds) throw IOException("Unknown image support file type")
         val suffix = name.substringAfterLast('.', "").lowercase()
         val permitted = if (kind == "upscaler") setOf("pth", "pt", "safetensors", "gguf")
-            else if (kind == "clip_l" || kind == "t5xxl") setOf("safetensors", "gguf")
-            else setOf("safetensors")
+            else if (kind == "clip_l" || kind == "t5xxl" || kind == "llm") setOf("safetensors", "safetensor", "gguf")
+            else setOf("safetensors", "safetensor")
         if (suffix !in permitted) throw IOException(".$suffix is not a supported $kind file type")
         val folder = privateDir(ctx, dir)
         val file = File(folder, "atlas-image.json")

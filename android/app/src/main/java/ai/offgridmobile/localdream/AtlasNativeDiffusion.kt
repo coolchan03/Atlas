@@ -29,6 +29,10 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val primary = File(dir, manifest.getString("primary")).canonicalFile
         if (primary.parentFile != dir || !primary.isFile) throw IOException("Image weights are missing")
         val family = manifest.optString("family", "unknown")
+        val variant = manifest.optString("variant", "base")
+        if (!AtlasImageArchitecture.supported(family)) {
+            throw IOException("Unsupported image architecture: " + family + ". Import a supported checkpoint.")
+        }
         val executable = File(context.applicationInfo.nativeLibraryDir, EXECUTABLE)
         if (!executable.isFile) throw IOException("Native image runtime is missing from this APK")
 
@@ -42,7 +46,8 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val id = UUID.randomUUID().toString()
         val output = File(File(context.filesDir, "generated_images").apply { mkdirs() }, "$id.png")
         val cmd = mutableListOf(executable.absolutePath)
-        if (family == "flux") cmd.addAll(listOf("--diffusion-model", primary.absolutePath))
+        if (family in setOf("flux", "z_image", "anima", "chroma"))
+            cmd.addAll(listOf("--diffusion-model", primary.absolutePath))
         else cmd.addAll(listOf("-m", primary.absolutePath))
         val attachments = mutableMapOf<String, File>()
         val support = manifest.optJSONArray("support")
@@ -64,20 +69,27 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 prompt += "<lora:$name:$strength>"
             } else attachments[kind] = path
         }
-        if (family == "flux") {
-            val missing = listOf("vae", "clip_l", "t5xxl").filter { !attachments.containsKey(it) }
-            if (missing.isNotEmpty()) throw IOException("FLUX needs VAE, CLIP-L and T5XXL. Missing: " + missing.joinToString(", "))
+        val missing = AtlasImageArchitecture.missing(family, attachments.keys)
+        if (missing.isNotEmpty()) {
+            throw IOException(family.uppercase() + " is missing required components: " +
+                missing.joinToString(", ") + ". Attach them in My models before generating.")
         }
         for ((type, flag) in listOf("vae" to "--vae", "clip_l" to "--clip_l",
-                "t5xxl" to "--t5xxl")) {
+                "t5xxl" to "--t5xxl", "llm" to "--llm")) {
             attachments[type]?.let { cmd.addAll(listOf(flag, it.absolutePath)) }
         }
         if (hasLora) cmd.addAll(listOf("--lora-model-dir", loraDir.absolutePath))
         cmd.addAll(listOf("-p", prompt, "-o", output.absolutePath,
             "-W", width.toString(), "-H", height.toString(),
             "--steps", steps.toString(), "-s", seed.toString(),
-            "--cfg-scale", (if (family == "flux") 1.0 else scale.coerceIn(1.0, 15.0)).toString(),
+            "--cfg-scale", AtlasImageArchitecture.cfg(family, variant, scale).toString(),
             "--vae-tiling", "--clip-on-cpu"))
+        // Architecture-specific parameters from stable-diffusion.cpp documentation.
+        // Flash attention and CPU offloading reduce mobile memory pressure.
+        if (family in setOf("z_image", "anima", "chroma")) {
+            cmd.addAll(listOf("--sampling-method", "euler", "--offload-to-cpu", "--diffusion-fa"))
+        }
+        if (family == "chroma") cmd.addAll(listOf("--model-args", "chroma_use_dit_mask=false"))
         if (params.hasKey("negativePrompt") && family != "flux") {
             params.getString("negativePrompt")?.takeIf { it.isNotEmpty() }?.let {
                 cmd.addAll(listOf("-n", it))
