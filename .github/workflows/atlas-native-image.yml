@@ -38,11 +38,22 @@ jobs:
           git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp checkout e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp submodule update --init --recursive --depth 1
+          # GGML Vulkan requires an official SPIRV-Headers CMake package.
+          # Ubuntu apt spirv-headers supplies headers, but no CMake config.
+          # Pin to the Vulkan SDK headers version reported by the build runner.
+          git clone --depth 1 --branch vulkan-sdk-1.4.335.0 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/atlas-spirv-headers
+          cmake -S /tmp/atlas-spirv-headers -B /tmp/atlas-spirv-headers-build -G Ninja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/atlas-spirv-install \
+            -DSPIRV_HEADERS_ENABLE_TESTS=OFF -DSPIRV_HEADERS_ENABLE_INSTALL=ON
+          cmake --build /tmp/atlas-spirv-headers-build
+          cmake --install /tmp/atlas-spirv-headers-build
+          test -s /tmp/atlas-spirv-install/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake
           cmake -S /tmp/atlas-sdcpp -B /tmp/atlas-sdcpp/build-android -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ATLAS_NDK/build/cmake/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
             -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF \
             -DSD_VULKAN=ON \
+            -DSPIRV-Headers_DIR=/tmp/atlas-spirv-install/share/cmake/SPIRV-Headers \
             -DVulkan_GLSLC_EXECUTABLE="$(command -v glslc)" \
             -DVulkan_INCLUDE_DIR="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include" \
             -DVulkan_LIBRARY="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so" \
