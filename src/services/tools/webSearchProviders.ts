@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 
 /**
  * Atlas: choose where the web_search tool gets results from.
- * Keys and URLs stay on the phone (AsyncStorage). If the chosen provider fails,
+ * API keys use OS Keychain; non-secret settings use AsyncStorage. If the chosen provider fails,
  * the built-in metasearch, DuckDuckGo and then Brave are tried so search keeps working.
  */
 export type SearchProvider = 'meta' | 'brave' | 'duckduckgo' | 'searxng' | 'exa' | 'parallel' | 'tavily';
@@ -27,6 +28,7 @@ interface SearchSettings {
   setProvider: (p: SearchProvider) => void;
   setSearxngUrl: (u: string) => void;
   setKey: (p: SearchProvider, k: string) => void;
+  loadSecureKeys: () => Promise<void>;
   setResults: (n: number) => void;
 }
 
@@ -39,10 +41,37 @@ export const useSearchSettings = create<SearchSettings>()(
       results: 5,
       setProvider: (provider) => set({ provider }),
       setSearxngUrl: (searxngUrl) => set({ searxngUrl: searxngUrl.trim().replace(/\/+$/, '') }),
-      setKey: (p, k) => set((s) => ({ keys: { ...s.keys, [p]: k.trim() } })),
+      setKey: (p, k) => {
+        const value = k.trim();
+        set((s) => ({ keys: { ...s.keys, [p]: value } }));
+        const service = `ai.offgridmobile.search.${p}`;
+        const operation = value
+          ? Keychain.setGenericPassword(p, value, { service, accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED })
+          : Keychain.resetGenericPassword({ service });
+        operation.catch(() => { /* Secure storage failure is surfaced on next search. */ });
+      },
+      loadSecureKeys: async () => {
+        const current = useSearchSettings.getState().keys;
+        const restored: Partial<Record<SearchProvider, string>> = {};
+        for (const p of ['exa', 'parallel', 'tavily'] as SearchProvider[]) {
+          const service = `ai.offgridmobile.search.${p}`;
+          try {
+            const credentials = await Keychain.getGenericPassword({ service });
+            if (credentials) restored[p] = credentials.password;
+            else if (current[p]) {
+              await Keychain.setGenericPassword(p, current[p]!, { service, accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED });
+              restored[p] = current[p];
+            }
+          } catch (_error) { /* Avoid losing existing credentials if Keychain is unavailable. */ }
+        }
+        useSearchSettings.setState({ keys: { ...current, ...restored } });
+      },
       setResults: (results) => set({ results }),
     }),
-    { name: 'atlas-search-settings', storage: createJSONStorage(() => AsyncStorage) },
+    { name: 'atlas-search-settings', storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ provider: state.provider, searxngUrl: state.searxngUrl, results: state.results }),
+      onRehydrateStorage: () => (state) => { void state?.loadSecureKeys(); },
+    },
   ),
 );
 

@@ -2,12 +2,12 @@ import * as Keychain from 'react-native-keychain';
 import logger from '../utils/logger';
 
 const SERVICE_NAME = 'ai.offgridmobile.auth';
-const PASSPHRASE_KEY = 'passphrase_hash';
+const PASSPHRASE_KEY = 'passphrase';
+const LEGACY_PASSPHRASE_KEY = 'passphrase_hash';
 
 class AuthService {
-  private hashPassphrase(passphrase: string): string {
-    // Simple hash - in production, consider using bcrypt via native module
-    // We use a deterministic hash since we're comparing hashes
+  private legacyHashPassphrase(passphrase: string): string {
+    // Only for unlocking and migrating existing legacy hashes.
     let hash = 0;
     for (let i = 0; i < passphrase.length; i++) {
       const char = passphrase.codePointAt(i) ?? 0;
@@ -31,8 +31,8 @@ class AuthService {
 
   async setPassphrase(passphrase: string): Promise<boolean> {
     try {
-      const hash = this.hashPassphrase(passphrase);
-      await Keychain.setGenericPassword(PASSPHRASE_KEY, hash, {
+      if (!passphrase) return false;
+      await Keychain.setGenericPassword(PASSPHRASE_KEY, passphrase, {
         service: SERVICE_NAME,
         accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED,
       });
@@ -53,8 +53,14 @@ class AuthService {
         return false;
       }
 
-      const inputHash = this.hashPassphrase(passphrase);
-      return inputHash === credentials.password;
+      if (credentials.username === PASSPHRASE_KEY) {
+        return credentials.password === passphrase;
+      }
+      if (credentials.username === LEGACY_PASSPHRASE_KEY &&
+          credentials.password === this.legacyHashPassphrase(passphrase)) {
+        return this.setPassphrase(passphrase);
+      }
+      return false;
     } catch (error) {
       logger.error('Failed to verify passphrase:', error);
       return false;

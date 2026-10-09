@@ -43,7 +43,7 @@ jobs:
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Run image model compatibility tests
         run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts __tests__/unit/services/hardware.test.ts
+          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts __tests__/unit/services/hardware.test.ts __tests__/unit/services/authService.test.ts __tests__/unit/services/authServiceSecurity.test.ts
       - name: Add sherpa voice dependencies
         run: |
           mkdir -p android/app/libs
