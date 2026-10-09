@@ -70,7 +70,7 @@ jobs:
           git -C /tmp/atlas-sdcpp/ggml apply "$GITHUB_WORKSPACE/android/patches/ggml-vulkan-guard-unsupported-bf16.patch"
           git -C /tmp/atlas-sdcpp apply --check "$GITHUB_WORKSPACE/android/patches/sdcpp-convert-all-bf16-to-f16.patch"
           git -C /tmp/atlas-sdcpp apply "$GITHUB_WORKSPACE/android/patches/sdcpp-convert-all-bf16-to-f16.patch"
-          grep -q 'if (device->bf16)' /tmp/atlas-sdcpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+          grep -q 'device->vendor_id != VK_VENDOR_ID_QUALCOMM' /tmp/atlas-sdcpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
           grep -q 'tensor_storage.type == GGML_TYPE_BF16' /tmp/atlas-sdcpp/src/model_loader.cpp
           # Android NDK has libvulkan.so and C API headers, but not vulkan.hpp.
           # GGML needs Khronos' Vulkan C++ headers to compile.

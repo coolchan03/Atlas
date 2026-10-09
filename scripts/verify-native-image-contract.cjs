@@ -100,7 +100,7 @@ check('Pinned native Vulkan backend guards unsupported BF16 shaders', () => {
     'mul_mat_vec_bf16_f16_f32',
     'mul_mat_vec_id_bf16_f32'
   ];
-  assert.equal((ggmlPatch.match(/\+\s*if \(device->bf16\) \{/g) || []).length, 3);
+  assert.equal((ggmlPatch.match(/\+\s*if \(device->bf16 && device->vendor_id != VK_VENDOR_ID_QUALCOMM\) \{/g) || []).length, 3);
   for (const shader of shaderNames) {
     assert.ok(ggmlPatch.includes(shader), 'Missing Vulkan shader guard: ' + shader);
   }
