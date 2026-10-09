@@ -53,7 +53,7 @@ check('Image support-file type contract', () => {
 });
 check('GPU selection and watchdog protections exist', () => {
   for (const token of ['--list-devices', 'diffusion=vulkan0', '--max-vram',
-    'Vulkan GPU not available', 'watchdogTimedOut', 'isStalled(', 'stream closed']) {
+    'Vulkan GPU not available', 'watchdogTimedOut', 'isStalled(', 'stream closed', 'if (!completed && output.exists()) output.delete()']) {
     assert.ok(cli.includes(token), 'Missing native safety protection: ' + token);
   }
   assert.match(progress, /fun isStalled\(/);

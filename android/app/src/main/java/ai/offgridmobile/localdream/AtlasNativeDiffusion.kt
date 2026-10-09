@@ -227,6 +227,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val tail = ArrayDeque<String>()
         val watchdogActive = AtomicBoolean(true)
         val watchdogTimedOut = AtomicBoolean(false)
+        var completed = false
         val watchdog = thread(start = true, isDaemon = true, name = "AtlasNativeImageWatchdog") {
             while (watchdogActive.get() && proc.isAlive) {
                 try { Thread.sleep(4000L) } catch (_: InterruptedException) { break }
@@ -314,7 +315,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 putInt("width", bounds.outWidth)
                 putInt("height", bounds.outHeight)
                 putDouble("seed", seed.toDouble())
-            }
+            }.also { completed = true }
         } finally {
             watchdogActive.set(false)
             watchdog.interrupt()
@@ -322,6 +323,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             phase = if (cancelled()) "Cancelled"
                 else if (watchdogTimedOut.get()) "Timed out" else "Finished"
             if (proc.isAlive) proc.destroyForcibly()
+            if (!completed && output.exists()) output.delete()
         }
     }
 
