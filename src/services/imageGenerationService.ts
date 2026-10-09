@@ -405,7 +405,8 @@ class ImageGenerationService {
     const handlers = this._imageProgressHandlers({ steps, isFirstRun, warmupStatus, requestEpoch });
     try {
       const result = await onnxImageGeneratorService.generateImage(
-        { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL },
+        { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL,
+          threads: useAppStore.getState().settings.imageThreads ?? 4 },
         handlers.onProgress,
         handlers.onPreview,
       );

@@ -8,9 +8,9 @@ import { useTheme } from '../theme';
 import { useAppStore } from '../stores';
 import { activeModelService } from '../services/activeModelService';
 import { imageGenerationService } from '../services/imageGenerationService';
-import { localDreamGeneratorService } from '../services/localDreamGenerator';
+import { localDreamGeneratorService, type NativeImageRuntimeStatus } from '../services/localDreamGenerator';
 import type { GeneratedImage, ONNXImageModel } from '../types';
-import { imageTestPreset } from '../utils/nativeImageTuning';
+import { imageTestPreset, type ImageTestMode } from '../utils/nativeImageTuning';
 import { getMissingImageSupportGuides, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail';
@@ -25,8 +25,8 @@ const TITLES = [
 const emptyItems = (): TestItem[] => TITLES.map(([key, title]) => ({ key, title, status: 'wait', detail: '' }));
 const SMILE = 'A single simple flat yellow smiley face icon: one bright yellow round circle with two small black dot eyes and one curved black smiling mouth, centered on a plain white background, clean vector art, no text.';
 const fmt = (s: number) => Math.floor(s / 60) + 'm ' + s % 60 + 's';
-function settingsFor(model: ONNXImageModel, quality: boolean) {
-  return imageTestPreset(model, quality, useAppStore.getState().settings);
+function settingsFor(model: ONNXImageModel, mode: ImageTestMode) {
+  return imageTestPreset(model, mode, useAppStore.getState().settings);
 }
 
 export const ImageModelTestScreen: React.FC = () => {
@@ -35,15 +35,18 @@ export const ImageModelTestScreen: React.FC = () => {
   const { colors } = useTheme();
   const id: string | undefined = route.params?.modelId;
   const model = useAppStore(s => s.downloadedImageModels.find(m => m.id === id));
-  const [quality, setQuality] = useState(true);
+  const [testMode, setTestMode] = useState<ImageTestMode>('smoke');
   const [includeLoRA, setIncludeLoRA] = useState(false);
   const [includeUpscaler, setIncludeUpscaler] = useState(false);
   const [items, setItems] = useState<TestItem[]>(emptyItems);
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [diffusionStep, setDiffusionStep] = useState(0);
+  const [runtime, setRuntime] = useState<NativeImageRuntimeStatus | null>(null);
+  const [cpuState, setCpuState] = useState<'active' | 'idle' | 'unknown'>('unknown');
+  const previousTicks = useRef<number | null>(null);
   const [result, setResult] = useState<GeneratedImage | null>(null);
-  const [decision, setDecision] = useState<'review' | 'pass' | 'wrong' | null>(null);
+  const [decision, setDecision] = useState<'engine' | 'review' | 'pass' | 'wrong' | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const started = useRef(0);
   const inProgress = useRef(false);
@@ -62,6 +65,32 @@ export const ImageModelTestScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, [running]);
 
+  useEffect(() => {
+    if (!running || model?.backend !== 'sdcpp') return;
+    let disposed = false;
+    let polling = false;
+    const poll = async () => {
+      if (polling || !generating.current || cancelRequested.current) return;
+      polling = true;
+      try {
+        const status = await localDreamGeneratorService.getNativeImageRuntimeStatus();
+        if (disposed || gone.current || !generating.current || !status) return;
+        setRuntime(status);
+        if (status.step > 0) setDiffusionStep(prev => Math.max(prev, status.step));
+        if (status.cpuTicks >= 0) {
+          const previous = previousTicks.current;
+          if (previous !== null) setCpuState(status.cpuTicks > previous ? 'active' : 'idle');
+          previousTicks.current = status.cpuTicks;
+        } else {
+          setCpuState('unknown');
+        }
+      } finally { polling = false; }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 12000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [running, model?.backend]);
+
   const update = (key: string, status: Status, detail: string) => {
     if (!gone.current) setItems(prev => prev.map(item => item.key === key ? { ...item, status, detail } : item));
   };
@@ -76,8 +105,11 @@ export const ImageModelTestScreen: React.FC = () => {
     setResult(null);
     setElapsed(0);
     setDiffusionStep(0);
+    setRuntime(null);
+    setCpuState('unknown');
+    previousTicks.current = null;
     setRunning(true);
-    const cfg = settingsFor(model, quality);
+    const cfg = settingsFor(model, testMode);
     try {
       if (imageGenerationService.getState().isGenerating || await localDreamGeneratorService.isGenerating()) {
         throw new Error('An image is already being generated. Finish or cancel it first.');
@@ -121,8 +153,12 @@ export const ImageModelTestScreen: React.FC = () => {
       const image = await localDreamGeneratorService.generateImage({
         ...cfg, prompt: SMILE, seed: 42,
         negativePrompt: model.nativeImageFamily === 'flux' ? '' : 'blurry, distorted, watermark, text',
-        useOpenCL: model.backend === 'mnn', previewInterval: 0,
+        useOpenCL: model.backend === 'sdcpp'
+          ? (useAppStore.getState().settings.imageUseOpenCL ?? true)
+          : model.backend === 'mnn',
+        previewInterval: 0,
         skipLoRA: !includeLoRA, skipUpscaler: !includeUpscaler,
+        threads: useAppStore.getState().settings.imageThreads ?? 4,
       }, progress => {
         if (cancelRequested.current || gone.current) return;
         setDiffusionStep(progress.step);
@@ -142,9 +178,12 @@ export const ImageModelTestScreen: React.FC = () => {
       if (Number(info.size) < 64 || pngHeader !== 'iVBORw0KGgo=') {
         throw new Error('The output is too small or does not contain a valid PNG header.');
       }
-      if (!gone.current) { setResult(image); setDecision('review'); }
-      update('output', 'warn', image.width + 'x' + image.height + ' PNG (' +
-        Math.round(Number(info.size) / 1024) + ' KB). Confirm the contents visually.');
+      if (!gone.current) { setResult(image); setDecision(testMode === 'smoke' ? 'engine' : 'review'); }
+      update('output', testMode === 'smoke' ? 'ok' : 'warn',
+        image.width + 'x' + image.height + ' PNG (' +
+        Math.round(Number(info.size) / 1024) + ' KB). ' +
+        (testMode === 'smoke' ? 'Native 1-step engine test passed; artistic quality was not tested.' :
+          'Confirm the subject visually before marking success.'));
     } catch (err: any) {
       if (!cancelRequested.current && !gone.current) {
         const message = err?.message || String(err || 'Image generation failed');
@@ -170,7 +209,7 @@ export const ImageModelTestScreen: React.FC = () => {
     if (generating.current) await localDreamGeneratorService.cancelGeneration().catch(() => {});
   };
 
-  const cfg = model ? settingsFor(model, quality) : null;
+  const cfg = model ? settingsFor(model, testMode) : null;
   const card = { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 };
   const bordered = (color: string) => ({
     borderColor: color, borderWidth: 1, borderRadius: 9, padding: 10, marginRight: 8,
@@ -194,18 +233,24 @@ export const ImageModelTestScreen: React.FC = () => {
           <View style={card}>
             <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{model.name}</Text>
             <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Fixed test: yellow smiley face, seed 42, no LLM prompt rewriting.</Text>
-            <View style={{ flexDirection: 'row', marginTop: 12 }}>
-              {[false, true].map(v => <TouchableOpacity key={String(v)} disabled={running}
-                onPress={() => setQuality(v)} style={bordered(quality === v ? colors.primary : colors.border)}>
-                <Text style={{ color: quality === v ? colors.primary : colors.textSecondary }}>
-                  {v ? 'Quality check' : 'Quick engine check'}
-                </Text>
-              </TouchableOpacity>)}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 12 }}>
+              {([
+                ['smoke', '1-step engine test'],
+                ['quick', 'Short render'],
+                ['quality', 'Quality render'],
+              ] as const).map(([key, label]) => (
+                <TouchableOpacity key={key} disabled={running}
+                  onPress={() => setTestMode(key)}
+                  style={bordered(testMode === key ? colors.primary : colors.border)}>
+                  <Text style={{ color: testMode === key ? colors.primary : colors.textSecondary }}>{label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
             <Text style={{ color: colors.textMuted, marginTop: 8 }}>
-              {cfg?.width}x{cfg?.height} · {cfg?.steps} steps · CFG {cfg?.guidanceScale}
-              {quality ? '. Quality mode may be slow or memory-intensive on a phone.' :
-                '. Quick mode checks the engine; SDXL may look poor at this resolution.'}
+              {cfg?.width}x{cfg?.height} ? {cfg?.steps} steps ? CFG {cfg?.guidanceScale}
+              {testMode === 'smoke' ? '. Only checks engine inference; image quality will be poor.' :
+                testMode === 'quick' ? '. Low-step diagnostic; image quality is not representative.' :
+                  '. Full quality uses much more RAM and may take a long time on CPU.'}
             </Text>
             {model.backend === 'sdcpp' && <>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
@@ -226,11 +271,29 @@ export const ImageModelTestScreen: React.FC = () => {
                 {running ? 'Cancel test · ' + fmt(elapsed) : decision || failure ? 'Test again' : 'Start test'}
               </Text>
             </TouchableOpacity>
-            {running && diffusionStep === 0 && elapsed >= 90 && (
-              <Text style={{ color: '#b78a26', marginTop: 8 }}>
-                No diffusion steps after {fmt(elapsed)}. The native engine may be initializing slowly or stalled.
-                You can cancel; this does not count as a pass.
-              </Text>
+            {model.backend === 'sdcpp' && running && elapsed >= 30 && (
+              <View style={{ marginTop: 10 }}>
+                <Text selectable style={{ color: colors.textSecondary, fontSize: 12 }}>
+                  Native process: {runtime?.running ? 'alive' : 'starting or unavailable'}.
+                  {' '}Compute: {runtime?.computeBackend || 'detecting'}.
+                  {' '}Stage: {runtime?.stage || 'awaiting diagnostics'}.
+                  {' '}Step: {runtime?.step ?? diffusionStep}/{runtime?.totalSteps || cfg?.steps}.
+                  {' '}Host CPU: {cpuState === 'active' ? 'active' :
+                    cpuState === 'idle' ? 'no increase on last sample' : 'unavailable'}.
+                  {' '}{runtime?.deviceLabel || ''}.
+                  {runtime?.secondsSinceLog !== undefined && runtime.secondsSinceLog >= 0
+                    ? ' Last engine output ' + Math.round(runtime.secondsSinceLog) + ' seconds ago.' : ''}
+                </Text>
+                {elapsed >= 120 && (
+                  <Text style={{ color: '#b78a26', marginTop: 7 }}>
+                    {runtime?.computeBackend?.includes('Vulkan')
+                      ? 'Vulkan GPU selected. Host CPU ticks do not measure GPU activity; a step may still take time.'
+                      : cpuState === 'active'
+                        ? 'Native CPU use is increasing; it is computing, even if progress is unchanged.'
+                        : 'Step progress has not advanced. This may be slow or stalled. Cancel and try the 1-step test or a smaller quantized model.'}
+                  </Text>
+                )}
+              </View>
             )}
           </View>
           {items.map(item => <View key={item.key} style={[card, { flexDirection: 'row' }]}>
@@ -250,6 +313,10 @@ export const ImageModelTestScreen: React.FC = () => {
             <Image source={{ uri: imageUri }} resizeMode="contain"
               style={{ width: '100%', height: 330, backgroundColor: colors.background, marginTop: 8 }} />
             <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{SMILE}</Text>
+            {decision === 'engine' && <Text style={{ color: colors.success || '#299662', marginTop: 8 }}>
+              Native engine completed one diffusion step and saved a PNG. This does not
+              test prompt accuracy; select Short render or Quality render for that.
+            </Text>}
             {decision === 'review' && <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>
               Does it actually show a yellow smiley face?
             </Text>}

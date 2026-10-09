@@ -60,9 +60,19 @@ Pony V7: https://huggingface.co/purplesmartai/pony-v7-base
 
 ## Important limitations
 
-- The native diffusion engine in this branch is CPU-only. Large GGUFs may
-  take a very long time, overheat, exhaust RAM, or encounter unsupported
-  quantizations on Android despite loading into the library.
+- The experimental native build now enables Vulkan and attempts to run
+  diffusion on vulkan0 with the text encoder and VAE on CPU. Its 4 GiB
+  GPU budget is a conservative starting value. Runtime detection must
+  succeed before GPU acceleration can be claimed.
+- If the Vulkan GPU is missing, Atlas reports CPU fallback instead of
+  claiming GPU acceleration. A Vulkan runtime failure surfaces an error.
+- On supported Vulkan hardware, speed and thermals remain UNVERIFIED
+  until tested on the real Razr Ultra 2025.
+- The image Test page offers a 1-step smoke test and shows native backend,
+  stage, last output time, CPU heartbeat and diffusion steps; a 1-step PNG
+  verifies execution, NOT prompt adherence.
+- Text encoders, VAE and diffusion require memory beyond the checkpoint;
+  shared Android GPU memory is not dedicated VRAM.
 - The 16 GB phone RAM figure is total RAM, not free RAM. Account for Android,
   encoder/transformer working buffers, VAE and output resolution.
 - Model-family recognition is based on known names and GGUF architecture / tensor

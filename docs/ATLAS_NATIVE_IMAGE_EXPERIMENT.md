@@ -70,3 +70,18 @@ See https://github.com/leejet/stable-diffusion.cpp for source.
 - SDXL image-size sliders support 512 through 1024 pixels.
 - AlbedoBase XL v3.1 Large includes a VAE; RealESRGAN_x4plus.pth is an upscaler.
 - Quality, thermal behavior, and runtime remain to be tested on Android.
+
+## Vulkan GPU and accurate generation diagnostics (experimental)
+
+- Previously native sd-cli built CPU-only even while the app displayed a GPU
+  switch. This branch enables SD_VULKAN in ARM64 and checks for vulkan0 via
+  native sd-cli --list-devices before attempting GPU execution.
+- Runtime assignment: diffusion=vulkan0,te=cpu,vae=cpu; auto-fit manages
+  weights within a 4 GiB initial GPU budget. CPU fallback applies only when
+  Vulkan is unavailable or explicitly disabled.
+- GPU acceleration must be verified with a successful Android build and
+  an on-device test showing selected backend and generated PNG.
+- Native CLI carriage-return progress frames are parsed correctly. Atlas
+  shows native backend, CPU ticks (host CPU activity only), and last output.
+- The Test screen starts in a one-step smoke mode for Anima. Quick and
+  quality render modes remain available; only visual check verifies the image.

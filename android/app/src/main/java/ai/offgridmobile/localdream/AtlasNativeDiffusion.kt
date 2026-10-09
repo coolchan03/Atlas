@@ -2,12 +2,14 @@ package ai.offgridmobile.localdream
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import java.util.ArrayDeque
 import java.util.UUID
 
@@ -15,6 +17,79 @@ import java.util.UUID
 internal class AtlasNativeDiffusion(private val context: Context) {
     companion object { const val EXECUTABLE = "libatlas_sdcli.so" }
     @Volatile private var running: Process? = null
+    @Volatile private var startedMs = 0L
+    @Volatile private var lastOutputMs = 0L
+    @Volatile private var lastStepMs = 0L
+    @Volatile private var reportedStep = 0
+    @Volatile private var requestedSteps = 0
+    @Volatile private var phase = "Idle"
+    @Volatile private var computeBackend = "not selected"
+    @Volatile private var deviceLabel = "not probed"
+    @Volatile private var vulkanSupported: Boolean? = null
+
+    private fun detectVulkan(cli: File, cancelled: () -> Boolean): Boolean {
+        val cached = vulkanSupported
+        if (cached != null) return cached
+        if (cancelled()) return false
+        val proc = try {
+            ProcessBuilder(cli.absolutePath, "--list-devices").apply {
+                directory(cli.parentFile)
+                redirectErrorStream(true)
+                environment()["LD_LIBRARY_PATH"] =
+                    listOf(cli.parent, "/system/lib64", "/vendor/lib64").joinToString(":")
+            }.start()
+        } catch (_: Exception) {
+            vulkanSupported = false
+            deviceLabel = "Vulkan probe unavailable"
+            return false
+        }
+        running = proc
+        return try {
+            if (!proc.waitFor(12, TimeUnit.SECONDS) || cancelled()) {
+                proc.destroyForcibly()
+                deviceLabel = "Vulkan detection timed out or was cancelled"
+                false
+            } else {
+                val output = proc.inputStream.bufferedReader().use { it.readText().take(3000) }
+                val found = proc.exitValue() == 0 && Regex("""vulkan0""", RegexOption.IGNORE_CASE).containsMatchIn(output)
+                deviceLabel = if (found) "Vulkan GPU detected" else "No usable Vulkan device reported"
+                vulkanSupported = found
+                found
+            }
+        } catch (_: Exception) {
+            proc.destroyForcibly()
+            deviceLabel = "GPU detection failed"
+            false
+        } finally {
+            if (running === proc) running = null
+            if (proc.isAlive) proc.destroyForcibly()
+        }
+    }
+
+    /** Lightweight native status; unlike a spinning UI, also reports child CPU ticks. */
+    fun status(): WritableMap {
+        val now = SystemClock.elapsedRealtime()
+        val process = running
+        val alive = process?.isAlive == true
+        val ticks = try {
+            if (alive && process != null) {
+                AtlasImageProgress.cpuTicks(File("/proc/" + process.pid() + "/stat").readText())
+            } else null
+        } catch (_: Exception) { null }
+        return Arguments.createMap().apply {
+            putBoolean("running", alive)
+            putString("stage", phase)
+            putString("computeBackend", computeBackend)
+            putString("deviceLabel", deviceLabel)
+            putInt("step", reportedStep)
+            putInt("totalSteps", requestedSteps)
+            putDouble("elapsedSeconds", if (startedMs > 0) (now - startedMs) / 1000.0 else 0.0)
+            putDouble("secondsSinceStep", if (lastStepMs > 0) (now - lastStepMs) / 1000.0 else -1.0)
+            putDouble("secondsSinceLog", if (lastOutputMs > 0) (now - lastOutputMs) / 1000.0 else -1.0)
+            putDouble("cpuTicks", ticks?.toDouble() ?: -1.0)
+        }
+    }
+
     fun available(): Boolean = File(context.applicationInfo.nativeLibraryDir, EXECUTABLE).isFile
     fun cancel() { running?.destroyForcibly() }
 
@@ -35,6 +110,15 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         }
         val executable = File(context.applicationInfo.nativeLibraryDir, EXECUTABLE)
         if (!executable.isFile) throw IOException("Native image runtime is missing from this APK")
+
+        // imageUseOpenCL remains the existing settings key for compatibility,
+        // but maps to Vulkan for directly imported diffusion models.
+        val preferGpu = !params.hasKey("useOpenCL") || params.getBoolean("useOpenCL")
+        phase = if (preferGpu) "Checking Vulkan GPU" else "CPU selected manually"
+        val gpuAvailable = preferGpu && detectVulkan(executable, cancelled)
+        if (cancelled()) throw IOException("Generation cancelled")
+        computeBackend = if (gpuAvailable) "Vulkan GPU (diffusion)" else "CPU"
+        if (!preferGpu) deviceLabel = "GPU disabled in settings"
 
         val width = (if (params.hasKey("width")) params.getInt("width") else 512).coerceIn(256, 1024)
         val height = (if (params.hasKey("height")) params.getInt("height") else 512).coerceIn(256, 1024)
@@ -79,15 +163,29 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             attachments[type]?.let { cmd.addAll(listOf(flag, it.absolutePath)) }
         }
         if (hasLora) cmd.addAll(listOf("--lora-model-dir", loraDir.absolutePath))
+        // Explicit execution assignment: quantized transformer diffusion
+        // runs on Vulkan, while Qwen/T5 encoders and VAE stay on CPU to reduce
+        // transient GPU allocations. Respect the available-device probe.
+        if (gpuAvailable) {
+            cmd.addAll(listOf("--backend", "diffusion=vulkan0,te=cpu,vae=cpu",
+                "--auto-fit", "on", "--max-vram", "vulkan0=4"))
+        } else {
+            cmd.addAll(listOf("--backend", "cpu"))
+        }
         cmd.addAll(listOf("-p", prompt, "-o", output.absolutePath,
             "-W", width.toString(), "-H", height.toString(),
             "--steps", steps.toString(), "-s", seed.toString(),
             "--cfg-scale", AtlasImageArchitecture.cfg(family, variant, scale).toString(),
             "--vae-tiling", "--clip-on-cpu"))
-        // Architecture-specific parameters from stable-diffusion.cpp documentation.
-        // Flash attention and CPU offloading reduce mobile memory pressure.
+        // sdcpp defaults to every physical core. Four threads is more thermal-
+        // friendly on a phone; expose it in Atlas settings for native checkpoints.
+        val threads = (if (params.hasKey("threads")) params.getInt("threads") else 4).coerceIn(1, 8)
+        cmd.addAll(listOf("--threads", threads.toString(), "--log-level", "verbose"))
+        // On Vulkan, auto-fit manages residency: do NOT force
+        // --offload-to-cpu, which would disable auto-fit and over-stage weights.
         if (family in setOf("z_image", "anima", "chroma")) {
-            cmd.addAll(listOf("--sampling-method", "euler", "--offload-to-cpu", "--diffusion-fa"))
+            cmd.addAll(listOf("--sampling-method", "euler", "--diffusion-fa"))
+            if (!gpuAvailable) cmd.add("--offload-to-cpu")
         }
         if (family == "chroma") cmd.addAll(listOf("--model-args", "chroma_use_dit_mask=false"))
         if (params.hasKey("negativePrompt") && family != "flux") {
@@ -101,18 +199,48 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             environment()["LD_LIBRARY_PATH"] =
                 listOf(executable.parent, "/system/lib64", "/vendor/lib64").joinToString(":")
         }.start()
+        val startTime = SystemClock.elapsedRealtime()
+        startedMs = startTime
+        lastOutputMs = startTime
+        lastStepMs = 0L
+        reportedStep = 0
+        requestedSteps = steps
+        phase = "Starting " + computeBackend
         running = proc
         val tail = ArrayDeque<String>()
         try {
-            proc.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    if (tail.size >= 15) tail.removeFirst()
-                    tail.addLast(line.take(300))
-                    val stepMatch = Regex("(\\d+)\\s*/\\s*(\\d+)").find(line)
-                    if (stepMatch != null) {
-                        val step = stepMatch.groupValues[1].toIntOrNull() ?: 0
-                        val total = stepMatch.groupValues[2].toIntOrNull() ?: steps
-                        if (total in 1..100 && step in 0..total) progress(step, total)
+            // CLI terminal progress bars are carriage-return-delimited rather
+            // than newline-delimited. BufferedReader.readLine() would hide all
+            // intermediate steps, presenting a false "stuck on 1/x" state.
+            fun acceptFrame(line: String) {
+                lastOutputMs = SystemClock.elapsedRealtime()
+                if (tail.size >= 15) tail.removeFirst()
+                tail.addLast(line.take(300))
+                AtlasImageProgress.stage(line)?.let { phase = it }
+                val step = AtlasImageProgress.parseStep(line, steps)
+                if (step != null && step > reportedStep) {
+                    lastStepMs = lastOutputMs
+                    reportedStep = step
+                    phase = "Running diffusion"
+                    progress(step, steps)
+                }
+            }
+            proc.inputStream.bufferedReader().use { reader ->
+                val frame = StringBuilder()
+                while (true) {
+                    val next = reader.read()
+                    if (next < 0) {
+                        if (frame.isNotEmpty()) acceptFrame(frame.toString())
+                        break
+                    }
+                    when (next.toChar()) {
+                        '\r', '\n' -> {
+                            if (frame.isNotEmpty()) {
+                                acceptFrame(frame.toString())
+                                frame.setLength(0)
+                            }
+                        }
+                        else -> if (frame.length < 4096) frame.append(next.toChar())
                     }
                 }
             }
@@ -120,8 +248,12 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             if (cancelled()) throw IOException("Generation cancelled")
             if (code != 0 || !output.isFile || output.length() == 0L) {
                 if (output.exists()) output.delete()
-                throw IOException("Native image engine failed (exit $code). " + tail.joinToString(" | ").takeLast(900))
+                val hint = if (gpuAvailable)
+                    "Vulkan execution failed. Try a smaller quantized Anima checkpoint, reduce resolution, or disable GPU Acceleration to try CPU. "
+                    else "CPU image generation failed. "
+                throw IOException(hint + "Native engine exit " + code + ": " + tail.joinToString(" | ").takeLast(900))
             }
+            phase = "Finalizing image"
             if (!params.hasKey("skipUpscaler") || !params.getBoolean("skipUpscaler")) {
                 attachments["upscaler"]?.let { upscale(executable, it, output, cancelled) }
             }
@@ -136,6 +268,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             }
         } finally {
             if (running === proc) running = null
+            phase = if (cancelled()) "Cancelled" else "Finished"
             if (proc.isAlive) proc.destroyForcibly()
         }
     }

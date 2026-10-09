@@ -75,7 +75,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
 
-      {Platform.OS !== 'android' && (
+      {(Platform.OS !== 'android' || imageModel?.backend === 'sdcpp') && (
         <SliderSetting
           testID="image-threads"
           label="Image Threads"
@@ -89,7 +89,9 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
       {Platform.OS === 'android' && (
         <View style={styles.settingGroup}>
           <View style={styles.settingHeader}>
-            <Text style={styles.settingLabel}>GPU Acceleration</Text>
+            <Text style={styles.settingLabel}>
+              {imageModel?.backend === 'sdcpp' ? 'Vulkan GPU Acceleration' : 'OpenCL GPU Acceleration'}
+            </Text>
             <Switch
               value={settings.imageUseOpenCL ?? true}
               onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
@@ -98,9 +100,11 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
             />
           </View>
           <Text style={styles.settingDescription}>
-            Use GPU for faster image generation. First run may be slower while optimizing for your device.
+            {imageModel?.backend === 'sdcpp'
+              ? 'Atlas prefers Adreno Vulkan GPU for diffusion, with CPU fallback if unavailable. See selected backend in Image Model Test.'
+              : 'Use OpenCL for supported MNN image models.'}
           </Text>
-          {(settings.imageUseOpenCL ?? true) && <ClearGPUCacheButton />}
+          {(settings.imageUseOpenCL ?? true) && imageModel?.backend !== 'sdcpp' && <ClearGPUCacheButton />}
         </View>
       )}
     </>

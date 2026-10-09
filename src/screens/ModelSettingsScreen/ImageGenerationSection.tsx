@@ -49,7 +49,9 @@ const EnhanceImageToggle: React.FC = () => {
 const ImageGpuSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const model = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const nativeImage = model?.backend === 'sdcpp';
   const { clearing, handleClearCache } = useClearGpuCache();
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const isOpenCL = settings?.imageUseOpenCL ?? true;
@@ -58,9 +60,13 @@ const ImageGpuSection: React.FC = () => {
     <>
       <View style={styles.toggleRow}>
         <View style={styles.toggleInfo}>
-          <Text style={styles.toggleLabel}>OpenCL GPU Acceleration</Text>
+          <Text style={styles.toggleLabel}>
+            {nativeImage ? 'Vulkan GPU Acceleration (Adreno)' : 'OpenCL GPU Acceleration'}
+          </Text>
           <Text style={styles.toggleDesc}>
-            Use GPU for faster image generation. First run may be slower while optimizing for your device.
+            {nativeImage
+              ? 'Prefer Vulkan for diffusion and CPU for the text encoder. The Image Model Test reports which backend actually runs.'
+              : 'Use OpenCL for supported MNN image models. First run may optimize your GPU.'}
           </Text>
         </View>
         <Switch
@@ -70,7 +76,7 @@ const ImageGpuSection: React.FC = () => {
           thumbColor={isOpenCL ? colors.primary : colors.textMuted}
         />
       </View>
-      {isOpenCL && (
+      {isOpenCL && !nativeImage && (
         <TouchableOpacity
           style={[styles.toggleRow, styles.clearCacheRow]}
           onPress={handleClearCache}
@@ -138,7 +144,7 @@ const ImageAdvancedSection: React.FC = () => {
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
 
-      {Platform.OS !== 'android' && (
+      {(Platform.OS !== 'android' || imageModel?.backend === 'sdcpp') && (
         <SliderSetting
           testID="image-threads"
           label="Image Threads"

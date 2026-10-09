@@ -835,6 +835,12 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         safeResolve(promise, generationInProgress.get())
     }
 
+    /** Read-only status for the native image test screen, safe during generation. */
+    @ReactMethod
+    fun getAtlasImageRuntimeStatus(promise: Promise) {
+        safeResolve(promise, directDiffusion.status())
+    }
+
     @ReactMethod
     fun cancelGeneration(promise: Promise) {
         generationCancelled.set(true)

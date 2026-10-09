@@ -37,8 +37,8 @@ export function getImageTuning(model: ImageIdentity, settings: ImageSettings) {
   if (!isModernImageModel(model)) return defaults;
   const family = model?.nativeImageFamily;
   const turbo = isTurbo(model);
-  const recommendedSide = family === 'sdxl' ? 1024 : 768;
-  const steps = turbo ? (family === 'anima' ? 12 : 8) : 28;
+  const recommendedSide = family === 'sdxl' ? 1024 : family === 'anima' ? 512 : 768;
+  const steps = turbo ? (family === 'anima' ? 8 : 8) : family === 'anima' ? 20 : 28;
   const side = (value: number) => value === SWEET_SPOT_SIZE
     ? recommendedSide : Math.max(512, Math.min(1024, value));
   return {
@@ -52,23 +52,33 @@ export function getImageSizeSlider(model: ImageIdentity) {
     min: 512, max: 1024, step: 64,
     description: model?.nativeImageFamily === 'sdxl'
       ? 'SDXL works best near 1024px. 512px may be blurry.'
-      : 'Larger images add detail but consume more RAM. Start at 768px.',
+      : model?.nativeImageFamily === 'anima'
+        ? '512px is the mobile starting point. 768-1024 improves detail but is much slower on CPU.'
+        : 'Larger images add detail but consume more RAM. Start at 768px.',
   };
   return { min: SWEET_SPOT_SIZE, max: 512, step: 64,
     description: 'Smaller = faster; 512px offers more detail on compact models.' };
 }
 
-export function imageTestPreset(model: ImageIdentity, quality: boolean, settings: ImageSettings) {
-  if (model?.backend === 'sdcpp' && model.nativeImageFamily === 'flux') {
-    return { steps: quality ? 24 : 8, width: quality ? 768 : 512,
-      height: quality ? 768 : 512, guidanceScale: 1 };
+export type ImageTestMode = 'smoke' | 'quick' | 'quality';
+
+/** Smoke confirms an actual inference step, never artistic correctness. */
+export function imageTestPreset(model: ImageIdentity, mode: ImageTestMode | boolean, settings: ImageSettings) {
+  const m: ImageTestMode = typeof mode === 'boolean' ? (mode ? 'quality' : 'quick') : mode;
+  const guidanceScale = recommendedImageGuidance(model);
+  if (m === 'smoke') {
+    return { steps: 1, width: 256, height: 256, guidanceScale };
   }
-  if (!quality) {
-    return { steps: 8, width: isModernImageModel(model) ? 512 : 256,
-      height: isModernImageModel(model) ? 512 : 256,
-      guidanceScale: recommendedImageGuidance(model) };
+  if (model?.backend === 'sdcpp' && model.nativeImageFamily === 'flux') {
+    return { steps: m === 'quick' ? 4 : 24, width: m === 'quick' ? 512 : 768,
+      height: m === 'quick' ? 512 : 768, guidanceScale: 1 };
+  }
+  if (m === 'quick') {
+    const size = isModernImageModel(model) ? 512 : 256;
+    return { steps: model?.nativeImageFamily === 'anima' ? 4 : 8,
+      width: size, height: size, guidanceScale };
   }
   const profile = getImageTuning(model, settings);
   return { ...profile, steps: isModernImageModel(model) ? profile.steps : Math.max(20, profile.steps),
-    guidanceScale: recommendedImageGuidance(model) };
+    guidanceScale };
 }

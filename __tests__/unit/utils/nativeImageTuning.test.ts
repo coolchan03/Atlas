@@ -26,7 +26,7 @@ describe('SDXL tuning without altering tuned mobile image models', () => {
     const chroma = { backend: 'sdcpp' as const, nativeImageFamily: 'chroma' as const };
     const settings = { imageSteps: 8, imageWidth: 256, imageHeight: 256, imageGuidanceScale: 7.5 };
     expect(getImageTuning(zImage, settings)).toEqual({ steps: 28, width: 768, height: 768 });
-    expect(getImageTuning(anima, settings)).toEqual({ steps: 28, width: 768, height: 768 });
+    expect(getImageTuning(anima, settings)).toEqual({ steps: 20, width: 512, height: 512 });
     expect(getImageTuning(chroma, settings)).toEqual({ steps: 28, width: 768, height: 768 });
     expect(getImageGuidance(zImage, settings.imageGuidanceScale)).toBe(5);
     expect(getImageGuidance(anima, settings.imageGuidanceScale)).toBe(6);
@@ -42,6 +42,20 @@ describe('SDXL tuning without altering tuned mobile image models', () => {
       .toEqual({ steps: 8, width: 768, height: 768 });
     expect(imageTestPreset(turbo, false, {})).toEqual({
       steps: 8, width: 512, height: 512, guidanceScale: 1,
+    });
+  });
+
+  it('isolates engine activity from art quality using a single-step preset', () => {
+    const anima = { backend: 'sdcpp' as const, nativeImageFamily: 'anima' as const };
+    const current = { imageSteps: 8, imageWidth: 256, imageHeight: 256 };
+    expect(imageTestPreset(anima, 'smoke', current)).toEqual({
+      steps: 1, width: 256, height: 256, guidanceScale: 6,
+    });
+    expect(imageTestPreset(anima, 'quick', current)).toEqual({
+      steps: 4, width: 512, height: 512, guidanceScale: 6,
+    });
+    expect(imageTestPreset(anima, 'quality', current)).toEqual({
+      steps: 20, width: 512, height: 512, guidanceScale: 6,
     });
   });
 

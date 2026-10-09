@@ -20,6 +20,19 @@ type ProgressCallback = (progress: ImageGenerationProgress) => void;
 type PreviewCallback = (preview: { previewPath: string; step: number; totalSteps: number }) => void;
 type NativeImageParams = ImageGenerationParams & {
   previewInterval?: number; skipLoRA?: boolean; skipUpscaler?: boolean;
+  threads?: number;
+};
+export type NativeImageRuntimeStatus = {
+  running: boolean;
+  stage: string;
+  computeBackend: string;
+  deviceLabel: string;
+  step: number;
+  totalSteps: number;
+  elapsedSeconds: number;
+  secondsSinceStep: number;
+  secondsSinceLog: number;
+  cpuTicks: number;
 };
 
 /**
@@ -55,6 +68,16 @@ class LocalDreamGeneratorService {
       return await DiffusionModule.isModelLoaded();
     } catch {
       return false;
+    }
+  }
+
+  async getNativeImageRuntimeStatus(): Promise<NativeImageRuntimeStatus | null> {
+    if (Platform.OS !== 'android' || !DiffusionModule?.getAtlasImageRuntimeStatus) return null;
+    try {
+      return await DiffusionModule.getAtlasImageRuntimeStatus();
+    } catch (e) {
+      logger.warn('[LocalDream] Could not read native image runtime status:', e);
+      return null;
     }
   }
 
@@ -155,6 +178,7 @@ class LocalDreamGeneratorService {
       useOpenCL: params.useOpenCL ?? true,
       skipLoRA: params.skipLoRA ?? false,
       skipUpscaler: params.skipUpscaler ?? false,
+      threads: params.threads ?? this.loadedThreads ?? 4,
     };
     logger.log(`[WIRE-IMAGE-PARAMS] ${JSON.stringify({ requested: { steps: params.steps, guidanceScale: params.guidanceScale, width: params.width, height: params.height }, native: { ...np, prompt: undefined } })}`); // [WIRE] settings→native image params
     return np;

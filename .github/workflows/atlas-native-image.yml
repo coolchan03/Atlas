@@ -27,6 +27,11 @@ jobs:
           NDK=$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           test -n "$NDK"
           echo "ATLAS_NDK=$NDK" >> "$GITHUB_ENV"
+          # glslc builds the Vulkan GGML compute shaders for ARM64.
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev
+          test -x "$(command -v glslc)"
+          test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
       - name: Build native ARM64 diffusion CLI from pinned upstream source
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
@@ -37,11 +42,19 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$ATLAS_NDK/build/cmake/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
             -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF \
+            -DSD_VULKAN=ON \
+            -DVulkan_GLSLC_EXECUTABLE="$(command -v glslc)" \
+            -DVulkan_INCLUDE_DIR="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include" \
+            -DVulkan_LIBRARY="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so" \
             -DSD_BUILD_EXAMPLES=ON -DSD_BUILD_SHARED_LIBS=OFF -DSD_BUILD_SHARED_GGML_LIB=OFF
           cmake --build /tmp/atlas-sdcpp/build-android --target sd-cli --parallel 3
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           cp /tmp/atlas-sdcpp/build-android/bin/sd-cli android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
           file android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+          # Fail closed if CI unexpectedly produced a CPU-only image runtime.
+          test -s android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+          strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'ggml_vulkan'
+          readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
       - name: Install JS dependencies and patched native llama runtime
         run: |
           npm ci --ignore-scripts
@@ -50,7 +63,7 @@ jobs:
       - name: TypeScript compile check
         run: |
           ./node_modules/.bin/tsc --noEmit -p . > /tmp/atlas-types.log 2>&1 || true
-          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|nativeImageCompatibility|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|quickImport|useModelsScreen|localDreamGenerator|activeModelService/loaders' ; then
+          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|nativeImageCompatibility|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|quickImport|useModelsScreen|localDreamGenerator|activeModelService/loaders|imageGenerationService|ImageQualitySliders' ; then
             echo 'New Atlas image TypeScript errors were detected'
             exit 1
           fi
@@ -65,9 +78,9 @@ jobs:
             https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
           echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
-      - name: Test native image family classifier
+      - name: Test native image family classifier and progress diagnostics
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --no-daemon --console=plain
+        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --no-daemon --console=plain
       - name: Assemble Android release APK
         working-directory: android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
