@@ -54,11 +54,15 @@ jobs:
           cmake --build /tmp/atlas-spirv-headers-build
           cmake --install /tmp/atlas-spirv-headers-build
           test -s /tmp/atlas-spirv-install/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake
+          # CMake's SPIRV-Headers package is found, but this pinned GGML build
+          # does not propagate its include directory to ggml-vulkan C++ sources.
+          test -s /tmp/atlas-spirv-install/include/spirv/unified1/spirv.hpp
           cmake -S /tmp/atlas-sdcpp -B /tmp/atlas-sdcpp/build-android -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ATLAS_NDK/build/cmake/android.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
             -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF \
             -DSD_VULKAN=ON \
+            -DCMAKE_CXX_FLAGS=-I/tmp/atlas-spirv-install/include \
             -DSPIRV-Headers_DIR=/tmp/atlas-spirv-install/share/cmake/SPIRV-Headers \
             -DVulkan_GLSLC_EXECUTABLE="$(command -v glslc)" \
             -DVulkan_INCLUDE_DIR=/tmp/atlas-vulkan-headers/include \
