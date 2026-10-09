@@ -8,15 +8,15 @@ on:
 
 jobs:
   native-image-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -38,6 +38,12 @@ jobs:
           git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp checkout e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp submodule update --init --recursive --depth 1
+          # Android NDK has libvulkan.so and C API headers, but not vulkan.hpp.
+          # GGML needs Khronos' Vulkan C++ headers to compile.
+          # Pin to the same Vulkan SDK release used for SPIRV-Headers.
+          git clone --depth 1 --branch vulkan-sdk-1.4.335.0 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/atlas-vulkan-headers
+          test -s /tmp/atlas-vulkan-headers/include/vulkan/vulkan.hpp
+          test -s /tmp/atlas-vulkan-headers/include/vulkan/vulkan.h
           # GGML Vulkan requires an official SPIRV-Headers CMake package.
           # Ubuntu apt spirv-headers supplies headers, but no CMake config.
           # Pin to the Vulkan SDK headers version reported by the build runner.
@@ -55,7 +61,7 @@ jobs:
             -DSD_VULKAN=ON \
             -DSPIRV-Headers_DIR=/tmp/atlas-spirv-install/share/cmake/SPIRV-Headers \
             -DVulkan_GLSLC_EXECUTABLE="$(command -v glslc)" \
-            -DVulkan_INCLUDE_DIR="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include" \
+            -DVulkan_INCLUDE_DIR=/tmp/atlas-vulkan-headers/include \
             -DVulkan_LIBRARY="$ATLAS_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so" \
             -DSD_BUILD_EXAMPLES=ON -DSD_BUILD_SHARED_LIBS=OFF -DSD_BUILD_SHARED_GGML_LIB=OFF
           cmake --build /tmp/atlas-sdcpp/build-android --target sd-cli --parallel 3
@@ -103,7 +109,7 @@ jobs:
           grep -q 'lib/arm64-v8a/libatlas_sdcli.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: atlas-native-image-experimental-apk
           path: android/app/build/outputs/apk/release/app-release.apk
