@@ -18,7 +18,7 @@ internal object AtlasImageProgress {
     fun stage(line: String): String? {
         val lower = line.lowercase()
         return when {
-            lower.contains("decode") && (lower.contains("vae") || lower.contains("latent")) -> "Decoding image"
+            lower.contains("decod") && (lower.contains("vae") || lower.contains("latent")) -> "Decoding image"
             lower.contains("saving") || lower.contains("wrote image") -> "Writing PNG"
             lower.contains("sampling") || lower.contains("denois") -> "Running diffusion"
             lower.contains("prompt") && (lower.contains("encod") || lower.contains("condition")) -> "Encoding prompt"

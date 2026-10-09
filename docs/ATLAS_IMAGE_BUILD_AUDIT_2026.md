@@ -10,7 +10,8 @@ Experimental branch: `atlas-image-native`. This audit is limited to Atlas, the A
 | 37864466376 | Native CMake configure | SPIRV-Headers *CMake package* absent | Pinned SPIRV-Headers package compiled and installed in CI |
 | 37865723518 | Vulkan C++ compilation | `vulkan/vulkan.hpp` not in Android NDK include dirs | Pinned Khronos Vulkan-Headers added |
 | 37866810548 | Vulkan C++ compilation | `spirv/unified1/spirv.hpp` not exposed to cross compiler | SPIRV include path explicitly passed to CMake |
-| 37867063365 | `:app:compileDebugKotlin` during unit test | `java.lang.Process.pid()` unavailable on Android compilation stubs | Optional reflection with guarded fallback; no direct call |
+| 37867063365 | `:app:compileDebugKotlin` during unit test | `java.lang.Process.pid()` unavailable on Android compilation stubs | Optional reflection with guarded fallback; no direct call (`40916d4d`, preserved from concurrent update) |
+| 37871796938 | `:app:testDebugUnitTest` | Progress parser expected `decode` but encountered `decoding VAE latents`; 1 out of 7 tests failed | Recognize `decod` stem and add three decoding-stage regression cases |
 
 **Why tests before step 11 passed:** JavaScript / TS tests cannot compile the Android Kotlin sources. The expensive native Vulkan compile succeeded, but CI ran Kotlin tests afterward.
 

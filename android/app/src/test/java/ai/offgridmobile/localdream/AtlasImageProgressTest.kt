@@ -19,6 +19,8 @@ class AtlasImageProgressTest {
         assertEquals("Encoding prompt", AtlasImageProgress.stage("encoding prompt embeddings"))
         assertEquals("Running diffusion", AtlasImageProgress.stage("sampling started"))
         assertEquals("Decoding image", AtlasImageProgress.stage("decoding VAE latents"))
+        assertEquals("Decoding image", AtlasImageProgress.stage("decode latent"))
+        assertEquals("Decoding image", AtlasImageProgress.stage("VAE decoder finished"))
         assertEquals("Writing PNG", AtlasImageProgress.stage("saving image"))
         assertNull(AtlasImageProgress.stage("user prompt: some private text"))
     }
