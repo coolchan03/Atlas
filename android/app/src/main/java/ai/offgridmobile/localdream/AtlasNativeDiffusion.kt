@@ -66,6 +66,11 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         }
     }
 
+    /** Android SDK Process lacks pid(); read it optionally for status diagnostics. */
+    private fun childPid(process: Process): Long? = try {
+        (process.javaClass.getMethod("pid").invoke(process) as? Number)?.toLong()?.takeIf { it > 0L }
+    } catch (_: Exception) { null }
+
     /** Lightweight native status; unlike a spinning UI, also reports child CPU ticks. */
     fun status(): WritableMap {
         val now = SystemClock.elapsedRealtime()
@@ -73,7 +78,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val alive = process?.isAlive == true
         val ticks = try {
             if (alive && process != null) {
-                AtlasImageProgress.cpuTicks(File("/proc/" + process.pid() + "/stat").readText())
+                childPid(process)?.let { pid -> AtlasImageProgress.cpuTicks(File("/proc/$pid/stat").readText()) }
             } else null
         } catch (_: Exception) { null }
         return Arguments.createMap().apply {
