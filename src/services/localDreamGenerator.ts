@@ -26,6 +26,7 @@ export type NativeImageRuntimeStatus = {
   running: boolean;
   stage: string;
   computeBackend: string;
+  weightPrecision?: string;
   deviceLabel: string;
   probeOutput?: string;
   androidVulkanFeature?: boolean;

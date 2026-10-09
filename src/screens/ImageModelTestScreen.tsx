@@ -327,6 +327,7 @@ export const ImageModelTestScreen: React.FC = () => {
                 <Text selectable style={{ color: colors.textSecondary, fontSize: 12 }}>
                   Native process: {runtime?.running ? 'alive' : 'starting or unavailable'}.
                   {' '}Compute: {runtime?.computeBackend || 'detecting'}.
+                  {' '}Precision: {runtime?.weightPrecision || 'detecting'}.
                   {' '}Stage: {runtime?.stage || 'awaiting diagnostics'}.
                   {' '}Step: {runtime?.step ?? diffusionStep}/{runtime?.totalSteps || cfg?.steps}.
                   {' '}Host CPU: {cpuState === 'active' ? 'active' :

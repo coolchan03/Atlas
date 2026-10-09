@@ -33,9 +33,10 @@ check('Extractable Android native image CLI', () => {
 check('Native and JS runtime progress interfaces agree', () => {
   assert.match(mod, /fun getAtlasImageRuntimeStatus\(/);
   assert.match(js, /getAtlasImageRuntimeStatus\(/);
-  for (const key of ['step', 'totalSteps', 'stage', 'computeBackend', 'cpuTicks']) {
+  for (const key of ['step', 'totalSteps', 'stage', 'computeBackend', 'cpuTicks', 'weightPrecision']) {
     assert.ok(cli.includes('"' + key + '"'), 'Native field missing: ' + key);
-    assert.ok(js.includes(key + ':'), 'JS field missing: ' + key);
+    assert.ok(js.includes(key + ':') || js.includes(key + '?:'),
+      'JS field missing: ' + key);
   }
 });
 check('No unsupported Android Process.pid() method', () => {
@@ -75,6 +76,21 @@ check('Vulkan probe parser is test-backed and contains no hidden control charact
     assert.doesNotMatch(native, /[\x00-\x08\x0b\x0c\x0e-\x1f]/,
       'Hidden control byte detected in native code (regression of invalid Vulkan regex)');
   }
+});
+check('BF16 safetensors use FP16 on Vulkan without touching GGUF', () => {
+  const detector = read(dir + 'AtlasImageGpuPrecision.kt');
+  const precisionTests = read(
+    'android/app/src/test/java/ai/offgridmobile/localdream/AtlasImageGpuPrecisionTest.kt');
+  assert.match(detector, /fun overrideArguments\(/);
+  assert.match(detector, /requiresFloat16Override\(/);
+  assert.match(detector, /listOf\("--type", "f16"\)/);
+  assert.match(detector, /"safetensors"/);
+  assert.match(cli, /AtlasImageGpuPrecision\.overrideArguments\(primary, gpuRequested\)/);
+  assert.match(cli, /cmd\.addAll\(precisionArgs\)/);
+  assert.match(precisionTests, /flagsBf16SafetensorsForFp16GpuLoading/);
+  assert.match(precisionTests, /leavesFp16AndQuantizedGgufAlone/);
+  const kotlinTest = step('Test native image family classifier and progress diagnostics')?.run;
+  assert.ok(kotlinTest?.includes('AtlasImageGpuPrecisionTest'));
 });
 check('Native build pins and includes Vulkan C++ and SPIRV headers', () => {
   const build = step('Build native ARM64 diffusion CLI from pinned upstream source')?.run;

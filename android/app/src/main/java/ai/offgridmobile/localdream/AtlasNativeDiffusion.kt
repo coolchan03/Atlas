@@ -26,6 +26,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
     @Volatile private var requestedSteps = 0
     @Volatile private var phase = "Idle"
     @Volatile private var computeBackend = "not selected"
+    @Volatile private var weightPrecision = "checkpoint precision"
     @Volatile private var deviceLabel = "not probed"
     @Volatile private var vulkanSupported: Boolean? = null
     @Volatile private var vulkanDevice = "vulkan0"
@@ -130,6 +131,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             putBoolean("running", alive)
             putString("stage", phase)
             putString("computeBackend", computeBackend)
+            putString("weightPrecision", weightPrecision)
             putString("deviceLabel", deviceLabel)
             putString("probeOutput", vulkanProbeOutput)
             putBoolean("androidVulkanFeature", androidHasVulkan)
@@ -173,6 +175,14 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         // That avoids a false "GPU unavailable" error while never silently
         // substituting the extremely slow CPU backend for Anima.
         val gpuRequested = preferGpu
+        // The Snapdragon/Adreno Vulkan driver can reject BF16 matrix-vector
+        // compute pipelines, even when it correctly detects the GPU.
+        // Convert BF16 safetensors weights to F16 *in memory while loading*.
+        // Do not rewrite the model file or expand quantized GGUF checkpoints.
+        val precisionArgs = AtlasImageGpuPrecision.overrideArguments(primary, gpuRequested)
+        weightPrecision = if (precisionArgs.isNotEmpty())
+            "BF16 checkpoint -> F16 Vulkan compatibility"
+        else "Original checkpoint precision"
         computeBackend = if (gpuRequested) "Vulkan GPU requested (unverified)" else "CPU"
         if (!preferGpu) deviceLabel = "GPU disabled in settings"
         else if (!probeEnumerated) {
@@ -222,6 +232,11 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             attachments[type]?.let { cmd.addAll(listOf(flag, it.absolutePath)) }
         }
         if (hasLora) cmd.addAll(listOf("--lora-model-dir", loraDir.absolutePath))
+        // Use sd.cpp's on-load conversion for BF16 matrices to avoid broken
+        // mul_mat_vec_bf16_f32_f32 pipeline creation on mobile Adreno Vulkan.
+        // --type f16 is supported by the pinned sd.cpp CLI; it converts
+        // eligible matrix weights but does not modify the saved checkpoint.
+        cmd.addAll(precisionArgs)
         // Explicit execution assignment: quantized transformer diffusion
         // runs on Vulkan, while Qwen/T5 encoders and VAE stay on CPU to reduce
         // transient GPU allocations. A failed probe does not prevent trying
@@ -336,11 +351,21 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             }
             if (code != 0 || !output.isFile || output.length() == 0L) {
                 if (output.exists()) output.delete()
-                val hint = if (gpuRequested)
-                    "Vulkan backend could not generate an image. Device probe: " +
-                    deviceLabel.takeLast(380) + ". GPU was explicitly requested; no CPU fallback occurred. "
-                    else "CPU image generation failed. "
-                throw IOException(hint + "Native engine exit " + code + ": " + tail.joinToString(" | ").takeLast(900))
+                val logTail = tail.joinToString(" | ").takeLast(900)
+                val bf16Error = logTail.contains("mul_mat_vec_bf16") ||
+                    logTail.contains("bf16", ignoreCase = true) &&
+                    logTail.contains("createComputePipeline")
+                val hint = when {
+                    bf16Error && gpuRequested ->
+                        "The Vulkan driver rejected a BF16 compute shader. " +
+                        "Precision: $weightPrecision. Use an F16 or quantized " +
+                        "Anima checkpoint if this compatibility conversion still fails. "
+                    gpuRequested ->
+                        "Vulkan backend could not generate an image. Device probe: " +
+                        deviceLabel.takeLast(380) + ". GPU was explicitly requested; no CPU fallback occurred. "
+                    else -> "CPU image generation failed. "
+                }
+                throw IOException(hint + "Native engine exit " + code + ": " + logTail)
             }
             phase = "Finalizing image"
             if (!params.hasKey("skipUpscaler") || !params.getBoolean("skipUpscaler")) {
