@@ -654,6 +654,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     fun attachAtlasImageSupport(params: ReadableMap, promise: Promise) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
+                if (generationInProgress.get()) throw IOException(
+                    "Finish or cancel image generation before replacing support files")
                 val support = AtlasImageFiles.attach(reactApplicationContext,
                     params.getString("uri") ?: "", params.getString("modelDir") ?: "",
                     params.getString("fileName") ?: "", params.getString("kind") ?: "",
@@ -706,6 +708,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     fun modifyAtlasImageSupport(params: ReadableMap, promise: Promise) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
+                if (generationInProgress.get()) throw IOException(
+                    "Finish or cancel image generation before changing support files")
                 AtlasImageFiles.modify(reactApplicationContext,
                     params.getString("modelDir") ?: "",
                     params.getString("kind") ?: "",

@@ -214,13 +214,29 @@ internal object AtlasImageFiles {
         val destination = File(supportDir, cleaned)
         val size = copy(ctx, uri, destination, progress)
         val arr = manifest.getJSONArray("support")
+        val replacedFiles = mutableListOf<File>()
         for (i in arr.length() - 1 downTo 0) {
-            if (arr.getJSONObject(i).optString("kind") == kind &&
-                (kind != "lora" || arr.getJSONObject(i).optString("name") == cleaned)) arr.remove(i)
+            val item = arr.getJSONObject(i)
+            if (item.optString("kind") == kind &&
+                (kind != "lora" || item.optString("name") == cleaned)) {
+                // Previously a replacement encoder remained on disk even when
+                // removed from the manifest, silently consuming phone storage.
+                val prior = File(item.optString("path")).canonicalFile
+                if (prior != destination.canonicalFile &&
+                    prior.path.startsWith(supportDir.canonicalPath + File.separator)) {
+                    replacedFiles.add(prior)
+                }
+                arr.remove(i)
+            }
         }
         arr.put(JSONObject().put("kind", kind).put("name", cleaned)
             .put("path", destination.absolutePath).put("strength", strength).put("enabled", true))
         file.writeText(manifest.toString())
+        // Delete only older, no-longer-referenced files after the new manifest
+        // is safely saved. Never touch the freshly attached destination.
+        replacedFiles.distinct().forEach { old ->
+            if (old.isFile && old != destination.canonicalFile) old.delete()
+        }
         return JSONObject().put("kind", kind).put("name", cleaned)
             .put("path", destination.absolutePath).put("size", size)
             .put("strength", strength).put("enabled", true)

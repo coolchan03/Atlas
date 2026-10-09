@@ -65,7 +65,7 @@ const ImageGpuSection: React.FC = () => {
           </Text>
           <Text style={styles.toggleDesc}>
             {nativeImage
-              ? 'Prefer Vulkan for diffusion and CPU for the text encoder. The Image Model Test reports which backend actually runs.'
+              ? 'Vulkan is required for large native image models by default. If the GPU is unavailable Atlas stops instead of silently hanging on CPU. Turn this off to explicitly use slower CPU mode. The Image Model Test shows the selected backend.'
               : 'Use OpenCL for supported MNN image models. First run may optimize your GPU.'}
           </Text>
         </View>

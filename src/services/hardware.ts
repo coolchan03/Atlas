@@ -291,9 +291,25 @@ class HardwareService {
    * so the gate doesn't refuse an ANE load that fits (nor admit a GPU load that
    * OOMs). Android (ONNX/QNN reserves accelerator memory up front) keeps 2.5×.
    */
-  estimateImageModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
+  estimateImageModelRam(model: {
+    fileSize?: number; size?: number; mmProjFileSize?: number;
+    backend?: string;
+    supportFiles?: Array<{ size?: number; enabled?: boolean; kind?: string }>;
+  }): number {
     const multiplier = Platform.OS === 'ios' && !this.preferGpuForImageGen() ? 1.8 : 2.5;
-    return this.estimateModelRam(model, multiplier);
+    const checkpointEstimate = this.estimateModelRam(model, multiplier);
+    if (model.backend !== 'sdcpp') return checkpointEstimate;
+    // Native multi-component models (Anima, Z-Image, Chroma, FLUX) load the
+    // attached VAE and text encoders in addition to the primary checkpoint.
+    // Omitting them produced a misleading "fits in RAM" result.
+    const attachments = model.supportFiles ?? [];
+    const supportBytes = attachments
+      .filter(file => file.enabled !== false && file.kind !== 'upscaler')
+      .reduce((total, file) => total + (Number.isFinite(file.size) && (file.size ?? 0) > 0
+        ? file.size ?? 0 : 0), 0);
+    // Encoders and LoRAs may allocate working buffers besides their weight files.
+    // Upscalers execute after diffusion and aren't permanently resident.
+    return checkpointEstimate + supportBytes * 1.25;
   }
   formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): string {
     return `~${(this.estimateModelRam(model, multiplier) / (1024 * 1024 * 1024)).toFixed(1)} GB`;

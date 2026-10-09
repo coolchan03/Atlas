@@ -20,6 +20,35 @@ describe('HardwareService', () => {
     (hardwareService as any).cachedImageRecommendation = null;
   });
 
+  describe('native multi-component image memory', () => {
+    const GB = 1024 * 1024 * 1024;
+    it('adds enabled Anima text encoder and VAE to the checkpoint memory estimate', () => {
+      const weights = 4 * GB;
+      const qwen = 1.2 * GB;
+      const vae = 0.25 * GB;
+      const model = {
+        backend: 'sdcpp',
+        size: weights,
+        supportFiles: [
+          { kind: 'llm', size: qwen, enabled: true },
+          { kind: 'vae', size: vae, enabled: true },
+          { kind: 'lora', size: 0.3 * GB, enabled: false },
+          { kind: 'upscaler', size: 0.2 * GB, enabled: true },
+        ],
+      };
+      const before = hardwareService.estimateImageModelRam({ backend: 'sdcpp', size: weights });
+      const after = hardwareService.estimateImageModelRam(model);
+      expect(after - before).toBeCloseTo((qwen + vae) * 1.25, -5);
+    });
+    it('does not change the existing mobile model estimate', () => {
+      const legacy = { backend: 'mnn', size: 500 * 1024 * 1024 };
+      // Platform.OS can be mocked as iOS by other HardwareService tests;
+      // either platform must use its existing multiplier for MNN models.
+      expect(hardwareService.estimateImageModelRam(legacy))
+        .toEqual(hardwareService.estimateImageModelRam({ size: legacy.size }));
+    });
+  });
+
   // ========================================================================
   // getDeviceInfo
   // ========================================================================

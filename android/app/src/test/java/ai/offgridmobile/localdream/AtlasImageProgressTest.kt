@@ -25,6 +25,15 @@ class AtlasImageProgressTest {
         assertNull(AtlasImageProgress.stage("user prompt: some private text"))
     }
 
+    @Test fun staleNativeDiffusionIsBounded() {
+        val now = 2_000_000L
+        assertEquals(false, AtlasImageProgress.isStalled(now, now - 599_000L, 0L, true))
+        assertEquals(true, AtlasImageProgress.isStalled(now, now - 600_000L, 0L, true))
+        assertEquals(false, AtlasImageProgress.isStalled(now, now - 600_000L, now - 2000L, true))
+        assertEquals(false, AtlasImageProgress.isStalled(now, now - 900_000L, 0L, false))
+        assertEquals(true, AtlasImageProgress.isStalled(now, now - 1_800_000L, 0L, false))
+    }
+
     @Test fun cpuTickParserWorksWithSpacesInProcessName() {
         val fields = listOf("R") + List(10) { "0" } + listOf("120", "40") + List(10) { "0" }
         val stat = "2222 (sd cli worker) " + fields.joinToString(" ")

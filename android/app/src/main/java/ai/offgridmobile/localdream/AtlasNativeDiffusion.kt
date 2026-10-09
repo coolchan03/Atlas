@@ -10,7 +10,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
+import kotlin.concurrent.thread
 import java.util.UUID
 
 /** Original safetensors and GGUF image weights executed by stable-diffusion.cpp. */
@@ -122,6 +124,16 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         phase = if (preferGpu) "Checking Vulkan GPU" else "CPU selected manually"
         val gpuAvailable = preferGpu && detectVulkan(executable, cancelled)
         if (cancelled()) throw IOException("Generation cancelled")
+        // A silent CPU fallback caused Anima to sit at 1/x for over 30 minutes.
+        // Modern multi-component checkpoints need an explicit choice to run on CPU.
+        if (preferGpu && !gpuAvailable && family in setOf("anima", "z_image", "chroma", "flux")) {
+            phase = "Vulkan GPU unavailable"
+            computeBackend = "not available"
+            throw IOException("Vulkan GPU not available: $deviceLabel. " +
+                "Atlas will not silently start an extremely slow CPU generation. " +
+                "Check that you installed the GPU-enabled APK, or disable Vulkan GPU Acceleration " +
+                "in image settings to explicitly permit slower CPU generation.")
+        }
         computeBackend = if (gpuAvailable) "Vulkan GPU (diffusion)" else "CPU"
         if (!preferGpu) deviceLabel = "GPU disabled in settings"
 
@@ -213,6 +225,21 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         phase = "Starting " + computeBackend
         running = proc
         val tail = ArrayDeque<String>()
+        val watchdogActive = AtomicBoolean(true)
+        val watchdogTimedOut = AtomicBoolean(false)
+        val watchdog = thread(start = true, isDaemon = true, name = "AtlasNativeImageWatchdog") {
+            while (watchdogActive.get() && proc.isAlive) {
+                try { Thread.sleep(4000L) } catch (_: InterruptedException) { break }
+                if (watchdogActive.get() && proc.isAlive &&
+                    AtlasImageProgress.isStalled(
+                        SystemClock.elapsedRealtime(), startedMs, lastStepMs, gpuAvailable)) {
+                    watchdogTimedOut.set(true)
+                    phase = "No diffusion step progress; native engine timed out"
+                    proc.destroyForcibly()
+                    break
+                }
+            }
+        }
         try {
             // CLI terminal progress bars are carriage-return-delimited rather
             // than newline-delimited. BufferedReader.readLine() would hide all
@@ -230,27 +257,40 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                     progress(step, steps)
                 }
             }
-            proc.inputStream.bufferedReader().use { reader ->
-                val frame = StringBuilder()
-                while (true) {
-                    val next = reader.read()
-                    if (next < 0) {
-                        if (frame.isNotEmpty()) acceptFrame(frame.toString())
-                        break
-                    }
-                    when (next.toChar()) {
-                        '\r', '\n' -> {
-                            if (frame.isNotEmpty()) {
-                                acceptFrame(frame.toString())
-                                frame.setLength(0)
-                            }
+            try {
+                proc.inputStream.bufferedReader().use { reader ->
+                    val frame = StringBuilder()
+                    while (true) {
+                        val next = reader.read()
+                        if (next < 0) {
+                            if (frame.isNotEmpty()) acceptFrame(frame.toString())
+                            break
                         }
-                        else -> if (frame.length < 4096) frame.append(next.toChar())
+                        when (next.toChar()) {
+                            '\r', '\n' -> {
+                                if (frame.isNotEmpty()) {
+                                    acceptFrame(frame.toString())
+                                    frame.setLength(0)
+                                }
+                            }
+                            else -> if (frame.length < 4096) frame.append(next.toChar())
+                        }
                     }
                 }
+            } catch (e: IOException) {
+                // Killing a stalled/cancelled process can close its stdout pipe
+                // during a blocking read. Surface the watchdog/cancel reason
+                // below rather than an unhelpful "stream closed" error.
+                if (!watchdogTimedOut.get() && !cancelled()) throw e
             }
             val code = proc.waitFor()
             if (cancelled()) throw IOException("Generation cancelled")
+            if (watchdogTimedOut.get()) {
+                throw IOException("Image generation stopped: no diffusion step progress for " +
+                    (if (gpuAvailable) "10 minutes on Vulkan GPU" else "30 minutes on CPU") +
+                    ". Try a smaller quantized checkpoint, check GPU status in Image Model Test, " +
+                    "or reduce the output resolution.")
+            }
             if (code != 0 || !output.isFile || output.length() == 0L) {
                 if (output.exists()) output.delete()
                 val hint = if (gpuAvailable)
@@ -264,16 +304,23 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(output.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                output.delete()
+                throw IOException("Native image engine produced an invalid or undecodable image")
+            }
             return Arguments.createMap().apply {
                 putString("id", id)
                 putString("imagePath", output.absolutePath)
-                putInt("width", bounds.outWidth.takeIf { it > 0 } ?: width)
-                putInt("height", bounds.outHeight.takeIf { it > 0 } ?: height)
+                putInt("width", bounds.outWidth)
+                putInt("height", bounds.outHeight)
                 putDouble("seed", seed.toDouble())
             }
         } finally {
+            watchdogActive.set(false)
+            watchdog.interrupt()
             if (running === proc) running = null
-            phase = if (cancelled()) "Cancelled" else "Finished"
+            phase = if (cancelled()) "Cancelled"
+                else if (watchdogTimedOut.get()) "Timed out" else "Finished"
             if (proc.isAlive) proc.destroyForcibly()
         }
     }

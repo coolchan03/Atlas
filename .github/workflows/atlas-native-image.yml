@@ -37,16 +37,13 @@ jobs:
           npm ci --ignore-scripts
           node node_modules/llama.rn/install/download-native-artifacts.js
           ./node_modules/.bin/patch-package
+      - name: Validate image native source contract
+        run: node scripts/verify-native-image-contract.cjs
       - name: TypeScript compile check
-        run: |
-          ./node_modules/.bin/tsc --noEmit -p . > /tmp/atlas-types.log 2>&1 || true
-          if grep -E 'error TS' /tmp/atlas-types.log | grep -E 'nativeImageImport|imageSupportActions|nativeImageCompatibility|MyModelsScreen|ModelTestScreen|ImageModelTestScreen|nativeImageTuning|quickImport|useModelsScreen|localDreamGenerator|activeModelService/loaders|imageGenerationService|ImageQualitySliders' ; then
-            echo 'New Atlas image TypeScript errors were detected'
-            exit 1
-          fi
+        run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Run image model compatibility tests
         run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts
+          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts __tests__/unit/services/hardware.test.ts
       - name: Add sherpa voice dependencies
         run: |
           mkdir -p android/app/libs
@@ -57,7 +54,7 @@ jobs:
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
       - name: Test native image family classifier and progress diagnostics
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --no-daemon --console=plain
+        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' :app:compileReleaseKotlin --no-daemon --console=plain
       - name: Build native ARM64 diffusion CLI from pinned upstream source
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp

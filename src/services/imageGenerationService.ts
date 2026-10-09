@@ -355,6 +355,10 @@ class ImageGenerationService {
       }
     }
     let warmupStatus = 'Optimizing GPU for your device (~120s, one-time)...';
+    if (runtimeModel.backend === 'sdcpp') {
+      // Native Vulkan first run is not OpenCL kernel warmup. Avoid false ETAs.
+      warmupStatus = 'Preparing native image model and checking Vulkan GPU...';
+    }
     if (runtimeModel.backend === 'qnn') warmupStatus = 'Preparing NPU image model (one-time)...';
     else if (Platform.OS === 'ios') warmupStatus = 'Preparing Core ML image model (one-time)...';
     return { runtimeModel, isFirstRun, warmupStatus };
@@ -367,7 +371,7 @@ class ImageGenerationService {
         if (!this._isRequestCurrent(requestEpoch)) return;
         const displayStep = Math.min(progress.step, steps);
         const suffix = isFirstRun ? ' (one-time warm-up)' : '';
-        const status = displayStep <= 1 && isFirstRun ? warmupStatus : `Generating image (${displayStep}/${steps})...${suffix}`;
+        const status = displayStep === 0 && isFirstRun ? warmupStatus : `Generating image (${displayStep}/${steps})...${suffix}`;
         this.updateState({ progress: { step: displayStep, totalSteps: steps }, status });
       },
       onPreview: (preview: { step: number; previewPath: string }) => {

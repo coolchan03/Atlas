@@ -29,6 +29,14 @@ internal object AtlasImageProgress {
         }
     }
 
+    /** Prevent an indefinite "1/x" while respecting slower explicit CPU runs. */
+    fun isStalled(nowMs: Long, startedMs: Long, lastStepMs: Long, gpu: Boolean): Boolean {
+        val lastProgress = if (lastStepMs > startedMs) lastStepMs else startedMs
+        if (lastProgress <= 0L || nowMs < lastProgress) return false
+        val limit = if (gpu) 10L * 60L * 1000L else 30L * 60L * 1000L
+        return nowMs - lastProgress >= limit
+    }
+
     /** Linux proc stat uses a parenthesized process name. Find field 14+15 afterwards. */
     fun cpuTicks(stat: String): Long? {
         val end = stat.lastIndexOf(')')
