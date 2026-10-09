@@ -114,6 +114,16 @@ check('Pinned native Vulkan backend guards unsupported BF16 shaders', () => {
   assert.ok(build.indexOf('ggml apply "$GITHUB_WORKSPACE') <
     build.indexOf('cmake -S /tmp/atlas-sdcpp -B '));
 });
+check('Adreno FP16 Vulkan matvec selects shared-memory reduction', () => {
+  const patch = read('android/patches/ggml-vulkan-guard-unsupported-bf16.patch');
+  // The Adreno 830 driver may reject subgroup specialization while the
+  // shared-memory Vulkan reduction mode can still execute on the GPU.
+  assert.match(patch, /-    const bool use_subgroups = device->subgroup_arithmetic;/);
+  assert.match(patch, /\+    const bool use_subgroups = device->subgroup_arithmetic &&/);
+  assert.match(patch, /\+        device->vendor_id != VK_VENDOR_ID_QUALCOMM;/);
+  assert.ok(patch.includes('SHADER_REDUCTION_MODE_SHMEM'));
+  assert.ok(patch.includes('mul_mat_vec_f16_f32_f32'));
+});
 check('Native build pins and includes Vulkan C++ and SPIRV headers', () => {
   const build = step('Build native ARM64 diffusion CLI from pinned upstream source')?.run;
   assert.ok(build, 'Native compiler step missing');

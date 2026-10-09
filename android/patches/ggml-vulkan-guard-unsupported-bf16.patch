@@ -1,5 +1,18 @@
 --- a/src/ggml-vulkan/ggml-vulkan.cpp
 +++ b/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -2719,7 +2719,11 @@
+-    const bool use_subgroups = device->subgroup_arithmetic;
++    // Atlas: Qualcomm's Vulkan compiler can reject the subgroup matvec
++    // shader specialization on Adreno 830 (including F16). Keep GPU
++    // execution but use SHADER_REDUCTION_MODE_SHMEM instead.
++    const bool use_subgroups = device->subgroup_arithmetic &&
++        device->vendor_id != VK_VENDOR_ID_QUALCOMM;
+     // The Imagination proprietary compiler rejects the subgroup-only dequant mul_mat_vec
+     // shaders that require a subgroup size >= 16; fall back to shared-memory reduction.
+     const bool is_imagination_proprietary =
+         device->driver_id == vk::DriverId::eImaginationProprietary;
+     // Ensure a subgroup size >= 16 is available
+     const bool use_subgroups16 = use_subgroups && subgroup_min_size_16 && !is_imagination_proprietary;
 @@ -2754,9 +2754,12 @@
  
          for (uint32_t i = 0; i < mul_mat_vec_max_cols; ++i) {
