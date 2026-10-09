@@ -1,0 +1,20 @@
+--- a/src/model_loader.cpp
++++ b/src/model_loader.cpp
+@@ -1589,8 +1589,17 @@
+     const std::string& name = tensor_storage.name;
+     if (tensor_storage.is_int8_tensorwise) {
+         return false;
+     }
++    // Atlas Vulkan compatibility: --type f16 must convert *all* BF16
++    // tensor weights, including special embedder and bias layers.
++    // Otherwise a single skipped BF16 weight can invoke an unsupported
++    // mul_mat_vec_bf16_f32_f32 pipeline on mobile GPUs.
++    // Keep LLaDA's special _pad_token in its original range.
++    if (type == GGML_TYPE_F16 && tensor_storage.type == GGML_TYPE_BF16 &&
++        !ends_with(name, "_pad_token")) {
++        return true;
++    }
+     if (type != GGML_TYPE_COUNT) {
+         if (ggml_is_quantized(type) && tensor_storage.ne[0] % ggml_blck_size(type) != 0) {
+             // Pass, do not convert
+         } else if (ends_with(name, ".bias")) {

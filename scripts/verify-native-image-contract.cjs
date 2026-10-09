@@ -92,6 +92,28 @@ check('BF16 safetensors use FP16 on Vulkan without touching GGUF', () => {
   const kotlinTest = step('Test native image family classifier and progress diagnostics')?.run;
   assert.ok(kotlinTest?.includes('AtlasImageGpuPrecisionTest'));
 });
+check('Pinned native Vulkan backend guards unsupported BF16 shaders', () => {
+  const ggmlPatch = read('android/patches/ggml-vulkan-guard-unsupported-bf16.patch');
+  const loaderPatch = read('android/patches/sdcpp-convert-all-bf16-to-f16.patch');
+  const shaderNames = [
+    'mul_mat_vec_bf16_f32_f32',
+    'mul_mat_vec_bf16_f16_f32',
+    'mul_mat_vec_id_bf16_f32'
+  ];
+  assert.equal((ggmlPatch.match(/\+\s*if \(device->bf16\) \{/g) || []).length, 3);
+  for (const shader of shaderNames) {
+    assert.ok(ggmlPatch.includes(shader), 'Missing Vulkan shader guard: ' + shader);
+  }
+  assert.ok(loaderPatch.includes('tensor_storage.type == GGML_TYPE_BF16'));
+  assert.ok(loaderPatch.includes('type == GGML_TYPE_F16'));
+  const build = step('Build native ARM64 diffusion CLI from pinned upstream source')?.run;
+  assert.ok(build?.includes('ggml-vulkan-guard-unsupported-bf16.patch'));
+  assert.ok(build?.includes('sdcpp-convert-all-bf16-to-f16.patch'));
+  assert.ok(build?.includes('ggml apply --check'));
+  assert.ok(build?.includes('ggml apply "$GITHUB_WORKSPACE'));
+  assert.ok(build.indexOf('ggml apply "$GITHUB_WORKSPACE') <
+    build.indexOf('cmake -S /tmp/atlas-sdcpp -B '));
+});
 check('Native build pins and includes Vulkan C++ and SPIRV headers', () => {
   const build = step('Build native ARM64 diffusion CLI from pinned upstream source')?.run;
   assert.ok(build, 'Native compiler step missing');

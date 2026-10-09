@@ -61,6 +61,17 @@ jobs:
           git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp checkout e16d26a96a1bf59824d12cc26352aa36c25c2252
           git -C /tmp/atlas-sdcpp submodule update --init --recursive --depth 1
+          # The pinned Vulkan backend unconditionally creates three BF16 matvec
+          # pipelines. On Adreno without native BF16 this aborts VkPipeline
+          # creation even for an otherwise compatible checkpoint.
+          # Vendor patches are generated and verified against exact pinned
+          # source revisions and applied before CMake or native compilation.
+          git -C /tmp/atlas-sdcpp/ggml apply --check "$GITHUB_WORKSPACE/android/patches/ggml-vulkan-guard-unsupported-bf16.patch"
+          git -C /tmp/atlas-sdcpp/ggml apply "$GITHUB_WORKSPACE/android/patches/ggml-vulkan-guard-unsupported-bf16.patch"
+          git -C /tmp/atlas-sdcpp apply --check "$GITHUB_WORKSPACE/android/patches/sdcpp-convert-all-bf16-to-f16.patch"
+          git -C /tmp/atlas-sdcpp apply "$GITHUB_WORKSPACE/android/patches/sdcpp-convert-all-bf16-to-f16.patch"
+          grep -q 'if (device->bf16)' /tmp/atlas-sdcpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+          grep -q 'tensor_storage.type == GGML_TYPE_BF16' /tmp/atlas-sdcpp/src/model_loader.cpp
           # Android NDK has libvulkan.so and C API headers, but not vulkan.hpp.
           # GGML needs Khronos' Vulkan C++ headers to compile.
           # Pin to the same Vulkan SDK release used for SPIRV-Headers.
