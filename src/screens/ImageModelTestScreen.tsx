@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, Share, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -43,6 +43,15 @@ export const ImageModelTestScreen: React.FC = () => {
   const [elapsed, setElapsed] = useState(0);
   const [diffusionStep, setDiffusionStep] = useState(0);
   const [runtime, setRuntime] = useState<NativeImageRuntimeStatus | null>(null);
+  const [probingGpu, setProbingGpu] = useState(false);
+  const [gpuDiagnostic, setGpuDiagnostic] = useState<{
+    enumerated: boolean;
+    androidVulkanFeature: boolean;
+    backend: string;
+    detail: string;
+    nativeOutput: string;
+  } | null>(null);
+  const [gpuProbeError, setGpuProbeError] = useState<string | null>(null);
   const [cpuState, setCpuState] = useState<'active' | 'idle' | 'unknown'>('unknown');
   const previousTicks = useRef<number | null>(null);
   const [result, setResult] = useState<GeneratedImage | null>(null);
@@ -90,6 +99,21 @@ export const ImageModelTestScreen: React.FC = () => {
     const timer = setInterval(() => { void poll(); }, 12000);
     return () => { disposed = true; clearInterval(timer); };
   }, [running, model?.backend]);
+
+  const checkGpu = async () => {
+    if (running || probingGpu || gone.current) return;
+    setProbingGpu(true);
+    setGpuDiagnostic(null);
+    setGpuProbeError(null);
+    try {
+      const diagnostic = await localDreamGeneratorService.getNativeImageGpuDiagnostics();
+      if (!gone.current) setGpuDiagnostic(diagnostic);
+    } catch (error: any) {
+      if (!gone.current) setGpuProbeError(error?.message || String(error));
+    } finally {
+      if (!gone.current) setProbingGpu(false);
+    }
+  };
 
   const update = (key: string, status: Status, detail: string) => {
     if (!gone.current) setItems(prev => prev.map(item => item.key === key ? { ...item, status, detail } : item));
@@ -262,6 +286,33 @@ export const ImageModelTestScreen: React.FC = () => {
                 <Switch disabled={running} value={includeUpscaler} onValueChange={setIncludeUpscaler} />
               </View>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>Both off by default. RealESRGAN_x4plus.pth is a 4x upscaler, not a style LoRA.</Text>
+              <TouchableOpacity disabled={running || probingGpu} onPress={checkGpu}
+                style={[bordered(colors.primary), { marginTop: 12, alignItems: 'center' }]}>
+                <Text style={{ color: colors.primary, fontWeight: '600' }}>
+                  {probingGpu ? 'Checking Vulkan hardware...' : 'Check GPU without loading Anima'}
+                </Text>
+              </TouchableOpacity>
+              {gpuDiagnostic && (
+                <View style={{ marginTop: 9 }}>
+                  <Text selectable style={{ color: gpuDiagnostic.enumerated ? colors.text : colors.error,
+                    fontSize: 12 }}>
+                    {gpuDiagnostic.enumerated ? 'Vulkan device recognized.' : 'GPU probe inconclusive.'}
+                    {' '}Android reports Vulkan: {gpuDiagnostic.androidVulkanFeature ? 'yes' : 'not advertised'}.
+                    {' '}Backend: {gpuDiagnostic.backend}.
+                    {' '}Native log: {gpuDiagnostic.nativeOutput}
+                  </Text>
+                  <TouchableOpacity onPress={() => {
+                    void Share.share({ message:
+                      'Atlas Vulkan probe - ' + gpuDiagnostic.detail +
+                      '\nDevice list: ' + gpuDiagnostic.nativeOutput }).catch(() => {});
+                  }} style={{ paddingVertical: 7 }}>
+                    <Text style={{ color: colors.primary, fontSize: 12 }}>Share GPU diagnostics</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {gpuProbeError && <Text selectable style={{ color: colors.error, fontSize: 12 }}>
+                GPU check error: {gpuProbeError}
+              </Text>}
             </>}
             <TouchableOpacity onPress={running ? stop : doTest} style={{
               alignItems: 'center', backgroundColor: running ? colors.error : colors.primary,

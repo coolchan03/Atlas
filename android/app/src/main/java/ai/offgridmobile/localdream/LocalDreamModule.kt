@@ -845,6 +845,22 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         safeResolve(promise, directDiffusion.status())
     }
 
+    /** Check GPU hardware and native Vulkan enumeration before loading weights. */
+    @ReactMethod
+    fun getAtlasImageGpuDiagnostics(promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) {
+                    throw IOException("Finish or cancel image generation before probing the GPU")
+                }
+                safeResolve(promise, directDiffusion.probeGpu())
+            } catch (e: Exception) {
+                safeReject(promise, "ATLAS_GPU_PROBE_FAILED",
+                    e.message ?: "Vulkan diagnostic check failed", e)
+            }
+        }
+    }
+
     @ReactMethod
     fun cancelGeneration(promise: Promise) {
         generationCancelled.set(true)

@@ -27,6 +27,8 @@ export type NativeImageRuntimeStatus = {
   stage: string;
   computeBackend: string;
   deviceLabel: string;
+  probeOutput?: string;
+  androidVulkanFeature?: boolean;
   step: number;
   totalSteps: number;
   elapsedSeconds: number;
@@ -79,6 +81,20 @@ class LocalDreamGeneratorService {
       logger.warn('[LocalDream] Could not read native image runtime status:', e);
       return null;
     }
+  }
+
+  /** Read the real sd-cli --list-devices output without loading any image weights. */
+  async getNativeImageGpuDiagnostics(): Promise<{
+    enumerated: boolean;
+    androidVulkanFeature: boolean;
+    backend: string;
+    detail: string;
+    nativeOutput: string;
+  }> {
+    if (Platform.OS !== 'android' || !DiffusionModule?.getAtlasImageGpuDiagnostics) {
+      throw new Error('GPU diagnostics require the updated Android Atlas APK.');
+    }
+    return DiffusionModule.getAtlasImageGpuDiagnostics();
   }
 
   async getLoadedModelPath(): Promise<string | null> {
