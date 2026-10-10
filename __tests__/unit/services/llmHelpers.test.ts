@@ -545,27 +545,28 @@ describe('initContextWithFallback — HTP device stripping and timeout', () => {
     expect(mockedInitLlama.mock.calls.length - callsBefore).toBe(1);
   });
 
-  it('strips devices from params on CPU fallback (attempt 2)', async () => {
+  it('tries GPU before CPU when HTP initialization fails', async () => {
     mockedInitLlama.mockRejectedValueOnce(new Error('HTP init failed'));
-    const mockCtx = { gpu: false, release: jest.fn() };
+    const mockCtx = { gpu: true, release: jest.fn() };
     mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
 
     await initContextWithFallback(baseParams, 2048, 99);
 
-    const cpuCall = mockedInitLlama.mock.calls[1][0] as Record<string, unknown>;
-    expect(cpuCall.devices).toBeUndefined();
-    expect(cpuCall.n_gpu_layers).toBe(0);
+    const gpuCall = mockedInitLlama.mock.calls[1][0] as Record<string, unknown>;
+    expect(gpuCall.devices).toBeUndefined();
+    expect(gpuCall.n_gpu_layers).toBe(99);
   });
 
   it('strips devices from params on minimal CPU fallback (attempt 3)', async () => {
     mockedInitLlama.mockRejectedValueOnce(new Error('HTP init failed'));
+    mockedInitLlama.mockRejectedValueOnce(new Error('OpenCL init failed'));
     mockedInitLlama.mockRejectedValueOnce(new Error('CPU init failed'));
     const mockCtx = { gpu: false, release: jest.fn() };
     mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
 
     await initContextWithFallback(baseParams, 8192, 99);
 
-    const minCtxCall = mockedInitLlama.mock.calls[2][0] as Record<string, unknown>;
+    const minCtxCall = mockedInitLlama.mock.calls[3][0] as Record<string, unknown>;
     expect(minCtxCall.devices).toBeUndefined();
     expect(minCtxCall.n_gpu_layers).toBe(0);
     expect(minCtxCall.n_ctx).toBe(2048);

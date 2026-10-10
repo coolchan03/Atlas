@@ -213,6 +213,22 @@ export async function initContextWithFallback(
     } else {
       logger.warn(`[LLM] Attempt 1/3 failed (no GPU requested): ${gpuMsg}`);
     }
+    // When Hexagon fails, try the bundled default GPU backend before CPU.
+    // Removing the HTP device pin lets llama.rn select OpenCL when available.
+    if (isHtp && nGpuLayers > 0) {
+      const gpuParams = { ...(params as Record<string, unknown>) };
+      delete gpuParams.devices;
+      try {
+        logger.log('[LLM] Hexagon failed; attempting OpenCL GPU before CPU');
+        const next = initLlama({ ...gpuParams, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
+        const context = await tryGpuInit(next, nGpuLayers);
+        return { context, gpuAttemptFailed: !(context.gpu ?? false), actualLength: contextLength };
+      } catch (openclError: any) {
+        const message = openclError?.message || String(openclError);
+        if (isNativeLlamaRuntimeError(message)) throwNativeLlamaRuntimeError(message);
+        logger.warn(`[LLM] OpenCL retry failed; continuing to CPU: ${message}`);
+      }
+    }
     try {
       logger.log(`[LLM] Attempt 2/3: CPU init (ctx=${contextLength}, gpu_layers=0)`);
       // Strip devices — HTP requires n_gpu_layers > 0; CPU fallback must not request it
