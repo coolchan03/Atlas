@@ -123,11 +123,10 @@ const TextModelTestScreen: React.FC = () => {
           const st = liteRTService.getLastBenchmarkStats();
           readTps = st?.prefillTokensPerSecond || 0;
         } else {
-          const n = (await llmService.tokenize(LONG_TEXT)).length;
-          const t1 = Date.now();
           await llmService.generateWithMaxTokens([msg(`${LONG_TEXT}\n\nIn one word, what was the traveller counting?`)], 4);
-          readTps = n / Math.max(0.05, (Date.now() - t1) / 1000);
-          useSpeedStats.getState().record(model.id, { prefill: readTps });
+          // Native prefill timing is recorded by llama.rn; elapsed wall time also
+          // includes generation and must never be presented as prompt tok/s.
+          readTps = useSpeedStats.getState().byModel[model.id]?.prefill || 0;
         }
         const pageSec = readTps > 0 ? 500 / readTps : 0; // ~500 tokens per page
         set('read', readTps > 0 && readTps < 40 ? 'warn' : 'ok', readTps > 0
@@ -150,10 +149,10 @@ const TextModelTestScreen: React.FC = () => {
         const g = llmService.getGpuInfo();
         let qualcomm = false;
         try { qualcomm = (await hardwareService.getSoCInfo()).vendor === 'qualcomm'; } catch { /* unknown */ }
-        if (qualcomm && !/q4_0|q8_0/i.test(model.fileName || '')) setFaster('A Q4_0 version of this model can run on the Snapdragon GPU and is usually much faster.');
-        const quant = !qualcomm || /q4_0|q8_0/i.test(model.fileName || '') ? '' : ' This file type speeds up less on the GPU - a Q4_0 or Q8_0 version is fastest on Snapdragon.';
+        if (qualcomm && /q4_k/i.test(model.fileName || '') && !g.gpu) setFaster('Q4_K GPU acceleration depends on your installed OpenCL runtime; try a Q4_0 build if GPU loading fails.');
+        const quant = /q4_k/i.test(model.fileName || '') ? ' Q4_K GPU performance depends on native backend support.' : '';
         const note = llmService.getBackendFallbackNotice();
-        if (llmService.isCpuForFileType()) set('accel', 'ok', 'CPU on purpose: the GPU/NPU only speed up Q4_0 and Q8_0 files, so this file type is faster on the CPU. A Q4_0 version of this model can use the GPU.');
+        if (llmService.isCpuForFileType()) set('accel', 'warn', 'CPU fallback: this model quantization is not eligible for the selected accelerator. OpenCL and Hexagon support different formats.');
         else set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
       }
 

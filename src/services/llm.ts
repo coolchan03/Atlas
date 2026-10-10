@@ -427,7 +427,13 @@ class LLMService {
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
-    try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    try {
+      const result = await completionWork;
+      // Preserve the native prefill/decode timings for the existing model tester.
+      // Wall-clock prompt time includes generation and must not be labeled prefill.
+      recordLlamaTimings(result);
+      return fullResponse.trim();
+    } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
 
   /** Ephemeral, tools-free routing pass for two-pass tool selection (not user-facing). */
