@@ -69,12 +69,15 @@ class LLMService {
     const validation = await validateModelFile(modelPath);
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
     const rawSettings = useAppStore.getState().settings;
-    // Atlas: the Adreno GPU (OpenCL) and NPU only speed up Q4_0 / Q8_0 files. Other types (Q4_K_M, Q5_K...)
-    // bounce between GPU and CPU and end up much slower than plain CPU - and force a big f16 memory cache.
-    // Run those on the CPU (with flash attention + a compact cache) instead.
-    const accel = rawSettings.inferenceBackend === INFERENCE_BACKENDS.OPENCL || rawSettings.inferenceBackend === INFERENCE_BACKENDS.HTP;
-    this.cpuForFileType = Platform.OS === 'android' && accel && !/q4_0|q8_0/i.test(modelPath.split('/').pop() || '');
-    if (this.cpuForFileType) logger.log('[LLM] Not a Q4_0/Q8_0 file: running on CPU (faster than GPU for this type)');
+    // HTP only accelerates selected quants. OpenCL can also support Q4_K
+    // (subject to the actual native runtime); let its load probe decide.
+    const accelerated = rawSettings.inferenceBackend === INFERENCE_BACKENDS.OPENCL || rawSettings.inferenceBackend === INFERENCE_BACKENDS.HTP;
+    const quant = modelPath.split('/').pop() ?? '';
+    const htpEligible = /(?:^|[-_.])(q4_0|q8_0)(?:\.|-|_|$)/i.test(quant);
+    const openclEligible = htpEligible || /(?:^|[-_.])q4_k(?:_[sml])?(?:\.|-|$)/i.test(quant);
+    this.cpuForFileType = Platform.OS === 'android' && accelerated &&
+      !(rawSettings.inferenceBackend === INFERENCE_BACKENDS.HTP ? htpEligible : openclEligible);
+    if (this.cpuForFileType) logger.log('[LLM] Quantization not eligible for selected accelerator; using CPU');
     const settings = this.cpuForFileType ? { ...rawSettings, inferenceBackend: INFERENCE_BACKENDS.CPU } : rawSettings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();

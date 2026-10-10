@@ -1,5 +1,6 @@
 import { Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import { getBackendDevicesInfo } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
 // Access NativeModules.LocalDreamModule dynamically (not destructured)
@@ -471,12 +472,15 @@ class HardwareService {
     if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
     try {
-      const hardware = (await DeviceInfo.getHardware()).toLowerCase();
-      // Support Qualcomm Adreno (qcom) and ARM Mali GPUs.
-      // Avoid 'arm' alone — it matches the CPU architecture string (arm64-v8a), not the GPU vendor.
-      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali');
-      if (!hasCompatibleGpu) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_compatible_gpu' });
-      return (this.cachedOpenCLCapability = { supported: true });
+      // The CPU hardware string is not the GPU name (MediaTek/Mali tablets were
+      // incorrectly rejected). Ask the bundled native runtime what it exposes.
+      const devices = await getBackendDevicesInfo();
+      const supported = devices.some(device =>
+        /opencl/i.test(device.backend) && /gpu/i.test(device.type));
+      return (this.cachedOpenCLCapability = {
+        supported,
+        reason: supported ? undefined : 'native_opencl_device_not_found',
+      });
     } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
   }
 }

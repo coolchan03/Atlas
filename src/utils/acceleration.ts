@@ -82,8 +82,8 @@ export function recommendedAccelerator(
   capability: AccelerationCapability,
   modelName: string | undefined,
 ): 'gpu' | 'npu' | null {
-  if (capability.hasGpu) return 'gpu';
   if (capability.hasNpu && isLlamaFamily(modelName)) return 'npu';
+  if (capability.hasGpu) return 'gpu';
   return null;
 }
 
@@ -165,16 +165,20 @@ export function acceleratedBackendFor(
 
 /**
  * Automatic backend for a locally downloaded llama/GGUF model when the user has NOT
- * explicitly chosen a backend. K-quants stay on CPU because Android OpenCL/HTP do not
- * accelerate them reliably; Q4_0/Q8_0 use the safest available accelerator. GPU wins
- * when present; the experimental HTP/NPU path is used only for the Llama-family case
- * accepted by recommendedAccelerator().
+ * explicitly chosen a backend. Prefer an eligible Hexagon NPU for supported Llama
+ * quantizations, then OpenCL. Q4_K is eligible for the newer OpenCL GPU path but
+ * not HTP; if the bundled runtime cannot offload it, native init falls back to CPU.
  */
 export function automaticBackendForModel(
   capability: AccelerationCapability,
   modelName: string | undefined,
   quantization: string | undefined,
 ): InferenceBackend {
+  // K-quants are not eligible for the current HTP runtime, but newer
+  // llama.cpp OpenCL backends support Q4_K. Try GPU before CPU when present.
+  if (/^Q4_K(?:_[SML])?$/i.test(quantization ?? '')) {
+    return capability.hasGpu ? INFERENCE_BACKENDS.OPENCL : INFERENCE_BACKENDS.CPU;
+  }
   if (!isAccelerableQuant(quantization)) return INFERENCE_BACKENDS.CPU;
   const recommended = recommendedAccelerator(capability, modelName);
   if (recommended === 'gpu') return INFERENCE_BACKENDS.OPENCL;
