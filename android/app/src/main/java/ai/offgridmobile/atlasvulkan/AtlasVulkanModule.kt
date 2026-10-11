@@ -19,6 +19,12 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
     private val cancelled = AtomicBoolean(false)
     override fun getName(): String = "AtlasVulkan"
 
+    @ReactMethod
+    fun addListener(eventName: String) { /* Events are emitted only during inference. */ }
+
+    @ReactMethod
+    fun removeListeners(count: Int) { /* No native observer is retained. */ }
+
     private fun newEngine(): Any =
         Class.forName("com.tensai.llamakt.LlamaEngine").getDeclaredConstructor().newInstance()
 
