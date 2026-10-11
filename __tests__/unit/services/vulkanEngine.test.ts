@@ -1,6 +1,7 @@
 jest.mock('react-native', () => {
   const handlers = new Map<string, Set<(event: any) => void>>();
   const native = {
+    rejectErrorListener: false,
     listBackends: jest.fn().mockResolvedValue([
       { name: 'Mali-G615', description: 'Vulkan', type: 'gpu' },
       { name: 'CPU', description: 'CPU', type: 'cpu' },
@@ -22,6 +23,10 @@ jest.mock('react-native', () => {
     NativeModules: { AtlasVulkan: native },
     NativeEventEmitter: class {
       addListener(name: string, handler: (event: unknown) => void) {
+        if (name === 'AtlasVulkanError' && native.rejectErrorListener) {
+          native.rejectErrorListener = false;
+          throw new Error('Native event bridge unavailable');
+        }
         if (!handlers.has(name)) handlers.set(name, new Set());
         handlers.get(name)!.add(handler);
         return { remove: () => handlers.get(name)?.delete(handler) };
@@ -35,7 +40,7 @@ import { vulkanEngine } from '../../../src/services/vulkanEngine';
 
 const native = (NativeModules as any).AtlasVulkan;
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => { jest.clearAllMocks(); native.rejectErrorListener = false; });
 
 it('detects a physically enumerated Vulkan GPU without depending on model name', async () => {
   expect(await vulkanEngine.isAvailable()).toBe(true);
@@ -66,6 +71,24 @@ it('can stop an active generation through the native interrupt command', async (
   expect(native.interrupt).toHaveBeenCalledTimes(1);
   resolveNative(true);
   await generating;
+});
+
+it('releases its lock when NativeEventEmitter listener setup throws', async () => {
+  native.rejectErrorListener = true;
+  await expect(vulkanEngine.generate('hello', 32, () => {})).rejects.toThrow('Native event bridge unavailable');
+  expect(native.generate).not.toHaveBeenCalled();
+  const output: string[] = [];
+  await vulkanEngine.generate('retry', 32, part => output.push(part));
+  expect(output).toEqual(['OK']);
+});
+
+it('propagates streaming callback failures and interrupts native generation', async () => {
+  await expect(vulkanEngine.generate('hello', 32, () => { throw new Error('UI callback failed'); }))
+    .rejects.toThrow('UI callback failed');
+  expect(native.interrupt).toHaveBeenCalledTimes(1);
+  const output: string[] = [];
+  await vulkanEngine.generate('retry', 32, part => output.push(part));
+  expect(output).toEqual(['OK']);
 });
 
 it('unloads the native model safely', async () => {

@@ -58,28 +58,32 @@ export const vulkanEngine = {
     const module = required();
     const sessionId = String(++generationCounter);
     activeSession = sessionId;
-    const events = new NativeEventEmitter(NativeModules.AtlasVulkan);
+    const subscriptions: Array<{ remove(): void }> = [];
     let finished = false;
     let reportedError: Error | null = null;
-    const token = events.addListener('AtlasVulkanToken', (event: {sessionId: string; text: string}) => {
-      if (!finished && activeSession === sessionId && event.sessionId === sessionId) {
-        onToken(event.text);
-      }
-    });
-    const failure = events.addListener('AtlasVulkanError', (event: {sessionId: string; text: string}) => {
-      if (event.sessionId === sessionId) reportedError = new Error(event.text || 'Vulkan generation failed');
-    });
-    const end = events.addListener('AtlasVulkanEnd', (_event: {sessionId: string}) => {
-      // The native promise remains the source of completion; events only stream text.
-    });
     try {
+      // Listener registration can fail (for example during RN bridge teardown).
+      // Always release the session lock, even if no native generation was started.
+      const events = new NativeEventEmitter(NativeModules.AtlasVulkan);
+      subscriptions.push(events.addListener('AtlasVulkanToken', (event: {sessionId: string; text: string}) => {
+        if (finished || activeSession !== sessionId || event.sessionId !== sessionId || reportedError) return;
+        try {
+          onToken(event.text);
+        } catch (error) {
+          reportedError = error instanceof Error ? error : new Error(String(error));
+          // Do not throw from a React Native event listener: cancel native work,
+          // then surface the callback failure through the generation promise.
+          void module.interrupt(sessionId).catch(() => {});
+        }
+      }));
+      subscriptions.push(events.addListener('AtlasVulkanError', (event: {sessionId: string; text: string}) => {
+        if (event.sessionId === sessionId) reportedError = new Error(event.text || 'Vulkan generation failed');
+      }));
       await module.generate(prompt, maxTokens, sessionId);
       if (reportedError) throw reportedError;
     } finally {
       finished = true;
-      token.remove();
-      failure.remove();
-      end.remove();
+      for (const subscription of subscriptions) subscription.remove();
       if (activeSession === sessionId) activeSession = null;
     }
   },

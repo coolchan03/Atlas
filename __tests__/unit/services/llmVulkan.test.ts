@@ -63,6 +63,7 @@ it('does not silently switch to CPU when the user explicitly selects Vulkan', as
   expect(unload).toHaveBeenCalled();
   expect(native).not.toHaveBeenCalled();
   expect(llmService.isModelLoaded()).toBe(false);
+  expect(llmService.getBackendFallbackNotice()).toContain('did not fall back to CPU');
 });
 
 it('still allows CPU when the caller explicitly requests it', async () => {

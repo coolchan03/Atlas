@@ -379,18 +379,18 @@ class LLMService {
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
-      const __wire: Array<Record<string, unknown>> = []; // [WIRE] capture raw per-token shape from-device
       // A caller may force thinking OFF (e.g. the image-prompt enhancement utility call),
       // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
       // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
       const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model()) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
-      logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
+      // Never log chat prompts, streamed text, reasoning, or model file paths: even
+      // development logcat output may outlive private/PIN-protected conversations.
+      logger.log(`[LLM] Native completion settings: thinking=${thinkingOn}, contextShiftDisabled=${this.shouldDisableCtxShift()}`);
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
-        if (__wire.length < 500) __wire.push({ token: data.token, content: data.content, reasoning_content: data.reasoning_content, tool_calls: data.tool_calls }); // [WIRE]
         if (!this.isGenerating || !data.token) return;
-        if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log(`[LLM][THINKING] First token raw data — token: ${JSON.stringify(data.token)}, content: ${JSON.stringify(data.content)}, reasoning_content: ${JSON.stringify(data.reasoning_content)}`); }
+        if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log('[LLM] First token received'); }
         tokenCount++;
         const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
         const reasoningContent = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
@@ -402,8 +402,7 @@ class LLMService {
         onStream?.({ reasoningContent, content });
       }), 'generateResponse');
       const cr = completionResult as any;
-      // [WIRE] Full raw stream + final result, so we can build fixtures from real Gemma/Qwen wire format.
-      logger.log(`[WIRE-LLAMA] ${JSON.stringify({ model: this.currentModelPath, stream: __wire, final: { content: cr?.content, text: cr?.text, reasoning_content: cr?.reasoning_content, tool_calls: cr?.tool_calls } })}`);
+      logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
@@ -468,7 +467,7 @@ class LLMService {
         const path = (a.uri || '').replace(/^file:\/\//, '');
         const exists = path.length > 0 && await RNFS.exists(path).catch(() => false);
         if (exists) kept.push(a);
-        else logger.warn(`[LLM] dropping missing image attachment (file gone): ${a.uri}`);
+        else logger.warn('[LLM] Dropping unavailable image attachment');
       }
       out.push(kept.length === attachments.length ? m : { ...m, attachments: kept });
     }
@@ -572,7 +571,7 @@ class LLMService {
   /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
   isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
-    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason + '. Using the existing CPU engine.';
+    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason + (this.context ? '. Using the existing CPU engine.' : '. GPU-only mode did not fall back to CPU.');
     if (!this.context) return null;
     if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
