@@ -1,1 +1,13 @@
-const fs=require('node:fs');const assert=require('node:assert/strict');const p=require('node:path');const s=fs.readFileSync(p.resolve(__dirname,'../android/app/src/main/java/ai/offgridmobile/atlasvulkan/AtlasVulkanModule.kt'),'utf8');assert.match(s,/sessionId = id\s*\n\s*worker\.execute/,'Register pending generation before queueing');assert.match(s,/if \(cancelled\.get\(\)\)/,'Queued generation must recognize cancellation');assert.doesNotMatch(s,/worker\.execute \{\s*val current = engine[\s\S]{0,230}cancelled\.set\(false\)/,'Worker must not re-enable cancelled generation');console.log('PASS queued cancellation safety');
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const source = fs.readFileSync(path.join(root, 'android/app/src/main/java/ai/offgridmobile/atlasvulkan/AtlasVulkanModule.kt'), 'utf8');
+assert.match(source, /AtomicReference<String\?>\(null\)/, 'Native sessions must use atomic state');
+assert.match(source, /!sessionId\.compareAndSet\(null, id\)/, 'Reserve generation slot atomically');
+assert.match(source, /sessionId\.compareAndSet\(id, null\)/, 'Clear only the matching session');
+assert.match(source, /if \(cancelled\.get\(\)\)/, 'Queued generation must recognize cancellation');
+assert.doesNotMatch(source, /sessionId = id/, 'Reject non-atomic session assignments');
+assert.match(source, /val decodedTokens = call\(current, "completion"/, 'Read native decode result');
+assert.match(source, /if \(decodedTokens < 0\) throw/, 'Native decode failures must reject');
+console.log('PASS atomic Vulkan session and native decode error checks');
