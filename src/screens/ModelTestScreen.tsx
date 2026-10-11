@@ -7,6 +7,7 @@ import { useTheme } from '../theme';
 import { useAppStore } from '../stores';
 import { activeModelService } from '../services/activeModelService';
 import { llmService } from '../services/llm';
+import { vulkanEngine } from '../services/vulkanEngine';
 import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
@@ -51,6 +52,8 @@ const TextModelTestScreen: React.FC = () => {
   const model = useAppStore((s) => s.downloadedModels.find((m) => m.id === modelId));
   const [steps, setSteps] = useState<Step[]>(STEPS.map((s) => ({ ...s, status: 'wait', detail: '' })));
   const [running, setRunning] = useState(false);
+  const [vulkanBusy, setVulkanBusy] = useState(false);
+  const [vulkanResult, setVulkanResult] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<{ good: boolean; text: string } | null>(null);
   const [prevId, setPrevId] = useState<string | null>(null);
   const [faster, setFaster] = useState<string | null>(null);
@@ -191,6 +194,30 @@ const TextModelTestScreen: React.FC = () => {
     setPrevId(null);
   };
 
+  const runVulkan = async () => {
+    if (!model || vulkanBusy || running || model.engine !== 'llama') return;
+    setVulkanBusy(true);
+    setVulkanResult('Checking Vulkan GPU availability...');
+    try {
+      const backends = await vulkanEngine.listBackends();
+      const gpu = backends.find(b => /vulkan/i.test(b.description + ' ' + b.name) && /gpu/i.test(b.type));
+      if (!gpu) throw new Error('Vulkan GPU not available in this APK or on this device');
+      // Release llama.rn weights before opening a second native GGUF runtime.
+      await activeModelService.unloadTextModel(false);
+      const started = Date.now();
+      const active = await vulkanEngine.loadModel(model.filePath, 8, 2048, 0);
+      if (!/vulkan/i.test(active)) throw new Error('Model loaded without Vulkan offload (active: ' + active + ')');
+      let output = '';
+      await vulkanEngine.generate('Reply with the word OK.', 24, text => { output += text; });
+      setVulkanResult('Vulkan: ' + active + ' / ' + gpu.name + '. Completed in ' + ((Date.now() - started) / 1000).toFixed(1) + 's. Reply: ' + (output.trim() || '(empty; check model template)'));
+    } catch (e: any) {
+      setVulkanResult('Vulkan test failed: ' + (e?.message || String(e)));
+    } finally {
+      try { await vulkanEngine.unload(); } catch { /* missing runtime is reported above */ }
+      setVulkanBusy(false);
+    }
+  };
+
   const icon = (s: Status) => ({ wait: ['circle', colors.textMuted], run: ['loader', colors.primary], ok: ['check-circle', colors.success ?? '#3a9d5d'], warn: ['alert-triangle', '#d4a017'], fail: ['x-circle', colors.error], skip: ['minus-circle', colors.textMuted] } as Record<Status, [string, string]>)[s];
   const card = { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 };
   const prevName = useAppStore((s) => s.downloadedModels.find((m) => m.id === prevId)?.name);
@@ -212,6 +239,16 @@ const TextModelTestScreen: React.FC = () => {
                 {running ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>{verdict ? 'Test again' : 'Start test'}</Text>}
               </TouchableOpacity>
             </View>
+            {model.engine === 'llama' && (
+              <View style={card}>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Experimental Vulkan GPU test</Text>
+                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Runs 8 GPU layers on this device. Unloads the currently active text model to avoid running out of memory.</Text>
+                <TouchableOpacity onPress={runVulkan} disabled={running || vulkanBusy} style={{ marginTop: 10, backgroundColor: colors.primary, borderRadius: 10, padding: 11 }}>
+                  <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{vulkanBusy ? 'Testing Vulkan...' : 'Test Vulkan GPU'}</Text>
+                </TouchableOpacity>
+                {!!vulkanResult && <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{vulkanResult}</Text>}
+              </View>
+            )}
             {steps.map((s) => {
               const [name, color] = icon(s.status);
               return (
