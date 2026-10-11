@@ -1,0 +1,65 @@
+name: Atlas Vulkan native build probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - atlas-vulkan-build-probe-20261011
+
+permissions:
+  contents: read
+
+jobs:
+  compile-llamakt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Atlas source
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android and Vulkan host tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends glslc ninja-build cmake g++ libvulkan-dev
+      - name: Prepare pinned llama.kt with Vulkan shaders
+        run: |
+          git submodule update --init vendor/llama-kt
+          node scripts/check-llamakt-source.cjs
+          node scripts/verify-llamakt-gradle.cjs
+          git -C vendor/llama-kt submodule update --init --depth 1 third_party/llama.cpp
+          bash vendor/llama-kt/scripts/gen-vulkan-shaders.sh "$(command -v glslc)"
+          test -s vendor/llama-kt/llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan-shaders.hpp
+          node scripts/prepare-llamakt-vulkan.cjs
+          node scripts/check-llamakt-vulkan-cmake.cjs
+      - name: Install React Native build dependencies
+        run: |
+          npm ci --ignore-scripts
+          node node_modules/llama.rn/install/download-native-artifacts.js
+          ./node_modules/.bin/patch-package
+      - name: Compile Vulkan ARM64 library
+        working-directory: android
+        run: ./gradlew :atlasLlamaKt:assembleRelease --max-workers=2 --no-daemon --console=plain
+      - name: Verify Vulkan JNI and native dependencies
+        run: |
+          AAR=android/atlasLlamaKt/build/outputs/aar/atlasLlamaKt-release.aar
+          test -s "$AAR"
+          unzip -p "$AAR" jni/arm64-v8a/libllamakt.so > /tmp/libllamakt.so
+          test -s /tmp/libllamakt.so
+          readelf -d /tmp/libllamakt.so | grep -F libvulkan.so
+          if readelf -d /tmp/libllamakt.so | grep -F libOpenCL.so; then exit 1; fi
+          readelf -Ws /tmp/libllamakt.so | grep -F Java_com_tensai_llamakt_LlamaEngine_nativeLoadModel
+      - name: Upload experimental Vulkan native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-llamakt-vulkan-compile-probe
+          path: android/atlasLlamaKt/build/outputs/aar/atlasLlamaKt-release.aar
+          if-no-files-found: error
