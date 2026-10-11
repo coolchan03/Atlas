@@ -50,3 +50,18 @@ jobs:
           test -f llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan.cpp
           test -n "$(find llama-kt/src/main/cpp/ggml-vulkan/shaders -name '*.cpp' -print -quit)"
       - name: Build pinned OpenCL ICD bridge
+        working-directory: vendor/llama-kt
+        run: |
+          bash scripts/build-opencl.sh
+          test -s llama-kt/src/main/jniLibs/arm64-v8a/libOpenCL.so
+      - name: Compile Android ARM64 llama.kt native engine
+        working-directory: android
+        run: ./gradlew :atlasLlamaKt:assembleRelease -PatlasVulkanEnabled=true --no-daemon --console=plain
+      - name: Verify Vulkan, OpenCL, JNI and 16KB ELF packaging
+        run: node scripts/verify-llamakt-aar.cjs
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: atlas-llamakt-vulkan-native-aar
+          path: android/atlasLlamaKt/build/outputs/aar/atlasLlamaKt-release.aar
+          retention-days: 14

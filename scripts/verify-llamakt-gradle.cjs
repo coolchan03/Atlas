@@ -13,5 +13,6 @@ assert(app.includes('atlasVulkanEnabled'), 'Vulkan engine must be opt-in');
 assert(build.includes('vendor/llama-kt/llama-kt/src/main/cpp/CMakeLists.txt'), 'native build does not use pinned upstream CMake');
 assert(build.includes('vendor/llama-kt/llama-kt/src/main') && build.includes('java.srcDirs') && build.includes('sourceSets.main.kotlin.srcDirs'), 'Kotlin build does not use pinned upstream source set');
 assert(build.includes('arm64-v8a'), 'missing ARM64 backend restriction');
+assert(build.includes('ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'), 'Vulkan native library must support Android 16KB pages');
 assert(build.includes('jvmToolchain(17)'), 'Vulkan module must target Atlas Java 17 toolchain');
 console.log('PASS: experimental Atlas Kotlin/Vulkan Gradle wiring');

@@ -1,0 +1,16 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const app = read('android/app/build.gradle');
+assert.ok(fs.existsSync(path.join(root, '.github/workflows/atlas-vulkan-experimental.yml')), 'experimental Vulkan CI workflow must exist');
+const wf = read('.github/workflows/atlas-vulkan-experimental.yml');
+assert.match(app, /atlasVulkanEnabled/, 'Vulkan must remain an opt-in Android build');
+assert.match(app, /project\(':atlasLlamaKt'\)/, 'app must include the pinned native Android library when enabled');
+assert.match(wf, /submodules:\s*recursive/, 'native dependencies must be fetched');
+assert.match(wf, /scripts\/bootstrap\.sh/, 'native source bootstrap must be reproducible');
+assert.match(wf, /scripts\/build-opencl\.sh/, 'OpenCL bridge stub must be built');
+assert.match(wf, /atlasLlamaKt:assembleRelease/, 'Vulkan engine must be built from source');
+assert.match(wf, /verify-llamakt-aar/, 'CI must verify the packaged native Vulkan code');
+console.log('PASS: experimental Vulkan AAR build configuration');
