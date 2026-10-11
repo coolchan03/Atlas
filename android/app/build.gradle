@@ -125,6 +125,10 @@ android {
             applicationIdSuffix ".dev"
         }
         release {
+            if (project.findProperty('atlasVulkanEnabled') == 'true') {
+                applicationIdSuffix '.vulkantest'
+                versionNameSuffix '-vulkan-test'
+            }
             signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

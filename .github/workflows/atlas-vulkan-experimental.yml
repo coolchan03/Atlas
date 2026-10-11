@@ -51,6 +51,7 @@ jobs:
           node scripts/check-vulkan-adapter.cjs
           node scripts/check-vulkan-model-test-ui.cjs
           node scripts/check-vulkan-chat-integration.cjs
+          node scripts/check-vulkan-test-package.cjs
       - name: Install React Native build dependencies
         run: |
           npm ci --ignore-scripts
@@ -58,6 +59,8 @@ jobs:
           ./node_modules/.bin/patch-package
       - name: Type-check Atlas Vulkan chat integration
         run: ./node_modules/.bin/tsc --noEmit
+      - name: Test Vulkan streaming and existing LLM behavior
+        run: ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/services/vulkanEngine.test.ts __tests__/unit/services/llmVulkan.test.ts __tests__/unit/services/llm.test.ts __tests__/unit/services/llmHelpers.test.ts
       - name: Generate pinned llama.cpp Vulkan shaders
         working-directory: vendor/llama-kt
         run: |
@@ -76,7 +79,9 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleRelease -PatlasVulkanEnabled=true --no-daemon --console=plain
       - name: Verify Vulkan, OpenCL, JNI and 16KB ELF packaging
-        run: node scripts/verify-llamakt-aar.cjs
+        run: |
+          node scripts/verify-llamakt-aar.cjs
+          node scripts/verify-vulkan-apk.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
