@@ -99,11 +99,13 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
             promise.reject("VULKAN_INVALID_REQUEST", "Invalid session or generation parameters")
             return
         }
+        if (sessionId != null) { promise.reject("VULKAN_BUSY", "Generation is already active"); return }
+        cancelled.set(false)
+        sessionId = id
         worker.execute {
+            if (cancelled.get()) { promise.resolve(false); if (sessionId == id) sessionId = null; return@execute }
             val current = engine
-            if (current == null) { promise.reject("VULKAN_NOT_LOADED", "Load a GGUF model first"); return@execute }
-            cancelled.set(false)
-            sessionId = id
+            if (current == null) { promise.reject("VULKAN_NOT_LOADED", "Load a GGUF model first"); if (sessionId == id) sessionId = null; return@execute }
             try {
                 val paramsClass = Class.forName("com.tensai.llamakt.SamplingParams")
                 val ctor = paramsClass.constructors.first { it.parameterCount == 9 }
