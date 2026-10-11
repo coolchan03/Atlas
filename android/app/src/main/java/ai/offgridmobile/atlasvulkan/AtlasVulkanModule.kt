@@ -19,6 +19,9 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
     @Volatile private var engine: Any? = null
     private val sessionId = AtomicReference<String?>(null)
     private val cancelled = AtomicBoolean(false)
+    // Keep admission and cancellation flag changes in the same critical section.
+    private val sessionLock = Any()
+    @Volatile private var unloading = false
     override fun getName(): String = "AtlasVulkan"
 
     @ReactMethod
@@ -137,12 +140,20 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
             promise.reject("VULKAN_INVALID_REQUEST", "Invalid session or generation parameters")
             return
         }
-        // Admission must be atomic: React Native can invoke two native methods concurrently.
-        if (!sessionId.compareAndSet(null, id)) {
+        // Reserve and clear the cancellation flag together: an interrupt must not
+        // get overwritten by a concurrent generate() call after session admission.
+        val admitted = synchronized(sessionLock) {
+            if (unloading || sessionId.get() != null) false
+            else {
+                cancelled.set(false)
+                sessionId.set(id)
+                true
+            }
+        }
+        if (!admitted) {
             promise.reject("VULKAN_BUSY", "Generation is already active")
             return
         }
-        cancelled.set(false)
         worker.execute {
             if (cancelled.get()) { promise.resolve(false); sessionId.compareAndSet(id, null); return@execute }
             val current = engine
@@ -176,25 +187,42 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
     @ReactMethod
     fun interrupt(id: String, promise: Promise) {
         try {
-            if (sessionId.get() == id && engine != null) {
-                cancelled.set(true)
-                call(engine!!, "interrupt")
+            // Queued generation may not have acquired an engine yet. Still cancel
+            // its reserved session, so the worker does not start it later.
+            val matched = synchronized(sessionLock) {
+                if (sessionId.get() != id) false
+                else { cancelled.set(true); true }
             }
-            promise.resolve(true)
+            if (matched) engine?.let { call(it, "interrupt") }
+            promise.resolve(matched)
         } catch (e: Throwable) { promise.reject("VULKAN_INTERRUPT_FAILED", e.message ?: "Interrupt failed") }
     }
 
     @ReactMethod
     fun unload(promise: Promise) {
-        cancelled.set(true)
+        val admitted = synchronized(sessionLock) {
+            if (unloading) false
+            else {
+                unloading = true
+                cancelled.set(true)
+                true
+            }
+        }
+        if (!admitted) { promise.reject("VULKAN_BUSY", "Unload already in progress"); return }
         engine?.let { try { call(it, "interrupt") } catch (_: Throwable) {} }
-        worker.execute {
-            try {
-                engine?.let { call(it, "free") }
-                engine = null
-                sessionId.set(null)
-                promise.resolve(true)
-            } catch (e: Throwable) { promise.reject("VULKAN_UNLOAD_FAILED", e.message ?: "Unload failed") }
+        try {
+            worker.execute {
+                try {
+                    engine?.let { call(it, "free") }
+                    engine = null
+                    sessionId.set(null)
+                    promise.resolve(true)
+                } catch (e: Throwable) { promise.reject("VULKAN_UNLOAD_FAILED", e.message ?: "Unload failed") }
+                finally { synchronized(sessionLock) { unloading = false } }
+            }
+        } catch (e: Throwable) {
+            synchronized(sessionLock) { unloading = false }
+            promise.reject("VULKAN_UNLOAD_FAILED", e.message ?: "Unload could not be queued")
         }
     }
 

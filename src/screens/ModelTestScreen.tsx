@@ -129,7 +129,9 @@ const TextModelTestScreen: React.FC = () => {
           await llmService.generateWithMaxTokens([msg(`${LONG_TEXT}\n\nIn one word, what was the traveller counting?`)], 4);
           // Native prefill timing is recorded by llama.rn; elapsed wall time also
           // includes generation and must never be presented as prompt tok/s.
-          readTps = useSpeedStats.getState().byModel[model.id]?.prefill || 0;
+          // The experimental Vulkan engine does not yet export native prefill timings.
+          // Never show a previous llama.rn value as this Vulkan run's throughput.
+          readTps = llmService.getGpuInfo().gpuBackend === 'Vulkan' ? 0 : (useSpeedStats.getState().byModel[model.id]?.prefill || 0);
         }
         const pageSec = readTps > 0 ? 500 / readTps : 0; // ~500 tokens per page
         set('read', readTps > 0 && readTps < 40 ? 'warn' : 'ok', readTps > 0
@@ -156,6 +158,7 @@ const TextModelTestScreen: React.FC = () => {
         const quant = /q4_k/i.test(model.fileName || '') ? ' Q4_K GPU performance depends on native backend support.' : '';
         const note = llmService.getBackendFallbackNotice();
         if (llmService.isCpuForFileType()) set('accel', 'warn', 'CPU fallback: this model quantization is not eligible for the selected accelerator. OpenCL and Hexagon support different formats.');
+        else if (g.gpu && g.gpuBackend === 'Vulkan') set('accel', 'warn', `Vulkan backend reported; actual GPU-offloaded layers have not been verified.${quant}`);
         else set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
       }
 
@@ -202,6 +205,7 @@ const TextModelTestScreen: React.FC = () => {
       const backends = await vulkanEngine.listBackends();
       const gpu = backends.find(b => /vulkan/i.test(b.description + ' ' + b.name) && /gpu/i.test(b.type));
       if (!gpu) throw new Error('Vulkan GPU not available in this APK or on this device');
+      if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still running. Stop it before testing Vulkan.');
       // Release llama.rn weights before opening a second native GGUF runtime.
       await activeModelService.unloadTextModel(false);
       const started = Date.now();
@@ -210,7 +214,7 @@ const TextModelTestScreen: React.FC = () => {
       let output = '';
       const prompt = await vulkanEngine.formatChat([{ role: 'user', content: 'Reply with the word OK.' }]);
       await vulkanEngine.generate(prompt, 24, text => { output += text; });
-      setVulkanResult('Vulkan: ' + active + ' / ' + gpu.name + '. Completed in ' + ((Date.now() - started) / 1000).toFixed(1) + 's. Reply: ' + (output.trim() || '(empty; check model template)'));
+      setVulkanResult('Backend reported: ' + active + ' / ' + gpu.name + '. Requested 8 GPU layers; actual offload is unverified. Total load + generation time: ' + ((Date.now() - started) / 1000).toFixed(1) + 's. Reply: ' + (output.trim() || '(empty; check model template)'));
     } catch (e: any) {
       setVulkanResult('Vulkan test failed: ' + (e?.message || String(e)));
     } finally {
@@ -243,7 +247,7 @@ const TextModelTestScreen: React.FC = () => {
             {model.engine === 'llama' && (
               <View style={card}>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>Experimental Vulkan GPU test</Text>
-                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Runs 8 GPU layers on this device. Unloads the currently active text model to avoid running out of memory.</Text>
+                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Requests 8 GPU layers, but actual GPU offload is not yet verified. This test unloads the active text model to save memory.</Text>
                 <TouchableOpacity onPress={runVulkan} disabled={running || vulkanBusy} style={{ marginTop: 10, backgroundColor: colors.primary, borderRadius: 10, padding: 11 }}>
                   <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{vulkanBusy ? 'Testing Vulkan...' : 'Test Vulkan GPU'}</Text>
                 </TouchableOpacity>
