@@ -15,8 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
+      - name: Fetch only public pinned Vulkan submodules
+        run: |
+          git submodule update --init --depth=1 vendor/llama-kt
+          git -C vendor/llama-kt submodule update --init --recursive --depth=1
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

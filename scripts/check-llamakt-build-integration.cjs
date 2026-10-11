@@ -8,7 +8,9 @@ assert.ok(fs.existsSync(path.join(root, '.github/workflows/atlas-vulkan-experime
 const wf = read('.github/workflows/atlas-vulkan-experimental.yml');
 assert.match(app, /atlasVulkanEnabled/, 'Vulkan must remain an opt-in Android build');
 assert.match(app, /project\(':atlasLlamaKt'\)/, 'app must include the pinned native Android library when enabled');
-assert.match(wf, /submodules:\s*recursive/, 'native dependencies must be fetched');
+assert.doesNotMatch(wf, /submodules:\s*recursive/, 'CI must not clone unrelated private pro submodule');
+assert.match(wf, /git submodule update --init --depth=1 vendor\/llama-kt/, 'CI must fetch only the pinned public engine');
+assert.match(wf, /git -C vendor\/llama-kt submodule update --init --recursive --depth=1/, 'CI must fetch pinned nested native sources');
 assert.match(wf, /scripts\/bootstrap\.sh/, 'native source bootstrap must be reproducible');
 assert.match(wf, /scripts\/build-opencl\.sh/, 'OpenCL bridge stub must be built');
 assert.match(wf, /atlasLlamaKt:assembleRelease/, 'Vulkan engine must be built from source');
