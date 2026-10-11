@@ -1,1 +1,15 @@
-const fs=require('node:fs');const assert=require('node:assert/strict');const workflow=fs.readFileSync(require('node:path').resolve(__dirname,'../.github/workflows/atlas-vulkan-experimental.yml'),'utf8');assert.match(workflow,/:app:assembleRelease -PatlasVulkanEnabled=true/,'Experimental CI must compile the FULL app, including the React Native bridge');assert.match(workflow,/check-vulkan-session\.cjs/,'Experimental CI must verify model session bridge');console.log('PASS full Atlas app compile gate wired');
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/atlas-vulkan-experimental.yml'), 'utf8');
+const download = workflow.indexOf('name: Download verified sherpa-onnx AAR');
+const nativeBuild = workflow.indexOf('name: Compile Android ARM64 llama.kt native engine');
+const appBuild = workflow.indexOf('name: Compile full Atlas application with experimental Vulkan bridge');
+assert.ok(download >= 0 && nativeBuild > download && appBuild > nativeBuild, 'Verified Sherpa AAR must be fetched before app compilation');
+assert.match(workflow, /sherpa-onnx-1\.13\.7\.aar/, 'Missing pinned Sherpa ONNX download');
+assert.match(workflow, /c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8/, 'Sherpa ONNX must use the pinned SHA-256');
+assert.match(workflow, /sha256sum -c -/, 'Sherpa ONNX download must verify checksum');
+assert.match(workflow, /test -s android\/app\/libs\/sherpa-onnx\.aar/, 'Sherpa ONNX AAR must be present and non-empty');
+assert.match(workflow, /:app:assembleRelease -PatlasVulkanEnabled=true/, 'Experimental CI must compile the full Atlas app');
+assert.match(workflow, /check-vulkan-session\.cjs/, 'Experimental CI must verify model session bridge');
+console.log('PASS full Atlas Vulkan app compile, Sherpa download, and checksum gates');
