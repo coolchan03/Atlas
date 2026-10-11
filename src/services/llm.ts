@@ -184,8 +184,9 @@ class LLMService {
           return;
         } catch (error: any) {
           this.vulkanFallbackReason = error?.message || 'Vulkan model load failed';
-          logger.warn('[LLM] Vulkan unavailable; retrying with existing CPU engine:', this.vulkanFallbackReason);
+          logger.warn('[LLM] Explicit Vulkan request failed; CPU fallback is disabled:', this.vulkanFallbackReason);
           try { await vulkanEngine.unload(); } catch { /* runtime might be missing */ }
+          throw new Error('Vulkan GPU unavailable: ' + this.vulkanFallbackReason + '. Select CPU explicitly to continue.');
         }
       }
       try {

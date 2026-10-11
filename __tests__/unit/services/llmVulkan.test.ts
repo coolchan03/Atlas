@@ -55,12 +55,21 @@ it('streams actual text through Vulkan while keeping the ordinary completion cal
   expect(onComplete).toHaveBeenCalledWith({content:'Hello world',reasoningContent:''});
 });
 
-it('falls back to llama.rn CPU if the Vulkan GPU cannot be enumerated', async () => {
+it('does not silently switch to CPU when the user explicitly selects Vulkan', async () => {
   jest.spyOn(vulkanEngine,'isAvailable').mockResolvedValue(false);
-  jest.spyOn(vulkanEngine,'unload').mockResolvedValue();
+  const unload = jest.spyOn(vulkanEngine,'unload').mockResolvedValue();
   native.mockResolvedValue(createMockLlamaContext() as any);
-  await llmService.loadModel('/models/small.gguf');
+  await expect(llmService.loadModel('/models/small.gguf')).rejects.toThrow('Vulkan GPU unavailable');
+  expect(unload).toHaveBeenCalled();
+  expect(native).not.toHaveBeenCalled();
+  expect(llmService.isModelLoaded()).toBe(false);
+});
+
+it('still allows CPU when the caller explicitly requests it', async () => {
+  const vulkanProbe = jest.spyOn(vulkanEngine,'isAvailable');
+  native.mockResolvedValue(createMockLlamaContext() as any);
+  await llmService.loadModel('/models/small.gguf', undefined, {forceCpu: true});
   expect(native).toHaveBeenCalled();
+  expect(vulkanProbe).not.toHaveBeenCalled();
   expect(llmService.isModelLoaded()).toBe(true);
-  expect(llmService.getBackendFallbackNotice()).toContain('Vulkan unavailable');
 });
