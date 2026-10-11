@@ -28,6 +28,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@v4
       - name: Install pinned Android Vulkan build prerequisites
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc || true

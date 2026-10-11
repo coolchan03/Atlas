@@ -11,6 +11,7 @@ assert.match(app, /project\(':atlasLlamaKt'\)/, 'app must include the pinned nat
 assert.doesNotMatch(wf, /submodules:\s*recursive/, 'CI must not clone unrelated private pro submodule');
 assert.match(wf, /git submodule update --init --depth=1 vendor\/llama-kt/, 'CI must fetch only the pinned public engine');
 assert.match(wf, /git -C vendor\/llama-kt submodule update --init --recursive --depth=1/, 'CI must fetch pinned nested native sources');
+assert.match(wf, /android-actions\/setup-android@v4/, 'CI needs sdkmanager command-line tools before installing the NDK');
 assert.match(wf, /scripts\/bootstrap\.sh/, 'native source bootstrap must be reproducible');
 assert.match(wf, /scripts\/build-opencl\.sh/, 'OpenCL bridge stub must be built');
 assert.match(wf, /atlasLlamaKt:assembleRelease/, 'Vulkan engine must be built from source');
