@@ -12,6 +12,7 @@ import ai.offgridmobile.pdf.PDFExtractorPackage
 import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
 import ai.offgridmobile.atlastts.AtlasTtsPackage
+import ai.offgridmobile.atlasvulkan.AtlasVulkanPackage
 import ai.offgridmobile.atlaskiwix.AtlasKiwixPackage
 import ai.offgridmobile.atlasdevice.AtlasDevicePackage
 
@@ -29,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
           add(LiteRTPackage())
           add(DeviceMemoryPackage())
           add(AtlasTtsPackage())
+          add(AtlasVulkanPackage())
           add(AtlasKiwixPackage())
           add(AtlasDevicePackage())
         },

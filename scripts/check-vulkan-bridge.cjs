@@ -1,0 +1,16 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const base = 'android/app/src/main/java/ai/offgridmobile/atlasvulkan/';
+const app = read('android/app/src/main/java/ai/offgridmobile/MainApplication.kt');
+const nativeModule = read(base + 'AtlasVulkanModule.kt');
+const pack = read(base + 'AtlasVulkanPackage.kt');
+assert.match(app, /AtlasVulkanPackage\(\)/);
+assert.match(pack, /AtlasVulkanModule\(reactContext\)/);
+assert.match(nativeModule, /override fun getName\(\).*AtlasVulkan/);
+assert.match(nativeModule, /fun listBackends\(promise: Promise\)/);
+assert.match(nativeModule, /Class\.forName\("com\.tensai\.llamakt\.LlamaEngine"\)/);
+assert.match(nativeModule, /promise\.resolve\(out\)/);
+console.log('PASS isolated Vulkan native backend discovery bridge');
