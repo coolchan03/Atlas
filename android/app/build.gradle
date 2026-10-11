@@ -152,6 +152,11 @@ configurations.all {
 }
 
 dependencies {
+    // Only experimental Vulkan builds compile the optional llama.kt engine.
+    // Normal Atlas releases keep their original llama.rn native packaging.
+    if (project.findProperty('atlasVulkanEnabled') == 'true') {
+        implementation project(':atlasLlamaKt')
+    }
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
