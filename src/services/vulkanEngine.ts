@@ -6,6 +6,8 @@ type VulkanModule = {
   listBackends(): Promise<Backend[]>;
   loadModel(path: string, gpuLayers: number, context: number, threads: number): Promise<string>;
   activeBackend(): Promise<string>;
+  formatChat(messagesJson: string): Promise<string>;
+  tokenize(text: string): Promise<number[]>;
   generate(prompt: string, maxTokens: number, sessionId: string): Promise<boolean>;
   interrupt(sessionId: string): Promise<boolean>;
   unload(): Promise<boolean>;
@@ -44,6 +46,12 @@ export const vulkanEngine = {
   },
   async activeBackend(): Promise<string> {
     return required().activeBackend();
+  },
+  async formatChat(messages: Array<{ role: string; content: string }>): Promise<string> {
+    return required().formatChat(JSON.stringify(messages));
+  },
+  async tokenize(text: string): Promise<number[]> {
+    return required().tokenize(text);
   },
   async generate(prompt: string, maxTokens: number, onToken: (text: string) => void): Promise<void> {
     if (activeSession) throw new Error('Vulkan generation is already active');

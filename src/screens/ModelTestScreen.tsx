@@ -208,7 +208,8 @@ const TextModelTestScreen: React.FC = () => {
       const active = await vulkanEngine.loadModel(model.filePath, 8, 2048, 0);
       if (!/vulkan/i.test(active)) throw new Error('Model loaded without Vulkan offload (active: ' + active + ')');
       let output = '';
-      await vulkanEngine.generate('Reply with the word OK.', 24, text => { output += text; });
+      const prompt = await vulkanEngine.formatChat([{ role: 'user', content: 'Reply with the word OK.' }]);
+      await vulkanEngine.generate(prompt, 24, text => { output += text; });
       setVulkanResult('Vulkan: ' + active + ' / ' + gpu.name + '. Completed in ' + ((Date.now() - started) / 1000).toFixed(1) + 's. Reply: ' + (output.trim() || '(empty; check model template)'));
     } catch (e: any) {
       setVulkanResult('Vulkan test failed: ' + (e?.message || String(e)));

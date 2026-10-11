@@ -313,11 +313,12 @@ export interface ONNXImageModel {
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
-export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
+export type InferenceBackend = 'cpu' | 'opencl' | 'vulkan' | 'htp' | 'metal';
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 export const INFERENCE_BACKENDS = {
   CPU: 'cpu' as InferenceBackend,
   OPENCL: 'opencl' as InferenceBackend,
+  VULKAN: 'vulkan' as InferenceBackend,
   HTP: 'htp' as InferenceBackend,
   METAL: 'metal' as InferenceBackend,
 } as const;

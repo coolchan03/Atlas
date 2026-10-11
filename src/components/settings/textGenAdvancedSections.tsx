@@ -92,7 +92,8 @@ const IOS_BACKENDS: BackendOption[] = [
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
   // Display label 'GPU' (users don't know OpenCL); id stays OPENCL.
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'GPU', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers using supported OpenCL GPUs, primarily Adreno. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Test)', desc: 'Experimental Mali/Adreno GPU offload using llama.kt. Falls back to CPU when unavailable. Text GGUF only.' },
 ];
 
 const HTP_BACKEND: BackendOption = {
@@ -121,7 +122,7 @@ export const BackendSelector: React.FC = () => {
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
   const layersLabel = current === INFERENCE_BACKENDS.HTP
     ? 'NPU Layers'
-    : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'GPU Layers (OpenCL)';
+    : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : current === INFERENCE_BACKENDS.VULKAN ? 'GPU Layers (Vulkan)' : 'GPU Layers (OpenCL)';
 
   return (
     <SegmentedRow<InferenceBackend>

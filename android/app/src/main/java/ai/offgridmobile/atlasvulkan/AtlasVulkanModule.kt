@@ -86,6 +86,36 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
     }
 
     @ReactMethod
+    fun tokenize(text: String, promise: Promise) {
+        worker.execute {
+            try {
+                val current = engine ?: throw IllegalStateException("Load a GGUF model first")
+                val ids = call(current, "tokenize", text) as IntArray
+                val result = Arguments.createArray()
+                ids.forEach { result.pushInt(it) }
+                promise.resolve(result)
+            } catch (e: Throwable) { promise.reject("VULKAN_TOKENIZE_FAILED", e.message ?: "Tokenization failed") }
+        }
+    }
+
+    @ReactMethod
+    fun formatChat(messagesJson: String, promise: Promise) {
+        worker.execute {
+            try {
+                val current = engine ?: throw IllegalStateException("Load a GGUF model first")
+                val json = org.json.JSONArray(messagesJson)
+                val chatClass = Class.forName("com.tensai.llamakt.ChatMessage")
+                val constructor = chatClass.getConstructor(String::class.java, String::class.java)
+                val messages = (0 until json.length()).map { index ->
+                    val item = json.getJSONObject(index)
+                    constructor.newInstance(item.getString("role"), item.getString("content"))
+                }
+                promise.resolve(call(current, "formatChat", messages, false) as String)
+            } catch (e: Throwable) { promise.reject("VULKAN_CHAT_FORMAT_FAILED", e.message ?: "Unable to format model chat") }
+        }
+    }
+
+    @ReactMethod
     fun activeBackend(promise: Promise) {
         worker.execute {
             try { promise.resolve(engine?.let { call(it, "activeBackend") as? String } ?: "unloaded") }

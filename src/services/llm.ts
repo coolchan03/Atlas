@@ -1,6 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
+import { vulkanEngine } from './vulkanEngine';
 import RNFS from 'react-native-fs';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
@@ -33,6 +34,8 @@ function resolveGpuBackend(enabled: boolean, devices: string[]): string {
 }
 class LLMService {
   private context: LlamaContext | null = null;
+  private vulkanLoaded = false;
+  private vulkanFallbackReason: string | null = null;
   private cpuForFileType = false;
   private currentModelPath: string | null = null;
   private isGenerating: boolean = false;
@@ -143,13 +146,14 @@ class LLMService {
     useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
-  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean }): Promise<void> {
+  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean }): Promise<void> {
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
       // Re-check after acquiring mutex — another call may have loaded the same model
-      if (this.context && this.currentModelPath === modelPath) return;
-      if (this.context && this.currentModelPath !== modelPath) {
+      const wantsVulkan = Platform.OS === 'android' && !mmProjPath && !opts?.forceCpu && useAppStore.getState().settings.inferenceBackend === INFERENCE_BACKENDS.VULKAN;
+      if (this.currentModelPath === modelPath && ((this.vulkanLoaded && wantsVulkan) || (this.context && !wantsVulkan))) return;
+      if (this.context || this.vulkanLoaded) {
         logger.log('[LLM] Releasing previous context before loading new model');
         await this.doUnloadModel();
       }
@@ -158,6 +162,32 @@ class LLMService {
       const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
       this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
       logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
+      this.vulkanFallbackReason = null;
+      if (Platform.OS === 'android' && !mmProjPath && !opts?.forceCpu && useAppStore.getState().settings.inferenceBackend === INFERENCE_BACKENDS.VULKAN) {
+        try {
+          if (!await vulkanEngine.isAvailable()) throw new Error('Vulkan GPU not detected in this build');
+          const requested = Math.max(1, Math.min(12, useAppStore.getState().settings.gpuLayers ?? 8));
+          const active = await vulkanEngine.loadModel(modelPath, requested, Math.min(ctxLen, 4096), nThreads);
+          if (!/vulkan/i.test(active)) throw new Error('Native model loaded on ' + active + ' rather than Vulkan');
+          this.vulkanLoaded = true;
+          this.currentModelPath = modelPath;
+          this.gpuEnabled = true;
+          this.gpuDevices = [active];
+          this.gpuReason = 'Vulkan backend active; actual offloaded layer count not reported by native runtime';
+          this.requestedGpuLayers = requested;
+          this.activeGpuLayers = 0;
+          this.currentSettings.contextLength = Math.min(ctxLen, 4096);
+          this.toolCallingSupported = false;
+          this.thinkingSupported = false;
+          this.multimodalInitialized = false;
+          this.multimodalSupport = null;
+          return;
+        } catch (error: any) {
+          this.vulkanFallbackReason = error?.message || 'Vulkan model load failed';
+          logger.warn('[LLM] Vulkan unavailable; retrying with existing CPU engine:', this.vulkanFallbackReason);
+          try { await vulkanEngine.unload(); } catch { /* runtime might be missing */ }
+        }
+      }
       try {
         const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers, fileSize });
         // attemptedGpuLayers (post device-cap/backend resolution) is what the init actually offered the
@@ -273,6 +303,21 @@ class LLMService {
   }
   /** Internal unload without acquiring the mutex (used by loadModel which already holds it). */
   private async doUnloadModel(): Promise<void> {
+    if (this.vulkanLoaded) {
+      await vulkanEngine.interrupt().catch(() => {});
+      await vulkanEngine.unload();
+      this.vulkanLoaded = false;
+      this.currentModelPath = null;
+      this.isGenerating = false;
+      this.activeCompletionPromise = null;
+      this.gpuEnabled = false;
+      this.gpuDevices = [];
+      this.gpuReason = '';
+      this.activeGpuLayers = 0;
+      this.requestedGpuLayers = 0;
+      useAppStore.getState().setModelMaxContext(null);
+      return;
+    }
     if (!this.context) return;
     if (this.isGenerating) {
       try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
@@ -292,10 +337,33 @@ class LLMService {
     const mutex = this.acquireContextMutex();
     try { await mutex.ready; await this.doUnloadModel(); } finally { mutex.release(); }
   }
-  isModelLoaded(): boolean { return this.context !== null; }
+  isModelLoaded(): boolean { return this.context !== null || this.vulkanLoaded; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
   async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean }): Promise<string> {
     const { onStream, onComplete, ...opts } = options ?? {};
+    if (this.vulkanLoaded) {
+      if (this.isGenerating) throw new Error('Generation already in progress');
+      this.isGenerating = true;
+      const started = Date.now();
+      let output = '';
+      let firstTokenMs = 0;
+      let tokenCount = 0;
+      const task = (async () => {
+        const prompt = await vulkanEngine.formatChat(messages.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, 512, token => {
+          if (!this.isGenerating || !token) return;
+          if (!firstTokenMs) firstTokenMs = Date.now() - started;
+          tokenCount++;
+          output += token;
+          onStream?.({ content: token, reasoningContent: '' });
+        });
+        this.performanceStats = recordGenerationStats(started, firstTokenMs, tokenCount);
+        onComplete?.({ content: output, reasoningContent: '' });
+        return output;
+      })();
+      this.activeCompletionPromise = task.then(() => {}, () => {});
+      try { return await task; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    }
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -350,6 +418,13 @@ class LLMService {
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
   async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
+    if (this.vulkanLoaded) {
+      const modelPath = this.currentModelPath;
+      if (!modelPath) throw new Error('No model loaded');
+      await this.unloadModel();
+      await this.loadModel(modelPath, undefined, { forceCpu: true });
+      this.vulkanFallbackReason = 'Tool calling requires the original llama.rn CPU runtime';
+    }
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
@@ -415,6 +490,18 @@ class LLMService {
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+    if (this.vulkanLoaded) {
+      if (this.isGenerating) throw new Error('Generation already in progress');
+      this.isGenerating = true;
+      let response = '';
+      const task = (async () => {
+        const prompt = await vulkanEngine.formatChat(messages.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, maxTokens, token => { if (this.isGenerating) response += token; });
+        return response.trim();
+      })();
+      this.activeCompletionPromise = task.then(() => {}, () => {});
+      try { return await task; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    }
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -445,6 +532,13 @@ class LLMService {
     return this.generateWithMaxTokens(messages, 64);
   }
   async stopGeneration(): Promise<void> {
+    if (this.vulkanLoaded) {
+      await vulkanEngine.interrupt();
+      if (this.activeCompletionPromise) await this.activeCompletionPromise;
+      this.activeCompletionPromise = null;
+      this.isGenerating = false;
+      return;
+    }
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     // Declare idle only AFTER the in-flight completion actually unwinds — llama cannot honor a
     // stop during prefill (a 2.6k-token KB prefill unwound ~9s on-device), so clearing the flag
@@ -469,13 +563,15 @@ class LLMService {
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
   getGpuInfo() {
-    return { gpu: this.gpuEnabled, gpuBackend: resolveGpuBackend(this.gpuEnabled, this.gpuDevices), gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
+    if (this.vulkanLoaded) return { gpu: true, gpuBackend: 'Vulkan', gpuLayers: 0, reasonNoGPU: 'Actual GPU offload layer count not reported by llama.kt; requested layers are not proof of offload' };
+    return { gpu: this.gpuEnabled, gpuBackend: resolveGpuBackend(this.gpuEnabled, this.gpuDevices), gpuLayers: this.activeGpuLayers, reasonNoGPU: this.vulkanFallbackReason ?? this.gpuReason };
   }
   /** The user-facing notice for a load that silently downgraded to CPU (GPU requested, 0 layers
    *  offloaded — init failure/timeout, capability refusal, or a RAM cap). Null when nothing to report. */
   /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
   isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
+    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason + '. Using the existing CPU engine.';
     if (!this.context) return null;
     if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
@@ -483,12 +579,14 @@ class LLMService {
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }
   private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false); }
-  async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
+  async getModelInfo() { return this.vulkanLoaded ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
+    if (this.vulkanLoaded) return vulkanEngine.tokenize(text);
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens || [];
   }
   async getTokenCount(text: string) {
+    if (this.vulkanLoaded) return (await vulkanEngine.tokenize(text)).length;
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens?.length || 0;
   }
