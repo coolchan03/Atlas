@@ -1,0 +1,12 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const root = path.resolve(__dirname, '..');
+const vendor = path.join(root, 'vendor', 'llama-kt');
+const pin = 'cad0ec95620d0dd951fc277fec0223f9ea4171e4';
+const required = ['LICENSE', 'THIRD_PARTY_LICENSES.md', 'llama-kt/src/main/cpp/tensai_jni.cpp', 'llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan.cpp', 'llama-kt/src/main/java/com/tensai/llamakt/LlamaEngine.kt'];
+if (!fs.existsSync(vendor)) throw Error('pinned llama.kt source missing');
+const actual = execFileSync('git', ['-C', vendor, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+if (actual !== pin) throw Error('llama.kt source revision mismatch: ' + actual);
+for (const f of required) if (!fs.existsSync(path.join(vendor, f))) throw Error('llama.kt source missing: ' + f);
+console.log('PASS pinned llama.kt ' + actual + ' and native Vulkan/JNI sources');
