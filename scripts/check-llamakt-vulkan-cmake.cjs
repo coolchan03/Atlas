@@ -1,0 +1,10 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const cmake = fs.readFileSync(path.resolve(__dirname, '../vendor/llama-kt/llama-kt/src/main/cpp/CMakeLists.txt'), 'utf8');
+const assert = require('node:assert/strict');
+assert.match(cmake, /ATLAS_VULKAN_ONLY/, 'native Vulkan-only overlay was not applied');
+assert.match(cmake, /-DLM_GGML_USE_VULKAN/, 'Vulkan backend must remain compiled');
+assert.doesNotMatch(cmake, /-DLM_GGML_USE_OPENCL/, 'llama.kt cannot add a second OpenCL implementation to Atlas');
+assert.doesNotMatch(cmake, /\$\{SRC_DIR\}\/ggml-opencl\/ggml-opencl\.cpp/, 'OpenCL source must be excluded from Vulkan-only variant');
+assert.doesNotMatch(cmake, /\n\s+OpenCL\s*\n/, 'Vulkan-only engine must not require a bundled OpenCL loader');
+console.log('PASS: Vulkan backend enabled without duplicate OpenCL runtime');
