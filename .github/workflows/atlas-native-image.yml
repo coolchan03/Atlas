@@ -12,6 +12,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch pinned Vulkan text runtime
+        run: |
+          git submodule update --init --recursive --depth 1 vendor/llama-kt
+          test -s vendor/llama-kt/llama-kt/src/main/cpp/CMakeLists.txt
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -115,7 +119,7 @@ jobs:
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
       - name: Assemble Android release APK
         working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+        run: ./gradlew assembleRelease -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon
       - name: Verify packaged diffusion and llama runtimes
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
@@ -124,6 +128,12 @@ jobs:
           grep -q 'lib/arm64-v8a/libatlas_sdcli.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
+          # Ensure the optional llama.kt Vulkan chat engine is inside the APK.
+          unzip -p "$APK" 'classes*.dex' | strings > /tmp/atlas-dex-strings.txt
+          grep -q 'com/tensai/llamakt/LlamaEngine' /tmp/atlas-dex-strings.txt
+          AAPT="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/aapt"
+          "$AAPT" dump badging "$APK" | grep -q "package: name='ai.offgridmobile.atlas.vulkantest'"
+          "$AAPT" dump badging "$APK" | grep -q "sdkVersion:'29'"
       - name: Upload Android diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v7
