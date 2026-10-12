@@ -160,6 +160,12 @@ export async function deleteMap(path: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------- GPS
+export function isValidGpsFix(f: GpsFix | null | undefined): f is GpsFix {
+  return !!f && Number.isFinite(f.lat) && Math.abs(f.lat) <= 90 &&
+    Number.isFinite(f.lon) && Math.abs(f.lon) <= 180 &&
+    Number.isFinite(f.accuracy) && f.accuracy >= 0;
+}
+
 const Native: any = NativeModules.AtlasDevice;
 
 export async function askLocationPermission(): Promise<boolean> {
@@ -176,10 +182,13 @@ export async function watchPosition(onFix: (f: GpsFix) => void, onError: (msg: s
   if (!Native?.startLocation) { onError('GPS is not available in this build.'); return () => undefined; }
   if (!(await askLocationPermission())) { onError('Location permission was not given. Allow it in Android Settings > Apps > Atlas > Permissions.'); return () => undefined; }
   const em = new NativeEventEmitter(Native);
-  const sub = em.addListener('AtlasLocation', (f: GpsFix) => { useMaps.getState().setFix(f); onFix(f); });
+  const sub = em.addListener('AtlasLocation', (f: GpsFix) => {
+    if (!isValidGpsFix(f)) { onError('GPS returned invalid coordinates; waiting for another fix.'); return; }
+    useMaps.getState().setFix(f); onFix(f);
+  });
   try {
     const last = await Native.lastLocation();
-    if (last) { useMaps.getState().setFix(last); onFix(last); }
+    if (isValidGpsFix(last)) { useMaps.getState().setFix(last); onFix(last); }
     await Native.startLocation();
   } catch (e: any) {
     onError(e?.code === 'NO_GPS' ? 'Location is turned off. Turn on Location in your quick settings (no internet needed).' : String(e?.message || e));
