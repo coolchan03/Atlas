@@ -84,9 +84,20 @@ export async function browseMaps(path = ''): Promise<RemoteEntry[]> {
 interface DlState { progress: Record<string, number>; jobs: Record<string, number>; set: (fn: (s: DlState) => Partial<DlState>) => void }
 export const useMapDownloads = create<DlState>((set) => ({ progress: {}, jobs: {}, set: (fn) => set(fn) }));
 
+function validateMapRemotePath(remotePath: string): void {
+  const parts = remotePath.split('/');
+  if (!remotePath || remotePath.startsWith('/') || remotePath.includes('\\') ||
+      remotePath.includes('?') || remotePath.includes('#') ||
+      parts.some(part => !part || part === '.' || part === '..' || /%2e|%2f|%5c/i.test(part)) ||
+      !/^[a-zA-Z0-9._/-]+$/.test(remotePath)) {
+    throw new Error('Invalid map download path.');
+  }
+}
 const fileNameFor = (remotePath: string) => remotePath.replace(/\//g, '_');
 
 export async function downloadMap(remotePath: string): Promise<string> {
+  validateMapRemotePath(remotePath);
+  if (!remotePath.toLowerCase().endsWith('.map')) throw new Error('Only Mapsforge .map files can be downloaded.');
   await RNFS.mkdir(mapsDir());
   const target = `${mapsDir()}/${fileNameFor(remotePath)}`;
   const part = `${target}.part`;
