@@ -171,9 +171,16 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         phase = if (preferGpu) "Checking Vulkan GPU" else "CPU selected manually"
         val probeEnumerated = preferGpu && detectVulkan(executable, cancelled)
         if (cancelled()) throw IOException("Generation cancelled")
-        // The device-list probe is advisory. Explicitly select the GPU below.
-        // That avoids a false "GPU unavailable" error while never silently
-        // substituting the extremely slow CPU backend for Anima.
+        // Do not launch a GPU-only run against an unverified Vulkan device.
+        // Android's Vulkan feature flag alone does not guarantee sd.cpp compute support.
+        // Preserve explicit GPU-only policy: never silently switch to CPU.
+        if (preferGpu && !probeEnumerated) {
+            computeBackend = "Vulkan unavailable (probe failed)"
+            throw IOException("No usable Vulkan diffusion GPU was detected by the native image engine. " +
+                "Device probe: " + deviceLabel.takeLast(380) + ". " +
+                "Select CPU explicitly in image settings or use a compatible GPU/runtime. " +
+                "No CPU fallback occurred.")
+        }
         val gpuRequested = preferGpu
         // The Snapdragon/Adreno Vulkan driver can reject BF16 matrix-vector
         // compute pipelines, even when it correctly detects the GPU.
@@ -185,9 +192,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         else "Original checkpoint precision"
         computeBackend = if (gpuRequested) "Vulkan GPU requested (unverified)" else "CPU"
         if (!preferGpu) deviceLabel = "GPU disabled in settings"
-        else if (!probeEnumerated) {
-            phase = "GPU probe inconclusive; trying native Vulkan directly"
-        }
+
 
         val width = (if (params.hasKey("width")) params.getInt("width") else 512).coerceIn(256, 1024)
         val height = (if (params.hasKey("height")) params.getInt("height") else 512).coerceIn(256, 1024)
