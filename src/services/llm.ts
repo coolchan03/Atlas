@@ -369,8 +369,15 @@ class LLMService {
     const path = this.currentModelPath?.toLowerCase() ?? '';
     return path.includes('gemma-4') || path.includes('gemma4');
   }
-  /** Disable ctx_shift on Android when GPU layers are active — the OpenCL backend SIGSEGVs on the ggml set op used by KV cache shifting. */
-  private shouldDisableCtxShift(): boolean { return Platform.OS === 'android' && this.activeGpuLayers > 0; }
+  /** Android OpenCL/HTP shifting can crash in KV-cache ggml ops. Backend selection
+   * is more reliable than reported layer count, which some drivers omit. */
+  private shouldDisableCtxShift(): boolean {
+    return Platform.OS === 'android' && (
+      this.selectedBackend === INFERENCE_BACKENDS.OPENCL ||
+      this.selectedBackend === INFERENCE_BACKENDS.HTP ||
+      this.activeGpuLayers > 0
+    );
+  }
   private deriveToolCallingSupport(context: LlamaContext): boolean {
     try {
       const jinja = (context as any)?.model?.chatTemplates?.jinja;
