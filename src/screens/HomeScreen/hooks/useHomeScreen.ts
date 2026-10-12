@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Alert } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
@@ -203,9 +203,13 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
+    // Choose private mode before any conversation or messages are created.
     if (!activeTextModelId && !activeImageModelId) { return; }
-    navigation.navigate('Chat', {});
+    Alert.alert('New conversation', 'Choose whether this chat should be saved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Regular chat', onPress: () => navigation.navigate('Chat', { privateChat: false }) },
+      { text: 'Private (not saved)', onPress: () => navigation.navigate('Chat', { privateChat: true }) },
+    ]);
   };
 
   const continueChat = (conversationId: string) => {
