@@ -37,6 +37,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev
           test -x "$(command -v glslc)"
           test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
+      - name: Remove mandatory OpenCL link from optional llama.kt Vulkan engine
+        run: python3 scripts/prepare-llamakt-vulkan.py
       - name: Generate pinned llama.kt Vulkan shaders
         run: |
           # llama.kt deliberately does not commit generated SPIR-V and the
