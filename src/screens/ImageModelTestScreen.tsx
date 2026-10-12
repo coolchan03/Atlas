@@ -333,13 +333,18 @@ export const ImageModelTestScreen: React.FC = () => {
                   {' '}Host CPU: {cpuState === 'active' ? 'active' :
                     cpuState === 'idle' ? 'no increase on last sample' : 'unavailable'}.
                   {' '}{runtime?.deviceLabel || ''}.
+                  {runtime?.secondsSinceStep !== undefined && runtime.secondsSinceStep >= 0
+                    ? ' Last completed step ' + Math.round(runtime.secondsSinceStep) + ' seconds ago.'
+                    : ' No completed diffusion step reported yet.'}
                   {runtime?.secondsSinceLog !== undefined && runtime.secondsSinceLog >= 0
                     ? ' Last engine output ' + Math.round(runtime.secondsSinceLog) + ' seconds ago.' : ''}
                 </Text>
                 {elapsed >= 120 && (
                   <Text style={{ color: '#b78a26', marginTop: 7 }}>
                     {runtime?.computeBackend?.includes('Vulkan')
-                      ? 'Vulkan GPU selected. Host CPU ticks do not measure GPU activity; a step may still take time.'
+                      ? runtime.secondsSinceLog >= 60
+                        ? 'Vulkan process has produced no recent output. GPU execution cannot be confirmed; it may be stalled. Try cancelling or switching to CPU explicitly.'
+                        : 'Vulkan requested; recent native output is not proof of successful GPU compute. Check whether diffusion steps advance.'
                       : cpuState === 'active'
                         ? 'Native CPU use is increasing; it is computing, even if progress is unchanged.'
                         : 'Step progress has not advanced. This may be slow or stalled. Cancel and try the 1-step test or a smaller quantized model.'}
