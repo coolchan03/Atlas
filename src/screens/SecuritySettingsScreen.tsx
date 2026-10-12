@@ -45,9 +45,12 @@ export const SecuritySettingsScreen: React.FC = () => {
             style: 'destructive',
             onPress: () => {
               setAlertState(hideAlert());
-              authService.removePassphrase().then(() => {
-                setAuthEnabled(false);
-              }).catch(() => {});
+              authService.removePassphrase().then((removed) => {
+                if (removed) setAuthEnabled(false);
+                else setAlertState(showAlert('Could not disable lock', 'The secure passphrase could not be removed. The app lock remains enabled.'));
+              }).catch(() => {
+                setAlertState(showAlert('Could not disable lock', 'Secure storage was unavailable. The app lock remains enabled.'));
+              });
             },
           },
         ]
@@ -106,7 +109,7 @@ export const SecuritySettingsScreen: React.FC = () => {
         <Card style={styles.infoCard}>
           <Icon name="info" size={18} color={colors.textMuted} />
           <Text style={styles.infoText}>
-            When enabled, the app will lock automatically when you switch away or close it. Your passphrase is stored securely on device and never transmitted.
+            When enabled, the app locks when you leave it. The passphrase is held in the operating system's secure credential store. Chat history is not yet encrypted at rest; the app lock and private-chat mode do not provide encrypted backups or encrypted cross-device sync.
           </Text>
         </Card>
       </ScrollView>
