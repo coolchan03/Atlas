@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -47,6 +47,7 @@ export const ChatsListScreen: React.FC = () => {
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [pendingPrivateChat, setPendingPrivateChat] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const { goTo } = useSpotlightTour();
 
@@ -71,12 +72,21 @@ export const ChatsListScreen: React.FC = () => {
     navigation.navigate('Chat', { conversationId: conversation.id });
   };
 
-  const handleNewChat = () => {
+  const startNewChat = (privateChat: boolean) => {
+    setPendingPrivateChat(privateChat);
     if (hasModels) {
-      navigation.navigate('Chat', {});
+      navigation.navigate('Chat', { privateChat });
       return;
     }
     setShowModelSelector(true);
+  };
+
+  const handleNewChat = () => {
+    Alert.alert('New conversation', 'Choose whether this chat should be saved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Regular chat', onPress: () => startNewChat(false) },
+      { text: 'Private (not saved)', onPress: () => startNewChat(true) },
+    ]);
   };
 
   const handleSelectTextModel = async (model: any) => {
@@ -88,7 +98,7 @@ export const ChatsListScreen: React.FC = () => {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
+        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', { privateChat: pendingPrivateChat }); },
       },
     );
   };
@@ -100,7 +110,7 @@ export const ChatsListScreen: React.FC = () => {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
+        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', { privateChat: pendingPrivateChat }); },
       },
     );
   };

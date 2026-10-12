@@ -155,13 +155,19 @@ export const useChatScreen = () => {
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
 
   const {
-    activeConversationId, conversations, createConversation, addMessage,
+    activeConversationId, conversations, createConversation: storeCreateConversation, addMessage,
     updateMessageContent, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
     streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
     deleteConversation, setActiveConversation, setConversationProject,
   } = useChatStore();
 
   const { projects, getProject } = useProjectStore();
+
+  // The privacy choice is made before a new conversation starts; it is never
+  // switched on after content has already been persisted.
+  const createConversation = (modelId: string, title?: string, projectId?: string) =>
+    storeCreateConversation(modelId, title, projectId,
+      !!route.params?.privateChat && !route.params?.conversationId);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 

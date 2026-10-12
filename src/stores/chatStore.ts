@@ -71,7 +71,7 @@ interface ChatState {
   streamingForConversationId: string | null;
   isStreaming: boolean;
   isThinking: boolean;
-  createConversation: (modelId: string, title?: string, projectId?: string) => string;
+  createConversation: (modelId: string, title?: string, projectId?: string, privateChat?: boolean) => string;
   deleteConversation: (conversationId: string) => void;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
@@ -111,7 +111,7 @@ export const useChatStore = create<ChatState>()(
       isStreaming: false,
       isThinking: false,
 
-      createConversation: (modelId, title, projectId) => {
+      createConversation: (modelId, title, projectId, privateChat = false) => {
         const id = generateId();
         const conversation: Conversation = {
           id,
@@ -121,6 +121,7 @@ export const useChatStore = create<ChatState>()(
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           projectId: projectId,
+          isPrivate: privateChat,
         };
 
         set((state) => ({
