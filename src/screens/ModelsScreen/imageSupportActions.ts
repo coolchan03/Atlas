@@ -4,6 +4,7 @@ import { modelManager } from '../../services';
 import { useAppStore } from '../../stores';
 import { ONNXImageModel } from '../../types';
 import { activeModelService } from '../../services/activeModelService';
+import { validateImageSupportFormat } from '../../utils/imageSupportFormat';
 
 export type ImageSupport = NonNullable<ONNXImageModel['supportFiles']>[number];
 export type ImageSupportKind = ImageSupport['kind'];
@@ -62,6 +63,8 @@ export async function pickAndAttachImageSupport(
   if (!/\.(safetensors?|gguf|pth|pt)$/i.test(name)) throw new Error('Supported add-on formats: .safetensors, .gguf, .pth or .pt');
   const kind = await chooseKind(name);
   if (!kind) return null;
+  const formatError = validateImageSupportFormat(name, kind);
+  if (formatError) throw new Error(formatError);
   if (model.id === useAppStore.getState().activeImageModelId) {
     await activeModelService.unloadImageModel(true);
   }
