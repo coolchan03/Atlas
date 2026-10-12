@@ -48,6 +48,8 @@ type OnboardingChecklist = {
 type AppSettings = {
   systemPrompt: string; temperature: number; maxTokens: number;
   topP: number; repeatPenalty: number; contextLength: number;
+  /** Auto chooses a RAM-safe window; manual uses contextLength subject to memory checks. */
+  contextMode?: 'auto' | 'manual';
   nThreads: number; nBatch: number;
   imageGenerationMode: ImageGenerationMode; autoDetectMethod: AutoDetectMethod;
   classifierModelId: string | null; imageSteps: number; imageGuidanceScale: number;
@@ -207,6 +209,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 4096,
+  contextMode: 'manual',
   nThreads: 0,
   nBatch: 512,
   imageGenerationMode: 'auto' as ImageGenerationMode,

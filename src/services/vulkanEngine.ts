@@ -2,13 +2,17 @@ import { NativeEventEmitter, NativeModules } from 'react-native';
 
 /** Experimental text-only Vulkan engine. Never substitutes for llama.rn silently. */
 type Backend = { name: string; description: string; type: string };
+export type VulkanSamplingSettings = {
+  temperature?: number; topK?: number; topP?: number; minP?: number;
+  repeatPenalty?: number; stop?: string[];
+};
 type VulkanModule = {
   listBackends(): Promise<Backend[]>;
   loadModel(path: string, gpuLayers: number, context: number, threads: number): Promise<string>;
   activeBackend(): Promise<string>;
   formatChat(messagesJson: string): Promise<string>;
   tokenize(text: string): Promise<number[]>;
-  generate(prompt: string, maxTokens: number, sessionId: string): Promise<boolean>;
+  generate(prompt: string, maxTokens: number, sessionId: string, samplingJson: string): Promise<boolean>;
   interrupt(sessionId: string): Promise<boolean>;
   unload(): Promise<boolean>;
 };
@@ -53,7 +57,8 @@ export const vulkanEngine = {
   async tokenize(text: string): Promise<number[]> {
     return required().tokenize(text);
   },
-  async generate(prompt: string, maxTokens: number, onToken: (text: string) => void): Promise<void> {
+  async generate(prompt: string, maxTokens: number, onToken: (text: string) => void,
+    sampling: VulkanSamplingSettings = {}): Promise<void> {
     if (activeSession) throw new Error('Vulkan generation is already active');
     const module = required();
     const sessionId = String(++generationCounter);
@@ -79,7 +84,7 @@ export const vulkanEngine = {
       subscriptions.push(events.addListener('AtlasVulkanError', (event: {sessionId: string; text: string}) => {
         if (event.sessionId === sessionId) reportedError = new Error(event.text || 'Vulkan generation failed');
       }));
-      await module.generate(prompt, maxTokens, sessionId);
+      await module.generate(prompt, maxTokens, sessionId, JSON.stringify(sampling));
       if (reportedError) throw reportedError;
     } finally {
       finished = true;

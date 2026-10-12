@@ -768,7 +768,7 @@ describe('LLMService', () => {
       expect(contents).toContain('Q2');
     });
 
-    it('passes all messages through to llama.rn for native context shifting', async () => {
+    it('windows oversized history safely when native context shifting is unsafe', async () => {
       const ctx = await setupForContextTest();
 
       (llmService as any).currentSettings.contextLength = 2048;
@@ -788,10 +788,11 @@ describe('LLMService', () => {
 
       const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
       const contents = oaiMessages.map((m: any) => m.content);
-      // All messages should be present — no JS-side truncation
+      // Older turns can leave the active window; the saved messages stay intact.
       expect(contents).toContain('Final question');
-      expect(contents).toContain(`Question 0 ${'x'.repeat(100)}`);
+      expect(contents).not.toContain(`Question 0 ${'x'.repeat(100)}`);
       expect(contents.join(' ')).toContain('System prompt');
+      expect(messages).toHaveLength(52);
     });
   });
 
@@ -1746,9 +1747,9 @@ describe('LLMService', () => {
 
       const debugInfo = await llmService.getContextDebugInfo(messages);
 
-      // With native context shifting, all messages are passed through
-      expect(debugInfo.managedMessageCount).toBe(debugInfo.originalMessageCount);
-      expect(debugInfo.truncatedCount).toBe(0);
+      // The active window omits older turns while preserving the original chat.
+      expect(debugInfo.managedMessageCount).toBeLessThan(debugInfo.originalMessageCount);
+      expect(debugInfo.truncatedCount).toBeGreaterThan(0);
     });
 
     it('uses char/4 estimation when tokenize throws in debug info', async () => {

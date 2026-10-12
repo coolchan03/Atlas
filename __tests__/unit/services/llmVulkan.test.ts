@@ -108,7 +108,7 @@ it('Auto selects OpenCL after a Vulkan load failure without trying CPU', async (
   expect((native as jest.Mock).mock.calls[0][0].n_gpu_layers).toBeGreaterThan(0);
 });
 
-it('Auto refuses to choose CPU when all accelerators are unavailable', async () => {
+it('Auto falls back to CPU when all accelerators are unavailable', async () => {
   const { hardwareService } = require('../../../src/services/hardware');
   jest.spyOn(hardwareService, 'getAccelerationCapability')
     .mockResolvedValue({ hasNpu: false, hasGpu: false });
@@ -116,9 +116,10 @@ it('Auto refuses to choose CPU when all accelerators are unavailable', async () 
   useAppStore.setState({ settings: {
     ...useAppStore.getState().settings, inferenceBackend: 'auto',
   }});
-  await expect(llmService.loadModel('/models/small.gguf'))
-    .rejects.toThrow('Select CPU explicitly');
-  expect(native).not.toHaveBeenCalled();
+  native.mockResolvedValue(createMockLlamaContext({ gpu: false }) as any);
+  await llmService.loadModel('/models/small.gguf');
+  expect(llmService.getSelectedBackend()).toBe('cpu');
+  expect(native).toHaveBeenCalled();
 });
 
 it('explicit OpenCL fails rather than loading CPU when GPU init fails', async () => {
@@ -132,4 +133,46 @@ it('explicit OpenCL fails rather than loading CPU when GPU init fails', async ()
   await expect(llmService.loadModel('/models/small-Q4_0.gguf'))
     .rejects.toThrow('CPU fallback is disabled');
   expect(native).toHaveBeenCalledTimes(1);
+});
+
+it('uses a user-selected Vulkan context above the former 4K limit and honors sampling settings', async () => {
+  useAppStore.setState({ settings: {
+    ...useAppStore.getState().settings, inferenceBackend: 'vulkan', contextMode: 'manual',
+    contextLength: 8192, maxTokens: 800, temperature: 0.35, topP: 0.75, repeatPenalty: 1.2,
+  }});
+  jest.spyOn(vulkanEngine, 'isAvailable').mockResolvedValue(true);
+  const load = jest.spyOn(vulkanEngine, 'loadModel').mockResolvedValue('Vulkan');
+  jest.spyOn(vulkanEngine, 'formatChat').mockResolvedValue('small prompt');
+  jest.spyOn(vulkanEngine, 'tokenize').mockResolvedValue([1, 2, 3, 4]);
+  const generate = jest.spyOn(vulkanEngine, 'generate').mockResolvedValue();
+  await llmService.loadModel('/models/small.gguf');
+  expect(load.mock.calls[0][2]).toBeGreaterThan(4096);
+  await llmService.generateResponse([{id:'q',role:'user',content:'Hello',timestamp:0}]);
+  expect(generate).toHaveBeenCalledWith('small prompt', 800, expect.any(Function), {
+    temperature: 0.35, topP: 0.75, repeatPenalty: 1.2,
+  });
+});
+
+it('trims old turns before formatting a long Vulkan chat', async () => {
+  useAppStore.setState({ settings: {
+    ...useAppStore.getState().settings, inferenceBackend: 'vulkan', contextMode: 'manual',
+    contextLength: 1024, maxTokens: 256,
+  }});
+  jest.spyOn(vulkanEngine, 'isAvailable').mockResolvedValue(true);
+  jest.spyOn(vulkanEngine, 'loadModel').mockResolvedValue('Vulkan');
+  const fmt = jest.spyOn(vulkanEngine, 'formatChat')
+    .mockImplementation(async items => JSON.stringify(items));
+  jest.spyOn(vulkanEngine, 'tokenize')
+    .mockImplementation(async text => Array(Math.ceil(text.length / 4)).fill(1));
+  jest.spyOn(vulkanEngine, 'generate').mockResolvedValue();
+  await llmService.loadModel('/models/small.gguf');
+  const history: any[] = [{id:'system',role:'system',content:'Rules',timestamp:0}];
+  for (let n = 0; n < 18; n++) history.push({id:String(n),role:n%2 ? 'assistant' : 'user',content:'x'.repeat(220),timestamp:0});
+  history.push({id:'last',role:'user',content:'Final question',timestamp:0});
+  await llmService.generateResponse(history);
+  const finalCall = fmt.mock.calls[fmt.mock.calls.length - 1][0];
+  expect(finalCall.some(item => item.content === 'Rules')).toBe(true);
+  expect(finalCall.some(item => item.content === 'Final question')).toBe(true);
+  expect(finalCall.length).toBeLessThan(history.length);
+  expect(history).toHaveLength(20);
 });

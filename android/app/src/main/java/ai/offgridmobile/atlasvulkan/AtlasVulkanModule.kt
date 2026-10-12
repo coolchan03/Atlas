@@ -135,7 +135,7 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
     }
 
     @ReactMethod
-    fun generate(prompt: String, maxTokens: Int, id: String, promise: Promise) {
+    fun generate(prompt: String, maxTokens: Int, id: String, samplingJson: String, promise: Promise) {
         if (id.isBlank() || maxTokens !in 1..4096 || prompt.isBlank()) {
             promise.reject("VULKAN_INVALID_REQUEST", "Invalid session or generation parameters")
             return
@@ -159,9 +159,19 @@ class AtlasVulkanModule(private val ctx: ReactApplicationContext) : ReactContext
             val current = engine
             if (current == null) { promise.reject("VULKAN_NOT_LOADED", "Load a GGUF model first"); sessionId.compareAndSet(id, null); return@execute }
             try {
+                val opts = org.json.JSONObject(samplingJson)
+                val temperature = opts.optDouble("temperature", 0.8).toFloat().coerceIn(0f, 2f)
+                val topK = opts.optInt("topK", 40).coerceIn(1, 200)
+                val topP = opts.optDouble("topP", 0.95).toFloat().coerceIn(0.01f, 1f)
+                val minP = opts.optDouble("minP", 0.05).toFloat().coerceIn(0f, 1f)
+                val repeatPenalty = opts.optDouble("repeatPenalty", 1.0).toFloat().coerceIn(1f, 2f)
+                val stopJson = opts.optJSONArray("stop")
+                val stops = if (stopJson == null) emptyList<String>() else
+                    (0 until stopJson.length()).mapNotNull { stopJson.optString(it).takeIf { s -> s.isNotBlank() } }.take(16)
                 val paramsClass = Class.forName("com.tensai.llamakt.SamplingParams")
                 val ctor = paramsClass.constructors.first { it.parameterCount == 9 }
-                val params = ctor.newInstance(maxTokens, 0.8f, 40, 0.95f, 0.05f, emptyList<String>(), -1, 1.0f, 64)
+                val params = ctor.newInstance(maxTokens, temperature, topK, topP, minP,
+                    stops, -1, repeatPenalty, 64)
                 val callbackClass = Class.forName("com.tensai.llamakt.TokenCallback")
                 val callback = Proxy.newProxyInstance(callbackClass.classLoader, arrayOf(callbackClass)) { _, method, args ->
                     if (method.name == "onToken" && !cancelled.get() && sessionId.get() == id) {

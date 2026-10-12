@@ -25,6 +25,7 @@ export const ChatContextSection: React.FC = () => {
   const isLiteRT = useAppStore(selectIsLiteRT);
   const ctxKey = isLiteRT ? 'liteRTMaxTokens' : 'contextLength';
   const ctxValue = useAppStore((s) => (s.settings as any)[ctxKey] as number) || 4096;
+  const contextMode = useAppStore((s) => s.settings.contextMode ?? 'manual');
   const modelMax = useAppStore((s) => s.modelMaxContext);
   // Same ceiling the loader uses for this phone's RAM (bigger choices would be cut down anyway).
   const ramGB = hardwareService.getTotalMemoryGB();
@@ -59,11 +60,20 @@ export const ChatContextSection: React.FC = () => {
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
           How much of the conversation and documents the model can keep in mind. Bigger remembers more but uses more RAM and starts slower. The model reloads after a change. If a size is too much for this phone or model, Atlas goes back to the last size that worked.{agentCtx ? ` The ${agentName} agent sets its own size (${agentCtx / 1024}K): change it in Agents.` : ''}
         </Text>
+        {!isLiteRT && (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Automatically select a safe context window"
+            onPress={() => updateSettings({ contextMode: 'auto' })}
+            style={{ alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16,
+              backgroundColor: contextMode === 'auto' ? colors.primary : colors.background }}>
+            <Text style={{ color: contextMode === 'auto' ? colors.background : colors.text }}>Auto (RAM-aware)</Text>
+          </TouchableOpacity>
+        )}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8 }}>
           {(isLiteRT ? [2048, 4096, 8192] : [2048, 4096, 8192, 16384].filter((n) => n <= deviceCap && (!modelMax || n <= Math.max(modelMax, 4096)))).map((n) => (
-            <TouchableOpacity key={n} onPress={() => updateSettings({ [ctxKey]: n } as any)}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: ctxValue === n ? colors.primary : colors.background }}>
-              <Text style={{ color: ctxValue === n ? colors.background : colors.text, fontSize: 13 }}>{n / 1024}K</Text>
+            <TouchableOpacity key={n} accessibilityRole="button" accessibilityLabel={`Use ${n / 1024}K manual context`}
+              onPress={() => updateSettings({ [ctxKey]: n, ...(!isLiteRT && { contextMode: 'manual' }) } as any)}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: (isLiteRT || contextMode === 'manual') && ctxValue === n ? colors.primary : colors.background }}>
+              <Text style={{ color: (isLiteRT || contextMode === 'manual') && ctxValue === n ? colors.background : colors.text, fontSize: 13 }}>{n / 1024}K</Text>
             </TouchableOpacity>
           ))}
         </View>

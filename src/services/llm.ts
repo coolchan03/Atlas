@@ -22,6 +22,7 @@ import { modelResidencyManager } from './modelResidency';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
+import { fitMessagesToContext } from './contextWindow';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
@@ -90,7 +91,10 @@ class LLMService {
     }
     // OpenCL supports more quants than the HTP list; let the actual native load decide.
     void openclEligible;
-    const settings = { ...rawSettings, inferenceBackend: backend };
+    const contextLength = rawSettings.contextMode === 'auto'
+      ? getMaxContextForDevice((await hardwareService.getDeviceInfo()).totalMemory)
+      : rawSettings.contextLength;
+    const settings = { ...rawSettings, inferenceBackend: backend, contextLength };
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
     // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
@@ -204,7 +208,7 @@ class LLMService {
             const requestedLayers = Math.max(1,
               useAppStore.getState().settings.gpuLayers || 99);
             const active = await vulkanEngine.loadModel(modelPath, requestedLayers,
-              Math.min(ctxLen, 4096), nThreads);
+              Math.min(ctxLen, 32768), nThreads);
             if (!/vulkan/i.test(active)) throw new Error(
               'Native model reported ' + active + ', not Vulkan',
             );
@@ -215,7 +219,7 @@ class LLMService {
             this.gpuReason = 'Native Vulkan backend selected; offloaded layer count unverified';
             this.requestedGpuLayers = requestedLayers;
             this.activeGpuLayers = 0;
-            this.currentSettings.contextLength = Math.min(ctxLen, 4096);
+            this.currentSettings.contextLength = Math.min(ctxLen, 32768);
             this.toolCallingSupported = false;
             this.thinkingSupported = false;
             this.multimodalInitialized = false;
@@ -429,14 +433,19 @@ class LLMService {
       let firstTokenMs = 0;
       let tokenCount = 0;
       const task = (async () => {
-        const prompt = await vulkanEngine.formatChat(messages.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
-        await vulkanEngine.generate(prompt, 512, token => {
+        const { settings } = useAppStore.getState();
+        const maxTokens = Math.max(1, Math.min(settings.maxTokens || 512, 4096,
+          Math.floor(this.currentSettings.contextLength * 0.4)));
+        const managed = await this.manageContextWindow(messages, maxTokens);
+        const prompt = await vulkanEngine.formatChat(managed.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, maxTokens, token => {
           if (!this.isGenerating || !token) return;
           if (!firstTokenMs) firstTokenMs = Date.now() - started;
           tokenCount++;
           output += token;
           onStream?.({ content: token, reasoningContent: '' });
-        });
+        }, { temperature: settings.temperature, topP: settings.topP,
+          repeatPenalty: settings.repeatPenalty });
         this.performanceStats = recordGenerationStats(started, firstTokenMs, tokenCount);
         onComplete?.({ content: output, reasoningContent: '' });
         return output;
@@ -520,9 +529,23 @@ class LLMService {
     this.activeCompletionPromise = work.then(() => { }, () => { });
     try { return await work; } finally { this.activeCompletionPromise = null; }
   }
-  /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
-  private async manageContextWindow(messages: Message[], _extraReserve = 0): Promise<Message[]> {
-    return messages;
+  /** Bound the active prompt for every local backend. Saved chat history is untouched. */
+  private async manageContextWindow(messages: Message[], extraReserve = 0): Promise<Message[]> {
+    if (!this.context && !this.vulkanLoaded) return messages;
+    const { settings } = useAppStore.getState();
+    const managed = await fitMessagesToContext({
+      messages,
+      contextTokens: this.currentSettings.contextLength || APP_CONFIG.maxContextLength,
+      outputTokens: Math.max(settings.maxTokens || 512, extraReserve),
+      format: (items) => this.vulkanLoaded
+        ? vulkanEngine.formatChat(items.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })))
+        : this.formatMessages(items),
+      countTokens: (text) => this.getTokenCount(text),
+    });
+    if (managed.droppedMessages || managed.latestTruncated) {
+      logger.log(`[LLM] Active context window: ${managed.promptTokens}/${managed.budgetTokens} prompt tokens; ${managed.droppedMessages} older messages omitted, latestTruncated=${managed.latestTruncated}`);
+    }
+    return managed.messages;
   }
   /**
    * Drop image attachments whose files no longer exist before they reach the native
@@ -572,8 +595,9 @@ class LLMService {
       this.isGenerating = true;
       let response = '';
       const task = (async () => {
-        const prompt = await vulkanEngine.formatChat(messages.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
-        await vulkanEngine.generate(prompt, maxTokens, token => { if (this.isGenerating) response += token; });
+        const managed = await this.manageContextWindow(messages, maxTokens);
+        const prompt = await vulkanEngine.formatChat(managed.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, Math.max(1, Math.min(maxTokens, 4096)), token => { if (this.isGenerating) response += token; });
         return response.trim();
       })();
       this.activeCompletionPromise = task.then(() => {}, () => {});
@@ -582,7 +606,8 @@ class LLMService {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
-    const oaiMessages = this.convertToOAIMessages(messages);
+    const managed = await this.manageContextWindow(messages, maxTokens);
+    const oaiMessages = this.convertToOAIMessages(managed);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
