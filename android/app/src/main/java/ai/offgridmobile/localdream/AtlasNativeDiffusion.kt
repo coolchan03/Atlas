@@ -291,6 +291,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val tail = ArrayDeque<String>()
         val watchdogActive = AtomicBoolean(true)
         val watchdogTimedOut = AtomicBoolean(false)
+        val shaderFailed = AtomicBoolean(false)
         var completed = false
         val watchdog = thread(start = true, isDaemon = true, name = "AtlasNativeImageWatchdog") {
             while (watchdogActive.get() && proc.isAlive) {
@@ -313,6 +314,13 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 lastOutputMs = SystemClock.elapsedRealtime()
                 if (tail.size >= 15) tail.removeFirst()
                 tail.addLast(line.take(300))
+                // Shader compilation failures cannot recover by waiting for another diffusion step.
+                if (gpuRequested && (line.contains("Compute pipeline creation failed", ignoreCase = true) ||
+                    line.contains("createComputePipeline ErrorUnknown", ignoreCase = true))) {
+                    shaderFailed.set(true)
+                    phase = "Vulkan shader compilation failed"
+                    proc.destroyForcibly()
+                }
                 AtlasImageProgress.stage(line)?.let { phase = it }
                 val step = AtlasImageProgress.parseStep(line, steps)
                 if (step != null && step > reportedStep) {
@@ -350,6 +358,12 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             }
             val code = proc.waitFor()
             if (cancelled()) throw IOException("Generation cancelled")
+            if (shaderFailed.get()) {
+                throw IOException("The Vulkan driver rejected a diffusion compute pipeline. " +
+                    "Device: " + deviceLabel.takeLast(250) + ". " +
+                    "Try compatible F16 or quantized weights, or select CPU explicitly. " +
+                    "No CPU fallback occurred. Native log: " + tail.joinToString(" | ").takeLast(600))
+            }
             if (watchdogTimedOut.get()) {
                 throw IOException("Image generation stopped: no diffusion step progress for " +
                     (if (gpuRequested) "10 minutes on requested Vulkan GPU" else "30 minutes on CPU") +

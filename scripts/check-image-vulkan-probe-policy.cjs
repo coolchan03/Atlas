@@ -12,4 +12,7 @@ assert.match(source, /No usable Vulkan diffusion GPU was detected/, 'Explain mis
 assert.match(source, /No CPU fallback occurred/, 'Retain explicit GPU-only policy');
 assert.doesNotMatch(source, /GPU probe inconclusive; trying native Vulkan directly/,
   'Never force Vulkan after a failed probe');
-console.log('PASS image Vulkan probe gate and explicit CPU fallback policy');
+assert.match(source, /line\.contains\("Compute pipeline creation failed"/, 'Recognize fatal Vulkan shader errors');
+assert.match(source, /shaderFailed\.set\(true\)/, 'Abort fatal shader errors promptly');
+assert.match(source, /if \(shaderFailed\.get\(\)\)/, 'Report shader error before the generic watchdog timeout');
+console.log('PASS image Vulkan probe, shader diagnostics and explicit CPU fallback policy');
