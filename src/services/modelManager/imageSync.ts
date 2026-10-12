@@ -4,6 +4,7 @@ import { ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete, validateImageModelDir } from '../../utils/imageModelIntegrity';
+import logger from '../../utils/logger';
 
 interface SyncCompletedImageDownloadsOpts {
   imageModelsDir: string;
@@ -133,8 +134,10 @@ export async function syncCompletedImageDownloads(opts: SyncCompletedImageDownlo
       existingIds.add(imageModel.id);
       recovered.push(imageModel);
       clearDownloadCallback(download.downloadId);
-    } catch {
-      // Keep metadata so recovery can be retried on next app start.
+    } catch (error) {
+      // Preserve recovery metadata and report an actionable diagnostic rather
+      // than silently losing the failure every time the app starts.
+      logger.warn(`[ImageDownloadRecovery] Could not restore ${imageModelId}; will retry on next startup:`, error);
     }
   }
 
