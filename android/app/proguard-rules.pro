@@ -8,3 +8,5 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+# Vulkan llama.kt engine is loaded reflectively by the Android bridge.
+-keep class com.tensai.llamakt.** { *; }

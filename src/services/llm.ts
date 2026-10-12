@@ -184,10 +184,8 @@ class LLMService {
           { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan },
           modelPath, !!mmProjPath,
         );
-        if (!candidates.length) {
-          throw new Error('Auto could not detect a compatible GPU or NPU for this model. ' +
-            'Select CPU explicitly to run without hardware acceleration.');
-        }
+        // Auto may use CPU when no accelerator can load; explicit choices remain strict.
+        candidates.push(INFERENCE_BACKENDS.CPU);
       }
       const failures: string[] = [];
       for (const backend of candidates) {
@@ -203,8 +201,8 @@ class LLMService {
           logger.log(`[LLM] Trying ${backend}: ctx=${ctxLen}, file=${(fileSize / (1024 * 1024)).toFixed(0)}MB, RAM=${memCheck.availableMB.toFixed(0)}MB`);
           if (backend === INFERENCE_BACKENDS.VULKAN) {
             if (!await vulkanEngine.isAvailable()) throw new Error('Vulkan GPU not detected in this build');
-            const requestedLayers = Math.max(1, Math.min(12,
-              useAppStore.getState().settings.gpuLayers || 8));
+            const requestedLayers = Math.max(1,
+              useAppStore.getState().settings.gpuLayers || 99);
             const active = await vulkanEngine.loadModel(modelPath, requestedLayers,
               Math.min(ctxLen, 4096), nThreads);
             if (!/vulkan/i.test(active)) throw new Error(
@@ -271,8 +269,7 @@ class LLMService {
         }
       }
       this.acceleratorAttempts = failures;
-      throw new Error('No accelerator could load this model. ' +
-        failures.join(' | ') + '. CPU was not selected automatically.');
+      throw new Error('No compatible backend could load this model (including CPU). ' + failures.join(' | '));
     } finally {
       mutex.release();
     }
