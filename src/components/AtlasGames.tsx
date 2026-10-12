@@ -3,6 +3,7 @@ import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Direction2048, empty2048, hasMoves2048, move2048, spawn2048 } from '../utils/game2048';
 import { MineGrid, mineResult, newMineGrid, revealMines } from '../utils/minesweeper';
+import { moveSnake, newSnake, SnakeDirection } from '../utils/snake';
 
 type Board = number[];
 const emptyBoard = (): Board => Array(9).fill(0);
@@ -15,7 +16,8 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake'>('menu');
+  const [snake, setSnake] = useState(() => newSnake());
   const [mines, setMines] = useState<MineGrid>(() => newMineGrid());
   const [placingFlags, setPlacingFlags] = useState(false);
   const [grid2048, setGrid2048] = useState<number[]>(() => spawn2048(spawn2048(empty2048())));
@@ -35,7 +37,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
   const [b, setB] = useState(7);
   const [answer, setAnswer] = useState(0);
   const [score, setScore] = useState(0);
-  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setMines(newMineGrid()); setPlacingFlags(false); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
+  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setSnake(newSnake()); setMines(newMineGrid()); setPlacingFlags(false); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
   const press = (label: string, fn: () => void) => <TouchableOpacity onPress={fn} style={{ padding: 13, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, marginBottom: 9 }}><Text style={{ color: colors.text, fontSize: 17 }}>{label}</Text></TouchableOpacity>;
   const tic = (idx: number) => {
     if (winner(board) || board[idx]) return;
@@ -70,6 +72,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Memory Match — find the matching pairs', () => start('memory'))}
         {press('2048 — slide and combine tiles', () => start('2048'))}
         {press('Minesweeper — reveal safe squares', () => start('mines'))}
+        {press('Snake — grow without hitting a wall', () => start('snake'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -149,6 +152,22 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
           }} style={{ width: 45, height: 45, margin: 3, borderWidth: 1, borderColor: colors.border, borderRadius: 5, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 19 }}>{cell.flagged ? '⚑' : cell.revealed ? (cell.mine ? '✕' : cell.nearby || '') : '?'}</Text></TouchableOpacity>)}
         </View>
         {press('New minefield', () => start('mines'))}
+      </>}
+      {game === 'snake' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 10 }}>Snake · Apples: {snake.score} {snake.over ? '· Game over' : ''}</Text>
+        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>Use the arrows to move one square at a time. Collect the apples and avoid walls and your tail.</Text>
+        <View style={{ width: 304, flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' }}>
+          {Array.from({ length: snake.size * snake.size }, (_, index) => <View key={index} style={{ width: 34, height: 34, margin: 2, borderRadius: 5, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: colors.text, fontSize: 20 }}>{snake.body[0] === index ? '●' : snake.body.includes(index) ? '•' : snake.food === index ? '◆' : ''}</Text>
+          </View>)}
+        </View>
+        <View style={{ alignItems: 'center', marginTop: 12 }}>
+          {press('↑ Up', () => setSnake(state => moveSnake(state, 'up')))}
+          <View style={{ flexDirection: 'row', gap: 14 }}>
+            {(['left', 'down', 'right'] as SnakeDirection[]).map(direction => <View key={direction}>{press(direction === 'left' ? '← Left' : direction === 'down' ? '↓ Down' : '→ Right', () => setSnake(state => moveSnake(state, direction)))}</View>)}
+          </View>
+        </View>
+        {press('New Snake game', () => start('snake'))}
       </>}
     </ScrollView>
   </Modal>;
