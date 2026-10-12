@@ -61,7 +61,7 @@ jobs:
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
       - name: Test native image family classifier and progress diagnostics
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --tests 'ai.offgridmobile.localdream.AtlasVulkanProbeTest' --tests 'ai.offgridmobile.localdream.AtlasImageGpuPrecisionTest' :app:compileReleaseKotlin --no-daemon --console=plain
+        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --tests 'ai.offgridmobile.localdream.AtlasVulkanProbeTest' --tests 'ai.offgridmobile.localdream.AtlasImageGpuPrecisionTest' :app:compileReleaseKotlin -PatlasVulkanEnabled=true --no-daemon --console=plain
       - name: Build native ARM64 diffusion CLI from pinned upstream source
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
@@ -134,6 +134,9 @@ jobs:
           AAPT="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/aapt"
           "$AAPT" dump badging "$APK" | grep -q "package: name='ai.offgridmobile.atlas.vulkantest'"
           "$AAPT" dump badging "$APK" | grep -q "sdkVersion:'29'"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose "$APK"
+          # This workflow only uploads an experimental APK; never create a public release here.
       - name: Upload Android diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v7
