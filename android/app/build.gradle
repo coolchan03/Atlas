@@ -82,7 +82,9 @@ android {
     namespace "ai.offgridmobile"
     defaultConfig {
         applicationId "ai.offgridmobile.atlas"
-        minSdkVersion rootProject.ext.minSdkVersion
+        // The optional llama.kt Vulkan library requires API 29. Keep normal Atlas
+        // installs at API 24; only the separate Vulkan test APK raises its floor.
+        minSdkVersion project.findProperty('atlasVulkanEnabled') == 'true' ? 29 : rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1784144537
         versionName "0.0.103"

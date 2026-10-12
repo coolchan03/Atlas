@@ -1,1 +1,12 @@
-const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');const gradle=fs.readFileSync(path.resolve(__dirname,'../android/app/build.gradle'),'utf8');assert.match(gradle,/if\s*\(project\.findProperty\('atlasVulkanEnabled'\)\s*==\s*'true'\)\s*\{\s*applicationIdSuffix\s+["']\.vulkantest["']/,'Vulkan test APK must have a separate package identity');console.log('PASS experimental Atlas Vulkan APK cannot overwrite existing installation');
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const app = fs.readFileSync(path.join(root, 'android/app/build.gradle'), 'utf8');
+const project = fs.readFileSync(path.join(root, 'android/build.gradle'), 'utf8');
+const native = fs.readFileSync(path.join(root, 'android/atlasLlamaKt/build.gradle'), 'utf8');
+assert.match(app, /applicationIdSuffix ['"]\.vulkantest['"]/, 'Vulkan APK must have an isolated package identity');
+assert.match(app, /minSdkVersion project\.findProperty\('atlasVulkanEnabled'\) == 'true' \? 29 : rootProject\.ext\.minSdkVersion/, 'Only experimental Vulkan APK may require API 29');
+assert.match(project, /minSdkVersion = 24/, 'Stable Android app minimum SDK must remain 24');
+assert.match(native, /minSdkVersion 29/, 'Native llama.kt module requires API 29');
+console.log('PASS isolated Vulkan APK identity and SDK version compatibility gate');
