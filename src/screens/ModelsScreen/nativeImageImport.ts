@@ -54,13 +54,21 @@ export async function importNativeImageFile(uri: string, fileName: string, deps:
   try {
     deps.setImportProgress({ fraction: 0, fileName });
     const r = await module.importAtlasImageFile({ uri, modelDir, fileName });
+    if (!r || typeof r.modelDir !== 'string' || !r.modelDir.trim() ||
+        !Number.isFinite(Number(r.size)) || Number(r.size) <= 0) {
+      throw new Error('Native import did not return a valid model location and file size. Model was not registered.');
+    }
+    const family = r.family || info.family;
+    if (!['sd15', 'sdxl', 'flux', 'z_image', 'anima', 'chroma'].includes(family)) {
+      throw new Error('Native import returned an unsupported image architecture. Model was not registered.');
+    }
     const model: ONNXImageModel = {
       id: modelId,
       name: name || fileName,
       description: 'Original ' + fileName.split('.').pop()?.toUpperCase() + ' image weights (no conversion)',
       modelPath: r.modelDir,
       backend: 'sdcpp',
-      nativeImageFamily: r.family || info.family,
+      nativeImageFamily: family,
       nativeImageVariant: r.variant === 'turbo' ? 'turbo' : 'base',
       downloadedAt: new Date().toISOString(),
       size: r.size,
