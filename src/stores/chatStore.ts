@@ -78,6 +78,7 @@ interface ChatState {
   setConversationProject: (conversationId: string, projectId: string | null) => void;
   setConversationArchived: (conversationId: string, archived: boolean) => void;
   renameConversation: (conversationId: string, title: string) => void;
+  setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
   setConversationAgent: (conversationId: string, agentId: string | null) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
    *  so no chat is left pointing at a project that no longer exists). */
@@ -156,6 +157,10 @@ export const useChatStore = create<ChatState>()(
           (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
+      setConversationPinVerifier: (conversationId, verifier) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, pinVerifier: verifier ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
       renameConversation: (conversationId, title) => {
         const clean = title.trim().slice(0, 100);
         if (!clean) return;

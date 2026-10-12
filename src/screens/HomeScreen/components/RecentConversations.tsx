@@ -90,13 +90,13 @@ export const RecentConversations: React.FC<Props> = ({
             <View style={styles.conversationInfo}>
               <View style={styles.conversationHeader}>
                 <Text style={styles.conversationTitle} numberOfLines={1}>
-                  {conv.title}
+                  {conv.pinVerifier ? 'Locked conversation' : conv.title}
                 </Text>
                 <Text style={styles.conversationMeta}>
                   {formatDate(conv.updatedAt)}
                 </Text>
               </View>
-              {conv.messages.length > 0 && (() => {
+              {conv.pinVerifier ? <Text style={styles.conversationPreview}>PIN required</Text> : conv.messages.length > 0 && (() => {
                 const lastMsg = conv.messages[conv.messages.length - 1];
                 return (
                   <Text style={styles.conversationPreview} numberOfLines={1}>

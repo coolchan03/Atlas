@@ -25,6 +25,7 @@ import { useChatScreen } from './useChatScreen';
 import { MessageRenderer } from './MessageRenderer';
 import { NoModelScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
+import { ChatPinGate } from '../../components/ChatPinGate';
 import { ChatMessageArea } from './ChatMessageArea';
 import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
@@ -378,6 +379,7 @@ export const ChatScreen: React.FC = () => {
       </KeyboardAvoidingView>
       {alertEl}
       <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
+      <ChatPinGate conversationId={chat.activeConversationId} />
       <ProAhaSheet
         visible={proAhaVisible}
         onClose={() => setProAhaVisible(false)}

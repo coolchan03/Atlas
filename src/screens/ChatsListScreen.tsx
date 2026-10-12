@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput, NativeModules } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -41,6 +41,21 @@ export const ChatsListScreen: React.FC = () => {
   const [showArchived, setShowArchived] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
+  const [pinTarget, setPinTarget] = useState<Conversation | null>(null);
+  const [newPin, setNewPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const savePin = async () => {
+    if (!pinTarget || pinBusy) return;
+    if (!/^[0-9]{4,12}$/.test(newPin)) { Alert.alert('PIN', 'Enter 4–12 digits.'); return; }
+    if (!NativeModules.AtlasDevice?.createChatPinVerifier) { Alert.alert('Update required', 'PIN locks need the newest Atlas APK.'); return; }
+    setPinBusy(true);
+    try {
+      const verifier = await NativeModules.AtlasDevice.createChatPinVerifier(newPin);
+      useChatStore.getState().setConversationPinVerifier(pinTarget.id, verifier);
+      setPinTarget(null); setNewPin('');
+    } catch (e: any) { Alert.alert('PIN setup failed', String(e?.message ?? e)); }
+    finally { setPinBusy(false); }
+  };
   const { getProject } = useProjectStore();
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
@@ -164,6 +179,11 @@ export const ChatsListScreen: React.FC = () => {
     setAlertState(showAlert('Chat options', conversation.title, [
       { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
       { text: 'Rename', onPress: () => { setAlertState(hideAlert()); setRenameTitle(conversation.title); setRenameTarget(conversation); } },
+      { text: conversation.pinVerifier ? 'PIN locked' : 'Set chat PIN', onPress: () => {
+        setAlertState(hideAlert());
+        if (conversation.pinVerifier) Alert.alert('PIN protected', 'This chat already has a PIN. PIN changes require the current PIN; remove or change it from the unlocked chat in a future update.');
+        else { setNewPin(''); setPinTarget(conversation); }
+      } },
       { text: conversation.isArchived ? 'Unarchive' : 'Archive', onPress: () => {
         setConversationArchived(conversation.id, !conversation.isArchived);
         setAlertState(hideAlert());
@@ -218,11 +238,11 @@ export const ChatsListScreen: React.FC = () => {
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.title}
+                {item.pinVerifier ? 'Locked conversation' : item.title}
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {!!item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>
@@ -297,6 +317,19 @@ export const ChatsListScreen: React.FC = () => {
           testID="conversation-list"
         />
       )}
+      <Modal visible={!!pinTarget} transparent animationType="fade" onRequestClose={() => setPinTarget(null)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Set a chat PIN</Text>
+            <Text style={{ color: colors.textSecondary }}>This adds an unlock screen. Conversation data is already encrypted at rest by Android Keystore.</Text>
+            <TextInput value={newPin} onChangeText={v => setNewPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+              <TouchableOpacity onPress={() => { setPinTarget(null); setNewPin(''); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity disabled={pinBusy} onPress={savePin}><Text style={{ color: colors.primary, fontWeight: '700' }}>Set PIN</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>

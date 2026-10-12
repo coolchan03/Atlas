@@ -349,6 +349,32 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.reject("CHAT_DECRYPT", "Chat storage cannot be decrypted on this device", e) }
     }
 
+    /** PIN verifier for individual UI locks; conversation data remains protected by the Keystore key. */
+    @ReactMethod
+    fun createChatPinVerifier(pin: String, promise: Promise) {
+        try {
+            require(pin.matches(Regex("[0-9]{4,12}"))) { "PIN must have 4 to 12 digits" }
+            val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+            val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 310000, 256)
+            val digest = try { javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded } finally { spec.clearPassword() }
+            promise.resolve("pin:v1:" + android.util.Base64.encodeToString(salt + digest, android.util.Base64.NO_WRAP))
+        } catch (e: Exception) { promise.reject("PIN_CREATE", "Could not configure chat PIN", e) }
+    }
+
+    @ReactMethod
+    fun verifyChatPin(pin: String, verifier: String, promise: Promise) {
+        try {
+            require(verifier.startsWith("pin:v1:")) { "Invalid PIN verifier" }
+            val decoded = android.util.Base64.decode(verifier.removePrefix("pin:v1:"), android.util.Base64.NO_WRAP)
+            require(decoded.size == 48) { "Invalid PIN verifier length" }
+            val salt = decoded.copyOfRange(0, 16)
+            val expected = decoded.copyOfRange(16, 48)
+            val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 310000, 256)
+            val actual = try { javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded } finally { spec.clearPassword() }
+            promise.resolve(java.security.MessageDigest.isEqual(expected, actual))
+        } catch (e: Exception) { promise.reject("PIN_VERIFY", "Could not verify chat PIN", e) }
+    }
+
     /** Portable password-encrypted backup, independent of device-bound Keystore. */
     @ReactMethod
     fun encryptPortableBackup(plain: String, passphrase: String, promise: Promise) {
