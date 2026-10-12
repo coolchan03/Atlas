@@ -9,7 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
-  Alert,
+  Alert, Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -61,6 +61,21 @@ export const SettingsScreen: React.FC = () => {
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | null>(null);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+  const runEncryptedBackup = async () => {
+    if (backupPassword.length < 12) { Alert.alert('Password too short', 'Use at least 12 characters. A forgotten password cannot be recovered.'); return; }
+    setBackupBusy(true);
+    try {
+      const result = backupPasswordAction === 'export'
+        ? await exportBackup(backupPassword) : await importBackup(backupPassword);
+      if (result) Alert.alert(backupPasswordAction === 'export' ? 'Encrypted backup saved' : 'Encrypted backup restored', String(result));
+      setBackupPassword('');
+      setBackupPasswordAction(null);
+    } catch (e: any) { Alert.alert('Encrypted backup failed', String(e?.message ?? e)); }
+    finally { setBackupBusy(false); }
+  };
   const deviceInfo = useAppStore((s) => s.deviceInfo);
   // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
   // sense to a paid user). hasRegisteredPro only flips true after RC verification
@@ -251,6 +266,22 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} onPress={() => { setBackupPassword(''); setBackupPasswordAction('export'); }}>
+              <View style={styles.navItemIcon}><Icon name="lock" size={16} color={colors.textSecondary} /></View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Encrypted backup with chats</Text>
+                <Text style={styles.navItemDesc}>Password-protected transfer to another device</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} onPress={() => { setBackupPassword(''); setBackupPasswordAction('import'); }}>
+              <View style={styles.navItemIcon}><Icon name="unlock" size={16} color={colors.textSecondary} /></View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Restore encrypted backup</Text>
+                <Text style={styles.navItemDesc}>Enter password and choose an .atlasbackup file</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => {
               Alert.alert('Restore backup?', 'This replaces your current agents, projects, chats and settings with the ones in the backup file.', [
                 { text: 'Cancel', style: 'cancel' },
@@ -322,6 +353,19 @@ export const SettingsScreen: React.FC = () => {
         <MadeWithLove />
         {__DEV__ && <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />}
       </ScrollView>
+      <Modal visible={backupPasswordAction !== null} transparent animationType="fade" onRequestClose={() => { if (!backupBusy) { setBackupPasswordAction(null); setBackupPassword(''); } }}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
+            <Text style={{ color: colors.textSecondary }}>Enter your backup password (minimum 12 characters). Keep it safe: it cannot be recovered. Encrypted backups include conversations, agents and settings, but not model files.</Text>
+            <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
+              <TouchableOpacity disabled={backupBusy} onPress={() => { setBackupPassword(''); setBackupPasswordAction(null); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity disabled={backupBusy} onPress={runEncryptedBackup}><Text style={{ color: colors.primary, fontWeight: '600' }}>{backupBusy ? 'Working…' : 'Continue'}</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
