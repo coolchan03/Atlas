@@ -22,14 +22,18 @@ export const CompassScreen: React.FC = () => {
   const night = useOffGrid((s) => s.nightRed);
   const { width, height } = useWindowDimensions();
   const [heading, setHeading] = useState<number | null>(null);
-  const [accuracy, setAccuracy] = useState<number>(3);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
   const size = Math.max(160, Math.min(width * 0.82, height - 400, 520));
 
   useEffect(() => {
     if (!Native) return;
     const em = new NativeEventEmitter(Native);
-    const a = em.addListener('AtlasCompass', (e: { heading: number }) => setHeading(e.heading));
-    const b = em.addListener('AtlasCompassAccuracy', (e: { accuracy: number }) => setAccuracy(e.accuracy));
+    const a = em.addListener('AtlasCompass', (e: { heading: number }) => {
+      if (Number.isFinite(e.heading)) setHeading(((e.heading % 360) + 360) % 360);
+    });
+    const b = em.addListener('AtlasCompassAccuracy', (e: { accuracy: number }) => {
+      if (Number.isFinite(e.accuracy)) setAccuracy(e.accuracy);
+    });
     Native.startCompass().catch(() => undefined);
     return () => { a.remove(); b.remove(); Native.stopCompass().catch(() => undefined); };
   }, []);
@@ -63,7 +67,7 @@ export const CompassScreen: React.FC = () => {
             ))}
           </View>
         </View>
-        {accuracy < 2 && (
+        {accuracy !== null && accuracy < 2 && (
           <Text style={{ color: colors.textSecondary, marginTop: 18, textAlign: 'center', paddingHorizontal: 24 }}>
             Low accuracy: move the phone in a figure-8 a few times, away from metal and magnets.
           </Text>
