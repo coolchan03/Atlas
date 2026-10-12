@@ -4,13 +4,13 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useAgentStore } from '../stores/agentStore';
 
 /** Chat header: shows the active agent; tap to switch agents (or none). */
-export function AgentChip({ styles, colors }: { styles: any; colors: any }) {
+export function AgentChip({ styles, colors, onSelect }: { styles: any; colors: any; onSelect?: (agentId: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const agents = useAgentStore((s) => s.agents);
   const activeId = useAgentStore((s) => s.activeAgentId);
   const setActive = useAgentStore((s) => s.setActiveAgent);
   const active = agents.find((a) => a.id === activeId);
-  const pick = (id: string | null) => { setActive(id); setOpen(false); };
+  const pick = (id: string | null) => { setActive(id); onSelect?.(id); setOpen(false); };
   return (
     <>
       <TouchableOpacity style={styles.headerProjectRow} onPress={() => setOpen(true)} testID="agent-selector">

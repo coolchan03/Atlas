@@ -252,6 +252,7 @@ export interface Conversation {
   /** Atlas private chat: never written to storage, gone when the app closes. */
   isPrivate?: boolean;
   isArchived?: boolean;
+  agentId?: string;
   /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
   instructions?: string;
 }

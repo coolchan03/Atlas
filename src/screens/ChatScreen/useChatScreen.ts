@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { useAgentStore } from '../../stores/agentStore';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
 import {
@@ -170,6 +171,14 @@ export const useChatScreen = () => {
       !!route.params?.privateChat && !route.params?.conversationId);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
+  useEffect(() => {
+    if (activeConversationId) {
+      const desiredAgent = activeConversation?.agentId ?? 'atlas';
+      if (useAgentStore.getState().activeAgentId !== desiredAgent) {
+        useAgentStore.getState().setActiveAgent(desiredAgent);
+      }
+    }
+  }, [activeConversationId, activeConversation?.agentId]);
 
   // Compute active model from either local or remote source
   const activeModelInfo = useMemo((): ActiveModelInfo => {

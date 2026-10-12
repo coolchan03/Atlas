@@ -8,6 +8,7 @@ import { llmService } from '../../services';
 import { createStyles } from './styles';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { AgentChip } from '../AgentChip';
+import { useChatStore } from '../../stores/chatStore';
 import { ChatContextSection } from './ChatContextSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
@@ -35,6 +36,7 @@ interface GenerationSettingsModalProps {
   onClose: () => void;
   onOpenProject?: () => void;
   onOpenModels?: () => void;
+  activeConversationId?: string | null;
   onOpenGallery?: () => void;
   onDeleteConversation?: () => void;
   onOpenTTSSettings?: () => void;
@@ -48,6 +50,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   onClose,
   onOpenProject,
   onOpenModels,
+  activeConversationId,
   onOpenGallery,
   onDeleteConversation,
   onOpenTTSSettings,
@@ -110,7 +113,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, gap: 12 }}>
           <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Agent</Text>
-          <AgentChip colors={colors} styles={{ headerProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8 }, headerSubtitle: { fontSize: 14 } }} />
+          <AgentChip onSelect={(id) => { if (activeConversationId) useChatStore.getState().setConversationAgent(activeConversationId, id); }} colors={colors} styles={{ headerProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8 }, headerSubtitle: { fontSize: 14 } }} />
         </View>
         {onOpenModels && (
           <TouchableOpacity onPress={onOpenModels} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }} testID="chat-settings-change-model">

@@ -84,6 +84,7 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       onClose={() => setShowSettingsPanel(false)}
       onOpenProject={() => setShowProjectSelector(true)}
       onOpenModels={onOpenModels}
+      activeConversationId={activeConversationId}
       onOpenGallery={imageCount > 0 ? () => navigation.navigate('Gallery', { conversationId: activeConversationId }) : undefined}
       onDeleteConversation={activeConversation ? handleDeleteConversation : undefined}
       conversationImageCount={imageCount}

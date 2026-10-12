@@ -77,6 +77,7 @@ interface ChatState {
   getActiveConversation: () => Conversation | null;
   setConversationProject: (conversationId: string, projectId: string | null) => void;
   setConversationArchived: (conversationId: string, archived: boolean) => void;
+  setConversationAgent: (conversationId: string, agentId: string | null) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
    *  so no chat is left pointing at a project that no longer exists). */
   unfileConversationsForProject: (projectId: string) => void;
@@ -122,6 +123,7 @@ export const useChatStore = create<ChatState>()(
           updatedAt: new Date().toISOString(),
           projectId: projectId,
           isPrivate: privateChat,
+          agentId: 'atlas',
         };
 
         set((state) => ({
@@ -146,6 +148,11 @@ export const useChatStore = create<ChatState>()(
       getActiveConversation: () => {
         const state = get();
         return state.conversations.find((c) => c.id === state.activeConversationId) || null;
+      },
+
+      setConversationAgent: (conversationId, agentId) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationArchived: (conversationId, archived) => {
