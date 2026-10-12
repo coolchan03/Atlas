@@ -7,6 +7,7 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
+import { ProjectLearningGame } from '../components/ProjectLearningGame';
 import { Switch } from 'react-native';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { hostVoices } from '../atlasVoice/neural';
@@ -16,6 +17,9 @@ const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: str
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
   { kind: 'cards', label: 'Flashcards', icon: 'layers', desc: 'Tap to flip' },
   { kind: 'quiz', label: 'Quiz', icon: 'check-square', desc: 'Multiple choice' },
+  { kind: 'crossword', label: 'Crossword', icon: 'grid', desc: 'Terms and clues from project sources' },
+  { kind: 'wordsearch', label: 'Word search', icon: 'search', desc: 'Find words from your documents' },
+  { kind: 'match', label: 'Matching game', icon: 'link', desc: 'Connect terms to definitions' },
   { kind: 'outline', label: 'Mind map', icon: 'share-2', desc: 'Outline of the topic' },
   { kind: 'podcast', label: 'Podcast', icon: 'headphones', desc: 'An episode read aloud, with a time bar' },
   { kind: 'slides', label: 'Video (slides)', icon: 'film', desc: 'Narrated slideshow' },
@@ -45,6 +49,7 @@ export const StudyScreen: React.FC = () => {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
+  const learningEnabled = Boolean(project?.allowLearningActivities ?? (project?.allowGames || project?.allowQuizzes || project?.allowPodcasts));
   const savedRaw = useStudyStore((s) => s.saved[projectId]);
   const saved = savedRaw || [];
   const add = useStudyStore((s) => s.add);
@@ -177,6 +182,7 @@ export const StudyScreen: React.FC = () => {
               <SourceChips nums={[...new Set([...v.text.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))]} sources={v.sources} onOpen={openSource} colors={colors} />
             </View>
           )}
+          {(v.crossword || v.wordSearch || v.learningTerms) && <ProjectLearningGame key={v.createdAt} activity={v} onOpenSource={openSource} />}
           {v.cards?.map((c, i) => (
             <TouchableOpacity key={i} style={[card, { minHeight: 90, justifyContent: 'center' }]} onPress={() => setFlipped((f) => ({ ...f, [i]: !f[i] }))}>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>{flipped[i] ? 'Answer' : `Card ${i + 1} · tap to flip`}</Text>
@@ -268,7 +274,7 @@ export const StudyScreen: React.FC = () => {
           <Text style={{ color: '#fff', fontWeight: '600' }}>{busy === 'Answering' ? 'Answering...' : 'Ask with sources'}</Text>
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginTop: 10 }}>
-          {KINDS.map((k) => (
+          {KINDS.filter(k => learningEnabled || !['quiz','podcast','crossword','wordsearch','match'].includes(k.kind)).map((k) => (
             <View key={k.kind} style={{ width: width >= 700 ? '33.3%' : '50%', padding: 5 }}>
               <TouchableOpacity disabled={!!busy} onPress={() => run(k.kind)} style={[card, { marginBottom: 0, minHeight: 84 }]}>
                 <Icon name={k.icon} size={20} color={colors.primary} />
@@ -278,13 +284,18 @@ export const StudyScreen: React.FC = () => {
             </View>
           ))}
         </View>
+        {!learningEnabled && <TouchableOpacity onPress={() => navigation.navigate('ProjectEdit', { projectId })} style={{ padding: 12, borderRadius: 10, backgroundColor: colors.surface, marginTop: 10 }}>
+          <Text style={{ color: colors.text, fontWeight: '600' }}>Learning activities are off for this project</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Enable the one Learning Activities switch in Project Settings to create source-based crosswords, word searches, matching games, quizzes and podcasts. Writing projects stay unchanged otherwise.</Text>
+          <Text style={{ color: colors.primary, marginTop: 6 }}>Open project settings</Text>
+        </TouchableOpacity>}
         {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>{/\.\.\.$/.test(busy) ? busy : 'Working on it'} - this can take a few minutes on a phone.</Text>}
         {saved.length > 0 && <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 6 }}>Saved</Text>}
         {saved.map((r) => (
           <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setResumeAt(0); setView(r); }}>
             <Icon name={KINDS.find((k) => k.kind === r.kind)?.icon || 'message-circle'} size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title ? `🎙 ${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title ? `${r.kind === 'podcast' ? '🎙 ' : ''}${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(r.createdAt).toLocaleString()}</Text>
             </View>
             <TouchableOpacity onPress={() => remove(projectId, r.createdAt)} style={{ padding: 6 }}><Icon name="trash-2" size={16} color={colors.textMuted} /></TouchableOpacity>

@@ -9,6 +9,7 @@ import { ensureTextModel } from '../atlasTools/models';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { buildCrossword, buildWordSearch, Crossword, LearningTerm, WordSearch, normalizeLearningWord } from './learningGames';
 
 export interface Source { n: number; doc: string; part: number; text: string; origin?: 'project' | 'library' | 'web'; url?: string }
 export interface Card { q: string; a: string; src: number[] }
@@ -17,7 +18,7 @@ export interface PodcastLine { host: 'A' | 'B' | 'C'; text: string }
 export interface Slide { title: string; bullets: string[]; narration: string; src: number[] }
 
 export interface StudyResult {
-  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline';
+  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline' | 'crossword' | 'wordsearch' | 'match';
   createdAt: number;
   topic: string;
   title?: string;
@@ -28,6 +29,9 @@ export interface StudyResult {
   podcast?: PodcastLine[];
   hosts?: number;
   slides?: Slide[];
+  learningTerms?: LearningTerm[];
+  crossword?: Crossword;
+  wordSearch?: WordSearch;
 }
 
 interface StudyState {
@@ -112,7 +116,34 @@ async function ask(system: string, user: string): Promise<string> {
 const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;
 const GROUND = 'Use ONLY the numbered sources. After every fact put the source number in brackets like [2]. If the sources do not cover something, do not invent it.';
 
+export function learningActivitiesEnabled(projectId: string): boolean {
+  const project = require('../stores/projectStore').useProjectStore.getState().getProject(projectId);
+  return !!(project?.allowLearningActivities ?? (project?.allowGames || project?.allowQuizzes || project?.allowPodcasts));
+}
+
+/** Filter small-model puzzle output against the original project source text. */
+export function parseGroundedLearningTerms(raw: string, sources: Source[]): LearningTerm[] {
+  const out: LearningTerm[] = [];
+  const used = new Set<string>();
+  for (const line of raw.split('\n')) {
+    const match = line.trim().match(/^(?:[-*]\s*)?TERM\s*:\s*([^|]+?)\s*\|\s*CLUE\s*:\s*(.+?)\s*\|\s*SRC\s*:\s*\[?(\d+)\]?\s*$/i);
+    if (!match) continue;
+    const answer = normalizeLearningWord(match[1]);
+    const clue = match[2].trim();
+    const source = sources.find(s => s.n === Number(match[3]));
+    if (!source || answer.length < 3 || answer.length > 14 || used.has(answer) || clue.length < 8 ||
+        clue.toUpperCase().includes(answer) || !new RegExp('\\\\b' + answer + '\\\\b', 'i').test(source.text)) continue;
+    used.add(answer);
+    out.push({ answer, clue, src: [source.n] });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
 export async function generate(projectId: string, kind: StudyResult['kind'], topic: string): Promise<StudyResult> {
+  if (['quiz', 'podcast', 'crossword', 'wordsearch', 'match'].includes(kind) && !learningActivitiesEnabled(projectId)) {
+    throw new Error('Enable Learning Activities in this project’s settings to generate quizzes, podcasts, or games.');
+  }
   const sources = await gatherSources(projectId, topic);
   if (!sources.length) throw new Error('This project has no documents in its knowledge base yet.');
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
@@ -145,6 +176,25 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     }
     if (!cards.length) throw new Error('The model did not produce flashcards in the expected format. Try again or use a bigger model.');
     return { ...base, cards };
+  }
+  if (kind === 'crossword' || kind === 'wordsearch' || kind === 'match') {
+    const raw = await ask(
+      'You create educational word puzzles from document passages. Use ONLY words that actually occur in the provided sources. Do not invent facts. Make concise clues that do not reveal the term. Do not include answers longer than 14 letters.',
+      `${S}${about}Extract up to 12 distinct important single-word terms and clues drawn from the sources. Use exactly one item per line in this format:\nTERM: WORD | CLUE: a short question or definition without the word | SRC: 1\nThe source number must identify a passage that literally contains the word. No introduction.`,
+    );
+    const terms = parseGroundedLearningTerms(raw, sources);
+    if (terms.length < 3) throw new Error('Not enough verifiable terms could be found in the project sources. Try more documents or a larger local model.');
+    if (kind === 'crossword') {
+      const crossword = buildCrossword(terms);
+      if (crossword.entries.length < 3) throw new Error('These project terms do not cross sufficiently for a crossword. Try another topic.');
+      return { ...base, title: 'Project crossword', learningTerms: terms, crossword };
+    }
+    if (kind === 'wordsearch') {
+      const wordSearch = buildWordSearch(terms);
+      if (wordSearch.entries.length < 3) throw new Error('Not enough terms fit into the word-search grid. Try another topic.');
+      return { ...base, title: 'Project word search', learningTerms: terms, wordSearch };
+    }
+    return { ...base, title: 'Project matching game', learningTerms: terms };
   }
   if (kind === 'quiz') {
     const t = await ask(`You write multiple-choice quizzes. ${GROUND}`, `${S}${about}Write 5 questions. For each, exactly:\nQ: question\nA) option\nB) option\nC) option\nD) option\nANSWER: letter\nWHY: one sentence\nSRC: number\n(blank line between questions)`);
@@ -238,6 +288,7 @@ async function researchSources(query: string, startN: number, onStep: (m: string
  * model's memory: from the project sources, an optional prompt and optional extra research.
  */
 export async function generatePodcast(projectId: string, opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
+  if (!learningActivitiesEnabled(projectId)) throw new Error('Enable Learning Activities in Project Settings before generating a podcast.');
   onStep('Reading your sources...');
   // With extra research on, leave room in the model's memory for the research sources.
   let sources = await gatherSources(projectId, opts.prompt, opts.research ? 0.6 : 1);
