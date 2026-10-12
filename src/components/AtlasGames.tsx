@@ -5,6 +5,14 @@ import { Direction2048, empty2048, hasMoves2048, move2048, spawn2048 } from '../
 import { MineGrid, mineResult, newMineGrid, revealMines } from '../utils/minesweeper';
 import { moveSnake, newSnake, SnakeDirection } from '../utils/snake';
 
+const WORDS = ['PUZZLE','PLANET','JOURNAL','ROBOT','GALAXY','GARDEN','COMPASS','ARCADE'];
+const TRIVIA = [
+  { q: 'Which planet is known as the Red Planet?', options: ['Venus','Mars','Jupiter','Saturn'], correct: 1 },
+  { q: 'What is the largest ocean?', options: ['Atlantic','Indian','Pacific','Arctic'], correct: 2 },
+  { q: 'What is 12 × 8?', options: ['84','96','108','98'], correct: 1 },
+  { q: 'How many sides does a hexagon have?', options: ['5','6','7','8'], correct: 1 },
+  { q: 'Which gas do plants absorb for photosynthesis?', options: ['Oxygen','Nitrogen','Carbon dioxide','Hydrogen'], correct: 2 },
+];
 type Board = number[];
 const emptyBoard = (): Board => Array(9).fill(0);
 const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -16,7 +24,12 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake' | 'word' | 'trivia'>('menu');
+  const [word, setWord] = useState('PLANET');
+  const [letters, setLetters] = useState<string[]>([]);
+  const [triviaIndex, setTriviaIndex] = useState(0);
+  const [triviaScore, setTriviaScore] = useState(0);
+  const [triviaAnswered, setTriviaAnswered] = useState(false);
   const [snake, setSnake] = useState(() => newSnake());
   const [mines, setMines] = useState<MineGrid>(() => newMineGrid());
   const [placingFlags, setPlacingFlags] = useState(false);
@@ -37,7 +50,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
   const [b, setB] = useState(7);
   const [answer, setAnswer] = useState(0);
   const [score, setScore] = useState(0);
-  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setSnake(newSnake()); setMines(newMineGrid()); setPlacingFlags(false); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
+  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setWord(WORDS[Math.floor(Math.random() * WORDS.length)]); setLetters([]); setTriviaIndex(0); setTriviaScore(0); setTriviaAnswered(false); setSnake(newSnake()); setMines(newMineGrid()); setPlacingFlags(false); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
   const press = (label: string, fn: () => void) => <TouchableOpacity onPress={fn} style={{ padding: 13, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, marginBottom: 9 }}><Text style={{ color: colors.text, fontSize: 17 }}>{label}</Text></TouchableOpacity>;
   const tic = (idx: number) => {
     if (winner(board) || board[idx]) return;
@@ -73,6 +86,8 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('2048 — slide and combine tiles', () => start('2048'))}
         {press('Minesweeper — reveal safe squares', () => start('mines'))}
         {press('Snake — grow without hitting a wall', () => start('snake'))}
+        {press('Word Guess — uncover the hidden word', () => start('word'))}
+        {press('Trivia — five quick questions', () => start('trivia'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -168,6 +183,31 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
           </View>
         </View>
         {press('New Snake game', () => start('snake'))}
+      </>}
+      {game === 'word' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>Word Guess · Wrong letters: {letters.filter(l => !word.includes(l)).length}/6</Text>
+        <Text style={{ color: colors.text, fontSize: 29, textAlign: 'center', letterSpacing: 5, marginBottom: 20 }}>{word.split('').map(l => letters.includes(l) ? l : '_').join(' ')}</Text>
+        {word.split('').every(l => letters.includes(l)) ? <Text style={{ color: colors.text }}>You solved it!</Text> : letters.filter(l => !word.includes(l)).length >= 6 ? <Text style={{ color: colors.text }}>Out of guesses! The word was {word}.</Text> :
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => <TouchableOpacity key={letter} disabled={letters.includes(letter)} onPress={() => setLetters(v => [...v, letter])} style={{ padding: 10, margin: 3, borderWidth: 1, borderColor: colors.border, borderRadius: 7, backgroundColor: colors.surface, opacity: letters.includes(letter) ? 0.3 : 1 }}><Text style={{ color: colors.text }}>{letter}</Text></TouchableOpacity>)}
+          </View>}
+        {press('New word', () => start('word'))}
+      </>}
+      {game === 'trivia' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 10 }}>Question {Math.min(triviaIndex+1, TRIVIA.length)}/{TRIVIA.length} · Score {triviaScore}</Text>
+        {triviaIndex < TRIVIA.length ? <>
+          <Text style={{ color: colors.text, fontSize: 21, marginBottom: 15 }}>{TRIVIA[triviaIndex].q}</Text>
+          {TRIVIA[triviaIndex].options.map((option, index) => press(option, () => {
+            if (triviaAnswered) return;
+            setTriviaAnswered(true);
+            if (index === TRIVIA[triviaIndex].correct) setTriviaScore(s => s + 1);
+          }))}
+          {triviaAnswered && <>
+            <Text style={{ color: colors.text, marginBottom: 12 }}>Answer: {TRIVIA[triviaIndex].options[TRIVIA[triviaIndex].correct]}</Text>
+            {press('Next question', () => { setTriviaIndex(i => i+1); setTriviaAnswered(false); })}
+          </>}
+        </> : <Text style={{ color: colors.text, fontSize: 20 }}>Finished! You got {triviaScore} out of {TRIVIA.length}.</Text>}
+        {press('Restart trivia', () => start('trivia'))}
       </>}
     </ScrollView>
   </Modal>;
