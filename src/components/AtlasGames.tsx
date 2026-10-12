@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Direction2048, empty2048, hasMoves2048, move2048, spawn2048 } from '../utils/game2048';
+import { MineGrid, mineResult, newMineGrid, revealMines } from '../utils/minesweeper';
 
 type Board = number[];
 const emptyBoard = (): Board => Array(9).fill(0);
@@ -14,7 +15,9 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines'>('menu');
+  const [mines, setMines] = useState<MineGrid>(() => newMineGrid());
+  const [placingFlags, setPlacingFlags] = useState(false);
   const [grid2048, setGrid2048] = useState<number[]>(() => spawn2048(spawn2048(empty2048())));
   const [score2048, setScore2048] = useState(0);
   const [rpsResult, setRpsResult] = useState('Choose rock, paper or scissors.');
@@ -32,7 +35,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
   const [b, setB] = useState(7);
   const [answer, setAnswer] = useState(0);
   const [score, setScore] = useState(0);
-  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
+  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setMines(newMineGrid()); setPlacingFlags(false); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
   const press = (label: string, fn: () => void) => <TouchableOpacity onPress={fn} style={{ padding: 13, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, marginBottom: 9 }}><Text style={{ color: colors.text, fontSize: 17 }}>{label}</Text></TouchableOpacity>;
   const tic = (idx: number) => {
     if (winner(board) || board[idx]) return;
@@ -66,6 +69,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Rock Paper Scissors — challenge Atlas', () => start('rps'))}
         {press('Memory Match — find the matching pairs', () => start('memory'))}
         {press('2048 — slide and combine tiles', () => start('2048'))}
+        {press('Minesweeper — reveal safe squares', () => start('mines'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -132,6 +136,19 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
           </View>
         </View>
         {press('New 2048 round', () => start('2048'))}
+      </>}
+      {game === 'mines' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>Minesweeper · {mineResult(mines) === 'won' ? 'You cleared the minefield!' : mineResult(mines) === 'lost' ? 'Mine hit — game over' : 'Find the 7 mines without hitting one.'}</Text>
+        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>Flags placed: {mines.filter(c => c.flagged).length} · 7 mines</Text>
+        {press(placingFlags ? 'Mode: Place flags (tap to switch)' : 'Mode: Reveal cells (tap to switch)', () => setPlacingFlags(v => !v))}
+        <View style={{ width: 306, flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center', marginBottom: 14 }}>
+          {mines.map((cell, index) => <TouchableOpacity key={index} onPress={() => {
+            if (mineResult(mines) !== 'playing') return;
+            if (placingFlags) { if (!cell.revealed) setMines(cells => cells.map((c, i) => i === index ? { ...c, flagged: !c.flagged } : c)); }
+            else setMines(cells => revealMines(cells, index));
+          }} style={{ width: 45, height: 45, margin: 3, borderWidth: 1, borderColor: colors.border, borderRadius: 5, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 19 }}>{cell.flagged ? '⚑' : cell.revealed ? (cell.mine ? '✕' : cell.nearby || '') : '?'}</Text></TouchableOpacity>)}
+        </View>
+        {press('New minefield', () => start('mines'))}
       </>}
     </ScrollView>
   </Modal>;
