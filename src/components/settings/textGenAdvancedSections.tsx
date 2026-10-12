@@ -91,9 +91,8 @@ const IOS_BACKENDS: BackendOption[] = [
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  // Display label 'GPU' (users don't know OpenCL); id stays OPENCL.
   { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers using supported OpenCL GPUs, primarily Adreno. Requires model reload.' },
-  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Test)', desc: 'Experimental Mali/Adreno GPU offload using llama.kt. Falls back to CPU when unavailable. Text GGUF only.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Test)', desc: 'Experimental GPU offload for text GGUF. Atlas checks Vulkan availability, then fails with an explanation if loading fails; it will not silently switch to CPU. Requires model reload.' },
 ];
 
 const HTP_BACKEND: BackendOption = {
