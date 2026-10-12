@@ -61,11 +61,11 @@ const ImageGpuSection: React.FC = () => {
       <View style={styles.toggleRow}>
         <View style={styles.toggleInfo}>
           <Text style={styles.toggleLabel}>
-            {nativeImage ? 'Vulkan GPU Acceleration (Adreno)' : 'OpenCL GPU Acceleration'}
+            {nativeImage ? 'Vulkan GPU Acceleration (experimental)' : 'OpenCL GPU Acceleration'}
           </Text>
           <Text style={styles.toggleDesc}>
             {nativeImage
-              ? 'Vulkan is required for large native image models by default. If the GPU is unavailable Atlas stops instead of silently hanging on CPU. Turn this off to explicitly use slower CPU mode. The Image Model Test shows the selected backend.'
+              ? 'Uses Vulkan only when the native image engine detects a GPU. Detection does not guarantee shader compatibility; a model may still fail. Disable to explicitly run on CPU. No automatic CPU fallback occurs.'
               : 'Use OpenCL for supported MNN image models. First run may optimize your GPU.'}
           </Text>
         </View>

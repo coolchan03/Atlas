@@ -169,7 +169,9 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         // but maps to Vulkan for directly imported diffusion models.
         val preferGpu = !params.hasKey("useOpenCL") || params.getBoolean("useOpenCL")
         phase = if (preferGpu) "Checking Vulkan GPU" else "CPU selected manually"
-        val probeEnumerated = preferGpu && detectVulkan(executable, cancelled)
+        // Recheck on every GPU generation: a previous successful enumeration is
+        // not proof that the driver/runtime is still available for this run.
+        val probeEnumerated = preferGpu && detectVulkan(executable, cancelled, force = true)
         if (cancelled()) throw IOException("Generation cancelled")
         // Do not launch a GPU-only run against an unverified Vulkan device.
         // Android's Vulkan feature flag alone does not guarantee sd.cpp compute support.

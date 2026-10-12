@@ -101,7 +101,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
           </View>
           <Text style={styles.settingDescription}>
             {imageModel?.backend === 'sdcpp'
-              ? 'Uses Adreno Vulkan GPU for native diffusion. If unavailable, Atlas stops with an error instead of silently switching to slow CPU. Disable this switch to choose CPU explicitly.'
+              ? 'Experimental Vulkan backend for compatible GPUs. Detection does not guarantee that model shaders will run. A failed GPU probe stops generation; disable to choose CPU explicitly.'
               : 'Use OpenCL for supported MNN image models.'}
           </Text>
           {(settings.imageUseOpenCL ?? true) && imageModel?.backend !== 'sdcpp' && <ClearGPUCacheButton />}
