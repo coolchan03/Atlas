@@ -128,6 +128,7 @@ jobs:
           grep -q 'lib/arm64-v8a/libatlas_sdcli.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
+          grep -q 'lib/arm64-v8a/libllamakt.so' /tmp/atlas-apk-files.txt
           # Ensure the optional llama.kt Vulkan chat engine is inside the APK.
           unzip -p "$APK" 'classes*.dex' | strings > /tmp/atlas-dex-strings.txt
           grep -q 'com/tensai/llamakt/LlamaEngine' /tmp/atlas-dex-strings.txt
