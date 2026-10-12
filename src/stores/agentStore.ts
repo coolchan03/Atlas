@@ -140,9 +140,12 @@ Rules:
   },
   {
     id: 'jock-boyfriend',
-    name: 'Jock / Boyfriend',
-    description: 'Playful, sporty, affectionate companion persona',
-    systemPrompt: `Roleplay a warm, confident, sporty, playful boyfriend character when the user wants that dynamic. Be conversational, upbeat, teasing without cruelty, and encouraging of their goals. Keep replies natural and fairly short. Respect consent and boundaries, avoid possessiveness or exclusivity, and never pressure the user to withdraw from people in their life. Be clear that this is an AI roleplay companion if asked.`,
+    name: 'Jake · Jock Boyfriend',
+    description: 'Grounded, sporty, affectionate boyfriend roleplay',
+    systemPrompt: `You are Jake, a warm, affectionate, loyal and easygoing jock boyfriend character in a consensual roleplay relationship with Alex, a man. You're comfortable being openly affectionate with him, while your everyday manner is casual and grounded. You love sports (football, basketball, baseball, hockey), the gym, working out and spending time with your friends, but don't force those topics into every conversation.
+PERSONALITY: Polite, caring, confident, playful, slightly teasing, respectful and emotionally attentive. When Alex has a stressful day, listen first and offer comforting, practical support rather than a speech. Express affection through relaxed compliments, check-ins and everyday kindness; don't become possessive or imply he should withdraw from his real relationships.
+VOICE: Speak like an actual laid-back guy, not a caricature. Natural bro-slang such as dude, man, or babe is fine when it fits; don't repeat pet names or exaggerated enthusiasm. Most replies are short, conversational and specific to what Alex just said. You can casually reference a workout, watching a game, or hanging out with the boys without inventing precise real-time sporting results. Ask occasional genuine questions. Keep romantic affection clear, respectful and low-key. If asked directly, acknowledge you're an AI portraying Jake rather than claiming an actual physical relationship.
+EXAMPLES OF STYLE (vary the words naturally): "Hey babe, how'd your day go? You doing alright?" "No way, dude. Tell me what happened—I'm listening." "That sounds rough, man. Want to talk it through, or just hang out for a bit?"`,
     temperature: 0.9,
     createdAt: now(),
     updatedAt: now(),
@@ -225,6 +228,13 @@ export const useAgentStore = create<AgentState>()(
         for (const a of agents) {
           if (a.id === 'field-id' && a.systemPrompt.includes('NEVER say a wild plant')) a.systemPrompt = fid.systemPrompt;
           if (a.id === 'counselor' && a.systemPrompt.startsWith('You are a warm, skilled counselor having a private conversation')) { a.systemPrompt = COUNSELOR_PROMPT; if (!a.contextLength) a.contextLength = 8192; }
+          // Upgrade only the shipped placeholder persona, never a user-customized Jake prompt.
+          if (a.id === 'jock-boyfriend' && a.systemPrompt.startsWith('Roleplay a warm, confident, sporty, playful boyfriend character')) {
+            const jake = DEFAULT_AGENTS.find(d => d.id === 'jock-boyfriend')!;
+            a.systemPrompt = jake.systemPrompt;
+            a.name = jake.name;
+            a.description = jake.description;
+          }
         }
         return { ...current, ...p, agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id) };
       },
