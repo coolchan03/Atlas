@@ -59,9 +59,16 @@ export async function importBackup(): Promise<number | null> {
   const files = await pick({ mode: 'open', type: [types.json, types.plainText, types.allFiles], allowMultiSelection: false });
   if (!files?.length) return null;
   const local = await resolvePickedFileUri(files[0].uri, files[0].name || 'backup.json');
-  const text = await RNFS.readFile(local.replace(/^file:\/\//, ''), 'utf8');
+  const pickedPath = local.replace(/^file:\/\//, '');
+  const stat = await RNFS.stat(pickedPath);
+  // Never parse unbounded attacker-controlled JSON into the app's memory.
+  if (Number(stat.size) > 50 * 1024 * 1024) throw new Error('Backup exceeds the 50 MB import limit.');
+  const text = await RNFS.readFile(pickedPath, 'utf8');
   const data = JSON.parse(text);
-  if (data?.format !== MAGIC || typeof data.items !== 'object') throw new Error('This is not an Atlas backup file.');
+  if (data?.format !== MAGIC || data.version !== 1 || !data.items ||
+      typeof data.items !== 'object' || Array.isArray(data.items)) {
+    throw new Error('This is not a supported Atlas backup file.');
+  }
   // A backup must not create arbitrary AsyncStorage keys or reintroduce secrets.
   const pairs = Object.entries(data.items).flatMap(([key, value]) => {
     if (!RESTORABLE_STORE_KEYS.has(key) || EXCLUDED_BACKUP_KEYS.test(key) || typeof value !== 'string') return [];

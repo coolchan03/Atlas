@@ -229,13 +229,18 @@ export const SettingsScreen: React.FC = () => {
         {/* Atlas: backup & restore */}
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
-            <TouchableOpacity style={styles.navItem} onPress={async () => {
+            <TouchableOpacity style={styles.navItem} onPress={() => {
+              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing chat history, projects and settings. Anyone with the file can read them. Do not store it in a shared or untrusted location. PIN-protected chats are not encrypted by this export.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Export anyway', onPress: async () => {
               try {
                 const name = await exportBackup();
                 if (name) Alert.alert('Backup saved', `Saved as ${name}. Keep a copy somewhere else too (PC, cloud, SD card). Models and knowledge-base documents are not included.`);
               } catch (e: any) {
                 if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Backup failed', String(e?.message || e));
               }
+                } },
+              ]);
             }}>
               <View style={styles.navItemIcon}>
                 <Icon name="save" size={16} color={colors.textSecondary} />
