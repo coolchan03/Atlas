@@ -109,7 +109,7 @@ export const SecuritySettingsScreen: React.FC = () => {
         <Card style={styles.infoCard}>
           <Icon name="info" size={18} color={colors.textMuted} />
           <Text style={styles.infoText}>
-            When enabled, the app locks when you leave it. The passphrase is held in the operating system's secure credential store. On Android, saved chat history uses device-bound Keystore encryption. Private-mode chats are not persisted. Individual PIN-locked chats, encrypted backups, and cross-device sync are not available yet.
+            The optional app lock is separate from individual chat protection. Ordinary chats are not encrypted by default. A chat you explicitly protect is encrypted with its own Android Keystore key and unlocked by its PIN; the same PIN may protect several chats. Removing protection after verifying the PIN saves that chat normally. Private chats are not persisted. Password-protected manual backups are available, but protected chats are excluded from portable exports. Automatic sync is disabled.
           </Text>
         </Card>
       </ScrollView>

@@ -57,8 +57,14 @@ export async function exportBackup(password?: string): Promise<string | null> {
     const { encryptedChatStorage } = require('../stores/encryptedChatStorage');
     const chatJson = await encryptedChatStorage.getItem('local-llm-chat-storage');
     if (chatJson) {
-      const sanitized = sanitizeBackupValue(chatJson);
-      if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
+      const parsed = JSON.parse(chatJson);
+      if (Array.isArray(parsed?.state?.conversations)) {
+        // Device-bound protected records are NOT portable. Do not include
+        // unreadable ciphertext or accidentally export their sensitive metadata.
+        parsed.state.conversations = parsed.state.conversations.filter((c: any) => !c.pinVerifier && !c.protectedBlob);
+        const sanitized = sanitizeBackupValue(JSON.stringify(parsed));
+        if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
+      }
     }
   }
   const data = { format: MAGIC, version: 1, createdAt: new Date().toISOString(), items: Object.fromEntries(safe) };
@@ -69,7 +75,7 @@ export async function exportBackup(password?: string): Promise<string | null> {
   // Protect memory/storage from accidentally exporting unbounded chat archives.
   // UTF-8 may occupy more bytes than the JavaScript string length.
   const bytes = unescape(encodeURIComponent(backupJson)).length;
-  if (bytes > 50 * 1024 * 1024) {
+  if (bytes > (password ? 35 : 50) * 1024 * 1024) {
     throw new Error('Backup exceeds 50 MB. Export fewer conversations or use a future encrypted archive format.');
   }
   const output = password ? await portableCrypto().encryptPortableBackup(backupJson, password) : backupJson;
@@ -114,7 +120,8 @@ export async function importBackup(password?: string): Promise<number | null> {
   const chatPair = pairs.find(([key]) => key === 'local-llm-chat-storage');
   const settingsPairs = pairs.filter(([key]) => key !== 'local-llm-chat-storage');
   if (chatPair && !encrypted) throw new Error('Chat restoration requires an encrypted backup.');
-  // Never store decrypted chat contents under their old plaintext AsyncStorage key.
+  // Restore via the selected-chat storage adapter. Ordinary chats are readable
+  // on disk by design; protected chats must never enter a portable backup.
   if (chatPair) {
     const { encryptedChatStorage } = require('../stores/encryptedChatStorage');
     await encryptedChatStorage.setItem('local-llm-chat-storage', chatPair[1]);

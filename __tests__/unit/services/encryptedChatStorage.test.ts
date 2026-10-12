@@ -1,58 +1,104 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
-import { encryptedChatStorage } from '../../../src/stores/encryptedChatStorage';
+import { encryptedChatStorage, protectChat, unlockChat, permanentlyUnprotectChat } from '../../../src/stores/encryptedChatStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true, default: {
     getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn(), multiRemove: jest.fn(),
   },
 }));
-describe('encrypted chat persistence migration', () => {
-  const records = new Map<string, string>();
+const fakeState: any = { conversations: [], activeConversationId: null };
+jest.mock('../../../src/stores/chatStore', () => ({
+  useChatStore: {
+    getState: () => fakeState,
+    setState: (updater: any) => Object.assign(fakeState, typeof updater === 'function' ? updater(fakeState) : updater),
+  },
+}));
+
+const KEY = 'local-llm-chat-storage';
+const encode = (text: string) => 'atlasitem:v1:' + Buffer.from(text).toString('base64');
+const decode = (text: string) => Buffer.from(text.slice('atlasitem:v1:'.length), 'base64').toString();
+const chat = (id: string, content = 'a secret conversation'): any => ({
+  id, title: 'Sensitive title ' + id, modelId: 'model', messages: [{ id: 'm', role: 'user', content, timestamp: 10 }],
+  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+});
+const snapshot = (conversations: any[]) => JSON.stringify({ state: { conversations, activeConversationId: null }, version: 0 });
+
+describe('selective and migration-safe chat storage', () => {
+  const disk = new Map<string, string>();
   beforeEach(async () => {
-    records.clear();
+    disk.clear();
+    fakeState.conversations = [];
+    fakeState.activeConversationId = null;
     (Platform as any).OS = 'android';
     (NativeModules as any).AtlasDevice = {
       encryptChatState: jest.fn(async (plain: string) => 'atlasenc:v1:' + plain),
-      decryptChatState: jest.fn(async (payload: string) => payload.replace(/^atlasenc:v1:/, '')),
+      decryptChatState: jest.fn(async (blob: string) => blob.replace(/^atlasenc:v1:/, '')),
+      createChatPinVerifier: jest.fn(async (pin: string) => 'pin:v1:' + pin),
+      verifyChatPin: jest.fn(async (pin: string, verifier: string) => verifier === 'pin:v1:' + pin),
+      encryptProtectedItem: jest.fn(async (_kind: string, _id: string, plain: string, pin: string, verifier: string) => {
+        if (verifier !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+        return encode(plain);
+      }),
+      decryptProtectedItem: jest.fn(async (_kind: string, _id: string, blob: string, pin: string, verifier: string) => {
+        if (verifier !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+        return decode(blob);
+      }),
+      removeProtectedItemKey: jest.fn(async () => true),
     };
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => records.get(key) ?? null);
-    (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => { records.set(key, value); });
-    (AsyncStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => { records.delete(key); });
-    (AsyncStorage.multiRemove as jest.Mock).mockImplementation(async (keys: string[]) => { keys.forEach(k => records.delete(k)); });
-    await encryptedChatStorage.removeItem('local-llm-chat-storage');
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => disk.get(key) ?? null);
+    (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => { disk.set(key, value); });
+    (AsyncStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => { disk.delete(key); });
+    (AsyncStorage.multiRemove as jest.Mock).mockImplementation(async (keys: string[]) => { keys.forEach(key => disk.delete(key)); });
+    await encryptedChatStorage.removeItem(KEY);
   });
-  it('migrates plaintext only after verified encryption', async () => {
-    records.set('local-llm-chat-storage', '{"state":{"conversations":[]}}');
-    expect(await encryptedChatStorage.getItem('local-llm-chat-storage')).toContain('conversations');
-    expect(records.has('local-llm-chat-storage')).toBe(false);
-    expect(records.get('atlas-chat-encrypted-v1')).toMatch(/^atlasenc:v1:/);
+
+  it('persists ordinary chats without mandatory app-wide encryption', async () => {
+    await encryptedChatStorage.setItem(KEY, snapshot([chat('ordinary')]));
+    expect(disk.get(KEY)).toContain('Sensitive title ordinary');
+    expect(disk.get('atlas-chat-encrypted-v1')).toBeUndefined();
+    expect((NativeModules as any).AtlasDevice.encryptChatState).not.toHaveBeenCalled();
   });
-  it('removes leftover plaintext after a previously interrupted migration', async () => {
-    records.set('local-llm-chat-storage', 'obsolete plaintext');
-    records.set('atlas-chat-encrypted-v1', 'atlasenc:v1:latest content');
-    expect(await encryptedChatStorage.getItem('local-llm-chat-storage')).toBe('latest content');
-    expect(records.has('local-llm-chat-storage')).toBe(false);
+  it('migrates an older whole-archive Keystore record before deleting it', async () => {
+    disk.set('atlas-chat-encrypted-v1', 'atlasenc:v1:' + snapshot([chat('normal')]));
+    const restored = await encryptedChatStorage.getItem(KEY);
+    expect(restored).toContain('Sensitive title normal');
+    expect(disk.has('atlas-chat-encrypted-v1')).toBe(false);
+    expect(disk.get(KEY)).toBe(restored);
   });
-  it('preserves legacy plaintext if encryption fails', async () => {
-    records.set('local-llm-chat-storage', 'important chats');
-    (NativeModules as any).AtlasDevice.encryptChatState.mockRejectedValueOnce(new Error('Keystore unavailable'));
-    await expect(encryptedChatStorage.getItem('local-llm-chat-storage')).rejects.toThrow();
-    expect(records.get('local-llm-chat-storage')).toBe('important chats');
+  it('migrates older PIN-locked chats to individually encrypted placeholders', async () => {
+    const legacy = { ...chat('locked'), pinVerifier: 'pin:v1:123456' };
+    disk.set('atlas-chat-encrypted-v1', 'atlasenc:v1:' + snapshot([legacy]));
+    const restored = JSON.parse((await encryptedChatStorage.getItem(KEY))!);
+    expect(restored.state.conversations[0].messages).toEqual([]);
+    expect(restored.state.conversations[0].title).toBe('Locked conversation');
+    expect(restored.state.conversations[0].protectedBlob).toMatch(/^atlasenc:v1:/);
+    expect((NativeModules as any).AtlasDevice.encryptChatState).toHaveBeenCalled();
   });
-  it('deduplicates unchanged chat state and serializes successive writes', async () => {
-    const key = 'local-llm-chat-storage';
-    await encryptedChatStorage.setItem(key, 'first');
-    const encrypt = (NativeModules as any).AtlasDevice.encryptChatState as jest.Mock;
-    const calls = encrypt.mock.calls.length;
-    await encryptedChatStorage.setItem(key, 'first');
-    expect(encrypt.mock.calls.length).toBe(calls);
-    await Promise.all([encryptedChatStorage.setItem(key, 'second'), encryptedChatStorage.setItem(key, 'third')]);
-    expect(await encryptedChatStorage.getItem(key)).toBe('third');
+  it('protects one chat and permanently restores it after verifying the same PIN', async () => {
+    const normal = chat('normal');
+    const secret = chat('secret', 'confidential project notes');
+    fakeState.conversations = [normal, secret];
+    await encryptedChatStorage.setItem(KEY, snapshot(fakeState.conversations));
+    await protectChat('secret', '123456');
+    const secured = disk.get(KEY)!;
+    expect(secured).toContain('Sensitive title normal');
+    expect(secured).not.toContain('confidential project notes');
+    expect(secured).not.toContain('Sensitive title secret');
+    expect(fakeState.conversations[1].messages).toHaveLength(0);
+    await expect(unlockChat('secret', 'wrong')).rejects.toThrow();
+    await unlockChat('secret', '123456');
+    expect(fakeState.conversations[1].messages[0].content).toBe('confidential project notes');
+    await permanentlyUnprotectChat('secret', '123456');
+    expect(fakeState.conversations[1].pinVerifier).toBeUndefined();
+    expect(disk.get(KEY)).toContain('confidential project notes');
+    expect((NativeModules as any).AtlasDevice.removeProtectedItemKey).toHaveBeenCalled();
   });
-  it('refuses to persist plaintext when bridge is missing', async () => {
+  it('fails closed if the native protection API is unavailable', async () => {
+    fakeState.conversations = [chat('secret')];
+    await encryptedChatStorage.setItem(KEY, snapshot(fakeState.conversations));
     (NativeModules as any).AtlasDevice = undefined;
-    await expect(encryptedChatStorage.setItem('local-llm-chat-storage', 'secret')).rejects.toThrow();
-    expect(records.size).toBe(0);
+    await expect(protectChat('secret', '123456')).rejects.toThrow();
+    expect(disk.get(KEY)).toContain('Sensitive title secret');
   });
 });

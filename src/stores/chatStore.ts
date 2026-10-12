@@ -157,9 +157,10 @@ export const useChatStore = create<ChatState>()(
           (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
-      setConversationPinVerifier: (conversationId, verifier) => {
-        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
-          (conv) => ({ ...conv, pinVerifier: verifier ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      setConversationPinVerifier: () => {
+        // Legacy API deliberately disabled: editing a verifier without
+        // authenticated encryption would turn a locked chat into plaintext.
+        throw new Error('Use protectChat or permanentlyUnprotectChat for an authenticated PIN change.');
       },
       renameConversation: (conversationId, title) => {
         const clean = title.trim().slice(0, 100);

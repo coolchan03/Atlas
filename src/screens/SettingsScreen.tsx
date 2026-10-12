@@ -271,8 +271,8 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity style={styles.navItem} onPress={() => { setBackupPassword(''); setBackupPasswordAction('export'); }}>
               <View style={styles.navItemIcon}><Icon name="lock" size={16} color={colors.textSecondary} /></View>
               <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Encrypted backup with chats</Text>
-                <Text style={styles.navItemDesc}>Password-protected transfer to another device</Text>
+                <Text style={styles.navItemTitle}>Encrypted backup (ordinary chats)</Text>
+                <Text style={styles.navItemDesc}>Excludes PIN-protected chats and project documents</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
@@ -360,7 +360,7 @@ export const SettingsScreen: React.FC = () => {
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
           <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 }}>
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
-            <Text style={{ color: colors.textSecondary }}>Enter your backup password (minimum 12 characters). Keep it safe: it cannot be recovered. Encrypted backups include conversations, agents and settings, but not model files.</Text>
+            <Text style={{ color: colors.textSecondary }}>Enter your backup password (minimum 12 characters). Keep it safe: it cannot be recovered. Encrypted backups include ordinary chats, agents and settings. PIN-protected chats, project documents and model files are excluded.</Text>
             <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }} />
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
               <TouchableOpacity disabled={backupBusy} onPress={() => { setBackupPassword(''); setBackupPasswordAction(null); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>

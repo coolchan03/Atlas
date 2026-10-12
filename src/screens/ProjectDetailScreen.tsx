@@ -135,11 +135,11 @@ export const ProjectDetailScreen: React.FC = () => {
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.title}
+                {item.pinVerifier ? 'Locked conversation' : item.title}
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>

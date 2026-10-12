@@ -375,6 +375,80 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.reject("PIN_VERIFY", "Could not verify chat PIN", e) }
     }
 
+    /** Protected items use an independent Android Keystore AES key per chat/project.
+     * Never use the unrestricted whole-archive decrypt API for protected items.
+     * The verifier is authenticated as AES-GCM associated data, preventing an
+     * attacker from substituting a different PIN verifier for an existing blob. */
+    private fun protectedAlias(kind: String, id: String): String {
+        require(kind == "chat" || kind == "project") { "Unsupported protected item type" }
+        require(id.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "Invalid protected item ID" }
+        return "atlas.protected.v1.$kind.$id"
+    }
+
+    private fun pinMatches(pin: String, verifier: String): Boolean {
+        require(verifier.startsWith("pin:v1:")) { "Unsupported PIN verifier" }
+        val bytes = android.util.Base64.decode(verifier.removePrefix("pin:v1:"), android.util.Base64.NO_WRAP)
+        require(bytes.size == 48) { "Invalid PIN verifier" }
+        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), bytes.copyOfRange(0, 16), 310000, 256)
+        val actual = try { javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded }
+                     finally { spec.clearPassword() }
+        return java.security.MessageDigest.isEqual(bytes.copyOfRange(16, 48), actual)
+    }
+
+    private fun protectedKey(kind: String, id: String, create: Boolean): javax.crypto.SecretKey {
+        val alias = protectedAlias(kind, id)
+        val store = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (!store.containsAlias(alias)) {
+            require(create) { "This item's encryption key is missing" }
+            val generator = javax.crypto.KeyGenerator.getInstance("AES", "AndroidKeyStore")
+            generator.init(android.security.keystore.KeyGenParameterSpec.Builder(alias,
+                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256).build())
+            generator.generateKey()
+        }
+        return store.getKey(alias, null) as javax.crypto.SecretKey
+    }
+
+    @ReactMethod
+    fun encryptProtectedItem(kind: String, id: String, plain: String, pin: String, verifier: String, promise: Promise) {
+        try {
+            require(pin.matches(Regex("[0-9]{4,12}"))) { "PIN must have 4–12 digits" }
+            require(pinMatches(pin, verifier)) { "Incorrect PIN" }
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, protectedKey(kind, id, true))
+            cipher.updateAAD("$kind:$id:$verifier:v1".toByteArray(Charsets.UTF_8))
+            val bytes = cipher.iv + cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+            promise.resolve("atlasitem:v1:" + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+        } catch (e: Exception) { promise.reject("PROTECTED_ENCRYPT", "Could not encrypt protected item", e) }
+    }
+
+    @ReactMethod
+    fun decryptProtectedItem(kind: String, id: String, blob: String, pin: String, verifier: String, promise: Promise) {
+        try {
+            require(pinMatches(pin, verifier)) { "Incorrect PIN" }
+            require(blob.startsWith("atlasitem:v1:")) { "Unsupported encrypted item" }
+            val bytes = android.util.Base64.decode(blob.removePrefix("atlasitem:v1:"), android.util.Base64.NO_WRAP)
+            require(bytes.size >= 29) { "Damaged protected item" }
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, protectedKey(kind, id, false),
+                javax.crypto.spec.GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+            cipher.updateAAD("$kind:$id:$verifier:v1".toByteArray(Charsets.UTF_8))
+            promise.resolve(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8))
+        } catch (e: Exception) { promise.reject("PROTECTED_DECRYPT", "Incorrect PIN or damaged protected item", e) }
+    }
+
+    @ReactMethod
+    fun removeProtectedItemKey(kind: String, id: String, pin: String, verifier: String, promise: Promise) {
+        try {
+            require(pinMatches(pin, verifier)) { "Incorrect PIN" }
+            val store = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            store.deleteEntry(protectedAlias(kind, id))
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("PROTECTED_KEY", "Could not revoke protected item key", e) }
+    }
+
     /** Portable password-encrypted backup, independent of device-bound Keystore. */
     @ReactMethod
     fun encryptPortableBackup(plain: String, passphrase: String, promise: Promise) {

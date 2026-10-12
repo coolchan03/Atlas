@@ -33,12 +33,10 @@ describe('chatStore', () => {
       const id = useChatStore.getState().createConversation('model', undefined, undefined, true);
       expect(getChatState().conversations.find(c => c.id === id)?.isPrivate).toBe(true);
     });
-    it('stores a per-chat PIN verifier without changing other conversations', () => {
-      const first = useChatStore.getState().createConversation('model');
-      const second = useChatStore.getState().createConversation('model');
-      useChatStore.getState().setConversationPinVerifier(first, 'pin:v1:test-verifier');
-      expect(getChatState().conversations.find(c => c.id === first)?.pinVerifier).toBe('pin:v1:test-verifier');
-      expect(getChatState().conversations.find(c => c.id === second)?.pinVerifier).toBeUndefined();
+    it('rejects bypassing protection by directly changing a PIN verifier', () => {
+      const id = useChatStore.getState().createConversation('model');
+      expect(() => useChatStore.getState().setConversationPinVerifier(id, null)).toThrow(/authenticated PIN/);
+      expect(getChatState().conversations[0].pinVerifier).toBeUndefined();
     });
     it('renames a conversation while rejecting blank titles', () => {
       const id = useChatStore.getState().createConversation('model');

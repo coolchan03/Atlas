@@ -253,8 +253,10 @@ export interface Conversation {
   isPrivate?: boolean;
   isArchived?: boolean;
   agentId?: string;
-  /** Salted verifier; never store a raw PIN. Chat archive is Keystore-encrypted at rest. */
+  /** Present only on an individually protected conversation; a salted PIN verifier. */
   pinVerifier?: string;
+  /** The protected conversation body, encrypted with this chat's own Keystore key. */
+  protectedBlob?: string;
   /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
   instructions?: string;
 }
