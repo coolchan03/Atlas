@@ -76,6 +76,7 @@ interface ChatState {
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
   setConversationProject: (conversationId: string, projectId: string | null) => void;
+  setConversationArchived: (conversationId: string, archived: boolean) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
    *  so no chat is left pointing at a project that no longer exists). */
   unfileConversationsForProject: (projectId: string) => void;
@@ -144,6 +145,11 @@ export const useChatStore = create<ChatState>()(
       getActiveConversation: () => {
         const state = get();
         return state.conversations.find((c) => c.id === state.activeConversationId) || null;
+      },
+
+      setConversationArchived: (conversationId, archived) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, isArchived: archived, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationProject: (conversationId, projectId) => {

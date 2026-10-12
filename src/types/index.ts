@@ -251,6 +251,7 @@ export interface Conversation {
   compactionCutoffMessageId?: string;
   /** Atlas private chat: never written to storage, gone when the app closes. */
   isPrivate?: boolean;
+  isArchived?: boolean;
   /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
   instructions?: string;
 }

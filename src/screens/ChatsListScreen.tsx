@@ -37,7 +37,8 @@ export const ChatsListScreen: React.FC = () => {
   const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const conversations = useChatStore(s => s.conversations);
-  const { deleteConversation, setActiveConversation } = useChatStore.getState();
+  const { deleteConversation, setActiveConversation, setConversationArchived } = useChatStore.getState();
+  const [showArchived, setShowArchived] = useState(false);
   const { getProject } = useProjectStore();
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
@@ -147,6 +148,17 @@ export const ChatsListScreen: React.FC = () => {
     ));
   };
 
+  const handleChatLongPress = (conversation: Conversation) => {
+    setAlertState(showAlert('Chat options', conversation.title, [
+      { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
+      { text: conversation.isArchived ? 'Unarchive' : 'Archive', onPress: () => {
+        setConversationArchived(conversation.id, !conversation.isArchived);
+        setAlertState(hideAlert());
+      } },
+      { text: 'Delete', style: 'destructive', onPress: () => { setAlertState(hideAlert()); handleDeleteChat(conversation); } },
+    ]));
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -187,6 +199,7 @@ export const ChatsListScreen: React.FC = () => {
           trigger={focusTrigger}
           style={styles.chatItem}
           onPress={() => handleChatPress(item)}
+          onLongPress={() => handleChatLongPress(item)}
           testID={`conversation-item-${index}`}
         >
           <View style={styles.chatContent}>
@@ -214,14 +227,17 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = [...conversations].sort(
+  const sortedConversations = conversations.filter(c => !!c.isArchived === showArchived).sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
+        <Text style={styles.title}>{showArchived ? 'Archived chats' : 'Chats'}</Text>
+        <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
+          <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
+        </TouchableOpacity>
         <AttachStep index={[2, 14]}>
           <Button
             title="New"
