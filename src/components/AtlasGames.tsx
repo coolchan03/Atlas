@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
+import { Direction2048, empty2048, hasMoves2048, move2048, spawn2048 } from '../utils/game2048';
 
 type Board = number[];
 const emptyBoard = (): Board => Array(9).fill(0);
@@ -13,7 +14,9 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048'>('menu');
+  const [grid2048, setGrid2048] = useState<number[]>(() => spawn2048(spawn2048(empty2048())));
+  const [score2048, setScore2048] = useState(0);
   const [rpsResult, setRpsResult] = useState('Choose rock, paper or scissors.');
   const [rpsScore, setRpsScore] = useState({ wins: 0, losses: 0, draws: 0 });
   const [memoryCards, setMemoryCards] = useState<number[]>([1,2,3,4,1,2,3,4]);
@@ -29,7 +32,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
   const [b, setB] = useState(7);
   const [answer, setAnswer] = useState(0);
   const [score, setScore] = useState(0);
-  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
+  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setGrid2048(spawn2048(spawn2048(empty2048()))); setScore2048(0); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
   const press = (label: string, fn: () => void) => <TouchableOpacity onPress={fn} style={{ padding: 13, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, marginBottom: 9 }}><Text style={{ color: colors.text, fontSize: 17 }}>{label}</Text></TouchableOpacity>;
   const tic = (idx: number) => {
     if (winner(board) || board[idx]) return;
@@ -44,6 +47,13 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
     }
     setBoard(next);
   };
+  const slide2048 = (direction: Direction2048) => {
+    const result = move2048(grid2048, direction);
+    if (result.moved) {
+      setGrid2048(spawn2048(result.board));
+      setScore2048(current => current + result.score);
+    }
+  };
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 48, backgroundColor: colors.background }}>
       <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, marginBottom: 14 }}>Atlas Offline Arcade</Text>
@@ -55,6 +65,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Math Sprint — multiplication practice', () => start('math'))}
         {press('Rock Paper Scissors — challenge Atlas', () => start('rps'))}
         {press('Memory Match — find the matching pairs', () => start('memory'))}
+        {press('2048 — slide and combine tiles', () => start('2048'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -105,6 +116,22 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         </View>
         <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>Choose two cards. If they differ, tap another card to hide them and try again.</Text>
         {press('New round', () => start('memory'))}
+      </>}
+      {game === '2048' && <>
+        <Text style={{ color: colors.text, fontSize: 19, marginBottom: 8 }}>2048 · Score: {score2048}</Text>
+        {!hasMoves2048(grid2048) && <Text style={{ color: colors.error }}>No moves left. Start a new round.</Text>}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 340, alignSelf: 'center' }}>
+          {grid2048.map((number, index) => <View key={index} style={{ width: 74, height: 74, justifyContent: 'center', alignItems: 'center', margin: 3, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: number >= 1024 ? 19 : 24 }}>{number || ''}</Text></View>)}
+        </View>
+        <View style={{ alignItems: 'center', marginTop: 15 }}>
+          {press('↑ Up', () => slide2048('up'))}
+          <View style={{ flexDirection: 'row', gap: 20 }}>
+            {press('← Left', () => slide2048('left'))}
+            {press('↓ Down', () => slide2048('down'))}
+            {press('→ Right', () => slide2048('right'))}
+          </View>
+        </View>
+        {press('New 2048 round', () => start('2048'))}
       </>}
     </ScrollView>
   </Modal>;
