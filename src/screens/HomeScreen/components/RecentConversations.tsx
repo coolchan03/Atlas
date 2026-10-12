@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { useChatStore } from '../../../stores/chatStore';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedListItem } from '../../../components/AnimatedListItem';
@@ -44,6 +45,11 @@ export const RecentConversations: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const handleLongPress = (conversation: Conversation) => Alert.alert('Chat options', conversation.title, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Archive', onPress: () => useChatStore.getState().setConversationArchived(conversation.id, true) },
+    { text: 'Delete', style: 'destructive', onPress: () => onDeleteConversation(conversation) },
+  ]);
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity
@@ -78,6 +84,7 @@ export const RecentConversations: React.FC<Props> = ({
             trigger={focusTrigger}
             style={styles.conversationItem}
             onPress={() => onContinueChat(conv.id)}
+            onLongPress={() => handleLongPress(conv)}
             testID={`conversation-item-${index}`}
           >
             <View style={styles.conversationInfo}>

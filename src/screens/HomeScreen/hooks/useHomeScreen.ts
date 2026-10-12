@@ -221,7 +221,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     : null;
 
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
-  const recentConversations = conversations.slice(0, 4);
+  const recentConversations = conversations.filter(c => !c.isArchived).slice(0, 4);
 
   // Get all remote text models — includes vision-language models since they do text generation too
   const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
