@@ -349,6 +349,43 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.reject("CHAT_DECRYPT", "Chat storage cannot be decrypted on this device", e) }
     }
 
+    /** Portable password-encrypted backup, independent of device-bound Keystore. */
+    @ReactMethod
+    fun encryptPortableBackup(plain: String, passphrase: String, promise: Promise) {
+        try {
+            require(passphrase.length >= 12) { "A backup password needs at least 12 characters" }
+            val random = java.security.SecureRandom()
+            val salt = ByteArray(16).also { random.nextBytes(it) }
+            val keyFactory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val spec = javax.crypto.spec.PBEKeySpec(passphrase.toCharArray(), salt, 310000, 256)
+            val secret = try { keyFactory.generateSecret(spec).encoded } finally { spec.clearPassword() }
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(secret, "AES"))
+            cipher.updateAAD("atlas-portable-backup:v1".toByteArray(Charsets.UTF_8))
+            val output = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+            val payload = salt + cipher.iv + output
+            promise.resolve("atlasbackup:v1:" + android.util.Base64.encodeToString(payload, android.util.Base64.NO_WRAP))
+        } catch (e: Exception) { promise.reject("BACKUP_ENCRYPT", "Backup encryption failed", e) }
+    }
+
+    @ReactMethod
+    fun decryptPortableBackup(payload: String, passphrase: String, promise: Promise) {
+        try {
+            require(payload.startsWith("atlasbackup:v1:")) { "Unsupported encrypted backup" }
+            val bytes = android.util.Base64.decode(payload.removePrefix("atlasbackup:v1:"), android.util.Base64.NO_WRAP)
+            require(bytes.size >= 45) { "Damaged encrypted backup" }
+            val salt = bytes.copyOfRange(0, 16)
+            val iv = bytes.copyOfRange(16, 28)
+            val keyFactory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val spec = javax.crypto.spec.PBEKeySpec(passphrase.toCharArray(), salt, 310000, 256)
+            val secret = try { keyFactory.generateSecret(spec).encoded } finally { spec.clearPassword() }
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(secret, "AES"), javax.crypto.spec.GCMParameterSpec(128, iv))
+            cipher.updateAAD("atlas-portable-backup:v1".toByteArray(Charsets.UTF_8))
+            promise.resolve(String(cipher.doFinal(bytes.copyOfRange(28, bytes.size)), Charsets.UTF_8))
+        } catch (e: Exception) { promise.reject("BACKUP_DECRYPT", "Incorrect password or damaged backup", e) }
+    }
+
     /** Opens the calendar app with a new event filled in - you confirm and save it there. */
     @ReactMethod
     fun addCalendarEvent(title: String, startMs: Double, endMs: Double, location: String, description: String, promise: Promise) {
