@@ -155,7 +155,10 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
       const q = b.match(/^\s*Q(?:uestion)?\s*\d*\s*[:.)]\s*(.+)/im)?.[1]?.trim();
       const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*\\(?${L}\\s*[).:\\-–]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
       const ans = 'ABCD'.indexOf((b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase());
-      if (!q || opts.length < 2 || ans < 0) return null;
+      // Reject partial/ambiguous options instead of accepting an answer that
+      // points outside the parsed choices (common with small local models).
+      if (!q || opts.length !== 4 || ans < 0 || ans >= opts.length ||
+          opts.some(option => !option.trim())) return null;
       return { q, options: opts, answer: ans, why: b.match(/WHY:\s*(.+)/i)?.[1]?.trim() || '', src: refs(`[${(b.match(/SRC:\s*([\d,\s[\]]+)/i)?.[1] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) };
     }).filter(Boolean) as QuizItem[];
     if (!quiz.length) throw new Error('The model did not produce a quiz in the expected format. Try again or use a bigger model.');

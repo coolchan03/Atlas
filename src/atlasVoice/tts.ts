@@ -55,7 +55,10 @@ export function speak(text: string, messageId?: string): void {
   Native.setRate(s.rate).catch(() => undefined);
   Native.speak(text, key).catch((err: unknown) => {
     logger.error('[AtlasTts] speak failed', err);
-    s.setSpeaking(null);
+    // An earlier failed utterance must not clear a newer active one.
+    if (useAtlasVoiceStore.getState().speakingKey === key) {
+      useAtlasVoiceStore.getState().setSpeaking(null);
+    }
   });
 }
 
@@ -87,7 +90,11 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
   const s = useAtlasVoiceStore.getState();
   s.setSpeaking(key, messageId);
   Native.setRate(Math.min(s.rate, 0.9)).catch(() => undefined);
-  (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => s.setSpeaking(null));
+  (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => {
+    if (useAtlasVoiceStore.getState().speakingKey === key) {
+      useAtlasVoiceStore.getState().setSpeaking(null);
+    }
+  });
 }
 
 /** Speak and wait until finished (resolves false if stopped). Optional pitch / voice for podcast hosts. */
