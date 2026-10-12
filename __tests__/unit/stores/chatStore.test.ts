@@ -33,6 +33,13 @@ describe('chatStore', () => {
       const id = useChatStore.getState().createConversation('model', undefined, undefined, true);
       expect(getChatState().conversations.find(c => c.id === id)?.isPrivate).toBe(true);
     });
+    it('renames a conversation while rejecting blank titles', () => {
+      const id = useChatStore.getState().createConversation('model');
+      useChatStore.getState().renameConversation(id, '  Important notes  ');
+      expect(getChatState().conversations[0].title).toBe('Important notes');
+      useChatStore.getState().renameConversation(id, '   ');
+      expect(getChatState().conversations[0].title).toBe('Important notes');
+    });
     it('archives and restores a conversation without deleting messages', () => {
       const id = useChatStore.getState().createConversation('model');
       useChatStore.getState().addMessage(id, { role: 'user', content: 'hello' });
