@@ -29,12 +29,19 @@ internal object AtlasImageProgress {
         }
     }
 
-    /** Prevent an indefinite "1/x" while respecting slower explicit CPU runs. */
-    fun isStalled(nowMs: Long, startedMs: Long, lastStepMs: Long, gpu: Boolean): Boolean {
+    /** Bound unresponsive runs without killing a slow step with recent native output. */
+    fun isStalled(nowMs: Long, startedMs: Long, lastStepMs: Long, gpu: Boolean,
+                  lastOutputMs: Long = 0L): Boolean {
         val lastProgress = if (lastStepMs > startedMs) lastStepMs else startedMs
         if (lastProgress <= 0L || nowMs < lastProgress) return false
-        val limit = if (gpu) 10L * 60L * 1000L else 30L * 60L * 1000L
-        return nowMs - lastProgress >= limit
+        val baseLimit = if (gpu) 10L * 60_000L else 30L * 60_000L
+        if (nowMs - lastProgress < baseLimit) return false
+        // Output alone may be repetitive logging; extend by at most 20 minutes
+        // per step, and only when the engine has written something recently.
+        val maxLimit = baseLimit + 20L * 60_000L
+        val recentOutput = lastOutputMs >= lastProgress && lastOutputMs <= nowMs &&
+            nowMs - lastOutputMs < 60_000L
+        return !recentOutput || nowMs - lastProgress >= maxLimit
     }
 
     /** Linux proc stat uses a parenthesized process name. Find field 14+15 afterwards. */

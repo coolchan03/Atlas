@@ -298,7 +298,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 try { Thread.sleep(4000L) } catch (_: InterruptedException) { break }
                 if (watchdogActive.get() && proc.isAlive &&
                     AtlasImageProgress.isStalled(
-                        SystemClock.elapsedRealtime(), startedMs, lastStepMs, gpuRequested)) {
+                        SystemClock.elapsedRealtime(), startedMs, lastStepMs, gpuRequested, lastOutputMs)) {
                     watchdogTimedOut.set(true)
                     phase = "No diffusion step progress; native engine timed out"
                     proc.destroyForcibly()

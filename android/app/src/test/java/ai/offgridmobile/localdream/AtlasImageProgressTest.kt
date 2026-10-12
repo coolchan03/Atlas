@@ -32,6 +32,13 @@ class AtlasImageProgressTest {
         assertEquals(false, AtlasImageProgress.isStalled(now, now - 600_000L, now - 2000L, true))
         assertEquals(false, AtlasImageProgress.isStalled(now, now - 900_000L, 0L, false))
         assertEquals(true, AtlasImageProgress.isStalled(now, now - 1_800_000L, 0L, false))
+        // A slow GPU step can continue while native logs are still arriving.
+        assertEquals(false, AtlasImageProgress.isStalled(now, now - 720_000L, 0L, true, now - 5_000L))
+        // Silence still times out, and repetitive logs cannot prolong it forever.
+        assertEquals(true, AtlasImageProgress.isStalled(now, now - 720_000L, 0L, true, now - 120_000L))
+        assertEquals(true, AtlasImageProgress.isStalled(now, now - 1_800_000L, 0L, true, now - 5_000L))
+        // A completed step restarts the timeout window.
+        assertEquals(false, AtlasImageProgress.isStalled(now, now - 720_000L, now - 40_000L, true, 0L))
     }
 
     @Test fun cpuTickParserWorksWithSpacesInProcessName() {
