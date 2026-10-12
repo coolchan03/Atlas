@@ -4,6 +4,7 @@ import { useTheme } from '../theme';
 import { Direction2048, empty2048, hasMoves2048, move2048, spawn2048 } from '../utils/game2048';
 import { MineGrid, mineResult, newMineGrid, revealMines } from '../utils/minesweeper';
 import { moveSnake, newSnake, SnakeDirection } from '../utils/snake';
+import { AtlasSudoku } from './AtlasSudoku';
 
 const WORDS = ['PUZZLE','PLANET','JOURNAL','ROBOT','GALAXY','GARDEN','COMPASS','ARCADE'];
 const TRIVIA = [
@@ -24,7 +25,7 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake' | 'word' | 'trivia'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake' | 'word' | 'trivia' | 'sudoku'>('menu');
   const [word, setWord] = useState('PLANET');
   const [letters, setLetters] = useState<string[]>([]);
   const [triviaIndex, setTriviaIndex] = useState(0);
@@ -88,6 +89,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Snake — grow without hitting a wall', () => start('snake'))}
         {press('Word Guess — uncover the hidden word', () => start('word'))}
         {press('Trivia — five quick questions', () => start('trivia'))}
+        {press('Sudoku — fill the 9×9 number puzzle', () => start('sudoku'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -209,6 +211,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         </> : <Text style={{ color: colors.text, fontSize: 20 }}>Finished! You got {triviaScore} out of {TRIVIA.length}.</Text>}
         {press('Restart trivia', () => start('trivia'))}
       </>}
+      {game === 'sudoku' && <AtlasSudoku />}
     </ScrollView>
   </Modal>;
 }
