@@ -365,10 +365,12 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                     "No CPU fallback occurred. Native log: " + tail.joinToString(" | ").takeLast(600))
             }
             if (watchdogTimedOut.get()) {
-                throw IOException("Image generation stopped: no diffusion step progress for " +
-                    (if (gpuRequested) "10 minutes on requested Vulkan GPU" else "30 minutes on CPU") +
-                    ". Try a smaller quantized checkpoint, check GPU status in Image Model Test, " +
-                    "or reduce the output resolution.")
+                val elapsedSinceStep = (SystemClock.elapsedRealtime() -
+                    (if (lastStepMs > startedMs) lastStepMs else startedMs)) / 1000L
+                throw IOException("Image generation stopped after $elapsedSinceStep seconds without a completed diffusion step " +
+                    "on " + (if (gpuRequested) "requested Vulkan GPU" else "CPU") +
+                    ". Native output may extend the stall window, but cannot extend it indefinitely. " +
+                    "Try a smaller quantized checkpoint or resolution. No automatic backend fallback occurred.")
             }
             if (code != 0 || !output.isFile || output.length() == 0L) {
                 if (output.exists()) output.delete()
