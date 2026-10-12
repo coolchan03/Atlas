@@ -9,6 +9,10 @@ import { NativeModules, Platform } from 'react-native';
  */
 const STORAGE_KEY = 'local-llm-chat-storage';
 const ENCRYPTED_KEY = 'atlas-chat-encrypted-v1';
+// Streaming-only state changes trigger Zustand persist but should not encrypt
+// the unchanged conversation archive on every generated token.
+let lastPersistedValue: string | null = null;
+let pendingWrites: Promise<void> = Promise.resolve();
 
 function cryptoModule() {
   const module = NativeModules.AtlasDevice;
@@ -35,7 +39,16 @@ export const encryptedChatStorage = {
   async getItem(key: string): Promise<string | null> {
     if (key !== STORAGE_KEY) throw new Error('Unexpected encrypted chat storage key.');
     const encrypted = await AsyncStorage.getItem(ENCRYPTED_KEY);
-    if (encrypted !== null) return cryptoModule().decryptChatState(encrypted);
+    if (encrypted !== null) {
+      const plaintext = await cryptoModule().decryptChatState(encrypted);
+      // Recover from an interrupted migration where the old cleartext key was
+      // not removed after the encrypted write completed.
+      if (await AsyncStorage.getItem(STORAGE_KEY) !== null) {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+      }
+      lastPersistedValue = plaintext;
+      return plaintext;
+    }
     const legacy = await AsyncStorage.getItem(STORAGE_KEY);
     if (legacy === null) return null;
     const ciphertext = await encryptAndVerify(legacy);
@@ -45,16 +58,30 @@ export const encryptedChatStorage = {
       throw new Error('Encrypted chat migration verification failed.');
     }
     await AsyncStorage.removeItem(STORAGE_KEY);
+    lastPersistedValue = legacy;
     return legacy;
   },
   async setItem(key: string, value: string): Promise<void> {
     if (key !== STORAGE_KEY) throw new Error('Unexpected encrypted chat storage key.');
-    const ciphertext = await encryptAndVerify(value);
-    await AsyncStorage.setItem(ENCRYPTED_KEY, ciphertext);
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    // Serialize writes so a slower encryption call for an earlier chat state
+    // can never overwrite a newer saved conversation.
+    const task = pendingWrites.then(async () => {
+      if (value === lastPersistedValue) return;
+      const ciphertext = await encryptAndVerify(value);
+      await AsyncStorage.setItem(ENCRYPTED_KEY, ciphertext);
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      lastPersistedValue = value;
+    });
+    pendingWrites = task.catch(() => undefined);
+    return task;
   },
   async removeItem(key: string): Promise<void> {
     if (key !== STORAGE_KEY) throw new Error('Unexpected encrypted chat storage key.');
-    await AsyncStorage.multiRemove([ENCRYPTED_KEY, STORAGE_KEY]);
+    const task = pendingWrites.then(async () => {
+      await AsyncStorage.multiRemove([ENCRYPTED_KEY, STORAGE_KEY]);
+      lastPersistedValue = null;
+    });
+    pendingWrites = task.catch(() => undefined);
+    return task;
   },
 };

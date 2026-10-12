@@ -5,6 +5,11 @@
  * Priority: P0 (Critical) - Core functionality for the app.
  */
 
+// Store behavior tests mock persistence; authenticated encryption is covered in
+// encryptedChatStorage.test.ts and requires a real Android Keystore on device.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({
+  encryptedChatStorage: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined) },
+}));
 import { useChatStore } from '../../../src/stores/chatStore';
 import { resetStores, getChatState } from '../../utils/testHelpers';
 import {
@@ -15,6 +20,28 @@ import {
 describe('chatStore', () => {
   beforeEach(() => {
     resetStores();
+  });
+
+  describe('Atlas agent, privacy and archive controls', () => {
+    it('defaults new conversations to Atlas and supports selecting another agent', () => {
+      const id = useChatStore.getState().createConversation('model');
+      expect(getChatState().conversations[0].agentId).toBe('atlas');
+      useChatStore.getState().setConversationAgent(id, 'teacher');
+      expect(getChatState().conversations[0].agentId).toBe('teacher');
+    });
+    it('creates a private conversation before any messages are added', () => {
+      const id = useChatStore.getState().createConversation('model', undefined, undefined, true);
+      expect(getChatState().conversations.find(c => c.id === id)?.isPrivate).toBe(true);
+    });
+    it('archives and restores a conversation without deleting messages', () => {
+      const id = useChatStore.getState().createConversation('model');
+      useChatStore.getState().addMessage(id, { role: 'user', content: 'hello' });
+      useChatStore.getState().setConversationArchived(id, true);
+      expect(getChatState().conversations[0].isArchived).toBe(true);
+      expect(getChatState().conversations[0].messages).toHaveLength(1);
+      useChatStore.getState().setConversationArchived(id, false);
+      expect(getChatState().conversations[0].isArchived).toBe(false);
+    });
   });
 
   // ============================================================================
