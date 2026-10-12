@@ -36,6 +36,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev
           test -x "$(command -v glslc)"
           test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
+      - name: Generate pinned llama.kt Vulkan shaders
+        run: |
+          # llama.kt deliberately does not commit generated SPIR-V and the
+          # corresponding C++ blobs. Build them before Gradle's CMake configure,
+          # whose source glob requires the generated .comp.cpp files.
+          test -s vendor/llama-kt/third_party/llama.cpp/ggml/src/ggml-vulkan/vulkan-shaders/CMakeLists.txt
+          bash vendor/llama-kt/scripts/gen-vulkan-shaders.sh "$(command -v glslc)"
+          test -s vendor/llama-kt/llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan-shaders.hpp
+          find vendor/llama-kt/llama-kt/src/main/cpp/ggml-vulkan/shaders -name '*.comp.cpp' | grep -q .
       - name: Install JS dependencies and patched native llama runtime
         run: |
           npm ci --ignore-scripts
