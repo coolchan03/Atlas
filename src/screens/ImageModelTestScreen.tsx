@@ -9,6 +9,8 @@ import { useAppStore } from '../stores';
 import { activeModelService } from '../services/activeModelService';
 import { imageGenerationService } from '../services/imageGenerationService';
 import { localDreamGeneratorService, type NativeImageRuntimeStatus } from '../services/localDreamGenerator';
+import { hardwareService } from '../services/hardware';
+import { selectImageAccelerator, imageComputeMode } from '../services/imageAcceleratorSelection';
 import type { GeneratedImage, ONNXImageModel } from '../types';
 import { imageTestPreset, type ImageTestMode } from '../utils/nativeImageTuning';
 import { getMissingImageSupportGuides, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
@@ -162,23 +164,23 @@ export const ImageModelTestScreen: React.FC = () => {
         mem.availableMemoryGB.toFixed(1) + ' GB usable.');
       if (cancelRequested.current) return;
 
-      // Validate the requested GPU before loading multi-gigabyte image weights.
-      // Enumeration is a prerequisite, not proof that diffusion shaders work.
-      if (model.backend === 'sdcpp' && (useAppStore.getState().settings.imageUseOpenCL ?? true)) {
-        update('engine', 'run', 'Checking native Vulkan device before loading image weights...');
-        const gpu = await localDreamGeneratorService.getNativeImageGpuDiagnostics();
-        if (!gpu.enumerated) {
-          throw new Error('No usable Vulkan device was detected by the image runtime: ' +
-            gpu.detail + '. Disable GPU in image settings to explicitly test CPU.');
-        }
-      }
-      update('engine', 'run', 'Selecting the image model...');
+      update('engine', 'run', 'Selecting and checking image accelerator...');
+      const imageDecision = await selectImageAccelerator(
+        model.backend || 'mnn', imageComputeMode(useAppStore.getState().settings), {
+          vulkan: () => localDreamGeneratorService.getNativeImageGpuDiagnostics(),
+          opencl: () => hardwareService.getOpenCLCapability(),
+          npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
+        },
+      );
+      if (cancelRequested.current) return;
+      update('engine', 'run', imageDecision.note + '. Loading model...');
       const t0 = Date.now();
       await activeModelService.loadImageModel(model.id);
       if (cancelRequested.current) return;
       if (!await localDreamGeneratorService.isModelLoaded()) throw new Error('The image engine did not report a loaded model.');
       const backend = await localDreamGeneratorService.getLoadedBackend();
       update('engine', 'ok', (backend || model.backend || 'unknown').toUpperCase() +
+        ' / ' + imageDecision.selected.toUpperCase() +
         ' selected in ' + ((Date.now() - t0) / 1000).toFixed(1) +
         's. Loading alone does not prove that the checkpoint will render.');
 
@@ -187,9 +189,7 @@ export const ImageModelTestScreen: React.FC = () => {
       const image = await localDreamGeneratorService.generateImage({
         ...cfg, prompt: SMILE, seed: 42,
         negativePrompt: model.nativeImageFamily === 'flux' ? '' : 'blurry, distorted, watermark, text',
-        useOpenCL: model.backend === 'sdcpp'
-          ? (useAppStore.getState().settings.imageUseOpenCL ?? true)
-          : model.backend === 'mnn',
+        useOpenCL: imageDecision.useOpenCL,
         previewInterval: 0,
         skipLoRA: !includeLoRA, skipUpscaler: !includeUpscaler,
         threads: useAppStore.getState().settings.imageThreads ?? 4,

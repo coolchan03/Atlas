@@ -187,6 +187,7 @@ export async function initContextWithFallback(
   params: object,
   contextLength: number,
   nGpuLayers: number,
+  allowCpuFallback: boolean = true,
 ): Promise<ContextInitResult> {
   const modelPath = (params as any).model || 'unknown';
   const isHtp = HTP_ENABLED && Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
@@ -202,11 +203,18 @@ export async function initContextWithFallback(
     logger.log(`[LLM] Attempt 1/3: ${isHtp ? 'HTP' : 'GPU'} init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
     const context = await tryGpuInit(gpuInitPromise, nGpuLayers, isHtp);
+    if (!allowCpuFallback && nGpuLayers > 0 && context.gpu !== true) {
+      await safeRelease(context);
+      throw new Error('Native context did not confirm GPU/NPU acceleration');
+    }
     logger.log('[LLM] GPU init succeeded');
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
     const gpuMsg = gpuError?.message || String(gpuError);
     if (isNativeLlamaRuntimeError(gpuMsg)) throwNativeLlamaRuntimeError(gpuMsg);
+    if (!allowCpuFallback && nGpuLayers > 0) {
+      throw new Error(`GPU/NPU initialization failed: ${gpuMsg}. CPU fallback is disabled.`);
+    }
     if (nGpuLayers > 0) {
       logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
       gpuAttemptFailed = true;

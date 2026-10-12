@@ -6,6 +6,7 @@ import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import { getImageTuning, getImageSizeSlider, isDirectSDXL, getImageGuidance } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
+import { ImageBackendModePicker } from '../ImageBackendModePicker';
 
 const ClearGPUCacheButton: React.FC = () => {
   const { colors } = useTheme();
@@ -88,23 +89,9 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
 
       {Platform.OS === 'android' && (
         <View style={styles.settingGroup}>
-          <View style={styles.settingHeader}>
-            <Text style={styles.settingLabel}>
-              {imageModel?.backend === 'sdcpp' ? 'Vulkan GPU Acceleration' : 'OpenCL GPU Acceleration'}
-            </Text>
-            <Switch
-              value={settings.imageUseOpenCL ?? true}
-              onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
-              trackColor={{ false: colors.surfaceLight, true: colors.primary }}
-              thumbColor={colors.surface}
-            />
-          </View>
-          <Text style={styles.settingDescription}>
-            {imageModel?.backend === 'sdcpp'
-              ? 'Experimental Vulkan backend for compatible GPUs. Detection does not guarantee that model shaders will run. A failed GPU probe stops generation; disable to choose CPU explicitly.'
-              : 'Use OpenCL for supported MNN image models.'}
-          </Text>
-          {(settings.imageUseOpenCL ?? true) && imageModel?.backend !== 'sdcpp' && <ClearGPUCacheButton />}
+          <ImageBackendModePicker backend={imageModel?.backend} />
+          {settings.imageBackendMode !== 'cpu' && imageModel?.backend === 'mnn' &&
+            <ClearGPUCacheButton />}
         </View>
       )}
     </>

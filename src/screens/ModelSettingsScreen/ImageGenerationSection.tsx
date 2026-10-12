@@ -8,6 +8,7 @@ import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import { getImageTuning, getImageSizeSlider, isDirectSDXL, getImageGuidance } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
+import { ImageBackendModePicker } from '../../components/ImageBackendModePicker';
 
 // ─── Advanced Sub-Components ─────────────────────────────────────────────────
 
@@ -47,41 +48,16 @@ const EnhanceImageToggle: React.FC = () => {
 };
 
 const ImageGpuSection: React.FC = () => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const { settings, activeImageModelId, downloadedImageModels } = useAppStore();
   const model = downloadedImageModels.find(m => m.id === activeImageModelId);
-  const nativeImage = model?.backend === 'sdcpp';
   const { clearing, handleClearCache } = useClearGpuCache();
-  const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-  const isOpenCL = settings?.imageUseOpenCL ?? true;
-
   return (
     <>
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleInfo}>
-          <Text style={styles.toggleLabel}>
-            {nativeImage ? 'Vulkan GPU Acceleration (experimental)' : 'OpenCL GPU Acceleration'}
-          </Text>
-          <Text style={styles.toggleDesc}>
-            {nativeImage
-              ? 'Uses Vulkan only when the native image engine detects a GPU. Detection does not guarantee shader compatibility; a model may still fail. Disable to explicitly run on CPU. No automatic CPU fallback occurs.'
-              : 'Use OpenCL for supported MNN image models. First run may optimize your GPU.'}
-          </Text>
-        </View>
-        <Switch
-          value={isOpenCL}
-          onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
-          trackColor={trackColor}
-          thumbColor={isOpenCL ? colors.primary : colors.textMuted}
-        />
-      </View>
-      {isOpenCL && !nativeImage && (
-        <TouchableOpacity
-          style={[styles.toggleRow, styles.clearCacheRow]}
-          onPress={handleClearCache}
-          disabled={clearing}
-        >
+      <ImageBackendModePicker backend={model?.backend} />
+      {settings.imageBackendMode !== 'cpu' && model?.backend === 'mnn' && (
+        <TouchableOpacity style={[styles.toggleRow, styles.clearCacheRow]}
+          onPress={handleClearCache} disabled={clearing}>
           <Text style={styles.clearCacheText}>
             {clearing ? 'Clearing...' : 'Clear GPU Cache'}
           </Text>

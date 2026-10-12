@@ -11,6 +11,8 @@ import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
 
 import { getImageTuning, getImageGuidance } from '../utils/nativeImageTuning';
+import { hardwareService } from './hardware';
+import { selectImageAccelerator, imageComputeMode } from './imageAcceleratorSelection';
 import { getMissingImageSupportGuides, imageFamilyDisplay, isRunnableNativeModel } from '../utils/nativeImageCompatibility';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
@@ -477,13 +479,29 @@ class ImageGenerationService {
       progress: { step: 0, totalSteps: steps }, error: null, result: null,
     });
 
+    // Choose a model-specific accelerator before loading multi-gigabyte weights.
+    // sd.cpp needs Vulkan; MNN uses OpenCL; QNN needs NPU. No CPU fallback.
+    let imageBackend;
+    try {
+      imageBackend = await selectImageAccelerator(
+        activeImageModel.backend || 'mnn', imageComputeMode(settings), {
+          vulkan: () => onnxImageGeneratorService.getNativeImageGpuDiagnostics(),
+          opencl: () => hardwareService.getOpenCLCapability(),
+          npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
+        },
+      );
+    } catch (error: any) {
+      return this._fail('Image accelerator unavailable: ' + (error?.message || String(error)));
+    }
+    if (!this._isRequestCurrent(requestEpoch)) return null;
+    this.updateState({ status: 'Selected ' + imageBackend.selected.toUpperCase() + ': ' + imageBackend.note });
     const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, { desiredThreads: settings.imageThreads ?? 4, override: opts?.override });
     if (!loaded) return null;
     if (requestEpoch !== this.requestEpoch) return null;
     if (this.cancelRequested) { this.resetState(); return null; }
 
     return this._runGenerationAndSave(
-      { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: settings.imageUseOpenCL ?? true },
+      { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: imageBackend.useOpenCL },
       requestEpoch,
     );
   }

@@ -39,12 +39,16 @@ function loadedLiteRTInfo(modelId: string, model: any): TextRuntimeInfo {
 
 function loadedLlamaInfo(modelId: string, model: any): TextRuntimeInfo {
   const gpu = llmService.getGpuInfo();
-  const npu = gpu.gpu && /HTP|NPU|HEXAGON|DSP/i.test(gpu.gpuBackend || '');
+  const selected = llmService.getSelectedBackend();
+  const npu = gpu.gpu && selected === 'htp';
   return {
     ...baseInfo(modelId, model),
     state: 'loaded',
     backend: gpu.gpu ? (npu ? 'NPU' : 'GPU') : 'CPU',
-    backendDetail: gpu.gpu ? (gpu.gpuBackend || (npu ? 'HTP' : 'OpenCL')) : 'CPU',
+    backendDetail: gpu.gpu ?
+      (selected === 'vulkan' ? 'Vulkan (native selected; offload unverified)' :
+        selected === 'htp' ? 'HTP / Hexagon (native context GPU flag confirmed)' :
+          'OpenCL (native context GPU flag confirmed): ' + gpu.gpuBackend) : 'CPU',
     contextLength: llmService.getPerformanceSettings().contextLength,
     gpuLayers: gpu.gpu ? gpu.gpuLayers : 0,
     fallbackNotice: llmService.getBackendFallbackNotice()

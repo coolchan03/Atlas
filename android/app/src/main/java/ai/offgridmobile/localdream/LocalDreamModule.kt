@@ -337,19 +337,10 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     private suspend fun startWithFallback(
         modelPath: String, backend: String, modelDir: File, cpuModelDir: File?,
     ): StartResult {
-        val result = tryStartServer(modelPath, modelDir, backend, backend == "mnn")
-        if (result.success) return result
-
-        if (backend != "qnn" || cpuModelDir == null) return result
-
-        Log.w(TAG, "QNN backend failed (${result.error}), falling back to MNN/CPU")
-        stopServer()
-        val fallbackResult = tryStartServer(modelPath, cpuModelDir, "mnn", true)
-        if (fallbackResult.success) {
-            Log.i(TAG, "Successfully fell back to MNN/CPU backend")
-            return fallbackResult
-        }
-        return StartResult(false, "QNN failed: ${result.error}. MNN fallback also failed: ${fallbackResult.error}")
+        // Loading NPU weights must not silently launch the CPU/MNN runtime.
+        // Model format-specific GPU fallback can be implemented only when a
+        // compatible MNN checkpoint is deliberately selected and probed.
+        return tryStartServer(modelPath, modelDir, backend, backend == "mnn")
     }
 
     @ReactMethod

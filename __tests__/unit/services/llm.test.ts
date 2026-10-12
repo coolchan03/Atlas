@@ -229,9 +229,7 @@ describe('LLMService', () => {
     });
 
     it('warns when mmproj file not found but continues', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true) // model exists
-        .mockResolvedValueOnce(false); // mmproj doesn't exist
+      mockedRNFS.exists.mockImplementation(async (path: string) => path !== '/models/mmproj.gguf');
 
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
@@ -2353,7 +2351,7 @@ describe('LLMService', () => {
         vendor: 'qualcomm', hasNPU: true, qnnVariant: '8gen3',
       });
 
-      const ctx = createMockLlamaContext();
+      const ctx = createMockLlamaContext({ gpu: true });
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({

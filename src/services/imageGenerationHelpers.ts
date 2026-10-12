@@ -40,8 +40,12 @@ export function buildImageGenMeta(
   opts: { steps: number; guidanceScale: number; result: GeneratedImage; useOpenCL: boolean },
 ): GenerationMeta {
   const backend = model.backend ?? 'mnn';
-  const isGpu = Platform.OS === 'ios' || backend === 'qnn' || (backend === 'mnn' && opts.useOpenCL);
-  const gpuBackend = Platform.OS === 'ios' ? 'Core ML (ANE)' : backend === 'qnn' ? 'QNN (NPU)' : isGpu ? 'MNN (GPU)' : 'MNN (CPU)';
+  const isGpu = Platform.OS === 'ios' || backend === 'qnn' ||
+    ((backend === 'mnn' || backend === 'sdcpp') && opts.useOpenCL);
+  const gpuBackend = Platform.OS === 'ios' ? 'Core ML (accelerator selected by OS)' :
+    backend === 'qnn' ? 'QNN (NPU)' :
+      backend === 'sdcpp' ? (opts.useOpenCL ? 'Vulkan (requested; compute unverified)' : 'Native CPU') :
+        isGpu ? 'MNN (OpenCL requested; compute unverified)' : 'MNN (CPU)';
   return {
     gpu: isGpu,
     gpuBackend,

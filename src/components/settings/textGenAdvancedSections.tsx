@@ -90,6 +90,7 @@ const IOS_BACKENDS: BackendOption[] = [
 ];
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.AUTO, label: 'Auto', desc: 'Checks NPU, Vulkan and OpenCL in order and loads the first working accelerator. Never silently switches to CPU; choose CPU manually if none works.' },
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
   { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers using supported OpenCL GPUs, primarily Adreno. Requires model reload.' },
   { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Test)', desc: 'Experimental GPU offload for text GGUF. Atlas checks Vulkan availability, then fails with an explanation if loading fails; it will not silently switch to CPU. Requires model reload.' },
@@ -119,7 +120,7 @@ export const BackendSelector: React.FC = () => {
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const current = settings.inferenceBackend ?? defaultBackend;
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
-  const layersLabel = current === INFERENCE_BACKENDS.HTP
+  const layersLabel = current === INFERENCE_BACKENDS.AUTO ? 'Accelerator Layer Limit' : current === INFERENCE_BACKENDS.HTP
     ? 'NPU Layers'
     : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : current === INFERENCE_BACKENDS.VULKAN ? 'GPU Layers (Vulkan)' : 'GPU Layers (OpenCL)';
 

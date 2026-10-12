@@ -52,7 +52,9 @@ type AppSettings = {
   imageGenerationMode: ImageGenerationMode; autoDetectMethod: AutoDetectMethod;
   classifierModelId: string | null; imageSteps: number; imageGuidanceScale: number;
   imageThreads: number; imageWidth: number; imageHeight: number;
-  imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
+  imageUseOpenCL: boolean;
+  imageBackendMode?: 'auto' | 'gpu' | 'cpu';
+  enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
    *  load (with a "Load Anyway" override when the budget still blocks). Off by
@@ -216,9 +218,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageWidth: 512,
   imageHeight: 512,
   imageUseOpenCL: true,
+  imageBackendMode: 'auto',
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
-  inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
+  inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
   gpuLayers: 99,
   flashAttn: true,
   aggressiveModelLoading: false,
@@ -283,10 +286,14 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (persistedState?.settings && !persistedState.settings.cacheType) {
     merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };
   }
+  if (persistedState?.settings && !persistedState.settings.imageBackendMode) {
+    merged.settings = { ...merged.settings,
+      imageBackendMode: persistedState.settings.imageUseOpenCL === false ? 'cpu' : 'auto' };
+  }
   if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
     merged.settings = {
       ...merged.settings,
-      inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
+      inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
     };
   }
 

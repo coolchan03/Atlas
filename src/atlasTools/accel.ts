@@ -22,7 +22,7 @@ export function autoPickAcceleration(): void {
     try {
       const st = useAppStore.getState();
       const settings = st.settings;
-      if (settings.backendUserChosen) return;
+      if (settings.backendUserChosen || settings.inferenceBackend === INFERENCE_BACKENDS.AUTO) return;
 
       const capability = await hardwareService.getAccelerationCapability();
       const patch: Partial<typeof settings> = { atlasAccelChecked: true };
@@ -57,7 +57,7 @@ export async function autoPickAccelerationForModel(model: DownloadedModel): Prom
   if (Platform.OS !== 'android' || model.engine !== 'llama') return;
 
   const st = useAppStore.getState();
-  if (st.settings.backendUserChosen) return;
+  if (st.settings.backendUserChosen || st.settings.inferenceBackend === INFERENCE_BACKENDS.AUTO) return;
 
   try {
     const capability = await hardwareService.getAccelerationCapability();
