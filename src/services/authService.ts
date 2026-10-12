@@ -72,7 +72,12 @@ class AuthService {
       const credentials = await Keychain.getGenericPassword({
         service: SERVICE_NAME,
       });
-      return credentials !== false;
+      // A credential from an unexpected account must never be treated as a
+      // configured lock. Only our current or legacy migration entries count.
+      return credentials !== false && (
+        credentials.username === PASSPHRASE_KEY ||
+        credentials.username === LEGACY_PASSPHRASE_KEY
+      );
     } catch (error) {
       logger.error('Failed to check passphrase:', error);
       return false;

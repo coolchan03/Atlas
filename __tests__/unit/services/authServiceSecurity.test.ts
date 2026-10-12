@@ -17,6 +17,14 @@ describe('credential storage migration', () => {
       expect.objectContaining({ service: 'ai.offgridmobile.auth' }),
     );
   });
+  it('only recognizes expected Keychain accounts as configured passphrases', async () => {
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValueOnce({ username: 'unrelated', password: 'secret' });
+    expect(await authService.hasPassphrase()).toBe(false);
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValueOnce({ username: 'passphrase', password: 'secret' });
+    expect(await authService.hasPassphrase()).toBe(true);
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValueOnce({ username: 'passphrase_hash', password: 'old' });
+    expect(await authService.hasPassphrase()).toBe(true);
+  });
   it('accepts an existing OS keychain credential', async () => {
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValueOnce({ username: 'passphrase', password: 'secret' });
     expect(await authService.verifyPassphrase('secret')).toBe(true);
