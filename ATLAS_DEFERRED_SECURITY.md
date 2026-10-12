@@ -1,6 +1,6 @@
 # Atlas audit: deferred security work (Batch 3)
 
-Status: INCOMPLETE. This is a tracked backlog, not a claim that encryption exists.
+Status: INCOMPLETE. Android device-bound AES-GCM chat persistence implemented in commit 8ebad3c, with guarded plaintext migration and JS unit tests. Native compilation, device migration and fail-closed behavior still require verification. Per-chat PIN, transferable encrypted backup and encrypted device sync are still missing.
 
 ## SEC-01: Encrypted chat persistence (required)
 - Replace plaintext AsyncStorage conversation persistence with audited authenticated encryption (AES-256-GCM or XChaCha20-Poly1305) backed by a maintained native Android/iOS cryptographic provider.
