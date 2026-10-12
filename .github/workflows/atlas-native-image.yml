@@ -3,7 +3,8 @@ name: Atlas native-image experimental APK
 # Deliberately separate from atlas-voice's published/latest APK pipeline.
 on:
   push:
-    branches: [atlas-image-native, atlas-audit-20261012]
+    # Audit batches use workflow_dispatch to avoid hour-long builds on every fix.
+    branches: [atlas-image-native]
   workflow_dispatch:
 
 jobs:
