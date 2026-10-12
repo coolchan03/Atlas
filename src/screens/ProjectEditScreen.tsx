@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Switch,
   KeyboardAvoidingView,
   Platform,
   InteractionManager,
@@ -49,6 +50,9 @@ export const ProjectEditScreen: React.FC = () => {
     name: '',
     description: '',
     systemPrompt: '',
+    allowGames: false,
+    allowQuizzes: false,
+    allowPodcasts: false,
   });
 
   useEffect(() => {
@@ -57,6 +61,9 @@ export const ProjectEditScreen: React.FC = () => {
         name: existingProject.name,
         description: existingProject.description,
         systemPrompt: existingProject.systemPrompt,
+        allowGames: existingProject.allowGames ?? false,
+        allowQuizzes: existingProject.allowQuizzes ?? false,
+        allowPodcasts: existingProject.allowPodcasts ?? false,
       });
     }
   }, [existingProject]);
@@ -72,12 +79,18 @@ export const ProjectEditScreen: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
+        allowGames: formData.allowGames,
+        allowQuizzes: formData.allowQuizzes,
+        allowPodcasts: formData.allowPodcasts,
       });
     } else {
       createProject({
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
+        allowGames: formData.allowGames,
+        allowQuizzes: formData.allowQuizzes,
+        allowPodcasts: formData.allowPodcasts,
       });
     }
 
@@ -148,6 +161,19 @@ export const ProjectEditScreen: React.FC = () => {
           <Text style={styles.tip}>
             Tip: Be specific about what you want the AI to do, how it should respond, and any context it needs.
           </Text>
+
+          <Text style={styles.label}>Optional AI features for this project</Text>
+          <Text style={styles.hint}>All three default to off. Turn on only the features you want for this project; writing projects will not automatically opt in.</Text>
+          {([
+            ['allowGames', 'Suggest games based on project content'],
+            ['allowQuizzes', 'Create quizzes from project content'],
+            ['allowPodcasts', 'Create podcasts from project content'],
+          ] as const).map(([key, title]) => (
+            <View key={key} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
+              <Text style={[styles.label, { flex: 1, marginBottom: 0 }]}>{title}</Text>
+              <Switch value={formData[key]} onValueChange={value => setFormData(current => ({ ...current, [key]: value }))} />
+            </View>
+          ))}
 
           <View style={styles.bottomPadding} />
         </ScrollView>

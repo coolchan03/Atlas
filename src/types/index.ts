@@ -360,6 +360,10 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** Optional project-level permission flags; omitted means ask before suggesting or generating. */
+  allowGames?: boolean;
+  allowQuizzes?: boolean;
+  allowPodcasts?: boolean;
   id: string;
   name: string;
   description: string;

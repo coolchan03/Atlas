@@ -7,6 +7,7 @@ import { moveSnake, newSnake, SnakeDirection } from '../utils/snake';
 import { AtlasSudoku } from './AtlasSudoku';
 import { AtlasSurvival } from './AtlasSurvival';
 import { AtlasTechTree } from './AtlasTechTree';
+import { AtlasChessPuzzles } from './AtlasChessPuzzles';
 
 const WORDS = ['PUZZLE','PLANET','JOURNAL','ROBOT','GALAXY','GARDEN','COMPASS','ARCADE'];
 const TRIVIA = [
@@ -27,7 +28,7 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake' | 'word' | 'trivia' | 'sudoku' | 'survival' | 'techtree'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory' | '2048' | 'mines' | 'snake' | 'word' | 'trivia' | 'sudoku' | 'survival' | 'techtree' | 'chess'>('menu');
   const [word, setWord] = useState('PLANET');
   const [letters, setLetters] = useState<string[]>([]);
   const [triviaIndex, setTriviaIndex] = useState(0);
@@ -94,6 +95,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Sudoku — fill the 9×9 number puzzle', () => start('sudoku'))}
         {press('Wilderness Survival — make decisions to stay alive', () => start('survival'))}
         {press('Civilization Tech Tree — research your way to space', () => start('techtree'))}
+        {press('Chess Puzzles — solve mate in one', () => start('chess'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -218,6 +220,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
       {game === 'sudoku' && <AtlasSudoku />}
       {game === 'survival' && <AtlasSurvival />}
       {game === 'techtree' && <AtlasTechTree />}
+      {game === 'chess' && <AtlasChessPuzzles />}
     </ScrollView>
   </Modal>;
 }

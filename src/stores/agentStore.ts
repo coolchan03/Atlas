@@ -249,8 +249,19 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const lp = lowPowerNote();
   const phoneMode = require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio';
   const phoneNote = phoneMode ? '\n\nPHONE CALL MODE: Speak like a natural telephone conversation. Answer in one or two short spoken sentences, usually under 35 words. No lists, markdown, headings, long introductions, or extended explanations unless urgently required for safety or explicitly requested. Ask one brief question if appropriate.' : '';
-  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote;
-  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote;
+  // Respect per-project creative preferences, including imported/older projects
+  // where missing flags default to off. Explicit user requests take precedence.
+  const chatState = require('./chatStore').useChatStore.getState();
+  const currentChat = chatState.conversations.find((c: any) => c.id === chatState.activeConversationId);
+  const currentProject = currentChat?.projectId ? require('./projectStore').useProjectStore.getState().getProject(currentChat.projectId) : undefined;
+  const projectPreferences = currentProject ? [
+    !currentProject.allowGames && 'Do not suggest or generate games from this project unless directly asked.',
+    !currentProject.allowQuizzes && 'Do not suggest or generate quizzes from this project unless directly asked.',
+    !currentProject.allowPodcasts && 'Do not suggest or generate podcasts from this project unless directly asked.',
+  ].filter(Boolean).join(' ') : '';
+  const projectGuard = projectPreferences ? '\n\nPROJECT FEATURE PREFERENCES: ' + projectPreferences : '';
+  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote + projectGuard;
+  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote + projectGuard;
 }
 
 /** An agent's system prompt with its learned lessons underneath. */
