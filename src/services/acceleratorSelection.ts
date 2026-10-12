@@ -1,6 +1,6 @@
 import { INFERENCE_BACKENDS, type InferenceBackend } from '../types';
 
-/** Only hardware accelerators. CPU is deliberately excluded from Auto mode. */
+/** Hardware candidates, ordered before the CPU fallback appended by LLMService in Auto mode. */
 export type TextAccelerator = 'htp' | 'vulkan' | 'opencl';
 
 export type AcceleratorAvailability = {
