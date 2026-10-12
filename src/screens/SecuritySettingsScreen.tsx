@@ -109,7 +109,7 @@ export const SecuritySettingsScreen: React.FC = () => {
         <Card style={styles.infoCard}>
           <Icon name="info" size={18} color={colors.textMuted} />
           <Text style={styles.infoText}>
-            When enabled, the app locks when you leave it. The passphrase is held in the operating system's secure credential store. Chat history is not yet encrypted at rest; the app lock and private-chat mode do not provide encrypted backups or encrypted cross-device sync.
+            When enabled, the app locks when you leave it. The passphrase is held in the operating system's secure credential store. On Android, saved chat history uses device-bound Keystore encryption. Private-mode chats are not persisted. Individual PIN-locked chats, encrypted backups, and cross-device sync are not available yet.
           </Text>
         </Card>
       </ScrollView>

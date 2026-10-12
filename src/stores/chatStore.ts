@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { encryptedChatStorage } from './encryptedChatStorage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
@@ -351,7 +351,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'local-llm-chat-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => encryptedChatStorage),
       partialize: (state) => {
         // Atlas: private chats are never saved.
         const conversations = state.conversations.filter((c) => !c.isPrivate);

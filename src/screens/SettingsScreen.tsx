@@ -230,7 +230,7 @@ export const SettingsScreen: React.FC = () => {
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => {
-              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing chat history, projects and settings. Anyone with the file can read them. Do not store it in a shared or untrusted location. PIN-protected chats are not encrypted by this export.', [
+              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing projects and settings, but not your encrypted chats. Anyone with the file can read its contents. Do not store it in a shared or untrusted location. PIN-locked chat export and cross-device transfer are not available yet.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Export anyway', onPress: async () => {
               try {
@@ -247,7 +247,7 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Back up</Text>
-                <Text style={styles.navItemDesc}>Agents, lessons, projects, chats and settings to one file</Text>
+                <Text style={styles.navItemDesc}>Agents, lessons, projects and settings (encrypted chats excluded)</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>

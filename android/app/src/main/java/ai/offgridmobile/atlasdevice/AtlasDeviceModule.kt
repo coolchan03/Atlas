@@ -301,6 +301,54 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.reject("CAL", e.message ?: "Calendar error", e) }
     }
 
+    // Device-bound AES-GCM for persisted chat state. No raw key material crosses the JS bridge.
+    private fun chatCipher(mode: Int): javax.crypto.Cipher {
+        val alias = "atlas.chat.storage.v1"
+        val store = java.security.KeyStore.getInstance("AndroidKeyStore")
+        store.load(null)
+        if (!store.containsAlias(alias)) {
+            val generator = javax.crypto.KeyGenerator.getInstance("AES", "AndroidKeyStore")
+            generator.init(android.security.keystore.KeyGenParameterSpec.Builder(
+                alias, android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
+                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+            ).setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256).build())
+            generator.generateKey()
+        }
+        val key = store.getKey(alias, null) as javax.crypto.SecretKey
+        return javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").also {
+            if (mode == javax.crypto.Cipher.ENCRYPT_MODE) it.init(mode, key)
+        }
+    }
+
+    @ReactMethod
+    fun encryptChatState(plain: String, promise: Promise) {
+        try {
+            val cipher = chatCipher(javax.crypto.Cipher.ENCRYPT_MODE)
+            cipher.updateAAD("local-llm-chat-storage:v1".toByteArray(Charsets.UTF_8))
+            val encrypted = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+            val encoded = android.util.Base64.encodeToString(cipher.iv + encrypted, android.util.Base64.NO_WRAP)
+            promise.resolve("atlasenc:v1:" + encoded)
+        } catch (e: Exception) { promise.reject("CHAT_ENCRYPT", "Could not protect chat storage", e) }
+    }
+
+    @ReactMethod
+    fun decryptChatState(payload: String, promise: Promise) {
+        try {
+            require(payload.startsWith("atlasenc:v1:")) { "Unsupported encrypted chat format" }
+            val bytes = android.util.Base64.decode(payload.removePrefix("atlasenc:v1:"), android.util.Base64.NO_WRAP)
+            require(bytes.size >= 29) { "Invalid encrypted chat payload" }
+            val iv = bytes.copyOfRange(0, 12)
+            val cipher = chatCipher(javax.crypto.Cipher.DECRYPT_MODE)
+            val store = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val key = store.getKey("atlas.chat.storage.v1", null) as javax.crypto.SecretKey
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
+            cipher.updateAAD("local-llm-chat-storage:v1".toByteArray(Charsets.UTF_8))
+            promise.resolve(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8))
+        } catch (e: Exception) { promise.reject("CHAT_DECRYPT", "Chat storage cannot be decrypted on this device", e) }
+    }
+
     /** Opens the calendar app with a new event filled in - you confirm and save it there. */
     @ReactMethod
     fun addCalendarEvent(title: String, startMs: Double, endMs: Double, location: String, description: String, promise: Promise) {

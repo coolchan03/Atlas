@@ -33,8 +33,10 @@ function sanitizeBackupValue(raw: string): string | null {
 }
 
 export async function exportBackup(): Promise<string | null> {
+  // Device-bound encrypted chats cannot be decrypted after transfer to a new
+  // phone. Do not export legacy plaintext chat records into readable backups.
   const keys = (await AsyncStorage.getAllKeys()).filter((k) =>
-    RESTORABLE_STORE_KEYS.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
+    k !== 'local-llm-chat-storage' && RESTORABLE_STORE_KEYS.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
   const pairs = await AsyncStorage.multiGet(keys);
   const safe = pairs.flatMap(([key, value]) => {
     if (value == null) return [];
