@@ -45,7 +45,14 @@ export async function exportBackup(): Promise<string | null> {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const name = `OffGridAtlas-backup-${stamp}.json`;
   const path = `${RNFS.CachesDirectoryPath}/${name}`;
-  await RNFS.writeFile(path, JSON.stringify(data), 'utf8');
+  const backupJson = JSON.stringify(data);
+  // Protect memory/storage from accidentally exporting unbounded chat archives.
+  // UTF-8 may occupy more bytes than the JavaScript string length.
+  const bytes = unescape(encodeURIComponent(backupJson)).length;
+  if (bytes > 50 * 1024 * 1024) {
+    throw new Error('Backup exceeds 50 MB. Export fewer conversations or use a future encrypted archive format.');
+  }
+  await RNFS.writeFile(path, backupJson, 'utf8');
   try {
     const [res] = await saveDocuments({ sourceUris: [`file://${path}`], mimeType: 'application/json', fileName: name, copy: true });
     return res?.name ?? name;
