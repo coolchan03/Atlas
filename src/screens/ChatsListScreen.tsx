@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { View, Text, FlatList, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,6 +39,8 @@ export const ChatsListScreen: React.FC = () => {
   const conversations = useChatStore(s => s.conversations);
   const { deleteConversation, setActiveConversation, setConversationArchived } = useChatStore.getState();
   const [showArchived, setShowArchived] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
   const { getProject } = useProjectStore();
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
@@ -161,6 +163,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleChatLongPress = (conversation: Conversation) => {
     setAlertState(showAlert('Chat options', conversation.title, [
       { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
+      { text: 'Rename', onPress: () => { setAlertState(hideAlert()); setRenameTitle(conversation.title); setRenameTarget(conversation); } },
       { text: conversation.isArchived ? 'Unarchive' : 'Archive', onPress: () => {
         setConversationArchived(conversation.id, !conversation.isArchived);
         setAlertState(hideAlert());
@@ -294,6 +297,18 @@ export const ChatsListScreen: React.FC = () => {
           testID="conversation-list"
         />
       )}
+      <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Rename chat</Text>
+            <TextInput value={renameTitle} onChangeText={setRenameTitle} maxLength={100} autoFocus selectTextOnFocus style={{ color: colors.text, borderWidth: 1, borderColor: colors.textMuted, borderRadius: 8, padding: 10 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
+              <TouchableOpacity onPress={() => setRenameTarget(null)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => { if (renameTarget) useChatStore.getState().renameConversation(renameTarget.id, renameTitle); setRenameTarget(null); }}><Text style={{ color: colors.primary, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}

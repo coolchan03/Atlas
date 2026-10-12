@@ -1,3 +1,7 @@
+// Inference unit tests isolate chat persistence from the native Android Keystore.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({ encryptedChatStorage: {
+  getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined),
+} }));
 import { initLlama } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
