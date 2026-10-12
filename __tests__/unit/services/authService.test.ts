@@ -29,7 +29,7 @@ describe('AuthService', () => {
   // setPassphrase
   // ========================================================================
   describe('setPassphrase', () => {
-    it('stores hashed passphrase in keychain and returns true', async () => {
+    it('stores passphrase in OS keychain and returns true', async () => {
       (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
 
       const result = await authService.setPassphrase('mySecret123');
@@ -37,8 +37,8 @@ describe('AuthService', () => {
       expect(result).toBe(true);
       expect(Keychain.setGenericPassword).toHaveBeenCalledTimes(1);
       expect(Keychain.setGenericPassword).toHaveBeenCalledWith(
-        'passphrase_hash',
-        expect.any(String),
+        'passphrase',
+        'mySecret123',
         expect.objectContaining({
           service: 'ai.offgridmobile.auth',
         }),
@@ -60,8 +60,8 @@ describe('AuthService', () => {
   // verifyPassphrase
   // ========================================================================
   describe('verifyPassphrase', () => {
-    it('returns true when passphrase matches stored hash', async () => {
-      // First, capture the hash that setPassphrase stores
+    it('returns true when passphrase matches secure credential', async () => {
+      // First, capture the credential that setPassphrase stores
       let storedHash = '';
       (Keychain.setGenericPassword as jest.Mock).mockImplementation(
         (_key: string, hash: string) => {
@@ -72,9 +72,9 @@ describe('AuthService', () => {
 
       await authService.setPassphrase('correctPassphrase');
 
-      // Mock getGenericPassword to return the stored hash
+      // Mock getGenericPassword to return the stored credential
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
-        username: 'passphrase_hash',
+        username: 'passphrase',
         password: storedHash,
         service: 'ai.offgridmobile.auth',
       });
@@ -84,7 +84,7 @@ describe('AuthService', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when passphrase does not match stored hash', async () => {
+    it('returns false when passphrase does not match secure credential', async () => {
       let storedHash = '';
       (Keychain.setGenericPassword as jest.Mock).mockImplementation(
         (_key: string, hash: string) => {
@@ -96,7 +96,7 @@ describe('AuthService', () => {
       await authService.setPassphrase('correctPassphrase');
 
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
-        username: 'passphrase_hash',
+        username: 'passphrase',
         password: storedHash,
         service: 'ai.offgridmobile.auth',
       });
@@ -131,7 +131,7 @@ describe('AuthService', () => {
   describe('hasPassphrase', () => {
     it('returns true when credentials exist in keychain', async () => {
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
-        username: 'passphrase_hash',
+        username: 'passphrase',
         password: 'somehash',
         service: 'ai.offgridmobile.auth',
       });
@@ -205,9 +205,9 @@ describe('AuthService', () => {
 
       await authService.setPassphrase('oldPass');
 
-      // Mock getGenericPassword to return the stored hash for verification
+      // Mock getGenericPassword to return the stored credential for verification
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
-        username: 'passphrase_hash',
+        username: 'passphrase',
         password: storedHash,
         service: 'ai.offgridmobile.auth',
       });
@@ -231,7 +231,7 @@ describe('AuthService', () => {
       await authService.setPassphrase('oldPass');
 
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
-        username: 'passphrase_hash',
+        username: 'passphrase',
         password: storedHash,
         service: 'ai.offgridmobile.auth',
       });
@@ -247,3 +247,4 @@ describe('AuthService', () => {
     });
   });
 });
+
