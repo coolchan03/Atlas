@@ -15,6 +15,11 @@ jest.mock('../../../src/services/rag', () => ({
   ragService: { deleteProjectDocuments: (id: string) => mockDeleteProjectDocuments(id) },
 }));
 
+// Project CRUD tests run without the Android Keystore; encrypted persistence
+// behavior is tested independently in encryptedChatStorage.test.ts.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({ encryptedChatStorage: {
+  getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined),
+} }));
 import { useProjectStore } from '../../../src/stores/projectStore';
 
 describe('projectStore', () => {

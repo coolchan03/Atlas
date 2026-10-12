@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { exportBackup, importBackup } from '../atlasTools/backup';
 import { LowPowerCard } from '../components/LowPowerCard';
-import { AtlasGames } from '../components/AtlasGames';
+
 import { AssistantAccessCard } from '../components/AssistantAccessCard';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
@@ -62,7 +62,7 @@ export const SettingsScreen: React.FC = () => {
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
-  const [showGames, setShowGames] = useState(false);
+
   const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
@@ -309,17 +309,6 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AnimatedEntry>
 
-        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
-          <TouchableOpacity style={[styles.navSection, styles.navItem]} onPress={() => setShowGames(true)}>
-            <Icon name="grid" size={20} color={colors.primary} />
-            <View style={[styles.navItemContent, { marginLeft: 15 }]}>
-              <Text style={styles.navItemTitle}>Atlas Offline Arcade</Text>
-              <Text style={styles.navItemDesc}>Tic-Tac-Toe, Number Guess, Math Sprint · no model required</Text>
-            </View>
-            <Icon name="chevron-right" size={17} color={colors.textMuted} />
-          </TouchableOpacity>
-        </AnimatedEntry>
-
         {/* About */}
         <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
@@ -366,7 +355,7 @@ export const SettingsScreen: React.FC = () => {
         <MadeWithLove />
         {__DEV__ && <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />}
       </ScrollView>
-      <AtlasGames visible={showGames} onClose={() => setShowGames(false)} />
+
       <Modal visible={backupPasswordAction !== null} transparent animationType="fade" onRequestClose={() => { if (!backupBusy) { setBackupPasswordAction(null); setBackupPassword(''); } }}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
           <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 }}>

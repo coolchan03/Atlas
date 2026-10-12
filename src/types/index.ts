@@ -361,6 +361,8 @@ export interface ImageGenerationProgress {
 }
 export interface Project {
   /** Optional project-level permission flags; omitted means ask before suggesting or generating. */
+  allowLearningActivities?: boolean;
+  /** Legacy flags retained only for reading older project records. */
   allowGames?: boolean;
   allowQuizzes?: boolean;
   allowPodcasts?: boolean;

@@ -254,11 +254,10 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const chatState = require('./chatStore').useChatStore.getState();
   const currentChat = chatState.conversations.find((c: any) => c.id === chatState.activeConversationId);
   const currentProject = currentChat?.projectId ? require('./projectStore').useProjectStore.getState().getProject(currentChat.projectId) : undefined;
-  const projectPreferences = currentProject ? [
-    !currentProject.allowGames && 'Do not suggest or generate games from this project unless directly asked.',
-    !currentProject.allowQuizzes && 'Do not suggest or generate quizzes from this project unless directly asked.',
-    !currentProject.allowPodcasts && 'Do not suggest or generate podcasts from this project unless directly asked.',
-  ].filter(Boolean).join(' ') : '';
+  const learningEnabled = currentProject?.allowLearningActivities ?? Boolean(currentProject?.allowGames || currentProject?.allowQuizzes || currentProject?.allowPodcasts);
+  const projectPreferences = currentProject && !learningEnabled
+    ? 'Do not proactively suggest or generate project-based learning games, quizzes, or podcasts. Only create them if the user explicitly asks. Standalone offline arcade games are unrelated to project content.'
+    : '';
   const projectGuard = projectPreferences ? '\n\nPROJECT FEATURE PREFERENCES: ' + projectPreferences : '';
   if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote + projectGuard;
   return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote + projectGuard;

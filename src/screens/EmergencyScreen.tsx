@@ -8,6 +8,7 @@ import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { ATLAS_CARDS } from '../learning/atlasCards';
 import { speak, stop } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
+import { AtlasGames } from '../components/AtlasGames';
 
 /**
  * Atlas emergency screen: the built-in cards, readable instantly with no model loaded.
@@ -83,6 +84,7 @@ export const EmergencyScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const cards = useMemo(() => Object.entries(ATLAS_CARDS).map(([f, r]) => parse(f, r)), []);
   const [open, setOpen] = useState<Card | null>(null);
+  const [gamesOpen, setGamesOpen] = useState(false);
   const [q, setQ] = useState('');
   const [size, setSize] = useState(width >= 720 ? 20 : 17);
   const speaking = useAtlasVoiceStore((s) => s.speakingKey !== null && s.speakingMessageId === 'emergency-card');
@@ -134,7 +136,12 @@ export const EmergencyScreen: React.FC = () => {
         <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginLeft: 8, flex: 1 }}>Emergency</Text>
         <TouchableOpacity onPress={() => setNight(!night)} style={{ padding: 8 }} accessibilityLabel="Red night mode"><Icon name="moon" size={20} color="#fff" /></TouchableOpacity>
       </View>
+      <AtlasGames visible={gamesOpen} onClose={() => setGamesOpen(false)} />
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 120, width: '100%', maxWidth: 1200, alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity onPress={() => setGamesOpen(true)} style={{ padding: 15, borderRadius: 12, backgroundColor: colors.surface, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name="grid" size={23} color={colors.primary} />
+          <View style={{ marginLeft: 12, flex: 1 }}><Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Offline Arcade</Text><Text style={{ color: colors.textSecondary }}>Standalone games · no model or internet needed</Text></View>
+        </TouchableOpacity>
         <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 10 }}>
           If someone may die (heavy bleeding, not breathing, unconscious): get help if any exists, then open the card. These work with no AI and no internet.
         </Text>
