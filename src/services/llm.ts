@@ -652,7 +652,7 @@ class LLMService {
   /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
   isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
-    if (this.acceleratorAttempts.length && this.context)
+    if (this.acceleratorAttempts.length && (this.context || this.vulkanLoaded))
       return 'Auto selected ' + this.selectedBackend.toUpperCase() + ' after: ' + this.acceleratorAttempts.join(' | ');
     if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason + (this.context ? '. Auto chose another accelerator.' : '. GPU-only mode did not fall back to CPU.');
     if (!this.context) return null;
@@ -662,7 +662,7 @@ class LLMService {
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }
   private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false); }
-  async getModelInfo() { return this.vulkanLoaded ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
+  async getModelInfo() { return (this.vulkanLoaded || this.context) ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
     if (this.vulkanLoaded) return vulkanEngine.tokenize(text);
     if (!this.context) throw new Error('No model loaded');
