@@ -419,11 +419,9 @@ class LLMService {
   }
   async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
     if (this.vulkanLoaded) {
-      const modelPath = this.currentModelPath;
-      if (!modelPath) throw new Error('No model loaded');
-      await this.unloadModel();
-      await this.loadModel(modelPath, undefined, { forceCpu: true });
-      this.vulkanFallbackReason = 'Tool calling requires the original llama.rn CPU runtime';
+      // Do not silently unload a GPU-only model and reload it on CPU for tools.
+      // A caller must explicitly select CPU (or an auto-fallback policy) first.
+      throw new Error('Tool calling is not supported by the experimental Vulkan engine. Select the CPU backend explicitly to use tools.');
     }
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,

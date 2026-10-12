@@ -55,6 +55,18 @@ it('streams actual text through Vulkan while keeping the ordinary completion cal
   expect(onComplete).toHaveBeenCalledWith({content:'Hello world',reasoningContent:''});
 });
 
+it('rejects tool calls on explicit Vulkan without unloading or switching to CPU', async () => {
+  jest.spyOn(vulkanEngine, 'isAvailable').mockResolvedValue(true);
+  jest.spyOn(vulkanEngine, 'loadModel').mockResolvedValue('Vulkan');
+  const unload = jest.spyOn(vulkanEngine, 'unload').mockResolvedValue();
+  await llmService.loadModel('/models/small.gguf');
+  await expect(llmService.generateResponseWithTools([{id:'m',role:'user',content:'hi',timestamp:0}], {tools:[]}))
+    .rejects.toThrow('Select the CPU backend explicitly');
+  expect(unload).not.toHaveBeenCalled();
+  expect(native).not.toHaveBeenCalled();
+  expect(llmService.getLoadedModelPath()).toBe('/models/small.gguf');
+});
+
 it('does not silently switch to CPU when the user explicitly selects Vulkan', async () => {
   jest.spyOn(vulkanEngine,'isAvailable').mockResolvedValue(false);
   const unload = jest.spyOn(vulkanEngine,'unload').mockResolvedValue();
