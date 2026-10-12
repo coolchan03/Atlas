@@ -237,8 +237,10 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const { activeAgentId, agents } = useAgentStore.getState();
   const agent = agents.find((a) => a.id === activeAgentId);
   const lp = lowPowerNote();
-  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp;
-  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp;
+  const phoneMode = require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio';
+  const phoneNote = phoneMode ? '\n\nPHONE CALL MODE: Speak like a natural telephone conversation. Answer in one or two short spoken sentences, usually under 35 words. No lists, markdown, headings, long introductions, or extended explanations unless urgently required for safety or explicitly requested. Ask one brief question if appropriate.' : '';
+  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote;
+  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote;
 }
 
 /** An agent's system prompt with its learned lessons underneath. */
@@ -263,11 +265,17 @@ export function activeAgentOverrides(): { temperature?: number; topP?: number; m
       o.maxTokens = Math.min(base, cap);
     }
   } catch { /* ignore */ }
-  if (!a) return o;
+  if (!a) {
+    if (require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio') o.maxTokens = Math.min(o.maxTokens ?? 96, 96);
+    return o;
+  }
   if (typeof a.temperature === 'number') o.temperature = a.temperature;
   if (typeof a.topP === 'number') o.topP = a.topP;
   if (typeof a.maxTokens === 'number' && o.maxTokens === undefined) o.maxTokens = a.maxTokens;
   if (typeof a.repeatPenalty === 'number') o.repeatPenalty = a.repeatPenalty;
+  if (require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio') {
+    o.maxTokens = Math.min(o.maxTokens ?? 96, 96);
+  }
   return o;
 }
 
