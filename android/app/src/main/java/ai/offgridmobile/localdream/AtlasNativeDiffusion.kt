@@ -157,6 +157,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val manifest = JSONObject(manifestFile.readText())
         val primary = File(dir, manifest.getString("primary")).canonicalFile
         if (primary.parentFile != dir || !primary.isFile) throw IOException("Image weights are missing")
+        AtlasImageCheckpointHeader.validate(primary)
         val family = manifest.optString("family", "unknown")
         val variant = manifest.optString("variant", "base")
         if (!AtlasImageArchitecture.supported(family)) {
