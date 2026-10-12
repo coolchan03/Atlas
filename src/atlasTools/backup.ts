@@ -9,6 +9,12 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
  * NOT included: downloaded models and knowledge-base documents (re-import those).
  */
 const MAGIC = 'OffGridAtlasBackup';
+// Explicit persistent-store allowlist also permits restore on a fresh install.
+// Add other reviewed store keys here as their schemas are audited.
+const RESTORABLE_STORE_KEYS = new Set([
+  'local-llm-chat-storage', 'local-llm-app-storage', 'local-llm-project-storage',
+  'atlas-agent-storage', 'atlas-learning', 'atlas-study', 'atlas-voice-settings',
+]);
 // Never export or restore credentials, vault contents, or authentication state.
 const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
 const SENSITIVE_FIELDS = /api.?key|secret|token|password|passphrase|credential/i;
@@ -27,7 +33,8 @@ function sanitizeBackupValue(raw: string): string | null {
 }
 
 export async function exportBackup(): Promise<string | null> {
-  const keys = (await AsyncStorage.getAllKeys()).filter((k) => !EXCLUDED_BACKUP_KEYS.test(k));
+  const keys = (await AsyncStorage.getAllKeys()).filter((k) =>
+    RESTORABLE_STORE_KEYS.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
   const pairs = await AsyncStorage.multiGet(keys);
   const safe = pairs.flatMap(([key, value]) => {
     if (value == null) return [];
@@ -56,13 +63,12 @@ export async function importBackup(): Promise<number | null> {
   const data = JSON.parse(text);
   if (data?.format !== MAGIC || typeof data.items !== 'object') throw new Error('This is not an Atlas backup file.');
   // A backup must not create arbitrary AsyncStorage keys or reintroduce secrets.
-  const existing = new Set(await AsyncStorage.getAllKeys());
   const pairs = Object.entries(data.items).flatMap(([key, value]) => {
-    if (!existing.has(key) || EXCLUDED_BACKUP_KEYS.test(key) || typeof value !== 'string') return [];
+    if (!RESTORABLE_STORE_KEYS.has(key) || EXCLUDED_BACKUP_KEYS.test(key) || typeof value !== 'string') return [];
     const sanitized = sanitizeBackupValue(value);
     return sanitized == null ? [] : [[key, sanitized] as [string, string]];
   });
-  if (!pairs.length) throw new Error('No eligible existing settings found. Restore requires an initialized Atlas installation; secrets and vault data are excluded.');
+  if (!pairs.length) throw new Error('No supported backup settings found. Only reviewed app stores are restorable; secrets and vault data are excluded.');
   await AsyncStorage.multiSet(pairs);
   // Load the restored data into the running app right away, so nothing writes old data back over it.
   const stores: [string, string][] = [
