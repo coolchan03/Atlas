@@ -62,7 +62,10 @@ export async function importBackup(): Promise<number | null> {
   const pickedPath = local.replace(/^file:\/\//, '');
   const stat = await RNFS.stat(pickedPath);
   // Never parse unbounded attacker-controlled JSON into the app's memory.
-  if (Number(stat.size) > 50 * 1024 * 1024) throw new Error('Backup exceeds the 50 MB import limit.');
+  const backupBytes = Number(stat.size);
+  if (!Number.isSafeInteger(backupBytes) || backupBytes < 0 || backupBytes > 50 * 1024 * 1024) {
+    throw new Error('Backup size is invalid or exceeds the 50 MB import limit.');
+  }
   const text = await RNFS.readFile(pickedPath, 'utf8');
   const data = JSON.parse(text);
   if (data?.format !== MAGIC || data.version !== 1 || !data.items ||
