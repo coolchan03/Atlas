@@ -13,6 +13,7 @@ type ColorsType = ReturnType<typeof useTheme>['colors'];
 type ChatModalSectionProps = {
   styles: StylesType;
   colors: ColorsType;
+  onOpenModels?: () => void;
   showProjectSelector: boolean;
   setShowProjectSelector: (v: boolean) => void;
   showDebugPanel: boolean;
@@ -42,7 +43,7 @@ type ChatModalSectionProps = {
 };
 
 export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
-  styles, colors,
+  styles, colors, onOpenModels,
   showProjectSelector, setShowProjectSelector,
   showDebugPanel, setShowDebugPanel,
   showModelSelector, setShowModelSelector, modelSelectorTab = 'text',
@@ -82,6 +83,7 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       visible={showSettingsPanel}
       onClose={() => setShowSettingsPanel(false)}
       onOpenProject={() => setShowProjectSelector(true)}
+      onOpenModels={onOpenModels}
       onOpenGallery={imageCount > 0 ? () => navigation.navigate('Gallery', { conversationId: activeConversationId }) : undefined}
       onDeleteConversation={activeConversation ? handleDeleteConversation : undefined}
       conversationImageCount={imageCount}

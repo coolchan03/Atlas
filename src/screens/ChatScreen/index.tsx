@@ -347,6 +347,7 @@ export const ChatScreen: React.FC = () => {
         </View>
         <ChatModalSection
           styles={styles} colors={colors}
+          onOpenModels={() => { chat.setShowSettingsPanel(false); setTimeout(() => setModelsManagerOpen(true), 250); }}
           showProjectSelector={chat.showProjectSelector}
           setShowProjectSelector={chat.setShowProjectSelector}
           showDebugPanel={chat.showDebugPanel}

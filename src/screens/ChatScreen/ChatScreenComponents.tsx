@@ -15,8 +15,6 @@ import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
-import { AgentChip } from '../../components/AgentChip';
-import { PrivateToggle } from '../../components/PrivateToggle';
 
 type StylesType = ReturnType<typeof createStyles>;
 type ColorsType = ReturnType<typeof useTheme>['colors'];
@@ -124,16 +122,7 @@ export const ChatHeader: React.FC<{
             </Text>
             <Text style={styles.modelSelectorArrow}>▼</Text>
           </TouchableOpacity>
-          <Text style={styles.headerSubtitleDivider}>·</Text>
-          <TouchableOpacity style={styles.headerProjectRow} onPress={() => setShowProjectSelector(true)}>
-            <Icon name="folder" size={11} color={activeProject ? colors.primary : colors.textMuted} />
-            <Text style={[styles.headerSubtitle, { color: activeProject ? colors.primary : colors.textMuted }]} numberOfLines={1}>
-              {activeProject ? activeProject.name : 'Default'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.headerSubtitleDivider}>·</Text>
-          <AgentChip styles={styles} colors={colors} />
-          <PrivateToggle colors={colors} />
+          {/* Project and agent selection live in Chat Settings to keep the model visible. */}
           {/* Pro-only: Chat/Voice mode dropdown, on the same line as Models ·
               project, pushed to the right. Empty slot in free builds. */}
           {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null; })()}
