@@ -162,6 +162,16 @@ export const ImageModelTestScreen: React.FC = () => {
         mem.availableMemoryGB.toFixed(1) + ' GB usable.');
       if (cancelRequested.current) return;
 
+      // Validate the requested GPU before loading multi-gigabyte image weights.
+      // Enumeration is a prerequisite, not proof that diffusion shaders work.
+      if (model.backend === 'sdcpp' && (useAppStore.getState().settings.imageUseOpenCL ?? true)) {
+        update('engine', 'run', 'Checking native Vulkan device before loading image weights...');
+        const gpu = await localDreamGeneratorService.getNativeImageGpuDiagnostics();
+        if (!gpu.enumerated) {
+          throw new Error('No usable Vulkan device was detected by the image runtime: ' +
+            gpu.detail + '. Disable GPU in image settings to explicitly test CPU.');
+        }
+      }
       update('engine', 'run', 'Selecting the image model...');
       const t0 = Date.now();
       await activeModelService.loadImageModel(model.id);
