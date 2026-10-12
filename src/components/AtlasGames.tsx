@@ -13,16 +13,23 @@ export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
-  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math'>('menu');
+  const [game, setGame] = useState<'menu' | 'tic' | 'guess' | 'math' | 'rps' | 'memory'>('menu');
+  const [rpsResult, setRpsResult] = useState('Choose rock, paper or scissors.');
+  const [rpsScore, setRpsScore] = useState({ wins: 0, losses: 0, draws: 0 });
+  const [memoryCards, setMemoryCards] = useState<number[]>([1,2,3,4,1,2,3,4]);
+  const [memoryOpen, setMemoryOpen] = useState<number[]>([]);
+  const [memoryMatched, setMemoryMatched] = useState<number[]>([]);
   const [board, setBoard] = useState<Board>(emptyBoard);
   const [target, setTarget] = useState(() => Math.floor(Math.random() * 100) + 1);
   const [guess, setGuess] = useState(50);
   const [attempts, setAttempts] = useState(0);
+  const [submittedGuess, setSubmittedGuess] = useState<number | null>(null);
+  const [lastMathCorrect, setLastMathCorrect] = useState<boolean | null>(null);
   const [a, setA] = useState(4);
   const [b, setB] = useState(7);
   const [answer, setAnswer] = useState(0);
   const [score, setScore] = useState(0);
-  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); };
+  const start = (id: typeof game) => { setGame(id); setBoard(emptyBoard()); setTarget(Math.floor(Math.random()*100)+1); setGuess(50); setAttempts(0); setSubmittedGuess(null); setLastMathCorrect(null); setScore(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); setRpsScore({ wins: 0, losses: 0, draws: 0 }); setRpsResult('Choose rock, paper or scissors.'); setMemoryCards([1,2,3,4,1,2,3,4].sort(() => Math.random()-0.5)); setMemoryOpen([]); setMemoryMatched([]); };
   const press = (label: string, fn: () => void) => <TouchableOpacity onPress={fn} style={{ padding: 13, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, marginBottom: 9 }}><Text style={{ color: colors.text, fontSize: 17 }}>{label}</Text></TouchableOpacity>;
   const tic = (idx: number) => {
     if (winner(board) || board[idx]) return;
@@ -46,6 +53,8 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('Tic-Tac-Toe — play against Atlas', () => start('tic'))}
         {press('Number Guess — find the secret number', () => start('guess'))}
         {press('Math Sprint — multiplication practice', () => start('math'))}
+        {press('Rock Paper Scissors — challenge Atlas', () => start('rps'))}
+        {press('Memory Match — find the matching pairs', () => start('memory'))}
       </>}
       {game === 'tic' && <>
         <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
@@ -60,8 +69,8 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
           {[-10,-1,1,10].map(delta => <TouchableOpacity key={delta} onPress={() => setGuess(v => Math.max(1,Math.min(100,v+delta)))} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 8 }}><Text style={{ color: colors.text }}>{delta > 0 ? '+' : ''}{delta}</Text></TouchableOpacity>)}
         </View>
-        {press('Submit guess', () => { setAttempts(v=>v+1); })}
-        {attempts > 0 && <Text style={{ color: colors.text, marginBottom: 15 }}>{guess === target ? 'Correct! Secret number found.' : guess < target ? 'Go higher' : 'Go lower'}</Text>}
+        {press('Submit guess', () => { if (submittedGuess !== target) { setSubmittedGuess(guess); setAttempts(v=>v+1); } })}
+        {submittedGuess !== null && <Text style={{ color: colors.text, marginBottom: 15 }}>{submittedGuess === target ? 'Correct! Secret number found.' : submittedGuess < target ? 'Go higher' : 'Go lower'}</Text>}
         {press('Start over', () => start('guess'))}
       </>}
       {game === 'math' && <>
@@ -70,7 +79,32 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>{[0,1,2,3,4,5,6,7,8,9].map(n => <TouchableOpacity key={n} onPress={() => setAnswer(v => Number(String(v)+n) % 10000)} style={{ padding: 18, margin: 5, backgroundColor: colors.surface, borderRadius: 9 }}><Text style={{ color: colors.text, fontSize: 20 }}>{n}</Text></TouchableOpacity>)}</View>
         <Text style={{ fontSize: 27, textAlign: 'center', color: colors.text, margin: 15 }}>{answer}</Text>
         {press('Clear', () => setAnswer(0))}
-        {press('Check answer / Next', () => { if (answer === a*b) setScore(v=>v+1); setAnswer(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); })}
+        {lastMathCorrect !== null && <Text style={{ color: colors.text }}>{lastMathCorrect ? 'Correct!' : 'Not quite. Keep practicing!'}</Text>}
+        {press('Check answer / Next', () => { const correct = answer === a*b; setLastMathCorrect(correct); if (correct) setScore(v=>v+1); setAnswer(0); setA(Math.ceil(Math.random()*12)); setB(Math.ceil(Math.random()*12)); })}
+      </>}
+      {game === 'rps' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{rpsResult}</Text>
+        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>Wins: {rpsScore.wins} · Losses: {rpsScore.losses} · Draws: {rpsScore.draws}</Text>
+        {['Rock', 'Paper', 'Scissors'].map((choice, i) => press(choice, () => {
+          const theirs = Math.floor(Math.random() * 3);
+          const outcome = (i - theirs + 3) % 3;
+          setRpsResult(`You: ${choice} · Atlas: ${['Rock', 'Paper', 'Scissors'][theirs]}. ${outcome === 0 ? 'Draw!' : outcome === 1 ? 'You win!' : 'Atlas wins!'}`);
+          setRpsScore(s => outcome === 0 ? { ...s, draws: s.draws + 1 } : outcome === 1 ? { ...s, wins: s.wins + 1 } : { ...s, losses: s.losses + 1 });
+        }))}
+      </>}
+      {game === 'memory' && <>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>{memoryMatched.length === memoryCards.length ? 'All pairs matched!' : `${memoryMatched.length / 2} of 4 pairs found`}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {memoryCards.map((value, i) => <TouchableOpacity key={i} onPress={() => {
+            if (memoryMatched.includes(i) || memoryOpen.includes(i)) return;
+            if (memoryOpen.length === 2) { setMemoryOpen([i]); return; }
+            if (memoryOpen.length === 1 && memoryCards[memoryOpen[0]] === value) {
+              setMemoryMatched(current => [...current, memoryOpen[0], i]); setMemoryOpen([]);
+            } else setMemoryOpen(current => [...current, i]);
+          }} style={{ width: 67, height: 67, margin: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.text, fontSize: 26 }}>{memoryMatched.includes(i) || memoryOpen.includes(i) ? value : '?'}</Text></TouchableOpacity>)}
+        </View>
+        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>Choose two cards. If they differ, tap another card to hide them and try again.</Text>
+        {press('New round', () => start('memory'))}
       </>}
     </ScrollView>
   </Modal>;
