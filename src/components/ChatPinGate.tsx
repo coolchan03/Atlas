@@ -3,7 +3,6 @@ import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useChatStore } from '../stores/chatStore';
 import { onProtectedChatsRelocked, unlockChat } from '../stores/encryptedChatStorage';
 import { useTheme } from '../theme';
-import { setScreenSecure } from '../atlasTools/screenSecure';
 import { useNavigation } from '@react-navigation/native';
 import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
 
@@ -23,11 +22,6 @@ export function ChatPinGate({ conversationId }: { conversationId?: string | null
   }, []);
   useEffect(() => { setPin(''); setError(''); }, [conversationId]);
   const locked = !!conversationId && !!verifier && unlocked.get(conversationId) !== verifier;
-  // A PIN-protected chat (locked or open) is never captured in screenshots or recents.
-  useEffect(() => {
-    setScreenSecure('chat-pin', !!verifier);
-    return () => setScreenSecure('chat-pin', false);
-  }, [verifier]);
   void revision;
   const submit = async (unlockMatching = false) => {
     if (!conversationId || !verifier || busy) return;

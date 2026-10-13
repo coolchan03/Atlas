@@ -20,11 +20,9 @@ import { useAuthStore } from '../stores';
 import { authService } from '../services';
 import { PassphraseSetupScreen } from './PassphraseSetupScreen';
 import { useChatPrefs } from '../atlasTools/chatPrefs';
-import { setScreenSecure } from '../atlasTools/screenSecure';
 
 export const SecuritySettingsScreen: React.FC = () => {
   const hideLocked = useChatPrefs((s) => s.hideLockedChats);
-  const blockScreenshots = useChatPrefs((s) => s.blockScreenshots);
   const setChatPrefs = useChatPrefs((s) => s.set);
   const navigation = useNavigation();
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
@@ -123,18 +121,6 @@ export const SecuritySettingsScreen: React.FC = () => {
               onValueChange={(v) => setChatPrefs({ hideLockedChats: v })}
               trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
               thumbColor={hideLocked ? colors.primary : colors.textMuted}
-            />
-          </View>
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Block screenshots</Text>
-              <Text style={styles.settingHint}>Hide Atlas from screenshots, screen recording and the recent-apps preview. Always on while a PIN screen is shown.</Text>
-            </View>
-            <Switch
-              value={blockScreenshots}
-              onValueChange={(v) => { setChatPrefs({ blockScreenshots: v }); setScreenSecure('settings', v); }}
-              trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
-              thumbColor={blockScreenshots ? colors.primary : colors.textMuted}
             />
           </View>
         </Card>

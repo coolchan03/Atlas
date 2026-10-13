@@ -9,15 +9,13 @@ interface ChatPrefs {
   compressAt: number;
   /** Hide PIN-locked chats from every list until the vault is opened with a PIN. */
   hideLockedChats: boolean;
-  /** FLAG_SECURE for the whole app (screenshots, recordings, recent-apps preview). */
-  blockScreenshots: boolean;
   set: (p: Partial<Omit<ChatPrefs, 'set'>>) => void;
 }
 export const useChatPrefs = create<ChatPrefs>()(
-  persist((set) => ({ autoCompress: true, compressAt: 0.7, hideLockedChats: false, blockScreenshots: false, set: (p) => set(p) }), {
+  persist((set) => ({ autoCompress: true, compressAt: 0.7, hideLockedChats: false, set: (p) => set(p) }), {
     name: 'atlas-chat-prefs',
     storage: createJSONStorage(() => AsyncStorage),
-    partialize: (s) => ({ autoCompress: s.autoCompress, compressAt: s.compressAt, hideLockedChats: s.hideLockedChats, blockScreenshots: s.blockScreenshots }),
+    partialize: (s) => ({ autoCompress: s.autoCompress, compressAt: s.compressAt, hideLockedChats: s.hideLockedChats }),
   }),
 );
 
