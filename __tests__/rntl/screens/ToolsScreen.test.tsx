@@ -82,23 +82,10 @@ describe('ToolsScreen', () => {
     }
   });
 
-  it('shows the Pro Tools row to everyone (even free users)', () => {
-    const { getByTestId, getByText } = render(<ToolsScreen />);
-    expect(getByTestId('tools-pro-tools')).toBeTruthy();
-    expect(getByText('Pro Tools')).toBeTruthy();
-  });
-
-  it('routes a free user to the Pro upsell when Pro Tools is pressed', () => {
-    const { getByTestId } = render(<ToolsScreen />);
-    fireEvent.press(getByTestId('tools-pro-tools'));
-    expect(mockNavigate).toHaveBeenCalledWith('ProDetail');
-  });
-
-  it('routes a pro user straight to the Pro Tools screen', () => {
-    registerScreen({ name: PRO_TOOLS_SCREEN, component: () => null });
-    const { getByTestId } = render(<ToolsScreen />);
-    fireEvent.press(getByTestId('tools-pro-tools'));
-    expect(mockNavigate).toHaveBeenCalledWith(PRO_TOOLS_SCREEN);
+  // Atlas removed the upstream Pro Tools upsell row.
+  it('does not show the Pro Tools upsell row', () => {
+    const { queryByTestId } = render(<ToolsScreen />);
+    expect(queryByTestId('tools-pro-tools')).toBeNull();
   });
 
   it('toggles a tool through the core settings store', () => {

@@ -168,13 +168,13 @@ describe('ProjectEditScreen', () => {
       const { getByText } = render(<ProjectEditScreen />);
       expect(getByText('Name *')).toBeTruthy();
       expect(getByText('Description')).toBeTruthy();
-      expect(getByText('System Prompt *')).toBeTruthy();
+      expect(getByText('Project notes (optional)')).toBeTruthy();
     });
 
     it('shows hint text for system prompt', () => {
       const { getByText } = render(<ProjectEditScreen />);
       expect(
-        getByText(/This context is sent to the AI at the start of every chat/),
+        getByText(/Extra context for chats in this project/),
       ).toBeTruthy();
     });
 
@@ -246,11 +246,11 @@ describe('ProjectEditScreen', () => {
     it('calls updateProject and goBack when saving existing project', () => {
       const { getByText } = render(<ProjectEditScreen />);
       fireEvent.press(getByText('Save'));
-      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', {
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', expect.objectContaining({
         name: 'Test Project',
         description: 'Test desc',
         systemPrompt: 'Be helpful',
-      });
+      }));
       expect(mockGoBack).toHaveBeenCalled();
     });
 
@@ -287,11 +287,11 @@ describe('ProjectEditScreen', () => {
 
       fireEvent.press(getByText('Save'));
 
-      expect(mockCreateProject).toHaveBeenCalledWith({
+      expect(mockCreateProject).toHaveBeenCalledWith(expect.objectContaining({
         name: 'My New Project',
         description: 'A description',
         systemPrompt: 'You are helpful',
-      });
+      }));
       expect(mockGoBack).toHaveBeenCalled();
     });
 
@@ -304,11 +304,11 @@ describe('ProjectEditScreen', () => {
 
       fireEvent.press(getByText('Save'));
 
-      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', {
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', expect.objectContaining({
         name: 'Trimmed Name',
         description: 'Trimmed Desc',
         systemPrompt: 'Trimmed Prompt',
-      });
+      }));
     });
   });
 
@@ -341,28 +341,13 @@ describe('ProjectEditScreen', () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
-    it('shows alert when system prompt is empty on save', () => {
-      const { getByDisplayValue, getByText } = render(<ProjectEditScreen />);
-      fireEvent.changeText(getByDisplayValue('Be helpful'), '');
-      fireEvent.press(getByText('Save'));
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Error',
-        'Please enter a system prompt',
-      );
-      expect(mockUpdateProject).not.toHaveBeenCalled();
-      expect(mockGoBack).not.toHaveBeenCalled();
-    });
-
-    it('shows alert when system prompt is only whitespace on save', () => {
+    // Atlas: project notes are optional (the agent's instructions come from Agents).
+    it('saves without project notes', () => {
       const { getByDisplayValue, getByText } = render(<ProjectEditScreen />);
       fireEvent.changeText(getByDisplayValue('Be helpful'), '   ');
       fireEvent.press(getByText('Save'));
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Error',
-        'Please enter a system prompt',
-      );
+      expect(mockShowAlert).not.toHaveBeenCalledWith('Error', expect.anything());
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', expect.objectContaining({ systemPrompt: '' }));
     });
 
     it('validates name before system prompt', () => {
