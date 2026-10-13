@@ -3,8 +3,6 @@ import { FONTS, TYPOGRAPHY, SPACING } from '../../constants';
 import { Platform } from 'react-native';
 
 export const PILL_ICON_SIZE = 32;
-export const ANIM_DURATION_IN = 180;
-export const ANIM_DURATION_OUT = 200;
 const TOOL_WARNING_COLOR = '#F59E0B';
 
 export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({

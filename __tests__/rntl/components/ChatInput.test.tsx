@@ -1847,62 +1847,17 @@ describe('ChatInput', () => {
   });
 
   // ============================================================================
-  // Icon collapse animation (triggered by text content)
+  // Composer icons stay put while typing
   // ============================================================================
-  describe('icon collapse animation', () => {
-    it('starts Animated.timing to collapse when text is entered', () => {
-      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
-      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+  describe('composer icons while typing', () => {
+    it('keeps the attach and settings buttons visible and tappable after typing', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(<ChatInput {...defaultProps} />);
 
-      fireEvent.changeText(getByTestId('chat-input'), 'a');
+      fireEvent.changeText(getByTestId('chat-input'), 'hello');
 
-      expect(timingSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ toValue: 1 }),
-      );
-      timingSpy.mockRestore();
-    });
-
-    it('starts Animated.timing to expand when text is cleared', () => {
-      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
-      const { getByTestId } = render(<ChatInput {...defaultProps} />);
-
-      fireEvent.changeText(getByTestId('chat-input'), 'a');
-      timingSpy.mockClear();
-      fireEvent.changeText(getByTestId('chat-input'), '');
-
-      expect(timingSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ toValue: 0 }),
-      );
-      timingSpy.mockRestore();
-    });
-
-    it('disables pointer events on pill icons when text is present', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      // Before typing, icons should be interactive
       expect(getByTestId('attach-button')).toBeTruthy();
-
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
-
-      // After typing, the Animated.View wrapping icons should have pointerEvents='none'
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBeGreaterThan(0);
-    });
-
-    it('re-enables pointer events on pill icons when text is cleared', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
-      fireEvent.changeText(getByTestId('chat-input'), '');
-
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBe(0);
+      expect(getByTestId('quick-settings-button')).toBeTruthy();
+      expect(UNSAFE_queryAllByProps({ pointerEvents: 'none' }).length).toBe(0);
     });
 
     it('icons remain accessible when input is empty', () => {

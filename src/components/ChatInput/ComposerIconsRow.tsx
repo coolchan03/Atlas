@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Animated } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
@@ -7,9 +7,6 @@ import { createStyles } from './styles';
 type TriggerRef = React.RefObject<React.ElementRef<typeof TouchableOpacity> | null>;
 
 interface ComposerIconsRowProps {
-  /** Collapses the icons to zero width once the user starts typing. */
-  hasText: boolean;
-  iconsAnim: Animated.Value;
   pillIconsExpandedWidth: number;
   attachTriggerRef: TriggerRef;
   onAttachPress: () => void;
@@ -20,25 +17,18 @@ interface ComposerIconsRowProps {
 }
 
 /**
- * The +/settings icon cluster on the right of the composer pill, which animates to zero width as
- * the user types. Extracted from ChatInput so that render stays under the max-lines lint budget
+ * The +/settings icon cluster on the right of the composer pill. It stays visible while typing so
+ * attachments and chat settings are always one tap away. Extracted from ChatInput so that render stays under the max-lines lint budget
  * (no behaviour change).
  */
 export const ComposerIconsRow: React.FC<ComposerIconsRowProps> = ({
-  hasText, iconsAnim, pillIconsExpandedWidth, attachTriggerRef, onAttachPress,
+  pillIconsExpandedWidth, attachTriggerRef, onAttachPress,
   quickSettingsTriggerRef, onQuickSettingsPress, showSettingsDot, disabled,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
-    <Animated.View
-      pointerEvents={hasText ? 'none' : 'auto'}
-      style={[styles.pillIcons, {
-        width: iconsAnim.interpolate({ inputRange: [0, 1], outputRange: [pillIconsExpandedWidth, 0] }),
-        opacity: iconsAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
-        overflow: 'hidden' as const,
-      }]}
-    >
+    <View style={[styles.pillIcons, { width: pillIconsExpandedWidth }]}>
       <TouchableOpacity
         ref={attachTriggerRef}
         testID="attach-button"
@@ -62,6 +52,6 @@ export const ComposerIconsRow: React.FC<ComposerIconsRowProps> = ({
           {showSettingsDot && <View style={styles.toolWarningDot} />}
         </View>
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 };

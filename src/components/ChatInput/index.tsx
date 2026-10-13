@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { RewriteButton } from '../RewriteButton';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -11,7 +11,7 @@ import { AttachStep } from 'react-native-spotlight-tour';
 import { triggerHaptic } from '../../utils/haptics';
 import logger from '../../utils/logger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
-import { createStyles, PILL_ICON_SIZE, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
+import { createStyles, PILL_ICON_SIZE } from './styles';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
@@ -148,15 +148,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const inputRef = useRef<TextInput>(null);
   const attachmentsRef = useRef<MediaAttachment[]>([]);
   const hasText = message.length > 0;
-  const iconsAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(iconsAnim, {
-      toValue: hasText ? 1 : 0,
-      duration: hasText ? ANIM_DURATION_IN : ANIM_DURATION_OUT,
-      useNativeDriver: false,
-    }).start();
-  }, [hasText, iconsAnim]);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
   attachmentsRef.current = attachments;
@@ -387,8 +378,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               />
               {hasText && !disabled && <RewriteButton text={message} onResult={setMessage} colors={colors} />}
               <ComposerIconsRow
-                hasText={hasText}
-                iconsAnim={iconsAnim}
                 pillIconsExpandedWidth={pillIconsExpandedWidth}
                 attachTriggerRef={attachPicker.triggerRef}
                 onAttachPress={handleAttachPress}
