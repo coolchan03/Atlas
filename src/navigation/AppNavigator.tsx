@@ -48,6 +48,7 @@ import {
   DeviceInfoScreen,
   StorageSettingsScreen,
   SecuritySettingsScreen,
+  AppearanceScreen,
   GalleryScreen,
   RemoteServersScreen,
   ProDetailScreen,
@@ -277,6 +278,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
         <RootStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+        <RootStack.Screen name="Appearance" component={AppearanceScreen} />
         <RootStack.Screen
           name="ProDetail"
           component={ProDetailScreen}

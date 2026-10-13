@@ -84,6 +84,10 @@ type AppSettings = {
   autoBackendMigrated?: boolean;
   /** What agents call the user (fills {{name}} in agent prompts). */
   userName?: string;
+  /** Theme, accent color, font and text size (see theme/appearance). */
+  appearance?: import('../theme/appearance').Appearance;
+  /** How every AI answers, whichever agent or project is active (see services/aiStyle). */
+  aiStyle?: import('../services/aiStyle').AiStyle;
   atlasAccelChecked?: boolean;
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;

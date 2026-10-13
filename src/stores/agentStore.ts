@@ -265,8 +265,12 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
     ? 'Do not proactively suggest or generate project-based learning games, quizzes, or podcasts. Only create them if the user explicitly asks. Standalone offline arcade games are unrelated to project content.'
     : '';
   const projectGuard = projectPreferences ? '\n\nPROJECT FEATURE PREFERENCES: ' + projectPreferences : '';
-  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote + projectGuard;
-  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote + projectGuard;
+  // Settings > Appearance & AI style applies to every agent and project. It comes before
+  // the phone-call note so call mode can still keep spoken answers short.
+  let style = '';
+  try { style = require('../services/aiStyle').aiStyleNote(require('./appStore').useAppStore.getState().settings?.aiStyle); } catch { /* no settings yet */ }
+  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + style + phoneNote + projectGuard;
+  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + style + phoneNote + projectGuard;
 }
 
 /** An agent's system prompt with its learned lessons underneath. */

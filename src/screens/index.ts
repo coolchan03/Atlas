@@ -33,6 +33,7 @@ export { ModelSettingsScreen } from './ModelSettingsScreen';
 export { DeviceInfoScreen } from './DeviceInfoScreen';
 export { StorageSettingsScreen } from './StorageSettingsScreen';
 export { SecuritySettingsScreen } from './SecuritySettingsScreen';
+export { AppearanceScreen } from './AppearanceScreen';
 export { RemoteServersScreen } from './RemoteServersScreen';
 export { ProDetailScreen } from './ProDetailScreen';
 export { AboutScreen } from './AboutScreen';

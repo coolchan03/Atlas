@@ -31,6 +31,7 @@ export type RootStackParamList = {
   DeviceInfo: undefined;
   StorageSettings: undefined;
   SecuritySettings: undefined;
+  Appearance: undefined;
   // Already in RootStack
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;

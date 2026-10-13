@@ -223,6 +223,7 @@ export const SettingsScreen: React.FC = () => {
         <AttachStep index={5} fill>
           <View style={styles.navSection}>
             {[
+              { icon: 'droplet', title: 'Appearance & AI style', desc: 'Theme, colors, font, text size, and how talkative the AI is', screen: 'Appearance' as const },
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
               { icon: 'wifi', title: 'Remote Servers', desc: 'Use models running on a computer on your Wi-Fi (Ollama, LM Studio...)', screen: 'RemoteServers' as const },
               { icon: 'compass', title: 'Atlas', desc: 'Emergency cards, Survival Manual, offline maps, phrases, off-grid mode', screen: 'AtlasHub' as const },
