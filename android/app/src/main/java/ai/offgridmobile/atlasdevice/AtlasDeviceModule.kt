@@ -42,6 +42,20 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         }
     }
 
+    /** Flashlight for SOS / Morse signalling. setTorchMode needs no camera permission. */
+    @ReactMethod
+    fun setTorch(enabled: Boolean, promise: Promise) {
+        try {
+            val cm = ctx.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val id = cm.cameraIdList.firstOrNull { cid ->
+                cm.getCameraCharacteristics(cid).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+            if (id == null) { promise.resolve(false); return }
+            cm.setTorchMode(id, enabled)
+            promise.resolve(true)
+        } catch (e: Exception) { promise.resolve(false) }
+    }
+
     /** FLAG_SECURE: hide the app from screenshots, recordings and the recent-apps preview. */
     @ReactMethod
     fun setSecure(enabled: Boolean, promise: Promise) {
