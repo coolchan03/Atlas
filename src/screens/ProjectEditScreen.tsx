@@ -35,6 +35,7 @@ export const ProjectEditScreen: React.FC = () => {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [protectAction, setProtectAction] = useState<'protect' | 'unprotect' | null>(null);
   const [protectPin, setProtectPin] = useState('');
+  const [protectPin2, setProtectPin2] = useState('');
   const [protectBusy, setProtectBusy] = useState(false);
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -56,7 +57,7 @@ export const ProjectEditScreen: React.FC = () => {
     name: '',
     description: '',
     systemPrompt: '',
-    allowLearningActivities: false,
+    allowLearningActivities: true,
   });
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export const ProjectEditScreen: React.FC = () => {
         name: existingProject.name,
         description: existingProject.description,
         systemPrompt: existingProject.systemPrompt,
-        allowLearningActivities: existingProject.allowLearningActivities ?? Boolean(existingProject.allowGames || existingProject.allowQuizzes || existingProject.allowPodcasts),
+        allowLearningActivities: existingProject.allowLearningActivities !== false,
       });
     }
   }, [existingProject]);
@@ -73,11 +74,12 @@ export const ProjectEditScreen: React.FC = () => {
   const applyProjectProtection = async () => {
     if (!existingProject || !protectAction || protectBusy) return;
     if (!/^[0-9]{4,12}$/.test(protectPin)) { Alert.alert('PIN', 'Enter 4–12 digits.'); return; }
+    if (protectAction === 'protect' && protectPin !== protectPin2) { Alert.alert('PIN', 'The two PINs do not match.'); return; }
     setProtectBusy(true);
     try {
       if (protectAction === 'protect') await protectProject(existingProject.id, protectPin);
       else await permanentlyUnprotectProject(existingProject.id, protectPin);
-      setProtectPin(''); setProtectAction(null);
+      setProtectPin(''); setProtectPin2(''); setProtectAction(null);
     } catch (e: any) { Alert.alert('Project protection', String(e?.message || e)); }
     finally { setProtectBusy(false); }
   };
@@ -173,7 +175,7 @@ export const ProjectEditScreen: React.FC = () => {
           </Text>
 
           <Text style={styles.label}>Learning activities</Text>
-          <Text style={styles.hint}>Allow Atlas to suggest learning games, quizzes or podcasts based on this project's material. Off by default; unrelated offline arcade games stay in Emergency/Offline tools.</Text>
+          <Text style={styles.hint}>Allow Atlas to suggest learning games, quizzes or podcasts based on this project's material. On by default; turn it off for writing-only projects. Offline arcade games are in Emergency mode.</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }}>
             <Text style={[styles.label, { flex: 1, marginBottom: 0 }]}>Allow project-based learning activities</Text>
             <Switch value={formData.allowLearningActivities} onValueChange={value => setFormData(current => ({ ...current, allowLearningActivities: value }))} />
@@ -197,8 +199,9 @@ export const ProjectEditScreen: React.FC = () => {
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{protectAction === 'protect' ? 'Protect project settings' : 'Permanently unprotect project'}</Text>
             <Text style={{ color: colors.textSecondary }}>{protectAction === 'protect' ? 'Choose a PIN; the same PIN may be used for other projects or chats.' : 'Enter the current PIN to decrypt and save these project settings normally.'}</Text>
             <TextInput value={protectPin} onChangeText={v => setProtectPin(v.replace(/\D/g,'').slice(0,12))} secureTextEntry keyboardType="number-pad" placeholder="4–12 digits" placeholderTextColor={colors.textMuted} style={{ borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8, color: colors.text }} />
+            {protectAction === 'protect' && <TextInput value={protectPin2} onChangeText={v => setProtectPin2(v.replace(/\D/g,'').slice(0,12))} secureTextEntry keyboardType="number-pad" placeholder="Type the PIN again" placeholderTextColor={colors.textMuted} style={{ borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8, color: colors.text }} />}
             <TouchableOpacity disabled={protectBusy} onPress={applyProjectProtection} style={{ padding: 13, borderRadius: 9, backgroundColor: colors.primary }}><Text style={{ color: '#fff', textAlign: 'center' }}>{protectBusy ? 'Working…' : 'Confirm'}</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => { setProtectAction(null); setProtectPin(''); }}><Text style={{ color: colors.text, textAlign: 'center' }}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setProtectAction(null); setProtectPin(''); setProtectPin2(''); }}><Text style={{ color: colors.text, textAlign: 'center' }}>Cancel</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>

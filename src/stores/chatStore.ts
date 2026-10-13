@@ -5,6 +5,39 @@ import { Message, Conversation, GenerationMeta } from '../types';
 import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
+import { enforceForageSafety } from '../utils/forageSafety';
+
+/** Field ID replies get the code-enforced foraging safety net. */
+function isFieldIdConversation(conv: Conversation | undefined): boolean {
+  if (conv?.agentId) return conv.agentId === 'field-id';
+  try { return require('./agentStore').useAgentStore.getState().activeAgentId === 'field-id'; } catch { return false; }
+}
+
+type PersistedChats = { conversations: Conversation[]; activeConversationId: string | null };
+/**
+ * zustand's persist writes on EVERY state change, including each streamed token
+ * (streamingMessage), and each write serializes every saved chat. Saved chats only
+ * change when a message is added or edited, and those updates create new
+ * conversation objects, so an identity check of the persisted slice is enough to
+ * skip the token-by-token rewrites.
+ */
+export function skipUnchangedChatWrites(inner: PersistStorage<PersistedChats>): PersistStorage<PersistedChats> {
+  let last: { conversations: Conversation[]; activeConversationId: string | null } | null = null;
+  const same = (value: StorageValue<PersistedChats>) => !!last &&
+    last.activeConversationId === value.state.activeConversationId &&
+    last.conversations.length === value.state.conversations.length &&
+    last.conversations.every((c, i) => c === value.state.conversations[i]);
+  return {
+    getItem: (name) => inner.getItem(name),
+    setItem: (name, value) => {
+      if (same(value)) return;
+      last = { conversations: value.state.conversations, activeConversationId: value.state.activeConversationId };
+      return inner.setItem(name, value);
+    },
+    removeItem: (name) => { last = null; return inner.removeItem(name); },
+  };
+}
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
   const now = Date.now();
@@ -318,7 +351,8 @@ export const useChatStore = create<ChatState>()(
         const streamReasoning = streamingReasoningContent.trim() || undefined;
         const parsed = parseModelOutput(streamingMessage, streamReasoning);
         const reasoningContent = parsed.reasoning ?? undefined;
-        const sanitizedMessage = parsed.answer;
+        const sanitizedMessage = isFieldIdConversation(get().conversations.find((c) => c.id === conversationId))
+          ? enforceForageSafety(parsed.answer) : parsed.answer;
         if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {
             role: 'assistant',
@@ -384,7 +418,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'local-llm-chat-storage',
-      storage: createJSONStorage(() => encryptedChatStorage),
+      storage: skipUnchangedChatWrites(createJSONStorage(() => encryptedChatStorage)!),
       partialize: (state) => {
         // Atlas: private chats are never saved.
         const conversations = state.conversations.filter((c) => !c.isPrivate);

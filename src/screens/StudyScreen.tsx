@@ -49,7 +49,7 @@ export const StudyScreen: React.FC = () => {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const learningEnabled = Boolean(project?.allowLearningActivities ?? (project?.allowGames || project?.allowQuizzes || project?.allowPodcasts));
+  const learningEnabled = project?.allowLearningActivities !== false;
   const savedRaw = useStudyStore((s) => s.saved[projectId]);
   const saved = savedRaw || [];
   const add = useStudyStore((s) => s.add);

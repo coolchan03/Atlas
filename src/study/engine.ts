@@ -118,24 +118,30 @@ const GROUND = 'Use ONLY the numbered sources. After every fact put the source n
 
 export function learningActivitiesEnabled(projectId: string): boolean {
   const project = require('../stores/projectStore').useProjectStore.getState().getProject(projectId);
-  return !!(project?.allowLearningActivities ?? (project?.allowGames || project?.allowQuizzes || project?.allowPodcasts));
+  // On unless the user switched it off (older projects had no setting at all).
+  return project?.allowLearningActivities !== false;
 }
 
 /** Filter small-model puzzle output against the original project source text. */
 export function parseGroundedLearningTerms(raw: string, sources: Source[]): LearningTerm[] {
   const out: LearningTerm[] = [];
   const used = new Set<string>();
-  for (const line of raw.split('\n')) {
-    const match = line.trim().match(/^(?:[-*]\s*)?TERM\s*:\s*([^|]+?)\s*\|\s*CLUE\s*:\s*(.+?)\s*\|\s*SRC\s*:\s*\[?(\d+)\]?\s*$/i);
+  for (const line of tidy(raw).split('\n')) {
+    // Small models add numbering, bold or drop the SRC part; accept those variants.
+    const match = line.trim().match(/^(?:[-*•]|\d+[.)])?\s*TERM\s*:\s*([^|]+?)\s*\|\s*(?:CLUE|DEFINITION)\s*:\s*(.+?)\s*(?:\|\s*SRC\s*:\s*\[?(\d+)\]?)?\s*$/i);
     if (!match) continue;
     const answer = normalizeLearningWord(match[1]);
     const clue = match[2].trim();
-    const source = sources.find(s => s.n === Number(match[3]));
-    if (!source || answer.length < 3 || answer.length > 14 || used.has(answer) || clue.length < 8 ||
-        clue.toUpperCase().includes(answer) || !new RegExp('\\\\b' + answer + '\\\\b', 'i').test(source.text)) continue;
+    if (answer.length < 3 || answer.length > 14 || used.has(answer) || clue.length < 8 ||
+        clue.toUpperCase().replace(/[^A-Z]/g, '').includes(answer)) continue;
+    // The word must really occur in a source passage: prefer the cited one, else any.
+    const word = new RegExp('\\b' + answer + '\\b', 'i');
+    const cited = sources.find(s => s.n === Number(match[3]));
+    const source = cited && word.test(cited.text) ? cited : sources.find(s => word.test(s.text));
+    if (!source) continue;
     used.add(answer);
     out.push({ answer, clue, src: [source.n] });
-    if (out.length >= 12) break;
+    if (out.length >= 16) break;
   }
   return out;
 }

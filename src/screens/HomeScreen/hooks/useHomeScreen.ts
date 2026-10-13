@@ -1,3 +1,4 @@
+import { useChatPrefs, useVaultSession, visibleConversations } from '../../../atlasTools/chatPrefs';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { InteractionManager, Alert } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
@@ -225,7 +226,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     : null;
 
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
-  const recentConversations = conversations.filter(c => !c.isArchived).slice(0, 4);
+  const hideLocked = useChatPrefs(s => s.hideLockedChats);
+  const vaultOpen = useVaultSession(s => s.open);
+  const recentConversations = visibleConversations(conversations, hideLocked, vaultOpen).filter(c => !c.isArchived).slice(0, 4);
 
   // Get all remote text models — includes vision-language models since they do text generation too
   const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>

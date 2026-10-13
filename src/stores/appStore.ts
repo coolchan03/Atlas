@@ -80,6 +80,8 @@ type AppSettings = {
    *  auto-selected). */
   /** Atlas: the user picked the backend themselves (auto GPU never overrides it). */
   backendUserChosen?: boolean;
+  /** What agents call the user (fills {{name}} in agent prompts). */
+  userName?: string;
   atlasAccelChecked?: boolean;
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;

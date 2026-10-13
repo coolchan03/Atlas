@@ -23,6 +23,11 @@ const MAGIC = 'OffGridAtlasBackup';
 const RESTORABLE_STORE_KEYS = new Set([
   'local-llm-chat-storage', 'local-llm-app-storage', 'local-llm-project-storage',
   'atlas-agent-storage', 'atlas-learning', 'atlas-study', 'atlas-voice-settings',
+  // Saved map places, Survival Manual notes, library list and app preferences.
+  // (Secret fields are stripped by stripSensitiveFields; API keys live in the Keychain.)
+  'atlas-maps', 'atlas-survival-manual', 'atlas-offline-library', 'atlas-off-grid',
+  'atlas-chat-prefs', 'atlas-daily-brief', 'atlas-low-power', 'remote-servers',
+  'atlas-study-progress',
 ]);
 // Never export or restore credentials, vault contents, or authentication state.
 const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
@@ -55,6 +60,24 @@ function portableStoreValue(key: string, raw: string): string | null {
   } catch { return null; }
 }
 
+function openLockedChats(): any[] {
+  try {
+    const { useChatStore } = require('../stores/chatStore');
+    return useChatStore.getState().conversations
+      .filter((c: any) => c.pinVerifier && Array.isArray(c.messages) && c.messages.length > 0)
+      .map(({ pinVerifier: _v, protectedBlob: _b, ...rest }: any) => ({ ...rest, wasLocked: true }));
+  } catch { return []; }
+}
+
+/** PIN-locked chats that a password backup would skip because they are not open right now. */
+export function lockedChatsNotOpen(): number {
+  try {
+    const { useChatStore } = require('../stores/chatStore');
+    return useChatStore.getState().conversations
+      .filter((c: any) => c.pinVerifier && !(Array.isArray(c.messages) && c.messages.length > 0)).length;
+  } catch { return 0; }
+}
+
 export async function exportBackup(password?: string): Promise<string | null> {
   if (password !== undefined && password.length < 12) throw new Error('Encrypted backups require a password of at least 12 characters.');
   // Device-bound encrypted chats cannot be decrypted after transfer to a new
@@ -72,7 +95,14 @@ export async function exportBackup(password?: string): Promise<string | null> {
     const chatJson = await encryptedChatStorage.getItem('local-llm-chat-storage');
     if (chatJson) {
       const sanitized = portableStoreValue('local-llm-chat-storage', chatJson);
-      if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
+      if (sanitized) {
+        // PIN-locked chats that are open right now (unlocked with their PIN) go into
+        // the password-encrypted backup as normal chats marked wasLocked, so they can
+        // move to a new phone. Chats still locked cannot be read and are left out.
+        const parsed = JSON.parse(sanitized);
+        parsed.state.conversations.push(...openLockedChats());
+        safe.push(['local-llm-chat-storage', JSON.stringify(parsed)]);
+      }
     }
   }
   const data = { format: MAGIC, version: 1, createdAt: new Date().toISOString(), items: Object.fromEntries(safe) };

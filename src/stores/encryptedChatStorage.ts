@@ -10,6 +10,7 @@ const sessionPins = new Map<string, string>();
 const latestBlobs = new Map<string, string>();
 const lastSealed = new Map<string, string>();
 let writes: Promise<void> = Promise.resolve();
+let lastWritten: string | null = null;
 const queue = (fn: () => Promise<void>) => {
   const next = writes.then(fn);
   writes = next.catch(() => undefined);
@@ -84,6 +85,7 @@ async function saveReplacement(id: string, next: Conversation): Promise<void> {
     const sealed = await sealedState(JSON.stringify(root));
     await AsyncStorage.setItem(KEY, sealed);
     if (await AsyncStorage.getItem(KEY) !== sealed) throw new Error('Could not verify chat protection update.');
+    lastWritten = sealed;
   });
 }
 export async function protectChat(id: string, pin: string): Promise<void> {
@@ -157,8 +159,38 @@ export async function relockProtectedChats(): Promise<void> {
   useChatStore.setState((s: any) => ({ conversations: s.conversations.map((c: Conversation) => c.pinVerifier
     ? placeholder(c, latestBlobs.get(c.id) || c.protectedBlob || '') : c) }));
 }
+// Re-lock after the app has been in the background for a while, never in the
+// middle of a reply: a reply that finishes after its chat was re-locked would
+// be lost, because sealing needs the PIN that re-locking forgets.
+export const RELOCK_GRACE_MS = 30_000;
+const relockListeners = new Set<() => void>();
+export function onProtectedChatsRelocked(fn: () => void): () => void {
+  relockListeners.add(fn);
+  return () => { relockListeners.delete(fn); };
+}
+let relockTimer: ReturnType<typeof setTimeout> | null = null;
+function generationRunning(): boolean {
+  try {
+    const st = require('./chatStore').useChatStore.getState();
+    if (st.isStreaming || st.isThinking) return true;
+  } catch { /* store not ready */ }
+  try { return !!require('../services/llm').llmService.isCurrentlyGenerating(); } catch { return false; }
+}
+export function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
+  if (relockTimer) clearTimeout(relockTimer);
+  relockTimer = setTimeout(() => {
+    relockTimer = null;
+    if (generationRunning()) { scheduleRelock(5_000); return; }
+    void relockProtectedChats().then(() => relockListeners.forEach(fn => fn())).catch(() => undefined);
+  }, delayMs);
+}
+export function cancelScheduledRelock(): void {
+  if (relockTimer) { clearTimeout(relockTimer); relockTimer = null; }
+}
 if (Platform.OS === 'android') AppState.addEventListener('change', state => {
-  if (state !== 'active') void relockProtectedChats().catch(() => undefined);
+  // 'inactive' fires for system dialogs and pickers; only a real background counts.
+  if (state === 'background') scheduleRelock();
+  else if (state === 'active') cancelScheduledRelock();
 });
 export const encryptedChatStorage = {
   async getItem(key: string): Promise<string | null> {
@@ -190,13 +222,18 @@ export const encryptedChatStorage = {
     if (key !== KEY) throw new Error('Unexpected chat key.');
     return queue(async () => {
       const sealed = await sealedState(value);
-      if (await AsyncStorage.getItem(KEY) !== sealed) await AsyncStorage.setItem(KEY, sealed);
+      // Compare with what this session last wrote instead of reading the whole
+      // saved file back on every write.
+      if (sealed === lastWritten) return;
+      await AsyncStorage.setItem(KEY, sealed);
+      lastWritten = sealed;
     });
   },
   async removeItem(key: string): Promise<void> {
     if (key !== KEY) throw new Error('Unexpected chat key.');
     return queue(async () => {
       await AsyncStorage.multiRemove([KEY, OLD_KEY]);
+      lastWritten = null;
       sessionPins.clear(); latestBlobs.clear(); lastSealed.clear();
     });
   },

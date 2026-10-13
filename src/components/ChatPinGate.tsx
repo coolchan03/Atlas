@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useChatStore } from '../stores/chatStore';
-import { unlockChat } from '../stores/encryptedChatStorage';
+import { onProtectedChatsRelocked, unlockChat } from '../stores/encryptedChatStorage';
 import { useTheme } from '../theme';
+import { setScreenSecure } from '../atlasTools/screenSecure';
 import { useNavigation } from '@react-navigation/native';
+import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
 
 const unlocked = new Map<string, string>();
-let failed = 0;
-let cooldownUntil = 0;
-AppState.addEventListener('change', state => { if (state !== 'active') unlocked.clear(); });
+onProtectedChatsRelocked(() => unlocked.clear());
 
 export function ChatPinGate({ conversationId }: { conversationId?: string | null }) {
   const { colors } = useTheme();
@@ -19,15 +19,20 @@ export function ChatPinGate({ conversationId }: { conversationId?: string | null
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', state => { if (state !== 'active') { setRevision(v => v + 1); setPin(''); } });
-    return () => sub.remove();
+    return onProtectedChatsRelocked(() => { setRevision(v => v + 1); setPin(''); });
   }, []);
   useEffect(() => { setPin(''); setError(''); }, [conversationId]);
   const locked = !!conversationId && !!verifier && unlocked.get(conversationId) !== verifier;
+  // A PIN-protected chat (locked or open) is never captured in screenshots or recents.
+  useEffect(() => {
+    setScreenSecure('chat-pin', !!verifier);
+    return () => setScreenSecure('chat-pin', false);
+  }, [verifier]);
   void revision;
   const submit = async (unlockMatching = false) => {
     if (!conversationId || !verifier || busy) return;
-    if (Date.now() < cooldownUntil) { setError('Too many attempts. Try again shortly.'); return; }
+    const wait = await pinWaitRemaining('chat');
+    if (wait > 0) { setError(`Too many wrong PINs. Try again in ${formatWait(wait)}.`); return; }
     setBusy(true);
     try {
       // Native decryption checks the PIN and authenticates this specific item.
@@ -41,11 +46,12 @@ export function ChatPinGate({ conversationId }: { conversationId?: string | null
           try { await unlockChat(chat.id, pin); unlocked.set(chat.id, chat.pinVerifier); } catch { /* different credential */ }
         }
       }
-      failed = 0; setPin(''); setError(''); setRevision(v => v + 1);
+      await recordPinSuccess('chat');
+      setPin(''); setError(''); setRevision(v => v + 1);
     } catch {
-      failed++;
-      if (failed >= 5) { cooldownUntil = Date.now() + 60_000; failed = 0; }
-      setError('Incorrect PIN or protected chat could not be opened.'); setPin('');
+      const next = await recordPinFailure('chat');
+      setError(next > 0 ? `Incorrect PIN. Wait ${formatWait(next)} before trying again.` : 'Incorrect PIN or protected chat could not be opened.');
+      setPin('');
     } finally { setBusy(false); }
   };
   return <Modal visible={locked} animationType="fade" onRequestClose={() => navigation.goBack()} transparent={false}>

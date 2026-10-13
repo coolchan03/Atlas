@@ -82,8 +82,7 @@ android {
     namespace "ai.offgridmobile"
     defaultConfig {
         applicationId "ai.offgridmobile.atlas"
-        // The optional llama.kt Vulkan library requires API 29. Keep normal Atlas
-        // installs at API 24; only the separate Vulkan test APK raises its floor.
+        // The optional llama.kt Vulkan library requires API 29 (Android 10).
         minSdkVersion project.findProperty('atlasVulkanEnabled') == 'true' ? 29 : rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1784144537
@@ -127,10 +126,8 @@ android {
             applicationIdSuffix ".dev"
         }
         release {
-            if (project.findProperty('atlasVulkanEnabled') == 'true') {
-                applicationIdSuffix '.vulkantest'
-                versionNameSuffix '-vulkan-test'
-            }
+            // Vulkan builds upgrade the normal Atlas app in place (same id and signing
+            // key), so chats, models and settings carry over.
             signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

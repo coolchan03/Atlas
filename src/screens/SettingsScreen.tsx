@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { exportBackup, importBackup } from '../atlasTools/backup';
+import { lockedChatsNotOpen, exportBackup, importBackup } from '../atlasTools/backup';
 import { LowPowerCard } from '../components/LowPowerCard';
 
 import { AssistantAccessCard } from '../components/AssistantAccessCard';
@@ -58,6 +58,8 @@ export const SettingsScreen: React.FC = () => {
   const settingsSections = useSettingsSections();
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
+  const userName = useAppStore((s) => s.settings.userName ?? '');
+  const updateSettings = useAppStore((s) => s.updateSettings);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
@@ -72,7 +74,9 @@ export const SettingsScreen: React.FC = () => {
     try {
       const result = backupPasswordAction === 'export'
         ? await exportBackup(backupPassword) : await importBackup(backupPassword);
-      if (result) Alert.alert(backupPasswordAction === 'export' ? 'Encrypted backup saved' : 'Encrypted backup restored', String(result));
+      const skipped = backupPasswordAction === 'export' ? lockedChatsNotOpen() : 0;
+      if (result) Alert.alert(backupPasswordAction === 'export' ? 'Encrypted backup saved' : 'Encrypted backup restored',
+        String(result) + (skipped ? `\n\n${skipped} PIN-locked chat${skipped === 1 ? ' was' : 's were'} not included because ${skipped === 1 ? 'it is' : 'they are'} locked. Open them with their PIN, then back up again to include them.` : ''));
       setBackupPassword('');
       setBackupPasswordAction(null);
     } catch (e: any) { Alert.alert('Encrypted backup failed', String(e?.message ?? e)); }
@@ -202,6 +206,18 @@ export const SettingsScreen: React.FC = () => {
             </View>
           </View>
         </AnimatedEntry>
+
+        <View style={styles.themeToggleRow}>
+          <Text style={styles.themeToggleLabel}>Your name</Text>
+          <TextInput
+            value={userName}
+            onChangeText={(v) => updateSettings({ userName: v.slice(0, 40) } as any)}
+            placeholder="What agents call you"
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel="Your name, used by agents"
+            style={{ color: colors.text, minWidth: 150, textAlign: 'right', paddingVertical: 4 }}
+          />
+        </View>
 
         {/* Navigation Items */}
         <AttachStep index={5} fill>

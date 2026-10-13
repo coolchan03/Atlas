@@ -148,7 +148,7 @@ jobs:
           unzip -p "$APK" 'classes*.dex' | strings > /tmp/atlas-dex-strings.txt
           grep -q 'com/tensai/llamakt/LlamaEngine' /tmp/atlas-dex-strings.txt
           AAPT="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/aapt"
-          "$AAPT" dump badging "$APK" | grep -q "package: name='ai.offgridmobile.atlas.vulkantest'"
+          "$AAPT" dump badging "$APK" | grep -q "package: name='ai.offgridmobile.atlas'"
           "$AAPT" dump badging "$APK" | grep -q "sdkVersion:'29'"
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose "$APK"

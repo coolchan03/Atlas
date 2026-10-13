@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput } from 'react-native';
-import { protectChat, permanentlyUnprotectChat } from '../stores/encryptedChatStorage';
+import { protectChat, permanentlyUnprotectChat, unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
+import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
+import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -45,10 +47,37 @@ export const ChatsListScreen: React.FC = () => {
   const [pinTarget, setPinTarget] = useState<Conversation | null>(null);
   const [pinAction, setPinAction] = useState<'set' | 'remove'>('set');
   const [newPin, setNewPin] = useState('');
+  const [newPin2, setNewPin2] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
+  const hideLocked = useChatPrefs(s => s.hideLockedChats);
+  const vaultOpen = useVaultSession(s => s.open);
+  const setVaultOpen = useVaultSession(s => s.setOpen);
+  const [vaultPrompt, setVaultPrompt] = useState(false);
+  const [vaultPin, setVaultPin] = useState('');
+  const [vaultError, setVaultError] = useState('');
+  useEffect(() => onProtectedChatsRelocked(() => setVaultOpen(false)), [setVaultOpen]);
+  /** Opens the hidden vault: unlocks every locked chat that uses this PIN. */
+  const openVault = async () => {
+    const wait = await pinWaitRemaining('chat');
+    if (wait > 0) { setVaultError(`Too many wrong PINs. Try again in ${formatWait(wait)}.`); return; }
+    let opened = 0;
+    for (const chat of useChatStore.getState().conversations.filter(c => c.pinVerifier)) {
+      try { await unlockChat(chat.id, vaultPin); opened++; } catch { /* other PIN */ }
+    }
+    setVaultPin('');
+    if (!opened) {
+      // Same answer for "no chats" and "wrong PIN", so the vault cannot be probed.
+      const next = await recordPinFailure('chat');
+      setVaultError(next > 0 ? `Nothing opened. Wait ${formatWait(next)}.` : 'Nothing opened with that PIN.');
+      return;
+    }
+    await recordPinSuccess('chat');
+    setVaultError(''); setVaultPrompt(false); setVaultOpen(true);
+  };
   const savePin = async () => {
     if (!pinTarget || pinBusy) return;
     if (!/^[0-9]{4,12}$/.test(newPin)) { Alert.alert('PIN', 'Enter 4–12 digits.'); return; }
+    if (pinAction === 'set' && newPin !== newPin2) { Alert.alert('PIN', 'The two PINs do not match.'); return; }
     setPinBusy(true);
     try {
       if (pinAction === 'remove') {
@@ -57,7 +86,7 @@ export const ChatsListScreen: React.FC = () => {
       } else {
         await protectChat(pinTarget.id, newPin);
       }
-      setPinTarget(null); setNewPin('');
+      setPinTarget(null); setNewPin(''); setNewPin2('');
     } catch (e: any) { Alert.alert('PIN update failed', String(e?.message ?? e)); }
     finally { setPinBusy(false); }
   };
@@ -265,14 +294,21 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = conversations.filter(c => !!c.isArchived === showArchived).sort(
+  const sortedConversations = visibleConversations(conversations, hideLocked, vaultOpen).filter(c => !!c.isArchived === showArchived).sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>{showArchived ? 'Archived chats' : 'Chats'}</Text>
+        <TouchableOpacity
+          // Long-press the title to open hidden PIN-locked chats (the "vault").
+          onLongPress={() => { if (vaultOpen) { setVaultOpen(false); return; } setVaultError(''); setVaultPin(''); setVaultPrompt(true); }}
+          delayLongPress={600}
+          activeOpacity={1}
+          accessibilityHint="Long press to open or close locked chats">
+          <Text style={styles.title}>{showArchived ? 'Archived chats' : vaultOpen && hideLocked ? 'Chats + vault' : 'Chats'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
           <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
         </TouchableOpacity>
@@ -328,9 +364,24 @@ export const ChatsListScreen: React.FC = () => {
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{pinAction === 'remove' ? 'Remove chat PIN' : 'Set a chat PIN'}</Text>
             <Text style={{ color: colors.textSecondary }}>{pinAction === 'remove' ? 'Enter the current PIN to permanently remove encryption. The conversation will be saved normally afterward.' : 'Encrypt only this conversation with its own Android Keystore key. You can use the same PIN on other protected chats.'}</Text>
             <TextInput value={newPin} onChangeText={v => setNewPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
+            {pinAction === 'set' && <TextInput value={newPin2} onChangeText={v => setNewPin2(v.replace(/\D/g, '').slice(0, 12))} placeholder="Type the PIN again" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />}
+            {pinAction === 'set' && <Text style={{ color: colors.textMuted, fontSize: 12 }}>If you forget this PIN the chat cannot be recovered.</Text>}
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
-              <TouchableOpacity onPress={() => { setPinTarget(null); setNewPin(''); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => { setPinTarget(null); setNewPin(''); setNewPin2(''); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity disabled={pinBusy} onPress={savePin}><Text style={{ color: colors.primary, fontWeight: '700' }}>{pinAction === 'remove' ? 'Remove PIN' : 'Set PIN'}</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={vaultPrompt} transparent animationType="fade" onRequestClose={() => setVaultPrompt(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
+          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Enter PIN</Text>
+            <TextInput value={vaultPin} onChangeText={v => setVaultPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" autoFocus style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
+            {!!vaultError && <Text style={{ color: colors.error }}>{vaultError}</Text>}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+              <TouchableOpacity onPress={() => setVaultPrompt(false)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity disabled={vaultPin.length < 4} onPress={openVault}><Text style={{ color: colors.primary, fontWeight: '700' }}>Open</Text></TouchableOpacity>
             </View>
           </View>
         </View>

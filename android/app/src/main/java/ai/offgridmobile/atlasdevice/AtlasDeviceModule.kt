@@ -42,6 +42,22 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         }
     }
 
+    /** FLAG_SECURE: hide the app from screenshots, recordings and the recent-apps preview. */
+    @ReactMethod
+    fun setSecure(enabled: Boolean, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) { promise.resolve(false); return }
+        activity.runOnUiThread {
+            try {
+                if (enabled) activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                else activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("SECURE_FLAG", e.message ?: "Could not change screenshot protection", e)
+            }
+        }
+    }
+
     // ---------------- compass ----------------
     private val sensors by lazy { ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
     private val rot = FloatArray(9)

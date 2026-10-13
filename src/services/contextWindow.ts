@@ -85,9 +85,15 @@ export async function fitMessagesToContext<T extends ContextMessage>(options: {
     if (await count([...systems, ...history.slice(-mid)]) <= budget) low = mid;
     else high = mid - 1;
   }
-  const kept = [...systems, ...history.slice(-low)];
+  // Drop older messages in chunks (a quarter of the history at a time), not one
+  // by one. The prompt start then stays identical for several turns, so the
+  // native KV cache can be reused instead of re-reading the whole prompt each send.
+  const needed = history.length - low;
+  const chunk = Math.max(2, Math.ceil(history.length * 0.25));
+  const dropped = Math.min(history.length - 1, Math.ceil(needed / chunk) * chunk);
+  const kept = [...systems, ...history.slice(dropped)];
   return {
-    messages: kept, droppedMessages: history.length - low,
+    messages: kept, droppedMessages: dropped,
     latestTruncated: false,
     promptTokens: await count(kept), budgetTokens: budget,
   };

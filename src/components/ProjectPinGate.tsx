@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
+import { setScreenSecure } from '../atlasTools/screenSecure';
 import { useNavigation } from '@react-navigation/native';
 import { useProjectStore } from '../stores/projectStore';
 import { isProtectedProjectUnlocked, unlockProject } from '../stores/protectedProjectStorage';
+import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
 
 /** Metadata-only project vault gate. Projects with documents/chats cannot yet
  * be protected; the protect action checks this before encryption. */
@@ -17,14 +19,23 @@ export function ProjectPinGate({ projectId }: { projectId: string }) {
   const [revision, setRevision] = useState(0);
   void revision;
   const locked = !!project?.pinVerifier && !isProtectedProjectUnlocked(projectId);
+  const protectedProject = !!project?.pinVerifier;
+  useEffect(() => {
+    setScreenSecure('project-pin', protectedProject);
+    return () => setScreenSecure('project-pin', false);
+  }, [protectedProject]);
   const submit = async () => {
     if (busy || pin.length < 4) return;
+    const wait = await pinWaitRemaining('project');
+    if (wait > 0) { setError(`Too many wrong PINs. Try again in ${formatWait(wait)}.`); return; }
     setBusy(true);
     try {
       await unlockProject(projectId, pin);
+      await recordPinSuccess('project');
       setPin(''); setError(''); setRevision(v => v + 1);
-    } catch (e: any) {
-      setError('Incorrect PIN or encrypted project could not be opened.');
+    } catch {
+      const next = await recordPinFailure('project');
+      setError(next > 0 ? `Incorrect PIN. Wait ${formatWait(next)} before trying again.` : 'Incorrect PIN or encrypted project could not be opened.');
       setPin('');
     } finally { setBusy(false); }
   };
