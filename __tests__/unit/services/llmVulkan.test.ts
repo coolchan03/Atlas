@@ -71,15 +71,15 @@ it('rejects tool calls on explicit Vulkan without unloading or switching to CPU'
   expect(llmService.getLoadedModelPath()).toBe('/models/small.gguf');
 });
 
-it('does not silently switch to CPU when the user explicitly selects Vulkan', async () => {
+it('falls back to CPU with a visible notice when explicitly selected Vulkan is unavailable', async () => {
   jest.spyOn(vulkanEngine,'isAvailable').mockResolvedValue(false);
   const unload = jest.spyOn(vulkanEngine,'unload').mockResolvedValue();
   native.mockResolvedValue(createMockLlamaContext() as any);
-  await expect(llmService.loadModel('/models/small.gguf')).rejects.toThrow('Vulkan GPU unavailable');
+  await llmService.loadModel('/models/small.gguf');
   expect(unload).toHaveBeenCalled();
-  expect(native).not.toHaveBeenCalled();
-  expect(llmService.isModelLoaded()).toBe(false);
-  expect(llmService.getBackendFallbackNotice()).toContain('did not fall back to CPU');
+  expect(llmService.isModelLoaded()).toBe(true);
+  expect(llmService.getSelectedBackend()).toBe('cpu');
+  expect(llmService.getBackendFallbackNotice()).toMatch(/Running on CPU because: vulkan/);
 });
 
 it('still allows CPU when the caller explicitly requests it', async () => {
@@ -126,17 +126,18 @@ it('Auto falls back to CPU when all accelerators are unavailable', async () => {
   expect(native).toHaveBeenCalled();
 });
 
-it('explicit OpenCL fails rather than loading CPU when GPU init fails', async () => {
+it('explicit OpenCL falls back to CPU (with a notice) when GPU init fails', async () => {
   const { hardwareService } = require('../../../src/services/hardware');
   jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
-  native.mockRejectedValue(new Error('GPU unavailable'));
+  native.mockRejectedValueOnce(new Error('GPU unavailable')).mockResolvedValue(createMockLlamaContext() as any);
   useAppStore.setState({ settings: {
     ...useAppStore.getState().settings, inferenceBackend: 'opencl',
     gpuLayers: 8,
   }});
-  await expect(llmService.loadModel('/models/small-Q4_0.gguf'))
-    .rejects.toThrow('CPU fallback is disabled');
-  expect(native).toHaveBeenCalledTimes(1);
+  await llmService.loadModel('/models/small-Q4_0.gguf');
+  expect(llmService.isModelLoaded()).toBe(true);
+  expect(native.mock.calls.length).toBeGreaterThanOrEqual(2);
+  expect(native.mock.calls[native.mock.calls.length - 1][0]).toEqual(expect.objectContaining({ n_gpu_layers: 0 }));
 });
 
 it('uses a user-selected Vulkan context above the former 4K limit and honors sampling settings', async () => {

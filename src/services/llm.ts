@@ -188,9 +188,15 @@ class LLMService {
           { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan },
           modelPath, !!mmProjPath,
         );
-        // Auto may use CPU when no accelerator can load; explicit choices remain strict.
+        candidates.push(INFERENCE_BACKENDS.CPU);
+      } else if (Platform.OS === 'android' && requested === INFERENCE_BACKENDS.VULKAN) {
+        // Vulkan is a separate engine: if it cannot load, fall back to llama.rn on CPU.
         candidates.push(INFERENCE_BACKENDS.CPU);
       }
+      // Every path ends on CPU when the accelerator cannot load, and the reason is shown
+      // to the user (getBackendFallbackNotice). Explicit OpenCL/NPU choices fall back inside
+      // initContextWithFallback; Auto and Vulkan fall back through the candidate list.
+      const fallsBack = auto || requested === INFERENCE_BACKENDS.VULKAN;
       const failures: string[] = [];
       for (const backend of candidates) {
         try {
@@ -225,7 +231,8 @@ class LLMService {
             this.multimodalInitialized = false;
             this.multimodalSupport = null;
           } else {
-            const requireAcceleration = Platform.OS === 'android' &&
+            // Strict only while Auto is still trying candidates (it has CPU next in the list).
+            const requireAcceleration = Platform.OS === 'android' && auto &&
               backend !== INFERENCE_BACKENDS.CPU;
             const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } =
               await this.initWithAutoContext(
@@ -261,12 +268,7 @@ class LLMService {
             gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false,
           });
           failures.push(`${backend}: ${message.slice(0, 180)}`);
-          if (!auto) {
-            if (backend === INFERENCE_BACKENDS.VULKAN)
-              throw new Error('Vulkan GPU unavailable: ' + message +
-                '. Select CPU explicitly to continue.');
-            throw new Error(message);
-          }
+          if (!fallsBack) throw new Error(message);
           // A timed-out native context may still be initializing; do not race a
           // second native backend against that unresolved work.
           if (/timed out after/i.test(message)) break;
@@ -684,9 +686,11 @@ class LLMService {
   /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
   isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
-    if (this.acceleratorAttempts.length && (this.context || this.vulkanLoaded))
-      return 'Auto selected ' + this.selectedBackend.toUpperCase() + ' after: ' + this.acceleratorAttempts.join(' | ');
-    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason + (this.context ? '. Auto chose another accelerator.' : '. GPU-only mode did not fall back to CPU.');
+    if (this.acceleratorAttempts.length && (this.context || this.vulkanLoaded)) {
+      const lead = this.requestedBackendAtLoad === INFERENCE_BACKENDS.AUTO ? 'Auto selected' : 'Running on';
+      return `${lead} ${this.selectedBackend.toUpperCase()} because: ${this.acceleratorAttempts.join(' | ')}`;
+    }
+    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason;
     if (!this.context) return null;
     if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
