@@ -187,7 +187,7 @@ export function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
 export function cancelScheduledRelock(): void {
   if (relockTimer) { clearTimeout(relockTimer); relockTimer = null; }
 }
-if (Platform.OS === 'android') AppState.addEventListener('change', state => {
+if (Platform.OS === 'android') AppState?.addEventListener?.('change', state => {
   // 'inactive' fires for system dialogs and pickers; only a real background counts.
   if (state === 'background') scheduleRelock();
   else if (state === 'active') cancelScheduledRelock();

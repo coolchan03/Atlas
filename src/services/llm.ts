@@ -23,6 +23,7 @@ import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import { fitMessagesToContext } from './contextWindow';
+import { OverridableMemoryError } from '../utils/modelLoadErrors';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
@@ -256,6 +257,9 @@ class LLMService {
           return;
         } catch (error: any) {
           const message = String(error?.message || error || 'Native load failed');
+          // A memory refusal is about the model, not the backend: keep its type so the UI
+          // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
+          const memoryRefusal = error?.name === 'OverridableMemoryError' || error instanceof OverridableMemoryError;
           if (backend === INFERENCE_BACKENDS.VULKAN) {
             try { await vulkanEngine.unload(); } catch { /* bridge may be unavailable */ }
             this.vulkanFallbackReason = message;
@@ -268,7 +272,8 @@ class LLMService {
             gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false,
           });
           failures.push(`${backend}: ${message.slice(0, 180)}`);
-          if (!fallsBack) throw new Error(message);
+          if (memoryRefusal) throw error;
+          if (!fallsBack) throw error instanceof Error ? error : new Error(message);
           // A timed-out native context may still be initializing; do not race a
           // second native backend against that unresolved work.
           if (/timed out after/i.test(message)) break;
