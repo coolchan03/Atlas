@@ -38,6 +38,10 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Navigator tests do not need bundled survival illustrations. Avoid importing real
+// static image assets in the lightweight Jest environment.
+jest.mock('../../../src/survival/images', () => ({ SURVIVAL_IMAGES: {} }));
+
 // Mock navigation
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => {
@@ -179,14 +183,22 @@ describe('AppNavigator', () => {
   });
 
   describe('Tab bar rendering', () => {
-    it('renders all five tab labels', () => {
+    it('renders five bottom tabs with Workspace replacing Projects and Agents', () => {
       const { getAllByText } = renderAppNavigator();
 
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Projects').length).toBeGreaterThanOrEqual(1);
+      expect(getAllByText('Workspace').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders five tabs with no hidden Agents tab', () => {
+      const { getAllByText, queryByText } = renderAppNavigator();
+      for (const title of ['Home', 'Chats', 'Workspace', 'Models', 'Settings']) {
+        expect(getAllByText(title).length).toBeGreaterThanOrEqual(1);
+      }
+      expect(queryByText('Agents')).toBeNull();
     });
 
     it('renders all tab buttons with testIDs', () => {
@@ -277,7 +289,7 @@ describe('AppNavigator', () => {
       // All tab labels should be visible
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Projects').length).toBeGreaterThanOrEqual(1);
+      expect(getAllByText('Workspace').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
 

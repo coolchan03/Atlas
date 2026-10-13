@@ -30,18 +30,7 @@ import {
   createVisionModel,
   createMessage,
 } from '../../utils/factories';
-import { Linking, Clipboard } from 'react-native';
-import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
-import { withUtm } from '../../../src/utils/utm';
 
-/** New chat first asks Regular vs Private; tap "Regular chat" in that system alert. */
-function pickRegularChat() {
-  const { Alert } = require('react-native');
-  const spy = jest.spyOn(Alert, 'alert').mockImplementation(((_t: string, _m: string, buttons?: { text: string; onPress?: () => void }[]) => {
-    buttons?.find((b) => b.text === 'Regular chat')?.onPress?.();
-  }) as any);
-  return spy;
-}
 
 
 // Mock requestAnimationFrame
@@ -481,10 +470,12 @@ describe('HomeScreen', () => {
       });
 
       const { getByTestId } = renderHomeScreen();
-      pickRegularChat();
+      const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByTestId('new-chat-button'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(alertSpy).not.toHaveBeenCalled(); // Privacy is selected later from Chat options.
+      alertSpy.mockRestore();
     });
 
     it('does not create a conversation eagerly when New Chat pressed', () => {

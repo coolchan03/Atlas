@@ -25,7 +25,6 @@ import {
   ChatsListScreen,
   ProjectDetailScreen,
   ProjectEditScreen,
-  AgentsScreen,
   AgentEditScreen,
   LearningScreen,
   EmergencyScreen,
@@ -69,7 +68,6 @@ const TAB_ICON_MAP: Record<string, string> = {
   HomeTab: 'home',
   ChatsTab: 'message-circle',
   ProjectsTab: 'folder',
-  AgentsTab: 'users',
   ModelsTab: 'cpu',
   SettingsTab: 'settings',
 };
@@ -176,14 +174,6 @@ const MainTabs: React.FC = () => {
           name="ProjectsTab"
           component={WorkspaceScreen}
           options={{ tabBarLabel: 'Workspace', tabBarButtonTestID: 'projects-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="AgentsTab"
-          component={AgentsScreen}
-          options={{ tabBarLabel: 'Agents', tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
           listeners={() => ({
             tabPress: () => { triggerHaptic('selection'); },
           })}
