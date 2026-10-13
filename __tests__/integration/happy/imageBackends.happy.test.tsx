@@ -27,6 +27,9 @@ const CONFIGS: Cfg[] = [
 describe('happy — image generation shows the correct backend label (heavy entry point)', () => {
   it.each(CONFIGS)('$label: produces an image and the details show "$expected"', async (cfg) => {
     const h = await setupChatScreen({ engine: 'litert', platform: cfg.platform });
+    // The GPU label needs a native OpenCL device: Auto now falls back to CPU without one.
+    (require('llama.rn') as any).getBackendDevicesInfo = jest.fn(() => Promise.resolve([{ backend: 'OpenCL', type: 'gpu', name: 'Adreno' }]));
+    (require('../../../src/services/hardware').hardwareService as any).cachedOpenCLCapability = null;
     h.enableGenerationDetailsViaUI(); // turn details on BEFORE mounting the chat (separate render)
     h.render();
     await h.placeImageModel({ backend: cfg.backend });

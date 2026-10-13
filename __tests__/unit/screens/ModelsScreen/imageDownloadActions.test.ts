@@ -210,6 +210,8 @@ describe('imageDownloadActions', () => {
 
   it('proceedWithDownload uses native zip flow and completes via listeners', async () => {
     const deps = makeDeps();
+    // The downloaded ZIP is complete (the flow now refuses archives under 95% of the expected size).
+    (RNFS.stat as jest.Mock).mockResolvedValue({ size: makeZipModelInfo().size, isFile: () => true, isDirectory: () => false });
 
     await proceedWithDownload(makeZipModelInfo(), deps);
 
@@ -224,7 +226,9 @@ describe('imageDownloadActions', () => {
 
     expect(mockStoreApi.setProcessing).toHaveBeenCalledWith('zip-42');
     expect(mockMoveCompletedDownload).toHaveBeenCalled();
-    expect(unzip).toHaveBeenCalled();
+    // Android uses the native streaming extractor when present, else the JS unzip.
+    const native = require('react-native').NativeModules.LocalDreamModule;
+    expect(typeof native?.extractImageZip === 'function' ? native.extractImageZip : unzip).toHaveBeenCalled();
     expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-zip-model');
   });
 
