@@ -54,7 +54,7 @@ check('Image support-file type contract', () => {
 });
 check('GPU selection and watchdog protections exist', () => {
   for (const token of ['--list-devices', 'diffusion=$vulkanDevice', '--max-vram',
-    'Vulkan GPU requested (unverified)', 'watchdogTimedOut', 'isStalled(', 'stream closed',
+    '$apiName GPU requested (unverified)', 'EXECUTABLE_OPENCL', 'watchdogTimedOut', 'isStalled(', 'stream closed',
     'if (!completed && output.exists()) output.delete()']) {
     assert.ok(cli.includes(token), 'Missing native safety protection: ' + token);
   }
@@ -67,11 +67,13 @@ check('Vulkan probe parser is test-backed and contains no hidden control charact
   assert.match(cli, /AtlasVulkanProbe\.device\(/);
   assert.match(cli, /redirectOutput\(log\)/);
   assert.match(cli, /configureNativeEnvironment\(/);
-  assert.match(cli, /probeGpu\(\)/);
+  assert.match(cli, /fun probeGpu\(api: String = "vulkan"\)/);
   assert.match(mod, /fun getAtlasImageGpuDiagnostics\(/);
+  assert.match(mod, /fun getAtlasImageGpuDiagnosticsFor\(/);
   assert.match(js, /getNativeImageGpuDiagnostics\(/);
   assert.match(parsed, /vulkan\[0-9\]/);
   assert.match(test, /parsesRealSdCliTabDelimitedDeviceOutput/);
+  assert.match(test, /findsTheOpenClDeviceOnlyWhenAskedForOpenCl/);
   for (const native of [cli, parsed, test, mod]) {
     assert.doesNotMatch(native, /[\x00-\x08\x0b\x0c\x0e-\x1f]/,
       'Hidden control byte detected in native code (regression of invalid Vulkan regex)');
