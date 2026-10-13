@@ -17,6 +17,8 @@ interface MessageOverlaysProps {
   isUser: boolean;
   canEdit: boolean;
   canRetry: boolean;
+  canDelete: boolean;
+  canSaveToProject: boolean;
   canGenerateImage: boolean;
   canSpeak: boolean;
   showSelectTextAction: boolean;
@@ -28,6 +30,8 @@ interface MessageOverlaysProps {
   onCopy: () => void;
   onEdit: () => void;
   onRetry: () => void;
+  onDelete: () => void;
+  onSaveToProject: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
   onSelectText: () => void;
@@ -38,9 +42,9 @@ interface MessageOverlaysProps {
 
 export const MessageOverlays: React.FC<MessageOverlaysProps> = ({
   message, styles, colors, showActionMenu, showSelectText, isEditing, isUser,
-  canEdit, canRetry, canGenerateImage, canSpeak, showSelectTextAction, displayContent,
+  canEdit, canRetry, canDelete, canSaveToProject, canGenerateImage, canSpeak, showSelectTextAction, displayContent,
   alertState, onCloseActionMenu, onCloseSelectText, onChangeEditText, onCopy, onEdit,
-  onRetry, onGenerateImage, onSpeak, onSelectText, onSaveEdit, onCancelEdit, onCloseAlert,
+  onRetry, onDelete, onSaveToProject, onGenerateImage, onSpeak, onSelectText, onSaveEdit, onCancelEdit, onCloseAlert,
 }) => (
   <>
     <ActionMenuSheet
@@ -49,12 +53,16 @@ export const MessageOverlays: React.FC<MessageOverlaysProps> = ({
       isUser={isUser}
       canEdit={canEdit}
       canRetry={canRetry}
+      canDelete={canDelete}
+      canSaveToProject={canSaveToProject}
       canGenerateImage={canGenerateImage}
       canSpeak={canSpeak}
       styles={styles}
       onCopy={onCopy}
       onEdit={onEdit}
       onRetry={onRetry}
+      onDelete={onDelete}
+      onSaveToProject={onSaveToProject}
       onGenerateImage={onGenerateImage}
       onSpeak={onSpeak}
       onSelectText={showSelectTextAction ? onSelectText : undefined}

@@ -1,6 +1,7 @@
+/* eslint-disable react-native/no-inline-styles, react-native/no-color-literals, max-lines -- Existing protected-chat vault, search, and folder list share access-control state. */
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform, Modal, TextInput } from 'react-native';
 import { unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
 import { useChatOptions } from '../components/ChatOptions';
 import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
@@ -15,7 +16,7 @@ import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/
 import { setPendingSpotlight } from '../components/onboarding/spotlightState';
 import { Button } from '../components/Button';
 import { ModelSelectorModal } from '../components';
-import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { CustomAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
@@ -23,10 +24,12 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useAgentStore } from '../stores/agentStore';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
+import { activeModelService, llmService, remoteServerManager } from '../services';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
+import { buildChatListRows, type ChatListRow } from './chatListGrouping';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
@@ -42,6 +45,8 @@ export const ChatsListScreen: React.FC = () => {
   const conversations = useChatStore(s => s.conversations);
   const { setActiveConversation } = useChatStore.getState();
   const [showArchived, setShowArchived] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const chatOptions = useChatOptions();
   const hideLocked = useChatPrefs(s => s.hideLockedChats);
   const vaultOpen = useVaultSession(s => s.open);
@@ -68,7 +73,8 @@ export const ChatsListScreen: React.FC = () => {
     await recordPinSuccess('chat');
     setVaultError(''); setVaultPrompt(false); setVaultOpen(true);
   };
-  const { getProject } = useProjectStore();
+  const { projects, getProject } = useProjectStore();
+  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
@@ -76,7 +82,6 @@ export const ChatsListScreen: React.FC = () => {
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
-  const [pendingPrivateChat, setPendingPrivateChat] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const { goTo } = useSpotlightTour();
 
@@ -101,21 +106,10 @@ export const ChatsListScreen: React.FC = () => {
     navigation.navigate('Chat', { conversationId: conversation.id });
   };
 
-  const startNewChat = (privateChat: boolean) => {
-    setPendingPrivateChat(privateChat);
-    if (hasModels) {
-      navigation.navigate('Chat', { privateChat });
-      return;
-    }
-    setShowModelSelector(true);
-  };
-
   const handleNewChat = () => {
-    Alert.alert('New conversation', 'Choose whether this chat should be saved.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Regular chat', onPress: () => startNewChat(false) },
-      { text: 'Private (not saved)', onPress: () => startNewChat(true) },
-    ]);
+    useAgentStore.getState().setActiveAgent(null);
+    if (hasModels) navigation.navigate('Chat', {});
+    else setShowModelSelector(true);
   };
 
   const handleSelectTextModel = async (model: any) => {
@@ -127,7 +121,7 @@ export const ChatsListScreen: React.FC = () => {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', { privateChat: pendingPrivateChat }); },
+        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
       },
     );
   };
@@ -139,7 +133,7 @@ export const ChatsListScreen: React.FC = () => {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', { privateChat: pendingPrivateChat }); },
+        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
       },
     );
   };
@@ -183,7 +177,7 @@ export const ChatsListScreen: React.FC = () => {
   };
 
 
-  const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
+  const renderChat = ({ item, index, nested = false }: { item: Conversation; index: number; nested?: boolean }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
     const lastMessage = item.messages[item.messages.length - 1];
 
@@ -191,7 +185,7 @@ export const ChatsListScreen: React.FC = () => {
         <AnimatedListItem
           index={index}
           trigger={focusTrigger}
-          style={styles.chatItem}
+          style={[styles.chatItem, nested && { marginLeft: SPACING.lg }]}
           onPress={() => handleChatPress(item)}
           onLongPress={() => chatOptions.open(item)}
           testID={`conversation-item-${index}`}
@@ -203,26 +197,62 @@ export const ChatsListScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {!!item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
+            {item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>
             )}
-            {project && (
+            {project && !nested && (
               <View style={styles.projectBadge}>
                 <Text style={styles.projectBadgeText}>{project.name}</Text>
               </View>
             )}
           </View>
+          {!!item.isPinned && <Icon name="star" size={15} color={colors.primary} />}
           <Icon name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedListItem>
     );
   };
 
-  // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = visibleConversations(conversations, hideLocked, vaultOpen).filter(c => !!c.isArchived === showArchived).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  // Project chats are grouped into expandable folders; no duplicate top-level rows.
+  const sortedConversations = visibleConversations(conversations, hideLocked, vaultOpen)
+    .filter(c => !!c.isArchived === showArchived);
+  const query = searchText.trim().toLocaleLowerCase();
+  const matchingConversations = query ? sortedConversations.filter(chat => {
+    const project = chat.projectId ? getProject(chat.projectId) : null;
+    const projectMatch = project && !project.pinVerifier && project.name.toLowerCase().includes(query);
+    if (projectMatch) return true;
+    if (project?.pinVerifier || chat.pinVerifier) return false;
+    return chat.title.toLocaleLowerCase().includes(query) ||
+      chat.messages.some(message => (message.role === 'user' || message.role === 'assistant') &&
+        message.content.toLocaleLowerCase().includes(query));
+  }) : sortedConversations;
+  const searchExpanded = new Set(expandedProjectIds);
+  if (query) for (const chat of matchingConversations) if (chat.projectId) searchExpanded.add(chat.projectId);
+  const chatRows = buildChatListRows(matchingConversations, projects, searchExpanded);
+  const renderFolder = (row: Extract<ChatListRow, { kind: 'folder' }>) => {
+    const open = searchExpanded.has(row.projectId);
+    return (
+      <TouchableOpacity testID={`project-chat-folder-${  row.projectId}`}
+        accessibilityRole="button" accessibilityLabel={row.locked ? 'Locked project' : `${row.name  }, ${  row.count  } chats`}
+        onPress={() => {
+          if (row.locked) {
+            navigation.navigate('ProjectDetail', { projectId: row.projectId });
+            return;
+          }
+          setExpandedProjectIds(ids => open ? ids.filter(id => id !== row.projectId) : [...ids, row.projectId]);
+        }}
+        style={[styles.chatItem, { gap: SPACING.sm, borderWidth: 1, borderColor: colors.border }]}>
+        <Icon name={row.locked ? 'lock' : 'folder'} size={21} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.chatTitle} numberOfLines={1}>{row.name}</Text>
+          {!row.locked && <Text style={styles.chatPreview}>{row.count} {row.count === 1 ? 'chat' : 'chats'}</Text>}
+        </View>
+        {row.pinned && <Icon name="star" size={15} color={colors.primary} />}
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -234,6 +264,10 @@ export const ChatsListScreen: React.FC = () => {
           activeOpacity={1}
           accessibilityHint="Long press to open or close locked chats">
           <Text style={styles.title}>{showArchived ? 'Archived chats' : vaultOpen && hideLocked ? 'Chats + vault' : 'Chats'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { setSearchOpen(v => !v); setSearchText(''); }}
+          accessibilityLabel={searchOpen ? 'Close chat search' : 'Search chats'} style={{ padding: 8 }}>
+          <Icon name={searchOpen ? 'x' : 'search'} size={19} color={colors.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
           <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
@@ -249,7 +283,15 @@ export const ChatsListScreen: React.FC = () => {
         </AttachStep>
       </View>
 
-      {sortedConversations.length === 0 ? (
+      {searchOpen && (
+        <View style={{ marginHorizontal: SPACING.lg, marginTop: 10, marginBottom: 8,
+          borderWidth: 1, borderColor: colors.border, borderRadius: 9, backgroundColor: colors.surface }}>
+          <TextInput autoFocus value={searchText} onChangeText={setSearchText}
+            testID="search-chats-input" placeholder="Search chats and projects"
+            placeholderTextColor={colors.textMuted} style={{ color: colors.text, paddingHorizontal: 13, paddingVertical: 10 }} />
+        </View>
+      )}
+      {chatRows.length === 0 ? (
         <View style={styles.emptyState}>
           <AnimatedEntry index={0} staggerMs={60} trigger={focusTrigger}>
             <View style={styles.emptyIcon}>
@@ -261,7 +303,7 @@ export const ChatsListScreen: React.FC = () => {
           </AnimatedEntry>
           <AnimatedEntry index={2} staggerMs={60} trigger={focusTrigger}>
             <Text style={styles.emptyText}>
-              {hasModels
+              {query ? 'No matching chats or projects.' : hasModels
                 ? 'Start a new conversation to begin chatting with your local AI.'
                 : 'Download a model from the Models tab to start chatting.'}
             </Text>
@@ -275,8 +317,10 @@ export const ChatsListScreen: React.FC = () => {
         </View>
       ) : (
         <FlatList
-          data={sortedConversations}
-          renderItem={renderChat}
+          data={chatRows}
+          renderItem={({ item, index }) => item.kind === 'folder'
+            ? renderFolder(item)
+            : renderChat({ item: item.conversation, index, nested: item.nested })}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.list, wide.column]}
           showsVerticalScrollIndicator={false}

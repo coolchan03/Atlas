@@ -1,5 +1,6 @@
+/* eslint-disable react-native/no-inline-styles, react-native/no-color-literals, max-params -- Existing device storage/model dashboard uses numerous runtime theme styles and confirmation helper. */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -25,6 +26,13 @@ export const MyModelsScreen: React.FC = () => {
   const { colors } = useTheme();
   const textModels = useAppStore((s) => s.downloadedModels);
   const imageModels = useAppStore((s) => s.downloadedImageModels);
+  const nicknames = useAppStore((s) => s.modelNicknames);
+  const setModelNickname = useAppStore((s) => s.setModelNickname);
+  const [nicknameTarget, setNicknameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [nicknameText, setNicknameText] = useState('');
+  const openNickname = (id: string, name: string) => {
+    setNicknameTarget({ id, name }); setNicknameText(nicknames[id] ?? '');
+  };
   const activeId = useAppStore((s) => s.activeModelId);
   const whisperPresent = useWhisperStore((s) => s.presentModelIds);
   const useSd = useStoragePrefs((s) => s.useSd);
@@ -172,11 +180,12 @@ export const MyModelsScreen: React.FC = () => {
           const size = (m.fileSize || 0) + ((m as any).mmProjFileSize || 0);
           return (
             <View key={m.id} style={card}>
-              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>{m.name}</Text>
+              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>{nicknames[m.id] || m.name}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
                 {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}{speeds[m.id]?.decode ? ` · writes ~${Math.max(1, Math.round(speeds[m.id].decode * 0.75))} words/s` : ''}
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <TouchableOpacity style={btn(colors.primary)} onPress={() => openNickname(m.id, m.name)}><Icon name="edit-2" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Nickname</Text></TouchableOpacity>
                 <TouchableOpacity style={btn(colors.primary)} disabled={!!busy} onPress={() => navigation.navigate('ModelTest', { modelId: m.id })}><Icon name="activity" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Test</Text></TouchableOpacity>
                 {m.engine === 'llama' && (vision ? (
                   <TouchableOpacity style={btn(colors.border)} onPress={() => removeVision(m)}><Icon name="eye-off" size={14} color={colors.textSecondary} /><Text style={{ color: colors.textSecondary, marginLeft: 6 }}>Remove vision file</Text></TouchableOpacity>
@@ -200,11 +209,12 @@ export const MyModelsScreen: React.FC = () => {
           <View key={m.id} style={card}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{m.name}</Text>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{nicknames[m.id] || m.name}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                   {fmtBytes(m.size || 0)} · {m.backend === 'sdcpp' ? `Original ${imageFamilyDisplay(m.nativeImageFamily)} weights` : (m.backend || 'model').toUpperCase()}
                 </Text>
               </View>
+              <TouchableOpacity style={btn(colors.primary)} onPress={() => openNickname(m.id, m.name)}><Icon name="edit-2" size={14} color={colors.primary} /><Text style={{ color: colors.primary, marginLeft: 6 }}>Nickname</Text></TouchableOpacity>
               <TouchableOpacity style={btn(colors.primary)} disabled={!!busy}
                 onPress={() => navigation.navigate('ModelTest', { modelId: m.id, modelType: 'image' })}>
                 <Icon name="activity" size={14} color={colors.primary} />
@@ -223,7 +233,7 @@ export const MyModelsScreen: React.FC = () => {
                 {getMissingImageSupportGuides(m).map(guide => (
                   <View key={guide.kind} style={{ marginTop: 7 }}>
                     <Text style={{ color: colors.text, fontSize: 12 }}>
-                      {guide.label}{guide.fileName ? ' ? ' + guide.fileName : ''}
+                      {guide.label}{guide.fileName ? ` ? ${  guide.fileName}` : ''}
                     </Text>
                     {guide.downloadUrl && (
                       <TouchableOpacity
@@ -254,7 +264,7 @@ export const MyModelsScreen: React.FC = () => {
                   LoRAs modify style. RealESRGAN .pth is an upscaler, not a style add-on.
                 </Text>
                 {(m.supportFiles || []).map(file => (
-                  <View key={file.kind + '/' + file.name} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
+                  <View key={`${file.kind  }/${  file.name}`} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
                     <Text style={{ color: colors.text, fontWeight: '500', fontSize: 13 }}>{file.name}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>{file.kind.toUpperCase()} · {fmtBytes(file.size)}{file.kind === 'lora' ? ` · strength ${file.strength.toFixed(2)}` : ''} · {file.enabled ? 'enabled' : 'disabled'}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -275,7 +285,7 @@ export const MyModelsScreen: React.FC = () => {
                         </>
                       )}
                       <TouchableOpacity style={btn(colors.error)} disabled={!!busy}
-                        onPress={() => confirm('Remove support file?', file.name + ' will be detached and deleted from Atlas.', 'Remove',
+                        onPress={() => confirm('Remove support file?', `${file.name  } will be detached and deleted from Atlas.`, 'Remove',
                           () => { void changeImageSupport(m, file, { delete: true }); })}>
                         <Icon name="trash-2" size={14} color={colors.error} />
                       </TouchableOpacity>
@@ -299,6 +309,26 @@ export const MyModelsScreen: React.FC = () => {
         ))}
         <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8 }}>Natural voices are in Models → Voice. Library packs and encyclopedias are in Settings → Offline Library. Maps are in Atlas → Maps.</Text>
       </ScrollView>
+      <Modal transparent visible={!!nicknameTarget} animationType="fade"
+        onRequestClose={() => setNicknameTarget(null)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 12 }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18 }}>Model nickname</Text>
+            <Text style={{ color: colors.textSecondary }}>Give {nicknameTarget?.name} a friendly name. The original filename and model weights stay unchanged.</Text>
+            <TextInput autoFocus maxLength={80} value={nicknameText} onChangeText={setNicknameText}
+              testID="model-nickname-input" placeholder={nicknameTarget?.name}
+              placeholderTextColor={colors.textMuted}
+              style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 12 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20 }}>
+              <TouchableOpacity onPress={() => setNicknameTarget(null)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => {
+                if (nicknameTarget) setModelNickname(nicknameTarget.id, nicknameText);
+                setNicknameTarget(null);
+              }}><Text style={{ color: colors.primary, fontWeight: '700' }}>Save</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );

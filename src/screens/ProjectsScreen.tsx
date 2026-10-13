@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles -- Inline pin affordance retains the existing themed project row. */
 import React, { useState } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
@@ -31,13 +32,13 @@ type NavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-export const ProjectsScreen: React.FC = () => {
+export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
-  const { projects, deleteProject } = useProjectStore();
+  const { projects, deleteProject, updateProject } = useProjectStore();
   const { conversations } = useChatStore();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
@@ -98,23 +99,33 @@ export const ProjectsScreen: React.FC = () => {
         >
           <View style={styles.projectIcon}>
             <Text style={styles.projectIconText}>
-              {item.name.charAt(0).toUpperCase()}
+              {item.pinVerifier ? 'L' : item.name.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.projectContent}>
             <View style={styles.projectNameRow}>
-              <Text style={styles.projectName} numberOfLines={1}>{item.name}</Text>
-              <View style={styles.chatCountTag}>
-                <Icon name="message-circle" size={8} color={colors.textMuted} />
-                <Text style={styles.chatCountText}>{chatCount}</Text>
-              </View>
+              <Text style={styles.projectName} numberOfLines={1}>{item.pinVerifier ? 'Locked project' : item.name}</Text>
+              {!item.pinVerifier && (
+                <View style={styles.chatCountTag}>
+                  <Icon name="message-circle" size={8} color={colors.textMuted} />
+                  <Text style={styles.chatCountText}>{chatCount}</Text>
+                </View>
+              )}
             </View>
-            {item.description ? (
+            {item.description && !item.pinVerifier ? (
               <Text style={styles.projectDescription} numberOfLines={1}>
                 {item.description}
               </Text>
             ) : null}
           </View>
+          <TouchableOpacity accessibilityLabel={item.isPinned ? 'Unpin project' : 'Pin project'}
+            testID={`pin-project-${  item.id}`} style={{ padding: 10 }}
+            onPress={() => {
+              try { updateProject(item.id, { isPinned: !item.isPinned }); }
+              catch (error: any) { setAlertState(showAlert('Cannot pin project', String(error?.message || error))); }
+            }}>
+            <Icon name="star" size={16} color={item.isPinned ? colors.primary : colors.textMuted} />
+          </TouchableOpacity>
           <Icon name="chevron-right" size={14} color={colors.textMuted} />
         </AnimatedListItem>
       </Swipeable>
@@ -122,7 +133,7 @@ export const ProjectsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={embedded ? [] : ['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
         <AttachStep index={7}>
@@ -164,7 +175,7 @@ export const ProjectsScreen: React.FC = () => {
         </View>
       ) : (
         <FlatList
-          data={projects}
+          data={[...projects].sort((a, b) => Number(!!b.isPinned) - Number(!!a.isPinned) || b.updatedAt.localeCompare(a.updatedAt))}
           renderItem={renderProject}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.list, wide.column]}

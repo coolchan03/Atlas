@@ -89,12 +89,13 @@ export const ChatHeader: React.FC<{
   activeProject: any;
   navigation: any;
   onOpenModels: () => void;
+  onOpenChatOptions?: () => void;
   setShowSettingsPanel: (v: boolean) => void;
   setShowProjectSelector: (v: boolean) => void;
   isRemote?: boolean;
   modelRuntimeLabel?: string;
   modelRuntimeState?: 'none' | 'selected' | 'loading' | 'loaded' | 'evicted' | 'remote';
-}> = ({ styles, colors, activeConversation, activeProject, navigation, onOpenModels, setShowSettingsPanel, setShowProjectSelector, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
+}> = ({ styles, colors, activeConversation, navigation, onOpenModels, onOpenChatOptions, setShowSettingsPanel, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -129,6 +130,12 @@ export const ChatHeader: React.FC<{
         </View>
       </View>
       <View style={styles.headerActions}>
+        {activeConversation && !activeConversation.isPrivate && onOpenChatOptions && (
+          <TouchableOpacity accessibilityLabel="Chat options and privacy" testID="chat-more-options"
+            style={styles.iconButton} onPress={onOpenChatOptions}>
+            <Icon name={activeConversation.pinVerifier ? 'lock' : 'more-horizontal'} size={19} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
         <AttachStep index={16}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
             <Icon name="sliders" size={16} color={colors.textSecondary} />

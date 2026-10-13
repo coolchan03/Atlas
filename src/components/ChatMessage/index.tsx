@@ -302,6 +302,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onCopy,
   onRetry,
   onEdit,
+  onDelete,
+  onSaveToProject,
   onGenerateImage,
   showActions = true,
   canGenerateImage = false,
@@ -343,6 +345,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const handleRetry = () => {
     onRetry?.(message);
     setShowActionMenu(false);
+  };
+
+  const handleDelete = () => {
+    setShowActionMenu(false);
+    onDelete?.(message);
+  };
+  const handleSaveToProject = () => {
+    setShowActionMenu(false);
+    onSaveToProject?.(message);
   };
 
   const handleEdit = () => {
@@ -435,6 +446,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         isUser={isUser}
         canEdit={!!onEdit}
         canRetry={!!onRetry}
+        canDelete={!!onDelete && !isStreaming}
+        canSaveToProject={!!onSaveToProject && !isUser && !isStreaming}
         canGenerateImage={canGenerateImage && !!onGenerateImage}
         canSpeak={canSpeak}
         showSelectTextAction={interfaceMode === 'chat'}
@@ -446,6 +459,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}
+        onDelete={handleDelete}
+        onSaveToProject={handleSaveToProject}
         onGenerateImage={handleGenerateImage}
         onSpeak={handleSpeak}
         onSelectText={handleSelectText}

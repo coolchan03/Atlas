@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles, max-params -- Legacy dialog styles and compact action helper use dynamic theme tokens. */
 /**
  * One long-press menu for a chat, shared by every chat list (Home recents, Chats tab,
  * project chats): rename, set/remove PIN, archive, delete. Lists call `open(chat)` and
@@ -5,6 +6,8 @@
  */
 import React, { useRef, useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
+import { AppSheet } from './AppSheet';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 import { useTheme } from '../theme';
 import { useChatStore, useAppStore } from '../stores';
@@ -23,6 +26,12 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
   const { colors } = useTheme();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
+  const [menuTarget, setMenuTarget] = useState<Conversation | null>(null);
+  const afterMenuClose = useRef<(() => void) | null>(null);
+  const finishMenu = (next?: () => void) => {
+    afterMenuClose.current = next ?? null;
+    setMenuTarget(null);
+  };
   const [renameTitle, setRenameTitle] = useState('');
   const [pinTarget, setPinTarget] = useState<Conversation | null>(null);
   const [pinAction, setPinAction] = useState<'set' | 'remove'>('set');
@@ -58,23 +67,14 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
     ));
   const confirmDelete = (conversation: Conversation) => setAlertState(deleteAlert(conversation));
 
-  const open = (conversation: Conversation) => {
-    const locked = !!conversation.pinVerifier;
-    setAlertState(showAlert('Chat options', locked ? 'Locked conversation' : conversation.title, [
-      { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-      { text: 'Rename', onPress: () => { setAlertState(hideAlert()); setRenameTitle(conversation.title); setRenameTarget(conversation); } },
-      { text: locked ? 'Remove chat PIN' : 'Set chat PIN', onPress: () => {
-        setAlertState(hideAlert());
-        setPinAction(locked ? 'remove' : 'set');
-        setNewPin(''); setNewPin2(''); setPinTarget(conversation);
-      } },
-      { text: conversation.isArchived ? 'Unarchive' : 'Archive', onPress: () => {
-        useChatStore.getState().setConversationArchived(conversation.id, !conversation.isArchived);
-        setAlertState(hideAlert());
-      } },
-      { text: 'Delete', style: 'destructive', onPress: () => { nextAlert.current = deleteAlert(conversation); } },
-    ]));
-  };
+  const open = (conversation: Conversation) => setMenuTarget(conversation);
+  const menuAction = (icon: string, label: string, action: () => void, destructive = false) => (
+    <TouchableOpacity key={label} accessibilityRole="button" testID={`chat-option-${  label.toLowerCase().replace(/\s+/g, '-')}`}
+      onPress={action} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: 20 }}>
+      <Icon name={icon} size={20} color={destructive ? colors.error : colors.textSecondary} />
+      <Text style={{ fontSize: 16, color: destructive ? colors.error : colors.text }}>{label}</Text>
+    </TouchableOpacity>
+  );
 
   const box = { backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 } as const;
   const backdrop = { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' } as const;
@@ -82,6 +82,35 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
 
   const element = (
     <>
+      <AppSheet visible={!!menuTarget} title="Chat options" enableDynamicSizing
+        onClose={() => setMenuTarget(null)}
+        onClosed={() => { const action = afterMenuClose.current; afterMenuClose.current = null; action?.(); }}>
+        {menuTarget && (
+          <View style={{ paddingBottom: 12 }}>
+            <Text numberOfLines={1} style={{ color: colors.textMuted, paddingHorizontal: 20, paddingBottom: 7 }}>
+              {menuTarget.pinVerifier ? 'Locked conversation' : menuTarget.title}
+            </Text>
+            {menuAction('edit-2', 'Rename', () => finishMenu(() => {
+              setRenameTitle(menuTarget.title); setRenameTarget(menuTarget);
+            }))}
+            {menuAction('star', menuTarget.isPinned ? 'Unpin from top' : 'Pin to top', () => {
+              useChatStore.getState().setConversationPinned(menuTarget.id, !menuTarget.isPinned);
+              finishMenu();
+            })}
+            {menuAction(menuTarget.pinVerifier ? 'unlock' : 'lock',
+              menuTarget.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', () => finishMenu(() => {
+                setPinAction(menuTarget.pinVerifier ? 'remove' : 'set');
+                setNewPin(''); setNewPin2(''); setPinTarget(menuTarget);
+              }))}
+            {menuAction('archive', menuTarget.isArchived ? 'Unarchive' : 'Archive', () => {
+              useChatStore.getState().setConversationArchived(menuTarget.id, !menuTarget.isArchived);
+              finishMenu();
+            })}
+            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 7 }} />
+            {menuAction('trash-2', 'Delete', () => finishMenu(() => confirmDelete(menuTarget)), true)}
+          </View>
+        )}
+      </AppSheet>
       <Modal visible={!!pinTarget} transparent animationType="fade" onRequestClose={closePin}>
         <View style={backdrop}>
           <View style={box}>

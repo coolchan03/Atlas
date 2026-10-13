@@ -10,7 +10,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore, Agent } from '../stores/agentStore';
 
 /** Agents tab: personas with their own system prompts. Tap the circle to make one active. */
-export const AgentsScreen: React.FC = () => {
+export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
   const wide = useWideLayout();
@@ -37,7 +37,7 @@ export const AgentsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={embedded ? [] : ['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Agents</Text>
         <View style={styles.headerButtons}>

@@ -7,6 +7,8 @@ export interface ChatMessageProps {
   onCopy?: (content: string) => void;
   onRetry?: (message: Message) => void;
   onEdit?: (message: Message, newContent: string) => void;
+  onDelete?: (message: Message) => void;
+  onSaveToProject?: (message: Message) => void;
   onGenerateImage?: (prompt: string) => void;
   showActions?: boolean;
   canGenerateImage?: boolean;

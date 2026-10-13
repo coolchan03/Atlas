@@ -11,12 +11,16 @@ interface ActionMenuSheetProps {
   isUser: boolean;
   canEdit: boolean;
   canRetry: boolean;
+  canDelete?: boolean;
+  canSaveToProject?: boolean;
   canGenerateImage: boolean;
   canSpeak: boolean;
   styles: any;
   onCopy: () => void;
   onEdit: () => void;
   onRetry: () => void;
+  onDelete?: () => void;
+  onSaveToProject?: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
   /** When provided, shows a "Select text" item (chat mode) for partial copy. */
@@ -29,12 +33,16 @@ export function ActionMenuSheet({
   isUser,
   canEdit,
   canRetry,
+  canDelete,
+  canSaveToProject,
   canGenerateImage,
   canSpeak,
   styles,
   onCopy,
   onEdit,
   onRetry,
+  onDelete,
+  onSaveToProject,
   onGenerateImage,
   onSpeak,
   onSelectText,
@@ -106,6 +114,22 @@ export function ActionMenuSheet({
           >
             <Icon name="image" size={18} color={colors.textSecondary} />
             <Text style={styles.actionSheetText}>Generate Image</Text>
+          </AnimatedPressable>
+        )}
+
+        {canSaveToProject && onSaveToProject && !isUser && (
+          <AnimatedPressable testID="action-save-to-project" hapticType="selection"
+            style={styles.actionSheetItem} onPress={onSaveToProject}>
+            <Icon name="folder-plus" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Save report to project</Text>
+          </AnimatedPressable>
+        )}
+
+        {canDelete && onDelete && (
+          <AnimatedPressable testID="action-delete" hapticType="selection"
+            style={styles.actionSheetItem} onPress={onDelete}>
+            <Icon name="trash-2" size={18} color={colors.error} />
+            <Text style={[styles.actionSheetText, { color: colors.error }]}>Delete message</Text>
           </AnimatedPressable>
         )}
 

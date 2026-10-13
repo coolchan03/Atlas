@@ -1,3 +1,4 @@
+/* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
 import { Dispatch, SetStateAction } from 'react';
 import { resolveAgentPrompt, activeAgentTools } from '../../stores/agentStore';
@@ -24,6 +25,7 @@ import { useChatStore, useProjectStore, useRemoteServerStore, useAppStore } from
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
+import { buildDeepResearchBrief, cancelDeepResearch, ResearchCancelledError } from '../../services/deepResearch';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
@@ -76,6 +78,9 @@ export type GenerationDeps = {
   setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
+  researchMode?: boolean;
+  researchDepth?: 'quick' | 'deep';
+  setResearchStatus?: (status: string | null) => void;
 };
 function applyCompactionPrefix(conversation: any, systemPrompt: string, messages: Message[]): { prefix: Message[]; filtered: Message[] } {
   const prefix: Message[] = [{ id: 'system', role: 'system', content: systemPrompt, timestamp: 0 }];
@@ -279,6 +284,7 @@ async function generateWithCompactionRetry(
   opts: { id: string; prompt: string; messages: Message[] },
   enabledTools: string[],
   projectId?: string,
+  ephemeralContext = false,
 ): Promise<boolean> {
   const extCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
   logger.log(`[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`);
@@ -289,7 +295,7 @@ async function generateWithCompactionRetry(
   // Atlas: compress older messages BEFORE the context is full, so long chats keep going smoothly.
   try {
     const prefs = useChatPrefs.getState();
-    if (prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
+    if (!ephemeralContext && prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
       const ctx = llmService.getPerformanceSettings().contextLength || 2048;
       const convo = opts.messages.filter(m => m.role !== 'system' && m.id !== 'compaction-summary');
       const sysChars = opts.messages.filter(m => m.role === 'system' || m.id === 'compaction-summary').reduce((n, m) => n + (m.content?.length || 0), 0);
@@ -308,7 +314,7 @@ async function generateWithCompactionRetry(
     }
   } catch (e) { logger.warn('[ChatGen] auto-compress skipped', e); }
   try { const outcome = await gen(opts.messages); turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted; } catch (error: any) {
-    if (!contextCompactionService.isContextFullError(error)) throw error;
+    if (!contextCompactionService.isContextFullError(error) || ephemeralContext) throw error;
     await llmService.stopGeneration().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
@@ -394,6 +400,25 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(deps, conversation, messageText);
+  let researchMessage = messageText;
+  if (deps.researchMode) {
+    try {
+      const brief = await buildDeepResearchBrief(messageText, {
+        contextLength: useAppStore.getState().settings.contextLength,
+        onStatus: (status) => deps.setResearchStatus?.(status),
+        depth: deps.researchDepth ?? 'deep',
+      });
+      // The evidence pack exists only inside this inference context, never in saved user messages.
+      researchMessage = `${messageText  }\n\n${  brief.context}`;
+    } catch (e: any) {
+      deps.setResearchStatus?.(null);
+      if (!(e instanceof ResearchCancelledError)) {
+        deps.addMessage(targetConversationId, { role: 'assistant', content: `Deep Research could not retrieve sources: ${  String(e?.message || e)}` });
+      }
+      generationSession.end('research-failed');
+      return;
+    }
+  }
   let basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
 
   // In voice/audio mode the pro audio feature augments the prompt for spoken
@@ -418,10 +443,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     deps.activeModel,
     { isRemote },
   );
-  const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
+  const messagesForContext = buildMessagesForContext(targetConversationId, researchMessage, systemPrompt);
+  deps.setResearchStatus?.(null);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
-    turnStopped = await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);
+    turnStopped = await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId, !!deps.researchMode);
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
@@ -589,7 +615,9 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   }
   await dispatchGenerationFn(deps, { text, attachments, conversationId: targetConversationId, imageMode }, startGeneration);
 }
-export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage'>): Promise<void> {
+export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'setResearchStatus'>): Promise<void> {
+  cancelDeepResearch();
+  deps.setResearchStatus?.(null);
   generationSession.end('stopped');
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise
   try { await generationService.stopGeneration().catch(() => { }); }
