@@ -18,7 +18,7 @@ export interface PodcastLine { host: 'A' | 'B' | 'C'; text: string }
 export interface Slide { title: string; bullets: string[]; narration: string; src: number[] }
 
 export interface StudyResult {
-  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline' | 'crossword' | 'wordsearch' | 'match';
+  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline' | 'crossword' | 'wordsearch' | 'match' | 'game';
   createdAt: number;
   topic: string;
   title?: string;
@@ -32,18 +32,23 @@ export interface StudyResult {
   learningTerms?: LearningTerm[];
   crossword?: Crossword;
   wordSearch?: WordSearch;
+  /** Project learning game payload (kind === 'game'), see src/study/games. */
+  game?: { type: string; data: any };
 }
 
 interface StudyState {
   saved: Record<string, StudyResult[]>; // by project
   add: (projectId: string, r: StudyResult) => void;
   remove: (projectId: string, createdAt: number) => void;
+  update: (projectId: string, createdAt: number, patch: Partial<StudyResult>) => void;
 }
 export const useStudyStore = create<StudyState>()(
   persist(
     (set) => ({
       saved: {},
-      add: (pid, r) => set((s) => ({ saved: { ...s.saved, [pid]: [r, ...(s.saved[pid] || [])].slice(0, 40) } })),
+      // 150 items per project (games add many); the oldest beyond that are dropped.
+      add: (pid, r) => set((s) => ({ saved: { ...s.saved, [pid]: [r, ...(s.saved[pid] || [])].slice(0, 150) } })),
+      update: (pid, at, patch) => set((s) => ({ saved: { ...s.saved, [pid]: (s.saved[pid] || []).map((x) => (x.createdAt === at ? { ...x, ...patch } : x)) } })),
       remove: (pid, at) => set((s) => ({ saved: { ...s.saved, [pid]: (s.saved[pid] || []).filter((x) => x.createdAt !== at) } })),
     }),
     { name: 'atlas-study', storage: createJSONStorage(() => AsyncStorage) },
@@ -98,8 +103,11 @@ export async function gatherSources(projectId: string, topic: string, share = 1)
   return out;
 }
 
-const sourceBlock = (s: Source[]) => s.map((x) => `[${x.n}] (${x.doc}, part ${x.part})\n${x.text}`).join('\n\n');
+export const sourceBlock = (s: Source[]) => s.map((x) => `[${x.n}] (${x.doc}, part ${x.part})\n${x.text}`).join('\n\n');
 const refs = (t: string) => [...new Set([...t.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))];
+
+/** One grounded model call for study features (games use it too). */
+export async function askModel(system: string, user: string): Promise<string> { return ask(system, user); }
 
 async function ask(system: string, user: string): Promise<string> {
   await ensureTextModel(null);
@@ -114,7 +122,7 @@ async function ask(system: string, user: string): Promise<string> {
 }
 
 const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;
-const GROUND = 'Use ONLY the numbered sources. After every fact put the source number in brackets like [2]. If the sources do not cover something, do not invent it.';
+export const GROUND = 'Use ONLY the numbered sources. After every fact put the source number in brackets like [2]. If the sources do not cover something, do not invent it.';
 
 export function learningActivitiesEnabled(projectId: string): boolean {
   const project = require('../stores/projectStore').useProjectStore.getState().getProject(projectId);
@@ -144,6 +152,30 @@ export function parseGroundedLearningTerms(raw: string, sources: Source[]): Lear
     if (out.length >= 16) break;
   }
   return out;
+}
+
+function shuffleIndexes(n: number, seed: number): number[] {
+  const out = Array.from({ length: n }, (_, i) => i);
+  let a = seed >>> 0;
+  for (let i = n - 1; i > 0; i--) {
+    a = (Math.imul(a ^ (a >>> 15), 2246822507) + 0x9E3779B9) >>> 0;
+    const j = a % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Key terms + clues that really occur in the sources (shared by most project games). */
+export async function termsFromSources(sources: Source[], topic = '', min = 3): Promise<LearningTerm[]> {
+  const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
+  const about = topic.trim() ? `Focus: ${topic.trim()}\n` : '';
+  const raw = await ask(
+    'You create educational word puzzles from document passages. Use ONLY words that actually occur in the provided sources. Do not invent facts. Make concise clues that do not reveal the term. Do not include answers longer than 14 letters.',
+    `${S}${about}Extract up to 14 distinct important single-word terms and clues drawn from the sources. Use exactly one item per line in this format:\nTERM: WORD | CLUE: a short question or definition without the word | SRC: 1\nThe source number must identify a passage that literally contains the word. No introduction.`,
+  );
+  const terms = parseGroundedLearningTerms(raw, sources);
+  if (terms.length < min) throw new Error('Not enough verifiable terms could be found in the project sources. Try more documents or a larger local model.');
+  return terms;
 }
 
 export async function generate(projectId: string, kind: StudyResult['kind'], topic: string): Promise<StudyResult> {
@@ -184,12 +216,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     return { ...base, cards };
   }
   if (kind === 'crossword' || kind === 'wordsearch' || kind === 'match') {
-    const raw = await ask(
-      'You create educational word puzzles from document passages. Use ONLY words that actually occur in the provided sources. Do not invent facts. Make concise clues that do not reveal the term. Do not include answers longer than 14 letters.',
-      `${S}${about}Extract up to 12 distinct important single-word terms and clues drawn from the sources. Use exactly one item per line in this format:\nTERM: WORD | CLUE: a short question or definition without the word | SRC: 1\nThe source number must identify a passage that literally contains the word. No introduction.`,
-    );
-    const terms = parseGroundedLearningTerms(raw, sources);
-    if (terms.length < 3) throw new Error('Not enough verifiable terms could be found in the project sources. Try more documents or a larger local model.');
+    const terms = await termsFromSources(sources, topic);
     if (kind === 'crossword') {
       const crossword = buildCrossword(terms);
       if (crossword.entries.length < 3) throw new Error('These project terms do not cross sufficiently for a crossword. Try another topic.');
@@ -218,7 +245,12 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
       return { q, options: opts, answer: ans, why: b.match(/WHY:\s*(.+)/i)?.[1]?.trim() || '', src: refs(`[${(b.match(/SRC:\s*([\d,\s[\]]+)/i)?.[1] || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean).join('][')}]`) };
     }).filter(Boolean) as QuizItem[];
     if (!quiz.length) throw new Error('The model did not produce a quiz in the expected format. Try again or use a bigger model.');
-    return { ...base, quiz };
+    // Small models put the right answer first most of the time: shuffle the options.
+    const shuffled = quiz.map((q, i) => {
+      const order = shuffleIndexes(q.options.length, Date.now() + i);
+      return { ...q, options: order.map((k) => q.options[k]), answer: order.indexOf(q.answer) };
+    });
+    return { ...base, quiz: shuffled };
   }
   if (kind === 'podcast') {
     const t = await ask(

@@ -8,6 +8,9 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';
+import { ProjectGame } from '../components/games/ProjectGame';
+import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
+import { dueItems, streakFrom, useStudyProgress } from '../study/progress';
 import { Switch } from 'react-native';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { hostVoices } from '../atlasVoice/neural';
@@ -55,6 +58,10 @@ export const StudyScreen: React.FC = () => {
   const add = useStudyStore((s) => s.add);
   const remove = useStudyStore((s) => s.remove);
   const [topic, setTopic] = useState('');
+  const progressItems = useStudyProgress((s) => s.items);
+  const doneDays = useStudyProgress((s) => s.doneDays);
+  const dueCount = React.useMemo(() => dueItems(projectId).length, [progressItems, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const streak = streakFrom(doneDays);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<StudyResult | null>(() => (openAt ? (useStudyStore.getState().saved[projectId] || []).find((r) => r.createdAt === openAt) ?? null : null));
   const [src, setSrc] = useState<Source | null>(null);
@@ -105,6 +112,21 @@ export const StudyScreen: React.FC = () => {
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make the episode', String(e?.message || e));
+    } finally { setBusy(null); keepScreenOn(false); }
+  };
+
+  const runGame = async (type: GameType) => {
+    const label = PROJECT_GAMES.find((g) => g.type === type)?.label || 'Game';
+    setBusy(label);
+    keepScreenOn(true);
+    try {
+      const r = await generateGame(projectId, type, topic, (m) => setBusy(m));
+      // Review and daily read live progress; they are not worth saving as items.
+      if (type !== 'review' && type !== 'daily') add(projectId, r);
+      setResumeAt(0);
+      setView(r);
+    } catch (e: any) {
+      Alert.alert('Could not make the game', String(e?.message || e));
     } finally { setBusy(null); keepScreenOn(false); }
   };
 
@@ -182,7 +204,8 @@ export const StudyScreen: React.FC = () => {
               <SourceChips nums={[...new Set([...v.text.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))]} sources={v.sources} onOpen={openSource} colors={colors} />
             </View>
           )}
-          {(v.crossword || v.wordSearch || v.learningTerms) && <ProjectLearningGame key={v.createdAt} activity={v} onOpenSource={openSource} />}
+          {v.kind !== 'game' && (v.crossword || v.wordSearch || v.learningTerms) && <ProjectLearningGame key={v.createdAt} activity={v} onOpenSource={openSource} />}
+          {v.kind === 'game' && <ProjectGame key={v.createdAt} result={v} projectId={projectId} onOpenSource={openSource} />}
           {v.cards?.map((c, i) => (
             <TouchableOpacity key={i} style={[card, { minHeight: 90, justifyContent: 'center' }]} onPress={() => setFlipped((f) => ({ ...f, [i]: !f[i] }))}>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>{flipped[i] ? 'Answer' : `Card ${i + 1} · tap to flip`}</Text>
@@ -284,16 +307,39 @@ export const StudyScreen: React.FC = () => {
             </View>
           ))}
         </View>
+        {learningEnabled && (
+          <View>
+            <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 4, fontSize: 16 }}>Learning games</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 6 }}>Every game is made from this project's documents (type a topic above to focus it). What you get wrong comes back in Review.</Text>
+            <View style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+              <Icon name="calendar" size={18} color={colors.primary} />
+              <Text style={{ color: colors.text, marginLeft: 10, flex: 1 }}>
+                Today: {dueCount} card{dueCount === 1 ? '' : 's'} due · streak {streak} day{streak === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 }}>
+              {PROJECT_GAMES.map((g) => (
+                <View key={g.type} style={{ width: width >= 700 ? '33.3%' : '50%', padding: 5 }}>
+                  <TouchableOpacity disabled={!!busy} onPress={() => runGame(g.type)} accessibilityRole="button" accessibilityLabel={`${g.label}. ${g.desc}`} style={[card, { marginBottom: 0, minHeight: 84 }]}>
+                    <Icon name={g.icon} size={20} color={colors.primary} />
+                    <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', marginTop: 6 }}>{busy === g.label ? 'Making...' : g.label}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{g.desc}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
         {!learningEnabled && <TouchableOpacity onPress={() => navigation.navigate('ProjectEdit', { projectId })} style={{ padding: 12, borderRadius: 10, backgroundColor: colors.surface, marginTop: 10 }}>
           <Text style={{ color: colors.text, fontWeight: '600' }}>Learning activities are off for this project</Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Enable the one Learning Activities switch in Project Settings to create source-based crosswords, word searches, matching games, quizzes and podcasts. Writing projects stay unchanged otherwise.</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Turn on Learning Activities in Project Settings to make source-based games, quizzes and podcasts from this project.</Text>
           <Text style={{ color: colors.primary, marginTop: 6 }}>Open project settings</Text>
         </TouchableOpacity>}
         {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>{/\.\.\.$/.test(busy) ? busy : 'Working on it'} - this can take a few minutes on a phone.</Text>}
         {saved.length > 0 && <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 6 }}>Saved</Text>}
         {saved.map((r) => (
           <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setResumeAt(0); setView(r); }}>
-            <Icon name={KINDS.find((k) => k.kind === r.kind)?.icon || 'message-circle'} size={18} color={colors.primary} />
+            <Icon name={(r.kind === 'game' ? PROJECT_GAMES.find((g) => g.type === r.game?.type)?.icon : KINDS.find((k) => k.kind === r.kind)?.icon) || 'message-circle'} size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title ? `${r.kind === 'podcast' ? '🎙 ' : ''}${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(r.createdAt).toLocaleString()}</Text>
