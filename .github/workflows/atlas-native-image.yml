@@ -57,15 +57,9 @@ jobs:
         run: node scripts/verify-native-image-contract.cjs
       - name: TypeScript compile check
         run: ./node_modules/.bin/tsc --noEmit -p .
-      - name: Run image model compatibility tests
-        run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts __tests__/unit/services/hardware.test.ts
-      - name: Verify model attachments, credentials and voice regressions
-        run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/imageSupportFormat.test.ts __tests__/unit/services/authServiceSecurity.test.ts __tests__/unit/services/authService.test.ts __tests__/unit/services/encryptedChatStorage.test.ts __tests__/unit/services/protectedProjectStorage.test.ts __tests__/unit/stores/projectStore.test.ts __tests__/unit/utils/learningGames.test.ts __tests__/unit/stores/chatStore.test.ts __tests__/integration/stores/chatStoreIntegration.test.ts __tests__/unit/services/voiceService.test.ts
-      - name: Verify flexible context and native Vulkan regressions
-        run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/services/acceleratorSelection.test.ts __tests__/unit/services/contextWindow.test.ts __tests__/unit/services/llmContextShiftSafety.test.ts __tests__/unit/services/llmVulkan.test.ts __tests__/unit/services/llm.test.ts
+      - name: Run the full Jest suite
+        # Every test, not a hand-picked subset: a failing test blocks the APK.
+        run: ./node_modules/.bin/jest --ci --silent --coverage=false --maxWorkers=2
       - name: Add sherpa voice dependencies
         run: |
           mkdir -p android/app/libs

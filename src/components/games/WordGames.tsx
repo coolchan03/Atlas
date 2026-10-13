@@ -6,7 +6,7 @@ import {
   buildPairs, closeEnough, hangmanGuess, hangmanMask, hangmanStatus, HANGMAN_LIVES, shuffle, wordleFeedback,
   type ClozeItem, type HangmanState, type PairCard,
 } from '../../study/games/logic';
-import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, ScoreLine, SourceLinks, Title, useGameColors, useRecord, type GameProps } from './kit';
+import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, ScoreLine, SourceLinks, useGameColors, useRecord, type GameProps } from './kit';
 
 // ----------------------------------------------------------------- memory pairs
 export function PairsGame({ result, projectId, onOpenSource }: GameProps) {
