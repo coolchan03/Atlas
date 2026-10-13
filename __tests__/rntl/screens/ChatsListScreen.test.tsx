@@ -145,6 +145,16 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 
 import { ChatsListScreen } from '../../../src/screens/ChatsListScreen';
 
+/** New chat first asks Regular vs Private; tap "Regular chat" in that system alert. */
+function pickRegularChat() {
+  const { Alert } = require('react-native');
+  const spy = jest.spyOn(Alert, 'alert').mockImplementation(((_t: string, _m: string, buttons?: { text: string; onPress?: () => void }[]) => {
+    buttons?.find((b) => b.text === 'Regular chat')?.onPress?.();
+  }) as any);
+  return spy;
+}
+
+
 describe('ChatsListScreen', () => {
   beforeEach(() => {
     resetStores();
@@ -174,6 +184,7 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
+      pickRegularChat();
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
     });
@@ -218,6 +229,7 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
+      pickRegularChat();
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
     });
@@ -353,9 +365,10 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
+      pickRegularChat();
       fireEvent.press(getByText('New'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
     });
 
     it('does not navigate when New is pressed and no models downloaded', () => {
@@ -495,9 +508,10 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
+      pickRegularChat();
       fireEvent.press(getByText('New Chat'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
     });
   });
 
@@ -518,24 +532,9 @@ describe('ChatsListScreen', () => {
         generatedImages: [],
       });
 
-      render(<ChatsListScreen />);
-      // The Swipeable mock renders renderRightActions inline, which contains
-      // a trash button. Find it and press it.
-      const { TouchableOpacity } = require('react-native');
-      // Since we render right actions inline, find all touchables
-      // and look for the trash-related one
       const tree = render(<ChatsListScreen />);
-      const touchables = tree.UNSAFE_getAllByType(TouchableOpacity);
-      // The delete action button should be among them
-      // Find the one that triggers the delete alert
-      for (const btn of touchables) {
-        mockShowAlert.mockClear();
-        fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
-          break;
-        }
-      }
+      // The Swipeable mock renders renderRightActions inline: press the row's delete action.
+      fireEvent.press(tree.getByTestId(`chat-delete-${conv.id}`));
 
       expect(mockShowAlert).toHaveBeenCalledWith(
         'Delete Chat',

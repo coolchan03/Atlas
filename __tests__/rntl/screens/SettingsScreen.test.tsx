@@ -95,13 +95,8 @@ describe('SettingsScreen', () => {
     mockProState.proBannerDismissed = false;
   });
 
-  it('shows the Pro upsell banner when Pro is not active and not dismissed', () => {
-    const { getByText } = render(<SettingsScreen />);
-    expect(getByText(/democratized/i)).toBeTruthy();
-  });
-
-  it('hides the Pro upsell banner once Pro is active', () => {
-    mockProState.hasRegisteredPro = true;
+  // Atlas removed the Off Grid Pro upsell entirely.
+  it('never shows the Pro upsell banner', () => {
     const { queryByText } = render(<SettingsScreen />);
     expect(queryByText(/democratized/i)).toBeNull();
   });
@@ -135,7 +130,7 @@ describe('SettingsScreen', () => {
   it('renders navigation item descriptions', () => {
     const { getByText } = render(<SettingsScreen />);
     expect(getByText('System prompt, generation, and performance')).toBeTruthy();
-    expect(getByText('Connect to Off Grid AI Desktop, Ollama, LM Studio, and more')).toBeTruthy();
+    expect(getByText('Use models running on a computer on your Wi-Fi (Ollama, LM Studio...)')).toBeTruthy();
     expect(getByText('Passphrase and app lock')).toBeTruthy();
     expect(getByText('Hardware and compatibility')).toBeTruthy();
     expect(getByText('Models and data usage')).toBeTruthy();
@@ -175,44 +170,17 @@ describe('SettingsScreen', () => {
     // The three theme options are rendered - pressing one calls setThemeMode
   });
 
-  it('renders Privacy First section', () => {
-    const { getByText } = render(<SettingsScreen />);
-    expect(getByText('Privacy First')).toBeTruthy();
-    expect(
-      getByText(/All your data stays on this device/),
-    ).toBeTruthy();
-  });
-
   it('renders about section text', () => {
     const { getByText } = render(<SettingsScreen />);
     expect(getByText('About')).toBeTruthy();
     expect(getByText(/Version/)).toBeTruthy();
   });
 
-  it('renders the "Stay in the loop" card with the Follow-on-X and Join-Slack items', () => {
-    const { getByText, getByTestId } = render(<SettingsScreen />);
-    expect(getByText('Stay in the loop')).toBeTruthy();
-    expect(getByText('Follow @alichherawalla on X')).toBeTruthy();
-    // The two affordances are present and tappable.
-    expect(getByTestId('follow-on-x')).toBeTruthy();
-    expect(getByTestId('join-slack')).toBeTruthy();
-  });
-
-  it('opens the X profile URL when Follow-on-X is tapped', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
-    const { getByTestId } = render(<SettingsScreen />);
-    fireEvent.press(getByTestId('follow-on-x'));
-    // Terminal artifact of a link tap: the OS is handed the exact X profile URL (the shared constant).
-    expect(openURL).toHaveBeenCalledWith(FOLLOW_X_URL);
-    openURL.mockRestore();
-  });
-
-  it('opens the Slack invite URL when Join-Slack is tapped', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
-    const { getByTestId } = render(<SettingsScreen />);
-    fireEvent.press(getByTestId('join-slack'));
-    expect(openURL).toHaveBeenCalledWith(SLACK_INVITE_URL);
-    openURL.mockRestore();
+  // Atlas removed the upstream Off Grid social links (X, Slack).
+  it('does not render the upstream Stay in the loop card', () => {
+    const { queryByTestId } = render(<SettingsScreen />);
+    expect(queryByTestId('follow-on-x')).toBeNull();
+    expect(queryByTestId('join-slack')).toBeNull();
   });
 
   it('no longer renders the removed Pro Tools row', () => {

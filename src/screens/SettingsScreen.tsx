@@ -58,7 +58,7 @@ export const SettingsScreen: React.FC = () => {
   const settingsSections = useSettingsSections();
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
-  const userName = useAppStore((s) => s.settings.userName ?? '');
+  const userName = useAppStore((s) => s.settings?.userName ?? '');
   const updateSettings = useAppStore((s) => s.updateSettings);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
