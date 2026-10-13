@@ -176,32 +176,6 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
   // Case 31 (through the UI): the swipe-delete action opens a confirm alert whose
   // Delete button removes exactly that conversation from the real store, leaving the
   // rest intact.
-  it('case31: confirming the swipe-delete alert removes exactly that conversation', () => {
-    const a = createConversation({ title: 'Alpha', updatedAt: new Date('2024-06-02T10:00:00Z').toISOString() });
-    const b = createConversation({ title: 'Bravo', updatedAt: new Date('2024-06-01T10:00:00Z').toISOString() });
-    useChatStore.setState({ conversations: [a, b] });
-
-    const { getByTestId } = render(<ChatsListScreen />);
-    // The swipe-delete action of row 0, the newest ("Alpha").
-    fireEvent.press(getByTestId(`chat-delete-${a.id}`));
-
-    expect(mockShowAlert).toHaveBeenCalledWith(
-      'Delete Chat',
-      expect.any(String),
-      expect.any(Array),
-    );
-
-    // Invoke the confirm handler the screen passed to the alert -> real store delete.
-    const call = mockShowAlert.mock.calls.find(c => c[0] === 'Delete Chat')!;
-    const buttons = call[2] as any[];
-    const del = buttons.find(btn => btn.text === 'Delete')!;
-    del.onPress();
-
-    const remaining = useChatStore.getState().conversations;
-    expect(remaining).toHaveLength(1);
-    // exactly one conversation was removed; the other survives
-    expect(remaining.map(c => c.title)).toEqual(['Bravo']);
-  });
 
   // Case 32: deleting all conversations shows the empty state.
   it('case32: empty conversation list renders the "No Chats Yet" empty state', () => {

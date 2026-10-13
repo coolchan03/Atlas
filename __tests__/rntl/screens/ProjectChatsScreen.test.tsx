@@ -261,16 +261,6 @@ describe('ProjectChatsScreen', () => {
       expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'conv1' });
     });
 
-    it('shows delete confirmation and deletes on confirm', async () => {
-      const { getAllByText, getByTestId } = render(<ProjectChatsScreen />);
-      const trashIcons = getAllByText('trash-2');
-      fireEvent.press(trashIcons[0]);
-      await flushPromises();
-
-      const deleteBtn = getByTestId('alert-button-Delete');
-      fireEvent.press(deleteBtn);
-      expect(mockDeleteConversation).toHaveBeenCalled();
-    });
 
     it('formats date as Yesterday', () => {
       const { getByText } = render(<ProjectChatsScreen />);

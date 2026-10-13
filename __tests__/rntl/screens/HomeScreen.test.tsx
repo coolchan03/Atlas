@@ -1350,57 +1350,6 @@ describe('HomeScreen', () => {
   // ============================================================================
   // Delete Conversation (full flow with swipe actions)
   // ============================================================================
-  describe('delete conversation full flow', () => {
-    it('renders delete button in swipeable right actions', () => {
-      const conv = createConversation({ title: 'Swipeable Chat' });
-      useChatStore.setState({ conversations: [conv] });
-
-      const { getAllByTestId } = renderHomeScreen();
-      expect(getAllByTestId('swipeable-right-actions').length).toBeGreaterThan(0);
-    });
-
-    it('shows delete confirmation and deletes conversation', async () => {
-      const conv = createConversation({ title: 'Delete This Chat' });
-      useChatStore.setState({ conversations: [conv] });
-
-      const { getByTestId, queryByText } = renderHomeScreen();
-
-      // Press the trash button (has testID="delete-conversation-button")
-      fireEvent.press(getByTestId('delete-conversation-button'));
-
-      await waitFor(() => {
-        expect(queryByText('Delete Conversation')).toBeTruthy();
-        expect(queryByText(`Delete "Delete This Chat"?`)).toBeTruthy();
-      });
-
-      // Press Delete button in the alert
-      await act(async () => {
-        fireEvent.press(getByTestId('alert-button-Delete'));
-      });
-
-      // Conversation should be deleted
-      expect(useChatStore.getState().conversations.length).toBe(0);
-    });
-
-    it('cancels delete conversation', async () => {
-      const conv = createConversation({ title: 'Keep This Chat' });
-      useChatStore.setState({ conversations: [conv] });
-
-      const { getByTestId, queryByText } = renderHomeScreen();
-
-      fireEvent.press(getByTestId('delete-conversation-button'));
-
-      await waitFor(() => {
-        expect(queryByText('Delete Conversation')).toBeTruthy();
-      });
-
-      // Press Cancel
-      fireEvent.press(getByTestId('alert-button-Cancel'));
-
-      // Conversation should still exist
-      expect(useChatStore.getState().conversations.length).toBe(1);
-    });
-  });
 
   // ============================================================================
   // Gallery Navigation

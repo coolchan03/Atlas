@@ -1,7 +1,7 @@
 /**
  * HAPPY-PATH (UI, BEHAVIORAL) — delete a conversation the way a user does: a chat created by sending a
- * message is swipe-deleted from the Home "Recent" list (tap the swipe-revealed delete → confirm) and
- * disappears.
+ * message is deleted from the Home "Recent" list (long-press → Chat options → Delete → confirm) and
+ * disappears. There is no swipe-to-delete: it removed chats by accident.
  *
  * Real ChatScreen (to create the chat via a real send) + real HomeScreen + real chatStore; only native leaves
  * faked. No deleteConversation() shortcut. (Editing a message is covered behaviorally by editMessage.happy;
@@ -16,8 +16,8 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-describe('happy — delete a conversation via the real swipe gesture', () => {
-  it('a sent chat is swipe-deleted from Recent and disappears', async () => {
+describe('happy — delete a conversation from the long-press menu', () => {
+  it('a sent chat is deleted from Recent via long-press and disappears; no swipe delete exists', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
     h.render();
     // Create a real conversation by sending a message.
@@ -32,9 +32,16 @@ describe('happy — delete a conversation via the real swipe gesture', () => {
     const home = h.rtl.render(React.createElement(HomeScreen, { navigation: { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} } }));
     await h.rtl.waitFor(() => { expect(home.queryByText('trip planning ideas')).not.toBeNull(); });
 
-    // Swipe-delete gesture: tap the swipe-revealed delete button, then confirm in the alert.
-    h.rtl.fireEvent.press(home.getByTestId('delete-conversation-button'));
-    h.rtl.fireEvent.press(await h.rtl.waitFor(() => home.getByText('Delete')));
+    expect(home.queryByTestId('delete-conversation-button')).toBeNull();
+    // Long-press opens the same options as the Chats tab; pick Delete, then confirm.
+    h.rtl.fireEvent(home.getByText('trip planning ideas'), 'longPress');
+    await h.rtl.waitFor(() => { expect(home.queryByText('Chat options')).not.toBeNull(); });
+    expect(home.getByText('Rename')).toBeTruthy();
+    expect(home.getByText('Set chat PIN')).toBeTruthy();
+    expect(home.getByText('Archive')).toBeTruthy();
+    h.rtl.fireEvent.press(home.getByText('Delete'));
+    await h.rtl.waitFor(() => { expect(home.queryByText('Delete Chat')).not.toBeNull(); });
+    h.rtl.fireEvent.press(home.getByText('Delete'));
 
     // The conversation is gone from the Recent list.
     await h.rtl.waitFor(() => { expect(home.queryByText('trip planning ideas')).toBeNull(); });

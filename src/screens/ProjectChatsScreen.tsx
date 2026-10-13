@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useChatOptions } from '../components/ChatOptions';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -166,7 +166,7 @@ export const ProjectChatsScreen: React.FC = () => {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { getProject } = useProjectStore();
-  const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
+  const { conversations, setActiveConversation, createConversation } = useChatStore();
   const { downloadedModels, activeModelId } = useAppStore();
 
   const project = getProject(projectId);
@@ -194,42 +194,16 @@ export const ProjectChatsScreen: React.FC = () => {
     }
   };
 
-  const handleDeleteChat = (conversation: Conversation) => {
-    setAlertState(showAlert(
-      'Delete Chat',
-      `Delete "${conversation.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteConversation(conversation.id),
-        },
-      ]
-    ));
-  };
-
-  const renderChatRightActions = (conversation: Conversation) => (
-    <TouchableOpacity
-      style={styles.deleteAction}
-      onPress={() => handleDeleteChat(conversation)}
-    >
-      <Icon name="trash-2" size={16} color={colors.error} />
-    </TouchableOpacity>
-  );
+  const chatOptions = useChatOptions();
 
   const renderChat = ({ item }: { item: Conversation }) => {
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <Swipeable
-        renderRightActions={() => renderChatRightActions(item)}
-        overshootRight={false}
-        containerStyle={styles.swipeableContainer}
-      >
         <TouchableOpacity
           style={styles.chatItem}
           onPress={() => handleChatPress(item)}
+          onLongPress={() => chatOptions.open(item)}
         >
           <View style={styles.chatIcon}>
             <Icon name="message-circle" size={14} color={colors.textMuted} />
@@ -249,7 +223,6 @@ export const ProjectChatsScreen: React.FC = () => {
           </View>
           <Icon name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>
-      </Swipeable>
     );
   };
 
@@ -300,6 +273,7 @@ export const ProjectChatsScreen: React.FC = () => {
         />
       )}
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
+      {chatOptions.element}
     </SafeAreaView>
   );
 };

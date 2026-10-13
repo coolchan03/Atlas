@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity, Platform, Alert, Modal, TextInput } from 'react-native';
-import { protectChat, permanentlyUnprotectChat, unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
+import { unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
+import { useChatOptions } from '../components/ChatOptions';
 import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
 import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/onboarding/spotlightConfig';
@@ -40,15 +40,9 @@ export const ChatsListScreen: React.FC = () => {
   const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
   const conversations = useChatStore(s => s.conversations);
-  const { deleteConversation, setActiveConversation, setConversationArchived } = useChatStore.getState();
+  const { setActiveConversation } = useChatStore.getState();
   const [showArchived, setShowArchived] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
-  const [renameTitle, setRenameTitle] = useState('');
-  const [pinTarget, setPinTarget] = useState<Conversation | null>(null);
-  const [pinAction, setPinAction] = useState<'set' | 'remove'>('set');
-  const [newPin, setNewPin] = useState('');
-  const [newPin2, setNewPin2] = useState('');
-  const [pinBusy, setPinBusy] = useState(false);
+  const chatOptions = useChatOptions();
   const hideLocked = useChatPrefs(s => s.hideLockedChats);
   const vaultOpen = useVaultSession(s => s.open);
   const setVaultOpen = useVaultSession(s => s.setOpen);
@@ -74,27 +68,11 @@ export const ChatsListScreen: React.FC = () => {
     await recordPinSuccess('chat');
     setVaultError(''); setVaultPrompt(false); setVaultOpen(true);
   };
-  const savePin = async () => {
-    if (!pinTarget || pinBusy) return;
-    if (!/^[0-9]{4,12}$/.test(newPin)) { Alert.alert('PIN', 'Enter 4–12 digits.'); return; }
-    if (pinAction === 'set' && newPin !== newPin2) { Alert.alert('PIN', 'The two PINs do not match.'); return; }
-    setPinBusy(true);
-    try {
-      if (pinAction === 'remove') {
-        // Decrypt, verify a readable plaintext write, then revoke this chat's key.
-        await permanentlyUnprotectChat(pinTarget.id, newPin);
-      } else {
-        await protectChat(pinTarget.id, newPin);
-      }
-      setPinTarget(null); setNewPin(''); setNewPin2('');
-    } catch (e: any) { Alert.alert('PIN update failed', String(e?.message ?? e)); }
-    finally { setPinBusy(false); }
-  };
   const { getProject } = useProjectStore();
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
-  const { removeImagesByConversationId, markSpotlightShown } = useAppStore.getState();
+  const { markSpotlightShown } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -187,44 +165,6 @@ export const ChatsListScreen: React.FC = () => {
     }
   };
 
-  const handleDeleteChat = (conversation: Conversation) => {
-    setAlertState(showAlert(
-      'Delete Chat',
-      `Delete "${conversation.title}"? This will also delete all images generated in this chat.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setAlertState(hideAlert());
-            const imageIds = removeImagesByConversationId(conversation.id);
-            for (const imageId of imageIds) {
-              onnxImageGeneratorService.deleteGeneratedImage(imageId).catch(() => {});
-            }
-            deleteConversation(conversation.id);
-          },
-        },
-      ]
-    ));
-  };
-
-  const handleChatLongPress = (conversation: Conversation) => {
-    setAlertState(showAlert('Chat options', conversation.title, [
-      { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-      { text: 'Rename', onPress: () => { setAlertState(hideAlert()); setRenameTitle(conversation.title); setRenameTarget(conversation); } },
-      { text: conversation.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', onPress: () => {
-        setAlertState(hideAlert());
-        setPinAction(conversation.pinVerifier ? 'remove' : 'set');
-        setNewPin(''); setPinTarget(conversation);
-      } },
-      { text: conversation.isArchived ? 'Unarchive' : 'Archive', onPress: () => {
-        setConversationArchived(conversation.id, !conversation.isArchived);
-        setAlertState(hideAlert());
-      } },
-      { text: 'Delete', style: 'destructive', onPress: () => { setAlertState(hideAlert()); handleDeleteChat(conversation); } },
-    ]));
-  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -242,34 +182,18 @@ export const ChatsListScreen: React.FC = () => {
     
   };
 
-  const renderRightActions = (conversation: Conversation) => (
-    <TouchableOpacity
-      style={styles.deleteAction}
-      onPress={() => handleDeleteChat(conversation)}
-      testID={`chat-delete-${conversation.id}`}
-      accessibilityRole="button"
-      accessibilityLabel="Delete chat"
-    >
-      <Icon name="trash-2" size={16} color={colors.error} />
-    </TouchableOpacity>
-  );
 
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <Swipeable
-        renderRightActions={() => renderRightActions(item)}
-        overshootRight={false}
-        containerStyle={styles.swipeableContainer}
-      >
         <AnimatedListItem
           index={index}
           trigger={focusTrigger}
           style={styles.chatItem}
           onPress={() => handleChatPress(item)}
-          onLongPress={() => handleChatLongPress(item)}
+          onLongPress={() => chatOptions.open(item)}
           testID={`conversation-item-${index}`}
         >
           <View style={styles.chatContent}>
@@ -292,7 +216,6 @@ export const ChatsListScreen: React.FC = () => {
           </View>
           <Icon name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedListItem>
-      </Swipeable>
     );
   };
 
@@ -361,21 +284,6 @@ export const ChatsListScreen: React.FC = () => {
           testID="conversation-list"
         />
       )}
-      <Modal visible={!!pinTarget} transparent animationType="fade" onRequestClose={() => setPinTarget(null)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{pinAction === 'remove' ? 'Remove chat PIN' : 'Set a chat PIN'}</Text>
-            <Text style={{ color: colors.textSecondary }}>{pinAction === 'remove' ? 'Enter the current PIN to permanently remove encryption. The conversation will be saved normally afterward.' : 'Encrypt only this conversation with its own Android Keystore key. You can use the same PIN on other protected chats.'}</Text>
-            <TextInput value={newPin} onChangeText={v => setNewPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
-            {pinAction === 'set' && <TextInput value={newPin2} onChangeText={v => setNewPin2(v.replace(/\D/g, '').slice(0, 12))} placeholder="Type the PIN again" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />}
-            {pinAction === 'set' && <Text style={{ color: colors.textMuted, fontSize: 12 }}>If you forget this PIN the chat cannot be recovered.</Text>}
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
-              <TouchableOpacity onPress={() => { setPinTarget(null); setNewPin(''); setNewPin2(''); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity disabled={pinBusy} onPress={savePin}><Text style={{ color: colors.primary, fontWeight: '700' }}>{pinAction === 'remove' ? 'Remove PIN' : 'Set PIN'}</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
       <Modal visible={vaultPrompt} transparent animationType="fade" onRequestClose={() => setVaultPrompt(false)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
           <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
@@ -389,18 +297,7 @@ export const ChatsListScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-      <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Rename chat</Text>
-            <TextInput value={renameTitle} onChangeText={setRenameTitle} maxLength={100} autoFocus selectTextOnFocus style={{ color: colors.text, borderWidth: 1, borderColor: colors.textMuted, borderRadius: 8, padding: 10 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
-              <TouchableOpacity onPress={() => setRenameTarget(null)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => { if (renameTarget) useChatStore.getState().renameConversation(renameTarget.id, renameTitle); setRenameTarget(null); }}><Text style={{ color: colors.primary, fontWeight: '600' }}>Save</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {chatOptions.element}
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}

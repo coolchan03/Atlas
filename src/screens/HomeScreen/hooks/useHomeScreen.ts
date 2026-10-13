@@ -4,7 +4,7 @@ import { InteractionManager, Alert } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
-import { Conversation, RemoteModel } from '../../../types';
+import { RemoteModel } from '../../../types';
 import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
@@ -19,28 +19,6 @@ export type { HomeScreenNavigationProp, ModelPickerType, LoadingState };
 // Track if we've synced native state to avoid repeated calls
 let hasInitializedNativeSync = false;
 let hasRunLANDiscovery = false;
-
-function deleteConversationWithAlert(
-  conversation: Conversation,
-  setAlertState: (s: AlertState) => void,
-  deleteConversation: (id: string) => void,
-) {
-  setAlertState(showAlert(
-    'Delete Conversation',
-    `Delete "${conversation.title}"?`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          setAlertState(hideAlert());
-          deleteConversation(conversation.id);
-        },
-      },
-    ]
-  ));
-}
 
 export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
@@ -68,7 +46,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     generatedImages,
   } = useAppStore();
 
-  const { conversations, setActiveConversation, deleteConversation } = useChatStore();
+  const { conversations, setActiveConversation } = useChatStore();
 
   // Remote server store for remote models
   const {
@@ -218,9 +196,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     navigation.navigate('Chat', { conversationId });
   };
 
-  const handleDeleteConversation = (conversation: Conversation) =>
-    deleteConversationWithAlert(conversation, setAlertState, deleteConversation);
-
   const activeRemoteImageModel = activeRemoteImageModelId && activeServerId
     ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
     : null;
@@ -273,6 +248,5 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     handleEjectAll,
     startNewChat,
     continueChat,
-    handleDeleteConversation,
   };
 };

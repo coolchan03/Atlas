@@ -77,7 +77,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     handleEjectAll,
     startNewChat,
     continueChat,
-    handleDeleteConversation,
   } = useHomeScreen(navigation);
 
   const { handleStepPress } = useHomeScreenSpotlight({
@@ -208,7 +207,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   totalCount={conversations.length}
                   focusTrigger={focusTrigger}
                   onContinueChat={continueChat}
-                  onDeleteConversation={handleDeleteConversation}
                   onSeeAll={() => navigation.navigate('ChatsTab')}
                 />
               </AnimatedEntry>

@@ -210,33 +210,6 @@ describe('useHomeScreen', () => {
   });
 
   // ==========================================================================
-  // handleDeleteConversation
-  // ==========================================================================
-  describe('handleDeleteConversation', () => {
-    it('shows delete confirmation alert', () => {
-      const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      const conversation = { id: 'conv-1', title: 'My Chat' } as any;
-      act(() => { result.current.handleDeleteConversation(conversation); });
-      expect(showAlert).toHaveBeenCalledWith(
-        'Delete Conversation',
-        expect.stringContaining('My Chat'),
-        expect.any(Array),
-      );
-    });
-
-    it('deletes conversation when confirmed', () => {
-      const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      const conversation = { id: 'conv-1', title: 'My Chat' } as any;
-      act(() => { result.current.handleDeleteConversation(conversation); });
-      const buttons = (showAlert as jest.Mock).mock.calls[0][2];
-      const deleteBtn = buttons.find((b: any) => b.text === 'Delete');
-      act(() => { deleteBtn.onPress(); });
-      expect(mockDeleteConversation).toHaveBeenCalledWith('conv-1');
-      expect(hideAlert).toHaveBeenCalled();
-    });
-  });
-
-  // ==========================================================================
   // handleEjectAll
   // ==========================================================================
   describe('handleEjectAll', () => {
