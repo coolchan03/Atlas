@@ -122,10 +122,12 @@ export interface ContextInitResult {
  *  first-load OpenCL kernel compilation exceeded it (2026-07-13 20:11 log: "timed out after
  *  8000ms" on a load that succeeded with 24 offloaded layers in an earlier session), silently
  *  downgrading every reload to CPU. The init runs on a native thread (no ANR exposure); 25s
- *  bounds a genuinely hung driver while letting a slow first compile finish. */
-const GPU_INIT_TIMEOUT_MS = 25000;
-/** Timeout for HTP/NPU context init -- DSP firmware load takes longer than Adreno. */
-const HTP_INIT_TIMEOUT_MS = 30000;
+ *  bounds a genuinely hung driver while letting a slow first compile finish (raised to 45s:
+ *  first-load kernel compiles of 3-4B models still ran past 25s). */
+const GPU_INIT_TIMEOUT_MS = 45000;
+/** Timeout for HTP/NPU context init -- DSP firmware load plus the first weight repack take
+ *  longer than Adreno; 30s cut off first NPU loads of 3-4B models. */
+const HTP_INIT_TIMEOUT_MS = 90000;
 /** iOS Metal init timeout. Larger than Android's because a legit large-model
  *  Metal setup takes longer — but bounded, so a Metal graph that HANGS (e.g.
  *  gemma3n froze indefinitely at kv-cache/graph construction) falls back to CPU
@@ -444,7 +446,10 @@ export async function fitMessagesInBudget(
   }
   return result;
 }
-// Android Adreno GPU caps (≤4GB/≤6GB→0, ≤8GB→12, >8GB→24).
+// Android Adreno GPU caps for models too big to offload whole (≤4GB/≤6GB→0, ≤8GB→12, >8GB→24).
+// A model whose weights fit in this share of RAM offloads fully: the caps alone meant no
+// phone ever ran a model fully on the GPU, and ≤6GB phones never used it at all.
+const ANDROID_FULL_OFFLOAD_RAM_SHARE = 0.4;
 const ANDROID_GPU_LAYER_CAPS: { maxGB: number; layers: number }[] = [{ maxGB: 4, layers: 0 }, { maxGB: 6, layers: 0 }, { maxGB: 8, layers: 12 }];
 const ANDROID_GPU_LAYERS_FALLBACK = 24;
 
@@ -471,6 +476,7 @@ export function getGpuLayersForDevice(
 
   // Android / Adreno-specific caps to prevent GPU ANRs
   if (Platform.OS === 'android') {
+    if (opts?.modelBytes && opts.modelBytes <= totalMemoryBytes * ANDROID_FULL_OFFLOAD_RAM_SHARE) return requestedLayers;
     const tier = ANDROID_GPU_LAYER_CAPS.find(t => totalGB <= t.maxGB);
     const maxLayers = tier ? tier.layers : ANDROID_GPU_LAYERS_FALLBACK;
     return Math.min(requestedLayers, maxLayers);

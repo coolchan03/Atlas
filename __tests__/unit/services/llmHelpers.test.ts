@@ -122,6 +122,12 @@ describe('getGpuLayersForDevice', () => {
       expect(getGpuLayersForDevice(12 * GB, 99)).toBe(24);
     });
 
+    it('offloads a model fully when its weights fit in 40% of RAM (6GB and 8GB phones too)', () => {
+      expect(getGpuLayersForDevice(6 * GB, 99, { modelBytes: 2 * GB })).toBe(99);
+      expect(getGpuLayersForDevice(8 * GB, 99, { modelBytes: 3 * GB })).toBe(99);
+      expect(getGpuLayersForDevice(8 * GB, 99, { modelBytes: 4.5 * GB })).toBe(12);
+    });
+
     it('returns requested layers when under cap on Android 12GB', () => {
       expect(getGpuLayersForDevice(12 * GB, 16)).toBe(16);
     });
@@ -615,7 +621,7 @@ describe('initContextWithFallback — GPU timeout on Android', () => {
       .mockResolvedValueOnce(cpuCtx);
 
     const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
-    jest.advanceTimersByTime(25001);
+    jest.advanceTimersByTime(45001);
     const result = await resultPromise;
 
     expect(result.gpuAttemptFailed).toBe(true);
@@ -639,7 +645,7 @@ describe('initContextWithFallback — GPU timeout on Android', () => {
       .mockResolvedValueOnce(cpuCtx);
 
     const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
-    jest.advanceTimersByTime(25001);
+    jest.advanceTimersByTime(45001);
     await resultPromise;
 
     // Late ctx whose release() throws — safeRelease must swallow the error

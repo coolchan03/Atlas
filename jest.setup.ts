@@ -119,12 +119,12 @@ jest.mock('@react-navigation/native', () => {
 
 // llama.rn mock - use virtual mock since native module may not resolve
 jest.mock('llama.rn', () => ({
-  // Native backend devices: an Adreno (qcom) test device exposes an OpenCL GPU,
+  // Native backend devices: an Adreno (qcom) test device exposes an OpenCL GPU and a Hexagon NPU,
   // anything else only the CPU — mirrors the real llama.rn device query.
   getBackendDevicesInfo: jest.fn(async () => {
     let hw = '';
     try { hw = String(await require('react-native-device-info').getHardware?.() ?? '').toLowerCase(); } catch { /* none */ }
-    return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
+    return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }, { backend: 'HTP', type: 'gpu', deviceName: 'HTP0' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
   }),
   initLlama: jest.fn(() => Promise.resolve({
     id: 'test-context-id',

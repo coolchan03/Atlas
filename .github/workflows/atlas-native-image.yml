@@ -70,7 +70,7 @@ jobs:
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
       - name: Test native image family classifier and progress diagnostics
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --tests 'ai.offgridmobile.localdream.AtlasVulkanProbeTest' --tests 'ai.offgridmobile.localdream.AtlasImageGpuPrecisionTest' :app:compileReleaseKotlin -PatlasVulkanEnabled=true --no-daemon --console=plain
+        run: ./gradlew :app:testDebugUnitTest --tests 'ai.offgridmobile.localdream.AtlasImageArchitectureTest' --tests 'ai.offgridmobile.localdream.AtlasImageProgressTest' --tests 'ai.offgridmobile.localdream.AtlasVulkanProbeTest' --tests 'ai.offgridmobile.localdream.AtlasImageGpuPrecisionTest' :app:compileReleaseKotlin -PatlasVulkanEnabled=true -PrnllamaBuildFromSource=false --no-daemon --console=plain
       - name: Build native ARM64 diffusion CLI from pinned upstream source
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
@@ -128,7 +128,11 @@ jobs:
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
       - name: Assemble Android release APK
         working-directory: android
-        run: ./gradlew assembleRelease -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon
+        # llama.rn's own gradle.properties forces a from-source build, and without
+        # Qualcomm's Hexagon SDK that build has no NPU backend at all. Use the
+        # release's prebuilt libraries (fetched above, sha256-checked), which carry
+        # the Hexagon NPU and OpenCL backends.
+        run: ./gradlew assembleRelease -PatlasVulkanEnabled=true -PrnllamaBuildFromSource=false -PreactNativeArchitectures=arm64-v8a --no-daemon
       - name: Verify packaged diffusion and llama runtimes
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
@@ -138,6 +142,11 @@ jobs:
           grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libllamakt.so' /tmp/atlas-apk-files.txt
+          # NPU + OpenCL chat runtime: the library must exist and carry the Hexagon
+          # backend, and the HTP DSP libraries must be packaged next to it.
+          grep -q 'lib/arm64-v8a/librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so' /tmp/atlas-apk-files.txt
+          grep -q 'assets/ggml-hexagon/libggml-htp-v' /tmp/atlas-apk-files.txt
+          unzip -p "$APK" 'lib/arm64-v8a/librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so' | strings | grep -q 'ggml_hexagon_session'
           # Ensure the optional llama.kt Vulkan chat engine is inside the APK.
           unzip -p "$APK" 'classes*.dex' | strings > /tmp/atlas-dex-strings.txt
           grep -q 'com/tensai/llamakt/LlamaEngine' /tmp/atlas-dex-strings.txt

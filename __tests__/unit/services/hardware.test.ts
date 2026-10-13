@@ -1222,6 +1222,14 @@ describe('HardwareService', () => {
       expect(await hardwareService.getAccelerationCapability()).toEqual({ hasNpu: true, hasGpu: true });
     });
 
+    it('reports no NPU on a Snapdragon when the runtime exposes no Hexagon device', async () => {
+      Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({ vendor: 'qualcomm', hasNPU: true } as any);
+      jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+      jest.spyOn(hardwareService, 'hasHtpDevice').mockResolvedValue(false);
+      expect(await hardwareService.getAccelerationCapability()).toEqual({ hasNpu: false, hasGpu: true });
+    });
+
     it('has no acceleration on a device with neither', async () => {
       Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
       jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({ vendor: 'other', hasNPU: false } as any);

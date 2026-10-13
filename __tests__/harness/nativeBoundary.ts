@@ -407,11 +407,11 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
       return context;
     }),
     // Native backend devices, as the real llama.rn query reports them: an Adreno ('qcom')
-    // device exposes an OpenCL GPU; anything else only the CPU.
+    // device exposes an OpenCL GPU and a Hexagon NPU; anything else only the CPU.
     getBackendDevicesInfo: jest.fn(async () => {
       let hw = '';
       try { hw = String(await require('react-native-device-info').getHardware?.() ?? '').toLowerCase(); } catch { /* none */ }
-      return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
+      return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }, { backend: 'HTP', type: 'gpu', deviceName: 'HTP0' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
     }),
     releaseContext: jest.fn().mockResolvedValue(undefined),
     completion: jest.fn().mockResolvedValue({ text: '' }),

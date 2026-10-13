@@ -280,6 +280,10 @@ class LLMService {
         }
       }
       this.acceleratorAttempts = failures;
+      if (failures.some(f => /timed out after/i.test(f))) throw new Error(
+        'The GPU/NPU took too long to start, so the load was stopped before trying the next backend. '
+        + 'Try loading again (the first start is the slowest), or pick CPU in Settings > Text generation. '
+        + failures.join(' | '));
       throw new Error('No compatible backend could load this model (including CPU). ' + failures.join(' | '));
     } finally {
       mutex.release();
@@ -299,11 +303,11 @@ class LLMService {
       const settings = useAppStore.getState().settings;
       const backend = selectedBackend ?? (settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU);
       if (backend === INFERENCE_BACKENDS.HTP) {
-        // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
-        // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
+        // HTP routes to the Hexagon NPU, so the Adreno GPU layer caps do not apply; only
+        // the ≤4GB floor does (the caps used to zero the NPU on 6GB phones too).
         if (!(await hardwareService.getSoCInfo()).hasNPU && strictAcceleration)
           throw new Error('HTP/NPU not supported by this device');
-        safeGpuLayers = safeGpuLayers > 0 ? (settings?.gpuLayers || 99) : 0;
+        safeGpuLayers = deviceInfo.totalMemory / BYTES_PER_GB > 4 ? (settings?.gpuLayers || 99) : 0;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
@@ -315,7 +319,9 @@ class LLMService {
           safeGpuLayers = 0;
         } else {
           // Respect the Adreno-specific RAM cap — safeGpuLayers already has it applied.
-          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+          // Name the OpenCL device: the default list can also include the Hexagon NPU.
+          if (capability.devices?.length) resolvedBaseParams = { ...params.baseParams, devices: capability.devices };
+          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU${capability.devices?.length ? ` (${capability.devices.join(', ')})` : ''}`);
         }
       } else {
         safeGpuLayers = 0;

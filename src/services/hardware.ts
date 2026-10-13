@@ -29,7 +29,8 @@ class HardwareService {
   private cachedDeviceInfo: DeviceInfoType | null = null;
   private cachedSoCInfo: SoCInfo | null = null;
   private cachedImageRecommendation: ImageModelRecommendation | null = null;
-  private cachedOpenCLCapability: { supported: boolean; reason?: string } | null = null;
+  private cachedOpenCLCapability: { supported: boolean; reason?: string; devices?: string[] } | null = null;
+  private cachedHtpDevice: boolean | null = null;
   async getDeviceInfo(): Promise<DeviceInfoType> {
     if (this.cachedDeviceInfo) {
       return this.cachedDeviceInfo;
@@ -464,22 +465,40 @@ class HardwareService {
    */
   async getAccelerationCapability(): Promise<{ hasNpu: boolean; hasGpu: boolean }> {
     if (Platform.OS !== 'android') return { hasNpu: false, hasGpu: false };
-    const [soc, opencl] = await Promise.all([this.getSoCInfo(), this.getOpenCLCapability()]);
-    return { hasNpu: HTP_ENABLED && soc.hasNPU, hasGpu: opencl.supported };
+    const [soc, opencl, htp] = await Promise.all([this.getSoCInfo(), this.getOpenCLCapability(), this.hasHtpDevice()]);
+    // A Snapdragon SoC is not enough: the bundled runtime must expose a Hexagon device
+    // (HTP0...). Without it the "NPU" choice could only ever fail.
+    return { hasNpu: HTP_ENABLED && soc.hasNPU && htp, hasGpu: opencl.supported };
   }
 
-  async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string }> {
+  /** True when the bundled llama.rn runtime exposes a Hexagon NPU device (HTP0, HTP1...). */
+  async hasHtpDevice(): Promise<boolean> {
+    if (this.cachedHtpDevice !== null) return this.cachedHtpDevice;
+    if (Platform.OS !== 'android') return false;
+    try {
+      const devices: Array<{ backend?: string; deviceName?: string; name?: string }> = await getBackendDevicesInfo();
+      return (this.cachedHtpDevice = devices.some(d =>
+        /^HTP\d/i.test(d.deviceName ?? d.name ?? '') || /hexagon|htp/i.test(d.backend ?? '')));
+    } catch { return false; /* not cached: a failed probe may succeed later */ }
+  }
+
+  /** `devices` names the native OpenCL GPU devices, so a load can ask for exactly them
+   *  (otherwise the runtime's default list can also pick up the Hexagon NPU). */
+  async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string; devices?: string[] }> {
     if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
     try {
       // The CPU hardware string is not the GPU name (MediaTek/Mali tablets were
       // incorrectly rejected). Ask the bundled native runtime what it exposes.
       const devices = await getBackendDevicesInfo();
-      const supported = devices.some(device =>
+      const gpus = devices.filter(device =>
         /opencl/i.test(device.backend) && /gpu/i.test(device.type));
+      const supported = gpus.length > 0;
+      const names = gpus.map(device => (device as { deviceName?: string }).deviceName).filter((n): n is string => !!n);
       return (this.cachedOpenCLCapability = {
         supported,
         reason: supported ? undefined : 'native_opencl_device_not_found',
+        ...(names.length ? { devices: names } : {}),
       });
     } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
   }
