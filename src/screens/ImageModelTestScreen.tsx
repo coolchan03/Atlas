@@ -13,6 +13,7 @@ import { hardwareService } from '../services/hardware';
 import { selectImageAccelerator, imageComputeMode } from '../services/imageAcceleratorSelection';
 import type { GeneratedImage, ONNXImageModel } from '../types';
 import { imageTestPreset, type ImageTestMode } from '../utils/nativeImageTuning';
+import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 import { getMissingImageSupportGuides, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail';
@@ -42,6 +43,8 @@ export const ImageModelTestScreen: React.FC = () => {
   const [includeUpscaler, setIncludeUpscaler] = useState(false);
   const [items, setItems] = useState<TestItem[]>(emptyItems);
   const [running, setRunning] = useState(false);
+  // Memory refusal can be overridden, the same "Load Anyway" the chat offers.
+  const [canForce, setCanForce] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [diffusionStep, setDiffusionStep] = useState(0);
   const [runtime, setRuntime] = useState<NativeImageRuntimeStatus | null>(null);
@@ -120,9 +123,10 @@ export const ImageModelTestScreen: React.FC = () => {
   const update = (key: string, status: Status, detail: string) => {
     if (!gone.current) setItems(prev => prev.map(item => item.key === key ? { ...item, status, detail } : item));
   };
-  const doTest = async () => {
+  const doTest = async (force = false) => {
     if (!model || inProgress.current) return;
     inProgress.current = true;
+    setCanForce(false);
     cancelRequested.current = false;
     started.current = Date.now();
     setItems(emptyItems());
@@ -158,8 +162,8 @@ export const ImageModelTestScreen: React.FC = () => {
 
       update('ram', 'run', 'Checking available RAM...');
       const mem = await activeModelService.checkMemoryForModel(model.id, 'image');
-      if (!mem.canLoad) throw new Error('The model exceeds the safe memory budget. Free RAM or choose a smaller model.');
-      update('ram', mem.severity === 'warning' ? 'warn' : 'ok',
+      if (!mem.canLoad && !force) { setCanForce(true); throw new Error('The model exceeds the safe memory budget. Free RAM, choose a smaller model, or tap Load anyway.'); }
+      update('ram', !mem.canLoad || mem.severity === 'warning' ? 'warn' : 'ok', (!mem.canLoad ? 'Forced. ' : '') +
         'Estimated ' + mem.requiredMemoryGB.toFixed(1) + ' GB required, ' +
         mem.availableMemoryGB.toFixed(1) + ' GB usable.');
       if (cancelRequested.current) return;
@@ -175,7 +179,7 @@ export const ImageModelTestScreen: React.FC = () => {
       if (cancelRequested.current) return;
       update('engine', 'run', imageDecision.note + '. Loading model...');
       const t0 = Date.now();
-      await activeModelService.loadImageModel(model.id);
+      await activeModelService.loadImageModel(model.id, undefined, force ? { override: true } : undefined);
       if (cancelRequested.current) return;
       if (!await localDreamGeneratorService.isModelLoaded()) throw new Error('The image engine did not report a loaded model.');
       const backend = await localDreamGeneratorService.getLoadedBackend();
@@ -221,6 +225,7 @@ export const ImageModelTestScreen: React.FC = () => {
     } catch (err: any) {
       if (!cancelRequested.current && !gone.current) {
         const message = err?.message || String(err || 'Image generation failed');
+        if (!force && isOverridableMemoryError(err)) setCanForce(true);
         setFailure(message);
         setItems(prev => {
           const current = prev.find(step => step.status === 'run');
@@ -324,7 +329,7 @@ export const ImageModelTestScreen: React.FC = () => {
                 GPU check error: {gpuProbeError}
               </Text>}
             </>}
-            <TouchableOpacity onPress={running ? stop : doTest} style={{
+            <TouchableOpacity onPress={running ? stop : () => doTest()} style={{
               alignItems: 'center', backgroundColor: running ? colors.error : colors.primary,
               padding: 12, borderRadius: 10, marginTop: 12,
             }}>
@@ -332,6 +337,12 @@ export const ImageModelTestScreen: React.FC = () => {
                 {running ? 'Cancel test · ' + fmt(elapsed) : decision || failure ? 'Test again' : 'Start test'}
               </Text>
             </TouchableOpacity>
+            {canForce && !running && (
+              <TouchableOpacity testID="model-test-load-anyway" onPress={() => doTest(true)} style={{ marginTop: 10, borderWidth: 1, borderColor: colors.error, borderRadius: 10, paddingVertical: 11, alignItems: 'center' }}>
+                <Text style={{ color: colors.error }}>Load anyway</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>May close other apps or crash if memory runs out</Text>
+              </TouchableOpacity>
+            )}
             {model.backend === 'sdcpp' && running && elapsed >= 30 && (
               <View style={{ marginTop: 10 }}>
                 <Text selectable style={{ color: colors.textSecondary, fontSize: 12 }}>

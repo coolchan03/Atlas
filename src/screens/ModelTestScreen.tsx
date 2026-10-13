@@ -14,6 +14,7 @@ import type { Message } from '../types';
 import { useSpeedStats, estimateReply, fmtSec, speedHealthLabel } from '../atlasTools/speed';
 import { localUniqueId } from '../utils/uniqueId';
 import { ImageModelTestScreen } from './ImageModelTestScreen';
+import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
 interface Step { key: string; title: string; status: Status; detail: string }
@@ -57,16 +58,19 @@ const TextModelTestScreen: React.FC = () => {
   const [verdict, setVerdict] = useState<{ good: boolean; text: string } | null>(null);
   const [prevId, setPrevId] = useState<string | null>(null);
   const [faster, setFaster] = useState<string | null>(null);
+  // Memory refusal can be overridden, the same "Load Anyway" the chat offers.
+  const [canForce, setCanForce] = useState(false);
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
 
   const set = (key: string, status: Status, detail: string) =>
     setSteps((all) => all.map((s) => (s.key === key ? { ...s, status, detail } : s)));
 
-  const run = async () => {
+  const run = async (force = false) => {
     if (!model || running) return;
     cancelled.current = false;
     setRunning(true);
+    setCanForce(false);
     setVerdict(null);
     setFaster(null);
     setSteps(STEPS.map((s) => ({ ...s, status: 'wait', detail: '' })));
@@ -85,14 +89,15 @@ const TextModelTestScreen: React.FC = () => {
       const mem = await activeModelService.checkMemoryForModel(model.id, 'text');
       const total = hardwareService.getTotalMemoryGB();
       const need = `needs about ${mem.requiredMemoryGB.toFixed(1)} GB; ${mem.availableMemoryGB.toFixed(1)} GB usable of ${total.toFixed(0)} GB`;
-      if (!mem.canLoad) { set('fit', 'fail', `Too big for this device (${need}). Try a smaller or more compressed version (Q4).`); ok = false; throw new Error(''); }
-      set('fit', mem.severity === 'warning' ? 'warn' : 'ok', mem.severity === 'warning' ? `Tight (${need}). Other apps may get closed.` : `Yes (${need})`);
+      if (!mem.canLoad && !force) { set('fit', 'fail', `Too big for this device (${need}). Try a smaller or more compressed version (Q4), or tap Load anyway.`); ok = false; setCanForce(true); throw new Error(''); }
+      if (!mem.canLoad) set('fit', 'warn', `Forced (${need}). The app or other apps may be closed.`);
+      else set('fit', mem.severity === 'warning' ? 'warn' : 'ok', mem.severity === 'warning' ? `Tight (${need}). Other apps may get closed.` : `Yes (${need})`);
       if (cancelled.current) return;
 
       // 2. Load
       set('load', 'run', before === model.id ? 'Already loaded' : 'Loading... (can take a minute)');
       const t0 = Date.now();
-      await activeModelService.loadTextModel(model.id);
+      await activeModelService.loadTextModel(model.id, undefined, force ? { override: true } : undefined);
       const loadS = (Date.now() - t0) / 1000;
       set('load', 'ok', before === model.id && loadS < 1 ? 'Already loaded' : `Loaded in ${loadS.toFixed(1)} s`);
       if (cancelled.current) return;
@@ -180,6 +185,7 @@ const TextModelTestScreen: React.FC = () => {
         : { good: false, text: 'This model had a problem. See the red line above.' });
     } catch (e: any) {
       const m = e?.message || String(e || '');
+      if (!force && isOverridableMemoryError(e)) setCanForce(true);
       setSteps((all) => {
         const cur = all.find((s) => s.status === 'run');
         return cur ? all.map((s) => (s === cur ? { ...s, status: 'fail', detail: m || 'Failed' } : s)) : all;
@@ -240,9 +246,15 @@ const TextModelTestScreen: React.FC = () => {
               <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{model.name}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{model.fileName} · {hardwareService.formatModelSize(model)}</Text>
               <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Checks whether this model fits, loads, how fast it writes and reads, and what it can do. Takes about a minute. The model stays loaded afterwards.</Text>
-              <TouchableOpacity onPress={run} disabled={running} style={{ marginTop: 12, backgroundColor: running ? colors.border : colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => run()} disabled={running} style={{ marginTop: 12, backgroundColor: running ? colors.border : colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}>
                 {running ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>{verdict ? 'Test again' : 'Start test'}</Text>}
               </TouchableOpacity>
+              {canForce && !running && (
+                <TouchableOpacity testID="model-test-load-anyway" onPress={() => run(true)} style={{ marginTop: 10, borderWidth: 1, borderColor: colors.error, borderRadius: 10, paddingVertical: 11, alignItems: 'center' }}>
+                  <Text style={{ color: colors.error }}>Load anyway</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>May close other apps or crash if memory runs out</Text>
+                </TouchableOpacity>
+              )}
             </View>
             {model.engine === 'llama' && (
               <View style={card}>
