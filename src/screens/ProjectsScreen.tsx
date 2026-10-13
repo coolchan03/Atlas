@@ -99,16 +99,18 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         >
           <View style={styles.projectIcon}>
             <Text style={styles.projectIconText}>
-              {item.name.charAt(0).toUpperCase()}
+              {item.pinVerifier ? 'L' : item.name.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.projectContent}>
             <View style={styles.projectNameRow}>
               <Text style={styles.projectName} numberOfLines={1}>{item.pinVerifier ? 'Locked project' : item.name}</Text>
-              <View style={styles.chatCountTag}>
-                <Icon name="message-circle" size={8} color={colors.textMuted} />
-                <Text style={styles.chatCountText}>{chatCount}</Text>
-              </View>
+              {!item.pinVerifier && (
+                <View style={styles.chatCountTag}>
+                  <Icon name="message-circle" size={8} color={colors.textMuted} />
+                  <Text style={styles.chatCountText}>{chatCount}</Text>
+                </View>
+              )}
             </View>
             {item.description && !item.pinVerifier ? (
               <Text style={styles.projectDescription} numberOfLines={1}>
