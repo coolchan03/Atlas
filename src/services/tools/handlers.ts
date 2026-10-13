@@ -140,7 +140,11 @@ async function handleWebSearch(query: string): Promise<string> {
   // Atlas: provider chosen on the Tools screen (SearXNG, DuckDuckGo, Exa, Parallel, Tavily, Brave).
   const { results, provider, notes } = await searchWeb(query, braveSearch);
   if (results.length === 0) {
-    return `No results found for "${query}".${notes.length ? ` (${notes.join('; ')})` : ''}`;
+    // Every provider failed: report it as a failure so the model says it could not
+    // search, instead of treating it as "nothing exists" (audit C7).
+    const failed = notes.filter((n) => !/: no results$/.test(n));
+    if (failed.length && failed.length === notes.length) throw new Error(`Search failed (offline or blocked): ${failed.join('; ')}`);
+    return `No results found for "${query}".`;
   }
   return `Results from ${provider}:\n\n` + results
     .map((r, i) => {

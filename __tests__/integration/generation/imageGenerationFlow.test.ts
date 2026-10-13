@@ -1083,7 +1083,7 @@ describe('Image Generation Flow Integration', () => {
 
       expect(message?.generationMeta).toBeDefined();
       // In test env, Platform.OS defaults to 'ios', so backend is always Core ML
-      expect(message?.generationMeta?.gpuBackend).toBe('Core ML (ANE)');
+      expect(message?.generationMeta?.gpuBackend).toBe('Core ML (accelerator selected by OS)');
       expect(message?.generationMeta?.gpu).toBe(true);
     });
   });

@@ -16,18 +16,22 @@ describe('image runtime accelerator selection', () => {
     expect((await selectImageAccelerator('sdcpp', 'auto', probe)).selected).toBe('vulkan');
     expect(probe.opencl).not.toHaveBeenCalled();
   });
-  it('does not silently substitute OpenCL for an unavailable diffusion GPU', async () => {
+  // Auto falls back to CPU with a visible note (audit G13); explicit GPU mode stays strict.
+  it('Auto falls back to CPU (with a note) when the diffusion GPU is unavailable; GPU mode is strict', async () => {
     const probe = probes();
     probe.vulkan.mockResolvedValue({ enumerated: false, detail: 'no supported GPU' });
-    await expect(selectImageAccelerator('sdcpp', 'auto', probe))
-      .rejects.toThrow('CPU was not chosen automatically');
+    const auto = await selectImageAccelerator('sdcpp', 'auto', probe);
+    expect(auto.selected).toBe('cpu');
+    expect(auto.note).toMatch(/CPU fallback/);
     expect(probe.opencl).not.toHaveBeenCalled();
+    await expect(selectImageAccelerator('sdcpp', 'gpu', probe)).rejects.toThrow('Vulkan GPU not available');
   });
-  it('requires native OpenCL for MNN models in Auto', async () => {
+  it('uses OpenCL for MNN in Auto when present, else CPU; GPU mode requires it', async () => {
     const probe = probes();
     expect((await selectImageAccelerator('mnn', 'auto', probe)).selected).toBe('opencl');
     probe.opencl.mockResolvedValue({ supported: false });
-    await expect(selectImageAccelerator('mnn', 'auto', probe)).rejects.toThrow('OpenCL not detected');
+    expect((await selectImageAccelerator('mnn', 'auto', probe)).selected).toBe('cpu');
+    await expect(selectImageAccelerator('mnn', 'gpu', probe)).rejects.toThrow('OpenCL not detected');
   });
   it('honors manual CPU only with an eligible image runtime', async () => {
     const probe = probes();

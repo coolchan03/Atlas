@@ -20,8 +20,8 @@ jest.mock('@react-navigation/native', () => ({
 
 type Cfg = { label: string; backend: 'mnn' | 'qnn'; platform: 'ios' | 'android'; expected: string };
 const CONFIGS: Cfg[] = [
-  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (GPU)' },
-  { label: 'Metal (Core ML, iOS)', backend: 'mnn', platform: 'ios', expected: 'Core ML (ANE)' },
+  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (OpenCL requested; compute unverified)' },
+  { label: 'Metal (Core ML, iOS)', backend: 'mnn', platform: 'ios', expected: 'Core ML (accelerator selected by OS)' },
 ];
 
 describe('happy — image generation shows the correct backend label (heavy entry point)', () => {

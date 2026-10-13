@@ -353,20 +353,21 @@ describe('ModelsScreen/utils', () => {
       expect(result.incompatibleReason).toBe('Requires Snapdragon 8 Gen 2+');
     });
 
-    it('8gen2 device is compatible with all variants', () => {
+    // Atlas: QNN binaries are compiled per chip, so only the matching variant is offered as compatible.
+    it('8gen2 device needs the 8gen2 variant', () => {
       const result = getImageModelCompatibility(
         makeHFModel({ backend: 'qnn', variant: 'min' }) as any,
         { recommendedBackend: 'qnn', compatibleBackends: ['qnn'], qnnVariant: '8gen2' } as any,
       );
-      expect(result.isCompatible).toBe(true);
+      expect(result.isCompatible).toBe(false);
     });
 
-    it('8gen1 device is compatible with non-8gen2 variants', () => {
+    it('8gen1 device needs the 8gen1 variant', () => {
       const result = getImageModelCompatibility(
         makeHFModel({ backend: 'qnn', variant: 'min' }) as any,
         { recommendedBackend: 'qnn', compatibleBackends: ['qnn'], qnnVariant: '8gen1' } as any,
       );
-      expect(result.isCompatible).toBe(true);
+      expect(result.isCompatible).toBe(false);
     });
 
     it('same variant is compatible', () => {

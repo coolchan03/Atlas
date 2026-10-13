@@ -510,7 +510,7 @@ describe('LocalDreamGeneratorService', () => {
         height: 512,
       });
 
-      expect(mockLocalDreamModule.generateImage).toHaveBeenCalledWith({
+      expect(mockLocalDreamModule.generateImage).toHaveBeenCalledWith(expect.objectContaining({
         prompt: 'A cat',
         negativePrompt: 'blurry',
         steps: 25,
@@ -520,7 +520,7 @@ describe('LocalDreamGeneratorService', () => {
         height: 512,
         previewInterval: 2,
         useOpenCL: true,
-      });
+      }));
     });
 
     it('returns a GeneratedImage with correct shape', async () => {

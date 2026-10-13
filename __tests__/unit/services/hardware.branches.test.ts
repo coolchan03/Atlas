@@ -202,37 +202,36 @@ describe('HardwareService — branch coverage', () => {
       });
     });
 
-    it('returns supported for qcom hardware and caches it', async () => {
-      Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('qcom-adreno');
-      const first = await hardwareService.getOpenCLCapability();
-      expect(first).toEqual({ supported: true });
+    // The GPU is detected from what the bundled llama.rn runtime exposes, not from
+    // the CPU hardware string (MediaTek/Mali tablets were wrongly rejected before).
+    const setDevices = (impl: () => Promise<unknown>) => {
+      (require('llama.rn') as any).getBackendDevicesInfo = jest.fn(impl);
+    };
 
-      // Second call returns the cached object without re-reading hardware
-      mockedDeviceInfo.getHardware.mockClear();
+    it('returns supported when the runtime exposes an OpenCL GPU, and caches it', async () => {
+      Platform.OS = 'android';
+      setDevices(() => Promise.resolve([{ backend: 'OpenCL', type: 'gpu', name: 'Adreno' }]));
+      const first = await hardwareService.getOpenCLCapability();
+      expect(first).toEqual({ supported: true, reason: undefined });
+      const llama = require('llama.rn') as any;
+      llama.getBackendDevicesInfo.mockClear();
       const second = await hardwareService.getOpenCLCapability();
       expect(second).toBe(first);
-      expect(mockedDeviceInfo.getHardware).not.toHaveBeenCalled();
+      expect(llama.getBackendDevicesInfo).not.toHaveBeenCalled();
     });
 
-    it('returns supported for mali hardware', async () => {
+    it('returns native_opencl_device_not_found when only CPU is exposed', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('arm-mali-g78');
-      expect(await hardwareService.getOpenCLCapability()).toEqual({ supported: true });
-    });
-
-    it('returns no_compatible_gpu for unsupported hardware', async () => {
-      Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('exynos-generic');
+      setDevices(() => Promise.resolve([{ backend: 'CPU', type: 'cpu', name: 'CPU' }]));
       expect(await hardwareService.getOpenCLCapability()).toEqual({
         supported: false,
-        reason: 'no_compatible_gpu',
+        reason: 'native_opencl_device_not_found',
       });
     });
 
-    it('returns detection_failed when getHardware throws', async () => {
+    it('returns detection_failed when the runtime query throws', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockRejectedValue(new Error('hw error'));
+      setDevices(() => Promise.reject(new Error('native error')));
       expect(await hardwareService.getOpenCLCapability()).toEqual({
         supported: false,
         reason: 'detection_failed',

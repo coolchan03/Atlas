@@ -197,6 +197,11 @@ async function meta(q: string, n: number, braveFallback?: (q: string) => Promise
   ];
   if (braveFallback) engines.push(['Brave', braveFallback(q)]);
   const settled = await Promise.allSettled(engines.map((e) => e[1]));
+  // Every engine failed (offline, blocked): report the failure instead of "no results".
+  if (settled.every((r) => r.status === 'rejected')) {
+    const first = settled[0] as PromiseRejectedResult;
+    throw new Error(String(first.reason?.message || first.reason || 'all search engines failed'));
+  }
   const merged = new Map<string, WebResult & { score: number; engines: string[] }>();
   settled.forEach((res, ei) => {
     if (res.status !== 'fulfilled') return;
