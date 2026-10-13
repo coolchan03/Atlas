@@ -80,7 +80,7 @@ jest.mock('../../../src/services/llm', () => ({
 // engines.activeLocalTextCapabilities / wantsLeadingThinkToken read the litert service directly;
 // mock it as a dumb flag reader so the real engine registry resolves deterministically here.
 jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
+  liteRTService: { isModelLoaded: jest.fn(() => false), getLoadedModelPath: jest.fn(() => null) },
 }));
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: {
@@ -993,6 +993,9 @@ describe('UI tool gate (supportsToolCalling) gates generation', () => {
 
 describe('SO4 engine tool-routing (LiteRT native path via engine registry)', () => {
   const litertModel = createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: false });
+  beforeEach(() => {
+    (require('../../../src/services/litert').liteRTService.getLoadedModelPath as jest.Mock).mockReturnValue(litertModel.filePath);
+  });
   const makeLiteRTDeps = (overrides: Record<string, unknown> = {}) => makeGenerationDeps({
     activeModelId: 'lr',
     activeModel: litertModel,
@@ -1014,6 +1017,8 @@ describe('SO4 engine tool-routing (LiteRT native path via engine registry)', () 
 
   it('does NOT inject the built-in tool text hint for LiteRT (native tools would double-inject)', async () => {
     mockLiteRTLoaded.mockReturnValue(true);
+    // Atlas makes the Atlas agent active by default; this test is about the plain settings prompt.
+    require('../../../src/stores/agentStore').useAgentStore.setState({ activeAgentId: null });
     const deps = makeLiteRTDeps({ settings: { ...makeGenerationDeps().settings, systemPrompt: 'Be helpful', enabledTools: ['get_current_datetime'] } });
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what time is it?' });
 

@@ -15,6 +15,9 @@
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
+// These residency tests size models with the CPU overhead; the app default is now Auto (GPU overhead).
+beforeEach(() => { require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' }); });
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => ({ params: {} }),
@@ -55,7 +58,7 @@ async function setupHome() {
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
   require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
-  useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+  useAppStore.setState({ activeModelId: null, loadedTextModelId: null, checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
 
   const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
   const view = rtl.render(React.createElement(

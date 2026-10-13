@@ -19,6 +19,9 @@
 import { installNativeBoundary, GB, requireRTL } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
+// These residency tests size models with the CPU overhead; the app default is now Auto (GPU overhead).
+beforeEach(() => { require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' }); });
+
 describe('happy — switching text models swaps residency (one heavy model accounted resident)', () => {
   it('evicts the LiteRT model from residency when a llama.cpp model is loaded', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });

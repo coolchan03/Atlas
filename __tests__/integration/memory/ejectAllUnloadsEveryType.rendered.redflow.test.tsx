@@ -15,6 +15,9 @@
  */
 import { setupChatScreen } from '../../harness/chatHarness';
 
+// These residency tests size models with the CPU overhead; the app default is now Auto (GPU overhead).
+beforeEach(() => { require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' }); });
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,

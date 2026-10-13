@@ -788,7 +788,8 @@ describe('WhisperService', () => {
         })),
       };
       mockedInitWhisper.mockResolvedValueOnce(mockContext as any);
-      await whisperService.loadModel('/path/model.bin');
+      // English-only model files are told 'en'; multilingual ones auto-detect.
+      await whisperService.loadModel('/path/ggml-tiny.en.bin');
 
       const result = await whisperService.transcribeFile('/audio.wav');
 

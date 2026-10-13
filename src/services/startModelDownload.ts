@@ -53,10 +53,6 @@ export async function startModelDownload(
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing && isActiveStatus(existing.status)) return;
 
-  // Refuse up front when the file cannot fit (plus 10% headroom) instead of
-  // failing after a long download.
-  await assertFreeSpace(file.size);
-
   // Publish a QUEUED row to the store IMMEDIATELY, before starting the (possibly
   // slot-limited) native download. Without this, a queued download had no store entry
   // at all until a concurrency slot freed up — so the Models/onboarding screens (which
@@ -93,6 +89,9 @@ export async function startModelDownload(
   };
 
   try {
+    // Refuse up front when the file cannot fit (plus 10% headroom) instead of
+    // failing after a long download; shows as a normal failed row with the reason.
+    await assertFreeSpace(file.size + (file.mmProjFile?.size ?? 0));
     // downloadModelBackground writes the row + adds the store entry synchronously
     // after start (add for new, retryEntry for an existing failed one — including the
     // queued placeholder row added above, whose id it reconciles to the real one).

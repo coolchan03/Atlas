@@ -40,7 +40,7 @@ jest.mock('../../../src/services/llm', () => ({
 // LiteRT boundary mocked as a dumb flag reader so engines.isModelReady/deriveEngineCapabilities
 // (which read this DIRECT module, not the barrel) resolve deterministically for the litert path.
 jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
+  liteRTService: { isModelLoaded: jest.fn(() => false), getLoadedModelPath: jest.fn(() => null) },
 }));
 
 // Get mock references after hoisting
@@ -319,7 +319,9 @@ describe('ensureModelLoadedFn typed outcome', () => {
 
   it('returns ok without loading when the LiteRT model is already resident', async () => {
     mockLiteRTLoaded.mockReturnValue(true);
-    const deps = makeDeps({ activeModel: createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: true }) });
+    const active = createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: true });
+    (liteRTService.getLoadedModelPath as jest.Mock).mockReturnValue(active.filePath);
+    const deps = makeDeps({ activeModel: active });
     const outcome = await ensureModelLoadedFn(deps);
     expect(outcome).toEqual({ ok: true });
     expect(mockLoadTextModel).not.toHaveBeenCalled();
