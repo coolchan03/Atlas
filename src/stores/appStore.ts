@@ -55,7 +55,7 @@ type AppSettings = {
   classifierModelId: string | null; imageSteps: number; imageGuidanceScale: number;
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean;
-  imageBackendMode?: 'auto' | 'gpu' | 'cpu';
+  imageBackendMode?: 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
   enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models

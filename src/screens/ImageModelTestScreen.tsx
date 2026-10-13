@@ -172,6 +172,7 @@ export const ImageModelTestScreen: React.FC = () => {
       const imageDecision = await selectImageAccelerator(
         model.backend || 'mnn', imageComputeMode(useAppStore.getState().settings), {
           vulkan: () => localDreamGeneratorService.getNativeImageGpuDiagnostics(),
+          sdOpencl: () => localDreamGeneratorService.getNativeImageGpuDiagnostics('opencl'),
           opencl: () => hardwareService.getOpenCLCapability(),
           npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
         },
@@ -194,6 +195,7 @@ export const ImageModelTestScreen: React.FC = () => {
         ...cfg, prompt: SMILE, seed: 42,
         negativePrompt: model.nativeImageFamily === 'flux' ? '' : 'blurry, distorted, watermark, text',
         useOpenCL: imageDecision.useOpenCL,
+        ...(imageDecision.computeBackend ? { computeBackend: imageDecision.computeBackend } : {}),
         previewInterval: 0,
         skipLoRA: !includeLoRA, skipUpscaler: !includeUpscaler,
         threads: useAppStore.getState().settings.imageThreads ?? 4,

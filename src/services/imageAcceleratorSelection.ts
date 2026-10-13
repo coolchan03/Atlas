@@ -1,16 +1,26 @@
 /**
  * Image inference uses distinct native runtimes. Never route a checkpoint into a
- * different model format's runtime or silently choose CPU in automatic mode.
+ * different model format's runtime. Imported (sd.cpp) checkpoints can run on the
+ * Vulkan or the OpenCL diffusion engine or on the CPU: the decision carries the
+ * backends to try next, so a GPU run that fails is retried with a visible notice.
  */
-export type ImageComputeMode = 'auto' | 'gpu' | 'cpu';
+export type ImageComputeMode = 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
 export type ImageBackend = 'sdcpp' | 'mnn' | 'qnn' | 'coreml' | string;
+type SdBackend = 'vulkan' | 'opencl' | 'cpu';
 export type ImageComputeDecision = {
   useOpenCL: boolean;
   selected: 'vulkan' | 'opencl' | 'npu' | 'cpu' | 'coreml';
   note: string;
+  /** sd.cpp engine for this attempt. */
+  computeBackend?: SdBackend;
+  /** sd.cpp: what to try, in order, if this attempt fails. */
+  fallbacks?: ImageComputeDecision[];
 };
+type GpuProbe = () => Promise<{ enumerated: boolean; detail: string }>;
 type Probes = {
-  vulkan: () => Promise<{ enumerated: boolean; detail: string }>;
+  vulkan: GpuProbe;
+  /** The OpenCL diffusion engine's device probe (absent in older APKs). */
+  sdOpencl?: GpuProbe;
   opencl: () => Promise<{ supported: boolean; reason?: string }>;
   npu: () => Promise<boolean>;
 };
@@ -21,6 +31,29 @@ export function imageComputeMode(settings: {
 }): ImageComputeMode {
   return settings.imageBackendMode ??
     (settings.imageUseOpenCL === false ? 'cpu' : 'auto');
+}
+
+const SD_LABEL: Record<SdBackend, string> = { vulkan: 'Vulkan', opencl: 'OpenCL', cpu: 'CPU' };
+const sdAttempt = (backend: SdBackend, note: string): ImageComputeDecision => ({
+  useOpenCL: backend !== 'cpu', selected: backend, computeBackend: backend, note,
+});
+
+/** Auto: Vulkan, then OpenCL, then CPU. A chosen GPU engine is tried first, then CPU. */
+async function planSdcpp(mode: ImageComputeMode, probe: Probes): Promise<ImageComputeDecision> {
+  const gpus: Array<'vulkan' | 'opencl'> = mode === 'opencl' ? ['opencl']
+    : mode === 'vulkan' || mode === 'gpu' ? ['vulkan'] : ['vulkan', 'opencl'];
+  const plan: ImageComputeDecision[] = [];
+  const skipped: string[] = [];
+  for (const api of gpus) {
+    const run = api === 'opencl' ? probe.sdOpencl : probe.vulkan;
+    let found: { enumerated: boolean; detail: string } | null = null;
+    try { found = run ? await run() : null; } catch (e: any) { found = { enumerated: false, detail: e?.message || String(e) }; }
+    if (found?.enumerated) plan.push(sdAttempt(api, SD_LABEL[api] + ' device detected; diffusion shaders still need to execute'));
+    else skipped.push(SD_LABEL[api] + ' unavailable (' + (found?.detail || 'not in this build') + ')');
+  }
+  plan.push(sdAttempt('cpu', plan.length ? 'CPU fallback' : 'CPU fallback: ' + skipped.join('; ')));
+  const [first, ...rest] = plan;
+  return { ...first, note: skipped.length && first.computeBackend !== 'cpu' ? first.note + '. ' + skipped.join('; ') : first.note, fallbacks: rest };
 }
 
 export async function selectImageAccelerator(
@@ -34,20 +67,14 @@ export async function selectImageAccelerator(
     return { useOpenCL: false, selected: 'coreml', note: 'Core ML backend selected' };
   }
   if (mode === 'cpu') {
+    if (backend === 'sdcpp') return sdAttempt('cpu', 'CPU explicitly selected');
     if (backend === 'qnn') {
       throw new Error('This image package contains NPU weights, not CPU weights. Import a CPU/MNN version to select CPU.');
     }
     return { useOpenCL: false, selected: 'cpu', note: 'CPU explicitly selected' };
   }
-  if (backend === 'sdcpp') {
-    const gpu = await probe.vulkan();
-    if (!gpu.enumerated) {
-      if (mode === 'gpu') throw new Error('Native diffusion Vulkan GPU not available: ' + gpu.detail);
-      return { useOpenCL: false, selected: 'cpu', note: 'CPU fallback: Vulkan unavailable (' + gpu.detail + ')' };
-    }
-    return { useOpenCL: true, selected: 'vulkan',
-      note: 'Vulkan device detected; actual diffusion shaders still need to execute' };
-  }
+  if (backend === 'sdcpp') return planSdcpp(mode, probe);
+  if (mode === 'vulkan' || mode === 'opencl') mode = 'gpu'; // other runtimes have one accelerator
   if (backend === 'mnn') {
     const gpu = await probe.opencl();
     if (!gpu.supported) {

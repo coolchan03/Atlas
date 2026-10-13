@@ -17,7 +17,11 @@ import java.util.UUID
 
 /** Original safetensors and GGUF image weights executed by stable-diffusion.cpp. */
 internal class AtlasNativeDiffusion(private val context: Context) {
-    companion object { const val EXECUTABLE = "libatlas_sdcli.so" }
+    companion object {
+        const val EXECUTABLE = "libatlas_sdcli.so"
+        /** Same sd-cli built with ggml's OpenCL backend (Adreno kernels) instead of Vulkan. */
+        const val EXECUTABLE_OPENCL = "libatlas_sdcli_opencl.so"
+    }
     @Volatile private var running: Process? = null
     @Volatile private var startedMs = 0L
     @Volatile private var lastOutputMs = 0L
@@ -30,25 +34,32 @@ internal class AtlasNativeDiffusion(private val context: Context) {
     @Volatile private var deviceLabel = "not probed"
     @Volatile private var vulkanSupported: Boolean? = null
     @Volatile private var vulkanDevice = "vulkan0"
+    @Volatile private var gpuApi = "vulkan"
     @Volatile private var vulkanProbeOutput = "Not checked"
     @Volatile private var androidHasVulkan = false
 
-    /** Prefer the Android OS Vulkan loader over app-private libraries. */
-    private fun configureNativeEnvironment(builder: ProcessBuilder) {
+    /** Prefer the Android OS Vulkan loader over app-private libraries. OpenCL lives in the
+     *  vendor partition (Adreno's libOpenCL.so), so OpenCL runs search /vendor/lib64 first. */
+    private fun configureNativeEnvironment(builder: ProcessBuilder, api: String = "vulkan") {
         val environment = builder.environment()
         val inherited = environment["LD_LIBRARY_PATH"]?.split(':').orEmpty()
-        environment["LD_LIBRARY_PATH"] = (
-            listOf("/system/lib64", context.applicationInfo.nativeLibraryDir, "/vendor/lib64") +
-                inherited
-            ).filter { it.isNotBlank() }.distinct().joinToString(":")
+        val system = listOf("/system/lib64", context.applicationInfo.nativeLibraryDir, "/vendor/lib64")
+        val order = if (api == "opencl") listOf("/vendor/lib64") + system else system
+        environment["LD_LIBRARY_PATH"] = (order + inherited)
+            .filter { it.isNotBlank() }.distinct().joinToString(":")
     }
+
+    private fun executableFor(api: String): File =
+        File(context.applicationInfo.nativeLibraryDir, if (api == "opencl") EXECUTABLE_OPENCL else EXECUTABLE)
 
     /**
      * sd-cli outputs "device name<TAB>description".
      * Capture its full output without deadlocking on a subprocess pipe.
      */
-    private fun detectVulkan(cli: File, cancelled: () -> Boolean, force: Boolean = false): Boolean {
-        if (vulkanSupported == true && !force) return true
+    private fun detectVulkan(cli: File, cancelled: () -> Boolean, force: Boolean = false,
+                             api: String = "vulkan"): Boolean {
+        if (vulkanSupported == true && !force && api == gpuApi) return true
+        gpuApi = api
         if (cancelled()) return false
         androidHasVulkan = try {
             context.packageManager.hasSystemFeature("android.hardware.vulkan.level") ||
@@ -60,7 +71,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 directory(cli.parentFile)
                 redirectErrorStream(true)
                 redirectOutput(log)
-                configureNativeEnvironment(this)
+                configureNativeEnvironment(this, api)
             }.start()
         } catch (e: Exception) {
             vulkanProbeOutput = "Probe could not start: " + e.javaClass.simpleName + ": " + e.message
@@ -75,14 +86,14 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             val output = if (log.isFile) log.readText().takeLast(4096) else ""
             val code = if (finished) proc.exitValue() else -1
             vulkanProbeOutput = AtlasVulkanProbe.summary(output, code, !finished)
-            val selected = if (finished && code == 0) AtlasVulkanProbe.device(output) else null
+            val selected = if (finished && code == 0) AtlasVulkanProbe.device(output, api) else null
             vulkanSupported = selected != null
             if (selected != null) {
                 vulkanDevice = selected.name
-                deviceLabel = "Vulkan " + selected.name + ": " + selected.description
+                deviceLabel = (if (api == "opencl") "OpenCL " else "Vulkan ") + selected.name + ": " + selected.description
                 true
             } else {
-                deviceLabel = "Native Vulkan probe inconclusive. " +
+                deviceLabel = "Native " + (if (api == "opencl") "OpenCL" else "Vulkan") + " probe inconclusive. " +
                     "Android Vulkan feature: " + (if (androidHasVulkan) "yes" else "not advertised") +
                     ". " + vulkanProbeOutput.takeLast(360)
                 false
@@ -98,15 +109,17 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         }
     }
 
-    /** Let a user diagnose Vulkan before loading any Anima weights. */
-    fun probeGpu(): WritableMap {
-        val binary = File(context.applicationInfo.nativeLibraryDir, EXECUTABLE)
-        if (!binary.isFile) throw IOException("Native image engine missing from the installed APK")
-        val available = detectVulkan(binary, { false }, force = true)
+    /** Let a user diagnose the Vulkan or OpenCL GPU before loading any weights. */
+    fun probeGpu(api: String = "vulkan"): WritableMap {
+        val binary = executableFor(api)
+        if (!binary.isFile) throw IOException(
+            (if (api == "opencl") "OpenCL" else "Native") + " image engine missing from the installed APK")
+        val available = detectVulkan(binary, { false }, force = true, api = api)
         return Arguments.createMap().apply {
             putBoolean("enumerated", available)
             putBoolean("androidVulkanFeature", androidHasVulkan)
-            putString("backend", if (available) vulkanDevice else "vulkan0 (unverified)")
+            putString("api", api)
+            putString("backend", if (available) vulkanDevice else (if (api == "opencl") "GPUOpenCL" else "vulkan0") + " (unverified)")
             putString("detail", deviceLabel)
             putString("nativeOutput", vulkanProbeOutput)
         }
@@ -163,26 +176,26 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         if (!AtlasImageArchitecture.supported(family)) {
             throw IOException("Unsupported image architecture: " + family + ". Import a supported checkpoint.")
         }
-        val executable = File(context.applicationInfo.nativeLibraryDir, EXECUTABLE)
-        if (!executable.isFile) throw IOException("Native image runtime is missing from this APK")
-
-        // imageUseOpenCL remains the existing settings key for compatibility,
-        // but maps to Vulkan for directly imported diffusion models.
-        val preferGpu = !params.hasKey("useOpenCL") || params.getBoolean("useOpenCL")
-        phase = if (preferGpu) "Checking Vulkan GPU" else "CPU selected manually"
+        // computeBackend picks the engine ("vulkan", "opencl" or "cpu"). Older JS sends only
+        // useOpenCL, the legacy settings key, which maps to Vulkan for these models.
+        val requested = params.takeIf { it.hasKey("computeBackend") }?.getString("computeBackend")
+            ?: if (!params.hasKey("useOpenCL") || params.getBoolean("useOpenCL")) "vulkan" else "cpu"
+        val api = if (requested == "opencl") "opencl" else "vulkan"
+        val preferGpu = requested != "cpu"
+        val apiName = if (api == "opencl") "OpenCL" else "Vulkan"
+        val executable = executableFor(api)
+        if (!executable.isFile) throw IOException(
+            if (api == "opencl") "The OpenCL image engine is missing from this APK" else "Native image runtime is missing from this APK")
+        phase = if (preferGpu) "Checking $apiName GPU" else "CPU selected manually"
         // Recheck on every GPU generation: a previous successful enumeration is
         // not proof that the driver/runtime is still available for this run.
-        val probeEnumerated = preferGpu && detectVulkan(executable, cancelled, force = true)
+        val probeEnumerated = preferGpu && detectVulkan(executable, cancelled, force = true, api = api)
         if (cancelled()) throw IOException("Generation cancelled")
-        // Do not launch a GPU-only run against an unverified Vulkan device.
-        // Android's Vulkan feature flag alone does not guarantee sd.cpp compute support.
-        // Preserve explicit GPU-only policy: never silently switch to CPU.
+        // Do not launch a GPU run against an unverified device: the app then tries the next backend.
         if (preferGpu && !probeEnumerated) {
-            computeBackend = "Vulkan unavailable (probe failed)"
-            throw IOException("No usable Vulkan diffusion GPU was detected by the native image engine. " +
-                "Device probe: " + deviceLabel.takeLast(380) + ". " +
-                "Select CPU explicitly in image settings or use a compatible GPU/runtime. " +
-                "No CPU fallback occurred.")
+            computeBackend = "$apiName unavailable (probe failed)"
+            throw IOException("No usable $apiName diffusion GPU was detected by the native image engine. " +
+                "Device probe: " + deviceLabel.takeLast(380) + ".")
         }
         val gpuRequested = preferGpu
         // The Snapdragon/Adreno Vulkan driver can reject BF16 matrix-vector
@@ -191,9 +204,9 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         // Do not rewrite the model file or expand quantized GGUF checkpoints.
         val precisionArgs = AtlasImageGpuPrecision.overrideArguments(primary, gpuRequested)
         weightPrecision = if (precisionArgs.isNotEmpty())
-            "BF16 checkpoint -> F16 Vulkan compatibility"
+            "BF16 checkpoint -> F16 $apiName compatibility"
         else "Original checkpoint precision"
-        computeBackend = if (gpuRequested) "Vulkan GPU requested (unverified)" else "CPU"
+        computeBackend = if (gpuRequested) "$apiName GPU requested (unverified)" else "CPU"
         if (!preferGpu) deviceLabel = "GPU disabled in settings"
 
 
@@ -245,10 +258,10 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         // --type f16 is supported by the pinned sd.cpp CLI; it converts
         // eligible matrix weights but does not modify the saved checkpoint.
         cmd.addAll(precisionArgs)
-        // Explicit execution assignment: quantized transformer diffusion
-        // runs on Vulkan, while Qwen/T5 encoders and VAE stay on CPU to reduce
-        // transient GPU allocations. A failed probe does not prevent trying
-        // an explicitly requested Vulkan backend. No CPU fallback occurs.
+        // Explicit execution assignment: quantized transformer diffusion runs on
+        // the probed GPU device (vulkanN or GPUOpenCL), while Qwen/T5 encoders and
+        // VAE stay on CPU to reduce transient GPU allocations. If the GPU run fails,
+        // the app retries with the next backend and tells the user.
         if (gpuRequested) {
             cmd.addAll(listOf("--backend", "diffusion=$vulkanDevice,te=cpu,vae=cpu",
                 "--auto-fit", "on", "--max-vram", "$vulkanDevice=4"))
@@ -279,7 +292,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         val proc = ProcessBuilder(cmd).apply {
             directory(executable.parentFile)
             redirectErrorStream(true)
-            configureNativeEnvironment(this)
+            configureNativeEnvironment(this, api)
         }.start()
         val startTime = SystemClock.elapsedRealtime()
         startedMs = startTime
@@ -316,7 +329,7 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 if (tail.size >= 15) tail.removeFirst()
                 tail.addLast(line.take(300))
                 // Shader compilation failures cannot recover by waiting for another diffusion step.
-                if (gpuRequested && (line.contains("Compute pipeline creation failed", ignoreCase = true) ||
+                if (gpuRequested && api == "vulkan" && (line.contains("Compute pipeline creation failed", ignoreCase = true) ||
                     line.contains("createComputePipeline ErrorUnknown", ignoreCase = true))) {
                     shaderFailed.set(true)
                     phase = "Vulkan shader compilation failed"
@@ -362,16 +375,16 @@ internal class AtlasNativeDiffusion(private val context: Context) {
             if (shaderFailed.get()) {
                 throw IOException("The Vulkan driver rejected a diffusion compute pipeline. " +
                     "Device: " + deviceLabel.takeLast(250) + ". " +
-                    "Try compatible F16 or quantized weights, or select CPU explicitly. " +
-                    "No CPU fallback occurred. Native log: " + tail.joinToString(" | ").takeLast(600))
+                    "Try compatible F16 or quantized weights, or another backend. " +
+                    "Native log: " + tail.joinToString(" | ").takeLast(600))
             }
             if (watchdogTimedOut.get()) {
                 val elapsedSinceStep = (SystemClock.elapsedRealtime() -
                     (if (lastStepMs > startedMs) lastStepMs else startedMs)) / 1000L
                 throw IOException("Image generation stopped after $elapsedSinceStep seconds without a completed diffusion step " +
-                    "on " + (if (gpuRequested) "requested Vulkan GPU" else "CPU") +
+                    "on " + (if (gpuRequested) "requested $apiName GPU" else "CPU") +
                     ". Native output may extend the stall window, but cannot extend it indefinitely. " +
-                    "Try a smaller quantized checkpoint or resolution. No automatic backend fallback occurred.")
+                    "Try a smaller quantized checkpoint or resolution.")
             }
             if (code != 0 || !output.isFile || output.length() == 0L) {
                 if (output.exists()) output.delete()
@@ -385,15 +398,15 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                         "Precision: $weightPrecision. Use an F16 or quantized " +
                         "Anima checkpoint if this compatibility conversion still fails. "
                     gpuRequested ->
-                        "Vulkan backend could not generate an image. Device probe: " +
-                        deviceLabel.takeLast(380) + ". GPU was explicitly requested; no CPU fallback occurred. "
+                        "$apiName backend could not generate an image. Device probe: " +
+                        deviceLabel.takeLast(380) + ". "
                     else -> "CPU image generation failed. "
                 }
                 throw IOException(hint + "Native engine exit " + code + ": " + logTail)
             }
             phase = "Finalizing image"
             if (!params.hasKey("skipUpscaler") || !params.getBoolean("skipUpscaler")) {
-                attachments["upscaler"]?.let { upscale(executable, it, output, cancelled) }
+                attachments["upscaler"]?.let { upscale(executable, it, output, cancelled, api) }
             }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(output.absolutePath, bounds)
@@ -419,14 +432,15 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         }
     }
 
-    private fun upscale(executable: File, upscaler: File, original: File, cancelled: () -> Boolean) {
+    private fun upscale(executable: File, upscaler: File, original: File, cancelled: () -> Boolean,
+                        api: String) {
         val result = File(original.parentFile, original.nameWithoutExtension + ".upscaled.png")
         val args = listOf(executable.absolutePath, "-M", "upscale", "-i", original.absolutePath,
             "--upscale-model", upscaler.absolutePath, "-o", result.absolutePath)
         val process = ProcessBuilder(args).apply {
             directory(executable.parentFile)
             redirectErrorStream(true)
-            configureNativeEnvironment(this)
+            configureNativeEnvironment(this, api)
         }.start()
         running = process
         try {

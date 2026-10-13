@@ -19,6 +19,14 @@ class AtlasVulkanProbeTest {
         assertEquals("vulkan1", AtlasVulkanProbe.device(output)?.name)
     }
 
+    @Test fun findsTheOpenClDeviceOnlyWhenAskedForOpenCl() {
+        val output = "CPU\tARM CPU\nGPUOpenCL\tQUALCOMM Adreno(TM) 740\n"
+        assertEquals("gpuopencl", AtlasVulkanProbe.device(output, "opencl")?.name)
+        assertEquals("QUALCOMM Adreno(TM) 740", AtlasVulkanProbe.device(output, "opencl")?.description)
+        assertNull(AtlasVulkanProbe.device(output))
+        assertNull(AtlasVulkanProbe.device("vulkan0\tAdreno\n", "opencl"))
+    }
+
     @Test fun doesNotMistakeLogTextOrControlCharactersForDevices() {
         assertNull(AtlasVulkanProbe.device("ggml_vulkan: No devices found\ncpu\tCPU\n"))
         assertNull(AtlasVulkanProbe.device("\u0008vulkan0\u0008"))

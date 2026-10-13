@@ -320,7 +320,7 @@ class ImageGenerationService {
     }
   }
 
-  private _saveResult(result: any, opts: { params: GenerateImageParams; activeImageModel: any; meta: { steps: number; guidanceScale: number; useOpenCL: boolean; startTime: number } }): GeneratedImage {
+  private _saveResult(result: any, opts: { params: GenerateImageParams; activeImageModel: any; meta: { steps: number; guidanceScale: number; useOpenCL: boolean; computeBackend?: 'vulkan' | 'opencl' | 'cpu'; fallbackNotes?: string[]; startTime: number } }): GeneratedImage {
     const { params, activeImageModel, meta } = opts;
     result.modelId = activeImageModel.id;
     if (params.conversationId) result.conversationId = params.conversationId;
@@ -334,10 +334,11 @@ class ImageGenerationService {
       const genTime = Date.now() - meta.startTime;
       useChatStore.getState().addMessage(params.conversationId, {
         role: 'assistant',
-        content: `Generated image for: "${params.prompt}"`,
+        content: `Generated image for: "${params.prompt}"`
+          + (meta.fallbackNotes?.length ? `\n\n${meta.fallbackNotes.join('. ')}. Made on ${meta.computeBackend === 'cpu' ? 'the CPU' : meta.computeBackend === 'opencl' ? 'OpenCL' : 'Vulkan'} instead.` : ''),
         attachments: [{ id: result.id, type: 'image', uri: `file://${result.imagePath}`, width: result.width, height: result.height }],
         generationTimeMs: genTime,
-        generationMeta: buildImageGenMeta(activeImageModel, { steps: meta.steps, guidanceScale: meta.guidanceScale, result, useOpenCL: meta.useOpenCL }),
+        generationMeta: buildImageGenMeta(activeImageModel, { steps: meta.steps, guidanceScale: meta.guidanceScale, result, useOpenCL: meta.useOpenCL, computeBackend: meta.computeBackend }),
       });
     }
     this.updateState({ phase: 'done', progress: null, status: null, previewPath: null, result, error: null });
@@ -402,7 +403,7 @@ class ImageGenerationService {
   }
 
   private async _runGenerationAndSave(opts: RunGenerationOptions, requestEpoch: number): Promise<GeneratedImage | null> {
-    const { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL } = opts;
+    const { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL, computeBackend } = opts;
     const { runtimeModel, isFirstRun, warmupStatus } = await this._getImageWarmupState(activeImageModel, useOpenCL);
     if (!this._isRequestCurrent(requestEpoch)) return null;
 
@@ -412,15 +413,30 @@ class ImageGenerationService {
     try {
       const result = await onnxImageGeneratorService.generateImage(
         { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL,
+          ...(computeBackend ? { computeBackend } : {}),
           threads: useAppStore.getState().settings.imageThreads ?? 4 },
         handlers.onProgress,
         handlers.onPreview,
       );
       if (!this._isRequestCurrent(requestEpoch)) return null;
       if (!result?.imagePath) { this.resetState(); return null; }
-      return this._saveResult(result, { params, activeImageModel: runtimeModel, meta: { steps, guidanceScale, useOpenCL, startTime } });
+      return this._saveResult(result, { params, activeImageModel: runtimeModel, meta: { steps, guidanceScale, useOpenCL, computeBackend, fallbackNotes: opts.fallbackNotes, startTime } });
     } catch (error: any) {
       if (!this._isRequestCurrent(requestEpoch)) return null;
+      // A GPU engine that fails (driver rejects a shader, unsupported op, stall) is not the
+      // end: try the next backend and say so, instead of leaving the user with no image.
+      const message = String(error?.message || error || '');
+      const [next, ...later] = opts.fallbacks ?? [];
+      if (next && !this.cancelRequested && !/cancel/i.test(message)) {
+        const label = (b?: string) => b === 'opencl' ? 'OpenCL' : b === 'cpu' ? 'CPU' : 'Vulkan';
+        const why = `${label(computeBackend)} failed (${message.slice(0, 160)})`;
+        logger.warn(`[ImageGen] ${why}; trying ${label(next.computeBackend)}`);
+        this.updateState({ status: `${why}. Trying ${label(next.computeBackend)}...` });
+        return this._runGenerationAndSave({
+          ...opts, useOpenCL: next.useOpenCL, computeBackend: next.computeBackend,
+          fallbacks: later, fallbackNotes: [...(opts.fallbackNotes ?? []), why],
+        }, requestEpoch);
+      }
       this._handleImageGenerationError(error);
       return null;
     } finally {
@@ -486,6 +502,7 @@ class ImageGenerationService {
       imageBackend = await selectImageAccelerator(
         activeImageModel.backend || 'mnn', imageComputeMode(settings), {
           vulkan: () => onnxImageGeneratorService.getNativeImageGpuDiagnostics(),
+          sdOpencl: () => onnxImageGeneratorService.getNativeImageGpuDiagnostics('opencl'),
           opencl: () => hardwareService.getOpenCLCapability(),
           npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
         },
@@ -501,7 +518,8 @@ class ImageGenerationService {
     if (this.cancelRequested) { this.resetState(); return null; }
 
     return this._runGenerationAndSave(
-      { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: imageBackend.useOpenCL },
+      { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: imageBackend.useOpenCL,
+        computeBackend: imageBackend.computeBackend, fallbacks: imageBackend.fallbacks },
       requestEpoch,
     );
   }

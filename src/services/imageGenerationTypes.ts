@@ -1,3 +1,4 @@
+import type { ImageComputeDecision } from './imageAcceleratorSelection';
 /**
  * ImageGenerationService types + the pure phase predicate.
  *
@@ -71,6 +72,11 @@ export interface RunGenerationOptions {
   imageWidth: number;
   imageHeight: number;
   useOpenCL: boolean;
+  /** sd.cpp engine for this attempt, and the ones to try if it fails. */
+  computeBackend?: 'vulkan' | 'opencl' | 'cpu';
+  fallbacks?: ImageComputeDecision[];
+  /** Why earlier backends were skipped, shown with the result. */
+  fallbackNotes?: string[];
 }
 
 export interface UpdateEnhancementOptions {

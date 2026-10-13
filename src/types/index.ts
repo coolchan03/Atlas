@@ -355,6 +355,8 @@ export interface ImageGenerationParams {
   guidanceScale?: number;
   seed?: number;
   useOpenCL?: boolean;
+  /** Imported (sd.cpp) checkpoints: which engine runs the diffusion. */
+  computeBackend?: 'vulkan' | 'opencl' | 'cpu';
 }
 export interface ImageGenerationProgress {
   step: number;

@@ -85,7 +85,8 @@ class LocalDreamGeneratorService {
   }
 
   /** Read the real sd-cli --list-devices output without loading any image weights. */
-  async getNativeImageGpuDiagnostics(): Promise<{
+  /** Probes the Vulkan (default) or OpenCL diffusion engine's GPU device. */
+  async getNativeImageGpuDiagnostics(api: 'vulkan' | 'opencl' = 'vulkan'): Promise<{
     enumerated: boolean;
     androidVulkanFeature: boolean;
     backend: string;
@@ -94,6 +95,10 @@ class LocalDreamGeneratorService {
   }> {
     if (Platform.OS !== 'android' || !DiffusionModule?.getAtlasImageGpuDiagnostics) {
       throw new Error('GPU diagnostics require the updated Android Atlas APK.');
+    }
+    if (api === 'opencl') {
+      if (!DiffusionModule.getAtlasImageGpuDiagnosticsFor) throw new Error('This APK has no OpenCL image engine.');
+      return DiffusionModule.getAtlasImageGpuDiagnosticsFor('opencl');
     }
     return DiffusionModule.getAtlasImageGpuDiagnostics();
   }
@@ -193,6 +198,7 @@ class LocalDreamGeneratorService {
       height: params.height || 512,
       previewInterval: params.previewInterval ?? 2,
       useOpenCL: params.useOpenCL ?? true,
+      ...(params.computeBackend ? { computeBackend: params.computeBackend } : {}),
       skipLoRA: params.skipLoRA ?? false,
       skipUpscaler: params.skipUpscaler ?? false,
       threads: params.threads ?? this.loadedThreads ?? 4,

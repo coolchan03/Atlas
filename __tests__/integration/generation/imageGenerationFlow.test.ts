@@ -129,6 +129,34 @@ describe('Image Generation Flow Integration', () => {
     return imageModel;
   };
 
+  describe('imported checkpoint GPU fallback', () => {
+    it('retries a failed Vulkan run on the CPU and says so in the chat', async () => {
+      const conversationId = setupWithConversation();
+      const imageModel = { ...createONNXImageModel({ id: 'img-model-1', modelPath: '/mock/image-model' }), backend: 'sdcpp', nativeImageFamily: 'sd15' } as any;
+      useAppStore.setState({
+        downloadedImageModels: [imageModel], activeImageModelId: 'img-model-1', generatedImages: [],
+        warmedImageModels: ['img-model-1'],
+        settings: { ...useAppStore.getState().settings, imageSteps: 20, imageThreads: 4, imageBackendMode: 'auto' } as any,
+      });
+      mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
+      (mockLocalDreamService as any).getNativeImageGpuDiagnostics = jest.fn(async (api?: string) =>
+        api === 'opencl' ? { enumerated: false, detail: 'no OpenCL device' } : { enumerated: true, detail: 'vulkan0' });
+      mockLocalDreamService.generateImage
+        .mockRejectedValueOnce(new Error('Vulkan backend could not generate an image. Native engine exit 134'))
+        .mockResolvedValueOnce({ id: 'img-cpu', prompt: 'a cat', imagePath: '/mock/cpu.png', width: 512, height: 512,
+          steps: 20, seed: 1, modelId: 'img-model-1', createdAt: new Date().toISOString() });
+
+      const result = await imageGenerationService.generateImage({ prompt: 'a cat', conversationId });
+
+      expect(result?.id).toBe('img-cpu');
+      const backends = mockLocalDreamService.generateImage.mock.calls.map(c => (c[0] as any).computeBackend);
+      expect(backends).toEqual(['vulkan', 'cpu']);
+      const last = getChatState().conversations.find(c => c.id === conversationId)!.messages.slice(-1)[0];
+      expect(last.content).toMatch(/Vulkan failed/);
+      expect(last.content).toMatch(/Made on the CPU instead/);
+    });
+  });
+
   describe('Image Generation Lifecycle', () => {
     it('should update state during generation lifecycle', async () => {
       const imageModel = setupImageModelState();

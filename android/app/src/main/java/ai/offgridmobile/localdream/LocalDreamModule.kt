@@ -852,6 +852,22 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /** Same check for a chosen GPU API: "vulkan" or "opencl". */
+    @ReactMethod
+    fun getAtlasImageGpuDiagnosticsFor(api: String, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) {
+                    throw IOException("Finish or cancel image generation before probing the GPU")
+                }
+                safeResolve(promise, directDiffusion.probeGpu(if (api == "opencl") "opencl" else "vulkan"))
+            } catch (e: Exception) {
+                safeReject(promise, "ATLAS_GPU_PROBE_FAILED",
+                    e.message ?: "GPU diagnostic check failed", e)
+            }
+        }
+    }
+
     @ReactMethod
     fun cancelGeneration(promise: Promise) {
         generationCancelled.set(true)

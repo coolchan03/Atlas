@@ -9,12 +9,15 @@ import java.util.Locale
 internal object AtlasVulkanProbe {
     data class Device(val name: String, val description: String)
 
-    fun device(output: String): Device? {
+    /** GPU device of the given API ("vulkan" or "opencl"); ggml names OpenCL "GPUOpenCL". */
+    fun device(output: String, api: String = "vulkan"): Device? {
+        val pattern = if (api == "opencl") Regex("""(gpu)?opencl[0-9]*""", RegexOption.IGNORE_CASE)
+            else Regex("""vulkan[0-9]+""", RegexOption.IGNORE_CASE)
         for (line in output.lineSequence()) {
             val tab = line.indexOf('\t')
             if (tab < 1) continue
             val name = line.substring(0, tab).trim()
-            if (!Regex("""vulkan[0-9]+""", RegexOption.IGNORE_CASE).matches(name)) continue
+            if (!pattern.matches(name)) continue
             return Device(name.lowercase(Locale.US), line.substring(tab + 1).trim().take(160))
         }
         return null

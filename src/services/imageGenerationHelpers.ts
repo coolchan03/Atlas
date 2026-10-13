@@ -37,14 +37,15 @@ export function cleanEnhancedPrompt(raw: string): string {
 
 export function buildImageGenMeta(
   model: ActiveImageModel,
-  opts: { steps: number; guidanceScale: number; result: GeneratedImage; useOpenCL: boolean },
+  opts: { steps: number; guidanceScale: number; result: GeneratedImage; useOpenCL: boolean; computeBackend?: 'vulkan' | 'opencl' | 'cpu' },
 ): GenerationMeta {
   const backend = model.backend ?? 'mnn';
   const isGpu = Platform.OS === 'ios' || backend === 'qnn' ||
     ((backend === 'mnn' || backend === 'sdcpp') && opts.useOpenCL);
   const gpuBackend = Platform.OS === 'ios' ? 'Core ML (accelerator selected by OS)' :
     backend === 'qnn' ? 'QNN (NPU)' :
-      backend === 'sdcpp' ? (opts.useOpenCL ? 'Vulkan (requested; compute unverified)' : 'Native CPU') :
+      backend === 'sdcpp' ? (!opts.useOpenCL || opts.computeBackend === 'cpu' ? 'Native CPU'
+        : opts.computeBackend === 'opencl' ? 'OpenCL (requested; compute unverified)' : 'Vulkan (requested; compute unverified)') :
         isGpu ? 'MNN (OpenCL requested; compute unverified)' : 'MNN (CPU)';
   return {
     gpu: isGpu,

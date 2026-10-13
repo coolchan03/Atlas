@@ -126,6 +126,27 @@ jobs:
           test -s android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
           strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'ggml_vulkan'
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
+      - name: Build OpenCL ARM64 diffusion CLI from the same pinned source
+        run: |
+          # A second image engine for Adreno phones whose Vulkan driver rejects the
+          # diffusion shaders: same sd-cli, ggml OpenCL backend with Adreno kernels.
+          # It links llama.rn's libOpenCL.so stub (soname libOpenCL.so); the phone's
+          # vendor libOpenCL.so is used at run time.
+          git clone --depth 1 --branch v2024.10.24 https://github.com/KhronosGroup/OpenCL-Headers.git /tmp/atlas-opencl-headers
+          test -s /tmp/atlas-opencl-headers/CL/cl.h
+          OPENCL_STUB="$GITHUB_WORKSPACE/node_modules/llama.rn/bin/arm64-v8a/libOpenCL.so"
+          readelf -d "$OPENCL_STUB" | grep -q 'Library soname: \[libOpenCL.so\]'
+          cmake -S /tmp/atlas-sdcpp -B /tmp/atlas-sdcpp/build-android-opencl -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ATLAS_NDK/build/cmake/android.toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
+            -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF \
+            -DSD_OPENCL=ON -DGGML_OPENCL_EMBED_KERNELS=ON -DGGML_OPENCL_USE_ADRENO_KERNELS=ON \
+            -DOpenCL_INCLUDE_DIR=/tmp/atlas-opencl-headers -DOpenCL_LIBRARY="$OPENCL_STUB" \
+            -DSD_BUILD_EXAMPLES=ON -DSD_BUILD_SHARED_LIBS=OFF -DSD_BUILD_SHARED_GGML_LIB=OFF
+          cmake --build /tmp/atlas-sdcpp/build-android-opencl --target sd-cli --parallel 3
+          cp /tmp/atlas-sdcpp/build-android-opencl/bin/sd-cli android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so
+          strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so | grep -q 'GPUOpenCL'
+          readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so | grep -q 'Shared library: \[libOpenCL.so\]'
       - name: Assemble Android release APK
         working-directory: android
         # llama.rn's own gradle.properties forces a from-source build, and without
@@ -139,6 +160,7 @@ jobs:
           test -s "$APK"
           unzip -l "$APK" > /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libatlas_sdcli.so' /tmp/atlas-apk-files.txt
+          grep -q 'lib/arm64-v8a/libatlas_sdcli_opencl.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/librnllama.so' /tmp/atlas-apk-files.txt
           grep -q 'lib/arm64-v8a/libllamakt.so' /tmp/atlas-apk-files.txt
