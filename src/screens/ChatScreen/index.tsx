@@ -1,6 +1,8 @@
+/* eslint-disable react-native/no-inline-styles, max-lines-per-function, complexity -- Existing chat orchestrator coordinates many native model and UI lifecycles. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useWideLayout } from '../../hooks/useWideLayout';
-import { FlatList, Keyboard, InteractionManager, Platform, View } from 'react-native';
+import { FlatList, Keyboard, InteractionManager, Platform, Text, TouchableOpacity, View } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 // Edge-to-edge-aware KeyboardAvoidingView. RN's own version leaves a residual
 // padding band on Android under edge-to-edge (adjustResize is a no-op there);
 // this one reconciles the keyboard frame against the navigation-bar inset.
@@ -14,10 +16,10 @@ import { useSpotlightTour } from 'react-native-spotlight-tour';
 import { CustomAlert, hideAlert, showAlert, SharePromptSheet, ProAhaSheet } from '../../components';
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
-import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
+import { useChatOptions } from '../../components/ChatOptions';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
@@ -47,6 +49,7 @@ export const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
+  const chatOptions = useChatOptions();
   const { goTo, current } = useSpotlightTour();
 
   // Collapsed Models control (shared with home): header "Models" → manager sheet.
@@ -58,8 +61,10 @@ export const ChatScreen: React.FC = () => {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const voiceSummary = useUiModeStore((s) => s.voiceSummary);
   const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
+  const modelNicknames = useAppStore(s => s.modelNicknames);
   const modelLabels: Record<ModelRowType, string> = {
-    text: chat.activeModelName ?? chat.activeModel?.name ?? '—',
+    text: chat.activeModelInfo?.modelId && modelNicknames[chat.activeModelInfo.modelId]
+      || chat.activeModelName || chat.activeModel?.name || '—',
     image: chat.activeImageModel?.name ?? '—',
     voice: voiceSummary ?? '—',
     speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
@@ -289,6 +294,8 @@ export const ChatScreen: React.FC = () => {
       onCopy={chat.handleCopyMessage}
       onRetry={chat.handleRetryMessage}
       onEdit={chat.handleEditMessage}
+      onDelete={chat.handleDeleteMessage}
+      onSaveToProject={chat.activeProject && !chat.activeProject.pinVerifier ? chat.handleSaveReportToProject : undefined}
       onGenerateImage={chat.handleGenerateImageFromMessage}
       onImagePress={chat.handleImagePress}
     />
@@ -308,12 +315,40 @@ export const ChatScreen: React.FC = () => {
           activeProject={chat.activeProject}
           navigation={chat.navigation}
           onOpenModels={() => setModelsManagerOpen(true)}
+          onOpenChatOptions={() => chat.activeConversation && chatOptions.open(chat.activeConversation)}
           setShowSettingsPanel={chat.setShowSettingsPanel}
           setShowProjectSelector={chat.setShowProjectSelector}
           isRemote={chat.activeModelInfo?.isRemote}
           modelRuntimeLabel={textRuntime.compact}
           modelRuntimeState={textRuntime.state}
         />
+        <TouchableOpacity testID="deep-research-toggle" accessibilityRole="switch"
+          accessibilityState={{ checked: chat.researchMode }}
+          disabled={chat.isStreaming || chat.isGeneratingImage || !!chat.researchStatus}
+          onPress={() => chat.setResearchMode(v => !v)}
+          style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16,
+            paddingVertical: 8, backgroundColor: chat.researchMode ? colors.surfaceLight : colors.background }}>
+          <Icon name="book-open" size={15} color={chat.researchMode ? colors.primary : colors.textMuted} />
+          <Text style={{ color: chat.researchMode ? colors.primary : colors.textSecondary, fontSize: 12, flex: 1 }}>
+            {chat.researchMode ? 'Research on — source-cited report' : 'Deep Research'}
+          </Text>
+          <Icon name={chat.researchMode ? 'check-circle' : 'circle'} size={16} color={chat.researchMode ? colors.primary : colors.textMuted} />
+        </TouchableOpacity>
+        {chat.researchMode && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+            paddingHorizontal: 16, paddingBottom: 6, backgroundColor: colors.surfaceLight }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 9 }}>Research depth</Text>
+            <TouchableOpacity testID="research-depth-toggle" disabled={!!chat.researchStatus || chat.isStreaming}
+              accessibilityRole="button" onPress={() => chat.setResearchDepth(v => v === 'deep' ? 'quick' : 'deep')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1,
+                borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
+              <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>
+                {chat.researchDepth === 'deep' ? 'Deep (3 searches)' : 'Quick (1 search)'}
+              </Text>
+              <Icon name="chevron-down" size={13} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
         <ModelsManagerSheet
           visible={modelsManagerOpen}
           onClose={() => setModelsManagerOpen(false)}
@@ -379,6 +414,7 @@ export const ChatScreen: React.FC = () => {
       </KeyboardAvoidingView>
       {alertEl}
       <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
+      {chatOptions.element}
       <ChatPinGate conversationId={chat.activeConversationId} />
       <ProAhaSheet
         visible={proAhaVisible}

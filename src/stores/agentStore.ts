@@ -166,6 +166,7 @@ interface AgentState {
   activeAgentId: string | null;
   /** Built-in agent ids already offered (so deleted ones do not come back). */
   seenDefaults?: string[];
+  noAgentDefaultMigrated?: boolean;
   createAgent: (a: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>> & Pick<Agent, 'name' | 'description' | 'systemPrompt'>) => Agent;
   updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteAgent: (id: string) => void;
@@ -177,7 +178,7 @@ export const useAgentStore = create<AgentState>()(
   persist(
     (set, get) => ({
       agents: DEFAULT_AGENTS,
-      activeAgentId: 'atlas',
+      activeAgentId: null,
       createAgent: (a) => {
         const agent: Agent = { ...a, id: generateId(), createdAt: now(), updatedAt: now() };
         set((s) => ({ agents: [...s.agents, agent] }));
@@ -242,7 +243,13 @@ export const useAgentStore = create<AgentState>()(
             a.description = jake.description;
           }
         }
-        return { ...current, ...p, agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id) };
+        return {
+          ...current, ...p,
+          // Old installs defaulted to Atlas without any user action. New installs use No agent.
+          activeAgentId: !p.noAgentDefaultMigrated && p.activeAgentId === 'atlas' ? null : (p.activeAgentId ?? null),
+          noAgentDefaultMigrated: true,
+          agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id),
+        };
       },
     },
   ),
@@ -264,7 +271,7 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const projectPreferences = currentProject && !learningEnabled
     ? 'Do not proactively suggest or generate project-based learning games, quizzes, or podcasts. Only create them if the user explicitly asks. Standalone offline arcade games are unrelated to project content.'
     : '';
-  const projectGuard = projectPreferences ? '\n\nPROJECT FEATURE PREFERENCES: ' + projectPreferences : '';
+  const projectGuard = projectPreferences ? `\n\nPROJECT FEATURE PREFERENCES: ${  projectPreferences}` : '';
   // Settings > Appearance & AI style applies to every agent and project. It comes before
   // the phone-call note so call mode can still keep spoken answers short.
   let style = '';

@@ -16,6 +16,13 @@ describe('native image support attachment formats', () => {
     expect(validateImageSupportFormat('adapter.gguf', 'lora')).toMatch(/GGUF/);
     expect(validateImageSupportFormat('upscaler.gguf', 'upscaler')).toMatch(/GGUF/);
   });
+  it('accepts JSON configuration files but not JSON as model weights', () => {
+    expect(validateImageSupportFormat('tokenizer.json', 'config')).toBeNull();
+    expect(validateImageSupportFormat('scheduler_config.json', 'config')).toBeNull();
+    expect(validateImageSupportFormat('tokenizer.json', 'lora')).toMatch(/Supported file types/);
+    expect(validateImageSupportFormat('weights.safetensors', 'config')).toMatch(/must be .json/);
+    expect(validateImageSupportFormat('../../config.json', 'config')).toMatch(/Invalid/);
+  });
   it('rejects ambiguous upscalers and malicious filenames', () => {
     expect(validateImageSupportFormat('other.pth', 'upscaler')).toMatch(/Unknown/);
     expect(validateImageSupportFormat('../evil.safetensors', 'lora')).toMatch(/Invalid/);

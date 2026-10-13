@@ -1,3 +1,4 @@
+/* eslint-disable max-params -- Existing createConversation API keeps its compatibility with private-chat callers. */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { encryptedChatStorage } from './encryptedChatStorage';
@@ -110,6 +111,7 @@ interface ChatState {
   getActiveConversation: () => Conversation | null;
   setConversationProject: (conversationId: string, projectId: string | null) => void;
   setConversationArchived: (conversationId: string, archived: boolean) => void;
+  setConversationPinned: (conversationId: string, pinned: boolean) => void;
   renameConversation: (conversationId: string, title: string) => void;
   setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
   setConversationAgent: (conversationId: string, agentId: string | null) => void;
@@ -161,7 +163,7 @@ export const useChatStore = create<ChatState>()(
           updatedAt: new Date().toISOString(),
           projectId: projectId,
           isPrivate: privateChat,
-          agentId: 'atlas',
+          agentId: require('./agentStore').useAgentStore.getState().activeAgentId,
         };
 
         set((state) => ({
@@ -207,6 +209,10 @@ export const useChatStore = create<ChatState>()(
       setConversationArchived: (conversationId, archived) => {
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
           (conv) => ({ ...conv, isArchived: archived, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationPinned: (conversationId, pinned) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, isPinned: pinned, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationProject: (conversationId, projectId) => {
@@ -280,6 +286,9 @@ export const useChatStore = create<ChatState>()(
           conversations: mapConversation(state.conversations, conversationId, (conv) => ({
             ...conv,
             messages: conv.messages.filter((msg) => msg.id !== messageId),
+            // A compacted summary may still contain facts from the deleted message.
+            compactionSummary: undefined,
+            compactionCutoffMessageId: undefined,
             updatedAt: nextUpdatedAt(conv.updatedAt),
           })),
         }));

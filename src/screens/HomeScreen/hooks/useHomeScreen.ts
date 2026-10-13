@@ -1,6 +1,6 @@
 import { useChatPrefs, useVaultSession, visibleConversations } from '../../../atlasTools/chatPrefs';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { InteractionManager, Alert } from 'react-native';
+import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
@@ -182,13 +182,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    // Choose private mode before any conversation or messages are created.
-    if (!activeTextModelId && !activeImageModelId) { return; }
-    Alert.alert('New conversation', 'Choose whether this chat should be saved.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Regular chat', onPress: () => navigation.navigate('Chat', { privateChat: false }) },
-      { text: 'Private (not saved)', onPress: () => navigation.navigate('Chat', { privateChat: true }) },
-    ]);
+    if (!activeTextModelId && !activeImageModelId) return;
+    require('../../../stores/agentStore').useAgentStore.getState().setActiveAgent(null);
+    navigation.navigate('Chat', {});
   };
 
   const continueChat = (conversationId: string) => {

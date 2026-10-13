@@ -252,7 +252,8 @@ export interface Conversation {
   /** Atlas private chat: never written to storage, gone when the app closes. */
   isPrivate?: boolean;
   isArchived?: boolean;
-  agentId?: string;
+  isPinned?: boolean;
+  agentId?: string | null;
   /** Present only on an individually protected conversation; a salted PIN verifier. */
   pinVerifier?: string;
   /** The protected conversation body, encrypted with this chat's own Keystore key. */
@@ -307,7 +308,7 @@ export interface ONNXImageModel {
   backend?: 'mnn' | 'qnn' | 'coreml' | 'sdcpp';
   nativeImageFamily?: 'sd15' | 'sdxl' | 'flux' | 'z_image' | 'anima' | 'chroma' | 'auraflow' | 'unknown';
   nativeImageVariant?: 'base' | 'turbo';
-  supportFiles?: Array<{ kind: 'lora' | 'vae' | 'clip_l' | 't5xxl' | 'llm' | 'upscaler'; name: string; path: string; size: number; enabled: boolean; strength: number }>;
+  supportFiles?: Array<{ kind: 'lora' | 'vae' | 'clip_l' | 't5xxl' | 'llm' | 'upscaler' | 'config'; name: string; path: string; size: number; enabled: boolean; strength: number }>;
   attentionVariant?: 'split_einsum' | 'original';
 }
 
@@ -364,6 +365,7 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;
   /** Encrypted project metadata. Knowledge-base documents cannot yet be sealed. */

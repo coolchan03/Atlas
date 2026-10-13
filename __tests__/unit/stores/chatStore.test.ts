@@ -23,9 +23,10 @@ describe('chatStore', () => {
   });
 
   describe('Atlas agent, privacy and archive controls', () => {
-    it('defaults new conversations to Atlas and supports selecting another agent', () => {
+    it('defaults new conversations to No Agent and supports selecting another agent', () => {
+      require('../../../src/stores/agentStore').useAgentStore.getState().setActiveAgent(null);
       const id = useChatStore.getState().createConversation('model');
-      expect(getChatState().conversations[0].agentId).toBe('atlas');
+      expect(getChatState().conversations[0].agentId).toBeNull();
       useChatStore.getState().setConversationAgent(id, 'teacher');
       expect(getChatState().conversations[0].agentId).toBe('teacher');
     });
@@ -406,6 +407,22 @@ describe('chatStore', () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toBe('Second');
     });
+  });
+
+  it('forgets compacted context when deleting a single message', () => {
+    const store = useChatStore.getState();
+    const convId = store.createConversation('test-model');
+    const msg = store.addMessage(convId, { role: 'user', content: 'Sensitive content' });
+    useChatStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === convId ? {
+        ...c, compactionSummary: 'Sensitive content', compactionCutoffMessageId: msg.id,
+      } : c),
+    }));
+    store.deleteMessage(convId, msg.id);
+    const conv = getChatState().conversations.find(c => c.id === convId)!;
+    expect(conv.messages.some(m => m.id === msg.id)).toBe(false);
+    expect(conv.compactionSummary).toBeUndefined();
+    expect(conv.compactionCutoffMessageId).toBeUndefined();
   });
 
   describe('deleteMessagesAfter', () => {
@@ -1248,9 +1265,9 @@ describe('chatStore', () => {
   });
 
   describe('streaming TTS answer gating (only the answer is spoken)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { registerHook, _clearHooksForTesting } = require('../../../src/bootstrap/hookRegistry');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { useAppStore } = require('../../../src/stores/appStore');
     let spoken: string[];
 

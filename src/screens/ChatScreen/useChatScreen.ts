@@ -1,5 +1,6 @@
+/* eslint-disable max-lines-per-function -- Chat hook owns the existing shared model/session lifecycle. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Alert } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
@@ -20,6 +21,7 @@ import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, han
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
+import { saveReportToProject } from '../../services/researchReportStorage';
 import { saveImageToGallery } from './useSaveImage';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import {
@@ -97,6 +99,9 @@ export const useChatScreen = () => {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
+  const [researchMode, setResearchMode] = useState(false);
+  const [researchDepth, setResearchDepth] = useState<'quick' | 'deep'>('deep');
+  const [researchStatus, setResearchStatus] = useState<string | null>(null);
   const [animateLastN, setAnimateLastN] = useState(0);
   const [queueCount, setQueueCount] = useState(0);
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
@@ -157,15 +162,15 @@ export const useChatScreen = () => {
 
   const {
     activeConversationId, conversations, createConversation: storeCreateConversation, addMessage,
-    updateMessageContent, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
+    updateMessageContent, deleteMessage, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
     streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
     deleteConversation, setActiveConversation, setConversationProject,
   } = useChatStore();
 
   const { projects, getProject } = useProjectStore();
 
-  // The privacy choice is made before a new conversation starts; it is never
-  // switched on after content has already been persisted.
+  // A new chat saves normally. Individual saved conversations can be encrypted later
+  // from Chat options without interrupting the initial conversation creation.
   const createConversation = (modelId: string, title?: string, projectId?: string) =>
     storeCreateConversation(modelId, title, projectId,
       !!route.params?.privateChat && !route.params?.conversationId);
@@ -173,7 +178,7 @@ export const useChatScreen = () => {
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   useEffect(() => {
     if (activeConversationId) {
-      const desiredAgent = activeConversation?.agentId ?? 'atlas';
+      const desiredAgent = activeConversation?.agentId ?? null;
       if (useAgentStore.getState().activeAgentId !== desiredAgent) {
         useAgentStore.getState().setActiveAgent(desiredAgent);
       }
@@ -247,6 +252,7 @@ export const useChatScreen = () => {
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
     createConversation,
     pendingProjectId,
+    researchMode, researchDepth, setResearchStatus,
   };
   genDepsRef.current = genDeps;
 
@@ -365,7 +371,7 @@ export const useChatScreen = () => {
   }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
 
   const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
-    handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
+    handleSendFn(genDeps, { text, attachments, imageMode: researchMode ? 'disabled' : imageMode, startGeneration, setDebugInfo });
 
   // After picking a text model, replay the stashed message (no retype needed).
   const handleModelSelect = async (model: DownloadedModel) => {
@@ -389,6 +395,7 @@ export const useChatScreen = () => {
     showScrollToBottom, setShowScrollToBottom,
     isClassifying, animateLastN, queueCount, queuedTexts,
     viewerImageUri, setViewerImageUri, imageGenState,
+    researchMode, setResearchMode, researchDepth, setResearchDepth, researchStatus,
     enabledTools, handleToggleTool,
     activeModelId: activeModelInfo.modelId, activeConversationId, activeConversation, activeModel,
     activeModelInfo, hasActiveModel, hasTextModel, activeRemoteModel, activeModelName,
@@ -406,6 +413,27 @@ export const useChatScreen = () => {
     handleUnloadModel: () => handleUnloadModelFn(modelDeps),
     handleDeleteConversation: () =>
       handleDeleteConversationFn(genDeps, { activeConversationId, activeConversation, setAlertState }),
+    handleSaveReportToProject: async (message: Message) => {
+      if (!activeConversationId || !activeProject?.id) return;
+      try {
+        const filename = await saveReportToProject(activeProject.id, activeConversationId, message);
+        Alert.alert('Saved to project', `${filename  } has been indexed in the project knowledge base.`);
+      } catch (e: any) {
+        Alert.alert('Could not save report', String(e?.message ?? e));
+      }
+    },
+    handleDeleteMessage: (message: Message) => {
+      if (!activeConversationId || isStreaming || isGeneratingImage) return;
+      const chatId = activeConversationId;
+      Alert.alert('Delete message?', 'Remove this message from the conversation? This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => {
+          deleteMessage(chatId, message.id);
+          contextCompactionService.clearSummary(chatId);
+          void llmService.clearKVCache(false).catch(() => undefined);
+        } },
+      ]);
+    },
     handleCopyMessage: (_content: string) => { },
     handleRetryMessage: (message: Message) =>
       handleRetryMessageFn(message, genDeps, { activeConversationId, hasActiveModel, activeConversation, deleteMessagesAfter, setDebugInfo }),

@@ -1,5 +1,6 @@
+/* eslint-disable complexity -- Explicit safety/extension whitelist checks are intentionally kept together. */
 /** Validate support-file format before passing it to the native image engine. */
-export type ImageSupportFileKind = 'vae' | 'llm' | 'clip_l' | 't5xxl' | 'lora' | 'upscaler';
+export type ImageSupportFileKind = 'vae' | 'llm' | 'clip_l' | 't5xxl' | 'lora' | 'upscaler' | 'config';
 
 export function validateImageSupportFormat(name: string, kind: ImageSupportFileKind): string | null {
   const filename = name.trim().toLowerCase();
@@ -7,8 +8,9 @@ export function validateImageSupportFormat(name: string, kind: ImageSupportFileK
       filename.includes('/') || filename.includes('\\') || filename.includes('\0') ||
       filename.length > 255) return 'Invalid support-file name.';
   const extension = filename.split('.').pop() || '';
+  if (kind === 'config') return extension === 'json' ? null : 'Configuration attachments must be .json files.';
   if (!['safetensors', 'safetensor', 'gguf', 'pth', 'pt'].includes(extension)) {
-    return 'Supported file types: .safetensors, .gguf, .pth and .pt.';
+    return 'Supported file types: .safetensors, .gguf, .pth, .pt and .json (configuration).';
   }
   if (extension === 'pth' || extension === 'pt') {
     if (kind !== 'upscaler') return 'PyTorch .pth/.pt files cannot be loaded as a LoRA, VAE or text encoder.';

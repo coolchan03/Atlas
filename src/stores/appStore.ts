@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Persistent app store keeps migration/default settings in one versioned schema. */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
@@ -56,6 +57,7 @@ type AppSettings = {
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean;
   imageBackendMode?: 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
+  imageAccelerationAutoMigrated?: boolean;
   enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
@@ -112,6 +114,8 @@ interface AppState {
   setDeviceInfo: (info: DeviceInfo) => void;
   setModelRecommendation: (rec: ModelRecommendation) => void;
   downloadedModels: DownloadedModel[];
+  modelNicknames: Record<string, string>;
+  setModelNickname: (modelId: string, nickname: string) => void;
   setDownloadedModels: (models: DownloadedModel[]) => void;
   addDownloadedModel: (model: DownloadedModel) => void;
   removeDownloadedModel: (modelId: string) => void;
@@ -230,6 +234,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageHeight: 512,
   imageUseOpenCL: true,
   imageBackendMode: 'auto',
+  imageAccelerationAutoMigrated: true,
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
@@ -302,6 +307,11 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
     merged.settings = { ...merged.settings,
       imageBackendMode: persistedState.settings.imageUseOpenCL === false ? 'cpu' : 'auto' };
   }
+  // Existing installs now use device-probed automatic image acceleration.
+  if (persistedState?.settings && !persistedState.settings.imageAccelerationAutoMigrated) {
+    merged.settings = { ...merged.settings, imageBackendMode: 'auto', imageUseOpenCL: true,
+      imageAccelerationAutoMigrated: true };
+  }
   // One-time: upgrades whose backend was picked automatically (never by the user) move
   // to Auto (NPU -> OpenCL GPU -> Vulkan GPU -> CPU), the same default as fresh installs.
   // Fresh installs start with the flag set, so only older saved settings are touched.
@@ -345,6 +355,14 @@ export const useAppStore = create<AppState>()(
       setDeviceInfo: (info) => set({ deviceInfo: info }),
       setModelRecommendation: (rec) => set({ modelRecommendation: rec }),
       downloadedModels: [],
+      modelNicknames: {},
+      setModelNickname: (modelId, nickname) => set(state => {
+        const next = { ...state.modelNicknames };
+        const label = nickname.trim().slice(0, 80);
+        if (label) next[modelId] = label;
+        else delete next[modelId];
+        return { modelNicknames: next };
+      }),
       setDownloadedModels: (models) => set({ downloadedModels: models.filter(m => !isExcludedTextModel(m)) }),
       addDownloadedModel: (model) =>
         set((state) => {
@@ -470,6 +488,7 @@ export const useAppStore = create<AppState>()(
         onboardingChecklist: state.onboardingChecklist,
         checklistDismissed: state.checklistDismissed,
         activeModelId: state.activeModelId,
+        modelNicknames: state.modelNicknames,
         lastTextModelId: state.lastTextModelId,
         settings: state.settings,
         activeImageModelId: state.activeImageModelId,

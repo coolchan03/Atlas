@@ -54,7 +54,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
-  const { downloadedModels, downloadedImageModels, activeImageModelId, activeModelId } = useAppStore();
+  const { downloadedModels, downloadedImageModels, activeImageModelId, activeModelId, modelNicknames } = useAppStore();
   // "Currently loaded" comes from the ONE reactive source (ActiveModelService's loaded state, projected to
   // the store) — engine-agnostic and never stale. Callers no longer pass it, so the sheet can't disagree
   // with the overview (which reads activeModelId, the SELECTION). See useLoadedTextModelPath.
@@ -91,12 +91,14 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const filteredDownloadedModels = useMemo(
-    () => downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
-    [downloadedModels],
+    () => downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model))
+      .map(model => modelNicknames[model.id] ? { ...model, name: modelNicknames[model.id] } : model),
+    [downloadedModels, modelNicknames],
   );
   const filteredDownloadedImageModels = useMemo(
-    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
-    [downloadedImageModels],
+    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model))
+      .map(model => modelNicknames[model.id] ? { ...model, name: modelNicknames[model.id] } : model),
+    [downloadedImageModels, modelNicknames],
   );
 
   useEffect(() => {

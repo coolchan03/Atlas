@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles -- Existing chat progress components share dynamic themed layout. */
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
@@ -10,6 +11,7 @@ import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } fr
 import { ReplyEta } from '../../components/ReplyEta';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
+import { cancelDeepResearch } from '../../services/deepResearch';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
 import { createStyles } from './styles';
@@ -240,6 +242,17 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           onStop={chat.handleStop}
         />
       )}
+      {!!chat.researchStatus && (
+        <View style={styles.classifyingBar} testID="deep-research-status">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.classifyingText}>{chat.researchStatus}</Text>
+          <AnimatedPressable testID="cancel-deep-research" onPress={() => {
+            cancelDeepResearch();
+          }} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={{ color: colors.primary, fontSize: 12 }}>Cancel</Text>
+          </AnimatedPressable>
+        </View>
+      )}
       <ModelStatusBar
         // While generating for this chat the loading state is shown inside the
         // reply bubble ("Loading <model>…"), so don't also show it in this bar.
@@ -293,7 +306,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             onSend={chat.handleSend}
             onStop={chat.handleStop}
             disabled={!chat.hasActiveModel}
-            isGenerating={chat.isStreaming || chat.isThinking}
+            isGenerating={chat.isStreaming || chat.isThinking || !!chat.researchStatus}
             supportsVision={chat.supportsVision}
             visionNeedsRepair={chat.visionNeedsRepair}
             conversationId={chat.activeConversationId}

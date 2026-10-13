@@ -1,5 +1,6 @@
+/* eslint-disable react-native/no-inline-styles -- Image setting chips use the selected theme colors. */
 import React from 'react';
-import { View, Text, Switch, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -28,11 +29,19 @@ const ClearGPUCacheButton: React.FC = () => {
 
 /** Basic controls: Image Steps + Image Size */
 export const ImageQualityBasicSliders: React.FC = () => {
+  const { colors } = useTheme();
   const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
   const model = downloadedImageModels.find(m => m.id === activeImageModelId);
   const preset = getImageTuning(model, settings);
   const sizeOptions = getImageSizeSlider(model);
   const isXL = isDirectSDXL(model);
+  const square = Math.max(sizeOptions.min, Math.min(sizeOptions.max, isXL ? 768 : 512));
+  const large = Math.max(square, Math.min(sizeOptions.max, Math.round(square * 1.5 / 64) * 64));
+  const aspectPresets = [
+    { label: 'Square', width: square, height: square },
+    { label: 'Portrait', width: square, height: large },
+    { label: 'Landscape', width: large, height: square },
+  ];
 
   return (
     <>
@@ -51,16 +60,30 @@ export const ImageQualityBasicSliders: React.FC = () => {
         description={sizeOptions.description}
         value={preset.width}
         min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
-        formatValue={(v) => `${v}x${v}`}
+        formatValue={(v) => `${v}x${settings.imageHeight || v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 }}>
+        {aspectPresets.map(option => {
+          const selected = settings.imageWidth === option.width && settings.imageHeight === option.height;
+          return (
+            <TouchableOpacity key={option.label} testID={`image-aspect-${  option.label.toLowerCase()}`}
+              accessibilityRole="button" accessibilityState={{ selected }}
+              onPress={() => updateSettings({ imageWidth: option.width, imageHeight: option.height })}
+              style={{ borderRadius: 9, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7,
+                backgroundColor: selected ? colors.surfaceLight : colors.background,
+                borderColor: selected ? colors.primary : colors.border }}>
+              <Text style={{ color: selected ? colors.primary : colors.textSecondary }}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </>
   );
 };
 
 /** Advanced controls: Guidance Scale, Image Threads, GPU Acceleration */
 export const ImageQualityAdvancedSliders: React.FC = () => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
   const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);

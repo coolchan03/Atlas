@@ -62,6 +62,7 @@ const SUPPORT_NAMES: Record<SupportKind, string> = {
   t5xxl: 'T5XXL text encoder',
   lora: 'Style LoRA',
   upscaler: 'Image upscaler',
+  config: 'JSON configuration (optional)',
 };
 
 export function getMissingImageSupportGuides(

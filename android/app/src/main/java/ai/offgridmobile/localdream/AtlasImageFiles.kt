@@ -12,7 +12,7 @@ import java.nio.ByteOrder
 
 /** Streamed, non-converting import for SDXL, SD1.x and FLUX image weights. */
 internal object AtlasImageFiles {
-    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "llm", "upscaler")
+    private val kinds = setOf("lora", "vae", "clip_l", "t5xxl", "llm", "upscaler", "config")
     fun inspect(ctx: Context, uriText: String, fileName: String): JSONObject {
         val lower = fileName.lowercase()
         val result = JSONObject().put("kind", "unknown").put("family", "unknown")
@@ -200,7 +200,8 @@ internal object AtlasImageFiles {
                strength: Double, progress: (Double) -> Unit): JSONObject {
         if (kind !in kinds) throw IOException("Unknown image support file type")
         val suffix = name.substringAfterLast('.', "").lowercase()
-        val permitted = if (kind == "upscaler") setOf("pth", "pt", "safetensors", "gguf")
+        val permitted = if (kind == "config") setOf("json")
+            else if (kind == "upscaler") setOf("pth", "pt", "safetensors", "gguf")
             else if (kind == "clip_l" || kind == "t5xxl" || kind == "llm") setOf("safetensors", "safetensor", "gguf")
             else setOf("safetensors", "safetensor")
         if (suffix !in permitted) throw IOException(".$suffix is not a supported $kind file type")
@@ -213,12 +214,23 @@ internal object AtlasImageFiles {
         val supportDir = File(folder, "support/$kind").apply { mkdirs() }
         val destination = File(supportDir, cleaned)
         val size = copy(ctx, uri, destination, progress)
+        if (kind == "config") {
+            if (size > 32L * 1024L * 1024L) {
+                destination.delete()
+                throw IOException("JSON configuration exceeds the 32 MB safety limit")
+            }
+            try { JSONObject(destination.readText()) }
+            catch (e: Exception) {
+                destination.delete()
+                throw IOException("Invalid JSON configuration: " + (e.message ?: "parse error"))
+            }
+        }
         val arr = manifest.getJSONArray("support")
         val replacedFiles = mutableListOf<File>()
         for (i in arr.length() - 1 downTo 0) {
             val item = arr.getJSONObject(i)
             if (item.optString("kind") == kind &&
-                (kind != "lora" || item.optString("name") == cleaned)) {
+                (kind != "lora" && kind != "config" || item.optString("name") == cleaned)) {
                 // Previously a replacement encoder remained on disk even when
                 // removed from the manifest, silently consuming phone storage.
                 val prior = File(item.optString("path")).canonicalFile

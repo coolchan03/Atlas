@@ -11,6 +11,7 @@ export type ImageSupportKind = ImageSupport['kind'];
 
 function chooseKind(name: string): Promise<ImageSupportKind | null> {
   const filename = name.toLowerCase();
+  if (filename.endsWith('.json')) return Promise.resolve('config');
   // Distinguish the Qwen3 encoder from a GGUF chat model or a style LoRA.
   if (/\.(pth|pt)$/i.test(filename)) {
     return new Promise(resolve => Alert.alert('PTH / PT file',
@@ -60,7 +61,7 @@ export async function pickAndAttachImageSupport(
   if (!chosen) return null;
   const name = (chosen.name || 'support.safetensors').replace(/^.*[/\\]/, '');
 
-  if (!/\.(safetensors?|gguf|pth|pt)$/i.test(name)) throw new Error('Supported add-on formats: .safetensors, .gguf, .pth or .pt');
+  if (!/\.(safetensors?|gguf|pth|pt|json)$/i.test(name)) throw new Error('Supported add-on formats: .safetensors, .gguf, .pth, .pt or .json');
   const kind = await chooseKind(name);
   if (!kind) return null;
   const formatError = validateImageSupportFormat(name, kind);
@@ -70,15 +71,15 @@ export async function pickAndAttachImageSupport(
   }
   const sub = new NativeEventEmitter(module).addListener('LocalDreamConvert',
     (e: { stage?: string; fraction?: number }) => {
-      if (e.stage === 'copy') setBusy('Attaching ' + name, Math.min(0.99, Math.max(0, e.fraction ?? 0)));
+      if (e.stage === 'copy') setBusy(`Attaching ${  name}`, Math.min(0.99, Math.max(0, e.fraction ?? 0)));
     });
   try {
-    setBusy('Attaching ' + name, 0);
+    setBusy(`Attaching ${  name}`, 0);
     const file = await module.attachAtlasImageSupport({
       modelDir: model.modelPath, uri: chosen.uri, fileName: name, kind, strength: 0.75,
     }) as ImageSupport;
     const updated = [...(model.supportFiles ?? []).filter(x =>
-      x.kind !== kind || (kind === 'lora' && x.name !== file.name)), file];
+      x.kind !== kind || ((kind === 'lora' || kind === 'config') && x.name !== file.name)), file];
     await persist(model, updated);
     return file;
   } finally { sub.remove(); }

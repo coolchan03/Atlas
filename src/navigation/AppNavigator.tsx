@@ -22,7 +22,6 @@ import {
   ModelsScreen,
   ChatScreen,
   SettingsScreen,
-  ProjectsScreen,
   ChatsListScreen,
   ProjectDetailScreen,
   ProjectEditScreen,
@@ -59,6 +58,7 @@ import {
   RootStackParamList,
   MainTabParamList,
 } from './types';
+import { WorkspaceScreen } from '../screens/WorkspaceScreen';
 import { useRegisteredScreens } from './screenRegistry';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -174,8 +174,8 @@ const MainTabs: React.FC = () => {
         />
         <Tab.Screen
           name="ProjectsTab"
-          component={ProjectsScreen}
-          options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }}
+          component={WorkspaceScreen}
+          options={{ tabBarLabel: 'Workspace', tabBarButtonTestID: 'projects-tab' }}
           listeners={() => ({
             tabPress: () => { triggerHaptic('selection'); },
           })}
@@ -183,7 +183,7 @@ const MainTabs: React.FC = () => {
         <Tab.Screen
           name="AgentsTab"
           component={AgentsScreen}
-          options={{ tabBarLabel: 'Agents', tabBarButtonTestID: 'agents-tab' }}
+          options={{ tabBarLabel: 'Agents', tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
           listeners={() => ({
             tabPress: () => { triggerHaptic('selection'); },
           })}
