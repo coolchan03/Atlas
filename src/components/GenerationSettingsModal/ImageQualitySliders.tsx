@@ -60,7 +60,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
         description={sizeOptions.description}
         value={preset.width}
         min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
-        formatValue={(v) => `${v}x${settings.imageHeight || v}`}
+        formatValue={(v) => `${v}x${preset.height}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 }}>

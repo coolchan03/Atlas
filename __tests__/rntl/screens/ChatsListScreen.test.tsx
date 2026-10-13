@@ -145,14 +145,6 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 
 import { ChatsListScreen } from '../../../src/screens/ChatsListScreen';
 
-/** New chat first asks Regular vs Private; tap "Regular chat" in that system alert. */
-function pickRegularChat() {
-  const { Alert } = require('react-native');
-  const spy = jest.spyOn(Alert, 'alert').mockImplementation(((_t: string, _m: string, buttons?: { text: string; onPress?: () => void }[]) => {
-    buttons?.find((b) => b.text === 'Regular chat')?.onPress?.();
-  }) as any);
-  return spy;
-}
 
 
 describe('ChatsListScreen', () => {
@@ -184,7 +176,6 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
-      pickRegularChat();
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
     });
@@ -229,7 +220,6 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
-      pickRegularChat();
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
     });
@@ -365,10 +355,12 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
-      pickRegularChat();
+      const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByText('New'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(alertSpy).not.toHaveBeenCalled(); // No Regular/Private startup dialog.
+      alertSpy.mockRestore();
     });
 
     it('does not navigate when New is pressed and no models downloaded', () => {
@@ -508,10 +500,9 @@ describe('ChatsListScreen', () => {
       });
 
       const { getByText } = render(<ChatsListScreen />);
-      pickRegularChat();
       fireEvent.press(getByText('New Chat'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 

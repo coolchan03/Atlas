@@ -108,16 +108,8 @@ jest.mock('../../../src/utils/logger', () => ({
 import { useHomeScreen } from '../../../src/screens/HomeScreen/hooks/useHomeScreen';
 import { remoteServerManager } from '../../../src/services';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../src/stores';
-import { showAlert, hideAlert } from '../../../src/components';
+import { showAlert } from '../../../src/components';
 
-/** New chat first asks Regular vs Private; tap "Regular chat" in that system alert. */
-function pickRegularChat() {
-  const { Alert } = require('react-native');
-  const spy = jest.spyOn(Alert, 'alert').mockImplementation(((_t: string, _m: string, buttons?: { text: string; onPress?: () => void }[]) => {
-    buttons?.find((b) => b.text === 'Regular chat')?.onPress?.();
-  }) as any);
-  return spy;
-}
 
 
 const mockNavigate = jest.fn();
@@ -181,9 +173,8 @@ describe('useHomeScreen', () => {
         generatedImages: [], settings: { contextLength: 4096 },
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      pickRegularChat();
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
 
     it('uses remote text model id when no local model is active', () => {
@@ -194,9 +185,8 @@ describe('useHomeScreen', () => {
         activeServerId: 'server-1',
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      pickRegularChat();
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 
