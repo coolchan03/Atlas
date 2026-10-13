@@ -1,13 +1,13 @@
 import { acceleratorCandidates, isExplicitAndroidAccelerator, requireGpuLayers } from '../../../src/services/acceleratorSelection';
 
 describe('text accelerator candidate selection', () => {
-  it('prefers NPU for eligible models, then Vulkan then OpenCL', () => {
+  it('prefers NPU for eligible models, then OpenCL, then Vulkan', () => {
     expect(acceleratorCandidates({ npu: true, vulkan: true, opencl: true }, '/models/qwen-Q4_0.gguf', false))
-      .toEqual(['htp', 'vulkan', 'opencl']);
+      .toEqual(['htp', 'opencl', 'vulkan']);
   });
   it('skips NPU on unsupported quantization and never adds CPU', () => {
     expect(acceleratorCandidates({ npu: true, vulkan: true, opencl: true }, '/models/qwen-Q5_K_M.gguf', false))
-      .toEqual(['vulkan', 'opencl']);
+      .toEqual(['opencl', 'vulkan']);
     expect(acceleratorCandidates({ npu: false, vulkan: false, opencl: false }, 'x.gguf', false)).toEqual([]);
   });
   it('does not use experimental Vulkan for a vision projector', () => {

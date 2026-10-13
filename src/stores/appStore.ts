@@ -80,6 +80,8 @@ type AppSettings = {
    *  auto-selected). */
   /** Atlas: the user picked the backend themselves (auto GPU never overrides it). */
   backendUserChosen?: boolean;
+  /** Set once the one-time move of automatic installs to the Auto backend has run. */
+  autoBackendMigrated?: boolean;
   /** What agents call the user (fills {{name}} in agent prompts). */
   userName?: string;
   atlasAccelChecked?: boolean;
@@ -227,6 +229,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
+  autoBackendMigrated: true,
   gpuLayers: 99,
   flashAttn: true,
   aggressiveModelLoading: false,
@@ -294,6 +297,13 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (persistedState?.settings && !persistedState.settings.imageBackendMode) {
     merged.settings = { ...merged.settings,
       imageBackendMode: persistedState.settings.imageUseOpenCL === false ? 'cpu' : 'auto' };
+  }
+  // One-time: upgrades whose backend was picked automatically (never by the user) move
+  // to Auto (NPU -> OpenCL GPU -> Vulkan GPU -> CPU), the same default as fresh installs.
+  // Fresh installs start with the flag set, so only older saved settings are touched.
+  if (Platform.OS === 'android' && persistedState?.settings && !persistedState.settings.autoBackendMigrated) {
+    merged.settings = { ...merged.settings, autoBackendMigrated: true,
+      ...(persistedState.settings.backendUserChosen ? {} : { inferenceBackend: INFERENCE_BACKENDS.AUTO }) } as any;
   }
   if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
     merged.settings = {

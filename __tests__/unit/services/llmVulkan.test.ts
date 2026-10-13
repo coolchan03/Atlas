@@ -91,25 +91,38 @@ it('still allows CPU when the caller explicitly requests it', async () => {
   expect(llmService.isModelLoaded()).toBe(true);
 });
 
-it('Auto selects OpenCL after a Vulkan load failure without trying CPU', async () => {
+it('Auto picks OpenCL first on an Adreno device (keeps tools), without touching Vulkan', async () => {
   const { hardwareService } = require('../../../src/services/hardware');
   const availability = jest.spyOn(hardwareService, 'getAccelerationCapability')
     .mockResolvedValue({ hasNpu: false, hasGpu: true });
   jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
   jest.spyOn(vulkanEngine, 'isAvailable').mockResolvedValue(true);
-  jest.spyOn(vulkanEngine, 'loadModel').mockRejectedValue(new Error('shader failed'));
-  const unload = jest.spyOn(vulkanEngine, 'unload').mockResolvedValue();
+  const vulkanLoad = jest.spyOn(vulkanEngine, 'loadModel').mockResolvedValue('Vulkan');
   native.mockResolvedValue(createMockLlamaContext({ gpu: true, devices: ['Adreno GPU'] }) as any);
   useAppStore.setState({ settings: {
     ...useAppStore.getState().settings, inferenceBackend: 'auto', gpuLayers: 8,
   }});
   await llmService.loadModel('/models/small-Q4_0.gguf');
   expect(availability).toHaveBeenCalled();
-  expect(unload).toHaveBeenCalled();
   expect(llmService.getSelectedBackend()).toBe('opencl');
-  expect(llmService.getBackendFallbackNotice()).toContain('Auto selected OPENCL');
+  expect(vulkanLoad).not.toHaveBeenCalled();
   expect(native).toHaveBeenCalledTimes(1);
   expect((native as jest.Mock).mock.calls[0][0].n_gpu_layers).toBeGreaterThan(0);
+});
+
+it('Auto uses Vulkan when OpenCL cannot load (Mali-style device)', async () => {
+  const { hardwareService } = require('../../../src/services/hardware');
+  jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: true });
+  jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+  jest.spyOn(vulkanEngine, 'isAvailable').mockResolvedValue(true);
+  jest.spyOn(vulkanEngine, 'loadModel').mockResolvedValue('Vulkan');
+  native.mockRejectedValue(new Error('OpenCL init failed'));
+  useAppStore.setState({ settings: {
+    ...useAppStore.getState().settings, inferenceBackend: 'auto', gpuLayers: 8,
+  }});
+  await llmService.loadModel('/models/small-Q4_0.gguf');
+  expect(llmService.getSelectedBackend()).toBe('vulkan');
+  expect(llmService.getBackendFallbackNotice()).toContain('Auto selected VULKAN');
 });
 
 it('Auto falls back to CPU when all accelerators are unavailable', async () => {
