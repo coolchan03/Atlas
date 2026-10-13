@@ -4,6 +4,7 @@
  * exact source passage it came from ([1], [2] ... tap to read the passage).
  */
 import { ragService } from '../services/rag';
+import { runBackgroundJob } from '../services/llmJobQueue';
 import { ragDatabase } from '../services/rag/database';
 import { ensureTextModel } from '../atlasTools/models';
 import { create } from 'zustand';
@@ -112,13 +113,13 @@ export async function askModel(system: string, user: string): Promise<string> { 
 async function ask(system: string, user: string): Promise<string> {
   await ensureTextModel(null);
   const { llmService } = require('../services/llm');
-  for (let i = 0; llmService.isCurrentlyGenerating() && i < 40; i++) await new Promise((r) => setTimeout(r, 1500));
-  if (llmService.isCurrentlyGenerating()) throw new Error('The AI is busy answering a chat. Wait for it to finish (or stop it), then try again.');
+  return runBackgroundJob(async () => {
   const out: string = await llmService.generateResponse(
     [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
     { disableThinking: true },
   );
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  });
 }
 
 const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;

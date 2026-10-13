@@ -29,6 +29,18 @@ export interface StartModelDownloadOpts {
  * pipeline (backgroundDownloadService, downloadStore progress, mmproj sidecar) was
  * already shared; this collapses the last duplicated wrapper around it.
  */
+const GB = 1024 * 1024 * 1024;
+export async function assertFreeSpace(bytes: number | undefined): Promise<void> {
+  if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return;
+  let free = 0;
+  try { free = Number((await require('react-native-fs').getFSInfo())?.freeSpace) || 0; } catch { return; }
+  if (!free) return;
+  const need = bytes * 1.1;
+  if (free < need) {
+    throw new Error(`Not enough storage: this download needs ${(need / GB).toFixed(1)} GB and ${(free / GB).toFixed(1)} GB is free. Delete a model in My models or free up space first.`);
+  }
+}
+
 export async function startModelDownload(
   modelId: string,
   file: ModelFile,
@@ -40,6 +52,10 @@ export async function startModelDownload(
   // up-front avoids the unnecessary native call.
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing && isActiveStatus(existing.status)) return;
+
+  // Refuse up front when the file cannot fit (plus 10% headroom) instead of
+  // failing after a long download.
+  await assertFreeSpace(file.size);
 
   // Publish a QUEUED row to the store IMMEDIATELY, before starting the (possibly
   // slot-limited) native download. Without this, a queued download had no store entry

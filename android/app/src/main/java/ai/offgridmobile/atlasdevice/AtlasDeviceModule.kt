@@ -42,6 +42,15 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         }
     }
 
+    /** Magnetic declination (degrees, east positive) from Android's built-in world magnetic model. */
+    @ReactMethod
+    fun magneticDeclination(lat: Double, lon: Double, altitudeM: Double, promise: Promise) {
+        try {
+            val field = android.hardware.GeomagneticField(lat.toFloat(), lon.toFloat(), altitudeM.toFloat(), System.currentTimeMillis())
+            promise.resolve(field.declination.toDouble())
+        } catch (e: Exception) { promise.reject("DECLINATION", e.message ?: "Declination unavailable", e) }
+    }
+
     /** Flashlight for SOS / Morse signalling. setTorchMode needs no camera permission. */
     @ReactMethod
     fun setTorch(enabled: Boolean, promise: Promise) {

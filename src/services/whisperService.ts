@@ -26,6 +26,15 @@ type TranscriptionCallback = (result: TranscriptionResult) => void;
 class WhisperService {
   private context: WhisperContext | null = null;
   private currentModelPath: string | null = null;
+
+  /**
+   * English-only models (file names with ".en") must be told 'en'. Multilingual
+   * models auto-detect, so Spanish or French speech is no longer forced into English.
+   */
+  private defaultLanguage(): string {
+    const name = (this.currentModelPath ?? '').split('/').pop()?.toLowerCase() ?? '';
+    return /\.en[.-]/.test(name) || name.endsWith('.en.bin') ? 'en' : 'auto';
+  }
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
   private isReleasingContext: boolean = false;
@@ -332,7 +341,7 @@ class WhisperService {
       logger.log('[WhisperService] Calling transcribeRealtime...');
       // Use the transcribeRealtime API
       const { stop, subscribe } = await this.context.transcribeRealtime({
-        language: options?.language || 'en',
+        language: options?.language || this.defaultLanguage(),
         maxLen: options?.maxLen || 0, // 0 = no limit
         realtimeAudioSec: 30, // Process in 30-second chunks
         realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
@@ -353,11 +362,8 @@ class WhisperService {
         logger.log('[WhisperService] Event received:', {
           isCapturing: evt.isCapturing,
           hasData: !!evt.data,
-          text: evt.data?.result?.slice(0, 50),
+          textLength: evt.data?.result?.length ?? 0,
         });
-        // [WIRE] raw realtime transcription event shape from-device (voice-mode STT path) — full result +
-        // segments + timing, so we can ground the realtime-transcript fixtures (distinct from file transcribe).
-        logger.log(`[WIRE-STT-REALTIME] ${JSON.stringify(evt)}`);
 
         const { isCapturing, data, processTime, recordingTime } = evt;
 
@@ -461,12 +467,11 @@ class WhisperService {
     }
 
     const { promise } = this.context.transcribe(filePath, {
-      language: options?.language || 'en',
+      language: options?.language || this.defaultLanguage(),
       onProgress: options?.onProgress,
     });
 
     const __res = await promise;
-    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
     const { result } = __res;
     return cleanTranscription(result);
   }

@@ -6,6 +6,7 @@ import logger from '../../utils/logger';
 import { searchWeb } from './webSearchProviders';
 import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
+import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -27,6 +28,11 @@ export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
 }
 
 async function dispatchTool(call: ToolCall): Promise<string> {
+  // Off-grid mode is enforced here, where tools actually run, not only when a
+  // chat builds its tool list (remote providers, learning and other callers too).
+  if (NETWORK_TOOLS.includes(call.name) && offGridOn()) {
+    return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
+  }
   switch (call.name) {
     case 'web_search': {
       const q = requireString(call, 'query');

@@ -16,6 +16,7 @@
  * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
  * In session mode nothing changes until you tap "Keep what it learned".
  */
+import { runBackgroundJob, fitPrompt } from '../services/llmJobQueue';
 import RNFS from 'react-native-fs';
 import { localUniqueId } from '../utils/uniqueId';
 import { llmService } from '../services/llm';
@@ -57,11 +58,8 @@ async function ensureModel(): Promise<void> {
 }
 
 async function ask(system: string, user: string, role: Role): Promise<string> {
-  for (let i = 0; llmService.isCurrentlyGenerating(); i++) {
-    if (stopRequested) throw new Error('stopped');
-    if (i === 0) status('Waiting for the chat to finish...');
-    await sleep(1500);
-  }
+  if (llmService.isCurrentlyGenerating()) status('Waiting for the chat to finish...');
+  return runBackgroundJob(async () => {
   if (stopRequested) throw new Error('stopped');
   if (new Set([roleModels.learner, roleModels.judge, roleModels.manager]).size > 1 || roleModels[role] !== baseModel) {
     await ensureTextModel(roleModels[role] || null, status);
@@ -70,9 +68,12 @@ async function ask(system: string, user: string, role: Role): Promise<string> {
   // Keep the prompt inside the model's memory (about 3 characters per token).
   const ctx = llmService.getPerformanceSettings().contextLength || 2048;
   const maxChars = Math.max(2500, (ctx - 700) * 3);
-  const u = user.length + system.length > maxChars ? user.slice(0, Math.max(800, maxChars - system.length)) : user;
+  // Keep both the start (task) and the end (instructions and reply format) when trimming;
+  // cutting only the end used to drop the instructions, so the reply could not be parsed.
+  const u = fitPrompt(user, Math.max(800, maxChars - system.length));
   const out = await llmService.generateResponse([msg('system', system), msg('user', u)], { disableThinking: true });
   return clean(out);
+  }, { maxWaitMs: 30 * 60_000, shouldStop: () => stopRequested });
 }
 
 // ------------------------------------------------------------------ research
