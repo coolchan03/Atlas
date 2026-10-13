@@ -40,6 +40,20 @@ function sanitizeBackupValue(raw: string): string | null {
   try { return JSON.stringify(stripSensitiveFields(JSON.parse(raw))); }
   catch { return null; }
 }
+function portableStoreValue(key: string, raw: string): string | null {
+  const safe = sanitizeBackupValue(raw);
+  if (!safe) return null;
+  if (key !== 'local-llm-project-storage' && key !== 'local-llm-chat-storage') return safe;
+  try {
+    const parsed = JSON.parse(safe);
+    const collection = key === 'local-llm-project-storage' ? 'projects' : 'conversations';
+    if (!Array.isArray(parsed?.state?.[collection])) return null;
+    // Never export device-bound protected items, nor restore ciphertext whose
+    // Android Keystore key exists only on the device that created it.
+    parsed.state[collection] = parsed.state[collection].filter((item: any) => !item.pinVerifier && !item.protectedBlob);
+    return JSON.stringify(parsed);
+  } catch { return null; }
+}
 
 export async function exportBackup(password?: string): Promise<string | null> {
   if (password !== undefined && password.length < 12) throw new Error('Encrypted backups require a password of at least 12 characters.');
@@ -50,21 +64,15 @@ export async function exportBackup(password?: string): Promise<string | null> {
   const pairs = await AsyncStorage.multiGet(keys);
   const safe = pairs.flatMap(([key, value]) => {
     if (value == null) return [];
-    const sanitized = sanitizeBackupValue(value);
+    const sanitized = portableStoreValue(key, value);
     return sanitized == null ? [] : [[key, sanitized] as [string, string]];
   });
   if (password) {
     const { encryptedChatStorage } = require('../stores/encryptedChatStorage');
     const chatJson = await encryptedChatStorage.getItem('local-llm-chat-storage');
     if (chatJson) {
-      const parsed = JSON.parse(chatJson);
-      if (Array.isArray(parsed?.state?.conversations)) {
-        // Device-bound protected records are NOT portable. Do not include
-        // unreadable ciphertext or accidentally export their sensitive metadata.
-        parsed.state.conversations = parsed.state.conversations.filter((c: any) => !c.pinVerifier && !c.protectedBlob);
-        const sanitized = sanitizeBackupValue(JSON.stringify(parsed));
-        if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
-      }
+      const sanitized = portableStoreValue('local-llm-chat-storage', chatJson);
+      if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
     }
   }
   const data = { format: MAGIC, version: 1, createdAt: new Date().toISOString(), items: Object.fromEntries(safe) };
@@ -113,7 +121,7 @@ export async function importBackup(password?: string): Promise<number | null> {
   // A backup must not create arbitrary AsyncStorage keys or reintroduce secrets.
   const pairs = Object.entries(data.items).flatMap(([key, value]) => {
     if (!RESTORABLE_STORE_KEYS.has(key) || EXCLUDED_BACKUP_KEYS.test(key) || typeof value !== 'string') return [];
-    const sanitized = sanitizeBackupValue(value);
+    const sanitized = portableStoreValue(key, value);
     return sanitized == null ? [] : [[key, sanitized] as [string, string]];
   });
   if (!pairs.length) throw new Error('No supported backup settings found. Only reviewed app stores are restorable; secrets and vault data are excluded.');

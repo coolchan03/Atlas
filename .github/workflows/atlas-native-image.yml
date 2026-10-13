@@ -62,7 +62,7 @@ jobs:
           ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/nativeImageCompatibility.test.ts __tests__/unit/utils/nativeImageTuning.test.ts __tests__/unit/services/hardware.test.ts
       - name: Verify model attachments, credentials and voice regressions
         run: |
-          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/imageSupportFormat.test.ts __tests__/unit/services/authServiceSecurity.test.ts __tests__/unit/services/authService.test.ts __tests__/unit/services/encryptedChatStorage.test.ts __tests__/unit/stores/chatStore.test.ts __tests__/integration/stores/chatStoreIntegration.test.ts __tests__/unit/services/voiceService.test.ts
+          ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/utils/imageSupportFormat.test.ts __tests__/unit/services/authServiceSecurity.test.ts __tests__/unit/services/authService.test.ts __tests__/unit/services/encryptedChatStorage.test.ts __tests__/unit/services/protectedProjectStorage.test.ts __tests__/unit/stores/projectStore.test.ts __tests__/unit/utils/learningGames.test.ts __tests__/unit/stores/chatStore.test.ts __tests__/integration/stores/chatStoreIntegration.test.ts __tests__/unit/services/voiceService.test.ts
       - name: Verify flexible context and native Vulkan regressions
         run: |
           ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/services/acceleratorSelection.test.ts __tests__/unit/services/contextWindow.test.ts __tests__/unit/services/llmContextShiftSafety.test.ts __tests__/unit/services/llmVulkan.test.ts __tests__/unit/services/llm.test.ts

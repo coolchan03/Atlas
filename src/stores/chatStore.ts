@@ -115,6 +115,9 @@ export const useChatStore = create<ChatState>()(
       isThinking: false,
 
       createConversation: (modelId, title, projectId, privateChat = false) => {
+        if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
+          throw new Error('This project is encrypted. Create chats separately until protected project content can be encrypted together.');
+        }
         const id = generateId();
         const conversation: Conversation = {
           id,
@@ -174,6 +177,9 @@ export const useChatStore = create<ChatState>()(
       },
 
       setConversationProject: (conversationId, projectId) => {
+        if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
+          throw new Error('Protected projects cannot accept unencrypted chats. Permanently unprotect the project first.');
+        }
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id !== conversationId

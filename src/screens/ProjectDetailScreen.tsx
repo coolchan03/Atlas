@@ -18,6 +18,7 @@ import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
+import { ProjectPinGate } from '../components/ProjectPinGate';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
@@ -48,6 +49,10 @@ export const ProjectDetailScreen: React.FC = () => {
   };
 
   const handleNewChat = () => {
+    if (project?.pinVerifier) {
+      setAlertState(showAlert('Protected project', 'Chats cannot be attached to a protected project until its content vault is supported. Permanently unprotect this project to create chats.'));
+      return;
+    }
     if (!hasModels) {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
@@ -166,6 +171,7 @@ export const ProjectDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ProjectPinGate projectId={projectId} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>

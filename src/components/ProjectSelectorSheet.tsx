@@ -66,9 +66,11 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
         {projects.map((project) => (
           <TouchableOpacity
             key={project.id}
+            disabled={!!project.pinVerifier}
             style={[
               styles.projectOption,
               activeProject?.id === project.id && styles.projectOptionSelected,
+              project.pinVerifier && { opacity: 0.45 },
             ]}
             onPress={() => handleSelect(project)}
           >
@@ -80,7 +82,7 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
             <View style={styles.projectOptionInfo}>
               <Text style={styles.projectOptionName}>{project.name}</Text>
               <Text style={styles.projectOptionDesc} numberOfLines={1}>
-                {project.description}
+                {project.pinVerifier ? 'Protected project · chats cannot be added until permanently unprotected' : project.description}
               </Text>
             </View>
             {activeProject?.id === project.id && (

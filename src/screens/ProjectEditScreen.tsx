@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   InteractionManager,
+  Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -21,6 +22,8 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
+import { ProjectPinGate } from '../components/ProjectPinGate';
+import { protectProject, permanentlyUnprotectProject } from '../stores/protectedProjectStorage';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProjectEdit'>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectEdit'>;
@@ -30,6 +33,9 @@ export const ProjectEditScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
   const projectId = route.params?.projectId;
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [protectAction, setProtectAction] = useState<'protect' | 'unprotect' | null>(null);
+  const [protectPin, setProtectPin] = useState('');
+  const [protectBusy, setProtectBusy] = useState(false);
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -63,6 +69,18 @@ export const ProjectEditScreen: React.FC = () => {
       });
     }
   }, [existingProject]);
+
+  const applyProjectProtection = async () => {
+    if (!existingProject || !protectAction || protectBusy) return;
+    if (!/^[0-9]{4,12}$/.test(protectPin)) { Alert.alert('PIN', 'Enter 4–12 digits.'); return; }
+    setProtectBusy(true);
+    try {
+      if (protectAction === 'protect') await protectProject(existingProject.id, protectPin);
+      else await permanentlyUnprotectProject(existingProject.id, protectPin);
+      setProtectPin(''); setProtectAction(null);
+    } catch (e: any) { Alert.alert('Project protection', String(e?.message || e)); }
+    finally { setProtectBusy(false); }
+  };
 
   const handleSave = () => {
     if (!formData.name.trim()) {
@@ -161,9 +179,29 @@ export const ProjectEditScreen: React.FC = () => {
             <Switch value={formData.allowLearningActivities} onValueChange={value => setFormData(current => ({ ...current, allowLearningActivities: value }))} />
           </View>
 
+          {existingProject && <View style={{ marginTop: 20, gap: 8 }}>
+            <Text style={styles.label}>Project encryption</Text>
+            <Text style={styles.hint}>Opt-in only. Protects this project's settings and notes with its own Android Keystore key. Projects with documents, chats or saved study outputs cannot yet be protected because those sources are stored separately.</Text>
+            <TouchableOpacity onPress={() => { setProtectAction(existingProject.pinVerifier ? 'unprotect' : 'protect'); setProtectPin(''); }} style={{ padding: 13, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{existingProject.pinVerifier ? 'Permanently remove project protection' : 'Encrypt project settings with a PIN'}</Text>
+            </TouchableOpacity>
+          </View>}
+
           <View style={styles.bottomPadding} />
         </ScrollView>
       </KeyboardAvoidingView>
+      {!!projectId && <ProjectPinGate projectId={projectId} />}
+      <Modal visible={protectAction !== null} animationType="fade" transparent onRequestClose={() => setProtectAction(null)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{protectAction === 'protect' ? 'Protect project settings' : 'Permanently unprotect project'}</Text>
+            <Text style={{ color: colors.textSecondary }}>{protectAction === 'protect' ? 'Choose a PIN; the same PIN may be used for other projects or chats.' : 'Enter the current PIN to decrypt and save these project settings normally.'}</Text>
+            <TextInput value={protectPin} onChangeText={v => setProtectPin(v.replace(/\D/g,'').slice(0,12))} secureTextEntry keyboardType="number-pad" placeholder="4–12 digits" placeholderTextColor={colors.textMuted} style={{ borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8, color: colors.text }} />
+            <TouchableOpacity disabled={protectBusy} onPress={applyProjectProtection} style={{ padding: 13, borderRadius: 9, backgroundColor: colors.primary }}><Text style={{ color: '#fff', textAlign: 'center' }}>{protectBusy ? 'Working…' : 'Confirm'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setProtectAction(null); setProtectPin(''); }}><Text style={{ color: colors.text, textAlign: 'center' }}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );

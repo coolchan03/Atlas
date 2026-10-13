@@ -362,6 +362,10 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** Present only on explicitly protected projects; a salted PIN verifier. */
+  pinVerifier?: string;
+  /** Encrypted project metadata. Knowledge-base documents cannot yet be sealed. */
+  protectedBlob?: string;
   /** Optional project-level permission flags; omitted means ask before suggesting or generating. */
   allowLearningActivities?: boolean;
   /** Legacy flags retained only for reading older project records. */

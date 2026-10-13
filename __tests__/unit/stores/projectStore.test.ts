@@ -40,6 +40,21 @@ describe('projectStore', () => {
     });
   });
 
+  describe('project protection boundaries', () => {
+    it('rejects direct tampering with PIN metadata', () => {
+      const project = useProjectStore.getState().projects[0];
+      expect(() => useProjectStore.getState().updateProject(project.id, { pinVerifier: undefined })).toThrow(/PIN verification/);
+      expect(() => useProjectStore.getState().updateProject(project.id, { protectedBlob: undefined })).toThrow(/PIN verification/);
+    });
+    it('refuses to edit or delete locked project content without unlocking', () => {
+      const original = useProjectStore.getState().projects[0];
+      useProjectStore.setState({ projects: [{ ...original, pinVerifier: 'pin:v1:protected', protectedBlob: 'atlasitem:v1:test' }] });
+      expect(() => useProjectStore.getState().updateProject(original.id, { name: 'Tampered' })).toThrow(/Unlock this project/);
+      expect(() => useProjectStore.getState().deleteProject(original.id)).toThrow(/Unlock this protected project/);
+      expect(useProjectStore.getState().projects).toHaveLength(1);
+    });
+  });
+
   // ============================================================================
   // Initial State
   // ============================================================================

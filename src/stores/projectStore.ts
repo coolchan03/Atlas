@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { protectedProjectStorage, isProtectedProjectUnlocked } from './protectedProjectStorage';
 import { Project } from '../types';
 import { generateId } from '../utils/generateId';
 import { ragService } from '../services/rag';
@@ -104,6 +104,12 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       updateProject: (id, updates) => {
+        // Secret metadata must only change through authenticated vault helpers.
+        if ('pinVerifier' in updates || 'protectedBlob' in updates) {
+          throw new Error('Project protection can only change after PIN verification.');
+        }
+        const selected = get().projects.find(p => p.id === id);
+        if (selected?.pinVerifier && !isProtectedProjectUnlocked(id)) throw new Error('Unlock this project before editing it.');
         set((state) => ({
           projects: state.projects.map((project) =>
             project.id === id
@@ -114,6 +120,10 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       deleteProject: (id) => {
+        const selected = get().projects.find(p => p.id === id);
+        if (selected?.pinVerifier && !isProtectedProjectUnlocked(id)) {
+          throw new Error('Unlock this protected project before deleting it.');
+        }
         ragService.deleteProjectDocuments(id).catch((err) => logger.error(`Failed to delete RAG documents for project ${id}`, err));
         // Cascade: unfile the project's chats so none is left pointing at a project that
         // no longer exists (a dangling projectId isn't re-filable and still tripped the
@@ -131,7 +141,7 @@ export const useProjectStore = create<ProjectState>()(
 
       duplicateProject: (id) => {
         const original = get().getProject(id);
-        if (!original) return null;
+        if (!original || original.pinVerifier) return null;
 
         const duplicate: Project = {
           ...original,
@@ -150,7 +160,7 @@ export const useProjectStore = create<ProjectState>()(
     }),
     {
       name: 'local-llm-project-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => protectedProjectStorage),
     }
   )
 );

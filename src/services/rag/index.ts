@@ -32,6 +32,8 @@ class RagService {
 
   async indexDocument(params: IndexDocumentParams): Promise<number> {
     const { projectId, filePath, fileName, fileSize, onProgress } = params;
+    const project = require('../../stores/projectStore').useProjectStore.getState().getProject(projectId);
+    if (project?.pinVerifier) throw new Error('Project is protected. Document imports are disabled until its knowledge base can also be encrypted. Permanently unprotect it first.');
     await this.ensureReady();
 
     // Prevent duplicate indexing of the same file
