@@ -1,5 +1,6 @@
 package ai.offgridmobile.localdream
 
+import android.app.Application
 import java.io.File
 import java.io.IOException
 import org.json.JSONArray
@@ -16,8 +17,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+// A plain Application: the app's own one starts React Native, which cannot boot in a
+// unit test (every test failed with a NullPointerException in java.io.File).
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(sdk = [33], application = Application::class)
 class AtlasNativeImageConfigTest {
     @get:Rule val temp = TemporaryFolder()
 
