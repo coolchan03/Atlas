@@ -99,6 +99,19 @@ export async function protectChat(id: string, pin: string): Promise<void> {
   await writes;
   const conv: Conversation | undefined = useChatStore.getState().conversations.find((c: Conversation) => c.id === id);
   if (!conv || conv.isPrivate || conv.pinVerifier) throw new Error('Select an unlocked, saved conversation.');
+  // Remove extracted chat memory before encrypting: it must not remain readable in a project.
+  if (conv.projectId) {
+    const { useProjectStore } = require('./projectStore');
+    const { projectKnowledge, removeChatKnowledge } = require('../services/projectKnowledge');
+    const { protectedProjectStorage } = require('./protectedProjectStorage');
+    const ps = useProjectStore.getState();
+    const project = ps.getProject(conv.projectId);
+    if (project && !project.pinVerifier) {
+      ps.updateProject(project.id, { knowledge: removeChatKnowledge(projectKnowledge(project.knowledge), id) });
+      await protectedProjectStorage.setItem('local-llm-project-storage',
+        JSON.stringify({ state: { projects: useProjectStore.getState().projects }, version: 0 }));
+    }
+  }
   const api = native();
   const verifier = await api.createChatPinVerifier(pin);
   const plain = JSON.stringify(publicBody(conv));

@@ -22,6 +22,7 @@ import { modelResidencyManager } from './modelResidency';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
+import { OutputLoopGuard, OUTPUT_LOOP_ERROR } from './outputLoopGuard';
 import { fitMessagesToContext } from './contextWindow';
 import { OverridableMemoryError } from '../utils/modelLoadErrors';
 import type { ToolCall } from './tools/types';
@@ -452,6 +453,8 @@ class LLMService {
       let output = '';
       let firstTokenMs = 0;
       let tokenCount = 0;
+      const loopGuard = new OutputLoopGuard();
+      let loopDetected = false;
       const task = (async () => {
         const { settings } = useAppStore.getState();
         const maxTokens = Math.max(1, Math.min(settings.maxTokens || 512, 4096,
@@ -460,12 +463,19 @@ class LLMService {
         const prompt = await vulkanEngine.formatChat(managed.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
         await vulkanEngine.generate(prompt, maxTokens, token => {
           if (!this.isGenerating || !token) return;
+          if (loopGuard.observe(token)) {
+            loopDetected = true;
+            void vulkanEngine.interrupt().catch(() => undefined);
+            return;
+          }
+          if (loopDetected) return;
           if (!firstTokenMs) firstTokenMs = Date.now() - started;
           tokenCount++;
           output += token;
           onStream?.({ content: token, reasoningContent: '' });
         }, { temperature: settings.temperature, topP: settings.topP,
           repeatPenalty: settings.repeatPenalty });
+        if (loopDetected) throw new Error(OUTPUT_LOOP_ERROR);
         this.performanceStats = recordGenerationStats(started, firstTokenMs, tokenCount);
         onComplete?.({ content: output, reasoningContent: '' });
         return output;
@@ -487,6 +497,8 @@ class LLMService {
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
+      const loopGuard = new OutputLoopGuard();
+      let loopDetected = false;
       // A caller may force thinking OFF (e.g. the image-prompt enhancement utility call),
       // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
       // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
@@ -496,7 +508,9 @@ class LLMService {
       // Never log chat prompts, streamed text, reasoning, or model file paths: even
       // development logcat output may outlive private/PIN-protected conversations.
       logger.log(`[LLM] Native completion settings: thinking=${thinkingOn}, contextShiftDisabled=${this.shouldDisableCtxShift()}`);
-      const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
+      let completionResult: Awaited<ReturnType<typeof ctx.completion>>;
+      try {
+      completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log('[LLM] First token received'); }
         tokenCount++;
@@ -505,10 +519,26 @@ class LLMService {
         if (data.content) streamedContentSoFar = data.content;
         else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
         if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+        if (content && loopGuard.observe(content)) {
+          loopDetected = true;
+          // This is an engine failure, not a safety filter. Do not silently retry on CPU.
+          void ctx.stopCompletion().catch(() => undefined);
+          return;
+        }
+        if (loopDetected) return;
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
       }), 'generateResponse');
+      } catch (error) {
+        if (!loopDetected) throw error;
+        await ctx.clearCache(true).catch(() => undefined);
+        throw new Error(OUTPUT_LOOP_ERROR);
+      }
+      if (loopDetected) {
+        await ctx.clearCache(true).catch(() => undefined);
+        throw new Error(OUTPUT_LOOP_ERROR);
+      }
       const cr = completionResult as any;
       logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);

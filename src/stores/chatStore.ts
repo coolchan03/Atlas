@@ -5,6 +5,7 @@ import { encryptedChatStorage } from './encryptedChatStorage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
+import { projectKnowledge, ensureChatKnowledge, removeChatKnowledge } from '../services/projectKnowledge';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import { enforceForageSafety } from '../utils/forageSafety';
@@ -170,15 +171,30 @@ export const useChatStore = create<ChatState>()(
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
         }));
+        if (projectId && !privateChat) {
+          const ps = require('./projectStore').useProjectStore.getState();
+          const project = ps.getProject(projectId);
+          if (project && !project.pinVerifier) ps.updateProject(projectId, {
+            knowledge: ensureChatKnowledge(projectKnowledge(project.knowledge), id),
+          });
+        }
 
         return id;
       },
 
       deleteConversation: (conversationId) => {
+        const prior = get().conversations.find(c => c.id === conversationId);
         set((state) => ({
           conversations: state.conversations.filter((c) => c.id !== conversationId),
           activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
         }));
+        if (prior?.projectId) {
+          const ps = require('./projectStore').useProjectStore.getState();
+          const project = ps.getProject(prior.projectId);
+          if (project && !project.pinVerifier) ps.updateProject(prior.projectId, {
+            knowledge: removeChatKnowledge(projectKnowledge(project.knowledge), conversationId),
+          });
+        }
       },
 
       setActiveConversation: (conversationId) => {
@@ -216,6 +232,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       setConversationProject: (conversationId, projectId) => {
+        const previous = get().conversations.find(c => c.id === conversationId);
         if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
           throw new Error('Protected projects cannot accept unencrypted chats. Permanently unprotect the project first.');
         }
@@ -226,6 +243,17 @@ export const useChatStore = create<ChatState>()(
               : { ...conv, projectId: projectId || undefined, updatedAt: nextUpdatedAt(conv.updatedAt) }
           ),
         }));
+        if (previous?.projectId !== projectId && previous && !previous.isPrivate) {
+          const ps = require('./projectStore').useProjectStore.getState();
+          const old = previous.projectId && ps.getProject(previous.projectId);
+          if (old && !old.pinVerifier) ps.updateProject(old.id, {
+            knowledge: removeChatKnowledge(projectKnowledge(old.knowledge), conversationId),
+          });
+          const target = projectId && ps.getProject(projectId);
+          if (target && !target.pinVerifier && !previous.pinVerifier) ps.updateProject(target.id, {
+            knowledge: ensureChatKnowledge(projectKnowledge(target.knowledge), conversationId),
+          });
+        }
       },
 
       unfileConversationsForProject: (projectId) => {
@@ -417,7 +445,16 @@ export const useChatStore = create<ChatState>()(
       },
 
       clearAllConversations: () => {
+        const prior = get().conversations;
         set({ conversations: [], activeConversationId: null });
+        const ps = require('./projectStore').useProjectStore.getState();
+        for (const project of ps.projects) {
+          const ids = prior.filter(c => c.projectId === project.id).map(c => c.id);
+          if (project.pinVerifier || !ids.length) continue;
+          let next = projectKnowledge(project.knowledge);
+          for (const id of ids) next = removeChatKnowledge(next, id);
+          ps.updateProject(project.id, { knowledge: next });
+        }
       },
 
       getConversationMessages: (conversationId) => {

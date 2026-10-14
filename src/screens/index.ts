@@ -23,6 +23,7 @@ export { MyModelsScreen } from './MyModelsScreen';
 export { ModelTestScreen } from './ModelTestScreen';
 export { DailyBriefScreen } from './DailyBriefScreen';
 export { KnowledgeBaseScreen } from './KnowledgeBaseScreen';
+export { ProjectKnowledgeScreen } from './ProjectKnowledgeScreen';
 export { ProjectChatsScreen } from './ProjectChatsScreen';
 export { DocumentPreviewScreen } from './DocumentPreviewScreen';
 export { ChatsListScreen } from './ChatsListScreen';

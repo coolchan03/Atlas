@@ -10,6 +10,7 @@ import type { ToolCall } from './tools/types';
 import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
+import { OutputLoopGuard, OUTPUT_LOOP_ERROR } from './outputLoopGuard';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
 
 type ToolStreamCallback = (data: StreamToken) => void;
@@ -160,6 +161,8 @@ export async function generateWithToolsImpl(
     let streamedContentSoFar = '';
     let streamedReasoningSoFar = '';
     let firstReceived = false;
+    const loopGuard = new OutputLoopGuard();
+    let loopDetected = false;
     const collectedToolCalls: ToolCall[] = [];
     // Gemma 4 emits <|tool_call>...<tool_call|> tokens in the stream; filter them out.
     const toolCallFilter = deps.isGemma4Model ? new ToolCallTokenFilter() : null;
@@ -171,10 +174,12 @@ export async function generateWithToolsImpl(
       tool_choice: 'auto',
       ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model),
     };
-    logger.log('[LLM-Tools] === INPUT ===');
-    logger.log(JSON.stringify(completionParams, null, 2));
-    const completionResult: any = await safeCompletion(deps.context, () => deps.context.completion(completionParams as any, (data: any) => {
-      if (!generating) return;
+    // Private project prompts and tool arguments must never be logged.
+    logger.log('[LLM-Tools] Native completion started', { messageCount: oaiMessages.length, toolCount: options.tools.length });
+    let completionResult: any;
+    try {
+    completionResult = await safeCompletion(deps.context, () => deps.context.completion(completionParams as any, (data: any) => {
+      if (!generating || loopDetected) return;
       if (data.tool_calls) {
         for (const tc of data.tool_calls) {
           collectedToolCalls.push(parseToolCall(tc));
@@ -196,20 +201,32 @@ export async function generateWithToolsImpl(
       if (reasoningPiece) { fullReasoning += reasoningPiece; options.onStream?.({ reasoningContent: reasoningPiece }); }
       if (contentPiece) {
         const visible = toolCallFilter ? toolCallFilter.process(contentPiece) : contentPiece;
+        if (visible && loopGuard.observe(visible)) {
+          loopDetected = true;
+          void deps.context.stopCompletion().catch(() => undefined);
+          return;
+        }
         fullResponse += visible;
         if (visible) options.onStream?.({ content: visible });
       }
     }), 'generateWithTools');
-    logger.log('[LLM-Tools] === OUTPUT ===');
-    logger.log(JSON.stringify(completionResult, null, 2));
+    } catch (error) {
+      if (!loopDetected) throw error;
+      await deps.context.clearCache?.(true).catch(() => undefined);
+      throw new Error(OUTPUT_LOOP_ERROR);
+    }
+    if (loopDetected) {
+      await deps.context.clearCache?.(true).catch(() => undefined);
+      throw new Error(OUTPUT_LOOP_ERROR);
+    }
     // [WIRE] full tool-generation input+output on ONE tagged line so the lossless wire file captures the
     // whole payload (the pretty-printed dumps above are separate untagged lines the tee can't match).
-    logger.log(`[WIRE-LLAMA-TOOL] ${JSON.stringify({ input: completionParams, output: completionResult })}`);
+    // Do not emit a wire log containing private prompts, results or project memories.
 
     const cr = completionResult;
-    logger.log(`[LLM-Tools] Completion done: streamed=${tokenCount} tokens, response="${fullResponse.substring(0, 100)}"`);
+    logger.log(`[LLM-Tools] Completion done: streamed=${tokenCount} tokens, responseChars=${fullResponse.length}`);
     logger.log(`[LLM-Tools] Result: predicted=${cr?.tokens_predicted}, evaluated=${cr?.tokens_evaluated}, context_full=${cr?.context_full}, stopped_eos=${cr?.stopped_eos}`);
-    logger.log(`[LLM-Tools] Result text="${(cr?.text || '').substring(0, 200)}", content="${(cr?.content || '').substring(0, 200)}"`);
+    logger.log(`[LLM-Tools] Result hasContent=${!!(cr?.content || cr?.text)}`);
 
     // If streaming didn't capture tokens, fall back to the CLEAN parsed content — NEVER cr.text, which
     // carries the raw <|channel>thought…<channel|> reasoning markers. reasoning falls back likewise.

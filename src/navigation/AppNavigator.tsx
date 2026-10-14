@@ -40,6 +40,7 @@ import {
   DailyBriefScreen,
   ProjectChatsScreen,
   KnowledgeBaseScreen,
+  ProjectKnowledgeScreen,
   DocumentPreviewScreen,
   DownloadManagerScreen,
   ModelSettingsScreen,
@@ -269,6 +270,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="ModelTest" component={ModelTestScreen} />
         <RootStack.Screen name="DailyBrief" component={DailyBriefScreen} />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
+        <RootStack.Screen name="ProjectKnowledge" component={ProjectKnowledgeScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />

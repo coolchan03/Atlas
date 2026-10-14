@@ -145,6 +145,8 @@ export const useProjectStore = create<ProjectState>()(
 
         const duplicate: Project = {
           ...original,
+          // Copy shared knowledge, but do not carry over private chat summaries.
+          knowledge: original.knowledge ? { ...original.knowledge, chats: {}, proposals: [] } : undefined,
           id: generateId(),
           name: `${original.name} (Copy)`,
           createdAt: new Date().toISOString(),

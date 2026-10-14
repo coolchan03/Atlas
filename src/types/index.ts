@@ -365,6 +365,8 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** Shared documents and chat summaries; protected with the project metadata. */
+  knowledge?: import('../services/projectKnowledge').ProjectKnowledge;
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;

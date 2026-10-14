@@ -13,6 +13,7 @@
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
 import { recordSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
+import { OutputLoopGuard, OUTPUT_LOOP_ERROR } from './outputLoopGuard';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
 const TAG = '[LiteRTService]';
@@ -104,7 +105,7 @@ class LiteRTService {
     if (!this.isAvailable()) throw new Error('LiteRT is not available on this platform');
     const { supportsVision = false, supportsAudio = false, maxNumTokens = 4096 } = opts;
     this.configuredMaxTokens = maxNumTokens;
-    logger.log(TAG, `loadModel — path=${modelPath} backend=${preferredBackend} supportsVision=${supportsVision} supportsAudio=${supportsAudio} maxNumTokens=${maxNumTokens}`);
+    logger.log(TAG, `loadModel — backend=${preferredBackend} supportsVision=${supportsVision} supportsAudio=${supportsAudio} maxNumTokens=${maxNumTokens}`);
 
     try {
       // Native resolves a map { backend, maxNumTokens } — maxNumTokens is the EFFECTIVE
@@ -308,22 +309,38 @@ class LiteRTService {
     const sendStart = Date.now();
     let firstTokenTime: number | undefined;
     let jsDecodeTokenCount = 0;
+    const loopGuard = new OutputLoopGuard();
+    let loopError: Error | null = null;
 
     // Register event listeners for this generation
     this.clearSubscriptions();
     this.subscriptions = [
       this.emitter!.addListener(EVENT_TOKEN, (token: string) => {
+        if (loopError) return;
+        if (loopGuard.observe(token)) {
+          loopError = new Error(OUTPUT_LOOP_ERROR);
+          logger.warn(TAG, 'Repetitive visible output detected; stopping current generation and resetting native session');
+          this.invalidateConversation();
+          this.clearSubscriptions();
+          callbacks.onError(loopError);
+          // Stop the existing native generation, not the engine or its NPU backend.
+          void LiteRTModule.stopGeneration().catch((e: unknown) =>
+            logger.warn(TAG, 'Native stop after output loop failed', e));
+          return;
+        }
         firstTokenTime ??= Date.now();
         jsDecodeTokenCount++;
         this.currentContent += token;
         callbacks.onToken(token);
       }),
       this.emitter!.addListener(EVENT_THINKING, (token: string) => {
+        if (loopError) return;
         firstTokenTime ??= Date.now();
         this.currentReasoning += token;
         callbacks.onReasoning(token);
       }),
       this.emitter!.addListener(EVENT_COMPLETE, (benchmarkJson: string) => {
+        if (loopError) return;
         logger.log(TAG, `sendMessage — complete, content=${this.currentContent.length} chars`);
         this.clearSubscriptions();
 
@@ -373,6 +390,7 @@ class LiteRTService {
         callbacks.onComplete(this.currentContent, this.currentReasoning, wallClockStats);
       }),
       this.emitter!.addListener(EVENT_ERROR, (message: string) => {
+        if (loopError) return;
         logger.log(TAG, `sendMessage — error: ${message}`);
         this.clearSubscriptions();
 
@@ -380,6 +398,7 @@ class LiteRTService {
         callbacks.onError(new Error(message));
       }),
       this.emitter!.addListener(EVENT_TOOL_CALL, async (json: string) => {
+        if (loopError) return;
         // Never log tool arguments: they can contain message text or file contents.
         logger.log(TAG, `sendMessage — tool call received (${json.length} chars)`);
         try {
@@ -412,7 +431,9 @@ class LiteRTService {
       } else {
         await LiteRTModule.sendMessage(text, null);
       }
+      if (loopError) throw loopError;
     } catch (e) {
+      if (loopError) throw loopError;
       this.clearSubscriptions();
       const err = e instanceof Error ? e : new Error(String(e));
       logger.log(TAG, `sendMessage — native error: ${err.message}`);
@@ -432,14 +453,14 @@ class LiteRTService {
   ): Promise<string> {
     const { imageUris, audioUris } = media ?? {};
     const { onToken, onToolCall, onReasoning } = handlers ?? {};
-    logger.log(TAG, `generateRaw — text=${text.length}ch, hasToolHandler=${!!onToolCall}, imageCount=${imageUris?.length ?? 0}, audioCount=${audioUris?.length ?? 0}, first100="${text.substring(0, 100)}"`);
+    logger.log(TAG, `generateRaw — inputChars=${text.length}, hasToolHandler=${!!onToolCall}, imageCount=${imageUris?.length ?? 0}, audioCount=${audioUris?.length ?? 0}`);
     this.currentToolCallHandler = onToolCall ?? null;
     return new Promise((resolve, reject) => {
       this.sendMessage(text, {
         onToken: t => onToken?.(t),
         onReasoning: t => onReasoning?.(t),
         onComplete: (fullContent, _reasoning, stats) => {
-          logger.log(TAG, `generateRaw — complete, response=${fullContent.length}ch, first200="${fullContent.substring(0, 200)}"`);
+          logger.log(TAG, `generateRaw — complete, responseChars=${fullContent.length}`);
           this._lastBenchmarkStats = stats;
           resolve(fullContent);
         },

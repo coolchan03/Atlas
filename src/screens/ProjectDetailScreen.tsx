@@ -178,6 +178,20 @@ export const ProjectDetailScreen: React.FC = () => {
         <Icon name="chevron-right" size={18} color="#fff" />
       </TouchableOpacity>
 
+      {/* Living shared and per-chat knowledge, separate from indexed reference files. */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('ProjectKnowledge', { projectId })}
+        style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12, backgroundColor: colors.surface }}
+        accessibilityLabel="Open project knowledge and chat memories"
+      >
+        <Icon name="layers" size={20} color={colors.primary} />
+        <View style={{ marginLeft: 12, flex: 1 }}>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Knowledge & Memory</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>Shared documents, chat memories, review proposed changes</Text>
+        </View>
+        <Icon name="chevron-right" size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
       <View style={styles.sectionsContainer}>
         {/* Knowledge Base Section */}
         <View style={styles.sectionHalf}>
