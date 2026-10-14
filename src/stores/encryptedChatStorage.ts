@@ -27,8 +27,13 @@ const native = () => {
     encryptProtectedItem(kind: string, id: string, plain: string, pin: string, verifier: string): Promise<string>;
     decryptProtectedItem(kind: string, id: string, blob: string, pin: string, verifier: string): Promise<string>;
     removeProtectedItemKey(kind: string, id: string, pin: string, verifier: string): Promise<boolean>;
+    encryptPortableBackup(plain: string, passphrase: string): Promise<string>;
+    decryptPortableBackup(payload: string, passphrase: string): Promise<string>;
   };
 };
+/** Portable (phone-independent) seal for a locked chat inside an encrypted backup: PIN-derived, per chat. */
+const portablePass = (pin: string, id: string) => `${pin}:atlas-locked-chat:${id}`;
+const PORTABLE = 'atlasbackup:v1:';
 const publicBody = (conv: Conversation): Conversation => {
   const { pinVerifier, protectedBlob, ...rest } = conv;
   return rest as Conversation;
@@ -110,7 +115,15 @@ async function recover(conv: Conversation, pin: string): Promise<{ restored: Con
   if (!conv.pinVerifier || !conv.protectedBlob) throw new Error('This chat has no protected record.');
   let blob = latestBlobs.get(conv.id) || conv.protectedBlob;
   let clear: string;
-  if (blob.startsWith('atlasenc:v1:')) {
+  if (blob.startsWith(PORTABLE)) {
+    // Restored from an encrypted backup: PIN-sealed, not yet tied to this phone's Keystore.
+    if (!await api.verifyChatPin(pin, conv.pinVerifier)) throw new Error('Incorrect PIN.');
+    clear = await api.decryptPortableBackup(blob, portablePass(pin, conv.id));
+    const upgraded = await api.encryptProtectedItem('chat', conv.id, clear, pin, conv.pinVerifier);
+    latestBlobs.set(conv.id, upgraded);
+    await saveReplacement(conv.id, placeholder(conv, upgraded));
+    blob = upgraded;
+  } else if (blob.startsWith('atlasenc:v1:')) {
     if (!await api.verifyChatPin(pin, conv.pinVerifier)) throw new Error('Incorrect PIN.');
     clear = await api.decryptChatState(blob);
     // Upgrade old installation-wide PIN ciphertext when authenticated.
@@ -134,6 +147,26 @@ export async function unlockChat(id: string, pin: string): Promise<void> {
   useChatStore.setState((s: any) => ({ conversations: s.conversations.map((c: Conversation) => c.id === id
     ? { ...restored, projectId: c.projectId, isArchived: c.isArchived, pinVerifier: conv.pinVerifier, protectedBlob: blob } : c) }));
 }
+/**
+ * Locked chats that are open right now, sealed for an encrypted backup. The backup holds only
+ * a title-less placeholder plus ciphertext derived from the chat's PIN; restoring it needs the PIN.
+ * Chats that are still locked are not here (no PIN to seal with): see lockedChatsForBackup.
+ */
+export async function openLockedChatsForBackup(): Promise<Conversation[]> {
+  const { useChatStore } = require('./chatStore');
+  await writes;
+  const out: Conversation[] = [];
+  for (const c of useChatStore.getState().conversations as Conversation[]) {
+    const pin = sessionPins.get(c.id);
+    if (!c.pinVerifier || !pin || c.isPrivate) continue;
+    const blob = await native().encryptPortableBackup(JSON.stringify(publicBody(c)), portablePass(pin, c.id));
+    out.push(placeholder(c, blob));
+  }
+  return out;
+}
+/** True for the ciphertext prefixes a locked chat may carry in a backup. */
+export const isLockedChatBlob = (blob: unknown): boolean =>
+  typeof blob === 'string' && (blob.startsWith(PORTABLE) || blob.startsWith('atlasitem:v1:'));
 export async function permanentlyUnprotectChat(id: string, pin: string): Promise<void> {
   const { useChatStore } = require('./chatStore');
   await writes;

@@ -51,25 +51,22 @@ function portableStoreValue(key: string, raw: string): string | null {
   if (key !== 'local-llm-project-storage' && key !== 'local-llm-chat-storage') return safe;
   try {
     const parsed = JSON.parse(safe);
-    const collection = key === 'local-llm-project-storage' ? 'projects' : 'conversations';
+    const isChats = key === 'local-llm-chat-storage';
+    const collection = isChats ? 'conversations' : 'projects';
     if (!Array.isArray(parsed?.state?.[collection])) return null;
-    // Never export device-bound protected items, nor restore ciphertext whose
-    // Android Keystore key exists only on the device that created it.
-    parsed.state[collection] = parsed.state[collection].filter((item: any) => !item.pinVerifier && !item.protectedBlob);
+    const { isLockedChatBlob } = require('../stores/encryptedChatStorage');
+    // Protected projects are device-bound and never exported. A locked chat travels only as
+    // its title-less placeholder plus ciphertext: never with readable messages or a title.
+    parsed.state[collection] = parsed.state[collection].flatMap((item: any) => {
+      if (!item.pinVerifier && !item.protectedBlob) return [item];
+      if (!isChats || !item.pinVerifier || !isLockedChatBlob(item.protectedBlob)) return [];
+      return [{ ...item, title: 'Locked conversation', messages: [] }];
+    });
     return JSON.stringify(parsed);
   } catch { return null; }
 }
 
-function openLockedChats(): any[] {
-  try {
-    const { useChatStore } = require('../stores/chatStore');
-    return useChatStore.getState().conversations
-      .filter((c: any) => c.pinVerifier && Array.isArray(c.messages) && c.messages.length > 0)
-      .map(({ pinVerifier: _v, protectedBlob: _b, ...rest }: any) => ({ ...rest, wasLocked: true }));
-  } catch { return []; }
-}
-
-/** PIN-locked chats that a password backup would skip because they are not open right now. */
+/** PIN-locked chats that a password backup can only carry as device-bound ciphertext (restorable on this phone only). */
 export function lockedChatsNotOpen(): number {
   try {
     const { useChatStore } = require('../stores/chatStore');
@@ -96,11 +93,14 @@ export async function exportBackup(password?: string): Promise<string | null> {
     if (chatJson) {
       const sanitized = portableStoreValue('local-llm-chat-storage', chatJson);
       if (sanitized) {
-        // PIN-locked chats that are open right now (unlocked with their PIN) go into
-        // the password-encrypted backup as normal chats marked wasLocked, so they can
-        // move to a new phone. Chats still locked cannot be read and are left out.
+        // Locked chats stay locked in the backup. Ones open right now are re-sealed with a key
+        // derived from their PIN, so they can move to a new phone and open there with that PIN.
+        // Ones still locked keep their on-phone ciphertext (restorable on this phone only).
         const parsed = JSON.parse(sanitized);
-        parsed.state.conversations.push(...openLockedChats());
+        const { openLockedChatsForBackup } = require('../stores/encryptedChatStorage');
+        const portable: any[] = await openLockedChatsForBackup();
+        const ids = new Set(portable.map((c) => c.id));
+        parsed.state.conversations = [...parsed.state.conversations.filter((c: any) => !ids.has(c.id)), ...portable];
         safe.push(['local-llm-chat-storage', JSON.stringify(parsed)]);
       }
     }

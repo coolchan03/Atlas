@@ -76,7 +76,7 @@ export const SettingsScreen: React.FC = () => {
         ? await exportBackup(backupPassword) : await importBackup(backupPassword);
       const skipped = backupPasswordAction === 'export' ? lockedChatsNotOpen() : 0;
       if (result) Alert.alert(backupPasswordAction === 'export' ? 'Encrypted backup saved' : 'Encrypted backup restored',
-        String(result) + (skipped ? `\n\n${skipped} PIN-locked chat${skipped === 1 ? ' was' : 's were'} not included because ${skipped === 1 ? 'it is' : 'they are'} locked. Open them with their PIN, then back up again to include them.` : ''));
+        String(result) + (skipped ? `\n\n${skipped} PIN-locked chat${skipped === 1 ? ' was' : 's were'} saved as locked ciphertext that only opens on this phone. To move ${skipped === 1 ? 'it' : 'them'} to a new phone, open ${skipped === 1 ? 'it' : 'them'} with ${skipped === 1 ? 'its' : 'their'} PIN, then back up again.` : ''));
       setBackupPassword('');
       setBackupPasswordAction(null);
     } catch (e: any) { Alert.alert('Encrypted backup failed', String(e?.message ?? e)); }
@@ -264,7 +264,7 @@ export const SettingsScreen: React.FC = () => {
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => {
-              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing projects and settings, but not your encrypted chats. Anyone with the file can read its contents. Do not store it in a shared or untrusted location. PIN-locked chat export and cross-device transfer are not available yet.', [
+              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing projects and settings, but not your encrypted chats. Anyone with the file can read its contents. Do not store it in a shared or untrusted location. Chats, including PIN-locked ones, are only in password-encrypted backups.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Export anyway', onPress: async () => {
               try {
