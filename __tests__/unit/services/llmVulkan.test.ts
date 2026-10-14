@@ -65,7 +65,7 @@ it('rejects tool calls on explicit Vulkan without unloading or switching to CPU'
   const unload = jest.spyOn(vulkanEngine, 'unload').mockResolvedValue();
   await llmService.loadModel('/models/small.gguf');
   await expect(llmService.generateResponseWithTools([{id:'m',role:'user',content:'hi',timestamp:0}], {tools:[]}))
-    .rejects.toThrow('Select the CPU backend explicitly');
+    .rejects.toThrow('Switch the text backend setting to OpenCL, Automatic or CPU');
   expect(unload).not.toHaveBeenCalled();
   expect(native).not.toHaveBeenCalled();
   expect(llmService.getLoadedModelPath()).toBe('/models/small.gguf');

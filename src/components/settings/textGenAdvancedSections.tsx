@@ -94,7 +94,7 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.AUTO, label: 'Automatic', desc: 'Recommended. Atlas tries the NPU, then the OpenCL GPU, then the Vulkan GPU, then the CPU for each model.' },
   { id: INFERENCE_BACKENDS.HTP, label: 'NPU', desc: 'Force the Snapdragon NPU. Needs a Q4_0 or Q8_0 text model; other formats are refused.' },
   { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Force the OpenCL GPU (Adreno). Keeps tools and pictures.' },
-  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan', desc: 'Force the Vulkan GPU (also Mali and other GPUs). No tools or pictures yet.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan', desc: 'Force the Vulkan GPU (also Mali and other GPUs). Text chat only: no tools and no picture input, because llama.kt has neither. Use OpenCL (Adreno) or Automatic for those.' },
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Run without hardware acceleration. Always works, can be considerably slower.' },
 ];
 

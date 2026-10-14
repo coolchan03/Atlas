@@ -202,7 +202,7 @@ class LLMService {
       for (const backend of candidates) {
         try {
           if (backend === INFERENCE_BACKENDS.VULKAN && mmProjPath) {
-            throw new Error('Vulkan text runtime does not support vision projectors');
+            throw new Error('Picture input is not available on the Vulkan GPU engine (llama.kt is text only). Choose OpenCL or Automatic in the text backend setting for pictures.');
           }
           const { fileSize, memCheck, params } = await this.validateAndPrepareModel(
             modelPath, opts?.override, backend,
@@ -529,7 +529,7 @@ class LLMService {
     if (this.vulkanLoaded) {
       // Do not silently unload a GPU-only model and reload it on CPU for tools.
       // A caller must explicitly select CPU (or an auto-fallback policy) first.
-      throw new Error('Tool calling is not supported by the experimental Vulkan engine. Select the CPU backend explicitly to use tools.');
+      throw new Error('Tools are not available on the Vulkan GPU engine (llama.kt has no tool calling). Switch the text backend setting to OpenCL, Automatic or CPU to use tools. Atlas does not change your choice by itself.');
     }
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
