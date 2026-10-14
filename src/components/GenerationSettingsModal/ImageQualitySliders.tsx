@@ -37,6 +37,11 @@ export const ImageQualityBasicSliders: React.FC = () => {
   const isXL = isDirectSDXL(model);
   const square = Math.max(sizeOptions.min, Math.min(sizeOptions.max, isXL ? 768 : 512));
   const large = Math.max(square, Math.min(sizeOptions.max, Math.round(square * 1.5 / 64) * 64));
+  // Shapes only where they differ and the runtime can render them (imported sd.cpp checkpoints).
+  const showAspect = model?.backend === 'sdcpp' && large > square;
+  // The size slider keeps the chosen shape: it sets the width and scales the height with it.
+  const ratio = preset.width > 0 ? preset.height / preset.width : 1;
+  const heightFor = (w: number) => Math.max(sizeOptions.min, Math.round((w * ratio) / 64) * 64);
   const aspectPresets = [
     { label: 'Square', width: square, height: square },
     { label: 'Portrait', width: square, height: large },
@@ -60,10 +65,10 @@ export const ImageQualityBasicSliders: React.FC = () => {
         description={sizeOptions.description}
         value={preset.width}
         min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
-        formatValue={(v) => `${v}x${preset.height}`}
-        onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
+        formatValue={(v) => `${v}x${heightFor(v)}`}
+        onChange={(value) => updateSettings({ imageWidth: value, imageHeight: heightFor(value) })}
       />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 }}>
+      {showAspect && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 }}>
         {aspectPresets.map(option => {
           const selected = settings.imageWidth === option.width && settings.imageHeight === option.height;
           return (
@@ -77,7 +82,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </View>}
     </>
   );
 };
