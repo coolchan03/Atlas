@@ -96,6 +96,31 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         try { genExec.execute { freeEngine() }; genExec.shutdown() } catch (_: Throwable) {}
     }
 
+
+    /**
+     * Renders text to 16-bit mono PCM offline (for saving a video). Runs on the generation
+     * thread, so it never overlaps a spoken reply. Returns null if the voice is not loaded.
+     */
+    fun synthesize(parts: List<String>, sid: Int, speed: Float, cancelled: () -> Boolean): Pair<ShortArray, Int>? {
+        return genExec.submit(Callable<Pair<ShortArray, Int>?> {
+            val engine = tts ?: return@Callable null
+            val rate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
+            val out = java.io.ByteArrayOutputStream()
+            val gap = ShortArray(rate / 8)
+            fun put(a: ShortArray) { val b = java.nio.ByteBuffer.allocate(a.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN); b.asShortBuffer().put(a); out.write(b.array()) }
+            for (p in parts) {
+                if (cancelled()) return@Callable null
+                val f = engine.generate(p, sid, speed).samples
+                put(ShortArray(f.size) { (f[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() })
+                put(gap)
+            }
+            val bytes = out.toByteArray()
+            val sh = ShortArray(bytes.size / 2)
+            java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(sh)
+            Pair(sh, rate)
+        }).get()
+    }
+
     fun stop() {
         tokenA.incrementAndGet()
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}

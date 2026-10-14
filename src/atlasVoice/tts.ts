@@ -137,3 +137,19 @@ export async function listVoices(lang = 'en'): Promise<TtsVoice[]> {
     return v;
   } catch { return []; }
 }
+
+/**
+ * Save speech as a WAV file with the voice chosen in Settings, without playing it.
+ * Used by "Save as video". Resolves the file path; rejects with code CANCELLED when stopped.
+ */
+export async function synthesizeToFile(text: string, outPath: string, lang = 'en-US'): Promise<string> {
+  if (!ttsAvailable() || !Native.synthesizeToFile) throw new Error('Saving speech is not available on this phone.');
+  ensureListeners();
+  await Native.setRate(useAtlasVoiceStore.getState().rate).catch(() => undefined);
+  return Native.synthesizeToFile(text, outPath, lang);
+}
+
+export function cancelSynthesis(): void {
+  if (!ttsAvailable()) return;
+  Native.cancelSynthesis?.()?.catch?.(() => undefined);
+}

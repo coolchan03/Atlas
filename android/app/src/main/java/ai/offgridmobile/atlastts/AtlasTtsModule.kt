@@ -66,6 +66,9 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("AUDIO_ROUTE", e) }
     }
+    /** synthesizeToFile jobs waiting for the engine: utterance id -> finished(ok). */
+    private val fileJobs = java.util.concurrent.ConcurrentHashMap<String, (Boolean) -> Unit>()
+    @Volatile private var fileCancel = false
     private val cancelled = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     /** Where new voices are saved: the phone (default) or an SD card folder chosen in Settings. */
     @Volatile private var voicesBase = ""
@@ -110,10 +113,12 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     if (utteranceId != null && utteranceId.endsWith("#0")) emit("AtlasTtsStart", utteranceId.substringBefore("#"))
                 }
                 override fun onDone(utteranceId: String?) {
+                    if (utteranceId != null && fileJobs.remove(utteranceId)?.invoke(true) != null) return
                     if (utteranceId != null && utteranceId.endsWith("#last")) emit("AtlasTtsDone", utteranceId.substringBefore("#"))
                 }
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
+                    if (utteranceId != null && fileJobs.remove(utteranceId)?.invoke(false) != null) return
                     val id = utteranceId?.substringBefore("#") ?: return
                     if (id == lastErrored) return
                     lastErrored = id
@@ -121,6 +126,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     emit("AtlasTtsDone", id)
                 }
                 override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    if (utteranceId != null && fileJobs.remove(utteranceId)?.invoke(false) != null) return
                     if (utteranceId != null) emit("AtlasTtsStopped", utteranceId.substringBefore("#"))
                 }
             })
@@ -196,6 +202,85 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
     }
+
+    private fun writeWav(file: java.io.File, pcm: ShortArray, rate: Int) {
+        val data = pcm.size * 2
+        val b = java.nio.ByteBuffer.allocate(44 + data).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()); b.putInt(36 + data); b.put("WAVE".toByteArray())
+        b.put("fmt ".toByteArray()); b.putInt(16); b.putShort(1); b.putShort(1); b.putInt(rate); b.putInt(rate * 2); b.putShort(2); b.putShort(16)
+        b.put("data".toByteArray()); b.putInt(data)
+        for (v in pcm) b.putShort(v)
+        file.writeBytes(b.array())
+    }
+
+    /**
+     * Saves the spoken text as a WAV file using the voice chosen in Settings (natural voice or the
+     * phone's own), without playing it. Used by "Save as video". Resolves the file path.
+     */
+    @ReactMethod
+    fun synthesizeToFile(text: String, outPath: String, lang: String, promise: Promise) {
+        Thread {
+            try {
+                fileCancel = false
+                val out = java.io.File(outPath)
+                out.parentFile?.mkdirs()
+                if (useNeural(lang)) {
+                    val sid = if (voiceName.startsWith("sid:")) voiceName.removePrefix("sid:").toIntOrNull() ?: neuralSid else neuralSid
+                    val r = neural.synthesize(chunks(text, 380), sid, rate) { fileCancel }
+                    if (r == null) { promise.reject("CANCELLED", "Stopped"); return@Thread }
+                    writeWav(out, r.first, r.second)
+                    promise.resolve(out.path); return@Thread
+                }
+                ensure()
+                val waitUntil = System.currentTimeMillis() + 8000
+                while (!ready && tts != null && System.currentTimeMillis() < waitUntil) Thread.sleep(50)
+                val engine = tts
+                if (engine == null || !ready) { promise.reject("NO_TTS_ENGINE", "No text-to-speech engine is installed on this phone."); return@Thread }
+                synchronized(engine) {
+                    engine.setSpeechRate(rate)
+                    engine.setPitch(1.0f)
+                    try {
+                        val loc = if (lang.isBlank()) Locale.getDefault() else Locale.forLanguageTag(lang)
+                        engine.setLanguage(loc)
+                        if (voiceName.isNotBlank() && !voiceName.startsWith("sid:")) engine.voices?.firstOrNull { it.name == voiceName }?.let { engine.voice = it }
+                    } catch (_: Exception) {}
+                }
+                val parts = chunks(text, (TextToSpeech.getMaxSpeechInputLength() - 100).coerceAtLeast(500))
+                if (parts.isEmpty()) { promise.reject("EMPTY", "Nothing to say"); return@Thread }
+                // The engine writes one file per call; join the pieces into one WAV.
+                val pieces = mutableListOf<java.io.File>()
+                for ((i, part) in parts.withIndex()) {
+                    if (fileCancel) { pieces.forEach { it.delete() }; promise.reject("CANCELLED", "Stopped"); return@Thread }
+                    val piece = java.io.File(out.path + ".$i.part")
+                    val id = "file~${System.nanoTime()}"
+                    val latch = java.util.concurrent.CountDownLatch(1)
+                    var ok = false
+                    fileJobs[id] = { v -> ok = v; latch.countDown() }
+                    val q = engine.synthesizeToFile(part, Bundle(), piece, id)
+                    if (q != TextToSpeech.SUCCESS) { fileJobs.remove(id); pieces.forEach { it.delete() }; promise.reject("TTS_ERROR", "The voice engine refused the text"); return@Thread }
+                    if (!latch.await(120, java.util.concurrent.TimeUnit.SECONDS)) { fileJobs.remove(id) }
+                    pieces.add(piece)
+                    if (!ok || piece.length() <= 44) { pieces.forEach { it.delete() }; promise.reject("TTS_ERROR", "The voice engine could not save the speech"); return@Thread }
+                }
+                if (pieces.size == 1) { pieces[0].renameTo(out) } else {
+                    // Same engine, same format: keep the first header and append the others' samples.
+                    val first = pieces[0].readBytes()
+                    val all = java.io.ByteArrayOutputStream()
+                    all.write(first)
+                    for (k in 1 until pieces.size) { val b = pieces[k].readBytes(); all.write(b, 44, b.size - 44) }
+                    val bytes = all.toByteArray()
+                    val bb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    bb.putInt(4, bytes.size - 8); bb.putInt(40, bytes.size - 44)
+                    out.writeBytes(bytes)
+                    pieces.forEach { it.delete() }
+                }
+                promise.resolve(out.path)
+            } catch (e: Throwable) { promise.reject("TTS_ERROR", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun cancelSynthesis(promise: Promise) { fileCancel = true; promise.resolve(true) }
 
     @ReactMethod
     fun stop(promise: Promise) {

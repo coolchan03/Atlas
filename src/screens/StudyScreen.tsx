@@ -15,6 +15,7 @@ import { Switch } from 'react-native';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { hostVoices } from '../atlasVoice/neural';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
+import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExportAvailable, VideoExportCancelled, type SavedVideo, type VideoProgress } from '../services/videoExport';
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
@@ -74,7 +75,7 @@ export const StudyScreen: React.FC = () => {
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
     void listVoices('en').then(setVoices).catch(() => setVoices([]));
-    return () => { stopRef.current = true; stop(); keepScreenOn(false); }; // leaving the screen stops playback
+    return () => { stopRef.current = true; stop(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
   }, []);
   // Android back button closes the open item (and stops audio) instead of leaving the screen.
   React.useEffect(() => {
@@ -164,6 +165,30 @@ export const StudyScreen: React.FC = () => {
   };
   const halt = () => { playToken.current++; stopRef.current = true; stop(); keepScreenOn(false); setPlaying(null); };
 
+  const [exporting, setExporting] = useState<VideoProgress | null>(null);
+  const [savedVideo, setSavedVideo] = useState<SavedVideo | null>(null);
+  const saveVideo = async (title: string, slides: NonNullable<StudyResult['slides']>) => {
+    halt();
+    setSavedVideo(null);
+    setExporting({ fraction: 0, stage: 'voice' });
+    keepScreenOn(true); // encoding takes minutes; don't let the phone sleep
+    try {
+      setSavedVideo(await exportSlidesVideo(title, slides, setExporting));
+    } catch (e: any) {
+      if (!(e instanceof VideoExportCancelled)) Alert.alert('Could not save the video', String(e?.message || e));
+    } finally { setExporting(null); keepScreenOn(false); }
+  };
+  const askSaveVideo = (title: string, slides: NonNullable<StudyResult['slides']>) => {
+    if (project?.pinVerifier) {
+      Alert.alert('Save outside the lock?', 'This project is PIN protected. The video is saved in your gallery (Movies/Atlas) without the PIN lock, and anything that can see your gallery can play it.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Save video', onPress: () => { void saveVideo(title, slides); } },
+      ]);
+      return;
+    }
+    void saveVideo(title, slides);
+  };
+  const stageText = (p: VideoProgress) => (p.stage === 'voice' ? 'Recording the voice' : p.stage === 'audio' ? 'Encoding the sound' : 'Drawing the slides');
   const openSource = (s: Source) => setSrc(s);
   const card = { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 10 };
 
@@ -269,6 +294,42 @@ export const StudyScreen: React.FC = () => {
                     onPlay={(i) => play(items, i)} onPause={halt} label="video" />
                 );
               })()}
+              {videoExportAvailable() && (
+                <View style={[card, { marginTop: 4 }]}>
+                  {exporting ? (
+                    <View>
+                      <Text style={{ color: colors.text, fontSize: 14 }}>{stageText(exporting)}... {Math.round(exporting.fraction * 100)}%</Text>
+                      <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.background, marginTop: 8 }}>
+                        <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.primary, width: `${Math.round(exporting.fraction * 100)}%` }} />
+                      </View>
+                      <TouchableOpacity onPress={cancelVideoExport} style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+                        <Text style={{ color: colors.primary, fontSize: 14 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View>
+                      <TouchableOpacity onPress={() => askSaveVideo(v.title || v.topic || 'Atlas video', v.slides!)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Icon name="download" size={18} color={colors.primary} />
+                        <Text style={{ color: colors.primary, fontSize: 15, marginLeft: 8 }}>Save as video</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>Made on this phone, offline. Saved to Movies/Atlas as an MP4.</Text>
+                      {savedVideo && (
+                        <View style={{ marginTop: 10 }}>
+                          <Text style={{ color: colors.text, fontSize: 14 }}>Saved: {savedVideo.name}</Text>
+                          <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                            <TouchableOpacity onPress={() => { shareVideo(savedVideo.uri).catch(() => Alert.alert('Could not share the video')); }} style={{ marginRight: 20 }}>
+                              <Text style={{ color: colors.primary, fontSize: 14 }}>Share</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => { openVideo(savedVideo.uri).catch(() => Alert.alert('No video player found')); }}>
+                              <Text style={{ color: colors.primary, fontSize: 14 }}>Play</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
               {(playing !== null ? [v.slides[playing]] : v.slides).map((s, i) => (
                 <View key={i} style={[card, { minHeight: playing !== null ? Math.min(420, width * 0.7) : undefined, justifyContent: 'center', backgroundColor: playing !== null ? '#0F172A' : colors.surface }]}>
                   <Text style={{ color: playing !== null ? '#fff' : colors.text, fontSize: playing !== null ? 26 : 18, fontWeight: '700' }}>{s.title}</Text>
