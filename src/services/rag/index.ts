@@ -4,6 +4,15 @@ import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
 import logger from '../../utils/logger';
+import RNFS from 'react-native-fs';
+
+/** Files Atlas wrote itself (saved research reports) go when their document is removed;
+ *  documents the user imported from elsewhere are left alone. */
+export const APP_OWNED_DOC_DIR = 'atlas-research-reports';
+async function removeAppOwnedCopy(path: string | undefined): Promise<void> {
+  if (!path || !path.startsWith(`${RNFS.DocumentDirectoryPath}/${APP_OWNED_DOC_DIR}/`)) return;
+  await RNFS.unlink(path).catch(() => undefined);
+}
 
 ;
 export type { RagDocument, RagSearchResult } from './database';
@@ -126,7 +135,9 @@ class RagService {
 
   async deleteDocument(docId: number): Promise<void> {
     await this.ensureReady();
+    const doc = ragDatabase.getDocumentById(docId);
     ragDatabase.deleteDocument(docId);
+    if (doc) await removeAppOwnedCopy(doc.path);
   }
 
   async getDocumentsByProject(projectId: string) {
@@ -149,7 +160,9 @@ class RagService {
 
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
+    const docs = ragDatabase.getDocumentsByProject(projectId);
     ragDatabase.deleteDocumentsByProject(projectId);
+    for (const doc of docs) await removeAppOwnedCopy(doc.path);
   }
 }
 

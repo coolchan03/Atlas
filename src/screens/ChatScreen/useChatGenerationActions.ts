@@ -295,7 +295,9 @@ async function generateWithCompactionRetry(
   // Atlas: compress older messages BEFORE the context is full, so long chats keep going smoothly.
   try {
     const prefs = useChatPrefs.getState();
-    if (!ephemeralContext && prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
+    // Research turns may compress stored history too: compactNow summarizes saved messages only,
+    // so the per-turn evidence pack is never written into a summary.
+    if (prefs.autoCompress && llmService.isModelLoaded() && !useRemoteServerStore.getState().activeRemoteTextModelId) {
       const ctx = llmService.getPerformanceSettings().contextLength || 2048;
       const convo = opts.messages.filter(m => m.role !== 'system' && m.id !== 'compaction-summary');
       const sysChars = opts.messages.filter(m => m.role === 'system' || m.id === 'compaction-summary').reduce((n, m) => n + (m.content?.length || 0), 0);
@@ -384,6 +386,11 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
     + (llmService.isThinkingEnabled?.() ? thinkingNote(deps.settings as any) : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }
+/** True while Deep Research is gathering sources (before generation starts). Sends made then are
+ *  queued like sends during a generation, instead of starting a second, racing research turn. */
+let researchInFlight = false;
+export function isResearchInFlight(): boolean { return researchInFlight; }
+
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   // PER-TURN stop truth (from the tool loop's outcome) — never the service's shared abort flag,
   // which the NEXT turn's prepare resets (the race that mislabeled a stopped turn 'No response').
@@ -403,9 +410,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   let researchMessage = messageText;
   let usedOfflineProjectEvidence = false;
   if (deps.researchMode) {
+    researchInFlight = true;
     try {
       const brief = await buildDeepResearchBrief(messageText, {
-        contextLength: useAppStore.getState().settings.contextLength,
+        // The loaded context, not the setting: Auto context mode can load a smaller one.
+        contextLength: llmService.getPerformanceSettings().contextLength || useAppStore.getState().settings.contextLength,
         onStatus: (status) => deps.setResearchStatus?.(status),
         depth: deps.researchDepth ?? 'deep',
         projectId: conversation?.projectId,
@@ -419,8 +428,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
         deps.addMessage(targetConversationId, { role: 'assistant', content: `Deep Research could not retrieve sources: ${  String(e?.message || e)}` });
       }
       generationSession.end('research-failed');
+      researchInFlight = false;
+      generationService.drainQueue(); // release a message sent while sources were loading
       return;
     }
+    researchInFlight = false;
   }
   // Offline research already contains the selected document excerpts; do not inject them twice.
   let basePrompt = usedOfflineProjectEvidence
@@ -612,7 +624,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
     deps.setActiveConversation(targetConversationId);
   }
   // Cross-modality serialization: queue if any generation is running (routed later).
-  if (generationService.getState().isGenerating || imageGenerationService.getState().isGenerating) {
+  if (generationService.getState().isGenerating || imageGenerationService.getState().isGenerating || researchInFlight) {
     const messageText = appendAttachmentText(text, attachments);
     // Carry the user's forced modality through the queue so a queued force-image send is dispatched as
     // image on drain — not re-decided at 'auto' by resolveTurnKind (#510).

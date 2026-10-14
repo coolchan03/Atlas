@@ -423,7 +423,8 @@ export const useChatScreen = () => {
       }
     },
     handleDeleteMessage: (message: Message) => {
-      if (!activeConversationId || isStreaming || isGeneratingImage) return;
+      // Not while Deep Research gathers sources: the turn it is building would lose its question.
+      if (!activeConversationId || isStreaming || isGeneratingImage || researchStatus) return;
       const chatId = activeConversationId;
       Alert.alert('Delete message?', 'Remove this message from the conversation? This cannot be undone.', [
         { text: 'Cancel', style: 'cancel' },

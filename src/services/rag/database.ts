@@ -180,6 +180,15 @@ class RagDatabase {
     db.executeSync('DELETE FROM rag_documents WHERE id = ?', [docId]);
   }
 
+  getDocumentById(docId: number): RagDocument | null {
+    const db = this.getDb();
+    const result = db.executeSync(
+      'SELECT id, project_id, name, path, size, created_at, enabled FROM rag_documents WHERE id = ?',
+      [docId]
+    );
+    return ((result.rows ?? [])[0] as unknown as RagDocument) ?? null;
+  }
+
   getDocumentsByProject(projectId: string): RagDocument[] {
     const db = this.getDb();
     const result = db.executeSync(

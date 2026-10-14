@@ -4,6 +4,7 @@ jest.mock('../../../../src/services/rag/database', () => ({
     insertDocument: jest.fn((_doc: any) => 1),
     insertChunks: jest.fn(() => [1, 2]),
     deleteDocument: jest.fn(),
+    getDocumentById: jest.fn(() => null),
     getDocumentsByProject: jest.fn(() => []),
     toggleEnabled: jest.fn(),
     getChunksByProject: jest.fn(() => []),

@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import type { Message } from '../types';
-import { ragService } from './rag';
+import { ragService, APP_OWNED_DOC_DIR } from './rag';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
 
@@ -20,15 +20,16 @@ export async function saveReportToProject(
   if (message.role !== 'assistant' || !message.content.trim()) {
     throw new Error('Only complete assistant text replies can be saved.');
   }
-  const base = `${RNFS.DocumentDirectoryPath  }/atlas-research-reports`;
+  const base = `${RNFS.DocumentDirectoryPath}/${APP_OWNED_DOC_DIR}`;
   const safeChatId = conversationId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeMessageId = message.id.replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `Research-${  safeChatId.slice(0, 28)  }-${  safeMessageId.slice(0, 30)  }.md`;
   const path = `${base  }/${  filename}`;
   await RNFS.mkdir(base);
-  if (await RNFS.exists(path)) {
-    throw new Error('This report was already saved. Remove the existing project document to re-index it.');
-  }
+  const indexed = (await ragService.getDocumentsByProject(projectId)).some(d => d.path === path);
+  if (indexed) throw new Error('This report is already saved in the project.');
+  // A leftover file from a removed document is simply replaced.
+  if (await RNFS.exists(path)) await RNFS.unlink(path).catch(() => undefined);
   const contents = `# Research report\n\n${  message.content.trim()  }\n`;
   await RNFS.writeFile(path, contents, 'utf8');
   try {
