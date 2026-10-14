@@ -3,9 +3,10 @@ import { searchWeb } from './tools/webSearchProviders';
 import { braveSearch, readPage } from './tools/handlers';
 import { offGridOn } from '../atlasTools/offGrid';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
+import { buildOfflineProjectResearch } from './offlineProjectResearch';
 
 type ResearchStatus = (status: string | null) => void;
-export type ResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType?: 'webpage' | 'search snippet' };
+export type ResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType?: 'webpage' | 'search snippet' | 'project document' };
 export type ResearchBrief = { context: string; sources: ResearchSource[] };
 let activeRun = 0;
 
@@ -17,11 +18,8 @@ export function cancelDeepResearch(): void { activeRun += 1; }
 /** Search and read webpages without permanently storing their contents in the user's chat. */
 export async function buildDeepResearchBrief(
   question: string,
-  opts: { contextLength?: number; onStatus?: ResearchStatus; depth?: 'quick' | 'deep' } = {},
+  opts: { contextLength?: number; onStatus?: ResearchStatus; depth?: 'quick' | 'deep'; projectId?: string } = {},
 ): Promise<ResearchBrief> {
-  if (offGridOn()) {
-    throw new Error('Deep Research requires internet access. Turn off off-grid mode or use offline documents.');
-  }
   const topic = question.trim().slice(0, 320);
   if (!topic) throw new Error('Enter a topic to research.');
   const run = ++activeRun;
@@ -36,6 +34,7 @@ export async function buildDeepResearchBrief(
   const found = new Map<string, { title: string; url: string; snippet: string; wasRead?: boolean }>();
   const errors: string[] = [];
   try {
+  if (offGridOn()) return await buildOfflineProjectResearch(topic, opts, check);
   // Direct links in the user's question should be read, not merely passed to a search engine.
   const directLinks = [...new Set(Array.from(topic.matchAll(/https:\/\/[^\s<>"']+/gi), match =>
     match[0].replace(/[),.!?;]+$/, '').split('#')[0]))].slice(0, 3);
