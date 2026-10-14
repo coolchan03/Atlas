@@ -28,7 +28,7 @@ const native = () => {
   };
 };
 const clearSecurity = (p: Project): Project => {
-  const { pinVerifier, protectedBlob, ...rest } = p;
+  const { pinVerifier: _pinVerifier, protectedBlob: _protectedBlob, ...rest } = p;
   return rest as Project;
 };
 const stub = (p: Project, blob: string): Project => ({
@@ -36,7 +36,7 @@ const stub = (p: Project, blob: string): Project => ({
   systemPrompt: '', createdAt: p.createdAt, updatedAt: p.updatedAt,
   pinVerifier: p.pinVerifier, protectedBlob: blob,
 });
-const seal = async (raw: string): Promise<string> => {
+const seal = async (raw: string, reencryptUnlocked = true): Promise<string> => {
   const root = JSON.parse(raw);
   if (!Array.isArray(root?.state?.projects)) throw new Error('Invalid project persistence data.');
   const projects: Project[] = [];
@@ -45,7 +45,7 @@ const seal = async (raw: string): Promise<string> => {
     let blob = blobs.get(p.id) || p.protectedBlob;
     const pin = pins.get(p.id);
     const plain = JSON.stringify(clearSecurity(p));
-    if (pin && (!blob || lastEncrypted.get(p.id) !== plain)) {
+    if (pin && reencryptUnlocked && (!blob || lastEncrypted.get(p.id) !== plain)) {
       blob = await native().encryptProtectedItem('project', p.id, plain, pin, p.pinVerifier);
       blobs.set(p.id, blob); lastEncrypted.set(p.id, plain);
     }
@@ -63,7 +63,7 @@ async function writeReplacement(id: string, project: Project): Promise<void> {
     const index = root.state.projects.findIndex((p: Project) => p.id === id);
     if (index < 0) throw new Error('Project was not found in saved data.');
     root.state.projects[index] = project;
-    const protectedText = await seal(JSON.stringify(root));
+    const protectedText = await seal(JSON.stringify(root), false);
     await AsyncStorage.setItem(KEY, protectedText);
     if (await AsyncStorage.getItem(KEY) !== protectedText) throw new Error('Could not verify protected project write.');
   });
@@ -127,6 +127,7 @@ export async function permanentlyUnprotectProject(id: string, pin: string): Prom
 export async function relockProjects(): Promise<void> {
   await pending;
   const { useProjectStore } = require('./projectStore');
+  if (useProjectStore.persist?.hasHydrated?.() === false) return;
   const projects = useProjectStore.getState().projects;
   await protectedProjectStorage.setItem(KEY, JSON.stringify({ state: { projects }, version: 0 }));
   pins.clear(); lastEncrypted.clear();
@@ -142,7 +143,7 @@ export const protectedProjectStorage = {
     await pending;
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
-    const safe = await seal(raw);
+    const safe = await seal(raw, false);
     if (safe !== raw) await AsyncStorage.setItem(KEY, safe);
     const parsed = JSON.parse(safe);
     parsed.state.projects.forEach((p: Project) => { if (p.protectedBlob) blobs.set(p.id, p.protectedBlob); });
