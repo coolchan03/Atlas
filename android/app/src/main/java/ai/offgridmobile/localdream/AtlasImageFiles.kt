@@ -102,10 +102,13 @@ internal object AtlasImageFiles {
         return target
     }
 
-    fun copy(ctx: Context, uriText: String, out: File, progress: (Double) -> Unit): Long {
+    /** maxBytes stops a too-large file before (or while) it is copied, not after. */
+    fun copy(ctx: Context, uriText: String, out: File, progress: (Double) -> Unit,
+             maxBytes: Long = Long.MAX_VALUE): Long {
         val uri = Uri.parse(if (uriText.startsWith("/")) "file://$uriText" else uriText)
         val size = try { ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L }
             catch (_: Exception) { -1L }
+        if (size > maxBytes) throw IOException("File is larger than the ${maxBytes / (1024L * 1024L)} MB limit")
         if (size > 0 && out.parentFile!!.usableSpace < size + 128L * 1024 * 1024) {
             throw IOException("Not enough free phone storage to import this model without conversion")
         }
@@ -120,6 +123,7 @@ internal object AtlasImageFiles {
                         if (n < 0) break
                         output.write(buf, 0, n)
                         copied += n
+                        if (copied > maxBytes) throw IOException("File is larger than the ${maxBytes / (1024L * 1024L)} MB limit")
                         if (size > 0) progress(copied.toDouble() / size)
                     }
                 }
@@ -216,12 +220,11 @@ internal object AtlasImageFiles {
         // Import each config to a unique path. A malformed replacement must not
         // overwrite the previously enabled atlas-runtime.json before validation.
         val destination = File(supportDir, if (kind == "config") "${UUID.randomUUID()}_$cleaned" else cleaned)
-        val size = copy(ctx, uri, destination, progress)
-        if (kind == "config") {
-            if (size > 32L * 1024L * 1024L) {
-                destination.delete()
-                throw IOException("JSON configuration exceeds the 32 MB safety limit")
-            }
+        // JSON configs are small: refuse an oversized one before copying it, and only parse
+        // the Atlas runtime file (other .json files are kept as metadata, unread).
+        val size = copy(ctx, uri, destination, progress,
+            if (kind == "config") 32L * 1024L * 1024L else Long.MAX_VALUE)
+        if (kind == "config" && cleaned.equals(AtlasNativeImageConfig.FILE_NAME, ignoreCase = true)) {
             try {
                 val json = JSONObject(destination.readText())
                 AtlasNativeImageConfig.validateForAttachment(cleaned, json)

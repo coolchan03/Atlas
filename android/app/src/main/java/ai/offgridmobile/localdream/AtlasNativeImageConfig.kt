@@ -87,8 +87,16 @@ internal object AtlasNativeImageConfig {
         return result
     }
 
+    /** AYS sigma tables exist only for SD 1.x and SDXL; on other families sd.cpp returns
+     *  all-zero sigmas and silently renders a blank image. */
+    private val aysFamilies = setOf("sd15", "sdxl")
+
     /** Append only CLI values that were checked against the versioned allowlist. */
     fun addArguments(command: MutableList<String>, options: RuntimeOptions?, family: String) {
+        if (options?.schedule == "ays" && family !in aysFamilies) {
+            throw IOException("The \"ays\" schedule only works with SD 1.x and SDXL models. " +
+                "Use discrete or karras in $FILE_NAME for this model.")
+        }
         val method = options?.samplingMethod ?: if (family in setOf("z_image", "anima", "chroma")) "euler" else null
         if (method != null) command.addAll(listOf("--sampling-method", method))
         options?.schedule?.let { command.addAll(listOf("--scheduler", it)) }

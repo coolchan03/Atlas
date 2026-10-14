@@ -34,6 +34,16 @@ class AtlasNativeImageConfigTest {
         assertEquals(listOf("--sampling-method", "dpm++2m", "--scheduler", "karras"), arguments)
     }
 
+    @Test fun aysScheduleOnlyRunsOnSdAndSdxl() {
+        val options = AtlasNativeImageConfig.parse(json("euler", "ays"))
+        val sdxl = mutableListOf<String>()
+        AtlasNativeImageConfig.addArguments(sdxl, options, "sdxl")
+        assertEquals(listOf("--sampling-method", "euler", "--scheduler", "ays"), sdxl)
+        assertThrows(IOException::class.java) {
+            AtlasNativeImageConfig.addArguments(mutableListOf(), options, "z_image")
+        }
+    }
+
     @Test fun rejectsUnknownFieldsAndInvalidCliArguments() {
         assertThrows(IOException::class.java) {
             AtlasNativeImageConfig.parse(json().put("tokenizer", "custom.json"))
