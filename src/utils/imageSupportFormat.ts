@@ -1,9 +1,18 @@
 /* eslint-disable complexity -- Explicit safety/extension whitelist checks are intentionally kept together. */
 /** Validate support-file format before passing it to the native image engine. */
+export const ATLAS_NATIVE_IMAGE_CONFIG_SAMPLE = JSON.stringify({
+  schema: 'atlas-native-image/v1',
+  sampling_method: 'euler',
+  schedule: 'discrete',
+}, null, 2);
+
 /** Describe what a JSON file contributes without implying it can execute model weights. */
 export function imageJsonConfigHint(name: string): string {
   if (!/\.json$/i.test(name)) return '';
   const filename = name.toLowerCase();
+  if (filename === 'atlas-runtime.json') {
+    return 'Active native settings: sampling_method (euler, euler_a, heun, dpm2, dpm++2m, dpm++2mv2, dpm++2s_a, lcm) and schedule (discrete, karras, ays). Invalid fields are rejected.';
+  }
   if (/tokenizer|vocab|added_tokens|special_tokens/.test(filename)) {
     return 'Tokenizer metadata saved with this model. The native image engine uses tokenizers included in compatible GGUF encoders; this file alone does not enable a new tokenizer or architecture.';
   }

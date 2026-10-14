@@ -1,4 +1,4 @@
-import { validateImageSupportFormat, imageJsonConfigHint } from '../../../src/utils/imageSupportFormat';
+import { validateImageSupportFormat, imageJsonConfigHint, ATLAS_NATIVE_IMAGE_CONFIG_SAMPLE } from '../../../src/utils/imageSupportFormat';
 describe('image configuration descriptions', () => {
   it('describes tokenizer and scheduler JSON without promising unsupported runtime features', () => {
     expect(imageJsonConfigHint('tokenizer.json')).toMatch(/GGUF/);
@@ -6,6 +6,10 @@ describe('image configuration descriptions', () => {
     expect(imageJsonConfigHint('model_index.json')).toMatch(/Diffusers/);
     expect(imageJsonConfigHint('my-other.json')).toMatch(/metadata/i);
     expect(imageJsonConfigHint('weights.safetensors')).toBe('');
+    expect(imageJsonConfigHint('atlas-runtime.json')).toMatch(/Active native settings/);
+    expect(JSON.parse(ATLAS_NATIVE_IMAGE_CONFIG_SAMPLE)).toEqual({
+      schema: 'atlas-native-image/v1', sampling_method: 'euler', schedule: 'discrete',
+    });
   });
 });
 
