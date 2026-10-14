@@ -160,6 +160,12 @@ const TextModelTestScreen: React.FC = () => {
         let qualcomm = false;
         try { qualcomm = (await hardwareService.getSoCInfo()).vendor === 'qualcomm'; } catch { /* unknown */ }
         if (qualcomm && /q4_k/i.test(model.fileName || '') && !g.gpu) setFaster('Q4_K GPU acceleration depends on your installed OpenCL runtime; try a Q4_0 build if GPU loading fails.');
+        // The NPU runs only Q4_0 / Q8_0 text models: point to the same model in that format.
+        let hasNpu = false;
+        try { hasNpu = (await hardwareService.getAccelerationCapability()).hasNpu; } catch { /* unknown */ }
+        const npuFormat = /(?:^|[-_.])(q4_0|q8_0)(?:[-_.]|$)/i.test(model.fileName || '');
+        const fileQuant = (model.fileName || '').match(/(?:^|[-_.])(i?q\d[\w]*?|f16|bf16)(?=\.gguf$|$)/i)?.[1]?.toUpperCase();
+        if (hasNpu && !npuFormat && !llmService.supportsVision()) setFaster(`This phone has an NPU, but this file's format${fileQuant ? ` (${fileQuant})` : ''} cannot use it. Download the file ending in Q4_0.gguf (or Q8_0) of the same model to run it on the NPU, usually much faster.`);
         const quant = /q4_k/i.test(model.fileName || '') ? ' Q4_K GPU performance depends on native backend support.' : '';
         const note = llmService.getBackendFallbackNotice();
         if (llmService.isCpuForFileType()) set('accel', 'warn', 'CPU fallback: this model quantization is not eligible for the selected accelerator. OpenCL and Hexagon support different formats.');
@@ -282,8 +288,8 @@ const TextModelTestScreen: React.FC = () => {
               <View style={[card, { borderWidth: 1, borderColor: verdict.good ? (colors.success ?? '#3a9d5d') : ('#d4a017') }]}>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>{verdict.text}</Text>
                 {!!faster && !running && (
-                  <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'ModelsTab', params: { initialTab: 'text', initialSearchQuery: model.name.replace(/[-_. ]?(i?q\d[\w]*|f16|bf16|gguf)$/gi, '').trim() } })} style={{ marginTop: 10 }}>
-                    <Text style={{ color: colors.primary }}>{faster} Find it</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'ModelsTab', params: { initialTab: 'text', initialSearchQuery: `${model.name.replace(/[-_. ]?(i?q\d[\w]*|f16|bf16|gguf)$/gi, '').trim()}` } })} style={{ marginTop: 10 }} testID="model-test-find-faster">
+                    <Text style={{ color: colors.primary }}>{faster} {/NPU/.test(faster) ? 'Get the NPU version' : 'Find it'}</Text>
                   </TouchableOpacity>
                 )}
                 {!!verdict && !verdict.good && tps0(verdict) && !running && (
