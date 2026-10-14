@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles, react-native/no-color-literals, max-params -- Existing device storage/model dashboard uses numerous runtime theme styles and confirmation helper. */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Modal, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Clipboard, Linking, Modal, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -15,7 +15,7 @@ import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from
 import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
 import { pickAndAttachImageSupport, modifyImageSupport, isPickerCancel, ImageSupport } from './ModelsScreen/imageSupportActions';
-import { imageJsonConfigHint } from '../utils/imageSupportFormat';
+import { imageJsonConfigHint, ATLAS_NATIVE_IMAGE_CONFIG_SAMPLE } from '../utils/imageSupportFormat';
 import { getMissingImageSupportGuides, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
@@ -263,8 +263,18 @@ export const MyModelsScreen: React.FC = () => {
                   <Text style={{ color: colors.primary, marginLeft: 6 }}>Attach LoRA / support file</Text>
                 </TouchableOpacity>
                 <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6 }}>
-                  LoRAs modify style. RealESRGAN .pth is an upscaler. JSON files carry configuration metadata; they cannot replace missing model or tokenizer weights.
+                  LoRAs modify style. RealESRGAN .pth is an upscaler. Native atlas-runtime.json changes supported sampler settings; other JSON is metadata, not model weights.
                 </Text>
+                <TouchableOpacity testID="native-image-config-example" accessibilityRole="button"
+                  style={[btn(colors.border), { alignSelf: 'flex-start' }]}
+                  onPress={() => {
+                    Clipboard.setString(ATLAS_NATIVE_IMAGE_CONFIG_SAMPLE);
+                    setAlertState(showAlert('Native JSON config copied',
+                      'Save this JSON as atlas-runtime.json, then Attach LoRA / support file. Supported sampler and schedule fields affect the native image engine. Other model/pipeline JSON cannot make incompatible weights runnable.'));
+                  }}>
+                  <Icon name="copy" size={14} color={colors.text} />
+                  <Text style={{ color: colors.text, marginLeft: 6, fontSize: 12 }}>Copy native JSON example</Text>
+                </TouchableOpacity>
                 {(m.supportFiles || []).map(file => (
                   <View key={`${file.kind  }/${  file.name}`} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
                     <Text style={{ color: colors.text, fontWeight: '500', fontSize: 13 }}>{file.name}</Text>

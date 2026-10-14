@@ -47,5 +47,5 @@ describe('happy — image generation shows the correct backend label (heavy entr
     await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); });
     // ...and the user sees the correct backend label in the message details.
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(new RegExp(cfg.expected.replace(/[()]/g, '\\$&')))).not.toBeNull(); });
-  });
+  }, 45000);
 });

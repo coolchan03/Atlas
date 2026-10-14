@@ -243,6 +243,9 @@ internal class AtlasNativeDiffusion(private val context: Context) {
                 prompt += "<lora:$name:$strength>"
             } else attachments[kind] = path
         }
+        // Versioned atlas-runtime.json supports native sampler/schedule settings.
+        // Generic tokenizer/config JSON is metadata and does not enable a new model architecture.
+        val runtimeConfig = AtlasNativeImageConfig.resolve(dir, support)
         val missing = AtlasImageArchitecture.missing(family, attachments.keys)
         if (missing.isNotEmpty()) {
             throw IOException(family.uppercase() + " is missing required components: " +
@@ -279,8 +282,9 @@ internal class AtlasNativeDiffusion(private val context: Context) {
         cmd.addAll(listOf("--threads", threads.toString(), "--log-level", "verbose"))
         // On Vulkan, auto-fit manages residency: do NOT force
         // --offload-to-cpu, which would disable auto-fit and over-stage weights.
+        AtlasNativeImageConfig.addArguments(cmd, runtimeConfig, family)
         if (family in setOf("z_image", "anima", "chroma")) {
-            cmd.addAll(listOf("--sampling-method", "euler", "--diffusion-fa"))
+            cmd.add("--diffusion-fa")
             if (!gpuRequested) cmd.add("--offload-to-cpu")
         }
         if (family == "chroma") cmd.addAll(listOf("--model-args", "chroma_use_dit_mask=false"))

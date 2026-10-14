@@ -9,6 +9,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.UUID
 
 /** Streamed, non-converting import for SDXL, SD1.x and FLUX image weights. */
 internal object AtlasImageFiles {
@@ -212,15 +213,19 @@ internal object AtlasImageFiles {
         val cleaned = name.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
         if (cleaned == "." || cleaned == ".." || cleaned.isEmpty()) throw IOException("Invalid filename")
         val supportDir = File(folder, "support/$kind").apply { mkdirs() }
-        val destination = File(supportDir, cleaned)
+        // Import each config to a unique path. A malformed replacement must not
+        // overwrite the previously enabled atlas-runtime.json before validation.
+        val destination = File(supportDir, if (kind == "config") "${UUID.randomUUID()}_$cleaned" else cleaned)
         val size = copy(ctx, uri, destination, progress)
         if (kind == "config") {
             if (size > 32L * 1024L * 1024L) {
                 destination.delete()
                 throw IOException("JSON configuration exceeds the 32 MB safety limit")
             }
-            try { JSONObject(destination.readText()) }
-            catch (e: Exception) {
+            try {
+                val json = JSONObject(destination.readText())
+                AtlasNativeImageConfig.validateForAttachment(cleaned, json)
+            } catch (e: Exception) {
                 destination.delete()
                 throw IOException("Invalid JSON configuration: " + (e.message ?: "parse error"))
             }
