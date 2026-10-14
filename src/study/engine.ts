@@ -281,7 +281,49 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
 // ---------------------------------------------------------------- podcast episodes
 export type PodcastLength = 'short' | 'medium' | 'long';
 export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner' | 'news';
-export interface PodcastOptions { prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string }
+export interface PodcastOptions {
+  prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string;
+  /** Checked between parts: true ends the episode early and keeps what is written so far. */
+  shouldStop?: () => boolean;
+  /** Fresh sources for one part's topic. Long episodes use it so each part draws on different passages. */
+  sourcesFor?: (topic: string) => Promise<Source[]>;
+}
+
+/** Longest episode: 90 minutes (60 written parts of about 1.5 minutes each). */
+export const MAX_PODCAST_MINUTES = 90;
+/** Parts per planning call; a phone model plans a dozen topics reliably, not forty. */
+const PLAN_BATCH = 12;
+const SEGMENT_RE = (i: number) => new RegExp(`(?:SEGMENT|PART)\\s*${i}\\s*[:.)\\-–]\\s*(.+)`, 'i');
+
+/** Number of written parts for an episode length (about 1.5 minutes of speech each). */
+export const podcastParts = (minutes: number): number => Math.max(1, Math.min(MAX_PODCAST_MINUTES / 1.5, Math.round(minutes / 1.5)));
+
+/**
+ * Each written part is its own model call (sources + outline + the last lines), so an hour-long
+ * episode needs the same context as a short one: about 3000 tokens. Returns a warning when the
+ * loaded model's context is smaller than that.
+ */
+export function podcastContextWarning(): string | null {
+  try {
+    const { llmService } = require('../services/llm');
+    const ctx = Number(llmService.getPerformanceSettings?.()?.contextLength) || 0;
+    if (ctx && ctx < 3000) return `The model's context is ${ctx} tokens. Raise it to at least 4096 in the text model settings so each part can read its sources.`;
+  } catch { /* no model yet */ }
+  return null;
+}
+
+/** Sources for a long part must not repeat the same passages: merge new ones into the episode's list. */
+export function mergeEpisodeSources(all: Source[], fresh: Source[]): { all: Source[]; part: Source[] } {
+  const part: Source[] = [];
+  const next = [...all];
+  for (const f of fresh) {
+    const known = next.find((x) => x.text === f.text);
+    if (known) { part.push(known); continue; }
+    const added = { ...f, n: next.length + 1 };
+    next.push(added); part.push(added);
+  }
+  return { all: next, part };
+}
 
 const STYLE_TEXT: Record<PodcastStyle, string> = {
   casual: 'friendly and relaxed, like two friends chatting',
@@ -291,7 +333,6 @@ const STYLE_TEXT: Record<PodcastStyle, string> = {
   beginner: 'for complete beginners: simple words, everyday examples, no jargon',
   news: 'a friendly daily news show: story by story, each explained simply with why it matters, upbeat but accurate',
 };
-const SEGMENTS: Record<PodcastLength, number> = { short: 2, medium: 3, long: 5 };
 
 /** Extra research: offline library (Kiwix) first, then the web when online and not in off-grid mode. */
 async function researchSources(query: string, startN: number, onStep: (m: string) => void): Promise<Source[]> {
@@ -336,7 +377,7 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     sources = trimSources([...sources, ...extra]);
   }
   if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
-  return writeEpisode(sources, opts, onStep);
+  return writeEpisode(sources, { ...opts, sourcesFor: opts.sourcesFor ?? ((topic) => gatherSources(projectId, topic, 1)) }, onStep);
 }
 
 /** Writes the episode script from ready-made sources (projects, the daily briefing, ...). */
@@ -344,7 +385,7 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
   // About 1.5 minutes of speech per written part (10 lines of ~25 words).
   const minutes = opts.minutes ?? (opts.length === 'short' ? 3 : opts.length === 'long' ? 10 : 6);
-  const nSeg = Math.max(1, Math.min(16, Math.round(minutes / 1.5)));
+  const nSeg = podcastParts(minutes);
   const hosts = opts.hosts ?? 2;
   const cast = hosts === 1
     ? 'ONE narrator (A) speaking alone, like a solo podcast'
@@ -355,16 +396,34 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
   const style = STYLE_TEXT[opts.style];
 
   onStep('Planning the episode...');
-  const plan = await ask(
-    'You plan podcast episodes based only on the given sources.',
-    `${S}${opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n'}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\nReply exactly:\nTITLE: catchy episode title\n${Array.from({ length: nSeg }, (_, i) => `SEGMENT ${i + 1}: one-line topic`).join('\n')}`,
-  );
-  const P = plan.replace(/\*\*|__/g, '');
-  const title = opts.title || (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
-  const segs = Array.from({ length: nSeg }, (_, i) => P.match(new RegExp(`(?:SEGMENT|PART)\\s*${i + 1}\\s*[:.)\\-–]\\s*(.+)`, 'i'))?.[1]?.replace(/["*]/g, '').trim()).filter(Boolean) as string[];
-  const topics = segs.length ? segs : [opts.prompt || 'the main ideas'];
-  // Keep the asked-for length even if the plan came back short.
-  while (topics.length < nSeg) topics.push(topics.length === nSeg - 1 ? 'key takeaways and wrap-up' : `more about ${topics[topics.length % Math.max(1, segs.length)] || 'the topic'}`);
+  const ask0 = opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n';
+  // Short episodes are planned in one call. Long ones are planned a dozen parts at a time, each
+  // call seeing the parts so far, so a 60-minute episode has a real outline instead of repeats.
+  let title = opts.title || '';
+  const topics: string[] = [];
+  for (let from = 1; from <= nSeg; from += PLAN_BATCH) {
+    const to = Math.min(nSeg, from + PLAN_BATCH - 1);
+    const batchList = Array.from({ length: to - from + 1 }, (_, i) => `SEGMENT ${from + i}: one-line topic`).join('\n');
+    const so_far = topics.length ? `Parts planned so far (do not repeat them):\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n` : '';
+    const ending = to === nSeg ? (nSeg > 1 ? `The last part (${nSeg}) is the wrap-up with key takeaways.\n` : '') : 'More parts follow after these.\n';
+    const plan = await ask(
+      'You plan podcast episodes based only on the given sources.',
+      `${S}${ask0}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\n${so_far}${ending}Reply exactly:\n${from === 1 ? 'TITLE: catchy episode title\n' : ''}${batchList}`,
+    );
+    const P = plan.replace(/\*\*|__/g, '');
+    if (from === 1 && !title) title = (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
+    for (let i = from; i <= to; i++) {
+      const topic = P.match(SEGMENT_RE(i))?.[1]?.replace(/["*]/g, '').trim();
+      if (topic) topics.push(topic);
+    }
+    if (topics.length < to) {
+      const known = [...topics];
+      while (topics.length < to) topics.push(topics.length === nSeg - 1 && nSeg > 1 ? 'key takeaways and wrap-up' : `more about ${known[topics.length % Math.max(1, known.length)] || opts.prompt || 'the topic'}`);
+    }
+    if (opts.shouldStop?.()) break;
+  }
+  if (!title) title = (opts.prompt || 'Episode').trim();
+  if (!topics.length) topics.push(opts.prompt || 'the main ideas');
 
   const lines: PodcastLine[] = [];
   const parse = (t: string) => t.split('\n').map((l) => {
@@ -375,16 +434,29 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
     return text ? { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text } : null;
   }).filter(Boolean) as PodcastLine[];
 
+  let episodeSources = sources;
   for (let i = 0; i < topics.length; i++) {
+    if (opts.shouldStop?.() && lines.length >= 4) break; // keep what is written
     onStep(`Writing part ${i + 1} of ${topics.length}...`);
-    const recap = lines.slice(-2).map((l) => `${l.host}: ${l.text}`).join('\n');
+    // Long episodes: each part reads passages found for its own topic.
+    let partSources = sources;
+    if (opts.sourcesFor && topics.length > PLAN_BATCH / 2) {
+      try {
+        const merged = mergeEpisodeSources(episodeSources, await opts.sourcesFor(topics[i]));
+        episodeSources = merged.all;
+        if (merged.part.length) partSources = merged.part;
+      } catch { /* keep the base sources */ }
+    }
+    const PS = `SOURCES:\n${sourceBlock(partSources)}\n\n`;
+    const outline = topics.length > 3 ? `Episode outline (for context, write only the part below):\n${topics.map((t, k) => `${k + 1}. ${t}`).join('\n')}\n` : '';
+    const recap = lines.slice(-4).map((l) => `${l.host}: ${l.text}`).join('\n');
     const where = topics.length === 1 ? 'This is the WHOLE episode: A welcomes listeners and introduces the title, the topic is covered, then a short wrap-up and goodbye.' : i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
     const t = await ask(
       'You write natural podcast scripts. Facts must come only from the sources. Never mention source numbers in the script.',
-      `${S}Episode: "${title}". Style: ${style}. Cast: ${cast}.\nThis part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
+      `${PS}Episode: "${title}". Style: ${style}. Cast: ${cast}.\n${outline}This part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
     );
     lines.push(...parse(t));
   }
   if (lines.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again or use a bigger model.');
-  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources, podcast: lines, hosts };
+  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: episodeSources.slice(0, 60), podcast: lines, hosts };
 }

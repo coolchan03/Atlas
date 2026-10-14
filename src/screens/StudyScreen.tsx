@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
-import { generate, generatePodcast, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
+import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';
 import { ProjectGame } from '../components/games/ProjectGame';
 import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
@@ -109,13 +109,15 @@ export const StudyScreen: React.FC = () => {
     return true;
   };
 
+  const stopEpisode = useRef(false);
   const makeEpisode = async () => {
     if (blockedByProtection()) return;
+    stopEpisode.current = false;
     setPodOpen(false);
     setBusy('Podcast');
     keepScreenOn(true); // long job: don't let the phone sleep and pause it
     try {
-      const r = await generatePodcast(projectId, { ...pod, hosts: voices.length >= 2 ? pod.hosts : 1 }, (m) => setBusy(m));
+      const r = await generatePodcast(projectId, { ...pod, hosts: voices.length >= 2 ? pod.hosts : 1, shouldStop: () => stopEpisode.current }, (m) => setBusy(m));
       add(projectId, r);
       setResumeAt(0);
       setView(r);
@@ -408,6 +410,11 @@ export const StudyScreen: React.FC = () => {
           <Text style={{ color: colors.primary, marginTop: 6 }}>Open project settings</Text>
         </TouchableOpacity>}
         {busy && <Text style={{ color: colors.textSecondary, marginTop: 10 }}>{/\.\.\.$/.test(busy) ? busy : 'Working on it'} - this can take a few minutes on a phone.</Text>}
+        {busy && /^(Planning|Writing part)/.test(busy) && (
+          <TouchableOpacity onPress={() => { stopEpisode.current = true; }} accessibilityRole="button" style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+            <Text style={{ color: colors.primary, fontSize: 14 }}>Stop and keep what is written</Text>
+          </TouchableOpacity>
+        )}
         {saved.length > 0 && <Text style={{ color: colors.text, fontWeight: '700', marginTop: 18, marginBottom: 6 }}>Saved</Text>}
         {saved.map((r) => (
           <TouchableOpacity key={r.createdAt} style={[card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => { setFlipped({}); setPicked({}); setResumeAt(0); setView(r); }}>
@@ -432,13 +439,18 @@ export const StudyScreen: React.FC = () => {
               style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 10, padding: 12, marginTop: 10, minHeight: 60 }} />
             <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>ABOUT HOW LONG</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-              {[3, 5, 10, 15, 20].map((m) => (
+              {[3, 5, 10, 15, 20, 30, 45, 60].map((m) => (
                 <TouchableOpacity key={m} onPress={() => setPod((p) => ({ ...p, minutes: m }))} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: pod.minutes === m ? colors.primary : colors.background }}>
                   <Text style={{ color: pod.minutes === m ? '#fff' : colors.text, fontSize: 13 }}>{m} min</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {pod.minutes >= 10 && <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>Longer episodes take several minutes to write on a phone.</Text>}
+            {pod.minutes >= 10 && <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+              {pod.minutes >= 30
+                ? `Writing ${pod.minutes} minutes takes roughly ${Math.round(pod.minutes * 0.6)}-${pod.minutes * 2} minutes on a phone, one part at a time. Keep Atlas open and plugged in. You can stop at any point and keep what is written.`
+                : 'Longer episodes take several minutes to write on a phone.'}
+            </Text>}
+            {pod.minutes >= 30 && !!podcastContextWarning() && <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{podcastContextWarning()}</Text>}
             {voices.length >= 2 && (
               <>
                 <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>PEOPLE ({voices.length} voices installed)</Text>
