@@ -57,8 +57,7 @@ export function installTextAppearance(targets: any[] = [Text, TextInput]): void 
     if (!target || typeof target.render !== 'function' || target.__atlasText) continue;
     const original = target.render;
     target.__atlasText = true;
-    // eslint-disable-next-line react-hooks/rules-of-hooks -- this IS the component's render function
-    target.render = function render(this: unknown, props: any, ref: unknown) {
+    target.render = function TextWithAppearance(this: unknown, props: any, ref: unknown) {
       const a = useSyncExternalStore(subscribe, snapshot);
       return original.call(this, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a) }, ref);
     };
