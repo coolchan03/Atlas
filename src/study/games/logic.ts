@@ -191,3 +191,52 @@ export function stars(score: number, max: number): number {
   const p = score / max;
   return p >= 0.9 ? 3 : p >= 0.6 ? 2 : p > 0 ? 1 : 0;
 }
+
+// ------------------------------------------------------------- word scramble
+/** The word's letters in another order. Always differs from the word unless it cannot (one letter, or all the same). */
+export function scrambleWord(word: string, seed = 1): string {
+  const letters = [...word.toUpperCase()];
+  if (new Set(letters).size < 2) return letters.join('');
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const out = shuffle(letters, seed + attempt * 101).join('');
+    if (out !== letters.join('')) return out;
+  }
+  return [...letters].reverse().join('') !== letters.join('') ? [...letters].reverse().join('') : letters.slice(1).concat(letters[0]).join('');
+}
+
+/** Scramble points: 2 for a clean answer, 1 if the first-letter hint was used. */
+export const scramblePoints = (usedHint: boolean) => (usedHint ? 1 : 2);
+
+// ------------------------------------------------------------- prize ladder (millionaire style)
+export const LADDER_PRIZES = [100, 200, 300, 500, 1000, 2000, 4000, 8000, 16000, 32000];
+/** Rungs (0-based) after which a wrong answer no longer loses everything: the 5th and the last. */
+export const LADDER_SAFE = [4, 9];
+
+/** What the player takes home after a wrong answer on `rung`: the last safe prize they passed. */
+export function ladderFallback(rung: number): number {
+  const passed = LADDER_SAFE.filter((s) => s < rung);
+  return passed.length ? LADDER_PRIZES[passed[passed.length - 1]] : 0;
+}
+
+/** Two wrong options to hide for the 50:50 lifeline (indices), deterministic for a question. */
+export function fiftyFifty(optionCount: number, answer: number, seed = 1): number[] {
+  const wrong = Array.from({ length: optionCount }, (_, i) => i).filter((i) => i !== answer);
+  return shuffle(wrong, seed).slice(0, Math.max(0, Math.min(2, wrong.length - 1)));
+}
+
+// ------------------------------------------------------------- fix the mistake
+export interface FixItem { text: string; options: string[]; answer: number; fix: string; src: number[] }
+
+/**
+ * From true/false statements: each FALSE statement becomes "which correction makes this true?",
+ * with the corrections of other false statements as wrong options. Needs three false statements.
+ */
+export function buildFixItems(statements: { text: string; isTrue: boolean; fix: string; src: number[] }[], seed = 1): FixItem[] {
+  const falses = statements.filter((s) => !s.isTrue && s.fix.trim().length > 3);
+  if (falses.length < 3) return [];
+  return falses.map((s, i) => {
+    const others = shuffle(falses.filter((o) => o !== s && o.fix !== s.fix).map((o) => o.fix), seed + i).slice(0, 3);
+    const options = shuffle([s.fix, ...others], seed * 31 + i);
+    return { text: s.text, options, answer: options.indexOf(s.fix), fix: s.fix, src: s.src };
+  }).filter((x) => x.options.length >= 3);
+}

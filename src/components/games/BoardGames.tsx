@@ -10,7 +10,7 @@ import { speakAndWait, stop } from '../../atlasVoice/tts';
 import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, ScoreLine, SourceLinks, Title, useGameColors, useRecord, type GameProps } from './kit';
 
 /** One multiple-choice question with feedback. */
-function McView({ q, onAnswer, result, onOpenSource, revealNow = true }: {
+export function McView({ q, onAnswer, result, onOpenSource, revealNow = true }: {
   q: McQuestion; onAnswer: (ok: boolean) => void; result: GameProps['result']; onOpenSource: GameProps['onOpenSource']; revealNow?: boolean;
 }) {
   const colors = useGameColors();

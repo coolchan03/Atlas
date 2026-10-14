@@ -45,3 +45,10 @@ Branch: `claude/atlas-gpu-npu-audit-mgklqk`. Nothing was merged and no pull requ
 4. Lock a chat, make an encrypted backup while it is open, restore on a clean install, open it with its PIN.
 5. Generate a picture inside a private chat; it must not appear in the Gallery.
 6. Chat on Vulkan with tools on: the message should tell you to use OpenCL, Automatic or CPU.
+
+## Follow-up: Study additions
+
+- **Hour-long podcasts.** Length choices go up to 60 minutes (cap 90). Each part of about 1.5 minutes is its own model call, so an hour needs the same context as a short episode (about 3000 tokens; the screen warns below that). A long episode is planned a dozen parts at a time with the parts so far in view, and every part reads passages found for its own topic, so it does not loop over the same sources. "Stop and keep what is written" ends it early. Expect roughly 0.6 to 2 minutes of writing per minute of audio on a phone; keep Atlas open and plugged in.
+- **Study guide and formula sheet.** The study guide already existed; it and the new Formula sheet can now be shared or saved as a Markdown file (you pick the folder).
+- **PowerPoint.** Slides (renamed from "Video (slides)") can be saved as a real .pptx, built on the phone with no library: a title slide, one slide per Study slide, and a sources slide. It opened in python-pptx and rendered in LibreOffice here; not yet opened in PowerPoint itself. Speaker notes are not included.
+- **Three more games:** Word scramble, Prize ladder (10 rungs, safe spots, 50:50 / Skip / Source lifelines, walk away) and Fix the mistake.

@@ -1,6 +1,7 @@
 import {
   acronymMatches, buildCloze, buildPairs, closeEnough, hangmanGuess, hangmanStatus, layoutConceptMap,
   longestOrderedRun, shuffle, similarity, wordleFeedback,
+  buildFixItems, fiftyFifty, ladderFallback, scramblePoints, scrambleWord, LADDER_PRIZES,
 } from '../../../src/study/games/logic';
 import { parseJsonLoose, srcList } from '../../../src/study/games/json';
 import { schedule, streakFrom } from '../../../src/study/progress';
@@ -104,8 +105,34 @@ describe('generateGame (project-based)', () => {
     (engine.gatherSources as jest.Mock).mockResolvedValue(sources);
     jest.spyOn(engine, 'termsFromSources').mockResolvedValue(terms as any);
   });
-  it('lists 18 new project games', () => {
-    expect(PROJECT_GAMES).toHaveLength(18);
+  it('lists 21 project games, including scramble, ladder and fix-the-mistake', () => {
+    expect(PROJECT_GAMES).toHaveLength(21);
+    expect(PROJECT_GAMES.map((g) => g.type)).toEqual(expect.arrayContaining(['scramble', 'ladder', 'mistake']));
+  });
+  it('builds a scramble from terms of four letters or more without a model call', async () => {
+    const r = await generateGame('p1', 'scramble', '');
+    expect(r.game?.type).toBe('scramble');
+    expect(r.game?.data.terms.every((t: any) => t.answer.length >= 4)).toBe(true);
+    expect(ask).not.toHaveBeenCalled();
+  });
+  it('builds a ladder of ten rungs plus spares, easy to hard', async () => {
+    ask.mockResolvedValue(JSON.stringify({ questions: Array.from({ length: 12 }, (_, i) => ({ q: `Q${i}`, options: ['right', 'w1', 'w2', 'w3'], answer: 0, why: '', src: [1], difficulty: (i % 3) + 1 })) }));
+    const r = await generateGame('p1', 'ladder', '');
+    expect(r.game?.data.questions).toHaveLength(10);
+    expect(r.game?.data.spares).toHaveLength(2);
+    const d = r.game?.data.questions.map((q: any) => q.difficulty);
+    expect(d).toEqual([...d].sort((a: number, b: number) => a - b));
+  });
+  it('turns false statements into pick-the-correction questions', async () => {
+    ask.mockResolvedValue(JSON.stringify({ statements: [
+      { text: 'Boiling takes ten hours.', true: false, fix: 'Boil for one minute.', src: [1] },
+      { text: 'Kindling goes in first.', true: false, fix: 'Tinder goes in first.', src: [2] },
+      { text: 'Never filter water.', true: false, fix: 'Filter cloudy water.', src: [1] },
+      { text: 'Boiling kills bacteria.', true: true, fix: '', src: [1] },
+    ] }));
+    const r = await generateGame('p1', 'mistake', '');
+    expect(r.game?.data.items).toHaveLength(3);
+    for (const it of r.game?.data.items) expect(it.options[it.answer]).toBe(it.fix);
   });
   it('builds true/false from model JSON with citations', async () => {
     ask.mockResolvedValue(JSON.stringify({ statements: [
@@ -142,5 +169,43 @@ describe('generateGame (project-based)', () => {
   });
   it('refuses a podcast quiz when the project has no podcast', async () => {
     await expect(generateGame('empty-project', 'podcastquiz', '')).rejects.toThrow(/podcast/i);
+  });
+});
+
+describe('quick games logic', () => {
+  it('scrambles a word into another order, deterministically', () => {
+    for (const w of ['BACTERIA', 'TINDER', 'AB', 'ABBA']) {
+      const out = scrambleWord(w, 5);
+      expect(out).not.toBe(w);
+      expect([...out].sort().join('')).toBe([...w].sort().join(''));
+      expect(scrambleWord(w, 5)).toBe(out);
+    }
+    expect(scrambleWord('AAAA')).toBe('AAAA'); // cannot differ
+    expect(scramblePoints(false)).toBe(2);
+    expect(scramblePoints(true)).toBe(1);
+  });
+
+  it('drops to the last safe prize, never below it', () => {
+    expect(ladderFallback(0)).toBe(0);
+    expect(ladderFallback(4)).toBe(0); // wrong on the 5th rung: nothing banked yet
+    expect(ladderFallback(5)).toBe(LADDER_PRIZES[4]);
+    expect(ladderFallback(9)).toBe(LADDER_PRIZES[4]);
+  });
+
+  it('50:50 hides two wrong options and never the answer', () => {
+    for (let a = 0; a < 4; a++) {
+      const hidden = fiftyFifty(4, a, 9);
+      expect(hidden).toHaveLength(2);
+      expect(hidden).not.toContain(a);
+    }
+    expect(fiftyFifty(3, 0, 1)).toHaveLength(1); // always leaves a wrong option next to the answer
+  });
+
+  it('needs three false statements to build corrections, and keeps the right fix among the options', () => {
+    const st = (text: string, isTrue: boolean, fix: string) => ({ text, isTrue, fix, src: [1] });
+    expect(buildFixItems([st('a', false, 'fix one'), st('b', false, 'fix two'), st('c', true, '')])).toEqual([]);
+    const items = buildFixItems([st('a', false, 'fix one'), st('b', false, 'fix two'), st('c', false, 'fix three'), st('d', false, 'fix four')]);
+    expect(items).toHaveLength(4);
+    for (const it of items) { expect(it.options[it.answer]).toBe(it.fix); expect(new Set(it.options).size).toBe(it.options.length); }
   });
 });

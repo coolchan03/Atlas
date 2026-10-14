@@ -6,6 +6,7 @@ import { ClozeGame, HangmanGame, PairsGame } from './WordGames';
 import { SortGame, TimelineGame, TrueFalseGame } from './OrderGames';
 import { BossGame, DailyGame, ExamGame, JeopardyGame, PodcastQuizGame, ReviewGame } from './BoardGames';
 import { ConceptMapGame, FeynmanGame, LevelsGame, MnemonicGame, PalaceGame, TutorGame } from './TutorGames';
+import { LadderGame, MistakeGame, ScrambleGame } from './QuickGames';
 import { useGameColors } from './kit';
 
 const GAMES: Record<string, React.ComponentType<GameProps>> = {
@@ -13,6 +14,7 @@ const GAMES: Record<string, React.ComponentType<GameProps>> = {
   truefalse: TrueFalseGame, timeline: TimelineGame, sort: SortGame, jeopardy: JeopardyGame, boss: BossGame,
   exam: ExamGame, conceptmap: ConceptMapGame, palace: PalaceGame, feynman: FeynmanGame, tutor: TutorGame,
   levels: LevelsGame, mnemonic: MnemonicGame, podcastquiz: PodcastQuizGame,
+  scramble: ScrambleGame, ladder: LadderGame, mistake: MistakeGame,
 };
 
 export function ProjectGame(props: GameProps) {

@@ -7,7 +7,7 @@
  */
 import { askModel, gatherSources, GROUND, sourceBlock, termsFromSources, useStudyStore, type Source, type StudyResult } from '../engine';
 import type { LearningTerm } from '../learningGames';
-import { buildCloze, buildPairs, shuffle, type ClozeItem, type MapEdge, type MapNode } from './logic';
+import { buildCloze, buildFixItems, buildPairs, shuffle, type ClozeItem, type MapEdge, type MapNode } from './logic';
 import { parseJsonLoose, srcList, str } from './json';
 import { useStudyProgress } from '../progress';
 import { runBackgroundJob } from '../../services/llmJobQueue';
@@ -15,7 +15,7 @@ import { runBackgroundJob } from '../../services/llmJobQueue';
 export type GameType =
   | 'review' | 'pairs' | 'hangman' | 'cloze' | 'timeline' | 'sort' | 'truefalse' | 'jeopardy'
   | 'boss' | 'feynman' | 'tutor' | 'levels' | 'palace' | 'mnemonic' | 'conceptmap' | 'daily'
-  | 'exam' | 'podcastquiz';
+  | 'exam' | 'podcastquiz' | 'scramble' | 'ladder' | 'mistake';
 
 export interface GameInfo { type: GameType; label: string; icon: string; desc: string; usesModel: 'once' | 'live' | 'none' }
 
@@ -38,6 +38,9 @@ export const PROJECT_GAMES: GameInfo[] = [
   { type: 'tutor', label: 'Socratic tutor', icon: 'help-circle', desc: 'Guided questions, no spoilers', usesModel: 'live' },
   { type: 'levels', label: 'Explain at my level', icon: 'sliders', desc: 'Age 5 up to expert', usesModel: 'live' },
   { type: 'mnemonic', label: 'Mnemonic maker', icon: 'zap', desc: 'Acronyms, rhymes and stories', usesModel: 'live' },
+  { type: 'scramble', label: 'Word scramble', icon: 'shuffle', desc: 'Unscramble the key terms, with a hint if you are stuck', usesModel: 'once' },
+  { type: 'ladder', label: 'Prize ladder', icon: 'trending-up', desc: '10 questions, 3 lifelines, safe spots on the way up', usesModel: 'once' },
+  { type: 'mistake', label: 'Fix the mistake', icon: 'tool', desc: 'Pick the correction that makes a false statement true', usesModel: 'once' },
   { type: 'podcastquiz', label: 'Podcast quiz', icon: 'headphones', desc: 'Questions about your last episode', usesModel: 'once' },
 ];
 
@@ -250,11 +253,16 @@ export async function generateGame(projectId: string, type: GameType, topic: str
     seedReviewItems(projectId);
     return make(sources, { day: new Date().toISOString().slice(0, 10) });
   }
-  if (['pairs', 'hangman', 'cloze', 'feynman', 'palace'].includes(type)) {
+  if (['pairs', 'hangman', 'cloze', 'feynman', 'palace', 'scramble'].includes(type)) {
     onStep('Finding key terms in your documents...');
     const terms = await termsFromSources(sources, topic, type === 'pairs' ? 4 : 3);
     if (type === 'pairs') return make(sources, { terms, cards: buildPairs(terms, Math.min(8, terms.length), Date.now()) });
     if (type === 'hangman') return make(sources, { terms });
+    if (type === 'scramble') {
+      const longEnough = terms.filter((t) => t.answer.length >= 4).slice(0, 12);
+      if (longEnough.length < 3) throw new Error('These documents gave too few terms of four letters or more for a word scramble. Try another topic.');
+      return make(sources, { terms: longEnough });
+    }
     if (type === 'feynman') return make(sources, { terms, concepts: terms.map((t) => t.answer) });
     if (type === 'palace') {
       onStep('Building your memory palace...');
@@ -281,6 +289,20 @@ export async function generateGame(projectId: string, type: GameType, topic: str
     onStep('Summoning the boss...');
     const questions = await mcQuestions(sources, 9, topic);
     return make(sources, { questions: questions.sort((a, b) => (a.difficulty ?? 2) - (b.difficulty ?? 2)), boss: Math.floor(Math.random() * 6) });
+  }
+  if (type === 'ladder') {
+    onStep('Writing the ladder questions...');
+    // 10 rungs plus 2 spares for the Skip lifeline.
+    const questions = await mcQuestions(sources, 12, topic);
+    if (questions.length < 6) throw new Error('The model did not write enough questions for a ladder. Try again.');
+    const ordered = questions.slice(0, 10).sort((a, b) => (a.difficulty ?? 2) - (b.difficulty ?? 2));
+    return make(sources, { questions: ordered, spares: questions.slice(10) });
+  }
+  if (type === 'mistake') {
+    onStep('Writing statements with mistakes...');
+    const items = buildFixItems(await statements(sources, 16, topic), Date.now());
+    if (items.length < 3) throw new Error('The model did not write enough false statements with corrections. Try again or use a bigger model.');
+    return make(sources, { items });
   }
   if (type === 'exam') {
     onStep('Writing multiple-choice questions...');
