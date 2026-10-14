@@ -119,6 +119,10 @@ function makeInMemoryDb() {
       return { rows, insertId: 0, rowsAffected: 0 };
     }
 
+    // SELECT ... FROM rag_documents WHERE id = ?
+    if (/FROM rag_documents WHERE id = \?/i.test(s) && /^SELECT/i.test(s)) {
+      return { rows: tables.rag_documents.filter(d => d.id === params[0]).map(d => ({ ...d })), insertId: 0, rowsAffected: 0 };
+    }
     // SELECT ... FROM rag_documents WHERE project_id = ? ORDER BY created_at DESC
     if (/FROM rag_documents WHERE project_id/i.test(s) && /^SELECT/i.test(s)) {
       const projectId = params[0];

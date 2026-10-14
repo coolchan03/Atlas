@@ -75,6 +75,8 @@ export const ChatsListScreen: React.FC = () => {
   };
   const { projects, getProject } = useProjectStore();
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
+  // Folders the user closed while searching (search opens matching folders by itself).
+  const [searchCollapsedIds, setSearchCollapsedIds] = useState<string[]>([]);
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
@@ -106,9 +108,9 @@ export const ChatsListScreen: React.FC = () => {
     navigation.navigate('Chat', { conversationId: conversation.id });
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = (privateChat = false) => {
     useAgentStore.getState().setActiveAgent(null);
-    if (hasModels) navigation.navigate('Chat', {});
+    if (hasModels) navigation.navigate('Chat', privateChat ? { privateChat: true } : {});
     else setShowModelSelector(true);
   };
 
@@ -228,7 +230,7 @@ export const ChatsListScreen: React.FC = () => {
         message.content.toLocaleLowerCase().includes(query));
   }) : sortedConversations;
   const searchExpanded = new Set(expandedProjectIds);
-  if (query) for (const chat of matchingConversations) if (chat.projectId) searchExpanded.add(chat.projectId);
+  if (query) for (const chat of matchingConversations) if (chat.projectId && !searchCollapsedIds.includes(chat.projectId)) searchExpanded.add(chat.projectId);
   const chatRows = buildChatListRows(matchingConversations, projects, searchExpanded);
   const renderFolder = (row: Extract<ChatListRow, { kind: 'folder' }>) => {
     const open = searchExpanded.has(row.projectId);
@@ -241,6 +243,7 @@ export const ChatsListScreen: React.FC = () => {
             return;
           }
           setExpandedProjectIds(ids => open ? ids.filter(id => id !== row.projectId) : [...ids, row.projectId]);
+          if (query) setSearchCollapsedIds(ids => open ? [...ids, row.projectId] : ids.filter(id => id !== row.projectId));
         }}
         style={[styles.chatItem, { gap: SPACING.sm, borderWidth: 1, borderColor: colors.border }]}>
         <Icon name={row.locked ? 'lock' : 'folder'} size={21} color={colors.primary} />
@@ -265,9 +268,13 @@ export const ChatsListScreen: React.FC = () => {
           accessibilityHint="Long press to open or close locked chats">
           <Text style={styles.title}>{showArchived ? 'Archived chats' : vaultOpen && hideLocked ? 'Chats + vault' : 'Chats'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => { setSearchOpen(v => !v); setSearchText(''); }}
+        <TouchableOpacity onPress={() => { setSearchOpen(v => !v); setSearchText(''); setSearchCollapsedIds([]); }}
           accessibilityLabel={searchOpen ? 'Close chat search' : 'Search chats'} style={{ padding: 8 }}>
           <Icon name={searchOpen ? 'x' : 'search'} size={19} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleNewChat(true)} testID="new-private-chat"
+          accessibilityLabel="New private chat (not saved)" style={{ padding: 8 }}>
+          <Icon name="eye-off" size={19} color={colors.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
           <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
@@ -277,7 +284,7 @@ export const ChatsListScreen: React.FC = () => {
             title="New"
             variant="primary"
             size="small"
-            onPress={handleNewChat}
+            onPress={() => handleNewChat()}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
         </AttachStep>
@@ -309,7 +316,7 @@ export const ChatsListScreen: React.FC = () => {
             </Text>
           </AnimatedEntry>
           {hasModels && (
-            <AnimatedListItem index={3} staggerMs={60} trigger={focusTrigger} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
+            <AnimatedListItem index={3} staggerMs={60} trigger={focusTrigger} hapticType="impactLight" style={styles.emptyButton} onPress={() => handleNewChat()}>
               <Icon name="plus" size={18} color={colors.primary} />
               <Text style={styles.emptyButtonText}>New Chat</Text>
             </AnimatedListItem>

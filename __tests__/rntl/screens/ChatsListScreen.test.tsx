@@ -337,6 +337,14 @@ describe('ChatsListScreen', () => {
       });
     });
 
+    it('the eye-off button starts a private (not saved) chat', () => {
+      const model = createDownloadedModel();
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const { getByTestId } = render(<ChatsListScreen />);
+      fireEvent.press(getByTestId('new-private-chat'));
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
+    });
+
     it('sets active conversation when a conversation is pressed', () => {
       const conv = createConversation({ title: 'Activate Me' });
       useChatStore.setState({ conversations: [conv] });

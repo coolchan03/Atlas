@@ -102,9 +102,15 @@ export const ChatHeader: React.FC<{
         <Icon name="arrow-left" size={20} color={colors.text} />
       </TouchableOpacity>
       <View style={styles.headerLeft}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {activeConversation?.title || 'New Chat'}
-        </Text>
+        <View style={styles.headerSubtitleRow}>
+          {activeConversation?.isPrivate && (
+            <Icon name="eye-off" size={13} color={colors.textMuted} style={styles.remoteIcon}
+              accessibilityLabel="Private chat, not saved" testID="private-chat-indicator" />
+          )}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {activeConversation?.isPrivate ? 'Private chat (not saved)' : activeConversation?.title || 'New Chat'}
+          </Text>
+        </View>
         <View style={styles.headerSubtitleRow}>
           <TouchableOpacity style={styles.modelSelector} onPress={onOpenModels} testID="model-selector">
             {modelRuntimeState === 'loading' ? (
