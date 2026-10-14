@@ -147,6 +147,28 @@ jobs:
           cp /tmp/atlas-sdcpp/build-android-opencl/bin/sd-cli android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so
           strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so | grep -q 'GPUOpenCL'
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so | grep -q 'Shared library: \[libOpenCL.so\]'
+      - name: Prepare release signing key (optional)
+        env:
+          ATLAS_KEYSTORE_BASE64: ${{ secrets.ATLAS_KEYSTORE_BASE64 }}
+          ATLAS_KEYSTORE_PASSWORD: ${{ secrets.ATLAS_KEYSTORE_PASSWORD }}
+          ATLAS_KEY_ALIAS: ${{ secrets.ATLAS_KEY_ALIAS }}
+          ATLAS_KEY_PASSWORD: ${{ secrets.ATLAS_KEY_PASSWORD }}
+        run: |
+          # With all four secrets the APK is signed with the owner's key. Without
+          # them the build keeps the debug signing, so it never breaks.
+          if [ -n "$ATLAS_KEYSTORE_BASE64" ] && [ -n "$ATLAS_KEYSTORE_PASSWORD" ] && [ -n "$ATLAS_KEY_ALIAS" ] && [ -n "$ATLAS_KEY_PASSWORD" ]; then
+            printf '%s' "$ATLAS_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/atlas-release.jks"
+            test -s "$RUNNER_TEMP/atlas-release.jks"
+            echo "ATLAS_KEYSTORE_FILE=$RUNNER_TEMP/atlas-release.jks" >> "$GITHUB_ENV"
+            echo "ATLAS_KEYSTORE_PASSWORD=$ATLAS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ATLAS_KEY_ALIAS=$ATLAS_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ATLAS_KEY_PASSWORD=$ATLAS_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "ATLAS_SIGNING=release" >> "$GITHUB_ENV"
+            echo "Release signing key found."
+          else
+            echo "ATLAS_SIGNING=debug" >> "$GITHUB_ENV"
+            echo "No release signing secrets; using debug signing."
+          fi
       - name: Assemble Android release APK
         working-directory: android
         # llama.rn's own gradle.properties forces a from-source build, and without
@@ -177,6 +199,7 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -q "sdkVersion:'29'"
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose "$APK"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -i 'certificate DN' | head -1 | sed 's/^/Signed with: /'
           # This workflow only uploads an experimental APK; never create a public release here.
       - name: Upload Android diagnostics on failure
         if: failure()

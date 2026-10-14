@@ -96,11 +96,23 @@ android {
             keyPassword 'android'
         }
         release {
+            // Real release key: Gradle properties first, then the ATLAS_* environment
+            // variables that CI sets from GitHub secrets. With neither, storeFile stays
+            // unset and the release build falls back to debug signing (see buildTypes).
+            def atlasStore = System.getenv('ATLAS_KEYSTORE_FILE')
             if (project.hasProperty('OFFGRID_UPLOAD_STORE_FILE')) {
                 storeFile file(OFFGRID_UPLOAD_STORE_FILE)
                 storePassword OFFGRID_UPLOAD_STORE_PASSWORD
                 keyAlias OFFGRID_UPLOAD_KEY_ALIAS
                 keyPassword OFFGRID_UPLOAD_KEY_PASSWORD
+            } else if (atlasStore && file(atlasStore).exists()
+                    && System.getenv('ATLAS_KEYSTORE_PASSWORD')
+                    && System.getenv('ATLAS_KEY_ALIAS')
+                    && System.getenv('ATLAS_KEY_PASSWORD')) {
+                storeFile file(atlasStore)
+                storePassword System.getenv('ATLAS_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ATLAS_KEY_ALIAS')
+                keyPassword System.getenv('ATLAS_KEY_PASSWORD')
             }
         }
     }
