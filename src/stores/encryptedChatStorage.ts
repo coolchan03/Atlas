@@ -42,6 +42,7 @@ const placeholder = (conv: Conversation, blob: string): Conversation => ({
   projectId: conv.projectId,
   agentId: conv.agentId,
   isArchived: conv.isArchived,
+  isPinned: conv.isPinned,
   messages: [],
   pinVerifier: conv.pinVerifier,
   protectedBlob: blob,

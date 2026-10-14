@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useChatOptions } from '../components/ChatOptions';
+import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -167,13 +168,15 @@ export const ProjectChatsScreen: React.FC = () => {
 
   const { getProject } = useProjectStore();
   const { conversations, setActiveConversation, createConversation } = useChatStore();
+  const hideLocked = useChatPrefs(s => s.hideLockedChats);
+  const vaultOpen = useVaultSession(s => s.open);
   const { downloadedModels, activeModelId } = useAppStore();
 
   const project = getProject(projectId);
   const hasModels = downloadedModels.length > 0;
 
   // Get chats for this project
-  const projectChats = conversations
+  const projectChats = visibleConversations(conversations, hideLocked, vaultOpen)
     .filter((c) => c.projectId === projectId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
@@ -211,11 +214,11 @@ export const ProjectChatsScreen: React.FC = () => {
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.title}
+                {item.pinVerifier ? 'Locked conversation' : item.title}
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>

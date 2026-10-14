@@ -8,7 +8,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useChatOptions } from '../components/ChatOptions';
+import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -32,14 +33,17 @@ export const ProjectDetailScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
 
   const { getProject, deleteProject } = useProjectStore();
-  const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
+  const { conversations, setActiveConversation, createConversation } = useChatStore();
+  const hideLocked = useChatPrefs(s => s.hideLockedChats);
+  const vaultOpen = useVaultSession(s => s.open);
+  const chatOptions = useChatOptions();
   const { downloadedModels, activeModelId } = useAppStore();
 
   const project = getProject(projectId);
   const hasModels = downloadedModels.length > 0;
 
   // Get chats for this project
-  const projectChats = conversations
+  const projectChats = visibleConversations(conversations, hideLocked, vaultOpen)
     .filter((c) => c.projectId === projectId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
@@ -82,21 +86,6 @@ export const ProjectDetailScreen: React.FC = () => {
     ));
   };
 
-  const handleDeleteChat = (conversation: Conversation) => {
-    setAlertState(showAlert(
-      'Delete Chat',
-      `Delete "${conversation.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteConversation(conversation.id),
-        },
-      ]
-    ));
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -112,27 +101,14 @@ export const ProjectDetailScreen: React.FC = () => {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const renderChatRightActions = (conversation: Conversation) => (
-    <TouchableOpacity
-      style={styles.deleteAction}
-      onPress={() => handleDeleteChat(conversation)}
-    >
-      <Icon name="trash-2" size={16} color={colors.error} />
-    </TouchableOpacity>
-  );
-
   const renderChat = ({ item }: { item: Conversation }) => {
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <Swipeable
-        renderRightActions={() => renderChatRightActions(item)}
-        overshootRight={false}
-        containerStyle={styles.swipeableContainer}
-      >
         <TouchableOpacity
           style={styles.chatItem}
           onPress={() => handleChatPress(item)}
+          onLongPress={() => chatOptions.open(item)}
         >
           <View style={styles.chatIcon}>
             <Icon name="message-circle" size={14} color={colors.textMuted} />
@@ -152,7 +128,6 @@ export const ProjectDetailScreen: React.FC = () => {
           </View>
           <Icon name="chevron-right" size={14} color={colors.textMuted} />
         </TouchableOpacity>
-      </Swipeable>
     );
   };
 
@@ -285,6 +260,7 @@ export const ProjectDetailScreen: React.FC = () => {
         />
       </View>
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
+      {chatOptions.element}
     </SafeAreaView >
   );
 };

@@ -145,6 +145,7 @@ jest.mock('react-native-safe-area-context', () => ({
     const { View } = require('react-native');
     return <View {...props}>{children}</View>;
   },
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 jest.mock('react-native-vector-icons/Feather', () => {
@@ -475,38 +476,6 @@ describe('ProjectDetailScreen', () => {
   // ============================================================================
   // Delete Chat
   // ============================================================================
-  describe('delete chat', () => {
-    it('shows confirmation alert when delete swipe action is pressed', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Delete Me Chat', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
-      // The trash icon renders as "trash-2" text from our Icon mock
-      fireEvent.press(getByText('trash-2'));
-
-      expect(queryByTestId('custom-alert')).toBeTruthy();
-      expect(queryByTestId('alert-title')?.props.children).toBe('Delete Chat');
-    });
-
-    it('deletes conversation when confirmed', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Delete Me', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('trash-2'));
-      fireEvent.press(getByTestId('alert-button-Delete'));
-
-      expect(mockDeleteConversation).toHaveBeenCalledWith('conv1');
-    });
-  });
 
   // ============================================================================
   // Project Not Found

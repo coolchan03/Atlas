@@ -1,11 +1,11 @@
 /* eslint-disable react-native/no-inline-styles, max-params -- Legacy dialog styles and compact action helper use dynamic theme tokens. */
 /**
  * One long-press menu for a chat, shared by every chat list (Home recents, Chats tab,
- * project chats): rename, set/remove PIN, archive, delete. Lists call `open(chat)` and
+ * project chats, an open chat): rename, pin, share, set/remove PIN, archive, delete. Lists call `open(chat)` and
  * render `element` once; the dialogs live here so every list offers the same options.
  */
 import React, { useRef, useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
@@ -14,6 +14,7 @@ import { useChatStore, useAppStore } from '../stores';
 import { protectChat, permanentlyUnprotectChat } from '../stores/encryptedChatStorage';
 import { onnxImageGeneratorService } from '../services';
 import type { Conversation } from '../types';
+import { conversationToText, hasShareableTurns } from '../utils/chatExport';
 
 /** Deletes a chat and the images generated in it. */
 export function deleteChatAndImages(conversationId: string): void {
@@ -22,7 +23,8 @@ export function deleteChatAndImages(conversationId: string): void {
   useChatStore.getState().deleteConversation(conversationId);
 }
 
-export function useChatOptions(): { open: (c: Conversation) => void; confirmDelete: (c: Conversation) => void; element: React.ReactElement } {
+/** `onDeleted` runs after a chat is deleted (an open chat uses it to leave the screen). */
+export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => void }): { open: (c: Conversation) => void; confirmDelete: (c: Conversation) => void; element: React.ReactElement } {
   const { colors } = useTheme();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
@@ -38,9 +40,6 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
   const [newPin, setNewPin] = useState('');
   const [newPin2, setNewPin2] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
-  // CustomAlert closes itself after any button press, so a follow-up dialog opened from a
-  // button would be closed at once. Queue it here and show it from onClose instead.
-  const nextAlert = useRef<AlertState | null>(null);
 
   const closePin = () => { setPinTarget(null); setNewPin(''); setNewPin2(''); };
   const savePin = async () => {
@@ -62,7 +61,7 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
       `Delete "${conversation.pinVerifier ? 'Locked conversation' : conversation.title}"? This will also delete all images generated in this chat.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteChatAndImages(conversation.id) },
+        { text: 'Delete', style: 'destructive', onPress: () => { deleteChatAndImages(conversation.id); opts?.onDeleted?.(conversation.id); } },
       ],
     ));
   const confirmDelete = (conversation: Conversation) => setAlertState(deleteAlert(conversation));
@@ -97,6 +96,9 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
               useChatStore.getState().setConversationPinned(menuTarget.id, !menuTarget.isPinned);
               finishMenu();
             })}
+            {hasShareableTurns(menuTarget) && menuAction('share-2', 'Share as text', () => finishMenu(() => {
+              Share.share({ title: menuTarget.title, message: conversationToText(menuTarget) }).catch(() => undefined);
+            }))}
             {menuAction(menuTarget.pinVerifier ? 'unlock' : 'lock',
               menuTarget.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', () => finishMenu(() => {
                 setPinAction(menuTarget.pinVerifier ? 'remove' : 'set');
@@ -143,7 +145,7 @@ export function useChatOptions(): { open: (c: Conversation) => void; confirmDele
         title={alertState.title}
         message={alertState.message}
         buttons={alertState.buttons}
-        onClose={() => { const next = nextAlert.current; nextAlert.current = null; setAlertState(next ?? hideAlert()); }}
+        onClose={() => setAlertState(hideAlert())}
       />
     </>
   );

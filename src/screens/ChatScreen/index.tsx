@@ -49,7 +49,8 @@ export const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
-  const chatOptions = useChatOptions();
+  // Deleting the open chat from its header menu leaves the screen instead of showing a deleted chat.
+  const chatOptions = useChatOptions({ onDeleted: () => { if (rootNavigation.canGoBack()) rootNavigation.goBack(); } });
   const { goTo, current } = useSpotlightTour();
 
   // Collapsed Models control (shared with home): header "Models" → manager sheet.
@@ -295,7 +296,7 @@ export const ChatScreen: React.FC = () => {
       onRetry={chat.handleRetryMessage}
       onEdit={chat.handleEditMessage}
       onDelete={chat.handleDeleteMessage}
-      onSaveToProject={chat.activeProject && !chat.activeProject.pinVerifier ? chat.handleSaveReportToProject : undefined}
+      onSaveToProject={chat.activeProject && !chat.activeProject.pinVerifier && !chat.activeConversation?.pinVerifier && !chat.activeConversation?.isPrivate ? chat.handleSaveReportToProject : undefined}
       onGenerateImage={chat.handleGenerateImageFromMessage}
       onImagePress={chat.handleImagePress}
     />
