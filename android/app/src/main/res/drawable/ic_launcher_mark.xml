@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Atlas mark: a two-tone navigation arrow (the "A") with an AI sparkle. Same geometry as the
+     legacy PNGs; keep inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFC86B" android:pathData="M54,30L34,77L54,66.5Z" />
+    <path android:fillColor="#FFF08A24" android:pathData="M54,30L74,77L54,66.5Z" />
+    <path android:fillColor="#FFFFF4DC"
+        android:pathData="M72,29L73.32,33.68L78,35L73.32,36.32L72,41L70.68,36.32L66,35L70.68,33.68Z" />
+</vector>
