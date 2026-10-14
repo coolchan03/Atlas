@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, NativeModules, Platform } from 'react-native';
 import type { Project } from '../types';
+import { protectedVault } from './protectedProjectVault';
+import logger from '../utils/logger';
 
-/** Selective encryption of project metadata only. The knowledge-base importer
- * refuses additions to protected projects until RAG document vaulting exists.
- * Protecting projects with existing documents, chats or study outputs is
- * intentionally rejected; otherwise the UI would promise false security. */
+/** Selective encryption of a project's metadata and its documents. Document text, names and
+ * embeddings live in an encrypted per-project vault (protectedProjectVault), never in rag.db.
+ * Protecting projects with existing chats or study outputs is intentionally rejected;
+ * otherwise the UI would promise false security. */
 const KEY = 'local-llm-project-storage';
 const pins = new Map<string, string>();
 const blobs = new Map<string, string>();
@@ -71,6 +73,10 @@ async function writeReplacement(id: string, project: Project): Promise<void> {
 export function isProtectedProjectUnlocked(id: string): boolean {
   return pins.has(id);
 }
+/** The PIN of an unlocked project, kept in memory only. For the document vault. */
+export function unlockedProjectPin(id: string): string | undefined {
+  return pins.get(id);
+}
 export async function protectProject(id: string, pin: string): Promise<void> {
   const { useProjectStore } = require('./projectStore');
   const { useChatStore } = require('./chatStore');
@@ -83,17 +89,25 @@ export async function protectProject(id: string, pin: string): Promise<void> {
       (useStudyStore.getState().saved[id] || []).length) {
     throw new Error('Move or remove associated chats and study outputs first. They are not yet part of the protected project vault.');
   }
-  const docs = await ragService.getDocumentsByProject(id);
-  if (docs.length) throw new Error('Knowledge-base documents cannot yet be encrypted safely. Remove them before protecting this project.');
   const api = native();
   const verifier = await api.createChatPinVerifier(pin);
   const plain = JSON.stringify(clearSecurity(project));
   const blob = await api.encryptProtectedItem('project', id, plain, pin, verifier);
   if (await api.decryptProtectedItem('project', id, blob, pin, verifier) !== plain) throw new Error('Project encryption verification failed.');
+  // Existing documents move into the encrypted vault first; the plain index is erased only after
+  // the vault is written, read back and the project record is saved as locked.
+  const docs = await ragService.exportProjectDocuments(id);
+  if (docs.length) await protectedVault.seal(id, pin, verifier, docs);
   const locked = stub({ ...project, pinVerifier: verifier }, blob);
-  await writeReplacement(id, locked);
+  try {
+    await writeReplacement(id, locked);
+  } catch (e) {
+    await protectedVault.destroy(id, pin, verifier);
+    throw e;
+  }
   blobs.set(id, blob); pins.delete(id); lastEncrypted.delete(id);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((p: Project) => p.id === id ? locked : p) }));
+  await ragService.eraseProjectDocumentsFromIndex(id);
 }
 async function decryptProject(p: Project, pin: string): Promise<Project> {
   if (!p.pinVerifier || !p.protectedBlob) throw new Error('Project is not protected.');
@@ -110,6 +124,8 @@ export async function unlockProject(id: string, pin: string): Promise<void> {
   if (!p) throw new Error('Project not found.');
   const original = await decryptProject(p, pin);
   pins.set(id, pin); lastEncrypted.set(id, JSON.stringify(clearSecurity(original)));
+  try { await protectedVault.open(id, pin, p.pinVerifier!); }
+  catch (e) { logger.error('[ProtectedProject] documents could not be opened', e); } // the project still opens; its documents stay hidden
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((x: Project) => x.id === id
     ? { ...original, pinVerifier: p.pinVerifier, protectedBlob: p.protectedBlob } : x) }));
 }
@@ -119,7 +135,11 @@ export async function permanentlyUnprotectProject(id: string, pin: string): Prom
   const p: Project | undefined = useProjectStore.getState().projects.find((x: Project) => x.id === id);
   if (!p || !p.pinVerifier) throw new Error('Project is not protected.');
   const decrypted = await decryptProject(p, pin);
+  const { ragService } = require('../services/rag');
+  const docs = await protectedVault.readAll(id, pin, p.pinVerifier);
+  await ragService.importProjectDocuments(id, docs); // back into the plain index, before the project is opened up
   await writeReplacement(id, clearSecurity(decrypted));
+  await protectedVault.destroy(id, pin, p.pinVerifier);
   pins.delete(id); blobs.delete(id); lastEncrypted.delete(id);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((x: Project) => x.id === id ? decrypted : x) }));
   await native().removeProtectedItemKey('project', id, pin, p.pinVerifier);
@@ -130,6 +150,7 @@ export async function relockProjects(): Promise<void> {
   const projects = useProjectStore.getState().projects;
   await protectedProjectStorage.setItem(KEY, JSON.stringify({ state: { projects }, version: 0 }));
   pins.clear(); lastEncrypted.clear();
+  protectedVault.closeAll();
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((p: Project) => p.pinVerifier
     ? stub(p, blobs.get(p.id) || p.protectedBlob || '') : p) }));
 }

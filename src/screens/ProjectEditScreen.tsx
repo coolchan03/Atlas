@@ -183,7 +183,7 @@ export const ProjectEditScreen: React.FC = () => {
 
           {existingProject && <View style={{ marginTop: 20, gap: 8 }}>
             <Text style={styles.label}>Project encryption</Text>
-            <Text style={styles.hint}>Opt-in only. Protects this project's settings and notes with its own Android Keystore key. Projects with documents, chats or saved study outputs cannot yet be protected because those sources are stored separately.</Text>
+            <Text style={styles.hint}>Opt-in only. Encrypts this project's settings, notes and documents (text and search index) with its own Android Keystore key and your PIN. Chats and saved study results stay outside the lock, so a project with chats or saved study results cannot be protected, and Study, research and chats are off for protected projects.</Text>
             <TouchableOpacity onPress={() => { setProtectAction(existingProject.pinVerifier ? 'unprotect' : 'protect'); setProtectPin(''); }} style={{ padding: 13, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
               <Text style={{ color: colors.text, fontWeight: '600' }}>{existingProject.pinVerifier ? 'Permanently remove project protection' : 'Encrypt project settings with a PIN'}</Text>
             </TouchableOpacity>

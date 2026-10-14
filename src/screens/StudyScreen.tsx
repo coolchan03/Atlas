@@ -102,7 +102,15 @@ export const StudyScreen: React.FC = () => {
   /** Rough speaking time of a text in seconds (about 155 words a minute at normal speed). */
   const secs = (t: string) => Math.max(1.5, (t.split(/\s+/).filter(Boolean).length / 2.6) / (rate || 1) + 0.4);
 
+  /** Study results are saved with the app's ordinary data, outside a protected project's vault. */
+  const blockedByProtection = (): boolean => {
+    if (!project?.pinVerifier) return false;
+    Alert.alert('Protected project', 'Study results are saved outside the PIN lock, so they cannot be made for a protected project. Permanently remove its protection first, or use a different project.');
+    return true;
+  };
+
   const makeEpisode = async () => {
+    if (blockedByProtection()) return;
     setPodOpen(false);
     setBusy('Podcast');
     keepScreenOn(true); // long job: don't let the phone sleep and pause it
@@ -117,6 +125,7 @@ export const StudyScreen: React.FC = () => {
   };
 
   const runGame = async (type: GameType) => {
+    if (blockedByProtection()) return;
     const label = PROJECT_GAMES.find((g) => g.type === type)?.label || 'Game';
     setBusy(label);
     keepScreenOn(true);
@@ -132,6 +141,7 @@ export const StudyScreen: React.FC = () => {
   };
 
   const run = async (kind: StudyResult['kind']) => {
+    if (blockedByProtection()) return;
     if (kind === 'podcast') { setPod((p) => ({ ...p, prompt: p.prompt || topic })); setPodOpen(true); return; }
     if (kind === 'answer' && !topic.trim()) { Alert.alert('Type a question first'); return; }
     setBusy(kind === 'answer' ? 'Answering' : KINDS.find((k) => k.kind === kind)?.label || kind);

@@ -12,7 +12,7 @@ export async function saveReportToProject(
 ): Promise<string> {
   const project = useProjectStore.getState().getProject(projectId);
   if (!project) throw new Error('The project no longer exists.');
-  if (project.pinVerifier) throw new Error('This project is encrypted. Its document index does not yet support encryption.');
+  if (project.pinVerifier) throw new Error('Reports cannot be saved into a PIN-protected project: the report would be written as a plain file first.');
   // The document index is plain text: a PIN-locked or private chat must never be copied into it.
   const chat = useChatStore.getState().conversations.find(c => c.id === conversationId);
   if (chat?.pinVerifier) throw new Error('This chat is PIN-locked. Saving it to the project would store it unencrypted.');

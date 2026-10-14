@@ -368,7 +368,7 @@ export interface Project {
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;
-  /** Encrypted project metadata. Knowledge-base documents cannot yet be sealed. */
+  /** Encrypted project metadata. Its knowledge-base documents live in an encrypted vault file (protectedProjectVault). */
   protectedBlob?: string;
   /** Optional project-level permission flags; omitted means ask before suggesting or generating. */
   allowLearningActivities?: boolean;

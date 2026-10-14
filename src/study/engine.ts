@@ -5,7 +5,7 @@
  */
 import { ragService } from '../services/rag';
 import { runBackgroundJob } from '../services/llmJobQueue';
-import { ragDatabase } from '../services/rag/database';
+import { knowledgeSource } from '../services/rag/knowledgeSource';
 import { ensureTextModel } from '../atlasTools/models';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -81,7 +81,7 @@ export async function gatherSources(projectId: string, topic: string, share = 1)
     raw = (r?.chunks || []).slice(0, 8);
   }
   if (raw.length < 4) {
-    const all = ragDatabase.getChunksByProject(projectId, 3000) as any[];
+    const all = knowledgeSource(projectId).getChunksByProject(projectId, 3000) as any[];
     // Even spread: every document gets a share, evenly spaced through it.
     const byDoc = new Map<string, any[]>();
     all.forEach((c) => { if (!byDoc.has(c.name)) byDoc.set(c.name, []); byDoc.get(c.name)!.push(c); });

@@ -12,7 +12,7 @@ export async function buildOfflineProjectResearch(
   if (!opts.projectId) throw new Error('Offline Deep Research needs a project with indexed documents. Add documents to a project first.');
   const project = useProjectStore.getState().getProject(opts.projectId);
   if (!project) throw new Error('This project no longer exists.');
-  if (project.pinVerifier) throw new Error('Offline research is unavailable for PIN-protected projects until document indexing supports encryption.');
+  if (project.pinVerifier) throw new Error('Offline research is unavailable for PIN-protected projects: its answer would be saved in a chat outside the project lock.');
   opts.onStatus?.('Searching project documents (offline)…');
   const docs = await ragService.getDocumentsByProject(opts.projectId);
   check();

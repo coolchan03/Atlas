@@ -1,4 +1,5 @@
-import { ragDatabase, RagSearchResult } from './database';
+import { RagSearchResult } from './database';
+import { knowledgeSource } from './knowledgeSource';
 import { embeddingService } from './embedding';
 import { cosineSimilarity } from './vectorMath';
 import logger from '../../utils/logger';
@@ -29,11 +30,12 @@ class RetrievalService {
   private async searchSemantic(projectId: string, query: string, topK: number): Promise<RagSearchResult[]> {
     if (!query.trim()) return [];
 
-    const stored = ragDatabase.getEmbeddingsByProject(projectId);
+    const source = knowledgeSource(projectId);
+    const stored = source.getEmbeddingsByProject(projectId);
     if (stored.length === 0) {
       // Fallback: return first chunks if no embeddings exist yet
       logger.log('[Retrieval] No embeddings found, returning first chunks as fallback');
-      return ragDatabase.getChunksByProject(projectId, topK);
+      return source.getChunksByProject(projectId, topK);
     }
 
     if (!embeddingService.isLoaded()) {
@@ -41,7 +43,7 @@ class RetrievalService {
         await embeddingService.load();
       } catch (err) {
         logger.error('[Retrieval] Failed to load embedding model, falling back', err);
-        return ragDatabase.getChunksByProject(projectId, topK);
+        return source.getChunksByProject(projectId, topK);
       }
     }
 
@@ -50,7 +52,7 @@ class RetrievalService {
       queryVec = await embeddingService.embed(query);
     } catch (err) {
       logger.error('[Retrieval] Failed to embed query, falling back', err);
-      return ragDatabase.getChunksByProject(projectId, topK);
+      return source.getChunksByProject(projectId, topK);
     }
 
     const scored = stored.map(entry => ({

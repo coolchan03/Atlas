@@ -19,7 +19,12 @@ jest.mock('../../../src/stores/projectStore', () => ({
 }));
 jest.mock('../../../src/stores/chatStore', () => ({ useChatStore: { getState: () => fakeChats } }));
 jest.mock('../../../src/study/engine', () => ({ useStudyStore: { getState: () => fakeStudy } }));
-jest.mock('../../../src/services/rag', () => ({ ragService: { getDocumentsByProject: (...args: any[]) => mockDocuments(...args) } }));
+jest.mock('../../../src/services/rag', () => ({ ragService: {
+  getDocumentsByProject: (...args: any[]) => mockDocuments(...args),
+  exportProjectDocuments: async () => [],
+  eraseProjectDocumentsFromIndex: async () => undefined,
+  importProjectDocuments: async () => undefined,
+} }));
 const KEY = 'local-llm-project-storage';
 const project = (id: string) => ({ id, name: 'My secret writing project', description: 'Story background', systemPrompt: 'Private story notes',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
@@ -74,13 +79,6 @@ describe('selective protection for metadata-only projects', () => {
     expect(fakeProjects.projects[1].pinVerifier).toBeUndefined();
     expect(disk.get(KEY)).toContain('Private story notes');
     expect((NativeModules as any).AtlasDevice.removeProtectedItemKey).toHaveBeenCalled();
-  });
-  it('refuses to claim projects with unencrypted knowledge-base documents are protected', async () => {
-    fakeProjects.projects = [project('secret')];
-    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
-    mockDocuments.mockResolvedValueOnce([{ id: 1 }]);
-    await expect(protectProject('secret', '123456')).rejects.toThrow(/cannot yet be encrypted/);
-    expect(disk.get(KEY)).toContain('Private story notes');
   });
   it('refuses projects with associated chats or saved study outputs', async () => {
     fakeProjects.projects = [project('secret')];

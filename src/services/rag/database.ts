@@ -154,6 +154,16 @@ class RagDatabase {
     }));
   }
 
+  /** Embeddings of one document, keyed by the chunk row they belong to. */
+  getEmbeddingsByDocument(docId: number): { chunk_rowid: number; embedding: number[] }[] {
+    const db = this.getDb();
+    const result = db.executeSync('SELECT chunk_rowid, embedding FROM rag_embeddings WHERE doc_id = ?', [docId]);
+    return ((result.rows ?? []) as unknown as any[]).map(row => ({
+      chunk_rowid: row.chunk_rowid,
+      embedding: this.blobToEmbedding(row.embedding),
+    }));
+  }
+
   hasEmbeddingsForDocument(docId: number): boolean {
     const db = this.getDb();
     const result = db.executeSync(

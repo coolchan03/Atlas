@@ -5,10 +5,18 @@ import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
+import { protectedVault, isVaultDocId, newVaultDocId, type VaultDoc } from '../../stores/protectedProjectVault';
+import { isProtectedProject } from './knowledgeSource';
 
 /** Files Atlas wrote itself (saved research reports) go when their document is removed;
  *  documents the user imported from elsewhere are left alone. */
 export const APP_OWNED_DOC_DIR = 'atlas-research-reports';
+/** A protected project keeps only encrypted text: drop the plain copy Atlas made of the file. */
+async function removeOwnCopy(path: string | undefined): Promise<void> {
+  if (!path) return;
+  const own = [RNFS.DocumentDirectoryPath, RNFS.CachesDirectoryPath].some(root => root && path.startsWith(`${root}/`));
+  if (own) await RNFS.unlink(path).catch(() => undefined);
+}
 async function removeAppOwnedCopy(path: string | undefined): Promise<void> {
   if (!path || !path.startsWith(`${RNFS.DocumentDirectoryPath}/${APP_OWNED_DOC_DIR}/`)) return;
   await RNFS.unlink(path).catch(() => undefined);
@@ -41,12 +49,12 @@ class RagService {
 
   async indexDocument(params: IndexDocumentParams): Promise<number> {
     const { projectId, filePath, fileName, fileSize, onProgress } = params;
-    const project = require('../../stores/projectStore').useProjectStore.getState().getProject(projectId);
-    if (project?.pinVerifier) throw new Error('Project is protected. Document imports are disabled until its knowledge base can also be encrypted. Permanently unprotect it first.');
+    const isProtected = isProtectedProject(projectId);
     await this.ensureReady();
 
     // Prevent duplicate indexing of the same file
-    const existing = ragDatabase.getDocumentsByProject(projectId);
+    const existing = isProtected ? protectedVault.list(projectId) : ragDatabase.getDocumentsByProject(projectId);
+    if (isProtected && !protectedVault.isOpen(projectId)) throw new Error('Unlock this project to add documents.');
     if (existing.some(d => d.path === filePath || d.name === fileName)) {
       throw new Error(`Document "${fileName}" is already in the knowledge base`);
     }
@@ -70,6 +78,21 @@ class RagService {
     const chunks = chunkDocument(attachment.textContent);
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
+    }
+
+    if (isProtected) {
+      // Protected project: chunks and embeddings go only into the encrypted vault, never rag.db.
+      onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
+      await embeddingService.load();
+      const embeddings = await embeddingService.embedBatch(chunks.map(c => c.content));
+      onProgress?.({ stage: 'indexing', message: 'Encrypting...' });
+      const id = await protectedVault.addDocument(projectId, {
+        name: fileName, path: filePath, size: fileSize,
+        chunks: chunks.map((c, i) => ({ content: c.content, position: c.position, embedding: embeddings[i] })),
+      });
+      await removeOwnCopy(filePath);
+      onProgress?.({ stage: 'done', message: 'Done' });
+      return id;
     }
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
@@ -134,18 +157,26 @@ class RagService {
   }
 
   async deleteDocument(docId: number): Promise<void> {
+    if (isVaultDocId(docId)) {
+      const gone = await protectedVault.remove(docId);
+      await removeAppOwnedCopy(gone?.path);
+      return;
+    }
     await this.ensureReady();
     const doc = ragDatabase.getDocumentById(docId);
     ragDatabase.deleteDocument(docId);
     if (doc) await removeAppOwnedCopy(doc.path);
   }
 
+  /** Protected projects list their documents only while unlocked. */
   async getDocumentsByProject(projectId: string) {
+    if (isProtectedProject(projectId)) return protectedVault.list(projectId);
     await this.ensureReady();
     return ragDatabase.getDocumentsByProject(projectId);
   }
 
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
+    if (isVaultDocId(docId)) { await protectedVault.setEnabled(docId, enabled); return; }
     await this.ensureReady();
     ragDatabase.toggleEnabled(docId, enabled);
   }
@@ -160,9 +191,50 @@ class RagService {
 
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
+    if (isProtectedProject(projectId)) {
+      const { useProjectStore } = require('../../stores/projectStore');
+      const { unlockedProjectPin } = require('../../stores/protectedProjectStorage');
+      const verifier: string | undefined = useProjectStore.getState().getProject(projectId)?.pinVerifier;
+      for (const doc of protectedVault.list(projectId)) await removeAppOwnedCopy(doc.path);
+      await protectedVault.destroy(projectId, unlockedProjectPin(projectId), verifier);
+    }
     const docs = ragDatabase.getDocumentsByProject(projectId);
     ragDatabase.deleteDocumentsByProject(projectId);
     for (const doc of docs) await removeAppOwnedCopy(doc.path);
+  }
+
+  /** Moves a project's rag.db documents into encrypted form (protecting a project that has some). */
+  async exportProjectDocuments(projectId: string): Promise<VaultDoc[]> {
+    await this.ensureReady();
+    return ragDatabase.getDocumentsByProject(projectId).map(d => {
+      const chunks = ragDatabase.getChunksByDocument(d.id);
+      const vectors = new Map(ragDatabase.getEmbeddingsByDocument(d.id).map(e => [e.chunk_rowid, e.embedding]));
+      return {
+        id: newVaultDocId(), name: d.name, path: d.path, size: d.size, createdAt: d.created_at, enabled: d.enabled,
+        chunks: chunks.map(c => ({ content: c.content, position: c.position, embedding: vectors.get(c.id) ?? [] })),
+      };
+    });
+  }
+
+  /** Erases a project's plain rag.db copies once the encrypted copy is safely written. */
+  async eraseProjectDocumentsFromIndex(projectId: string): Promise<void> {
+    await this.ensureReady();
+    const docs = ragDatabase.getDocumentsByProject(projectId);
+    ragDatabase.deleteDocumentsByProject(projectId);
+    for (const doc of docs) await removeOwnCopy(doc.path);
+  }
+
+  /** The reverse: puts decrypted documents back into rag.db (removing protection). */
+  async importProjectDocuments(projectId: string, docs: VaultDoc[]): Promise<void> {
+    await this.ensureReady();
+    ragDatabase.deleteDocumentsByProject(projectId);
+    for (const d of docs) {
+      const id = ragDatabase.insertDocument({ projectId, name: d.name, path: d.path, size: d.size });
+      const rows = ragDatabase.insertChunks(id, d.chunks.map(c => ({ content: c.content, position: c.position })) as any);
+      const withVectors = rows.flatMap((rowId, i) => (d.chunks[i].embedding.length ? [{ chunkRowid: rowId, docId: id, embedding: d.chunks[i].embedding }] : []));
+      if (withVectors.length) ragDatabase.insertEmbeddingsBatch(withVectors);
+      if (!d.enabled) ragDatabase.toggleEnabled(id, false);
+    }
   }
 }
 
