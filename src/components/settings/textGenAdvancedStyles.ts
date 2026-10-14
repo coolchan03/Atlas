@@ -27,6 +27,7 @@ export const createTextGenAdvancedStyles = (colors: ThemeColors) => ({
   },
   buttons: {
     flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: SPACING.sm,
   },
   button: {

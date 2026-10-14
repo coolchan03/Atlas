@@ -88,35 +88,25 @@ const IOS_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.METAL, label: 'Metal', desc: 'Offload layers to GPU via Metal. Faster for larger models. Requires model reload.' },
 ];
 
+// Automatic is the recommended choice; the others force one engine (each falls back to CPU
+// with a visible reason if it cannot load the model).
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
-  { id: INFERENCE_BACKENDS.AUTO, label: 'Automatic', desc: 'Atlas tests the compatible NPU, OpenCL and Vulkan engines for each model. No manual GPU selection is needed.' },
-  { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Troubleshooting option: run locally without hardware acceleration. Can be considerably slower.' },
-];
-
-// GPU-specific controls remain accessible only in developer builds for native
-// diagnostic regression tests. Release users have one Auto choice, not GPU APIs.
-const ANDROID_DEVELOPER_BACKENDS: BackendOption[] = [
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL (Dev)', desc: 'Test the OpenCL path without automatic selection.' },
-  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Dev)', desc: 'Test the native Vulkan path without automatic selection.' },
+  { id: INFERENCE_BACKENDS.AUTO, label: 'Automatic', desc: 'Recommended. Atlas tries the NPU, then the OpenCL GPU, then the Vulkan GPU, then the CPU for each model.' },
+  { id: INFERENCE_BACKENDS.HTP, label: 'NPU', desc: 'Force the Snapdragon NPU. Needs a Q4_0 or Q8_0 text model; other formats are refused.' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Force the OpenCL GPU (Adreno). Keeps tools and pictures.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan', desc: 'Force the Vulkan GPU (also Mali and other GPUs). No tools or pictures yet.' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Run without hardware acceleration. Always works, can be considerably slower.' },
 ];
 
 export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
   const { gpuLayersEffective } = useTextGenerationAdvanced();
-  // Older saved Vulkan/OpenCL/HTP selections are replaced by the single Auto choice.
-  useEffect(() => {
-    if (isAndroid && !__DEV__ && ![INFERENCE_BACKENDS.AUTO, INFERENCE_BACKENDS.CPU].includes(settings.inferenceBackend)) {
-      updateSettings({ inferenceBackend: INFERENCE_BACKENDS.AUTO, backendUserChosen: false });
-    }
-  }, [settings.inferenceBackend, updateSettings]);
-
-  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS
-    : (__DEV__ ? [...ANDROID_BASE_BACKENDS, ...ANDROID_DEVELOPER_BACKENDS] : ANDROID_BASE_BACKENDS);
+  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : ANDROID_BASE_BACKENDS;
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const savedBackend = settings.inferenceBackend ?? defaultBackend;
-  const current = isAndroid && !__DEV__ && savedBackend !== INFERENCE_BACKENDS.CPU ? INFERENCE_BACKENDS.AUTO : savedBackend;
+  const current = savedBackend;
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
   const layersLabel = current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'Accelerator Layer Limit';
 
