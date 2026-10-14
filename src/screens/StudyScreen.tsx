@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Linking, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Linking, ScrollView, Share, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -7,6 +7,7 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
+import { safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';
 import { ProjectGame } from '../components/games/ProjectGame';
 import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
@@ -19,6 +20,7 @@ import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExpor
 
 const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: string }[] = [
   { kind: 'guide', label: 'Study guide', icon: 'book', desc: 'Summary, key ideas, terms' },
+  { kind: 'formulas', label: 'Formula sheet', icon: 'percent', desc: 'Formulas, rules and numbers on one page' },
   { kind: 'cards', label: 'Flashcards', icon: 'layers', desc: 'Tap to flip' },
   { kind: 'quiz', label: 'Quiz', icon: 'check-square', desc: 'Multiple choice' },
   { kind: 'crossword', label: 'Crossword', icon: 'grid', desc: 'Terms and clues from project sources' },
@@ -202,6 +204,16 @@ export const StudyScreen: React.FC = () => {
     void saveVideo(title, slides);
   };
   const stageText = (p: VideoProgress) => (p.stage === 'voice' ? 'Recording the voice' : p.stage === 'audio' ? 'Encoding the sound' : 'Drawing the slides');
+  const textHeading = (r: StudyResult) => r.title || `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`;
+  const shareText = async (r: StudyResult) => {
+    try { await Share.share({ title: textHeading(r), message: studyMarkdown(r, textHeading(r)) }); } catch { /* closed */ }
+  };
+  const saveText = async (r: StudyResult) => {
+    try {
+      const name = await saveMarkdown(safeFileName(textHeading(r), 'md'), studyMarkdown(r, textHeading(r)));
+      if (name) Alert.alert('Saved', name);
+    } catch (e: any) { Alert.alert('Could not save the file', String(e?.message || e)); }
+  };
   const openSource = (s: Source) => setSrc(s);
   const card = { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 10 };
 
@@ -240,6 +252,14 @@ export const StudyScreen: React.FC = () => {
             <View style={card}>
               <MarkdownText>{v.text}</MarkdownText>
               <SourceChips nums={[...new Set([...v.text.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))]} sources={v.sources} onOpen={openSource} colors={colors} />
+              <View style={{ flexDirection: 'row', marginTop: 12 }}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => { void shareText(v); }} style={{ marginRight: 22 }}>
+                  <Text style={{ color: colors.primary, fontSize: 14 }}>Share</Text>
+                </TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" onPress={() => { void saveText(v); }}>
+                  <Text style={{ color: colors.primary, fontSize: 14 }}>Save as file (Markdown)</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           {v.kind !== 'game' && (v.crossword || v.wordSearch || v.learningTerms) && <ProjectLearningGame key={v.createdAt} activity={v} onOpenSource={openSource} />}

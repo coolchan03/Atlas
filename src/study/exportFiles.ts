@@ -1,0 +1,50 @@
+/**
+ * Saving study material outside the app: a study guide or formula sheet as a Markdown file, and
+ * slides as a PowerPoint file. The phone's own "save to" picker chooses the folder (Downloads and
+ * so on), so nothing is uploaded anywhere.
+ */
+import RNFS from 'react-native-fs';
+import { isErrorWithCode, errorCodes, saveDocuments } from '@react-native-documents/picker';
+import type { Source, StudyResult } from './engine';
+
+export const MIME_MARKDOWN = 'text/markdown';
+export const MIME_PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+/** A file name that is safe on every file system and short enough to read. */
+export function safeFileName(title: string, extension: string): string {
+  const base = title.replace(/[^A-Za-z0-9 _-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Atlas study';
+  return `${base}.${extension}`;
+}
+
+const sourceLine = (s: Source) => `[${s.n}] ${s.doc}, part ${s.part}${s.url ? ` (${s.url})` : ''}`;
+
+/** The text of a study guide, formula sheet, answer or outline with the sources it used at the end. */
+export function studyMarkdown(r: StudyResult, heading: string): string {
+  const body = (r.text ?? '').trim();
+  const used = new Set([...body.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])));
+  const list = r.sources.filter((s) => used.has(s.n));
+  const sources = list.length ? `\n\n## Sources\n\n${list.map((s) => `- ${sourceLine(s)}`).join('\n')}` : '';
+  const topic = r.topic ? `\n\n_Topic: ${r.topic}_` : '';
+  return `# ${heading}${topic}\n\n${body}${sources}\n`;
+}
+
+/**
+ * Writes a file into the app cache, lets the person pick where to save it, then removes the
+ * cache copy. Resolves the saved name, or null if they closed the picker.
+ */
+export async function saveToPhone(fileName: string, mimeType: string, write: (path: string) => Promise<void>): Promise<string | null> {
+  const path = `${RNFS.CachesDirectoryPath}/${Date.now()}-${fileName}`;
+  try {
+    await write(path);
+    const [saved] = await saveDocuments({ sourceUris: [`file://${path}`], mimeType, fileName, copy: true });
+    return saved?.name ?? fileName;
+  } catch (e) {
+    if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) return null;
+    throw e;
+  } finally {
+    RNFS.unlink(path).catch(() => undefined);
+  }
+}
+
+export const saveMarkdown = (fileName: string, text: string): Promise<string | null> =>
+  saveToPhone(fileName, MIME_MARKDOWN, (path) => RNFS.writeFile(path, text, 'utf8'));

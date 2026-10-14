@@ -19,7 +19,7 @@ export interface PodcastLine { host: 'A' | 'B' | 'C'; text: string }
 export interface Slide { title: string; bullets: string[]; narration: string; src: number[] }
 
 export interface StudyResult {
-  kind: 'guide' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline' | 'crossword' | 'wordsearch' | 'match' | 'game';
+  kind: 'guide' | 'formulas' | 'cards' | 'quiz' | 'podcast' | 'slides' | 'answer' | 'outline' | 'crossword' | 'wordsearch' | 'match' | 'game';
   createdAt: number;
   topic: string;
   title?: string;
@@ -196,6 +196,13 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
   if (kind === 'guide') {
     const t = await ask(`You write study guides. ${GROUND}`, `${S}${about}Write a study guide with: a 3-sentence summary, the key ideas as short bullet points, important terms with one-line definitions, and 3 questions to think about. Use markdown headings.`);
     return { ...base, text: t };
+  }
+  if (kind === 'formulas') {
+    const t = await ask(
+      `You write formula sheets for students. ${GROUND}`,
+      `${S}${about}Write a formula sheet from the sources. Group it under short markdown headings by topic. For every formula, equation, rule, constant or key number the sources contain, give: the formula on its own line inside backticks, what each symbol means, when to use it, and a tiny worked example only if the sources give the numbers. Keep each entry to a few lines. If the sources contain no formulas, say that in one line at the top and list the key rules, definitions and numbers instead.`,
+    );
+    return { ...base, title: `Formula sheet${topic.trim() ? `: ${topic.trim()}` : ''}`, text: t };
   }
   if (kind === 'outline') {
     const t = await ask(`You make mind-map outlines. ${GROUND}`, `${S}${about}Make a mind-map style outline: one main topic, 3-6 branches, 2-4 short points under each branch (nested markdown bullets). Cite sources.`);
