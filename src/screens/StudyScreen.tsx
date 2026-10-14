@@ -8,6 +8,7 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
+import { deckSlides, savePptx } from '../study/pptx';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';
 import { ProjectGame } from '../components/games/ProjectGame';
 import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
@@ -28,7 +29,7 @@ const KINDS: { kind: StudyResult['kind']; label: string; icon: string; desc: str
   { kind: 'match', label: 'Matching game', icon: 'link', desc: 'Connect terms to definitions' },
   { kind: 'outline', label: 'Mind map', icon: 'share-2', desc: 'Outline of the topic' },
   { kind: 'podcast', label: 'Podcast', icon: 'headphones', desc: 'An episode read aloud, with a time bar' },
-  { kind: 'slides', label: 'Video (slides)', icon: 'film', desc: 'Narrated slideshow' },
+  { kind: 'slides', label: 'Slides', icon: 'film', desc: 'Present them, save as PowerPoint, or save as a narrated video' },
 ];
 
 /** Sources row: [1] [2] ... tap to read the exact passage an item came from. */
@@ -214,6 +215,13 @@ export const StudyScreen: React.FC = () => {
       if (name) Alert.alert('Saved', name);
     } catch (e: any) { Alert.alert('Could not save the file', String(e?.message || e)); }
   };
+  const savePowerPoint = async (r: StudyResult) => {
+    try {
+      const title = r.title || r.topic || 'Atlas slides';
+      const name = await savePptx(safeFileName(title, 'pptx'), title, deckSlides(title, r.topic && r.topic !== title ? r.topic : '', r.slides ?? [], r.sources));
+      if (name) Alert.alert('Saved', name);
+    } catch (e: any) { Alert.alert('Could not save the PowerPoint', String(e?.message || e)); }
+  };
   const openSource = (s: Source) => setSrc(s);
   const card = { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 10 };
 
@@ -327,6 +335,13 @@ export const StudyScreen: React.FC = () => {
                     onPlay={(i) => play(items, i)} onPause={halt} label="video" />
                 );
               })()}
+              <View style={[card, { marginTop: 4 }]}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => { void savePowerPoint(v); }} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="file-text" size={18} color={colors.primary} />
+                  <Text style={{ color: colors.primary, fontSize: 15, marginLeft: 8 }}>Save as PowerPoint (.pptx)</Text>
+                </TouchableOpacity>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>Made on this phone. You choose where it is saved, for example Downloads. Opens in PowerPoint, Google Slides and Keynote.</Text>
+              </View>
               {videoExportAvailable() && (
                 <View style={[card, { marginTop: 4 }]}>
                   {exporting ? (
