@@ -1,0 +1,45 @@
+import { DEFAULT_HIDDEN, MAX_VISIBLE, moveNavItem, resolveNavBar, setNavItemVisible } from '../../../src/navigation/navBar';
+
+describe('bottom bar rules', () => {
+  it('defaults to Home, Chats, Workspace and Settings', () => {
+    const r = resolveNavBar(undefined);
+    expect(r.visible).toEqual(['home', 'chats', 'workspace', 'settings']);
+    expect(r.labels).toBe(true);
+    expect(DEFAULT_HIDDEN).toContain('models');
+  });
+
+  it('turns an item on up to five, never more', () => {
+    let s = setNavItemVisible(undefined, 'models', true);
+    expect(resolveNavBar(s).visible).toContain('models');
+    expect(resolveNavBar(s).visible).toHaveLength(MAX_VISIBLE);
+    s = setNavItemVisible(s, 'compass', true);
+    expect(resolveNavBar(s).visible).not.toContain('compass');
+  });
+
+  it('keeps Settings and at least two items', () => {
+    expect(resolveNavBar(setNavItemVisible(undefined, 'settings', false)).visible).toContain('settings');
+    let s = setNavItemVisible(undefined, 'home', false);
+    s = setNavItemVisible(s, 'chats', false);
+    expect(resolveNavBar(s).visible).toEqual(['workspace', 'settings']);
+    s = setNavItemVisible(s, 'workspace', false); // would leave only Settings
+    expect(resolveNavBar(s).visible).toEqual(['workspace', 'settings']);
+  });
+
+  it('moves items and keeps the choice of what is shown', () => {
+    // Settings passes the hidden Models row, then Workspace.
+    const s = moveNavItem(moveNavItem(undefined, 'settings', -1), 'settings', -1);
+    expect(resolveNavBar(s).order.slice(0, 5)).toEqual(['home', 'chats', 'settings', 'workspace', 'models']);
+    expect(resolveNavBar(s).visible).toEqual(['home', 'chats', 'settings', 'workspace']);
+    expect(resolveNavBar(moveNavItem(s, 'home', -1)).visible[0]).toBe('home'); // already first
+  });
+
+  it('survives bad saved data', () => {
+    const r = resolveNavBar({ order: ['models', 'nope' as any, 'models', 'home'], hidden: ['settings', 'chats', 'workspace', 'home', 'models'] });
+    expect(r.visible).toContain('settings');
+    expect(r.visible.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(r.order).size).toBe(r.order.length);
+    const tooMany = resolveNavBar({ hidden: [] });
+    expect(tooMany.visible).toHaveLength(MAX_VISIBLE);
+    expect(tooMany.visible).toContain('settings');
+  });
+});

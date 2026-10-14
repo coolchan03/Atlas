@@ -1,4 +1,4 @@
-/** Settings > Appearance & AI style: theme, background, accent, font, text size, and how the AI answers. */
+/** Settings > Appearance & AI style: theme, background, accent, font, text size, bottom bar, and how the AI answers. */
 import React from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { ACCENTS, FONT_CHOICES, PALETTES, TEXT_SIZES, type Appearance } from '../theme/appearance';
+import { NavBarSettings } from '../components/NavBarSettings';
 import { AI_LENGTHS, AI_LEVELS, AI_TONES, type AiStyle } from '../services/aiStyle';
 
 type Option<T> = { id: T; name: string; hint?: string };
@@ -103,6 +104,8 @@ export const AppearanceScreen: React.FC = () => {
           <Text style={styles.previewBody}>This is how chats and notes will look.</Text>
           <Text style={styles.previewMeta}>Font and size apply to every screen right away.</Text>
         </View>
+
+        <NavBarSettings />
 
         <Text style={styles.section}>AI style</Text>
         <Text style={styles.note}>Applies to every chat, agent and project. A project or agent can still add its own instructions.</Text>

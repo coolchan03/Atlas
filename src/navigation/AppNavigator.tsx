@@ -59,18 +59,13 @@ import {
 } from './types';
 import { WorkspaceScreen } from '../screens/WorkspaceScreen';
 import { useRegisteredScreens } from './screenRegistry';
+import { NAV_ITEMS, resolveNavBar, type NavItemId } from './navBar';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-// Animated tab icon with scale spring on focus
-const TAB_ICON_MAP: Record<string, string> = {
-  HomeTab: 'home',
-  ChatsTab: 'message-circle',
-  ProjectsTab: 'folder',
-  ModelsTab: 'cpu',
-  SettingsTab: 'settings',
-};
+// Animated tab icon with scale spring on focus. Icons come from the bottom-bar registry.
+const TAB_ICON_MAP: Record<string, string> = Object.fromEntries(NAV_ITEMS.map((i) => [i.route, i.icon]));
 
 const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
   const { colors } = useTheme();
@@ -119,21 +114,36 @@ const mainTabsStyles = StyleSheet.create({
   container: { flex: 1 },
 });
 
+// Shortcut tabs open a full-screen destination; their own page is never shown.
+const EmptyTabPage: React.FC = () => null;
+
+const TAB_PAGES: Partial<Record<NavItemId, React.ComponentType<any>>> = {
+  home: HomeScreen, chats: ChatsListScreen, workspace: WorkspaceScreen, models: ModelsScreen, settings: SettingsScreen,
+};
+const TAB_TEST_IDS: Record<string, string> = {
+  HomeTab: 'home-tab', ChatsTab: 'chats-tab', ProjectsTab: 'projects-tab', ModelsTab: 'models-tab', SettingsTab: 'settings-tab',
+};
+
 // Main Tab Navigator
 const MainTabs: React.FC = () => {
   const { colors, shadows } = useTheme();
   const insets = useSafeAreaInsets();
+  const navBar = useAppStore((s) => s.settings?.navBar);
+  const { order, visible, labels } = useMemo(() => resolveNavBar(navBar), [navBar]);
   const bottomInset = Math.max(insets.bottom, 20);
-  const tabBarHeight = 60 + bottomInset;
+  const tabBarHeight = (labels ? 60 : 48) + bottomInset;
 
   return (
     <View style={mainTabsStyles.container}>
       <Tab.Navigator
+        // Start on the first shown tab that is a real page (a shortcut has no page of its own).
+        initialRouteName={(NAV_ITEMS.find((i) => visible.includes(i.id) && TAB_PAGES[i.id]) ?? NAV_ITEMS[0]).route as keyof MainTabParamList}
         backBehavior="history"
         screenOptions={({ route }) => ({
           headerShown: false,
           animation: 'fade',
           lazy: true,
+          tabBarShowLabel: labels,
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
@@ -154,46 +164,32 @@ const MainTabs: React.FC = () => {
           },
         })}
       >
-        <Tab.Screen
-          name="HomeTab"
-          component={HomeScreen}
-          options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ChatsTab"
-          component={ChatsListScreen}
-          options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ProjectsTab"
-          component={WorkspaceScreen}
-          options={{ tabBarLabel: 'Workspace', tabBarButtonTestID: 'projects-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ModelsTab"
-          component={ModelsScreen}
-          options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="SettingsTab"
-          component={SettingsScreen}
-          options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
+        {/* Every destination stays a registered route so navigate('ModelsTab') works when it is off the bar. */}
+        {order.map((id) => {
+          const item = NAV_ITEMS.find((i) => i.id === id)!;
+          const shown = visible.includes(id);
+          return (
+            <Tab.Screen
+              key={item.route}
+              name={item.route as keyof MainTabParamList}
+              component={TAB_PAGES[id] ?? EmptyTabPage}
+              options={{
+                tabBarLabel: item.label,
+                tabBarButtonTestID: TAB_TEST_IDS[item.route] ?? `${id}-tab`,
+                ...(shown ? {} : { tabBarButton: () => null, tabBarItemStyle: { display: 'none' as const } }),
+              }}
+              listeners={({ navigation }) => ({
+                tabPress: (e: { preventDefault: () => void }) => {
+                  triggerHaptic('selection');
+                  if (item.target) {
+                    e.preventDefault();
+                    (navigation.getParent() as any)?.navigate(item.target);
+                  }
+                },
+              })}
+            />
+          );
+        })}
       </Tab.Navigator>
     </View >
   );

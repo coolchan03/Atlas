@@ -47,4 +47,11 @@ export type MainTabParamList = {
   ProjectsTab: undefined;
   ModelsTab: { initialTab?: 'text' | 'image' | 'voice' | 'transcription'; repairModelId?: string; initialSearchQuery?: string } | undefined;
   SettingsTab: undefined;
+  // Optional bottom-bar shortcuts: each opens a full-screen destination.
+  EmergencyTab: undefined;
+  LibraryTab: undefined;
+  BriefTab: undefined;
+  CompassTab: undefined;
+  PhrasesTab: undefined;
+  SurvivalTab: undefined;
 };

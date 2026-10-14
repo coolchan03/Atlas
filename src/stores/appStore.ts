@@ -90,6 +90,8 @@ type AppSettings = {
   userName?: string;
   /** Theme, accent color, font and text size (see theme/appearance). */
   appearance?: import('../theme/appearance').Appearance;
+  /** Which destinations the bottom bar shows, their order and whether it has labels. */
+  navBar?: import('../navigation/navBar').NavBarSetting;
   /** How every AI answers, whichever agent or project is active (see services/aiStyle). */
   aiStyle?: import('../services/aiStyle').AiStyle;
   atlasAccelChecked?: boolean;

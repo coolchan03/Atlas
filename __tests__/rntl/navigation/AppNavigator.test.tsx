@@ -183,32 +183,42 @@ describe('AppNavigator', () => {
   });
 
   describe('Tab bar rendering', () => {
-    it('renders five bottom tabs with Workspace replacing Projects and Agents', () => {
-      const { getAllByText } = renderAppNavigator();
+    it('shows Home, Chats, Workspace and Settings by default, with Models off the bar', () => {
+      const { getAllByText, queryByTestId } = renderAppNavigator();
 
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Workspace').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
+      expect(queryByTestId('models-tab')).toBeNull();
     });
 
-    it('renders five tabs with no hidden Agents tab', () => {
-      const { getAllByText, queryByText } = renderAppNavigator();
-      for (const title of ['Home', 'Chats', 'Workspace', 'Models', 'Settings']) {
-        expect(getAllByText(title).length).toBeGreaterThanOrEqual(1);
-      }
+    it('has no Agents tab', () => {
+      const { queryByText } = renderAppNavigator();
       expect(queryByText('Agents')).toBeNull();
     });
 
-    it('renders all tab buttons with testIDs', () => {
+    it('renders the shown tab buttons with testIDs', () => {
       const { getByTestId } = renderAppNavigator();
 
       expect(getByTestId('home-tab')).toBeTruthy();
       expect(getByTestId('chats-tab')).toBeTruthy();
       expect(getByTestId('projects-tab')).toBeTruthy();
-      expect(getByTestId('models-tab')).toBeTruthy();
       expect(getByTestId('settings-tab')).toBeTruthy();
+    });
+
+    it('puts Models on the bar when the person turns it on, and can add a shortcut', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'survival', 'home'] } } });
+      const { getByTestId, queryByTestId } = renderAppNavigator();
+      expect(getByTestId('models-tab')).toBeTruthy();
+      expect(queryByTestId('home-tab')).toBeNull();
+      expect(getByTestId('settings-tab')).toBeTruthy();
+    });
+
+    it('hides the labels when asked', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { labels: false } } });
+      const { queryByText } = renderAppNavigator();
+      expect(queryByText('Workspace')).toBeNull();
     });
   });
 
@@ -284,6 +294,8 @@ describe('AppNavigator', () => {
       // This is the key regression test: with a 48dp bottom inset (3-button Android nav),
       // all tabs should still be visible and not clipped by the system navigation bar
       mockInsets.bottom = 48;
+      // The fullest bar: all five main tabs on.
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'survival'] } } });
       const { getAllByText, getByTestId } = renderAppNavigator();
 
       // All tab labels should be visible
