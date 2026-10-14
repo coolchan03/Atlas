@@ -6,6 +6,7 @@
  * - imageGenerationService ↔ useAppStore (generated images)
  */
 
+import { Platform } from 'react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
@@ -131,7 +132,10 @@ describe('Image Generation Flow Integration', () => {
   };
 
   describe('imported checkpoint GPU fallback', () => {
-    it('never silently runs on CPU when no image GPU is usable', async () => {
+    it('never silently runs on CPU when no Android image GPU is usable', async () => {
+      const originalOS = Platform.OS;
+      Object.defineProperty(Platform, 'OS', { configurable: true, writable: true, value: 'android' });
+      try {
       const imageModel = { ...createONNXImageModel({ id: 'img-model-1', modelPath: '/mock/image-model' }),
         backend: 'sdcpp', nativeImageFamily: 'sd15' } as any;
       useAppStore.setState({
@@ -144,6 +148,9 @@ describe('Image Generation Flow Integration', () => {
       const result = await imageGenerationService.generateImage({ prompt: 'A quick sketch' });
       expect(result).toBeNull();
       expect(mockLocalDreamService.generateImage).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(Platform, 'OS', { configurable: true, writable: true, value: originalOS });
+      }
     });
 
     it('retries a failed Vulkan run on the CPU and says so in the chat', async () => {

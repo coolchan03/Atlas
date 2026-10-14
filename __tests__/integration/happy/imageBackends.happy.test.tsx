@@ -31,8 +31,9 @@ describe('happy — image generation shows the correct backend label (heavy entr
     (require('llama.rn') as any).getBackendDevicesInfo = jest.fn(() => Promise.resolve([{ backend: 'OpenCL', type: 'gpu', name: 'Adreno' }]));
     (require('../../../src/services/hardware').hardwareService as any).cachedOpenCLCapability = null;
     if (cfg.platform === 'ios') {
-      // This iOS boundary's CPU-backed native mock requires an explicit CPU opt-in.
-      require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ imageAllowCpuFallback: true });
+      // iOS delegates Core ML scheduling to the OS; the Android-only CPU opt-in
+      // must not block a compatible iOS model.
+      require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ imageAllowCpuFallback: false });
     }
     h.enableGenerationDetailsViaUI(); // turn details on BEFORE mounting the chat (separate render)
     h.render();
