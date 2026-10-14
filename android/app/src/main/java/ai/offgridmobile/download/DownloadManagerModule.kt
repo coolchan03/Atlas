@@ -312,12 +312,20 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun startProgressPolling() {
         scope.launch {
-            val active = withContext(Dispatchers.IO) {
-                downloadDao.getAllDownloads().first().filter {
-                    it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.RUNNING
+            // Room opens (and migrates) the database on this first query. Polling is best-effort:
+            // a SQLite failure here must not take the whole app down.
+            try {
+                val active = withContext(Dispatchers.IO) {
+                    downloadDao.getAllDownloads().first().filter {
+                        it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.RUNNING
+                    }
                 }
+                active.forEach { if (!workObservers.containsKey(it.id)) registerObserver(it.id, it.fileName, it.modelId) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "Progress polling skipped: ${e.message}")
             }
-            active.forEach { if (!workObservers.containsKey(it.id)) registerObserver(it.id, it.fileName, it.modelId) }
         }
     }
 
