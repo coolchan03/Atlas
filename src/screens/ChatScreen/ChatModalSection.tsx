@@ -23,6 +23,12 @@ type ChatModalSectionProps = {
   modelSelectorTab?: 'text' | 'image';
   showSettingsPanel: boolean;
   setShowSettingsPanel: (v: boolean) => void;
+  researchMode: boolean;
+  setResearchMode: (enabled: boolean) => void;
+  researchDepth: 'quick' | 'deep';
+  setResearchDepth: (depth: 'quick' | 'deep') => void;
+  researchBusy: boolean;
+  researchStatus: string | null;
   debugInfo: any;
   activeProject: any;
   activeConversation: any;
@@ -48,6 +54,7 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
   showDebugPanel, setShowDebugPanel,
   showModelSelector, setShowModelSelector, modelSelectorTab = 'text',
   showSettingsPanel, setShowSettingsPanel,
+  researchMode, setResearchMode, researchDepth, setResearchDepth, researchBusy, researchStatus,
   debugInfo, activeProject, activeConversation, settings, projects,
   handleSelectProject, handleModelSelect, handleUnloadModel, handleDeleteConversation,
   isModelLoading, imageCount, activeConversationId, navigation,
@@ -82,6 +89,12 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
     <GenerationSettingsModal
       visible={showSettingsPanel}
       onClose={() => setShowSettingsPanel(false)}
+      researchMode={researchMode}
+      onResearchModeChange={setResearchMode}
+      researchDepth={researchDepth}
+      onResearchDepthChange={setResearchDepth}
+      researchBusy={researchBusy}
+      researchStatus={researchStatus}
       onOpenProject={() => setShowProjectSelector(true)}
       onOpenModels={onOpenModels}
       activeConversationId={activeConversationId}
