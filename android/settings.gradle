@@ -4,6 +4,8 @@ extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autoli
 rootProject.name = 'OffgridMobile'
 include ':app'
 // Experimental Vulkan text inference. Builds only when atlasVulkanEnabled=true.
-include ':atlasLlamaKt'
-project(':atlasLlamaKt').projectDir = file('atlasLlamaKt')
+if (providers.gradleProperty('atlasVulkanEnabled').getOrElse('false') == 'true') {
+    include ':atlasLlamaKt'
+    project(':atlasLlamaKt').projectDir = file('atlasLlamaKt')
+}
 includeBuild('../node_modules/@react-native/gradle-plugin')
