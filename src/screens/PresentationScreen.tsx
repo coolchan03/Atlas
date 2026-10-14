@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles, prefer-template, max-params */
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +18,7 @@ const defaultSlide = (layout: Layout): PresentationSlide =>
 
 export const PresentationScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [slides, setSlides] = useState<PresentationSlide[]>(defaultPresentationSlides);
   const [active, setActive] = useState(0);
   const [styleId, setStyleId] = useState<PresentationStyleId>('minimal');

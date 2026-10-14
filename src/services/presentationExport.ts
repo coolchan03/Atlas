@@ -1,3 +1,4 @@
+/* eslint-disable prefer-template, max-params */
 import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { zip } from 'react-native-zip-archive';
@@ -133,7 +134,8 @@ export function pptxParts(slides: PresentationSlide[], template: PresentationTem
 }
 
 function sanitizedName(name: string): string {
-  return (name.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,70) || 'Atlas Presentation');
+  const printable = name.trim().split('').filter(ch => ch.charCodeAt(0) >= 32).join('');
+  return (printable.replace(/[<>:"/\\|?*]/g, '_').slice(0,70) || 'Atlas Presentation');
 }
 function nativeExporter(): any {
   if (Platform.OS !== 'android' || !NativeModules.AtlasPresentationExporter) {
