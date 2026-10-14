@@ -43,3 +43,19 @@ describe('bottom bar rules', () => {
     expect(tooMany.visible).toContain('settings');
   });
 });
+
+describe('vibration setting', () => {
+  it('stops haptics when switched off', () => {
+    const haptic = require('react-native-haptic-feedback');
+    const { useAppStore } = require('../../../src/stores/appStore');
+    const { triggerHaptic } = require('../../../src/utils/haptics');
+    const trigger = (haptic.default ?? haptic).trigger as jest.Mock;
+    trigger.mockClear();
+    useAppStore.setState({ settings: { ...useAppStore.getState().settings, hapticsOff: false } });
+    triggerHaptic('selection');
+    expect(trigger).toHaveBeenCalledTimes(1);
+    useAppStore.setState({ settings: { ...useAppStore.getState().settings, hapticsOff: true } });
+    triggerHaptic('selection');
+    expect(trigger).toHaveBeenCalledTimes(1);
+  });
+});

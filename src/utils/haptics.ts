@@ -16,6 +16,8 @@ const options = {
 
 export function triggerHaptic(type: HapticType): void {
   try {
+    // Settings > Appearance > Vibration can turn all of it off.
+    if (require('../stores/appStore').useAppStore.getState().settings?.hapticsOff) return;
     ReactNativeHapticFeedback.trigger(type, options);
   } catch {
     // Silent swallow — haptics are non-critical

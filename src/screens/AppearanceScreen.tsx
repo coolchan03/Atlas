@@ -107,6 +107,11 @@ export const AppearanceScreen: React.FC = () => {
 
         <NavBarSettings />
 
+        <Text style={styles.section}>Feel</Text>
+        <Text style={styles.label}>Vibration on taps</Text>
+        <Chips testID="haptics" value={!settings.hapticsOff} onPick={on => updateSettings({ hapticsOff: !on })}
+          options={[{ id: true, name: 'On' }, { id: false, name: 'Off' }]} />
+
         <Text style={styles.section}>AI style</Text>
         <Text style={styles.note}>Applies to every chat, agent and project. A project or agent can still add its own instructions.</Text>
         <Text style={styles.label}>How much it says</Text>
