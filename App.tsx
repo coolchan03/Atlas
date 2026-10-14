@@ -35,12 +35,14 @@ import { registerAtlasVoice } from './src/atlasVoice';
 import { startLowPowerMonitor } from './src/atlasTools/lowPower';
 import { autoPickAcceleration } from './src/atlasTools/accel';
 import { startCtxRecovery } from './src/atlasTools/ctxGuard';
+import { startTextAppearance } from './src/theme/globalText';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
 startLowPowerMonitor();
 autoPickAcceleration();
 startCtxRecovery();
+startTextAppearance(); // font and text size apply to every Text without a restart
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 

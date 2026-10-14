@@ -101,7 +101,7 @@ export const AppearanceScreen: React.FC = () => {
         <View style={styles.preview}>
           <Text style={styles.previewTitle}>Preview</Text>
           <Text style={styles.previewBody}>This is how chats and notes will look.</Text>
-          <Text style={styles.previewMeta}>Some screens finish switching font after the app restarts.</Text>
+          <Text style={styles.previewMeta}>Font and size apply to every screen right away.</Text>
         </View>
 
         <Text style={styles.section}>AI style</Text>

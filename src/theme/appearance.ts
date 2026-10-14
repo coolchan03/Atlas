@@ -81,11 +81,12 @@ export function applyAppearanceColors(base: ThemeColors, isDark: boolean, appear
   return { ...base, ...(bg ?? {}), ...(ac ? { ...ac, borderFocus: ac.primary } : {}) };
 }
 
-// TYPOGRAPHY is a shared constant read when style sheets are built, so the font and
-// size are applied to it in place. Themed styles rebuild on change; a few static
-// style sheets pick the change up on the next app start.
-const BASE_TYPOGRAPHY: Record<string, { fontSize: number; heading: boolean }> = Object.fromEntries(
-  Object.entries(TYPOGRAPHY).map(([key, value]) => [key, { fontSize: value.fontSize, heading: value.fontFamily === FONTS.heading }]),
+// TYPOGRAPHY is a shared constant read when style sheets are built, so the font family is
+// applied to it in place and themed styles rebuild on change. Font SIZE is not applied here:
+// theme/globalText scales every Text as it renders, which also covers inline and static
+// styles, and scaling in both places would double it.
+const BASE_TYPOGRAPHY: Record<string, { heading: boolean }> = Object.fromEntries(
+  Object.entries(TYPOGRAPHY).map(([key, value]) => [key, { heading: value.fontFamily === FONTS.heading }]),
 );
 let appliedTypographyKey = 'atlas:normal';
 
@@ -98,11 +99,10 @@ export function applyTypography(appearance?: Appearance): string {
   FONTS.heading = font.heading;
   FONTS.body = font.body;
   FONTS.mono = font.body;
-  for (const [name, style] of Object.entries(TYPOGRAPHY) as Array<[string, { fontSize: number; fontFamily: string }]>) {
+  for (const [name, style] of Object.entries(TYPOGRAPHY) as Array<[string, { fontFamily: string }]>) {
     const base = BASE_TYPOGRAPHY[name];
     if (!base) continue;
     style.fontFamily = base.heading ? font.heading : font.body;
-    style.fontSize = Math.round(base.fontSize * size.scale);
   }
   return key;
 }
