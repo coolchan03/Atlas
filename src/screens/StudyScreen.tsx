@@ -177,6 +177,7 @@ export const StudyScreen: React.FC = () => {
 
   const [exporting, setExporting] = useState<VideoProgress | null>(null);
   const [savedVideo, setSavedVideo] = useState<SavedVideo | null>(null);
+  React.useEffect(() => { setSavedVideo(null); }, [view]); // a saved video belongs to the slides it was made from
   const saveVideo = async (title: string, slides: NonNullable<StudyResult['slides']>) => {
     halt();
     setSavedVideo(null);
