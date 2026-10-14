@@ -58,6 +58,8 @@ import {
   MainTabParamList,
 } from './types';
 import { WorkspaceScreen } from '../screens/WorkspaceScreen';
+import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
+import { PresentationScreen } from '../screens/PresentationScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, resolveNavBar, type NavItemId } from './navBar';
 
@@ -114,11 +116,17 @@ const mainTabsStyles = StyleSheet.create({
   container: { flex: 1 },
 });
 
+const AdaptiveHomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const mode = useAppStore(s => s.settings.appearance?.layoutMode ?? 'standard');
+  if (mode === 'standard') return <HomeScreen navigation={navigation} />;
+  return <QuickHomeScreen navigation={navigation} mode={mode} />;
+};
+
 // Shortcut tabs open a full-screen destination; their own page is never shown.
 const EmptyTabPage: React.FC = () => null;
 
 const TAB_PAGES: Partial<Record<NavItemId, React.ComponentType<any>>> = {
-  home: HomeScreen, chats: ChatsListScreen, workspace: WorkspaceScreen, models: ModelsScreen, settings: SettingsScreen,
+  home: AdaptiveHomeScreen, chats: ChatsListScreen, workspace: WorkspaceScreen, models: ModelsScreen, settings: SettingsScreen,
 };
 const TAB_TEST_IDS: Record<string, string> = {
   HomeTab: 'home-tab', ChatsTab: 'chats-tab', ProjectsTab: 'projects-tab', ModelsTab: 'models-tab', SettingsTab: 'settings-tab',
@@ -129,9 +137,12 @@ const MainTabs: React.FC = () => {
   const { colors, shadows } = useTheme();
   const insets = useSafeAreaInsets();
   const navBar = useAppStore((s) => s.settings?.navBar);
+  const appearance = useAppStore((s) => s.settings?.appearance);
   const { order, visible, labels } = useMemo(() => resolveNavBar(navBar), [navBar]);
   const bottomInset = Math.max(insets.bottom, 20);
-  const tabBarHeight = (labels ? 60 : 48) + bottomInset;
+  const density = appearance?.density ?? (appearance?.layoutMode === 'compact' ? 'compact' : appearance?.layoutMode === 'simple' ? 'spacious' : 'comfortable');
+  const bar = density === 'compact' ? (labels ? 48 : 43) : density === 'spacious' ? (labels ? 70 : 57) : (labels ? 60 : 48);
+  const tabBarHeight = bar + bottomInset;
 
   return (
     <View style={mainTabsStyles.container}>
@@ -150,7 +161,7 @@ const MainTabs: React.FC = () => {
             borderTopWidth: 1,
             height: tabBarHeight,
             paddingBottom: bottomInset,
-            paddingTop: 10,
+            paddingTop: density === 'compact' ? 4 : density === 'spacious' ? 13 : 10,
             ...shadows.medium,
           },
           tabBarActiveTintColor: colors.primary,
@@ -265,6 +276,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
         <RootStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
         <RootStack.Screen name="Appearance" component={AppearanceScreen} />
+        <RootStack.Screen name="Presentations" component={PresentationScreen} />
         <RootStack.Screen
           name="ProDetail"
           component={ProDetailScreen}

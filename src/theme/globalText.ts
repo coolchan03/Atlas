@@ -9,7 +9,7 @@ import { StyleSheet } from 'react-native';
 import { FONT_CHOICES, TEXT_SIZES, type Appearance } from './appearance';
 
 export interface TextAppearance { key: string; scale: number; heading: string; body: string }
-const NEUTRAL: TextAppearance = { key: 'atlas:normal', scale: 1, heading: 'serif', body: 'sans-serif' };
+const NEUTRAL: TextAppearance = { key: 'atlas:normal:standard', scale: 1, heading: 'serif', body: 'sans-serif' };
 
 let current: TextAppearance = NEUTRAL;
 const listeners = new Set<() => void>();
@@ -19,7 +19,8 @@ const snapshot = () => current;
 export function textAppearanceFor(appearance?: Appearance): TextAppearance {
   const font = FONT_CHOICES.find(f => f.id === appearance?.font) ?? FONT_CHOICES[0];
   const size = TEXT_SIZES.find(t => t.id === appearance?.textSize) ?? TEXT_SIZES[1];
-  return { key: `${font.id}:${size.id}`, scale: size.scale, heading: font.heading, body: font.body };
+  const mode = appearance?.layoutMode ?? 'standard';
+  return { key: `${font.id}:${size.id}:${mode}`, scale: size.scale * (mode === 'simple' ? 1.08 : 1), heading: font.heading, body: font.body };
 }
 
 /** Tell every mounted Text/TextInput about a new choice. */
@@ -31,7 +32,7 @@ export function setTextAppearance(next: TextAppearance): void {
 export const getTextAppearance = (): TextAppearance => current;
 
 /** Plain system families the app uses by default; only these follow the chosen font. Code (monospace, Menlo) stays. */
-const FOLLOWS_FONT = new Set(['sans-serif', 'serif']);
+const FOLLOWS_FONT = new Set(['sans-serif', 'serif', ...FONT_CHOICES.filter(f => f.id !== 'mono').flatMap(f => [f.heading, f.body])]);
 /** Every family that is real text, so it scales; anything else (an icon font) does not. */
 const TEXT_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'Menlo', ...FONT_CHOICES.flatMap(f => [f.heading, f.body])]);
 

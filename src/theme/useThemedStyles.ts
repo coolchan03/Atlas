@@ -15,10 +15,22 @@ import type { ThemeColors, ThemeShadows } from './palettes';
 export function useThemedStyles<T extends StyleSheet.NamedStyles<T>>(
   factory: (colors: ThemeColors, shadows: ThemeShadows) => T,
 ): T {
-  const { colors, shadows, typographyKey } = useTheme();
+  const { colors, shadows, typographyKey, densityScale } = useTheme();
   return useMemo(
-    () => StyleSheet.create(factory(colors, shadows)),
+    () => {
+      const original = factory(colors, shadows);
+      if (densityScale === 1) return StyleSheet.create(original);
+      const compacted = Object.fromEntries(Object.entries(original).map(([name, value]) => {
+        if (!value || typeof value !== 'object') return [name, value];
+        const scaled = Object.fromEntries(Object.entries(value).map(([key, amount]) => [
+          key, /^(padding|margin|gap$|rowGap$|columnGap$)/.test(key) && typeof amount === 'number'
+            ? Math.round(amount * densityScale) : amount,
+        ]));
+        return [name, scaled];
+      }));
+      return StyleSheet.create(compacted as T);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- factory is a stable module-level function
-    [colors, shadows, typographyKey],
+    [colors, shadows, typographyKey, densityScale],
   );
 }

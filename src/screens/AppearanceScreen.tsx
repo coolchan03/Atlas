@@ -8,7 +8,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
-import { ACCENTS, FONT_CHOICES, PALETTES, TEXT_SIZES, type Appearance } from '../theme/appearance';
+import { ACCENTS, FONT_CHOICES, PALETTES, TEXT_SIZES, LAYOUT_MODES, type Appearance } from '../theme/appearance';
 import { NavBarSettings } from '../components/NavBarSettings';
 import { AI_LENGTHS, AI_LEVELS, AI_TONES, type AiStyle } from '../services/aiStyle';
 
@@ -62,6 +62,13 @@ export const AppearanceScreen: React.FC = () => {
         <Chips testID="theme-mode" value={themeMode} onPick={setThemeMode}
           options={[{ id: 'system', name: 'Match phone' }, { id: 'light', name: 'Light' }, { id: 'dark', name: 'Dark' }]} />
 
+        <Text style={styles.label}>Layout style</Text>
+        <Chips testID="layout-mode" value={appearance.layoutMode ?? 'standard'}
+          onPick={layoutMode => setLook({ layoutMode })} options={LAYOUT_MODES} />
+        <Text style={styles.label}>Spacing</Text>
+        <Chips testID="density" value={appearance.density ?? (appearance.layoutMode === 'compact' ? 'compact' : appearance.layoutMode === 'simple' ? 'spacious' : 'comfortable')}
+          onPick={density => setLook({ density })}
+          options={[{ id: 'comfortable', name: 'Comfortable' }, { id: 'compact', name: 'Tight' }, { id: 'spacious', name: 'Spacious' }]} />
         <Text style={styles.label}>Background</Text>
         <View style={styles.chips}>
           {PALETTES.map(p => {
@@ -100,8 +107,8 @@ export const AppearanceScreen: React.FC = () => {
           options={TEXT_SIZES.map(t => ({ id: t.id, name: t.name }))} />
 
         <View style={styles.preview}>
-          <Text style={styles.previewTitle}>Preview</Text>
-          <Text style={styles.previewBody}>This is how chats and notes will look.</Text>
+          <Text style={[styles.previewTitle, { fontFamily: FONT_CHOICES.find(f => f.id === appearance.font)?.heading ?? 'serif' }]}>Preview</Text>
+          <Text style={[styles.previewBody, { fontFamily: FONT_CHOICES.find(f => f.id === appearance.font)?.body ?? 'sans-serif' }]}>This is how chats and notes will look.</Text>
           <Text style={styles.previewMeta}>Font and size apply to every screen right away.</Text>
         </View>
 
