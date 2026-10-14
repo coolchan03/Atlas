@@ -74,14 +74,15 @@ export const trimSources = (src: Source[]): Source[] => {
 const tidy = (t: string) => t.replace(/\*\*|__/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+(?=(?:Q|A|ANSWER|WHY|SRC|TITLE|SAY|[A-D])\s*[:).])/gim, '');
 
 /** Sources for a topic (search) or, with no topic, a spread across all documents. */
-export async function gatherSources(projectId: string, topic: string, share = 1): Promise<Source[]> {
+export async function gatherSources(projectId: string, topic: string, share = 1, cache: { all?: any[] } = {}): Promise<Source[]> {
   let raw: { name: string; content: string; position: number }[] = [];
   if (topic.trim()) {
     const r: any = await ragService.searchProject(projectId, topic.trim());
     raw = (r?.chunks || []).slice(0, 8);
   }
   if (raw.length < 4) {
-    const all = knowledgeSource(projectId).getChunksByProject(projectId, 3000) as any[];
+    // Read once per cache: a long episode asks for sources for every part.
+    const all = (cache.all ??= knowledgeSource(projectId).getChunksByProject(projectId, 3000) as any[]);
     // Even spread: every document gets a share, evenly spaced through it.
     const byDoc = new Map<string, any[]>();
     all.forEach((c) => { if (!byDoc.has(c.name)) byDoc.set(c.name, []); byDoc.get(c.name)!.push(c); });
@@ -384,7 +385,8 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
     sources = trimSources([...sources, ...extra]);
   }
   if (!sources.length) throw new Error('No sources: add documents to this project, or turn on extra research.');
-  return writeEpisode(sources, { ...opts, sourcesFor: opts.sourcesFor ?? ((topic) => gatherSources(projectId, topic, 1)) }, onStep);
+  const chunkCache: { all?: any[] } = {};
+  return writeEpisode(sources, { ...opts, sourcesFor: opts.sourcesFor ?? ((topic) => gatherSources(projectId, topic, 1, chunkCache)) }, onStep);
 }
 
 /** Writes the episode script from ready-made sources (projects, the daily briefing, ...). */
@@ -427,7 +429,6 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
       const known = [...topics];
       while (topics.length < to) topics.push(topics.length === nSeg - 1 && nSeg > 1 ? 'key takeaways and wrap-up' : `more about ${known[topics.length % Math.max(1, known.length)] || opts.prompt || 'the topic'}`);
     }
-    if (opts.shouldStop?.()) break;
   }
   if (!title) title = (opts.prompt || 'Episode').trim();
   if (!topics.length) topics.push(opts.prompt || 'the main ideas');
@@ -442,8 +443,9 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
   }).filter(Boolean) as PodcastLine[];
 
   let episodeSources = sources;
+  let stoppedEarly = false;
   for (let i = 0; i < topics.length; i++) {
-    if (opts.shouldStop?.() && lines.length >= 4) break; // keep what is written
+    if (opts.shouldStop?.() && lines.length >= 4) { stoppedEarly = true; break; } // keep what is written
     onStep(`Writing part ${i + 1} of ${topics.length}...`);
     // Long episodes: each part reads passages found for its own topic.
     let partSources = sources;
@@ -463,6 +465,18 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
       `${PS}Episode: "${title}". Style: ${style}. Cast: ${cast}.\n${outline}This part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
     );
     lines.push(...parse(t));
+  }
+  if (stoppedEarly) {
+    // Ended by the person: close the episode properly instead of cutting off mid-topic.
+    onStep('Writing the ending...');
+    try {
+      const recap = lines.slice(-4).map((l) => `${l.host}: ${l.text}`).join('\n');
+      const t = await ask(
+        'You write natural podcast scripts. Never mention source numbers in the script.',
+        `Episode: "${title}". Style: ${style}. Cast: ${cast}.\nThe episode ends here. Write a short wrap-up in about 4 lines: a one-sentence summary of what was covered, then a goodbye.\nLast lines so far:\n${recap}\nExactly this format:\n${fmt}`,
+      );
+      lines.push(...parse(t));
+    } catch { /* the episode is still complete enough without it */ }
   }
   if (lines.length < 4) throw new Error('The model did not write the conversation in the expected format. Try again or use a bigger model.');
   return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: episodeSources.slice(0, 60), podcast: lines, hosts };

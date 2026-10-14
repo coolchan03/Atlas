@@ -73,12 +73,13 @@ export const StudyScreen: React.FC = () => {
   const [picked, setPicked] = useState<Record<number, number>>({});
   const [playing, setPlaying] = useState<number | null>(null);
   const stopRef = useRef(false);
+  const stopEpisode = useRef(false);
   const [podOpen, setPodOpen] = useState(false);
   const [pod, setPod] = useState<{ prompt: string; minutes: number; hosts: 1 | 2 | 3; style: PodcastStyle; research: boolean }>({ prompt: '', minutes: 5, hosts: 2, style: 'casual', research: false });
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
     void listVoices('en').then(setVoices).catch(() => setVoices([]));
-    return () => { stopRef.current = true; stop(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
+    return () => { stopRef.current = true; stopEpisode.current = true; stop(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
   }, []);
   // Android back button closes the open item (and stops audio) instead of leaving the screen.
   React.useEffect(() => {
@@ -112,7 +113,6 @@ export const StudyScreen: React.FC = () => {
     return true;
   };
 
-  const stopEpisode = useRef(false);
   const makeEpisode = async () => {
     if (blockedByProtection()) return;
     stopEpisode.current = false;

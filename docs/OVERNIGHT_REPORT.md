@@ -52,3 +52,9 @@ Branch: `claude/atlas-gpu-npu-audit-mgklqk`. Nothing was merged and no pull requ
 - **Study guide and formula sheet.** The study guide already existed; it and the new Formula sheet can now be shared or saved as a Markdown file (you pick the folder).
 - **PowerPoint.** Slides (renamed from "Video (slides)") can be saved as a real .pptx, built on the phone with no library: a title slide, one slide per Study slide, and a sources slide. It opened in python-pptx and rendered in LibreOffice here; not yet opened in PowerPoint itself. Speaker notes are not included.
 - **Three more games:** Word scramble, Prize ladder (10 rungs, safe spots, 50:50 / Skip / Source lifelines, walk away) and Fix the mistake.
+
+## Follow-up: bottom bar and stability
+
+- **Bottom bar.** Settings > Appearance > Bottom bar: choose up to 5 destinations (at least 2, Settings always stays), reorder them, hide the labels, reset. Off by default now: Models. Optional shortcuts that open full screens: Emergency, Library, Daily brief, Compass, Phrases, Manual. Models is still reachable from Home and from a new Models row in Settings. Also new: Appearance > Feel > vibration on or off.
+- **Stability pass.** A second independent read found a corrupt-PowerPoint bug (the zip library drops folder names when given folders separately; now the whole folder is zipped), icons growing with the text-size setting (icon fonts are now left alone), a podcast that kept writing after leaving the screen, no ending when stopped early, and repeated 3000-chunk reads on long episodes. All fixed with tests.
+- Still not run on a phone: video export, PowerPoint opened in PowerPoint itself, the global text wrapper on a real device.

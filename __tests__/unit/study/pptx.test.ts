@@ -44,11 +44,12 @@ describe('PowerPoint export', () => {
     }
   });
 
-  it('zips the top-level entries so [Content_Types].xml sits at the zip root', async () => {
+  it('zips the whole folder (the Android library then keeps folder names and puts [Content_Types].xml at the root)', async () => {
     await writePptx(deck, 't', '/cache/out.pptx');
-    const [sources, target] = (zip as jest.Mock).mock.calls[0];
+    const [source, target] = (zip as jest.Mock).mock.calls[0];
     expect(target).toBe('/cache/out.pptx');
-    expect(sources.map((s: string) => s.split('/').pop())).toEqual(['[Content_Types].xml', '_rels', 'docProps', 'ppt']);
+    expect(typeof source).toBe('string'); // the folder, not a list of its top-level entries
+    expect(source).toMatch(/pptx-\d+$/);
     expect(RNFS.writeFile).toHaveBeenCalledWith(expect.stringContaining('/ppt/slides/slide1.xml'), expect.any(String), 'utf8');
   });
 });

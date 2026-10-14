@@ -62,3 +62,11 @@ describe('nested text', () => {
     expect(adjustTextStyle({ fontSize: 10 }, a, true)).toMatchObject({ fontSize: 12 });
   });
 });
+
+describe('icons', () => {
+  it('keeps an icon font at the size the screen asked for', () => {
+    const a = textAppearanceFor({ textSize: 'xlarge' });
+    expect(adjustTextStyle({ fontSize: 22, fontFamily: 'Feather' }, a)).toMatchObject({ fontSize: 22, fontFamily: 'Feather' });
+    expect(adjustTextStyle({ fontSize: 22, fontFamily: 'sans-serif-condensed' }, textAppearanceFor({ font: 'condensed', textSize: 'xlarge' }))).toMatchObject({ fontSize: 29 });
+  });
+});

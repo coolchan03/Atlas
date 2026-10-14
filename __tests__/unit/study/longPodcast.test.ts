@@ -63,6 +63,19 @@ describe('hour-long podcast', () => {
     });
     expect(result.podcast!.length).toBeGreaterThanOrEqual(40);
     expect(result.podcast!.length).toBeLessThan(40 * 10);
+    // A closing part was asked for, so the episode does not stop mid-topic.
+    expect(calls[calls.length - 1].user).toContain('The episode ends here');
+  });
+
+  it('a stop pressed while planning still gives a full plan and an ended episode', async () => {
+    let stop = false;
+    const result = await writeEpisode([src(1)], {
+      prompt: 'x', minutes: 60, style: 'casual', research: false,
+      shouldStop: () => stop,
+      sourcesFor: async () => { stop = true; return [src(1)]; },
+    });
+    expect(calls.filter((c) => /plan podcast/i.test(c.system))).toHaveLength(4);
+    expect(result.podcast!.length).toBeGreaterThan(0);
   });
 
   it('reuses a passage that was already used instead of numbering it twice', () => {

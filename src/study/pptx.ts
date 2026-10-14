@@ -111,8 +111,10 @@ export async function writePptx(deck: DeckSlide[], title: string, target: string
       await RNFS.mkdir(full.slice(0, full.lastIndexOf('/')));
       await RNFS.writeFile(full, content, 'utf8');
     }
-    // Each top-level folder is added with its own name as the root; [Content_Types].xml sits at the zip root.
-    await zip([`${dir}/[Content_Types].xml`, `${dir}/_rels`, `${dir}/docProps`, `${dir}/ppt`], target);
+    // Zip the folder itself: on Android the library adds its children, so [Content_Types].xml sits at
+    // the zip root and _rels, docProps and ppt keep their own folder names. (Passing the four
+    // top-level entries separately drops the folder names and corrupts the package.)
+    await zip(dir, target);
   } finally {
     RNFS.unlink(dir).catch(() => undefined);
   }

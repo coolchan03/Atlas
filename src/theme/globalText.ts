@@ -32,6 +32,8 @@ export const getTextAppearance = (): TextAppearance => current;
 
 /** Plain system families the app uses by default; only these follow the chosen font. Code (monospace, Menlo) stays. */
 const FOLLOWS_FONT = new Set(['sans-serif', 'serif']);
+/** Every family that is real text, so it scales; anything else (an icon font) does not. */
+const TEXT_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'Menlo', ...FONT_CHOICES.flatMap(f => [f.heading, f.body])]);
 
 /** The style a text should render with under the given appearance. Returns the input untouched when nothing changes. */
 export function adjustTextStyle(style: unknown, a: TextAppearance, nested = false): unknown {
@@ -42,7 +44,9 @@ export function adjustTextStyle(style: unknown, a: TextAppearance, nested = fals
   // A Text inside another Text inherits the parent's family and size: only change what it sets itself.
   if (family === undefined) { if (!nested) out.fontFamily = a.body; }
   else if (typeof family === 'string' && FOLLOWS_FONT.has(family)) out.fontFamily = family === 'serif' ? a.heading : a.body;
-  if (a.scale !== 1) {
+  // Icon fonts (react-native-vector-icons draws icons as Text with their own family) keep their size.
+  const textFamily = family === undefined || (typeof family === 'string' && TEXT_FAMILIES.has(family));
+  if (a.scale !== 1 && textFamily) {
     const size = flat.fontSize;
     if (typeof size === 'number') out.fontSize = Math.round(size * a.scale);
     else if (!nested) out.fontSize = Math.round(14 * a.scale); // 14 is React Native's default
