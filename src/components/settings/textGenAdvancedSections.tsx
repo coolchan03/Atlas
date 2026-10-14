@@ -22,7 +22,6 @@ import {
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
 import { hardwareService } from '../../services/hardware';
-import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
 
 const isAndroid = Platform.OS === 'android';
@@ -90,39 +89,36 @@ const IOS_BACKENDS: BackendOption[] = [
 ];
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
-  { id: INFERENCE_BACKENDS.AUTO, label: 'Auto', desc: 'Checks NPU, Vulkan and OpenCL in order and loads the first working accelerator. Never silently switches to CPU; choose CPU manually if none works.' },
-  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers using supported OpenCL GPUs, primarily Adreno. Requires model reload.' },
-  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Test)', desc: 'Experimental GPU offload for text GGUF. Atlas checks Vulkan availability, then fails with an explanation if loading fails; it will not silently switch to CPU. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.AUTO, label: 'Automatic', desc: 'Atlas tests the compatible NPU, OpenCL and Vulkan engines for each model. No manual GPU selection is needed.' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Troubleshooting option: run locally without hardware acceleration. Can be considerably slower.' },
 ];
 
-const HTP_BACKEND: BackendOption = {
-  id: INFERENCE_BACKENDS.HTP,
-  label: 'NPU (Beta)',
-  desc: 'Experimental — works best with Llama- and Qwen-style models. Some models (e.g. Gemma) fall back to CPU or produce invalid output. Requires model reload.',
-};
+// GPU-specific controls remain accessible only in developer builds for native
+// diagnostic regression tests. Release users have one Auto choice, not GPU APIs.
+const ANDROID_DEVELOPER_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL (Dev)', desc: 'Test the OpenCL path without automatic selection.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan (Dev)', desc: 'Test the native Vulkan path without automatic selection.' },
+];
 
 export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
   const { gpuLayersEffective } = useTextGenerationAdvanced();
-  const [hasNPU, setHasNPU] = useState(false);
-
+  // Older saved Vulkan/OpenCL/HTP selections are replaced by the single Auto choice.
   useEffect(() => {
-    if (isAndroid) {
-      hardwareService.getSoCInfo().then(info => setHasNPU(info.hasNPU));
+    if (isAndroid && !__DEV__ && ![INFERENCE_BACKENDS.AUTO, INFERENCE_BACKENDS.CPU].includes(settings.inferenceBackend)) {
+      updateSettings({ inferenceBackend: INFERENCE_BACKENDS.AUTO, backendUserChosen: false });
     }
-  }, []);
+  }, [settings.inferenceBackend, updateSettings]);
 
-  const androidBackends = hasNPU && HTP_UI_ENABLED ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
-  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : androidBackends;
+  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS
+    : (__DEV__ ? [...ANDROID_BASE_BACKENDS, ...ANDROID_DEVELOPER_BACKENDS] : ANDROID_BASE_BACKENDS);
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
-  const current = settings.inferenceBackend ?? defaultBackend;
+  const savedBackend = settings.inferenceBackend ?? defaultBackend;
+  const current = isAndroid && !__DEV__ && savedBackend !== INFERENCE_BACKENDS.CPU ? INFERENCE_BACKENDS.AUTO : savedBackend;
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
-  const layersLabel = current === INFERENCE_BACKENDS.AUTO ? 'Accelerator Layer Limit' : current === INFERENCE_BACKENDS.HTP
-    ? 'NPU Layers'
-    : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : current === INFERENCE_BACKENDS.VULKAN ? 'GPU Layers (Vulkan)' : 'GPU Layers (OpenCL)';
+  const layersLabel = current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'Accelerator Layer Limit';
 
   return (
     <SegmentedRow<InferenceBackend>

@@ -1,4 +1,14 @@
-import { validateImageSupportFormat } from '../../../src/utils/imageSupportFormat';
+import { validateImageSupportFormat, imageJsonConfigHint } from '../../../src/utils/imageSupportFormat';
+describe('image configuration descriptions', () => {
+  it('describes tokenizer and scheduler JSON without promising unsupported runtime features', () => {
+    expect(imageJsonConfigHint('tokenizer.json')).toMatch(/GGUF/);
+    expect(imageJsonConfigHint('scheduler_config.json')).toMatch(/scheduler/i);
+    expect(imageJsonConfigHint('model_index.json')).toMatch(/Diffusers/);
+    expect(imageJsonConfigHint('my-other.json')).toMatch(/metadata/i);
+    expect(imageJsonConfigHint('weights.safetensors')).toBe('');
+  });
+});
+
 describe('native image support attachment formats', () => {
   it('accepts recognized LoRA, encoder and VAE weights', () => {
     expect(validateImageSupportFormat('portrait_lora.safetensors', 'lora')).toBeNull();

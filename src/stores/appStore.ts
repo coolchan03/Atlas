@@ -58,6 +58,8 @@ type AppSettings = {
   imageUseOpenCL: boolean;
   imageBackendMode?: 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
   imageAccelerationAutoMigrated?: boolean;
+  /** CPU fallback is much slower; require explicit user opt-in. */
+  imageAllowCpuFallback?: boolean;
   enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
@@ -235,6 +237,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageUseOpenCL: true,
   imageBackendMode: 'auto',
   imageAccelerationAutoMigrated: true,
+  imageAllowCpuFallback: false,
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,

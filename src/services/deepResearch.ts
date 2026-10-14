@@ -1,10 +1,11 @@
+/* eslint-disable complexity -- Research covers source failures, cancellation, and link reading without hiding cases. */
 import { searchWeb } from './tools/webSearchProviders';
 import { braveSearch, readPage } from './tools/handlers';
 import { offGridOn } from '../atlasTools/offGrid';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 
 type ResearchStatus = (status: string | null) => void;
-export type ResearchSource = { id: number; title: string; url: string; excerpt: string };
+export type ResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType?: 'webpage' | 'search snippet' };
 export type ResearchBrief = { context: string; sources: ResearchSource[] };
 let activeRun = 0;
 
@@ -21,20 +22,34 @@ export async function buildDeepResearchBrief(
   if (offGridOn()) {
     throw new Error('Deep Research requires internet access. Turn off off-grid mode or use offline documents.');
   }
+  const topic = question.trim().slice(0, 320);
+  if (!topic) throw new Error('Enter a topic to research.');
   const run = ++activeRun;
   const awakeReason = `deep-research-${  run}`;
   holdScreenAwake(awakeReason);
   const check = () => { if (activeRun !== run) throw new ResearchCancelledError(); };
-  const topic = question.trim().slice(0, 320);
-  if (!topic) throw new Error('Enter a topic to research.');
   // Preserve tokens for the conversation and for the model's final answer.
   const budget = Math.min(11500, Math.max(2900, Math.floor((opts.contextLength || 4096) * 1.5)));
   const queries = opts.depth === 'quick'
     ? [topic]
     : [topic, `${topic  } primary sources and evidence`, `${topic  } recent developments alternate views`];
-  const found = new Map<string, { title: string; url: string; snippet: string }>();
+  const found = new Map<string, { title: string; url: string; snippet: string; wasRead?: boolean }>();
   const errors: string[] = [];
   try {
+  // Direct links in the user's question should be read, not merely passed to a search engine.
+  const directLinks = [...new Set(Array.from(topic.matchAll(/https:\/\/[^\s<>"']+/gi), match =>
+    match[0].replace(/[),.!?;]+$/, '').split('#')[0]))].slice(0, 3);
+  for (const [index, url] of directLinks.entries()) {
+    check();
+    opts.onStatus?.(`Reading linked webpage (${index + 1}/${directLinks.length})…`);
+    try {
+      const content = await readPage(url, 1600);
+      check();
+      if (content.trim()) found.set(url, { title: 'User-provided webpage', url, snippet: content.trim(), wasRead: true });
+    } catch (e: any) {
+      errors.push(`Could not read ${url}: ${String(e?.message || e).slice(0, 100)}`);
+    }
+  }
   for (const [index, query] of queries.entries()) {
     check();
     opts.onStatus?.(`Searching sources (${  index + 1  }/${  queries.length  })…`);
@@ -56,13 +71,18 @@ export async function buildDeepResearchBrief(
   const readLimit = opts.depth === 'quick' ? 2 : 4;
   const sources: ResearchSource[] = [...found.values()].slice(0, sourceLimit).map((source, index) => ({
     id: index + 1, title: source.title, url: source.url, excerpt: source.snippet,
+    evidenceType: source.wasRead ? 'webpage' : 'search snippet',
   }));
   for (const [index, source] of sources.slice(0, readLimit).entries()) {
     check();
+    if (source.evidenceType === 'webpage') continue;
     opts.onStatus?.(`Reading source (${  index + 1  }/${  Math.min(sources.length, readLimit)  })…`);
     try {
       const content = await readPage(source.url, 1300);
-      if (content.trim()) source.excerpt = content.trim().slice(0, 1300);
+      if (content.trim()) {
+        source.excerpt = content.trim().slice(0, 1300);
+        source.evidenceType = 'webpage';
+      }
     } catch {
       // Preserve searchable snippets and URLs if the publisher blocks a full page.
     }
@@ -79,7 +99,7 @@ SOURCES:
 `;
   let context = prefix;
   for (const source of sources) {
-    const heading = `\n[${source.id}] ${source.title}\nURL: ${source.url}\nExcerpt: `;
+    const heading = `\n[${source.id}] ${source.title}\nURL: ${source.url}\nEvidence: ${source.evidenceType ?? 'search snippet'}\nExcerpt: `;
     const remaining = budget - context.length - heading.length - 280;
     if (remaining < 90) break;
     context += `${heading + source.excerpt.slice(0, Math.min(remaining, 1150))  }\n`;

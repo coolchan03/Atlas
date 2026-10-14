@@ -30,6 +30,10 @@ describe('happy — image generation shows the correct backend label (heavy entr
     // The GPU label needs a native OpenCL device: Auto now falls back to CPU without one.
     (require('llama.rn') as any).getBackendDevicesInfo = jest.fn(() => Promise.resolve([{ backend: 'OpenCL', type: 'gpu', name: 'Adreno' }]));
     (require('../../../src/services/hardware').hardwareService as any).cachedOpenCLCapability = null;
+    if (cfg.platform === 'ios') {
+      // This iOS boundary's CPU-backed native mock requires an explicit CPU opt-in.
+      require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ imageAllowCpuFallback: true });
+    }
     h.enableGenerationDetailsViaUI(); // turn details on BEFORE mounting the chat (separate render)
     h.render();
     await h.placeImageModel({ backend: cfg.backend });

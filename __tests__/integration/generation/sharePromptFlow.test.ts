@@ -207,6 +207,7 @@ describe('Share Prompt Flow Integration', () => {
         settings: {
           imageSteps: 20, imageGuidanceScale: 7.5,
           imageWidth: 512, imageHeight: 512, imageThreads: 4,
+          imageAllowCpuFallback: true, // CPU-only mocked image engine.
           enhanceImagePrompts: false,
         } as any,
       });

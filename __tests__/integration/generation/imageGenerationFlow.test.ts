@@ -123,6 +123,7 @@ describe('Image Generation Flow Integration', () => {
         imageWidth: 512,
         imageHeight: 512,
         imageThreads: 4,
+        imageAllowCpuFallback: true, // Existing CPU-generator integration tests explicitly opt in.
       } as any,
     });
     mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
@@ -130,13 +131,28 @@ describe('Image Generation Flow Integration', () => {
   };
 
   describe('imported checkpoint GPU fallback', () => {
+    it('never silently runs on CPU when no image GPU is usable', async () => {
+      const imageModel = { ...createONNXImageModel({ id: 'img-model-1', modelPath: '/mock/image-model' }),
+        backend: 'sdcpp', nativeImageFamily: 'sd15' } as any;
+      useAppStore.setState({
+        downloadedImageModels: [imageModel], activeImageModelId: 'img-model-1',
+        warmedImageModels: ['img-model-1'],
+        settings: { ...useAppStore.getState().settings, imageBackendMode: 'auto', imageAllowCpuFallback: false } as any,
+      });
+      (mockLocalDreamService as any).getNativeImageGpuDiagnostics = jest.fn(async () =>
+        ({ enumerated: false, detail: 'No supported GPU device' }));
+      const result = await imageGenerationService.generateImage({ prompt: 'A quick sketch' });
+      expect(result).toBeNull();
+      expect(mockLocalDreamService.generateImage).not.toHaveBeenCalled();
+    });
+
     it('retries a failed Vulkan run on the CPU and says so in the chat', async () => {
       const conversationId = setupWithConversation();
       const imageModel = { ...createONNXImageModel({ id: 'img-model-1', modelPath: '/mock/image-model' }), backend: 'sdcpp', nativeImageFamily: 'sd15' } as any;
       useAppStore.setState({
         downloadedImageModels: [imageModel], activeImageModelId: 'img-model-1', generatedImages: [],
         warmedImageModels: ['img-model-1'],
-        settings: { ...useAppStore.getState().settings, imageSteps: 20, imageThreads: 4, imageBackendMode: 'auto' } as any,
+        settings: { ...useAppStore.getState().settings, imageSteps: 20, imageThreads: 4, imageBackendMode: 'auto', imageAllowCpuFallback: true } as any,
       });
       mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
       (mockLocalDreamService as any).getNativeImageGpuDiagnostics = jest.fn(async (api?: string) =>
@@ -216,6 +232,7 @@ describe('Image Generation Flow Integration', () => {
           imageWidth: 768,
           imageHeight: 768,
           imageThreads: 4,
+          imageAllowCpuFallback: true,
         } as any,
       });
 
