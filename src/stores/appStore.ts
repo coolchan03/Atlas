@@ -310,10 +310,12 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
     merged.settings = { ...merged.settings,
       imageBackendMode: persistedState.settings.imageUseOpenCL === false ? 'cpu' : 'auto' };
   }
-  // Existing installs now use device-probed automatic image acceleration.
+  // Existing installs move to device-probed automatic image acceleration, except an engine the
+  // user picked (CPU, Vulkan or OpenCL), which is kept.
   if (persistedState?.settings && !persistedState.settings.imageAccelerationAutoMigrated) {
-    merged.settings = { ...merged.settings, imageBackendMode: 'auto', imageUseOpenCL: true,
-      imageAccelerationAutoMigrated: true };
+    const kept = ['cpu', 'vulkan', 'opencl'].includes(merged.settings?.imageBackendMode as string);
+    merged.settings = { ...merged.settings, imageAccelerationAutoMigrated: true,
+      ...(kept ? {} : { imageBackendMode: 'auto', imageUseOpenCL: true }) };
   }
   // One-time: upgrades whose backend was picked automatically (never by the user) move
   // to Auto (NPU -> OpenCL GPU -> Vulkan GPU -> CPU), the same default as fresh installs.

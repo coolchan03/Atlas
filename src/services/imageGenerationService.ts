@@ -512,8 +512,10 @@ class ImageGenerationService {
       return this._fail('Image accelerator unavailable: ' + (error?.message || String(error)));
     }
     if (!this._isRequestCurrent(requestEpoch)) return null;
-    // iOS delegates Core ML scheduling to the OS; this restriction is Android-only.
-    const allowSlowCpu = Platform.OS !== 'android' || settings.imageAllowCpuFallback === true || imageComputeMode(settings) === 'cpu';
+    // iOS delegates Core ML scheduling to the OS; this restriction is Android-only. Only imported
+    // (sd.cpp) checkpoints are gated: their CPU runs take very long, MNN CPU models are made for it.
+    const allowSlowCpu = Platform.OS !== 'android' || activeImageModel.backend !== 'sdcpp'
+      || settings.imageAllowCpuFallback === true || imageComputeMode(settings) === 'cpu';
     if (imageBackend.selected === 'cpu' && !allowSlowCpu) {
       return this._fail('No usable Vulkan/OpenCL image accelerator found. Enable "Allow slow CPU fallback" in Advanced Image Settings if you want to continue on CPU.');
     }
