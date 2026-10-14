@@ -309,6 +309,55 @@ describe('Image Generation Flow Integration', () => {
       expect(conversation?.messages[0].attachments).toHaveLength(1);
       expect(conversation?.messages[0].attachments?.[0].type).toBe('image');
     });
+
+    it.each([
+      ['private', { isPrivate: true }],
+      ['PIN-locked', { pinVerifier: 'pin:v1:abc' }],
+    ])('keeps a picture from a %s chat out of the gallery and the saved image list', async (_name, flag) => {
+      const originalOS = Platform.OS;
+      const rn = require('react-native');
+      const originalDevice = rn.NativeModules.AtlasDevice;
+      (Platform as any).OS = 'android';
+      rn.NativeModules.AtlasDevice = {
+        encryptChatState: async (t: string) => 'atlasenc:v1:' + t,
+        decryptChatState: async (t: string) => t,
+      };
+      const imageModel = setupImageModelState();
+      const conversationId = setupWithConversation();
+      require('../../../src/stores/chatStore').useChatStore.setState({
+        conversations: getChatState().conversations.map(c => ({ ...c, ...flag })),
+      });
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'a secret prompt', conversationId });
+
+      const { galleryImages } = require('../../../src/stores/appStore');
+      const state = getAppState();
+      expect(galleryImages(state.generatedImages, state.hiddenImages)).toHaveLength(0);
+      const saved = useAppStore.persist.getOptions().partialize!(state as any) as any;
+      expect(JSON.stringify(saved)).not.toContain('a secret prompt');
+      expect(saved.hiddenImages).toHaveLength(1);
+      // The chat's own gallery view still has it for the current session.
+      expect(state.generatedImages.some(i => i.conversationId === conversationId)).toBe(true);
+      (Platform as any).OS = originalOS;
+      rn.NativeModules.AtlasDevice = originalDevice;
+    });
+
+    it('lists an ordinary chat picture in the gallery as before', async () => {
+      const imageModel = setupImageModelState();
+      const conversationId = setupWithConversation();
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+      await imageGenerationService.generateImage({ prompt: 'a sunset', conversationId });
+      const { galleryImages } = require('../../../src/stores/appStore');
+      const state = getAppState();
+      expect(galleryImages(state.generatedImages, state.hiddenImages)).toHaveLength(1);
+    });
   });
 
   describe('Progress Updates', () => {

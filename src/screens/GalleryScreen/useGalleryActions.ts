@@ -3,6 +3,7 @@ import { Platform, PermissionsAndroid, Share } from 'react-native';
 import RNFS from 'react-native-fs';
 import { showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore, useChatStore } from '../../stores';
+import { galleryImages } from '../../stores/appStore';
 import { imageGenerationService, onnxImageGeneratorService } from '../../services';
 import type { ImageGenerationState } from '../../services';
 import { GeneratedImage } from '../../types';
@@ -20,7 +21,7 @@ export const formatDate = (dateStr: string): string => {
 };
 
 export const useGalleryActions = (conversationId: string | undefined) => {
-  const { generatedImages, removeGeneratedImage } = useAppStore();
+  const { generatedImages, hiddenImages, removeGeneratedImage } = useAppStore();
   const conversations = useChatStore(s => s.conversations);
 
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -44,8 +45,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
       try {
         const diskImages = await onnxImageGeneratorService.getGeneratedImages();
         if (diskImages.length > 0) {
-          const { generatedImages: storeImages, addGeneratedImage } = useAppStore.getState();
-          const existingIds = new Set(storeImages.map(img => img.id));
+          const { generatedImages: storeImages, hiddenImages: hidden, addGeneratedImage } = useAppStore.getState();
+          // Pictures from private or locked chats are never listed from disk either.
+          const existingIds = new Set([...storeImages.map(img => img.id), ...hidden.map(h => h.id)]);
           for (const img of diskImages) {
             if (!existingIds.has(img.id)) {
               addGeneratedImage(img);
@@ -75,11 +77,11 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   }, [conversationId, conversations]);
 
   const displayImages = useMemo(() => {
-    if (!conversationId) return generatedImages;
+    if (!conversationId) return galleryImages(generatedImages, hiddenImages);
     return generatedImages.filter(
       img => img.conversationId === conversationId || (chatImageIds && chatImageIds.has(img.id))
     );
-  }, [generatedImages, conversationId, chatImageIds]);
+  }, [generatedImages, hiddenImages, conversationId, chatImageIds]);
 
   const handleDelete = useCallback((image: GeneratedImage) => {
     const doDelete = async () => {

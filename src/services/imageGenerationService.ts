@@ -325,6 +325,14 @@ class ImageGenerationService {
     const { params, activeImageModel, meta } = opts;
     result.modelId = activeImageModel.id;
     if (params.conversationId) result.conversationId = params.conversationId;
+    // A picture made in a private or PIN-locked chat stays with that chat: it is hidden from the
+    // Gallery and never written to the saved image list (its prompt would be readable there).
+    const sensitiveChat = params.conversationId
+      ? require('../stores/chatStore').useChatStore.getState().conversations.find((c: any) => c.id === params.conversationId)
+      : undefined;
+    if (sensitiveChat?.isPrivate || sensitiveChat?.pinVerifier) {
+      useAppStore.getState().hideGeneratedImage(result.id, sensitiveChat.isPrivate ? 'private' : 'locked');
+    }
     useAppStore.getState().addGeneratedImage(result);
     // First successful generation warmed the backend — don't show the ~120s
     // one-time notice for this model again (persisted across launches).

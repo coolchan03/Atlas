@@ -163,6 +163,11 @@ interface AppState {
   setImageGenerationStatus: (status: string | null) => void;
   setImagePreviewPath: (path: string | null) => void;
   generatedImages: GeneratedImage[];
+  /** Pictures made inside private or PIN-locked chats: kept out of the Gallery, the saved image list and backups. */
+  hiddenImages: Array<{ id: string; kind: 'private' | 'locked' }>;
+  hideGeneratedImage: (id: string, kind: 'private' | 'locked') => void;
+  /** Deletes the files of pictures from private chats (those chats no longer exist after a restart). Returns their ids. */
+  takePrivateImageIds: () => string[];
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
@@ -427,6 +432,14 @@ export const useAppStore = create<AppState>()(
       setImagePreviewPath: (path) => set({ imagePreviewPath: path }),
       // Gallery
       generatedImages: [],
+      hiddenImages: [],
+      hideGeneratedImage: (id, kind) =>
+        set((state) => (state.hiddenImages.some((h) => h.id === id) ? state : { hiddenImages: [...state.hiddenImages, { id, kind }] })),
+      takePrivateImageIds: () => {
+        const ids = get().hiddenImages.filter((h) => h.kind === 'private').map((h) => h.id);
+        if (ids.length) set((state) => ({ hiddenImages: state.hiddenImages.filter((h) => h.kind !== 'private') }));
+        return ids;
+      },
       addGeneratedImage: (image) =>
         set((state) => ({
           generatedImages: [image, ...state.generatedImages],
@@ -497,7 +510,9 @@ export const useAppStore = create<AppState>()(
         lastTextModelId: state.lastTextModelId,
         settings: state.settings,
         activeImageModelId: state.activeImageModelId,
-        generatedImages: state.generatedImages,
+        // Pictures from private or locked chats are not written to the saved list.
+        generatedImages: state.generatedImages.filter((img) => !state.hiddenImages.some((h) => h.id === img.id)),
+        hiddenImages: state.hiddenImages,
         shownSpotlights: state.shownSpotlights,
         warmedImageModels: state.warmedImageModels,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
@@ -512,3 +527,10 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+/** Pictures for the global Gallery and counts: never those from private or locked chats. */
+export const galleryImages = (images: GeneratedImage[], hidden: Array<{ id: string }>): GeneratedImage[] => {
+  if (!hidden.length) return images;
+  const skip = new Set(hidden.map((h) => h.id));
+  return images.filter((img) => !skip.has(img.id));
+};

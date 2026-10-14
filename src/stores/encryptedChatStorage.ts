@@ -104,6 +104,11 @@ export async function protectChat(id: string, pin: string): Promise<void> {
   const plain = JSON.stringify(publicBody(conv));
   const blob = await api.encryptProtectedItem('chat', id, plain, pin, verifier);
   if (await api.decryptProtectedItem('chat', id, blob, pin, verifier) !== plain) throw new Error('Encryption verification failed.');
+  // Pictures made in this chat leave the Gallery and the saved image list before it locks.
+  try {
+    const { useAppStore } = require('./appStore');
+    for (const m of conv.messages) for (const a of m.attachments ?? []) if (a.type === 'image') useAppStore.getState().hideGeneratedImage(a.id, 'locked');
+  } catch { /* gallery store unavailable */ }
   const stub = placeholder({ ...conv, pinVerifier: verifier }, blob);
   await saveReplacement(id, stub);  // seal on disk before hiding the plaintext in memory
   latestBlobs.set(id, blob);

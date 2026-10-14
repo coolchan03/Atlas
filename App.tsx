@@ -35,6 +35,7 @@ import { registerAtlasVoice } from './src/atlasVoice';
 import { startLowPowerMonitor } from './src/atlasTools/lowPower';
 import { autoPickAcceleration } from './src/atlasTools/accel';
 import { startCtxRecovery } from './src/atlasTools/ctxGuard';
+import { purgePrivateChatImages } from './src/services/privateImagePurge';
 import { startTextAppearance } from './src/theme/globalText';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
@@ -223,6 +224,7 @@ function App() {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
+      purgePrivateChatImages().catch(() => undefined); // pictures from private chats do not outlive them
 
       // Project the persisted "aggressive model loading" setting onto the residency
       // manager (single owner of the runtime load policy) now that settings are

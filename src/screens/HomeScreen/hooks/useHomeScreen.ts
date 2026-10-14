@@ -2,6 +2,7 @@ import { useChatPrefs, useVaultSession, visibleConversations } from '../../../at
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
+import { galleryImages } from '../../../stores/appStore';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
 import { RemoteModel } from '../../../types';
@@ -44,6 +45,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     deviceInfo,
     setDeviceInfo,
     generatedImages,
+    hiddenImages,
   } = useAppStore();
 
   const { conversations, setActiveConversation } = useChatStore();
@@ -222,7 +224,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     activeModelId,
     downloadedImageModels,
     activeImageModelId,
-    generatedImages,
+    generatedImages: galleryImages(generatedImages, hiddenImages),
     conversations,
     activeTextModel,
     activeImageModel,
