@@ -401,13 +401,16 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(deps, conversation, messageText);
   let researchMessage = messageText;
+  let usedOfflineProjectEvidence = false;
   if (deps.researchMode) {
     try {
       const brief = await buildDeepResearchBrief(messageText, {
         contextLength: useAppStore.getState().settings.contextLength,
         onStatus: (status) => deps.setResearchStatus?.(status),
         depth: deps.researchDepth ?? 'deep',
+        projectId: conversation?.projectId,
       });
+      usedOfflineProjectEvidence = brief.sources.some(s => s.evidenceType === 'project document');
       // The evidence pack exists only inside this inference context, never in saved user messages.
       researchMessage = `${messageText  }\n\n${  brief.context}`;
     } catch (e: any) {
@@ -419,7 +422,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
       return;
     }
   }
-  let basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+  // Offline research already contains the selected document excerpts; do not inject them twice.
+  let basePrompt = usedOfflineProjectEvidence
+    ? rawPrompt
+    : await injectRagContext(conversation?.projectId, messageText, rawPrompt);
 
   // In voice/audio mode the pro audio feature augments the prompt for spoken
   // output. No-op (returns undefined) in free builds.
