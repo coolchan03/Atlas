@@ -47,7 +47,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         if (diskImages.length > 0) {
           const { generatedImages: storeImages, hiddenImages: hidden, addGeneratedImage } = useAppStore.getState();
           // Pictures from private or locked chats are never listed from disk either.
-          const existingIds = new Set([...storeImages.map(img => img.id), ...hidden.map(h => h.id)]);
+          const existingIds = new Set([...storeImages.map(img => img.id), ...(hidden ?? []).map(h => h.id)]);
           for (const img of diskImages) {
             if (!existingIds.has(img.id)) {
               addGeneratedImage(img);

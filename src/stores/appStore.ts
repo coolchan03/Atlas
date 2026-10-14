@@ -529,8 +529,8 @@ export const useAppStore = create<AppState>()(
 );
 
 /** Pictures for the global Gallery and counts: never those from private or locked chats. */
-export const galleryImages = (images: GeneratedImage[], hidden: Array<{ id: string }>): GeneratedImage[] => {
-  if (!hidden.length) return images;
+export const galleryImages = (images: GeneratedImage[], hidden?: Array<{ id: string }>): GeneratedImage[] => {
+  if (!hidden?.length) return images;
   const skip = new Set(hidden.map((h) => h.id));
   return images.filter((img) => !skip.has(img.id));
 };
