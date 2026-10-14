@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -12,8 +12,15 @@ import { useChatStore } from '../../stores/chatStore';
 import { ChatContextSection } from './ChatContextSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
+import { ResearchSettingsSection, type ResearchDepth } from './ResearchSettingsSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE, DEFAULT_IMAGE_STEPS } from '../../utils/imageGenAdvice';
+
+const chatRowStyles = StyleSheet.create({
+  agentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, gap: 12 },
+  modelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+  rowTitle: { fontSize: 15, fontWeight: '600' },
+});
 
 const DEFAULT_SETTINGS = {
   temperature: 0.7,
@@ -40,6 +47,12 @@ interface GenerationSettingsModalProps {
   onOpenGallery?: () => void;
   onDeleteConversation?: () => void;
   onOpenTTSSettings?: () => void;
+  researchMode?: boolean;
+  onResearchModeChange?: (enabled: boolean) => void;
+  researchDepth?: ResearchDepth;
+  onResearchDepthChange?: (depth: ResearchDepth) => void;
+  researchBusy?: boolean;
+  researchStatus?: string | null;
   conversationImageCount?: number;
   activeProjectName?: string | null;
   isRemote?: boolean;
@@ -54,6 +67,12 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   onOpenGallery,
   onDeleteConversation,
   onOpenTTSSettings,
+  researchMode = false,
+  onResearchModeChange,
+  researchDepth = 'deep',
+  onResearchDepthChange,
+  researchBusy = false,
+  researchStatus,
   conversationImageCount = 0,
   activeProjectName,
   isRemote,
@@ -111,15 +130,25 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, gap: 12 }}>
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Agent</Text>
+        <View style={chatRowStyles.agentRow}>
+          <Text style={[chatRowStyles.rowTitle, { color: colors.text }]}>Agent</Text>
           <AgentChip onSelect={(id) => { if (activeConversationId) useChatStore.getState().setConversationAgent(activeConversationId, id); }} colors={colors} styles={{ headerProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8 }, headerSubtitle: { fontSize: 14 } }} />
         </View>
         {onOpenModels && (
-          <TouchableOpacity onPress={onOpenModels} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }} testID="chat-settings-change-model">
-            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Models</Text>
+          <TouchableOpacity onPress={onOpenModels} style={chatRowStyles.modelRow} testID="chat-settings-change-model">
+            <Text style={[chatRowStyles.rowTitle, { color: colors.text }]}>Models</Text>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />
           </TouchableOpacity>
+        )}
+        {onResearchModeChange && onResearchDepthChange && (
+          <ResearchSettingsSection
+            enabled={researchMode}
+            onEnabledChange={onResearchModeChange}
+            depth={researchDepth}
+            onDepthChange={onResearchDepthChange}
+            busy={researchBusy}
+            status={researchStatus}
+          />
         )}
         <ConversationActionsSection
           onClose={onClose}

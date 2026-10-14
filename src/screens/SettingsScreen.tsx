@@ -223,6 +223,7 @@ export const SettingsScreen: React.FC = () => {
         <AttachStep index={5} fill>
           <View style={styles.navSection}>
             {[
+              { icon: 'monitor', title: 'Presentation Studio', desc: 'Create PowerPoint decks with templates and export PDF, offline', screen: 'Presentations' as const },
               { icon: 'droplet', title: 'Appearance & AI style', desc: 'Theme, colors, font, text size, bottom bar, and how talkative the AI is', screen: 'Appearance' as const },
               { icon: 'cpu', title: 'Models', desc: 'Browse, download and load text, image and voice models', screen: 'ModelsTab' as any },
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },

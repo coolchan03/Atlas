@@ -8,14 +8,24 @@ import type { ThemeColors } from './palettes';
 
 export type PaletteId = 'classic' | 'black' | 'forest' | 'ocean' | 'dusk' | 'paper';
 export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal' | 'red' | 'slate';
-export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'condensed';
+export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'condensed' | 'light' | 'medium' | 'casual';
 export type TextSizeId = 'small' | 'normal' | 'large' | 'xlarge';
+export type LayoutMode = 'standard' | 'simple' | 'compact' | 'colorful';
+export type Density = 'comfortable' | 'compact' | 'spacious';
+export const LAYOUT_MODES: Array<{ id: LayoutMode; name: string; hint: string }> = [
+  { id: 'standard', name: 'Standard', hint: 'Original Atlas home and layout' },
+  { id: 'simple', name: 'Simple', hint: 'Large, labeled actions without clutter' },
+  { id: 'compact', name: 'Compact', hint: 'Shortcuts and tighter spacing' },
+  { id: 'colorful', name: 'Colorful', hint: 'Pastel cards and lively accents' },
+];
 
 export interface Appearance {
   palette?: PaletteId;
   accent?: AccentId;
   font?: FontId;
   textSize?: TextSizeId;
+  layoutMode?: LayoutMode;
+  density?: Density;
 }
 
 type Surfaces = Pick<ThemeColors, 'background' | 'surface' | 'surfaceLight' | 'surfaceHover' | 'border' | 'borderLight' | 'divider'>;
@@ -60,7 +70,10 @@ export const FONT_CHOICES: Array<{ id: FontId; name: string; heading: string; bo
   { id: 'sans', name: 'Clean', heading: 'sans-serif', body: 'sans-serif' },
   { id: 'serif', name: 'Book', heading: 'serif', body: 'serif' },
   { id: 'mono', name: 'Terminal', heading: 'monospace', body: 'monospace' },
-  { id: 'condensed', name: 'Compact', heading: 'sans-serif-condensed', body: 'sans-serif-condensed' },
+  { id: 'condensed', name: 'Narrow', heading: 'sans-serif-condensed', body: 'sans-serif-condensed' },
+  { id: 'light', name: 'Light', heading: 'sans-serif-light', body: 'sans-serif-light' },
+  { id: 'medium', name: 'Bold', heading: 'sans-serif-medium', body: 'sans-serif-medium' },
+  { id: 'casual', name: 'Handwritten', heading: 'casual', body: 'casual' },
 ];
 
 export const TEXT_SIZES: Array<{ id: TextSizeId; name: string; scale: number }> = [
@@ -77,8 +90,15 @@ export function applyAppearanceColors(base: ThemeColors, isDark: boolean, appear
   const accent = ACCENTS.find(a => a.id === appearance.accent);
   const bg = palette && (isDark ? palette.dark : palette.light);
   const ac = accent && (isDark ? accent.dark : accent.light);
-  if (!bg && !ac) return base;
-  return { ...base, ...(bg ?? {}), ...(ac ? { ...ac, borderFocus: ac.primary } : {}) };
+  const colorful = appearance.layoutMode === 'colorful' && !ac;
+  const colorfulAccent = isDark ? ACCENTS[3].dark : ACCENTS[5].light;
+  const colorfulSurfaces = isDark
+    ? surfaces(['#11152B', '#211D38', '#252F43', '#303950', '#3E4160', '#545B77'])
+    : surfaces(['#F3F6FF', '#FFF9EC', '#E8F6F3', '#DFF0FF', '#D4DEED', '#B6CEED']);
+  if (!bg && !ac && !colorful) return base;
+  return { ...base, ...(colorful && !bg ? colorfulSurfaces : {}), ...(bg ?? {}),
+    ...(colorful ? { ...colorfulAccent, borderFocus: colorfulAccent.primary } : {}),
+    ...(ac ? { ...ac, borderFocus: ac.primary } : {}) };
 }
 
 // TYPOGRAPHY is a shared constant read when style sheets are built, so the font family is
@@ -93,7 +113,7 @@ let appliedTypographyKey = 'atlas:normal';
 export function applyTypography(appearance?: Appearance): string {
   const font = FONT_CHOICES.find(f => f.id === appearance?.font) ?? FONT_CHOICES[0];
   const size = TEXT_SIZES.find(t => t.id === appearance?.textSize) ?? TEXT_SIZES[1];
-  const key = `${font.id}:${size.id}`;
+  const key = `${font.id}:${size.id}:${appearance?.layoutMode ?? 'standard'}`;
   if (key === appliedTypographyKey) return key;
   appliedTypographyKey = key;
   FONTS.heading = font.heading;

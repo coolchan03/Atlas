@@ -116,6 +116,38 @@ describe('GenerationSettingsModal', () => {
     };
   });
 
+  it('keeps Deep Research in Chat Settings, with the switch and no header strip', () => {
+    const onModeChange = jest.fn();
+    const onDepthChange = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <GenerationSettingsModal {...defaultProps} researchMode={false}
+        onResearchModeChange={onModeChange} researchDepth="deep"
+        onResearchDepthChange={onDepthChange} />,
+    );
+    expect(getByTestId('research-settings-section')).toBeTruthy();
+    expect(queryByTestId('research-depth-quick')).toBeNull();
+    fireEvent(getByTestId('deep-research-toggle'), 'valueChange', true);
+    expect(onModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('chooses quick or deep research inside the cog and locks controls while generating', () => {
+    const onModeChange = jest.fn();
+    const onDepthChange = jest.fn();
+    const { getByTestId, rerender } = render(
+      <GenerationSettingsModal {...defaultProps} researchMode researchDepth="deep"
+        onResearchModeChange={onModeChange} onResearchDepthChange={onDepthChange} />,
+    );
+    fireEvent.press(getByTestId('research-depth-quick'));
+    expect(onDepthChange).toHaveBeenCalledWith('quick');
+    rerender(
+      <GenerationSettingsModal {...defaultProps} researchMode researchDepth="quick"
+        researchBusy onResearchModeChange={onModeChange}
+        onResearchDepthChange={onDepthChange} />,
+    );
+    expect(getByTestId('deep-research-toggle').props.disabled).toBe(true);
+    expect(getByTestId('research-depth-deep').props.accessibilityState.disabled).toBe(true);
+  });
+
   it('returns null when not visible', () => {
     const { queryByTestId } = render(
       <GenerationSettingsModal {...defaultProps} visible={false} />,

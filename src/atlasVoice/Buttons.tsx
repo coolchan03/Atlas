@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useUiModeStore } from '../stores/uiModeStore';
@@ -15,13 +15,23 @@ export function AtlasModeToggle() {
   return (
     <TouchableOpacity
       onPress={() => { if (on) stop(); setMode(on ? 'chat' : 'audio'); }}
-      style={{ width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? colors.primary : colors.surface, marginRight: 6 }}
-      accessibilityLabel={on ? 'Leave voice mode' : 'Voice mode'}
+      style={[styles.modeButton, { backgroundColor: on ? colors.primary : colors.surface }]}
+      testID="chat-voice-mode-button"
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={on ? 'End voice call' : 'Start voice call'}
     >
       <Icon name="phone-call" size={16} color={on ? '#fff' : colors.textSecondary} />
     </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  modeButton: {
+    width: 40, height: 40, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+});
 
 /** Speaker button under each answer: tap to read it aloud, tap again to stop. */
 export function AtlasSpeakButton({ text, messageId }: { text: string; messageId: string }) {

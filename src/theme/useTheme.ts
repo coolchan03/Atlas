@@ -25,6 +25,7 @@ export interface Theme {
   isDark: boolean;
   /** Font + text size in effect; part of the theme so themed styles rebuild when it changes. */
   typographyKey: string;
+  densityScale: number;
 }
 
 /** Get theme for a given mode (non-hook, for use outside components) */
@@ -34,7 +35,9 @@ export function getTheme(mode: 'light' | 'dark', appearance?: Appearance): Theme
   const shadows = isDark ? SHADOWS_DARK : SHADOWS_LIGHT;
   const elevation = createElevation(colors);
   const typographyKey = applyTypography(appearance);
-  return { colors, shadows, elevation, isDark, typographyKey };
+  const density = appearance?.density ?? (appearance?.layoutMode === 'compact' ? 'compact' : appearance?.layoutMode === 'simple' ? 'spacious' : 'comfortable');
+  const densityScale = density === 'compact' ? 0.8 : density === 'spacious' ? 1.15 : 1;
+  return { colors, shadows, elevation, isDark, typographyKey, densityScale };
 }
 
 /** Hook that returns the current theme based on appStore themeMode */

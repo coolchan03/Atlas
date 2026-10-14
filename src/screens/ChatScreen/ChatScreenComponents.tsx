@@ -14,10 +14,16 @@ import { ModelSelectorModal } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
-import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 type StylesType = ReturnType<typeof createStyles>;
 type ColorsType = ReturnType<typeof useTheme>['colors'];
+
+/** Follows late voice registration so the call button appears without reopening chat. */
+const HeaderVoiceAction: React.FC<{ styles: StylesType }> = ({ styles }) => {
+  const ModeToggle = useSlot(SLOTS.chatInputModeToggle);
+  return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null;
+};
 
 export const NoModelScreen: React.FC<{
   styles: StylesType;
@@ -91,11 +97,12 @@ export const ChatHeader: React.FC<{
   onOpenModels: () => void;
   onOpenChatOptions?: () => void;
   setShowSettingsPanel: (v: boolean) => void;
+  researchMode?: boolean;
   setShowProjectSelector: (v: boolean) => void;
   isRemote?: boolean;
   modelRuntimeLabel?: string;
   modelRuntimeState?: 'none' | 'selected' | 'loading' | 'loaded' | 'evicted' | 'remote';
-}> = ({ styles, colors, activeConversation, navigation, onOpenModels, onOpenChatOptions, setShowSettingsPanel, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
+}> = ({ styles, colors, activeConversation, navigation, onOpenModels, onOpenChatOptions, setShowSettingsPanel, researchMode, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -130,21 +137,22 @@ export const ChatHeader: React.FC<{
             <Text style={styles.modelSelectorArrow}>▼</Text>
           </TouchableOpacity>
           {/* Project and agent selection live in Chat Settings to keep the model visible. */}
-          {/* Pro-only: Chat/Voice mode dropdown, on the same line as Models ·
-              project, pushed to the right. Empty slot in free builds. */}
-          {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null; })()}
         </View>
       </View>
-      <View style={styles.headerActions}>
+      <View style={styles.headerActions} testID="chat-header-actions">
         {activeConversation && !activeConversation.isPrivate && onOpenChatOptions && (
           <TouchableOpacity accessibilityLabel="Chat options and privacy" testID="chat-more-options"
             style={styles.iconButton} onPress={onOpenChatOptions}>
             <Icon name={activeConversation.pinVerifier ? 'lock' : 'more-horizontal'} size={19} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
+        <HeaderVoiceAction styles={styles} />
         <AttachStep index={16}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
-            <Icon name="sliders" size={16} color={colors.textSecondary} />
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)}
+            accessibilityRole="button"
+            accessibilityLabel={researchMode ? 'Chat settings, Deep Research enabled' : 'Chat settings'}
+            testID="chat-settings-icon">
+            <Icon name="settings" size={18} color={researchMode ? colors.primary : colors.textSecondary} />
           </TouchableOpacity>
         </AttachStep>
       </View>
