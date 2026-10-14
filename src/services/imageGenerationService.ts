@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, complexity, prefer-template -- Image generation's existing orchestrator owns retries, metadata, and model residency. */
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
 import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
@@ -511,6 +512,13 @@ class ImageGenerationService {
       return this._fail('Image accelerator unavailable: ' + (error?.message || String(error)));
     }
     if (!this._isRequestCurrent(requestEpoch)) return null;
+    // iOS delegates Core ML scheduling to the OS; this restriction is Android-only.
+    const allowSlowCpu = Platform.OS !== 'android' || settings.imageAllowCpuFallback === true || imageComputeMode(settings) === 'cpu';
+    if (imageBackend.selected === 'cpu' && !allowSlowCpu) {
+      return this._fail('No usable Vulkan/OpenCL image accelerator found. Enable "Allow slow CPU fallback" in Advanced Image Settings if you want to continue on CPU.');
+    }
+    // Never silently start a potentially hours-long CPU image job without opting in.
+    const allowedFallbacks = allowSlowCpu ? imageBackend.fallbacks : imageBackend.fallbacks?.filter(option => option.selected !== 'cpu');
     this.updateState({ status: 'Selected ' + imageBackend.selected.toUpperCase() + ': ' + imageBackend.note });
     const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, { desiredThreads: settings.imageThreads ?? 4, override: opts?.override });
     if (!loaded) return null;
@@ -519,7 +527,7 @@ class ImageGenerationService {
 
     return this._runGenerationAndSave(
       { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: imageBackend.useOpenCL,
-        computeBackend: imageBackend.computeBackend, fallbacks: imageBackend.fallbacks },
+        computeBackend: imageBackend.computeBackend, fallbacks: allowedFallbacks },
       requestEpoch,
     );
   }

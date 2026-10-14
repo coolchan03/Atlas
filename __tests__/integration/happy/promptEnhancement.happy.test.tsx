@@ -28,7 +28,7 @@ describe('happy — image prompt enhancement rewrites the prompt via the text en
     const textModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
     const imageModel = createONNXImageModel({ id: 'sd', name: 'SD', modelPath: '/models/sd', backend: 'mnn' });
     useAppStore.setState({ downloadedModels: [textModel], activeModelId: 'llm', downloadedImageModels: [imageModel], activeImageModelId: 'sd' });
-    useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, enhanceImagePrompts: true, imageSteps: 8 });
+    useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, imageAllowCpuFallback: true, enhanceImagePrompts: true, imageSteps: 8 });
 
     // The text engine's enhancement output.
     boundary.llama!.scriptCompletion({ text: 'a photorealistic tabby cat, studio lighting, ultra detailed' });

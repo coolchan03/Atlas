@@ -15,6 +15,7 @@ import { CustomAlert, hideAlert, initialAlertState, AlertState, showAlert } from
 import { pickAndAttachMmProj } from './ModelsScreen/importHelpers';
 import { quickImportModel } from './ModelsScreen/quickImport';
 import { pickAndAttachImageSupport, modifyImageSupport, isPickerCancel, ImageSupport } from './ModelsScreen/imageSupportActions';
+import { imageJsonConfigHint } from '../utils/imageSupportFormat';
 import { getMissingImageSupportGuides, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
 import { listVolumes, sdCard, useStoragePrefs, chooseSd, fmtBytes, Volume } from '../atlasTools/storage';
 import type { DownloadedModel, ONNXImageModel } from '../types';
@@ -114,7 +115,8 @@ export const MyModelsScreen: React.FC = () => {
     try {
       const attached = await pickAndAttachImageSupport(model, (label, fraction) =>
         setBusy({ id: model.id, label, fraction }));
-      if (attached) setAlertState(showAlert('Support file attached', `${attached.name} is linked to ${model.name}.`));
+      if (attached) setAlertState(showAlert('Support file attached',
+        `${attached.name} is linked to ${model.name}. ${attached.kind === 'config' ? imageJsonConfigHint(attached.name) : ''}`));
     } catch (e: any) {
       if (!isPickerCancel(e)) setAlertState(showAlert('Could not attach image support', String(e?.message || e)));
     } finally { setBusy(null); }
@@ -261,12 +263,13 @@ export const MyModelsScreen: React.FC = () => {
                   <Text style={{ color: colors.primary, marginLeft: 6 }}>Attach LoRA / support file</Text>
                 </TouchableOpacity>
                 <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6 }}>
-                  LoRAs modify style. RealESRGAN .pth is an upscaler, not a style add-on.
+                  LoRAs modify style. RealESRGAN .pth is an upscaler. JSON files carry configuration metadata; they cannot replace missing model or tokenizer weights.
                 </Text>
                 {(m.supportFiles || []).map(file => (
                   <View key={`${file.kind  }/${  file.name}`} style={{ marginTop: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 8 }}>
                     <Text style={{ color: colors.text, fontWeight: '500', fontSize: 13 }}>{file.name}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>{file.kind.toUpperCase()} · {fmtBytes(file.size)}{file.kind === 'lora' ? ` · strength ${file.strength.toFixed(2)}` : ''} · {file.enabled ? 'enabled' : 'disabled'}</Text>
+                    {file.kind === 'config' && <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>{imageJsonConfigHint(file.name)}</Text>}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                       <TouchableOpacity style={btn(colors.primary)} disabled={!!busy}
                         onPress={() => changeImageSupport(m, file, { enabled: !file.enabled })}>

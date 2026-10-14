@@ -35,7 +35,7 @@ async function generateWithSettings(settings: Record<string, unknown>) {
   const model = createONNXImageModel({ id: 'sd', name: 'SD Test', modelPath: '/models/sd', backend: 'mnn' });
   useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: 'sd' });
   useAppStore.getState().updateSettings({
-    imageThreads: 4, imageUseOpenCL: false, enhanceImagePrompts: false, imageSteps: 8, ...settings,
+    imageThreads: 4, imageUseOpenCL: false, imageAllowCpuFallback: true, enhanceImagePrompts: false, imageSteps: 8, ...settings,
   });
 
   // Pre-load so the already-loaded fast path in _ensureImageModelLoaded is taken (skips FS integrity).

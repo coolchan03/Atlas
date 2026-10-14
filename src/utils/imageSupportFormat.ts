@@ -1,5 +1,21 @@
 /* eslint-disable complexity -- Explicit safety/extension whitelist checks are intentionally kept together. */
 /** Validate support-file format before passing it to the native image engine. */
+/** Describe what a JSON file contributes without implying it can execute model weights. */
+export function imageJsonConfigHint(name: string): string {
+  if (!/\.json$/i.test(name)) return '';
+  const filename = name.toLowerCase();
+  if (/tokenizer|vocab|added_tokens|special_tokens/.test(filename)) {
+    return 'Tokenizer metadata saved with this model. The native image engine uses tokenizers included in compatible GGUF encoders; this file alone does not enable a new tokenizer or architecture.';
+  }
+  if (/scheduler/.test(filename)) {
+    return 'Scheduler configuration saved for compatibility. The native diffusion engine selects its own supported sampler; this JSON does not override it.';
+  }
+  if (/model_index|pipeline/.test(filename)) {
+    return 'Diffusers pipeline metadata saved. Atlas does not execute Python Diffusers pipelines from JSON; compatible image weights and encoders are still required.';
+  }
+  return 'JSON model configuration saved as metadata. Only settings supported by the selected native engine can affect generation.';
+}
+
 export type ImageSupportFileKind = 'vae' | 'llm' | 'clip_l' | 't5xxl' | 'lora' | 'upscaler' | 'config';
 
 export function validateImageSupportFormat(name: string, kind: ImageSupportFileKind): string | null {
