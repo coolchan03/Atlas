@@ -25,17 +25,40 @@ describe('global text appearance', () => {
     expect(adjustTextStyle({ fontFamily: 'serif' }, a)).toMatchObject({ fontFamily: 'sans-serif' });
   });
 
-  it('re-renders text that is already on screen when the choice changes', () => {
-    const seen: unknown[] = [];
-    // A stand-in for React Native's forwardRef Text: records the style it is asked to draw.
-    const Fake: any = { render: (props: any) => { seen.push(props.style); return null; } };
-    installTextAppearance([Fake]);
-    const View = () => React.createElement(() => Fake.render({ style: { fontSize: 10 } }, null));
+  it('re-renders text that is already on screen when the choice changes, and passes props and statics through', () => {
+    const seen: any[] = [];
+    // A stand-in for React Native's Text: a plain function component that records what it is asked to draw.
+    const Fake: any = (props: any) => { seen.push(props); return null; };
+    Fake.State = { marker: true };
+    const mod: any = { default: Fake };
+    installTextAppearance([mod]);
+    const Patched: any = mod.default;
+    expect(Patched).not.toBe(Fake);
+    expect(Patched.State).toEqual({ marker: true });
     let tree: any;
-    act(() => { tree = create(React.createElement(View)); });
-    expect(seen[seen.length - 1]).toEqual({ fontSize: 10 });
+    act(() => { tree = create(React.createElement(Patched, { style: { fontSize: 10 }, numberOfLines: 2 })); });
+    expect(seen[seen.length - 1]).toEqual({ style: { fontSize: 10 }, numberOfLines: 2 });
     act(() => setTextAppearance(textAppearanceFor({ textSize: 'large' })));
-    expect(seen[seen.length - 1]).toMatchObject({ fontSize: 12 });
+    expect(seen[seen.length - 1]).toMatchObject({ style: { fontSize: 12 }, numberOfLines: 2 });
     act(() => tree.unmount());
+    // Installing twice must not wrap twice.
+    installTextAppearance([mod]);
+    expect(mod.default).toBe(Patched);
+  });
+
+  it('patches the real React Native Text and TextInput modules in a normal run', () => {
+    const textMod = require('react-native/Libraries/Text/Text');
+    const before = textMod.default;
+    installTextAppearance();
+    expect(textMod.default.__atlasText || before.__atlasText).toBe(true);
+    expect(require('react-native').Text).toBe(textMod.default);
+  });
+});
+
+describe('nested text', () => {
+  it('does not give an inner Text a size or font of its own', () => {
+    const a = textAppearanceFor({ font: 'mono', textSize: 'large' });
+    expect(adjustTextStyle({ fontWeight: 'bold' }, a, true)).toEqual({ fontWeight: 'bold' });
+    expect(adjustTextStyle({ fontSize: 10 }, a, true)).toMatchObject({ fontSize: 12 });
   });
 });

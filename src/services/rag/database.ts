@@ -38,6 +38,8 @@ class RagDatabase {
     if (this.ready) return;
     try {
       this.db = open({ name: 'rag.db' });
+      // Deleted rows (a project that was just protected) must be overwritten, not left in free pages.
+      try { this.db.executeSync('PRAGMA secure_delete = ON'); } catch { /* older SQLite */ }
       this.db.executeSync(
         `CREATE TABLE IF NOT EXISTS rag_documents (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,6 +164,13 @@ class RagDatabase {
       chunk_rowid: row.chunk_rowid,
       embedding: this.blobToEmbedding(row.embedding),
     }));
+  }
+
+  /** True when any indexed document uses this file path. */
+  isPathIndexed(path: string): boolean {
+    const result = this.getDb().executeSync('SELECT COUNT(*) as count FROM rag_documents WHERE path = ?', [path]);
+    const rows = (result.rows ?? []) as unknown as { count: number }[];
+    return rows.length > 0 && rows[0].count > 0;
   }
 
   hasEmbeddingsForDocument(docId: number): boolean {

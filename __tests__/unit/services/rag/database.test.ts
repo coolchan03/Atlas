@@ -42,11 +42,12 @@ describe('RagDatabase', () => {
     it('opens the database and creates tables', async () => {
       await ragDatabase.ensureReady();
       expect(open).toHaveBeenCalledWith({ name: 'rag.db' });
-      // rag_documents, rag_chunks, rag_embeddings = 3 tables
-      expect(mockExecuteSync).toHaveBeenCalledTimes(3);
-      expect(mockExecuteSync.mock.calls[0][0]).toContain('rag_documents');
-      expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_chunks');
-      expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_embeddings');
+      // secure_delete first (deleted document text must be overwritten), then 3 tables
+      expect(mockExecuteSync).toHaveBeenCalledTimes(4);
+      expect(mockExecuteSync.mock.calls[0][0]).toContain('secure_delete');
+      expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_documents');
+      expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_chunks');
+      expect(mockExecuteSync.mock.calls[3][0]).toContain('rag_embeddings');
     });
 
     it('does not re-initialize on second call', async () => {

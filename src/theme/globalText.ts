@@ -4,8 +4,8 @@
  * never see the theme; instead of rewriting each one, Text and TextInput adjust their own
  * style as they render. A tiny store tells every mounted text when the choice changes.
  */
-import { useSyncExternalStore } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import React, { useSyncExternalStore } from 'react';
+import { StyleSheet } from 'react-native';
 import { FONT_CHOICES, TEXT_SIZES, type Appearance } from './appearance';
 
 export interface TextAppearance { key: string; scale: number; heading: string; body: string }
@@ -34,35 +34,73 @@ export const getTextAppearance = (): TextAppearance => current;
 const FOLLOWS_FONT = new Set(['sans-serif', 'serif']);
 
 /** The style a text should render with under the given appearance. Returns the input untouched when nothing changes. */
-export function adjustTextStyle(style: unknown, a: TextAppearance): unknown {
+export function adjustTextStyle(style: unknown, a: TextAppearance, nested = false): unknown {
   if (a.key === NEUTRAL.key) return style;
   const flat = (StyleSheet.flatten(style as any) ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = { ...flat };
   const family = flat.fontFamily;
-  if (family === undefined) out.fontFamily = a.body;
+  // A Text inside another Text inherits the parent's family and size: only change what it sets itself.
+  if (family === undefined) { if (!nested) out.fontFamily = a.body; }
   else if (typeof family === 'string' && FOLLOWS_FONT.has(family)) out.fontFamily = family === 'serif' ? a.heading : a.body;
   if (a.scale !== 1) {
     const size = flat.fontSize;
-    out.fontSize = typeof size === 'number' ? Math.round(size * a.scale) : Math.round(14 * a.scale); // 14 is React Native's default
+    if (typeof size === 'number') out.fontSize = Math.round(size * a.scale);
+    else if (!nested) out.fontSize = Math.round(14 * a.scale); // 14 is React Native's default
     if (typeof flat.lineHeight === 'number') out.lineHeight = Math.round(flat.lineHeight * a.scale);
   }
   return out;
 }
 
-let installed = false;
-/** Patches Text and TextInput once. `targets` is only for tests. */
-export function installTextAppearance(targets: any[] = [Text, TextInput]): void {
-  if (installed && targets.length === 2 && targets[0] === Text) return;
-  for (const target of targets) {
-    if (!target || typeof target.render !== 'function' || target.__atlasText) continue;
-    const original = target.render;
-    target.__atlasText = true;
-    target.render = function TextWithAppearance(this: unknown, props: any, ref: unknown) {
-      const a = useSyncExternalStore(subscribe, snapshot);
-      return original.call(this, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a) }, ref);
-    };
+/** React Native modules whose default export is the component, patched in place. Literal paths: Metro needs them. */
+const TEXT_MODULE_COUNT = 2;
+function reactNativeTextModules(): any[] {
+  const out: any[] = [];
+  try { out.push(require('react-native/Libraries/Text/Text')); } catch { out.push(null); }
+  try { out.push(require('react-native/Libraries/Components/TextInput/TextInput')); } catch { out.push(null); }
+  return out;
+}
+
+/**
+ * Wraps a component so its style follows the chosen font and size. In this React Native
+ * version Text and TextInput are plain function components (ref arrives as a prop), so the
+ * wrapper just renders the original with an adjusted style and re-renders on a change.
+ */
+export function withTextAppearance<P extends { style?: unknown }>(Original: React.ComponentType<P>): React.ComponentType<P> {
+  const Wrapped = function TextWithAppearance(props: P) {
+    const a = useSyncExternalStore(subscribe, snapshot);
+    const nested = !!React.useContext(ancestorContext());
+    return React.createElement(Original as React.ComponentType<any>, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a, nested) });
+  };
+  Object.assign(Wrapped, Original); // statics such as TextInput.State
+  (Wrapped as any).displayName = (Original as any).displayName ?? 'Text';
+  (Wrapped as any).__atlasText = true;
+  return Wrapped;
+}
+
+let ancestor: React.Context<unknown> | null = null;
+/** React Native's own marker for "inside another Text". */
+function ancestorContext(): React.Context<unknown> {
+  if (!ancestor) {
+    try { ancestor = require('react-native/Libraries/Text/TextAncestorContext').default; } catch { /* tests */ }
+    ancestor = ancestor ?? React.createContext<unknown>(false);
   }
-  if (targets.length === 2 && targets[0] === Text) installed = true;
+  return ancestor as React.Context<unknown>;
+}
+
+let installed = false;
+/**
+ * Replaces the default export of React Native's Text and TextInput modules once. Anything that
+ * reads `Text` from react-native after this (every normal import) gets the wrapped version.
+ * Call it before the app's screens load. `modules` is only for tests.
+ */
+export function installTextAppearance(modules: any[] = reactNativeTextModules()): void {
+  if (installed && modules.length === TEXT_MODULE_COUNT) return;
+  for (const mod of modules) {
+    const original = mod?.default;
+    if (!original || original.__atlasText || (typeof original !== 'function' && typeof original !== 'object')) continue;
+    mod.default = withTextAppearance(original);
+  }
+  if (modules.length === TEXT_MODULE_COUNT) installed = true;
 }
 
 /** Patch Text/TextInput and follow the saved Appearance choice (including after it loads from disk). */

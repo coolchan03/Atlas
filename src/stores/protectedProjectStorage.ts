@@ -107,7 +107,10 @@ export async function protectProject(id: string, pin: string): Promise<void> {
   }
   blobs.set(id, blob); pins.delete(id); lastEncrypted.delete(id);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((p: Project) => p.id === id ? locked : p) }));
-  await ragService.eraseProjectDocumentsFromIndex(id);
+  // The project is locked and its vault verified; now erase the plain index. If this fails the
+  // user is told, and protecting again retries the erase (the vault is rewritten from rag.db).
+  try { await ragService.eraseProjectDocumentsFromIndex(id); }
+  catch (e) { throw new Error(`The project is protected, but its old plain document index could not be erased (${e instanceof Error ? e.message : e}). Unlock and protect it again to retry.`); }
 }
 async function decryptProject(p: Project, pin: string): Promise<Project> {
   if (!p.pinVerifier || !p.protectedBlob) throw new Error('Project is not protected.');
@@ -138,7 +141,12 @@ export async function permanentlyUnprotectProject(id: string, pin: string): Prom
   const { ragService } = require('../services/rag');
   const docs = await protectedVault.readAll(id, pin, p.pinVerifier);
   await ragService.importProjectDocuments(id, docs); // back into the plain index, before the project is opened up
-  await writeReplacement(id, clearSecurity(decrypted));
+  try {
+    await writeReplacement(id, clearSecurity(decrypted));
+  } catch (e) {
+    await ragService.eraseProjectDocumentsFromIndex(id).catch(() => undefined); // still protected: no plain copies
+    throw e;
+  }
   await protectedVault.destroy(id, pin, p.pinVerifier);
   pins.delete(id); blobs.delete(id); lastEncrypted.delete(id);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((x: Project) => x.id === id ? decrypted : x) }));

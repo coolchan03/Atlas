@@ -6,13 +6,19 @@ import logger from '../utils/logger';
  * Delete those picture files instead of leaving them on the phone.
  */
 export async function purgePrivateChatImages(): Promise<number> {
-  const ids = useAppStore.getState().takePrivateImageIds();
+  const ids = useAppStore.getState().privateImageIds();
   if (!ids.length) return 0;
   const { onnxImageGeneratorService } = require('./index');
   let removed = 0;
   for (const id of ids) {
-    try { if (await onnxImageGeneratorService.deleteGeneratedImage(id)) removed++; }
-    catch (e) { logger.warn('[PrivateImages] could not delete one picture', e); }
+    try {
+      await onnxImageGeneratorService.deleteGeneratedImage(id);
+      removed++;
+      useAppStore.getState().forgetHiddenImages([id]); // only forgotten once the file is gone
+    } catch (e: any) {
+      if (e?.code === 'NOT_FOUND') { useAppStore.getState().forgetHiddenImages([id]); continue; } // already gone
+      logger.warn('[PrivateImages] could not delete one picture; will retry next start', e);
+    }
   }
   return removed;
 }

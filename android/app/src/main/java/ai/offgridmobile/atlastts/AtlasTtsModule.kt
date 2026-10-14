@@ -227,7 +227,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                 if (useNeural(lang)) {
                     val sid = if (voiceName.startsWith("sid:")) voiceName.removePrefix("sid:").toIntOrNull() ?: neuralSid else neuralSid
                     val r = neural.synthesize(chunks(text, 380), sid, rate) { fileCancel }
-                    if (r == null) { promise.reject("CANCELLED", "Stopped"); return@Thread }
+                    if (r == null) { if (fileCancel) promise.reject("CANCELLED", "Stopped") else promise.reject("NO_VOICE", "The natural voice is not loaded yet. Open Settings > Voice and try again."); return@Thread }
                     writeWav(out, r.first, r.second)
                     promise.resolve(out.path); return@Thread
                 }

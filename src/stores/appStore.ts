@@ -166,8 +166,10 @@ interface AppState {
   /** Pictures made inside private or PIN-locked chats: kept out of the Gallery, the saved image list and backups. */
   hiddenImages: Array<{ id: string; kind: 'private' | 'locked' }>;
   hideGeneratedImage: (id: string, kind: 'private' | 'locked') => void;
-  /** Deletes the files of pictures from private chats (those chats no longer exist after a restart). Returns their ids. */
-  takePrivateImageIds: () => string[];
+  /** Ids of pictures made in private chats (those chats no longer exist after a restart). */
+  privateImageIds: () => string[];
+  /** Stops tracking these ids, once their files are gone. */
+  forgetHiddenImages: (ids: string[]) => void;
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
@@ -435,11 +437,9 @@ export const useAppStore = create<AppState>()(
       hiddenImages: [],
       hideGeneratedImage: (id, kind) =>
         set((state) => (state.hiddenImages.some((h) => h.id === id) ? state : { hiddenImages: [...state.hiddenImages, { id, kind }] })),
-      takePrivateImageIds: () => {
-        const ids = get().hiddenImages.filter((h) => h.kind === 'private').map((h) => h.id);
-        if (ids.length) set((state) => ({ hiddenImages: state.hiddenImages.filter((h) => h.kind !== 'private') }));
-        return ids;
-      },
+      privateImageIds: () => get().hiddenImages.filter((h) => h.kind === 'private').map((h) => h.id),
+      forgetHiddenImages: (ids) =>
+        set((state) => ({ hiddenImages: state.hiddenImages.filter((h) => !ids.includes(h.id)) })),
       addGeneratedImage: (image) =>
         set((state) => ({
           generatedImages: [image, ...state.generatedImages],

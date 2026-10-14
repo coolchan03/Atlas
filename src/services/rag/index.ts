@@ -14,6 +14,8 @@ export const APP_OWNED_DOC_DIR = 'atlas-research-reports';
 /** A protected project keeps only encrypted text: drop the plain copy Atlas made of the file. */
 async function removeOwnCopy(path: string | undefined): Promise<void> {
   if (!path) return;
+  // Another document (any project) may still use the same file: leave it then.
+  try { if (ragDatabase.isPathIndexed(path)) return; } catch { /* index unavailable: be safe below */ }
   const own = [RNFS.DocumentDirectoryPath, RNFS.CachesDirectoryPath].some(root => root && path.startsWith(`${root}/`));
   if (own) await RNFS.unlink(path).catch(() => undefined);
 }

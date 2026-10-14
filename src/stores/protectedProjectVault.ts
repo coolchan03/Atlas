@@ -86,7 +86,12 @@ export const protectedVault = {
 
   /** Decrypts the project's documents into memory. Called when the project is unlocked. */
   async open(projectId: string, pin: string, verifier: string): Promise<void> {
-    await serial(async () => { open.set(projectId, await readFile(projectId, pin, verifier)); });
+    await serial(async () => {
+      const docs = await readFile(projectId, pin, verifier);
+      // The project may have re-locked while the file was being decrypted: keep nothing in memory then.
+      const { unlockedProjectPin } = require('./protectedProjectStorage');
+      if (unlockedProjectPin(projectId) === pin) open.set(projectId, docs);
+    });
   },
 
   /** Forgets every decrypted document (the encrypted files stay). Called when projects re-lock. */
