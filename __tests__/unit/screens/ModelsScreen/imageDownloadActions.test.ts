@@ -209,6 +209,8 @@ describe('imageDownloadActions', () => {
   });
 
   it('proceedWithDownload uses native zip flow and completes via listeners', async () => {
+    // The zip integrity gate rejects truncated downloads before calling unzip.
+    (RNFS.stat as jest.Mock).mockImplementation(async (path: string) => ({ size: path.endsWith('.zip') ? 2000000 : 500000 }));
     const deps = makeDeps();
 
     await proceedWithDownload(makeZipModelInfo(), deps);

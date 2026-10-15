@@ -9,11 +9,9 @@
  */
 
 import React from 'react';
-import { Linking } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 // Import the SAME shared URL constants the screen uses, so the tap assertions ride on the
 // single source of truth (test-side DRY) rather than re-hardcoding the URL strings.
-import { FOLLOW_X_URL, SLACK_INVITE_URL } from '../../../src/utils/sharePrompt';
 
 // Navigation is globally mocked in jest.setup.ts
 
@@ -95,9 +93,9 @@ describe('SettingsScreen', () => {
     mockProState.proBannerDismissed = false;
   });
 
-  it('shows the Pro upsell banner when Pro is not active and not dismissed', () => {
-    const { getByText } = render(<SettingsScreen />);
-    expect(getByText(/democratized/i)).toBeTruthy();
+  it('does not show the retired Pro upsell marketing card', () => {
+    const { queryByText } = render(<SettingsScreen />);
+    expect(queryByText(/democratized/i)).toBeNull();
   });
 
   it('hides the Pro upsell banner once Pro is active', () => {
@@ -135,7 +133,7 @@ describe('SettingsScreen', () => {
   it('renders navigation item descriptions', () => {
     const { getByText } = render(<SettingsScreen />);
     expect(getByText('System prompt, generation, and performance')).toBeTruthy();
-    expect(getByText('Connect to Off Grid AI Desktop, Ollama, LM Studio, and more')).toBeTruthy();
+    expect(getByText('Use models running on a computer on your Wi-Fi (Ollama, LM Studio...)')).toBeTruthy();
     expect(getByText('Passphrase and app lock')).toBeTruthy();
     expect(getByText('Hardware and compatibility')).toBeTruthy();
     expect(getByText('Models and data usage')).toBeTruthy();
@@ -175,12 +173,10 @@ describe('SettingsScreen', () => {
     // The three theme options are rendered - pressing one calls setThemeMode
   });
 
-  it('renders Privacy First section', () => {
+  it('advertises encrypted project-file backups and protected-item exclusions accurately', () => {
     const { getByText } = render(<SettingsScreen />);
-    expect(getByText('Privacy First')).toBeTruthy();
-    expect(
-      getByText(/All your data stays on this device/),
-    ).toBeTruthy();
+    expect(getByText('Encrypted backup (chats + project files)')).toBeTruthy();
+    expect(getByText(/Includes project knowledge-base files; excludes PIN-protected items/)).toBeTruthy();
   });
 
   it('renders about section text', () => {
@@ -189,30 +185,27 @@ describe('SettingsScreen', () => {
     expect(getByText(/Version/)).toBeTruthy();
   });
 
-  it('renders the "Stay in the loop" card with the Follow-on-X and Join-Slack items', () => {
-    const { getByText, getByTestId } = render(<SettingsScreen />);
-    expect(getByText('Stay in the loop')).toBeTruthy();
-    expect(getByText('Follow @alichherawalla on X')).toBeTruthy();
-    // The two affordances are present and tappable.
-    expect(getByTestId('follow-on-x')).toBeTruthy();
-    expect(getByTestId('join-slack')).toBeTruthy();
+  it('shows manual backup and restore choices instead of unrelated marketing links', () => {
+    const { getByText, queryByText } = render(<SettingsScreen />);
+    expect(getByText('Back up')).toBeTruthy();
+    expect(getByText('Encrypted backup (chats + project files)')).toBeTruthy();
+    expect(getByText('Restore encrypted backup')).toBeTruthy();
+    expect(getByText('Restore')).toBeTruthy();
+    expect(queryByText('Stay in the loop')).toBeNull();
   });
 
-  it('opens the X profile URL when Follow-on-X is tapped', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
-    const { getByTestId } = render(<SettingsScreen />);
-    fireEvent.press(getByTestId('follow-on-x'));
-    // Terminal artifact of a link tap: the OS is handed the exact X profile URL (the shared constant).
-    expect(openURL).toHaveBeenCalledWith(FOLLOW_X_URL);
-    openURL.mockRestore();
+  it('prompts for a password before encrypted backup export', () => {
+    const { getByText } = render(<SettingsScreen />);
+    fireEvent.press(getByText('Encrypted backup (chats + project files)'));
+    expect(getByText('Protect your backup')).toBeTruthy();
+    expect(getByText(/at least 12 characters/)).toBeTruthy();
   });
 
-  it('opens the Slack invite URL when Join-Slack is tapped', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
-    const { getByTestId } = render(<SettingsScreen />);
-    fireEvent.press(getByTestId('join-slack'));
-    expect(openURL).toHaveBeenCalledWith(SLACK_INVITE_URL);
-    openURL.mockRestore();
+  it('prompts for a password before encrypted backup import', () => {
+    const { getByText } = render(<SettingsScreen />);
+    fireEvent.press(getByText('Restore encrypted backup'));
+    expect(getByText('Unlock encrypted backup')).toBeTruthy();
+    expect(getByText(/at least 12 characters/)).toBeTruthy();
   });
 
   it('no longer renders the removed Pro Tools row', () => {

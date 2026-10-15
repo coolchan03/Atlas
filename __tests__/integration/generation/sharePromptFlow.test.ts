@@ -207,7 +207,7 @@ describe('Share Prompt Flow Integration', () => {
         settings: {
           imageSteps: 20, imageGuidanceScale: 7.5,
           imageWidth: 512, imageHeight: 512, imageThreads: 4,
-          enhanceImagePrompts: false,
+          enhanceImagePrompts: false, imageBackendMode: 'cpu',
         } as any,
       });
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);

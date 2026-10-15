@@ -50,7 +50,7 @@ const setupModel = () => {
     activeImageModelId: 'img-1',
     generatedImages: [],
     warmedImageModels: ['img-1'], // pre-warmed so the ~120s notice path is out of scope here
-    settings: { imageSteps: 8, imageGuidanceScale: 2, imageWidth: 256, imageHeight: 256, imageThreads: 4 } as any,
+    settings: { imageSteps: 8, imageGuidanceScale: 2, imageWidth: 256, imageHeight: 256, imageThreads: 4, imageBackendMode: 'cpu' } as any,
   });
   mockDream.getLoadedModelPath.mockResolvedValue(model.modelPath);
   return model;

@@ -30,9 +30,7 @@ import {
   createVisionModel,
   createMessage,
 } from '../../utils/factories';
-import { Linking, Clipboard } from 'react-native';
-import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
-import { withUtm } from '../../../src/utils/utm';
+import { Alert } from 'react-native';
 
 // Mock requestAnimationFrame
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
@@ -322,45 +320,31 @@ describe('HomeScreen', () => {
   // ============================================================================
   // Off Grid AI Desktop promo card
   // ============================================================================
-  describe('Off Grid AI Desktop promo card', () => {
-    it('shows the card by default (not dismissed)', () => {
-      const { getByTestId, getByText } = renderHomeScreen();
-      expect(getByTestId('desktop-promo-card')).toBeTruthy();
-      expect(getByText('Off Grid AI Desktop')).toBeTruthy();
+  describe('home dashboard without retired promotions', () => {
+    it('starts without the obsolete desktop promotion card', () => {
+      const { queryByTestId, queryByText } = renderHomeScreen();
+      expect(queryByTestId('desktop-promo-card')).toBeNull();
+      expect(queryByText('Off Grid AI Desktop')).toBeNull();
     });
 
-    it('hides the card when previously dismissed', () => {
+    it('does not resurrect the retired promo after a saved dismissal', () => {
       useAppStore.setState({ desktopPromoDismissed: true });
-      const { queryByTestId } = renderHomeScreen();
-      expect(queryByTestId('desktop-promo-card')).toBeNull();
+      expect(renderHomeScreen().queryByTestId('desktop-promo-card')).toBeNull();
     });
 
-    it('tapping dismiss hides the card and persists the flag', () => {
+    it('does not expose a stale promotion dismiss control', () => {
       useAppStore.setState({ desktopPromoDismissed: false });
-      const { getByTestId, queryByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('desktop-promo-dismiss'));
-      expect(queryByTestId('desktop-promo-card')).toBeNull();
-      expect(useAppStore.getState().desktopPromoDismissed).toBe(true);
+      expect(renderHomeScreen().queryByTestId('desktop-promo-dismiss')).toBeNull();
     });
 
-    it('tapping the card opens the Off Grid AI Desktop download URL', () => {
-      useAppStore.setState({ desktopPromoDismissed: false });
-      const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    it('leaves the model manager accessible without marketing UI', () => {
       const { getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('desktop-promo-card'));
-      expect(spy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'home-promo'));
-      spy.mockRestore();
+      fireEvent.press(getByTestId('models-summary'));
+      expect(getByTestId('models-row-text')).toBeTruthy();
     });
 
-    it('tapping copy link copies the URL and shows confirmation (for sharing on mobile)', () => {
-      useAppStore.setState({ desktopPromoDismissed: false });
-      const spy = jest.spyOn(Clipboard, 'setString').mockImplementation(() => {});
-      const { getByTestId, getByText } = renderHomeScreen();
-      expect(getByText('Copy link')).toBeTruthy();
-      fireEvent.press(getByTestId('desktop-promo-copy'));
-      expect(spy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'home-promo'));
-      expect(getByText('Link copied')).toBeTruthy();
-      spy.mockRestore();
+    it('does not display a dead promotional copy-link action', () => {
+      expect(renderHomeScreen().queryByTestId('desktop-promo-copy')).toBeNull();
     });
   });
 
@@ -375,7 +359,7 @@ describe('HomeScreen', () => {
 
     it('shows app title', () => {
       const { getByText } = renderHomeScreen();
-      expect(getByText('Off Grid AI')).toBeTruthy();
+      expect(getByText('Atlas')).toBeTruthy();
     });
 
     it('shows Text and Image model card labels', () => {
@@ -507,10 +491,17 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('new-chat-button'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
+      const choices = spy.mock.calls[0][2]!;
+      fireEvent.press(getByTestId('new-chat-button'));
+      act(() => { choices.find(choice => choice.text === 'Regular chat')?.onPress?.(); });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      spy.mockRestore();
     });
 
     it('does not create a conversation eagerly when New Chat pressed', () => {

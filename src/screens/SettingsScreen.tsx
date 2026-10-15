@@ -218,7 +218,7 @@ export const SettingsScreen: React.FC = () => {
               <View style={styles.navItemIcon}><Icon name="lock" size={16} color={colors.textSecondary} /></View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Encrypted backup (chats + project files)</Text>
-                <Text style={styles.navItemDesc}>Excludes PIN-protected chats and project documents</Text>
+                <Text style={styles.navItemDesc}>Includes project knowledge-base files; excludes PIN-protected items and models</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
