@@ -2,6 +2,15 @@ name: Publish Verified Atlas Official Release
 
 on:
   workflow_dispatch:
+    inputs:
+      signed_build_run:
+        description: Exact successful signed APK build run ID
+        required: true
+        type: string
+      release_commit:
+        description: Exact audited commit SHA for the official release
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,8 +26,8 @@ jobs:
     timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
-      SIGNED_BUILD_RUN: "38804633509"
-      RELEASE_COMMIT: "7b32b6114f432cacdc2256b48c62141fdb6e1437"
+      SIGNED_BUILD_RUN: ${{ inputs.signed_build_run }}
+      RELEASE_COMMIT: ${{ inputs.release_commit }}
       RELEASE_TAG: "atlas-official-v0.0.103"
     steps:
       - name: Await exact official APK build success
@@ -33,7 +42,7 @@ jobs:
             echo "::error::APK build came from an unexpected commit"
             exit 1
           fi
-          for check in "TypeScript gate" "Core regression gate" "Require permanent release-signing keystore" "Build release APK" "Verify release native runtime" "Run actions/upload-artifact@v4"; do
+          for check in "TypeScript gate" "Core regression gate" "Checkout pinned public llama.kt sources (exclude private Pro)" "Install Vulkan shader-generator dependencies" "Bootstrap pinned llama.kt Vulkan sources" "Isolate llama.kt Vulkan backend from llama.rn OpenCL" "Require permanent release-signing keystore" "Build release APK" "Verify release native runtime" "Run actions/upload-artifact@v4"; do
             result="$(gh run view "$SIGNED_BUILD_RUN" -R "$GITHUB_REPOSITORY" --json jobs --jq ".jobs[].steps[] | select(.name == \"$check\") | .conclusion")"
             if [ "$result" != "success" ]; then
               echo "::error::Required APK gate failed or is missing: $check"
