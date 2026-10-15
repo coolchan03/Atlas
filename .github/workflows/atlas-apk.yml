@@ -46,6 +46,34 @@ jobs:
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Core regression gate
         run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent
+      - name: Checkout pinned public llama.kt sources (exclude private Pro)
+        run: |
+          set -euo pipefail
+          git submodule sync -- vendor/llama-kt
+          git submodule update --init --depth=1 -- vendor/llama-kt
+          git -C vendor/llama-kt submodule update --init --recursive --depth=1
+          node scripts/check-llamakt-source.cjs
+          test -f vendor/llama-kt/llama-kt/src/main/cpp/CMakeLists.txt
+          echo "Pinned llama.kt native CMake source is present."
+      - name: Install Vulkan shader-generator dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev ninja-build cmake python3
+          command -v glslc
+      - name: Bootstrap pinned llama.kt Vulkan sources
+        working-directory: vendor/llama-kt
+        run: |
+          set -euo pipefail
+          bash scripts/bootstrap.sh
+          test -s llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan.cpp
+          test -n "$(find llama-kt/src/main/cpp/ggml-vulkan/shaders -name '*.cpp' -print -quit)"
+      - name: Isolate llama.kt Vulkan backend from llama.rn OpenCL
+        run: |
+          set -euo pipefail
+          node scripts/prepare-llamakt-vulkan.cjs
+          node scripts/check-llamakt-vulkan-cmake.cjs
+          node scripts/verify-llamakt-gradle.cjs
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
           mkdir -p android/app/libs
