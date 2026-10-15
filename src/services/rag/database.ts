@@ -237,6 +237,32 @@ class RagDatabase {
     }
   }
 
+  /** Sync adds only new documents. Never clear another device's project data. */
+  appendProjectDocuments(docs: {
+    projectId: string; name: string; path: string; size: number;
+    enabled: boolean; createdAt: string; chunks: { content: string; position: number }[];
+  }[]): void {
+    const db = this.getDb();
+    db.executeSync('BEGIN');
+    try {
+      for (const doc of docs) {
+        const result = db.executeSync(
+          'INSERT INTO rag_documents (project_id, name, path, size, created_at, enabled) VALUES (?, ?, ?, ?, ?, ?)',
+          [doc.projectId, doc.name, doc.path, doc.size, doc.createdAt, doc.enabled ? 1 : 0],
+        );
+        if (result.insertId == null) throw new Error('Could not sync project document.');
+        for (const chunk of doc.chunks) {
+          db.executeSync('INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
+            [chunk.content, result.insertId, chunk.position]);
+        }
+      }
+      db.executeSync('COMMIT');
+    } catch (error) {
+      db.executeSync('ROLLBACK');
+      throw error;
+    }
+  }
+
   deleteDocumentsByProject(projectId: string): void {
     const db = this.getDb();
     db.executeSync('DELETE FROM rag_embeddings WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);

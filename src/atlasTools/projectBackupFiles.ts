@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { sha256 } from 'js-sha256';
 import { ragService } from '../services/rag';
 
 /** Files and their searchable text, bound to stable project IDs (never absolute paths). */
@@ -48,6 +49,7 @@ async function readablePath(path: string, name: string): Promise<string> {
 }
 export async function collectProjectFiles(projectIds: string[]): Promise<ProjectBackupFile[]> {
   const result: ProjectBackupFile[] = [];
+  let totalBytes = 0;
   for (const projectId of projectIds) {
     if (!safeProjectId(projectId)) throw new Error('Project has an invalid ID for portable backup.');
     const documents = await ragService.getDocumentsByProject(projectId);
@@ -58,6 +60,9 @@ export async function collectProjectFiles(projectIds: string[]): Promise<Project
       const size = Number(stat.size);
       if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_FILE_BYTES)
         throw new Error(`Document "${doc.name}" is too large for this backup (25 MB per file maximum).`);
+      totalBytes += size;
+      if (totalBytes > MAX_FILE_BYTES)
+        throw new Error('Project files exceed the 25 MB encrypted backup and sync limit.');
       const base64 = await RNFS.readFile(path, 'base64');
       if (byteCount(base64) !== size) throw new Error(`Document "${doc.name}" changed during backup. Retry.`);
       const chunks = (await ragService.getDocumentChunks(doc.id))
@@ -73,7 +78,31 @@ export async function collectProjectFiles(projectIds: string[]): Promise<Project
 }
 
 /** Stage every file before changing the knowledge-base index. Bad archives do not mutate it. */
-export async function restoreProjectFiles(files: ProjectBackupFile[], projectIds: string[]): Promise<number> {
+async function selectIncomingFiles(files: ProjectBackupFile[], merge: boolean): Promise<ProjectBackupFile[]> {
+  // Sync is append-only. Existing documents must never be replaced by an incoming
+  // peer; files with divergent contents are preserved under deterministic names.
+  const incoming: ProjectBackupFile[] = [];
+  for (const file of files) {
+    if (!merge) { incoming.push(file); continue; }
+    const current = await ragService.getDocumentsByProject(file.projectId);
+    const sameName = current.filter(doc => doc.name === file.name);
+    let identical = false;
+    for (const doc of sameName) {
+      if (doc.size !== file.size) continue;
+      try { identical = await RNFS.readFile(doc.path, 'base64') === file.base64; }
+      catch { /* Unreadable local copy must not delete an incoming file. */ }
+      if (identical) break;
+    }
+    if (identical) continue;
+    let name = file.name;
+    if (sameName.length) name = `${file.name.slice(0, 160)  }-sync-${  sha256(file.base64).slice(0, 10)}`;
+    if (current.some(doc => doc.name === name)) continue;
+    incoming.push({ ...file, name });
+  }
+  return incoming;
+}
+
+export async function restoreProjectFiles(files: ProjectBackupFile[], projectIds: string[], merge = false): Promise<number> {
   if (!Array.isArray(files) || !Array.isArray(projectIds) || projectIds.some(id => !safeProjectId(id)))
     throw new Error('Invalid project file backup manifest.');
   const allowed = new Set(projectIds);
@@ -88,10 +117,11 @@ export async function restoreProjectFiles(files: ProjectBackupFile[], projectIds
     total += file.size;
     if (total > MAX_FILE_BYTES) throw new Error('Project files exceed 25 MB in one portable backup.');
   }
+  const incoming = await selectIncomingFiles(files, merge);
   const written: string[] = [];
   const restored: RestoredProjectFile[] = [];
   try {
-    for (const [i, file] of files.entries()) {
+    for (const [i, file] of incoming.entries()) {
       const directory = `${ROOT()}/${file.projectId}`;
       await RNFS.mkdir(directory);
       const path = `${directory}/${Date.now().toString(36)}_${i}_${file.name}`;
@@ -103,7 +133,8 @@ export async function restoreProjectFiles(files: ProjectBackupFile[], projectIds
       const { base64: _data, ...metadata } = file;
       restored.push({ ...metadata, path });
     }
-    await ragService.restoreProjectDocuments(projectIds, restored);
+    if (merge) await ragService.appendProjectDocuments(restored);
+    else await ragService.restoreProjectDocuments(projectIds, restored);
     return written.length;
   } catch (error) {
     await Promise.all(written.map(path => RNFS.unlink(path).catch(() => undefined)));

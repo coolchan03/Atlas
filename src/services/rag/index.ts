@@ -149,6 +149,14 @@ class RagService {
     ragDatabase.restoreProjectDocuments(projectIds, files);
   }
 
+  async appendProjectDocuments(files: {
+    projectId: string; name: string; path: string; size: number; enabled: boolean;
+    createdAt: string; chunks: { content: string; position: number }[];
+  }[]): Promise<void> {
+    await this.ensureReady();
+    ragDatabase.appendProjectDocuments(files);
+  }
+
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
     await this.ensureReady();
     ragDatabase.toggleEnabled(docId, enabled);

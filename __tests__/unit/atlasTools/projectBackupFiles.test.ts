@@ -27,11 +27,13 @@ jest.mock('react-native-fs', () => ({
 const mockGetDocs = jest.fn(async (_id: string): Promise<any[]> => []);
 const mockGetChunks = jest.fn(async (_id: number): Promise<any[]> => []);
 const mockRestore = jest.fn(async (_ids: string[], _docs: any[]) => undefined);
+const mockAppend = jest.fn(async (_docs: any[]) => undefined);
 jest.mock('../../../src/services/rag', () => ({
   ragService: {
     getDocumentsByProject: (...a: any[]) => mockGetDocs(...a as [string]),
     getDocumentChunks: (...a: any[]) => mockGetChunks(...a as [number]),
     restoreProjectDocuments: (...a: any[]) => mockRestore(...a as [string[], any[]]),
+    appendProjectDocuments: (...a: any[]) => mockAppend(...a as [any[]]),
   },
 }));
 const sample = (name = 'context.pdf', projectId = 'therapy') => ({
@@ -45,6 +47,7 @@ describe('portable project knowledge-base backups', () => {
     mockGetDocs.mockResolvedValue([]);
     mockGetChunks.mockResolvedValue([]);
     mockRestore.mockResolvedValue(undefined);
+    mockAppend.mockResolvedValue(undefined);
   });
   it('exports the actual original bytes and per-project searchable chunks', async () => {
     mockFiles.set('/docs/attachments/40_context.pdf', 'YWJj');
@@ -97,4 +100,31 @@ describe('portable project knowledge-base backups', () => {
     await expect(restoreProjectFiles([], ['therapy'])).resolves.toBe(0);
     expect(mockRestore).toHaveBeenCalledWith(['therapy'], []);
   });
+  it('sync appends into the original project without erasing preexisting documents', async () => {
+    mockFiles.set('/docs/attachments/old_context.pdf', 'YWJj');
+    mockGetDocs.mockResolvedValue([{ id: 50, name: 'different.pdf', path: '/docs/attachments/old_context.pdf', size: 3 }]);
+    await expect(restoreProjectFiles([sample()], ['therapy'], true)).resolves.toBe(1);
+    expect(mockRestore).not.toHaveBeenCalled();
+    expect(mockAppend).toHaveBeenCalledWith([expect.objectContaining({
+      name: 'context.pdf', projectId: 'therapy',
+    })]);
+    expect(mockFiles.has('/docs/attachments/old_context.pdf')).toBe(true);
+  });
+  it('sync skips byte-identical incoming documents', async () => {
+    mockFiles.set('/docs/attachments/old_context.pdf', 'YWJj');
+    mockGetDocs.mockResolvedValue([{ id: 50, name: 'context.pdf', path: '/docs/attachments/old_context.pdf', size: 3 }]);
+    expect(await restoreProjectFiles([sample()], ['therapy'], true)).toBe(0);
+    expect(mockAppend).toHaveBeenCalledWith([]);
+    expect(RNFS.writeFile).not.toHaveBeenCalled();
+  });
+  it('sync preserves conflicting file contents under a different name', async () => {
+    mockFiles.set('/docs/attachments/old_context.pdf', 'ZGVm');
+    mockGetDocs.mockResolvedValue([{ id: 50, name: 'context.pdf', path: '/docs/attachments/old_context.pdf', size: 3 }]);
+    expect(await restoreProjectFiles([sample()], ['therapy'], true)).toBe(1);
+    expect(mockAppend).toHaveBeenCalledWith([expect.objectContaining({
+      name: expect.stringMatching(/^context.pdf-sync-/), projectId: 'therapy',
+    })]);
+    expect(mockFiles.get('/docs/attachments/old_context.pdf')).toBe('ZGVm');
+  });
+
 });
