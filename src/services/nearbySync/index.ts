@@ -7,8 +7,11 @@ import { useAuthStore } from '../../stores/authStore';
 import { collectProjectFiles, restoreProjectFiles } from '../../atlasTools/projectBackupFiles';
 import { mergeAgents, mergeConversations, mergeProjects, validateSnapshot } from './merge';
 import type { SyncSnapshot } from './merge';
+import { applyTombstones, captureRemovals, combineTombstones, emptyTombstones, validateTombstones } from './tombstones';
+import type { Tombstones, SyncKind } from './tombstones';
 
 const PREF = 'atlas-sync-enabled-v1';
+const DELETED_PREF = 'atlas-sync-deletions-v1';
 type NativeReply = { peerId: string; payload: string; transport: 'wifi' | 'bluetooth' };
 type Peer = { id: string; address: string };
 type NativeNearby = {
@@ -47,6 +50,9 @@ class NearbySyncService {
   private appListener: { remove(): void } | null = null;
   private busy = false;
   private mergeQueue: Promise<void> = Promise.resolve();
+  private deleted: Tombstones = emptyTombstones();
+  private applyingRemote = false;
+  private trackingStarted = false;
   private listeners = new Set<(s: NearbyStatus) => void>();
   private status: NearbyStatus = { enabled: false, deviceId: '', peers: [], syncing: false };
   getStatus() { return this.status; }
@@ -65,6 +71,31 @@ class NearbySyncService {
       if (store.persist?.hasHydrated?.() === false) await store.persist.rehydrate();
     }
   }
+  private observeRemovals(kind: SyncKind, before: { id: string; pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }[],
+    after: { id: string }[]) {
+    if (this.applyingRemote || before === after) return;
+    const next = captureRemovals(before, after, { current: this.deleted, kind });
+    if (Object.keys(next[kind]).length === Object.keys(this.deleted[kind]).length) return;
+    this.deleted = next;
+    AsyncStorage.setItem(DELETED_PREF, JSON.stringify(this.deleted)).catch(error =>
+      this.publish({ lastError: String(error) }));
+  }
+  private watchStores() {
+    if (this.trackingStarted) return;
+    this.trackingStarted = true;
+    useChatStore.subscribe((next, previous) => {
+      if (next.conversations !== previous.conversations)
+        this.observeRemovals('conversations', previous.conversations, next.conversations);
+    });
+    useProjectStore.subscribe((next, previous) => {
+      if (next.projects !== previous.projects)
+        this.observeRemovals('projects', previous.projects, next.projects);
+    });
+    useAgentStore.subscribe((next, previous) => {
+      if (next.agents !== previous.agents)
+        this.observeRemovals('agents', previous.agents, next.agents);
+    });
+  }
   private async snapshot(): Promise<SyncSnapshot> {
     await this.hydrated();
     const projects = useProjectStore.getState().projects
@@ -77,7 +108,7 @@ class NearbySyncService {
     const agents = useAgentStore.getState().agents;
     const files = await collectProjectFiles(projects.map(p => p.id));
     return {
-      version: 1, sourceId: this.deviceId, projects, conversations, agents, files,
+      version: 1, sourceId: this.deviceId, projects, conversations, agents, files, deleted: this.deleted,
     };
   }
   private async apply(json: string, expectedPeerId: string): Promise<void> {
@@ -90,19 +121,36 @@ class NearbySyncService {
     if (remote.sourceId !== expectedPeerId || remote.sourceId === this.deviceId)
       throw new Error('Wrong device identity in encrypted sync message');
     await this.hydrated();
-    const projects = useProjectStore.getState().projects;
-    const nextProjects = mergeProjects(projects, remote.projects);
-    const allowed = new Set(nextProjects.items.filter(p => !p.pinVerifier && !p.protectedBlob)
+    const incomingDeleted = validateTombstones(remote.deleted);
+    const projectsBefore = useProjectStore.getState().projects;
+    const incomingProjects = applyTombstones(remote.projects, incomingDeleted.projects);
+    const provisionalProjects = mergeProjects(projectsBefore, incomingProjects);
+    const allowed = new Set(provisionalProjects.items.filter(p => !p.pinVerifier && !p.protectedBlob)
       .map(p => p.id));
-    const conversations = useChatStore.getState().conversations;
-    const filtered = remote.conversations.filter(c => !c.projectId || allowed.has(c.projectId));
-    const nextChats = mergeConversations(conversations, filtered);
-    const nextAgents = mergeAgents(useAgentStore.getState().agents, remote.agents);
     const files = (remote.files ?? []).filter(file => allowed.has(file.projectId));
     if (files.length) await restoreProjectFiles(files, [...allowed], true);
-    useProjectStore.setState({ projects: nextProjects.items });
-    useChatStore.setState({ conversations: nextChats.items });
-    useAgentStore.setState({ agents: nextAgents.items });
+    // Re-read local state after file IO; users may edit while an offline transfer runs.
+    const combined = combineTombstones(this.deleted, incomingDeleted);
+    const nextProjects = mergeProjects(
+      applyTombstones(useProjectStore.getState().projects, combined.projects),
+      applyTombstones(remote.projects, combined.projects));
+    const projectIds = new Set(nextProjects.items.filter(p => !p.pinVerifier && !p.protectedBlob)
+      .map(p => p.id));
+    const nextChats = mergeConversations(
+      applyTombstones(useChatStore.getState().conversations, combined.conversations),
+      applyTombstones(remote.conversations.filter(c => !c.projectId || projectIds.has(c.projectId)),
+        combined.conversations));
+    const nextAgents = mergeAgents(
+      applyTombstones(useAgentStore.getState().agents, combined.agents),
+      applyTombstones(remote.agents, combined.agents));
+    this.applyingRemote = true;
+    try {
+      useProjectStore.setState({ projects: nextProjects.items });
+      useChatStore.setState({ conversations: nextChats.items });
+      useAgentStore.setState({ agents: nextAgents.items });
+      this.deleted = combined;
+    } finally { this.applyingRemote = false; }
+    await AsyncStorage.setItem(DELETED_PREF, JSON.stringify(this.deleted));
     this.publish({ lastSync: new Date().toISOString(), lastError: undefined });
   }
   private async incoming(message: Incoming) {
@@ -130,6 +178,10 @@ class NearbySyncService {
       if (!this.active) { this.stopRuntime().catch(() => undefined); return; }
       if (this.enabled) this.run().catch(e => this.publish({ lastError: String(e) }));
     });
+    await this.hydrated();
+    const savedDeletions = await AsyncStorage.getItem(DELETED_PREF);
+    this.deleted = savedDeletions ? validateTombstones(JSON.parse(savedDeletions)) : emptyTombstones();
+    this.watchStores();
     this.enabled = await AsyncStorage.getItem(PREF) === 'true';
     this.publish({ enabled: this.enabled });
     if (this.enabled && this.active) await this.run();

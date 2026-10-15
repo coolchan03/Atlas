@@ -2,6 +2,7 @@ import { sha256 } from 'js-sha256';
 import type { Conversation, Project } from '../../types';
 import type { Agent } from '../../stores/agentStore';
 import type { ProjectBackupFile } from '../../atlasTools/projectBackupFiles';
+import type { Tombstones } from './tombstones';
 
 /** Copy-on-conflict synchronization. Remote data is never allowed to erase a local edit. */
 export interface SyncSnapshot {
@@ -11,6 +12,7 @@ export interface SyncSnapshot {
   conversations: Conversation[];
   agents: Agent[];
   files?: ProjectBackupFile[];
+  deleted?: Tombstones;
   // Transport and storage are handled separately; no credentials, model weights or keys.
 }
 export interface MergeResult<T> { items: T[]; added: number; updated: number; conflicts: number }
@@ -63,7 +65,8 @@ export function mergeConversations(local: Conversation[], remote: Conversation[]
       }
       continue;
     }
-    const remoteWins = validTime(incoming.updatedAt) > validTime(current.updatedAt);
+    const remoteWins = validTime(incoming.updatedAt) > validTime(current.updatedAt) ||
+      (validTime(incoming.updatedAt) === validTime(current.updatedAt) && stable(incoming) > stable(current));
     if (remoteWins) {
       if (preserveConflict(output, current, ' (sync conflict)')) conflicts++;
       output[index] = incoming;
@@ -83,7 +86,8 @@ function mergeNamed<T extends RecordItem & { name: string; pinVerifier?: string;
     if (index < 0) { output.push(incoming); added++; continue; }
     const existing = output[index];
     if (isProtected(existing) || stable(existing) === stable(incoming)) continue;
-    const remoteWins = validTime(incoming.updatedAt) > validTime(existing.updatedAt);
+    const remoteWins = validTime(incoming.updatedAt) > validTime(existing.updatedAt) ||
+      (validTime(incoming.updatedAt) === validTime(existing.updatedAt) && stable(incoming) > stable(existing));
     if (remoteWins) {
       if (preserveConflict(output, existing, ' (sync conflict)')) conflicts++;
       output[index] = incoming; updated++;

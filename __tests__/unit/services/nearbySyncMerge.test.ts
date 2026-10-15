@@ -67,4 +67,13 @@ describe('Atlas offline conflict-preserving merge', () => {
     expect(() => validateSnapshot({ ...valid, projects: null })).toThrow(/Unsupported/);
     expect(() => validateSnapshot({ ...valid, sourceId: '../other' })).toThrow(/Unsupported/);
   });
+  it('converges when two offline devices edit the same chat at the same timestamp', () => {
+    const left = chat(['left']);
+    const right = chat(['right']);
+    const fromLeft = mergeConversations([left], [right]).items;
+    const fromRight = mergeConversations([right], [left]).items;
+    expect(fromLeft).toEqual(fromRight);
+    expect(fromLeft).toHaveLength(2);
+    expect(mergeConversations(fromLeft, fromRight).items).toHaveLength(2);
+  });
 });

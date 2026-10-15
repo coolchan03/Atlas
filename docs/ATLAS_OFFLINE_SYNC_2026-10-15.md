@@ -13,7 +13,7 @@
 1. This first native implementation uses a **local IP socket**, not standalone Wi-Fi Direct discovery/formation. Users must connect both devices to the same Wi-Fi/hotspot, or create the Wi-Fi Direct network using Android first.
 2. **Bluetooth transfer is not implemented.** Do not claim Bluetooth fallback, BLE discovery, or background sync is available.
 3. Chat-local image, attachment and voice files are not portable yet; only project knowledge-base documents carry their original bytes.
-4. Record deletions need synchronized tombstones to prevent an older peer from reintroducing records. Until then, deletion across devices is not a complete bidirectional merge guarantee.
+4. Deletions of whole chats, projects and agents now propagate through persisted tombstones; newer offline conflicting edits are retained as recovered copies. Individual message-level deletions are still not distributed as independent tombstones, so a deleted message may remain in a conflicting transcript on the other device.
 5. Local file transfers are limited to a maximum 25 MB of knowledge-base documents; large project file sets produce a descriptive error, not a silently incomplete transfer.
 6. Pairing requires both devices foregrounded. Native Android device-to-device QA, performance on phone and tablet, repeated pairing, disconnect/reconnect, and Android OS upgrade/key-loss recovery remain necessary.
 7. Full Jest baseline remains at 16 failing and 21 skipped tests in the last complete run; this branch cannot be labeled stable solely because the focused nearby-sync tests pass.
