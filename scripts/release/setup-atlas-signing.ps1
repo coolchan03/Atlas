@@ -4,7 +4,7 @@ param(
   [string]$OutputDirectory = (Join-Path $HOME 'Atlas-Signing'),
   [string]$Alias = 'atlas-upload'
 )
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue' # Native Git/OpenSSL progress on stderr is normal; every exit code is checked.
 Set-StrictMode -Version Latest
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   throw 'GitHub CLI (gh) is required. Install it and run gh auth login.'
@@ -21,7 +21,7 @@ $keytool = Get-Command keytool -ErrorAction SilentlyContinue
 if (-not $openssl -and -not $keytool) {
   throw 'Git for Windows OpenSSL or JDK keytool is required to create a signing key. No Android SDK is needed.'
 }
-New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $OutputDirectory -Force -ErrorAction Stop | Out-Null
 $keyPath = Join-Path $OutputDirectory 'atlas-upload-keystore.p12'
 $existing = Test-Path -LiteralPath $keyPath
 if ($existing) {
