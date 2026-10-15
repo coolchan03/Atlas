@@ -1,0 +1,28 @@
+name: Verify Atlas permanent signing key
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate permanent keystore and signing alias
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_ALIAS"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/atlas-release.p12"
+          keytool -list -v -storetype PKCS12 -keystore "$RUNNER_TEMP/atlas-release.p12" \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > cert-info.txt
+          tr -d ':' < cert-info.txt | tr '[:upper:]' '[:lower:]' | grep -q 21a1de68bdcf3d06d24dad16a33563848212fa485f018de11e776ad2c007504a
+          echo "Atlas saved key and GitHub credentials passed."
