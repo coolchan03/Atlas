@@ -56,10 +56,10 @@ jobs:
           ls -la android/app/libs
       - name: Require permanent release-signing keystore
         env:
-          ATLAS_UPLOAD_KEYSTORE_B64: ${{ secrets.OFFGRID_UPLOAD_KEYSTORE_BASE64 }}
-          ATLAS_UPLOAD_STORE_PASSWORD: ${{ secrets.OFFGRID_UPLOAD_STORE_PASSWORD }}
-          ATLAS_UPLOAD_KEY_ALIAS: ${{ secrets.OFFGRID_UPLOAD_KEY_ALIAS }}
-          ATLAS_UPLOAD_KEY_PASSWORD: ${{ secrets.OFFGRID_UPLOAD_KEY_PASSWORD }}
+          ATLAS_UPLOAD_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          ATLAS_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ATLAS_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ATLAS_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           for variable in ATLAS_UPLOAD_KEYSTORE_B64 ATLAS_UPLOAD_STORE_PASSWORD ATLAS_UPLOAD_KEY_ALIAS ATLAS_UPLOAD_KEY_PASSWORD; do
@@ -78,9 +78,9 @@ jobs:
         working-directory: android
         env:
           OFFGRID_UPLOAD_STORE_FILE: atlas-upload-keystore.p12
-          OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.OFFGRID_UPLOAD_STORE_PASSWORD }}
-          OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.OFFGRID_UPLOAD_KEY_ALIAS }}
-          OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.OFFGRID_UPLOAD_KEY_PASSWORD }}
+          OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
           ./gradlew assembleRelease -PatlasRequireReleaseSigning=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
