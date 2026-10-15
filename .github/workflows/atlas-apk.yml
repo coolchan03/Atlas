@@ -29,7 +29,7 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc || true
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -133,7 +133,7 @@ jobs:
           # Confirm exact GitHub keystore identity, rejecting other valid certificates.
           expected_cert_sha="$(cat android/app/signing-cert.sha256)"
           actual_cert_sha="$("$APKSIGNER" verify --print-certs "$APK" |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+            sed -nE 's/^.*certificate SHA-256 digest:[[:space:]]*([[:xdigit:]]{64})[[:space:]]*$/\1/p' | head -1)"
           if [ -z "$expected_cert_sha" ] || [ -z "$actual_cert_sha" ] ||
              [ "${expected_cert_sha,,}" != "${actual_cert_sha,,}" ]; then
             echo "::error::APK signing certificate does not match the configured release keystore"
