@@ -9,38 +9,28 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Linking,
   Alert, Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { useNavigation, CommonActions, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { MadeWithLove } from '../components/MadeWithLove';
 import { DebugLogsScreen } from '../components/DebugLogsScreen';
 import { useSettingsSections } from '../components/settings/sectionRegistry';
-import { ProUpsellBanner } from '../components/settings/ProUpsellBanner';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import DeviceInfo from 'react-native-device-info';
-import RNFS from 'react-native-fs';
-import { useAppStore, useRemoteServerStore } from '../stores';
-import { hardwareService } from '../services';
+import { useAppStore } from '../stores';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
-import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL, shareOnX } from '../utils/sharePrompt';
 import { clearProForTesting } from '../services/proLicenseService';
-import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import packageJson from '../../package.json';
 
-const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -78,60 +68,16 @@ export const SettingsScreen: React.FC = () => {
     } catch (e: any) { Alert.alert('Encrypted backup failed', String(e?.message ?? e)); }
     finally { setBackupBusy(false); }
   };
-  const deviceInfo = useAppStore((s) => s.deviceInfo);
   // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
   // sense to a paid user). hasRegisteredPro only flips true after RC verification
   // (activateProByEmail / revalidatePro), so this also covers "paid and verified".
   const devProDisabled = useAppStore((s) => s.devProDisabled);
   const setDevProDisabled = useAppStore((s) => s.setDevProDisabled);
   const setHasRegisteredPro = useAppStore((s) => s.setHasRegisteredPro);
-  const { proStatusLabel } = useProStatusLabel();
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
   }, [completeChecklistStep]);
-
-  const handleSendFeedback = async () => {
-    const { downloadedModels, activeModelId } = useAppStore.getState();
-    const { activeServerId } = useRemoteServerStore.getState();
-
-    const [buildNumber, fsInfo] = await Promise.all([
-      DeviceInfo.getBuildNumber(),
-      RNFS.getFSInfo(),
-    ]);
-
-    const ramGB = hardwareService.getTotalMemoryGB().toFixed(1);
-    const tier = hardwareService.getDeviceTier();
-    const freeGB = (fsInfo.freeSpace / (1024 * 1024 * 1024)).toFixed(1);
-    const activeModel = downloadedModels.find(m => m.id === activeModelId);
-    const modelLine = activeModel ? activeModel.fileName : 'None';
-    const remoteServer = activeServerId ? 'Yes' : 'No';
-    const deviceLine = deviceInfo
-      ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
-      : 'Device: Unknown';
-
-    const subject = encodeURIComponent(`[Feedback] Atlas v${packageJson.version}`);
-    const body = encodeURIComponent(
-      `Hi,\n\n[Describe your feedback or issue here]\n\n` +
-      `---\n` +
-      `App: v${packageJson.version} (build ${buildNumber})\n` +
-      `${deviceLine}\n` +
-      `RAM: ${ramGB} GB · Tier: ${tier}\n` +
-      `Model: ${modelLine}\n` +
-      `Free storage: ${freeGB} GB\n` +
-      `Remote server: ${remoteServer}`,
-    );
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        'Could Not Open Mail',
-        `Looks like there was an issue. You can reach out to us at ${FEEDBACK_EMAIL}`,
-        [{ text: 'OK' }],
-      );
-    }
-  };
 
   // DEV-only: flip the Pro auto-unlock. Disabling also clears the cached license
   // so the build behaves like a fresh free install. We flip the store flags
@@ -247,12 +193,12 @@ export const SettingsScreen: React.FC = () => {
         <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => {
-              Alert.alert('Unencrypted backup', 'This backup is a plain JSON file containing projects and settings, but not your encrypted chats. Anyone with the file can read its contents. Do not store it in a shared or untrusted location. PIN-locked chat export and cross-device transfer are not available yet.', [
+              Alert.alert('Unencrypted backup', 'This is a readable JSON file of projects and settings only. Project documents and chats are not included; use Encrypted backup to preserve project documents and ordinary chats. Never store plain backups in a shared location.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Export anyway', onPress: async () => {
               try {
                 const name = await exportBackup();
-                if (name) Alert.alert('Backup saved', `Saved as ${name}. Keep a copy somewhere else too (PC, cloud, SD card). Models and knowledge-base documents are not included.`);
+                if (name) Alert.alert('Backup saved', `Saved as ${name}. Keep a copy somewhere else too (PC, cloud, SD card). Plain JSON backups do not include project documents, private chats or models. Use Encrypted backup for project files.`);
               } catch (e: any) {
                 if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Backup failed', String(e?.message || e));
               }
@@ -271,7 +217,7 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity style={styles.navItem} onPress={() => { setBackupPassword(''); setBackupPasswordAction('export'); }}>
               <View style={styles.navItemIcon}><Icon name="lock" size={16} color={colors.textSecondary} /></View>
               <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Encrypted backup (ordinary chats)</Text>
+                <Text style={styles.navItemTitle}>Encrypted backup (chats + project files)</Text>
                 <Text style={styles.navItemDesc}>Excludes PIN-protected chats and project documents</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
@@ -357,14 +303,14 @@ export const SettingsScreen: React.FC = () => {
       </ScrollView>
 
       <Modal visible={backupPasswordAction !== null} transparent animationType="fade" onRequestClose={() => { if (!backupBusy) { setBackupPasswordAction(null); setBackupPassword(''); } }}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-          <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
-            <Text style={{ color: colors.textSecondary }}>Enter your backup password (minimum 12 characters). Keep it safe: it cannot be recovered. Encrypted backups include ordinary chats, agents and settings. PIN-protected chats, project documents and model files are excluded.</Text>
-            <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
+        <View style={styles.backupBackdrop}>
+          <View style={styles.backupSheet}>
+            <Text style={styles.backupTitle}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
+            <Text style={{ color: colors.textSecondary }}>Use a password of at least 12 characters and keep it safe. Encrypted backups include ordinary chats, project knowledge-base files and searchable document text (up to 25 MB of project files per backup), agents and settings. Device-bound PIN-protected items and downloaded models remain excluded.</Text>
+            <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={styles.backupInput} />
+            <View style={styles.backupActions}>
               <TouchableOpacity disabled={backupBusy} onPress={() => { setBackupPassword(''); setBackupPasswordAction(null); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity disabled={backupBusy} onPress={runEncryptedBackup}><Text style={{ color: colors.primary, fontWeight: '600' }}>{backupBusy ? 'Working…' : 'Continue'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={backupBusy} onPress={runEncryptedBackup}><Text style={styles.backupContinueLabel}>{backupBusy ? 'Working…' : 'Continue'}</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -374,6 +320,12 @@ export const SettingsScreen: React.FC = () => {
 };
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  backupBackdrop: { flex: 1, justifyContent: 'center' as const, padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backupSheet: { backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 },
+  backupTitle: { color: colors.text, fontSize: 18, fontWeight: '600' as const },
+  backupInput: { color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 },
+  backupActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const, gap: 18 },
+  backupContinueLabel: { color: colors.primary, fontWeight: '600' as const },
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const,

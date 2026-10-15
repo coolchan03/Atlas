@@ -60,7 +60,8 @@ class DocumentService {
 
     // Decode URL-encoded characters (like %20 for spaces) and strip file:// prefix
     // This is critical because RNFS.exists() needs decoded paths, not URL-encoded
-    const decodedUri = decodeURIComponent(uri);
+    let decodedUri = uri;
+    try { decodedUri = decodeURIComponent(uri); } catch { /* Malformed picker URI: preserve literal path. */ }
     const cleanUri = decodedUri.replace(/^file:\/\//, '');
     console.log(`[DocumentService] Decoded and cleaned path: ${cleanUri}`);
     console.log(`[DocumentService] Documents path: ${documentsPath}`);
@@ -156,7 +157,10 @@ class DocumentService {
   async processDocumentFromPath(filePath: string, fileName?: string, maxCharsOverride?: number): Promise<MediaAttachment | null> {
     try {
       console.log(`[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`);
-      const name = fileName || filePath.split('/').pop() || 'document';
+      const rawName = fileName || filePath.split('/').pop() || 'document';
+      let name = rawName;
+      try { name = decodeURIComponent(rawName); } catch { /* Keep malformed percent sequences displayable. */ }
+      name = name.replaceAll(/[\\/]/g, '_');
       const extension = `.${name.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
       console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);

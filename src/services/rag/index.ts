@@ -64,7 +64,9 @@ class RagService {
     }
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
-    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: filePath, size: fileSize });
+    // The extractor saves a durable local copy. Index that path rather than a
+    // picker/cache path that can disappear before the next backup.
+    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: attachment.uri || filePath, size: fileSize });
     const rowIds = ragDatabase.insertChunks(docId, chunks);
 
     onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
@@ -132,6 +134,19 @@ class RagService {
   async getDocumentsByProject(projectId: string) {
     await this.ensureReady();
     return ragDatabase.getDocumentsByProject(projectId);
+  }
+
+  async getDocumentChunks(docId: number): Promise<{ content: string; position: number }[]> {
+    await this.ensureReady();
+    return ragDatabase.getChunksByDocument(docId);
+  }
+
+  async restoreProjectDocuments(projectIds: string[], files: {
+    projectId: string; name: string; path: string; size: number; enabled: boolean;
+    createdAt: string; chunks: { content: string; position: number }[];
+  }[]): Promise<void> {
+    await this.ensureReady();
+    ragDatabase.restoreProjectDocuments(projectIds, files);
   }
 
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
