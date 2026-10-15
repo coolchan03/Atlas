@@ -97,11 +97,14 @@ android {
             keyPassword 'android'
         }
         release {
-            if (project.hasProperty('OFFGRID_UPLOAD_STORE_FILE')) {
-                storeFile file(OFFGRID_UPLOAD_STORE_FILE)
-                storePassword OFFGRID_UPLOAD_STORE_PASSWORD
-                keyAlias OFFGRID_UPLOAD_KEY_ALIAS
-                keyPassword OFFGRID_UPLOAD_KEY_PASSWORD
+            // CI release secrets are injected as environment variables; local signing
+            // through Gradle properties is also supported without storing credentials.
+            def signingPath = System.getenv('OFFGRID_UPLOAD_STORE_FILE') ?: project.findProperty('OFFGRID_UPLOAD_STORE_FILE')
+            if (signingPath) {
+                storeFile file(signingPath)
+                storePassword System.getenv('OFFGRID_UPLOAD_STORE_PASSWORD') ?: project.findProperty('OFFGRID_UPLOAD_STORE_PASSWORD')
+                keyAlias System.getenv('OFFGRID_UPLOAD_KEY_ALIAS') ?: project.findProperty('OFFGRID_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('OFFGRID_UPLOAD_KEY_PASSWORD') ?: project.findProperty('OFFGRID_UPLOAD_KEY_PASSWORD')
             }
         }
     }
@@ -131,7 +134,19 @@ android {
                 applicationIdSuffix '.vulkantest'
                 versionNameSuffix '-vulkan-test'
             }
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            // Experimental builds may retain debug signing. Published releases must
+            // be signed with the permanent upload key and fail closed otherwise.
+            if (project.findProperty('atlasRequireReleaseSigning') == 'true') {
+                if (!signingConfigs.release.storeFile ||
+                    !signingConfigs.release.storePassword ||
+                    !signingConfigs.release.keyAlias ||
+                    !signingConfigs.release.keyPassword) {
+                    throw new GradleException('Permanent Atlas release-signing credentials are required.')
+                }
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

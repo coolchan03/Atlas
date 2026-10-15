@@ -18,15 +18,19 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-type Cfg = { label: string; backend: 'mnn' | 'qnn'; platform: 'ios' | 'android'; expected: string };
+type Cfg = { label: string; backend: 'mnn' | 'coreml'; platform: 'ios' | 'android'; expected: string };
 const CONFIGS: Cfg[] = [
-  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (GPU)' },
-  { label: 'Metal (Core ML, iOS)', backend: 'mnn', platform: 'ios', expected: 'Core ML (ANE)' },
+  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (OpenCL requested; compute unverified)' },
+  { label: 'Metal (Core ML, iOS)', backend: 'coreml', platform: 'ios', expected: 'Core ML (accelerator selected by OS)' },
 ];
 
 describe('happy — image generation shows the correct backend label (heavy entry point)', () => {
   it.each(CONFIGS)('$label: produces an image and the details show "$expected"', async (cfg) => {
     const h = await setupChatScreen({ engine: 'litert', platform: cfg.platform });
+    if (cfg.backend === 'mnn') {
+      const { hardwareService } = require('../../../src/services/hardware');
+      jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+    }
     h.enableGenerationDetailsViaUI(); // turn details on BEFORE mounting the chat (separate render)
     h.render();
     await h.placeImageModel({ backend: cfg.backend });

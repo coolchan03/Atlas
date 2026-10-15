@@ -40,7 +40,7 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
   s.unmount();
 }
 
-async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
+async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>, expectFailure = false) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const DeviceInfo = require('react-native-device-info');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -50,28 +50,26 @@ async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   selectBackendViaUI(h, 'opencl');
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).not.toBeNull(); });
   await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
-  await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
+  if (!expectFailure) await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
 }
 
-describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV-B24)', () => {
-  it('still renders a reply on CPU when the GPU/OpenCL init times out', async () => {
+describe('T016 (rendered) — explicit GPU timeout is visible, never silently falls back to CPU', () => {
+  it('reports explicit GPU failure without silently switching to CPU or losing the model selection', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });
     h.enableGenerationDetailsViaUI();
     h.render();
 
-    // The GPU/OpenCL context init will time out (B24), forcing the CPU fallback.
+    // User chose OpenCL: a GPU timeout must fail visibly, never execute on CPU.
     h.boundary.llama!.scriptGpuInitFailure();
-    await reloadOnOpenCL(h);
-
-    await h.send('hello', { text: 'Hi there.' });
-    // The turn still works — the load did not hang or fail; a reply renders.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
-
-    // ...and the Generation Details reflect the CPU fallback, not a phantom GPU offload.
-    const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
-    expect(h.rtl.within(meta).queryByText('CPU')).not.toBeNull();
-    expect(h.rtl.within(meta).queryByText(/OpenCL/)).toBeNull();
-  }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load
+    await reloadOnOpenCL(h, true);
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/GPU\/NPU initialization failed: GPU context init timed out after 8000ms/)).not.toBeNull();
+    }, { timeout: 20000 });
+    expect(h.useAppStore.getState().activeModelId).toBe('m');
+    expect(h.view!.queryByTestId('chat-input')).not.toBeNull();
+    const { llmService } = require('../../../src/services/llm');
+    expect(llmService.isModelLoaded()).toBe(false);
+  }, 30000);
 
   it('falsify: without the GPU init failure, OpenCL keeps the GPU offload', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'ggml-small-Q4_0.gguf' });

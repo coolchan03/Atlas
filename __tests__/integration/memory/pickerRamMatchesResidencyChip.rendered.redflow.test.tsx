@@ -72,6 +72,8 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
+    // This test models a detected OpenCL device; backend capability is a native boundary.
+    jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
     const { useAppStore } = require('../../../src/stores');
     const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
     const { activeModelService } = require('../../../src/services/activeModelService');

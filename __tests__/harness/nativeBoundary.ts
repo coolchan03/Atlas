@@ -659,18 +659,22 @@ function makeFsFake(): FsFake {
   const { Volume } = require('memfs');
   const vol = Volume.fromJSON({});
   vol.mkdirSync(DocumentDirectoryPath, { recursive: true });
+  // Native boundary tests need realistic file sizes, not gigabytes of real JS heap.
+  // Store a tiny representative payload while returning device-faithful stat sizes.
+  const virtualFileSizes = new Map<string, number>();
 
   const norm = (p: string) => p.replace(/^file:\/\//, '').replace(/\/+$/, '') || '/';
   const base = (p: string) => norm(p).slice(norm(p).lastIndexOf('/') + 1);
   const mkStat = (p: string, st: { size: number; isFile(): boolean; isDirectory(): boolean; mtime: Date }) => ({
-    path: norm(p), name: base(p), size: Number(st.size),
+    path: norm(p), name: base(p), size: virtualFileSizes.get(norm(p)) ?? Number(st.size),
     isFile: () => st.isFile(), isDirectory: () => st.isDirectory(), mtime: st.mtime,
   });
 
   const seedFile = (path: string, sizeBytes: number) => {
     const p = norm(path);
     vol.mkdirSync(p.slice(0, p.lastIndexOf('/')) || '/', { recursive: true });
-    vol.writeFileSync(p, Buffer.alloc(sizeBytes));
+    virtualFileSizes.set(p, sizeBytes);
+    vol.writeFileSync(p, Buffer.alloc(Math.min(sizeBytes, 4096)));
   };
   const seedDir = (path: string) => vol.mkdirSync(norm(path), { recursive: true });
 
@@ -690,13 +694,23 @@ function makeFsFake(): FsFake {
     writeFile: jest.fn(async (p: string, contents: string) => {
       const np = norm(p);
       vol.mkdirSync(np.slice(0, np.lastIndexOf('/')) || '/', { recursive: true });
+      virtualFileSizes.delete(np);
       vol.writeFileSync(np, String(contents ?? ''));
     }),
     readFile: jest.fn(async (p: string) => vol.readFileSync(norm(p), 'utf8')),
     read: jest.fn(async () => 'GGUF'),
-    unlink: jest.fn(async (p: string) => { vol.rmSync(norm(p), { recursive: true, force: true }); }),
-    moveFile: jest.fn(async (from: string, to: string) => { vol.renameSync(norm(from), norm(to)); }),
-    copyFile: jest.fn(async (from: string, to: string) => { vol.copyFileSync(norm(from), norm(to)); }),
+    unlink: jest.fn(async (p: string) => { virtualFileSizes.delete(norm(p)); vol.rmSync(norm(p), { recursive: true, force: true }); }),
+    moveFile: jest.fn(async (from: string, to: string) => {
+      const size = virtualFileSizes.get(norm(from));
+      virtualFileSizes.delete(norm(from));
+      if (size !== undefined) virtualFileSizes.set(norm(to), size);
+      vol.renameSync(norm(from), norm(to));
+    }),
+    copyFile: jest.fn(async (from: string, to: string) => {
+      const size = virtualFileSizes.get(norm(from));
+      if (size !== undefined) virtualFileSizes.set(norm(to), size);
+      vol.copyFileSync(norm(from), norm(to));
+    }),
     hash: jest.fn(async () => 'deadbeef'),
     downloadFile: jest.fn(() => ({ jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 0 }) })),
     stopDownload: jest.fn(),
