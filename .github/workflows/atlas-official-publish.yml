@@ -1,0 +1,66 @@
+name: Publish Verified Atlas Official Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: atlas-official-v0.0.103
+  cancel-in-progress: false
+
+jobs:
+  official-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SIGNED_BUILD_RUN: "38804633509"
+      RELEASE_COMMIT: "7b32b6114f432cacdc2256b48c62141fdb6e1437"
+      RELEASE_TAG: "atlas-official-v0.0.103"
+    steps:
+      - name: Await exact official APK build success
+        run: |
+          set -euo pipefail
+          gh run watch "$SIGNED_BUILD_RUN" -R "$GITHUB_REPOSITORY" --exit-status --interval 30
+      - name: Verify audited commit and signed APK checks
+        run: |
+          set -euo pipefail
+          actual_commit="$(gh run view "$SIGNED_BUILD_RUN" -R "$GITHUB_REPOSITORY" --json headSha --jq .headSha)"
+          if [ "$actual_commit" != "$RELEASE_COMMIT" ]; then
+            echo "::error::APK build came from an unexpected commit"
+            exit 1
+          fi
+          for check in "TypeScript gate" "Core regression gate" "Require permanent release-signing keystore" "Build release APK" "Verify release native runtime" "Run actions/upload-artifact@v4"; do
+            result="$(gh run view "$SIGNED_BUILD_RUN" -R "$GITHUB_REPOSITORY" --json jobs --jq ".jobs[].steps[] | select(.name == \"$check\") | .conclusion")"
+            if [ "$result" != "success" ]; then
+              echo "::error::Required APK gate failed or is missing: $check"
+              exit 1
+            fi
+          done
+          target="$(gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)"
+          if [ "$target" != "$RELEASE_COMMIT" ]; then
+            echo "::error::The official release draft targets the wrong commit"
+            exit 1
+          fi
+      - name: Download verified signed Android APK
+        run: |
+          set -euo pipefail
+          mkdir -p official-apk
+          gh run download "$SIGNED_BUILD_RUN" -R "$GITHUB_REPOSITORY" --name Atlas-apk --dir official-apk
+          shopt -s nullglob
+          apks=(official-apk/*.apk)
+          if [ "${#apks[@]}" -ne 1 ] || [ ! -s "${apks[0]}" ]; then
+            echo "::error::Expected exactly one nonempty verified APK artifact"
+            exit 1
+          fi
+          unzip -t "${apks[0]}" >/dev/null
+          sha256sum "${apks[0]}"
+      - name: Publish Atlas official release, not prerelease
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" official-apk/*.apk -R "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json name,url,isDraft,isPrerelease,assets
