@@ -65,10 +65,10 @@ try {
     Write-Host "Configured $Name"
   }
   $encoded = [Convert]::ToBase64String([IO.File]::ReadAllBytes($keyPath))
-  Set-AtlasSecret 'OFFGRID_UPLOAD_KEYSTORE_BASE64' $encoded
-  Set-AtlasSecret 'OFFGRID_UPLOAD_STORE_PASSWORD' $password
-  Set-AtlasSecret 'OFFGRID_UPLOAD_KEY_ALIAS' $Alias
-  Set-AtlasSecret 'OFFGRID_UPLOAD_KEY_PASSWORD' $password
+  Set-AtlasSecret 'KEYSTORE_BASE64' $encoded
+  Set-AtlasSecret 'KEYSTORE_PASSWORD' $password
+  Set-AtlasSecret 'KEY_ALIAS' $Alias
+  Set-AtlasSecret 'KEY_PASSWORD' $password
   Write-Host 'Your permanent release-signing credentials are configured.'
   Write-Host "Keystore: $keyPath"
   Write-Host 'Store your password in a password manager and make an OFFLINE backup of the keystore.'

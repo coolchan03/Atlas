@@ -28,7 +28,7 @@
 
 ## Remaining external and historical risks
 
-1. **Signing secret setup is user-owned.** No signing secrets were listed by GitHub CLI during this audit. The user must run the signing setup locally, securely save the keystore/password, and re-run the release workflow. Never store a keystore or password in the Git repository or chat.
+1. **Signing credentials are configured in GitHub.** Four generic KEYSTORE_* secret names are present. Their values are private and cannot be inspected. Preserve the existing keystore and password offline. The audit-branch APK build must still verify the final signature.
 2. **Physical-device testing:** Moto Razr Ultra and tablet must validate actual NPU/GPU model loading, app lock, encrypted backup restore, project file sync, peer pairing, disconnect/reconnect, and same-device updates.
 3. **Offline transports:** local Wi-Fi/hotspot peer sync exists; forming Wi-Fi Direct networks and Bluetooth fallback are not implemented. No background sync while Atlas is closed.
 4. **Private Pro tests:** 21 skipped tests require the actual private source and may be worked on separately. Do not present as passing.
@@ -38,4 +38,4 @@
 
 ## Signing locally
 
-Run \`scripts\release\setup-atlas-signing.bat\` on the trusted Windows machine. Do not delete or replace an existing signing key. The setup configures these **GitHub secrets**: \`OFFGRID_UPLOAD_KEYSTORE_BASE64\`, \`OFFGRID_UPLOAD_STORE_PASSWORD\`, \`OFFGRID_UPLOAD_KEY_ALIAS\`, \`OFFGRID_UPLOAD_KEY_PASSWORD\`.
+GitHub already lists all four signing secrets. The setup command `scripts\release\setup-atlas-signing.bat` is provided only for initial setup or recovery. Preserve the current signing key; do not generate a replacement unnecessarily.
