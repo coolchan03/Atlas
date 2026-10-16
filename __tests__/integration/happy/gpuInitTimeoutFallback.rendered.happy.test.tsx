@@ -63,7 +63,7 @@ describe('T016 (rendered) — explicit GPU timeout is visible, never silently fa
     h.boundary.llama!.scriptGpuInitFailure();
     await reloadOnOpenCL(h, true);
     await h.rtl.waitFor(() => {
-      expect(h.view!.queryByText(/GPU\/NPU initialization failed: GPU context init timed out after 8000ms/)).not.toBeNull();
+      expect(h.view!.queryAllByText(/GPU\/NPU initialization failed: GPU context init timed out after 8000ms/).length).toBeGreaterThan(0);
     }, { timeout: 20000 });
     expect(h.useAppStore.getState().activeModelId).toBe('m');
     expect(h.view!.queryByTestId('chat-input')).not.toBeNull();

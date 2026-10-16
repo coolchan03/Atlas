@@ -68,7 +68,7 @@ describe('GPU-failure notice — explicit GPU selections fail visibly without CP
     h.boundary.llama!.scriptGpuInitFailure();
     await reloadOnOpenCL(h, true);
     await h.rtl.waitFor(() => {
-      expect(h.view!.queryByText(/GPU\/NPU initialization failed: GPU context init timed out/)).not.toBeNull();
+      expect(h.view!.queryAllByText(/GPU\/NPU initialization failed: GPU context init timed out/).length).toBeGreaterThan(0);
     }, { timeout: 20000 });
     expect(h.view!.queryByText(/running on CPU/i)).toBeNull();
     expect(h.useAppStore.getState().activeModelId).toBe('m');
