@@ -138,7 +138,7 @@ it('Auto falls back to CPU when all accelerators are unavailable', async () => {
   expect(native).toHaveBeenCalled();
 });
 
-it('explicit OpenCL falls back to CPU (with a notice) when GPU init fails', async () => {
+it('explicit OpenCL fails visibly without retrying CPU when GPU init fails', async () => {
   const { hardwareService } = require('../../../src/services/hardware');
   jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
   native.mockRejectedValueOnce(new Error('GPU unavailable')).mockResolvedValue(createMockLlamaContext() as any);
@@ -146,10 +146,11 @@ it('explicit OpenCL falls back to CPU (with a notice) when GPU init fails', asyn
     ...useAppStore.getState().settings, inferenceBackend: 'opencl',
     gpuLayers: 8,
   }});
-  await llmService.loadModel('/models/small-Q4_0.gguf');
-  expect(llmService.isModelLoaded()).toBe(true);
-  expect(native.mock.calls.length).toBeGreaterThanOrEqual(2);
-  expect(native.mock.calls[native.mock.calls.length - 1][0]).toEqual(expect.objectContaining({ n_gpu_layers: 0 }));
+  await expect(llmService.loadModel('/models/small-Q4_0.gguf'))
+    .rejects.toThrow(/GPU\/NPU initialization failed: GPU unavailable/);
+  expect(llmService.isModelLoaded()).toBe(false);
+  expect(native).toHaveBeenCalled();
+  expect(native.mock.calls.every(call => call[0].n_gpu_layers > 0)).toBe(true);
 });
 
 it('uses a user-selected Vulkan context above the former 4K limit and honors sampling settings', async () => {
