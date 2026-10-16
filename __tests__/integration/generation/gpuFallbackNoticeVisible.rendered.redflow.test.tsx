@@ -45,7 +45,7 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
   s.unmount();
 }
 
-async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
+async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>, expectFailure = false) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const DeviceInfo = require('react-native-device-info');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -55,28 +55,24 @@ async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   selectBackendViaUI(h, 'opencl');
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).not.toBeNull(); });
   await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
-  await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
+  if (!expectFailure) await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
 }
 
-describe('GPU fallback notice — a GPU-selected load that lands on CPU is visibly reported (device 18:57)', () => {
-  it('shows a CPU-fallback notice in the conversation when the GPU init fails (details OFF)', async () => {
+describe('GPU-failure notice — explicit GPU selections fail visibly without CPU fallback', () => {
+  it('shows a visible failure and never silently changes an explicitly selected GPU to CPU', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'test-q4_0.gguf' });
     h.render();
-
-    // A live conversation exists (the user was chatting when they changed the backend, as on device).
     await h.send('hello', { text: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
 
-    // PRE-CONDITION: no fallback notice is on screen before the reload.
-    expect(h.view!.queryByText(/running on CPU/i)).toBeNull();
-
-    // Device boundary: the GPU/OpenCL context init times out (B24's exact failure shape).
     h.boundary.llama!.scriptGpuInitFailure();
-    await reloadOnOpenCL(h);
-
-    // RED on HEAD: the downgrade is silent — no notice renders anywhere.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/running on CPU/i)).not.toBeNull(); }, { timeout: 20000 });
-  }, 50000);
+    await reloadOnOpenCL(h, true);
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/GPU\/NPU initialization failed: GPU context init timed out/)).not.toBeNull();
+    }, { timeout: 20000 });
+    expect(h.view!.queryByText(/running on CPU/i)).toBeNull();
+    expect(h.useAppStore.getState().activeModelId).toBe('m');
+  }, 30000);
 
   it('falsify: a healthy GPU reload shows NO fallback notice', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', modelFileName: 'test-q4_0.gguf' });

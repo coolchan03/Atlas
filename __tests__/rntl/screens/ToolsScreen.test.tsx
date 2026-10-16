@@ -82,23 +82,24 @@ describe('ToolsScreen', () => {
     }
   });
 
-  it('shows the Pro Tools row to everyone (even free users)', () => {
-    const { getByTestId, getByText } = render(<ToolsScreen />);
-    expect(getByTestId('tools-pro-tools')).toBeTruthy();
-    expect(getByText('Pro Tools')).toBeTruthy();
+  it('does not expose private Pro-only tools in the open-core tool list', () => {
+    const { queryByTestId, queryByText, getByTestId } = render(<ToolsScreen />);
+    expect(queryByTestId('tools-pro-tools')).toBeNull();
+    expect(queryByText('Pro Tools')).toBeNull();
+    expect(getByTestId('tool-picker-row-web_search')).toBeTruthy();
   });
 
-  it('routes a free user to the Pro upsell when Pro Tools is pressed', () => {
+  it('shows locally available tool switches without navigating to a Pro upsell', () => {
     const { getByTestId } = render(<ToolsScreen />);
-    fireEvent.press(getByTestId('tools-pro-tools'));
-    expect(mockNavigate).toHaveBeenCalledWith('ProDetail');
+    expect(getByTestId('tool-picker-row-calculator')).toBeTruthy();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('routes a pro user straight to the Pro Tools screen', () => {
+  it('does not invent a private Pro Tools route when the Pro screen is registered', () => {
     registerScreen({ name: PRO_TOOLS_SCREEN, component: () => null });
-    const { getByTestId } = render(<ToolsScreen />);
-    fireEvent.press(getByTestId('tools-pro-tools'));
-    expect(mockNavigate).toHaveBeenCalledWith(PRO_TOOLS_SCREEN);
+    const { queryByTestId, getByTestId } = render(<ToolsScreen />);
+    expect(queryByTestId('tools-pro-tools')).toBeNull();
+    expect(getByTestId('tool-picker-row-calculator')).toBeTruthy();
   });
 
   it('toggles a tool through the core settings store', () => {

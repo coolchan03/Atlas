@@ -177,7 +177,7 @@ export const useAgentStore = create<AgentState>()(
   persist(
     (set, get) => ({
       agents: DEFAULT_AGENTS,
-      activeAgentId: 'atlas',
+      activeAgentId: null,
       createAgent: (a) => {
         const agent: Agent = { ...a, id: generateId(), createdAt: now(), updatedAt: now() };
         set((s) => ({ agents: [...s.agents, agent] }));
@@ -258,7 +258,7 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const projectPreferences = currentProject && !learningEnabled
     ? 'Do not proactively suggest or generate project-based learning games, quizzes, or podcasts. Only create them if the user explicitly asks. Standalone offline arcade games are unrelated to project content.'
     : '';
-  const projectGuard = projectPreferences ? '\n\nPROJECT FEATURE PREFERENCES: ' + projectPreferences : '';
+  const projectGuard = projectPreferences ? `\n\nPROJECT FEATURE PREFERENCES: ${  projectPreferences}` : '';
   if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + phoneNote + projectGuard;
   return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + phoneNote + projectGuard;
 }

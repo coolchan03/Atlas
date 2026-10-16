@@ -51,7 +51,7 @@ async function setupHome() {
   const docs = boundary.fs!.DocumentDirectoryPath;
   const modelPath = `${docs}/models/ggml-small.gguf`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf' });
+  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf', fileSize: 500 * 1024 * 1024 });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
   require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);

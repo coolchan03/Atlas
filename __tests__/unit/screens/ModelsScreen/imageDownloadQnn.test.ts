@@ -41,9 +41,9 @@ describe('getQnnWarningMessage', () => {
     expect(msg).toBeNull();
   });
 
-  it('returns null when device is 8gen2 (flagship — always compatible)', () => {
+  it('warns when device is 8gen2 but model is compiled for 8gen1', () => {
     const msg = getQnnWarningMessage(makeModel({ variant: '8gen1' }), { hasNPU: true, qnnVariant: '8gen2' });
-    expect(msg).toBeNull();
+    expect(msg).toContain('requires 8gen2');
   });
 
   it('returns null when device is 8gen1 and model is not 8gen2', () => {
@@ -53,12 +53,12 @@ describe('getQnnWarningMessage', () => {
 
   it('returns incompatibility message when device is 8gen1 and model is 8gen2', () => {
     const msg = getQnnWarningMessage(makeModel({ variant: '8gen2' }), { hasNPU: true, qnnVariant: '8gen1' });
-    expect(msg).toContain('flagship');
+    expect(msg).toContain('requires 8gen1');
   });
 
   it('returns incompatibility message for non-flagship device with 8gen2 model variant', () => {
     const msg = getQnnWarningMessage(makeModel({ variant: '8gen2' }), { hasNPU: true, qnnVariant: 'min' });
-    expect(msg).toContain('non-flagship');
+    expect(msg).toContain('requires min');
   });
 
   it('returns incompatibility message mentioning device chip name', () => {

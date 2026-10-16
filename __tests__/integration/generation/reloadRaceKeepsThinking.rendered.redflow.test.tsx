@@ -64,6 +64,8 @@ describe('reload race — a send during the load window keeps thinking (device 2
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
+    const { hardwareService } = require('../../../src/services/hardware');
+    jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
     h.render();
 
     // GESTURE: turn Thinking ON the way the user does — quick settings → the Thinking row.

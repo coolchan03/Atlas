@@ -11,7 +11,8 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
@@ -166,16 +167,14 @@ describe('ChatsListScreen', () => {
     });
 
     it('enables New when downloadable models exist but none are loaded', () => {
-      useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [createDownloadedModel()], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
+      expect(spy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
+      act(() => { spy.mock.calls[0][2]!.find(choice => choice.text === 'Regular chat')?.onPress?.(); });
       expect(getByText('Select Model')).toBeTruthy();
+      spy.mockRestore();
     });
   });
 
@@ -210,16 +209,13 @@ describe('ChatsListScreen', () => {
     });
 
     it('shows New button flow when only image models are available', () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        activeModelId: null,
-        downloadedImageModels: [createONNXImageModel()],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [createONNXImageModel()], activeImageModelId: null });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
+      act(() => { spy.mock.calls[0][2]!.find(choice => choice.text === 'Private (not saved)')?.onPress?.(); });
       expect(getByText('Select Model')).toBeTruthy();
+      spy.mockRestore();
     });
 
     it('shows "New Chat" button in empty state when models are downloaded', () => {
@@ -345,17 +341,16 @@ describe('ChatsListScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('navigates to new Chat when New button is pressed and models exist', () => {
+    it('offers regular or private chat before navigating', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      spy.mock.calls[0][2]!.find(choice => choice.text === 'Regular chat')?.onPress?.();
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      spy.mockRestore();
     });
 
     it('does not navigate when New is pressed and no models downloaded', () => {
@@ -487,17 +482,16 @@ describe('ChatsListScreen', () => {
   // Empty State with Models
   // ==========================================================================
   describe('empty state new chat button', () => {
-    it('navigates when New Chat empty state button pressed', () => {
+    it('navigates privately when New Chat empty state button pressed and private is chosen', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New Chat'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      spy.mock.calls[0][2]!.find(choice => choice.text === 'Private (not saved)')?.onPress?.();
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
+      spy.mockRestore();
     });
   });
 
@@ -511,37 +505,12 @@ describe('ChatsListScreen', () => {
   // Delete Chat Flow
   // ==========================================================================
   describe('delete chat flow', () => {
-    it('shows delete confirmation when swipe-delete is triggered', () => {
+    it('shows delete confirmation for the correct swipe-delete button', () => {
       const conv = createConversation({ title: 'Delete Me' });
       useChatStore.setState({ conversations: [conv] });
-      useAppStore.setState({
-        generatedImages: [],
-      });
-
-      render(<ChatsListScreen />);
-      // The Swipeable mock renders renderRightActions inline, which contains
-      // a trash button. Find it and press it.
-      const { TouchableOpacity } = require('react-native');
-      // Since we render right actions inline, find all touchables
-      // and look for the trash-related one
-      const tree = render(<ChatsListScreen />);
-      const touchables = tree.UNSAFE_getAllByType(TouchableOpacity);
-      // The delete action button should be among them
-      // Find the one that triggers the delete alert
-      for (const btn of touchables) {
-        mockShowAlert.mockClear();
-        fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
-          break;
-        }
-      }
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Delete Chat',
-        expect.stringContaining('Delete Me'),
-        expect.any(Array),
-      );
+      const { getByTestId } = render(<ChatsListScreen />);
+      fireEvent.press(getByTestId(`chat-delete-${conv.id}`));
+      expect(mockShowAlert).toHaveBeenCalledWith('Delete Chat', expect.stringContaining('Delete Me'), expect.any(Array));
     });
 
     it('deletes conversation and images when confirmed', async () => {

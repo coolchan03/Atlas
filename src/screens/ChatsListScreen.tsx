@@ -18,8 +18,8 @@ import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
-import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, SPACING } from '../constants';
+import { createStyles } from './ChatsListScreen.styles';
+
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
@@ -215,6 +215,8 @@ export const ChatsListScreen: React.FC = () => {
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity
+      testID={`chat-delete-${conversation.id}`}
+      accessibilityLabel={`Delete ${conversation.title}`}
       style={styles.deleteAction}
       onPress={() => handleDeleteChat(conversation)}
     >
@@ -247,7 +249,7 @@ export const ChatsListScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {!!item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
+            {Boolean(item.pinVerifier) ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>
@@ -265,7 +267,7 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = conversations.filter(c => !!c.isArchived === showArchived).sort(
+  const sortedConversations = conversations.filter(c => Boolean(c.isArchived) === showArchived).sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
@@ -273,7 +275,7 @@ export const ChatsListScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>{showArchived ? 'Archived chats' : 'Chats'}</Text>
-        <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
+        <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={styles.archiveToggle}>
           <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
         </TouchableOpacity>
         <AttachStep index={[2, 14]}>
@@ -323,26 +325,26 @@ export const ChatsListScreen: React.FC = () => {
         />
       )}
       <Modal visible={!!pinTarget} transparent animationType="fade" onRequestClose={() => setPinTarget(null)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{pinAction === 'remove' ? 'Remove chat PIN' : 'Set a chat PIN'}</Text>
+        <View style={styles.pinBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalHeading}>{pinAction === 'remove' ? 'Remove chat PIN' : 'Set a chat PIN'}</Text>
             <Text style={{ color: colors.textSecondary }}>{pinAction === 'remove' ? 'Enter the current PIN to permanently remove encryption. The conversation will be saved normally afterward.' : 'Encrypt only this conversation with its own Android Keystore key. You can use the same PIN on other protected chats.'}</Text>
-            <TextInput value={newPin} onChangeText={v => setNewPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+            <TextInput value={newPin} onChangeText={v => setNewPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" style={styles.pinInput} />
+            <View style={styles.pinActions}>
               <TouchableOpacity onPress={() => { setPinTarget(null); setNewPin(''); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity disabled={pinBusy} onPress={savePin}><Text style={{ color: colors.primary, fontWeight: '700' }}>{pinAction === 'remove' ? 'Remove PIN' : 'Set PIN'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={pinBusy} onPress={savePin}><Text style={styles.pinConfirmText}>{pinAction === 'remove' ? 'Remove PIN' : 'Set PIN'}</Text></TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Rename chat</Text>
-            <TextInput value={renameTitle} onChangeText={setRenameTitle} maxLength={100} autoFocus selectTextOnFocus style={{ color: colors.text, borderWidth: 1, borderColor: colors.textMuted, borderRadius: 8, padding: 10 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
+        <View style={styles.renameBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalHeading}>Rename chat</Text>
+            <TextInput value={renameTitle} onChangeText={setRenameTitle} maxLength={100} autoFocus selectTextOnFocus style={styles.renameInput} />
+            <View style={styles.renameActions}>
               <TouchableOpacity onPress={() => setRenameTarget(null)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => { if (renameTarget) useChatStore.getState().renameConversation(renameTarget.id, renameTitle); setRenameTarget(null); }}><Text style={{ color: colors.primary, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => { if (renameTarget) useChatStore.getState().renameConversation(renameTarget.id, renameTitle); setRenameTarget(null); }}><Text style={styles.renameSaveText}>Save</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -372,135 +374,9 @@ export const ChatsListScreen: React.FC = () => {
         }}
         onSelectionComplete={() => {
           setShowModelSelector(false);
-          navigation.navigate('Chat', {});
+          navigation.navigate('Chat', { privateChat: pendingPrivateChat });
         }}
       />
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  swipeableContainer: {
-    overflow: 'visible' as const,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
-  list: {
-    padding: SPACING.lg,
-  },
-  chatItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: colors.surface,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: 10,
-    marginBottom: SPACING.md,
-    ...shadows.small,
-  },
-  chatContent: {
-    flex: 1,
-  },
-  chatHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-  },
-  chatTitle: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  chatDate: {
-    ...TYPOGRAPHY.metaSmall,
-    color: colors.textMuted,
-  },
-  chatPreview: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  projectBadge: {
-    alignSelf: 'flex-start' as const,
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs / 2,
-    borderRadius: 4,
-    marginTop: SPACING.sm - 2,
-  },
-  projectBadgeText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.xxl + SPACING.sm,
-  },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: SPACING.xl - SPACING.xs,
-  },
-  emptyTitle: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    marginBottom: SPACING.sm,
-  },
-  emptyText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-    marginBottom: SPACING.xl,
-  },
-  emptyButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.xl - SPACING.xs,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
-    gap: SPACING.sm,
-  },
-  emptyButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-  },
-  deleteAction: {
-    backgroundColor: colors.errorBackground,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    width: 44,
-    borderRadius: 10,
-    marginBottom: SPACING.md,
-    marginLeft: SPACING.sm,
-  },
-});

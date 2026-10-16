@@ -11,11 +11,14 @@ function portableCrypto() {
 import RNFS from 'react-native-fs';
 import { pick, saveDocuments, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { collectProjectFiles, restoreProjectFiles } from './projectBackupFiles';
+import type { ProjectBackupFile } from './projectBackupFiles';
 
 /**
  * Backup = every saved app setting in one JSON file: agents and their lessons, projects,
  * chats, learning history, voice and search settings, app settings.
- * NOT included: downloaded models and knowledge-base documents (re-import those).
+ * Password-encrypted archives include project knowledge-base files and searchable chunks.
+ * Plain JSON exports omit private content, project documents and downloaded models.
  */
 const MAGIC = 'OffGridAtlasBackup';
 // Explicit persistent-store allowlist also permits restore on a fresh install.
@@ -75,7 +78,14 @@ export async function exportBackup(password?: string): Promise<string | null> {
       if (sanitized) safe.push(['local-llm-chat-storage', sanitized]);
     }
   }
-  const data = { format: MAGIC, version: 1, createdAt: new Date().toISOString(), items: Object.fromEntries(safe) };
+  // Only encrypted backups may carry original project files. Include the original
+  // file bytes, searchable chunks, enabled flag and stable project ID together.
+  const projectRecord = safe.find(([key]) => key === 'local-llm-project-storage')?.[1];
+  const projectIds: string[] = projectRecord
+    ? JSON.parse(projectRecord).state.projects.map((p: { id: string }) => p.id) : [];
+  const projectFiles: ProjectBackupFile[] = password ? await collectProjectFiles(projectIds) : [];
+  const data = { format: MAGIC, version: password ? 2 : 1, createdAt: new Date().toISOString(),
+    items: Object.fromEntries(safe), ...(password ? { projectFiles } : {}) };
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const name = `OffGridAtlas-backup-${stamp}.${password ? 'atlasbackup' : 'json'}`;
   const path = `${RNFS.CachesDirectoryPath}/${name}`;
@@ -96,28 +106,32 @@ export async function exportBackup(password?: string): Promise<string | null> {
   }
 }
 
-/** Returns the number of restored entries. The app must be closed and reopened afterwards. */
-export async function importBackup(password?: string): Promise<number | null> {
+async function readPortableBackup(password?: string): Promise<{ data: any; encrypted: boolean } | null> {
   const files = await pick({ mode: 'open', type: [types.json, types.plainText, types.allFiles], allowMultiSelection: false });
   if (!files?.length) return null;
   const local = await resolvePickedFileUri(files[0].uri, files[0].name || 'backup.json');
-  const pickedPath = local.replace(/^file:\/\//, '');
-  const stat = await RNFS.stat(pickedPath);
+  const stat = await RNFS.stat(local.replace(/^file:\/\//, ''));
   // Never parse unbounded attacker-controlled JSON into the app's memory.
-  const backupBytes = Number(stat.size);
-  if (!Number.isSafeInteger(backupBytes) || backupBytes < 0 || backupBytes > 50 * 1024 * 1024) {
+  const bytes = Number(stat.size);
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > 50 * 1024 * 1024)
     throw new Error('Backup size is invalid or exceeds the 50 MB import limit.');
-  }
-  const text = await RNFS.readFile(pickedPath, 'utf8');
+  const text = await RNFS.readFile(local.replace(/^file:\/\//, ''), 'utf8');
   const encrypted = text.startsWith('atlasbackup:v1:');
   if (encrypted && !password) throw new Error('This encrypted backup requires its password.');
   if (!encrypted && password) throw new Error('Selected backup is not encrypted.');
   const decoded = encrypted ? await portableCrypto().decryptPortableBackup(text, password!) : text;
   const data = JSON.parse(decoded);
-  if (data?.format !== MAGIC || data.version !== 1 || !data.items ||
-      typeof data.items !== 'object' || Array.isArray(data.items)) {
+  if (data?.format !== MAGIC || ![1, 2].includes(data.version) || !data.items ||
+      typeof data.items !== 'object' || Array.isArray(data.items))
     throw new Error('This is not a supported Atlas backup file.');
-  }
+  return { data, encrypted };
+}
+
+/** Returns the number of restored entries. The app must be closed and reopened afterwards. */
+export async function importBackup(password?: string): Promise<number | null> {
+  const source = await readPortableBackup(password);
+  if (!source) return null;
+  const { data, encrypted } = source;
   // A backup must not create arbitrary AsyncStorage keys or reintroduce secrets.
   const pairs = Object.entries(data.items).flatMap(([key, value]) => {
     if (!RESTORABLE_STORE_KEYS.has(key) || EXCLUDED_BACKUP_KEYS.test(key) || typeof value !== 'string') return [];
@@ -125,6 +139,15 @@ export async function importBackup(password?: string): Promise<number | null> {
     return sanitized == null ? [] : [[key, sanitized] as [string, string]];
   });
   if (!pairs.length) throw new Error('No supported backup settings found. Only reviewed app stores are restorable; secrets and vault data are excluded.');
+  if (data.version === 2 && !encrypted) throw new Error('Project document backups must be password-encrypted.');
+  const projectPair = pairs.find(([key]) => key === 'local-llm-project-storage');
+  if (data.version === 2 && !projectPair) throw new Error('Project file backup is missing the project records.');
+  const projectIds: string[] = projectPair
+    ? JSON.parse(projectPair[1]).state.projects.map((p: { id: string }) => p.id) : [];
+  // Do not claim restoration succeeded if a document is missing or damaged.
+  // Older v1 backups are supported without replacing existing knowledge-base data.
+  const restoredDocs = data.version === 2
+    ? await restoreProjectFiles(data.projectFiles as ProjectBackupFile[], projectIds) : 0;
   const chatPair = pairs.find(([key]) => key === 'local-llm-chat-storage');
   const settingsPairs = pairs.filter(([key]) => key !== 'local-llm-chat-storage');
   if (chatPair && !encrypted) throw new Error('Chat restoration requires an encrypted backup.');
@@ -155,5 +178,5 @@ export async function importBackup(password?: string): Promise<number | null> {
   for (const [m, name] of stores) {
     try { await mods[m]()[name]?.persist?.rehydrate?.(); } catch { /* store not present */ }
   }
-  return pairs.length;
+  return pairs.length + restoredDocs;
 }

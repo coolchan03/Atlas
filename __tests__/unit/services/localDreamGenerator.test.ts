@@ -520,6 +520,9 @@ describe('LocalDreamGeneratorService', () => {
         height: 512,
         previewInterval: 2,
         useOpenCL: true,
+        threads: 4,
+        skipLoRA: false,
+        skipUpscaler: false,
       });
     });
 

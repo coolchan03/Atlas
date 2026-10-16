@@ -80,7 +80,7 @@ jest.mock('../../../src/services/llm', () => ({
 // engines.activeLocalTextCapabilities / wantsLeadingThinkToken read the litert service directly;
 // mock it as a dumb flag reader so the real engine registry resolves deterministically here.
 jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
+  liteRTService: { isModelLoaded: jest.fn(() => false), getLoadedModelPath: jest.fn(() => '/mock/models/test-model.gguf') },
 }));
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: {

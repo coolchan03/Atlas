@@ -11,6 +11,10 @@ import { Platform, NativeModules } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
+import { getBackendDevicesInfo } from 'llama.rn';
+
+jest.mock('llama.rn', () => ({ getBackendDevicesInfo: jest.fn() }));
+const mockedBackendDevicesInfo = getBackendDevicesInfo as jest.Mock;
 
 const mockedDeviceInfo = DeviceInfo as jest.Mocked<typeof DeviceInfo>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
@@ -204,35 +208,35 @@ describe('HardwareService — branch coverage', () => {
 
     it('returns supported for qcom hardware and caches it', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('qcom-adreno');
+      mockedBackendDevicesInfo.mockResolvedValue([{ backend: 'opencl', type: 'gpu', name: 'Adreno' }]);
       const first = await hardwareService.getOpenCLCapability();
       expect(first).toEqual({ supported: true });
 
       // Second call returns the cached object without re-reading hardware
-      mockedDeviceInfo.getHardware.mockClear();
+      mockedBackendDevicesInfo.mockClear();
       const second = await hardwareService.getOpenCLCapability();
       expect(second).toBe(first);
-      expect(mockedDeviceInfo.getHardware).not.toHaveBeenCalled();
+      expect(mockedBackendDevicesInfo).not.toHaveBeenCalled();
     });
 
     it('returns supported for mali hardware', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('arm-mali-g78');
+      mockedBackendDevicesInfo.mockResolvedValue([{ backend: 'opencl', type: 'gpu', name: 'Mali G78' }]);
       expect(await hardwareService.getOpenCLCapability()).toEqual({ supported: true });
     });
 
     it('returns no_compatible_gpu for unsupported hardware', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockResolvedValue('exynos-generic');
+      mockedBackendDevicesInfo.mockResolvedValue([{ backend: 'cpu', type: 'cpu', name: 'Generic CPU' }]);
       expect(await hardwareService.getOpenCLCapability()).toEqual({
         supported: false,
-        reason: 'no_compatible_gpu',
+        reason: 'native_opencl_device_not_found',
       });
     });
 
-    it('returns detection_failed when getHardware throws', async () => {
+    it('returns detection_failed when native backend enumeration throws', async () => {
       Platform.OS = 'android';
-      mockedDeviceInfo.getHardware.mockRejectedValue(new Error('hw error'));
+      mockedBackendDevicesInfo.mockRejectedValue(new Error('native enumeration error'));
       expect(await hardwareService.getOpenCLCapability()).toEqual({
         supported: false,
         reason: 'detection_failed',

@@ -168,13 +168,13 @@ describe('ProjectEditScreen', () => {
       const { getByText } = render(<ProjectEditScreen />);
       expect(getByText('Name *')).toBeTruthy();
       expect(getByText('Description')).toBeTruthy();
-      expect(getByText('System Prompt *')).toBeTruthy();
+      expect(getByText('Project notes (optional)')).toBeTruthy();
     });
 
     it('shows hint text for system prompt', () => {
       const { getByText } = render(<ProjectEditScreen />);
       expect(
-        getByText(/This context is sent to the AI at the start of every chat/),
+        getByText(/Extra context for chats in this project/),
       ).toBeTruthy();
     });
 
@@ -250,6 +250,7 @@ describe('ProjectEditScreen', () => {
         name: 'Test Project',
         description: 'Test desc',
         systemPrompt: 'Be helpful',
+        allowLearningActivities: false,
       });
       expect(mockGoBack).toHaveBeenCalled();
     });
@@ -291,6 +292,7 @@ describe('ProjectEditScreen', () => {
         name: 'My New Project',
         description: 'A description',
         systemPrompt: 'You are helpful',
+        allowLearningActivities: false,
       });
       expect(mockGoBack).toHaveBeenCalled();
     });
@@ -308,6 +310,7 @@ describe('ProjectEditScreen', () => {
         name: 'Trimmed Name',
         description: 'Trimmed Desc',
         systemPrompt: 'Trimmed Prompt',
+        allowLearningActivities: false,
       });
     });
   });
@@ -341,28 +344,23 @@ describe('ProjectEditScreen', () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
-    it('shows alert when system prompt is empty on save', () => {
+    it('allows empty optional project instructions', () => {
       const { getByDisplayValue, getByText } = render(<ProjectEditScreen />);
       fireEvent.changeText(getByDisplayValue('Be helpful'), '');
       fireEvent.press(getByText('Save'));
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Error',
-        'Please enter a system prompt',
-      );
-      expect(mockUpdateProject).not.toHaveBeenCalled();
-      expect(mockGoBack).not.toHaveBeenCalled();
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1',
+        expect.objectContaining({ systemPrompt: '', allowLearningActivities: false }));
+      expect(mockShowAlert).not.toHaveBeenCalled();
+      expect(mockGoBack).toHaveBeenCalled();
     });
 
-    it('shows alert when system prompt is only whitespace on save', () => {
+    it('trims whitespace-only optional instructions without an error', () => {
       const { getByDisplayValue, getByText } = render(<ProjectEditScreen />);
       fireEvent.changeText(getByDisplayValue('Be helpful'), '   ');
       fireEvent.press(getByText('Save'));
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Error',
-        'Please enter a system prompt',
-      );
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1',
+        expect.objectContaining({ systemPrompt: '' }));
+      expect(mockShowAlert).not.toHaveBeenCalled();
     });
 
     it('validates name before system prompt', () => {

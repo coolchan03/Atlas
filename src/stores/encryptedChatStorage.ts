@@ -29,7 +29,7 @@ const native = () => {
   };
 };
 const publicBody = (conv: Conversation): Conversation => {
-  const { pinVerifier, protectedBlob, ...rest } = conv;
+  const { pinVerifier: _pinVerifier, protectedBlob: _protectedBlob, ...rest } = conv;
   return rest as Conversation;
 };
 const placeholder = (conv: Conversation, blob: string): Conversation => ({
@@ -45,7 +45,9 @@ const placeholder = (conv: Conversation, blob: string): Conversation => ({
   pinVerifier: conv.pinVerifier,
   protectedBlob: blob,
 });
-async function sealedState(text: string): Promise<string> {
+// Storage reads and point updates contain already-sealed placeholders, not live plaintext.
+// Only persist writes from the hydrated store may re-encrypt unlocked conversation bodies.
+async function sealedState(text: string, reencryptUnlocked = true): Promise<string> {
   const root = JSON.parse(text);
   if (!Array.isArray(root?.state?.conversations)) throw new Error('Invalid saved chat state.');
   const out: Conversation[] = [];
@@ -57,7 +59,7 @@ async function sealedState(text: string): Promise<string> {
     let blob = latestBlobs.get(conv.id) || conv.protectedBlob;
     const pin = sessionPins.get(conv.id);
     const plain = JSON.stringify(publicBody(conv));
-    if (pin && (!blob?.startsWith('atlasitem:v1:') || lastSealed.get(conv.id) !== plain)) {
+    if (pin && reencryptUnlocked && (!blob?.startsWith('atlasitem:v1:') || lastSealed.get(conv.id) !== plain)) {
       blob = await native().encryptProtectedItem('chat', conv.id, plain, pin, conv.pinVerifier);
       latestBlobs.set(conv.id, blob);
       lastSealed.set(conv.id, plain);
@@ -81,7 +83,7 @@ async function saveReplacement(id: string, next: Conversation): Promise<void> {
     const index = root.state.conversations.findIndex((c: Conversation) => c.id === id);
     if (index < 0) throw new Error('Protected chat is missing from saved data.');
     root.state.conversations[index] = next;
-    const sealed = await sealedState(JSON.stringify(root));
+    const sealed = await sealedState(JSON.stringify(root), false);
     await AsyncStorage.setItem(KEY, sealed);
     if (await AsyncStorage.getItem(KEY) !== sealed) throw new Error('Could not verify chat protection update.');
   });
@@ -146,6 +148,9 @@ export async function permanentlyUnprotectChat(id: string, pin: string): Promise
 export async function relockProtectedChats(): Promise<void> {
   await writes;
   const { useChatStore } = require('./chatStore');
+  // A background event can arrive while Zustand is hydrating. Never write the
+  // default empty store over existing disk data before hydration completes.
+  if (useChatStore.persist?.hasHydrated?.() === false) return;
   const state = useChatStore.getState();
   // Flush any just-generated messages while the PIN is still in memory.
   // Clearing the credential before that write could discard the last reply.
@@ -169,12 +174,12 @@ export const encryptedChatStorage = {
       const old = await AsyncStorage.getItem(OLD_KEY);
       if (!old) return null;
       const clear = await native().decryptChatState(old);
-      raw = await sealedState(clear);
+      raw = await sealedState(clear, false);
       await AsyncStorage.setItem(KEY, raw);
       if (await AsyncStorage.getItem(KEY) !== raw) throw new Error('Chat migration verification failed.');
       await AsyncStorage.removeItem(OLD_KEY);
     } else {
-      const safe = await sealedState(raw);
+      const safe = await sealedState(raw, false);
       if (safe !== raw) { await AsyncStorage.setItem(KEY, safe); raw = safe; }
       // Finish interrupted migration once the selective copy is verified.
       if (await AsyncStorage.getItem(OLD_KEY)) {

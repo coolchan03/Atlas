@@ -42,8 +42,7 @@ export async function selectImageAccelerator(
   if (backend === 'sdcpp') {
     const gpu = await probe.vulkan();
     if (!gpu.enumerated) {
-      if (mode === 'gpu') throw new Error('Native diffusion Vulkan GPU not available: ' + gpu.detail);
-      return { useOpenCL: false, selected: 'cpu', note: 'CPU fallback: Vulkan unavailable (' + gpu.detail + ')' };
+      throw new Error(`Native diffusion Vulkan GPU not available: ${  gpu.detail  }. CPU was not chosen automatically; select CPU explicitly.`);
     }
     return { useOpenCL: true, selected: 'vulkan',
       note: 'Vulkan device detected; actual diffusion shaders still need to execute' };
@@ -51,8 +50,7 @@ export async function selectImageAccelerator(
   if (backend === 'mnn') {
     const gpu = await probe.opencl();
     if (!gpu.supported) {
-      if (mode === 'gpu') throw new Error('OpenCL not detected for this image model (' + (gpu.reason ?? 'unknown reason') + ')');
-      return { useOpenCL: false, selected: 'cpu', note: 'CPU fallback: OpenCL unavailable (' + (gpu.reason ?? 'unknown reason') + ')' };
+      throw new Error(`OpenCL not detected for this image model (${  gpu.reason ?? 'unknown reason'  }). CPU was not chosen automatically; select CPU explicitly.`);
     }
     return { useOpenCL: true, selected: 'opencl',
       note: 'OpenCL requested; MNN compute support must be confirmed by rendering' };
@@ -63,5 +61,5 @@ export async function selectImageAccelerator(
     return { useOpenCL: false, selected: 'npu',
       note: 'QNN NPU package selected; no CPU fallback permitted' };
   }
-  throw new Error('Unknown image model backend: ' + backend);
+  throw new Error(`Unknown image model backend: ${  backend}`);
 }

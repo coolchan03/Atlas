@@ -83,6 +83,8 @@ export function computePendingSettings(
   );
 }
 
+// Chat hook lifecycle is already large; extract independent concerns in a separate refactor.
+// eslint-disable-next-line max-lines-per-function
 export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
@@ -173,7 +175,7 @@ export const useChatScreen = () => {
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   useEffect(() => {
     if (activeConversationId) {
-      const desiredAgent = activeConversation?.agentId ?? 'atlas';
+      const desiredAgent = activeConversation?.agentId ?? null;
       if (useAgentStore.getState().activeAgentId !== desiredAgent) {
         useAgentStore.getState().setActiveAgent(desiredAgent);
       }
@@ -350,7 +352,8 @@ export const useChatScreen = () => {
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
-    setShowModelSelector(true);
+    // Reload in place. Opening the model picker here hides the composer mid-reload
+    // and prevents sending even when the same model loaded successfully.
     // Unload with keepSelection=true so a failed reload never clears activeModelId
     // (the default unload cleared it, so an OOM stranded the chat: stuck banner +
     // wedged send). The unload still nulls loadedTextModelId, so loadTextModel

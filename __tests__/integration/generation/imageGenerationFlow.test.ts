@@ -123,6 +123,7 @@ describe('Image Generation Flow Integration', () => {
         imageWidth: 512,
         imageHeight: 512,
         imageThreads: 4,
+        imageBackendMode: 'cpu', // Integration mocks deliberately have no physical OpenCL/Vulkan device.
       } as any,
     });
     mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
@@ -188,6 +189,7 @@ describe('Image Generation Flow Integration', () => {
           imageWidth: 768,
           imageHeight: 768,
           imageThreads: 4,
+          imageBackendMode: 'cpu',
         } as any,
       });
 
@@ -1083,7 +1085,7 @@ describe('Image Generation Flow Integration', () => {
 
       expect(message?.generationMeta).toBeDefined();
       // In test env, Platform.OS defaults to 'ios', so backend is always Core ML
-      expect(message?.generationMeta?.gpuBackend).toBe('Core ML (ANE)');
+      expect(message?.generationMeta?.gpuBackend).toBe('Core ML (accelerator selected by OS)');
       expect(message?.generationMeta?.gpu).toBe(true);
     });
   });

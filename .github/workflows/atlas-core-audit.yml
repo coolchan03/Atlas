@@ -1,0 +1,36 @@
+name: Atlas Core Audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches:
+      - atlas-voice
+      - 'audit/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atlas-core-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: TypeScript and Jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies without native Android SDK
+        run: npm ci --ignore-scripts
+      - name: Apply audited dependency patches
+        run: ./node_modules/.bin/patch-package
+      - name: Type check
+        run: ./node_modules/.bin/tsc --noEmit -p .
+      - name: Run all available core regression tests
+        run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent

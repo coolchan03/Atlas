@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
-import { encryptedChatStorage, protectChat, unlockChat, permanentlyUnprotectChat } from '../../../src/stores/encryptedChatStorage';
+import { encryptedChatStorage, protectChat, unlockChat, permanentlyUnprotectChat, relockProtectedChats } from '../../../src/stores/encryptedChatStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true, default: {
@@ -12,14 +12,15 @@ jest.mock('../../../src/stores/chatStore', () => ({
   useChatStore: {
     getState: () => fakeState,
     setState: (updater: any) => Object.assign(fakeState, typeof updater === 'function' ? updater(fakeState) : updater),
+    persist: { hasHydrated: () => fakeState.isHydrated !== false },
   },
 }));
 
 const KEY = 'local-llm-chat-storage';
-const encode = (text: string) => 'atlasitem:v1:' + Buffer.from(text).toString('base64');
+const encode = (text: string) => `atlasitem:v1:${  Buffer.from(text).toString('base64')}`;
 const decode = (text: string) => Buffer.from(text.slice('atlasitem:v1:'.length), 'base64').toString();
 const chat = (id: string, content = 'a secret conversation'): any => ({
-  id, title: 'Sensitive title ' + id, modelId: 'model', messages: [{ id: 'm', role: 'user', content, timestamp: 10 }],
+  id, title: `Sensitive title ${  id}`, modelId: 'model', messages: [{ id: 'm', role: 'user', content, timestamp: 10 }],
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 });
 const snapshot = (conversations: any[]) => JSON.stringify({ state: { conversations, activeConversationId: null }, version: 0 });
@@ -30,18 +31,19 @@ describe('selective and migration-safe chat storage', () => {
     disk.clear();
     fakeState.conversations = [];
     fakeState.activeConversationId = null;
+    fakeState.isHydrated = true;
     (Platform as any).OS = 'android';
     (NativeModules as any).AtlasDevice = {
-      encryptChatState: jest.fn(async (plain: string) => 'atlasenc:v1:' + plain),
+      encryptChatState: jest.fn(async (plain: string) => `atlasenc:v1:${  plain}`),
       decryptChatState: jest.fn(async (blob: string) => blob.replace(/^atlasenc:v1:/, '')),
-      createChatPinVerifier: jest.fn(async (pin: string) => 'pin:v1:' + pin),
-      verifyChatPin: jest.fn(async (pin: string, verifier: string) => verifier === 'pin:v1:' + pin),
+      createChatPinVerifier: jest.fn(async (pin: string) => `pin:v1:${  pin}`),
+      verifyChatPin: jest.fn(async (pin: string, verifier: string) => verifier === `pin:v1:${  pin}`),
       encryptProtectedItem: jest.fn(async (_kind: string, _id: string, plain: string, pin: string, verifier: string) => {
-        if (verifier !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+        if (verifier !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
         return encode(plain);
       }),
       decryptProtectedItem: jest.fn(async (_kind: string, _id: string, blob: string, pin: string, verifier: string) => {
-        if (verifier !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+        if (verifier !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
         return decode(blob);
       }),
       removeProtectedItemKey: jest.fn(async () => true),
@@ -60,7 +62,7 @@ describe('selective and migration-safe chat storage', () => {
     expect((NativeModules as any).AtlasDevice.encryptChatState).not.toHaveBeenCalled();
   });
   it('migrates an older whole-archive Keystore record before deleting it', async () => {
-    disk.set('atlas-chat-encrypted-v1', 'atlasenc:v1:' + snapshot([chat('normal')]));
+    disk.set('atlas-chat-encrypted-v1', `atlasenc:v1:${  snapshot([chat('normal')])}`);
     const restored = await encryptedChatStorage.getItem(KEY);
     expect(restored).toContain('Sensitive title normal');
     expect(disk.has('atlas-chat-encrypted-v1')).toBe(false);
@@ -68,7 +70,7 @@ describe('selective and migration-safe chat storage', () => {
   });
   it('migrates older PIN-locked chats to individually encrypted placeholders', async () => {
     const legacy = { ...chat('locked'), pinVerifier: 'pin:v1:123456' };
-    disk.set('atlas-chat-encrypted-v1', 'atlasenc:v1:' + snapshot([legacy]));
+    disk.set('atlas-chat-encrypted-v1', `atlasenc:v1:${  snapshot([legacy])}`);
     const restored = JSON.parse((await encryptedChatStorage.getItem(KEY))!);
     expect(restored.state.conversations[0].messages).toEqual([]);
     expect(restored.state.conversations[0].title).toBe('Locked conversation');
@@ -93,6 +95,25 @@ describe('selective and migration-safe chat storage', () => {
     expect(fakeState.conversations[1].pinVerifier).toBeUndefined();
     expect(disk.get(KEY)).toContain('confidential project notes');
     expect((NativeModules as any).AtlasDevice.removeProtectedItemKey).toHaveBeenCalled();
+  });
+  it('does not replace another unlocked chat ciphertext with a locked placeholder', async () => {
+    fakeState.conversations = [chat('first', 'preserve original first'), chat('second', 'preserve original second')];
+    await encryptedChatStorage.setItem(KEY, snapshot(fakeState.conversations));
+    await protectChat('first', '111111');
+    await protectChat('second', '222222');
+    await unlockChat('first', '111111');
+    await permanentlyUnprotectChat('second', '222222');
+    const first = JSON.parse(disk.get(KEY)!).state.conversations.find((c: any) => c.id === 'first');
+    expect(decode(first.protectedBlob)).toContain('preserve original first');
+    expect(decode(first.protectedBlob)).not.toContain('Locked conversation');
+  });
+  it('does not overwrite saved chats when backgrounded before hydration', async () => {
+    await encryptedChatStorage.setItem(KEY, snapshot([chat('on-disk', 'important')]));
+    const before = disk.get(KEY);
+    fakeState.conversations = [];
+    fakeState.isHydrated = false;
+    await relockProtectedChats();
+    expect(disk.get(KEY)).toBe(before);
   });
   it('fails closed if the native protection API is unavailable', async () => {
     fakeState.conversations = [chat('secret')];

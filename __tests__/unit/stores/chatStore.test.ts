@@ -23,9 +23,9 @@ describe('chatStore', () => {
   });
 
   describe('Atlas agent, privacy and archive controls', () => {
-    it('defaults new conversations to Atlas and supports selecting another agent', () => {
+    it('defaults new conversations to no agent and supports selecting another agent', () => {
       const id = useChatStore.getState().createConversation('model');
-      expect(getChatState().conversations[0].agentId).toBe('atlas');
+      expect(getChatState().conversations[0].agentId).toBeUndefined();
       useChatStore.getState().setConversationAgent(id, 'teacher');
       expect(getChatState().conversations[0].agentId).toBe('teacher');
     });
@@ -1248,9 +1248,9 @@ describe('chatStore', () => {
   });
 
   describe('streaming TTS answer gating (only the answer is spoken)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { registerHook, _clearHooksForTesting } = require('../../../src/bootstrap/hookRegistry');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { useAppStore } = require('../../../src/stores/appStore');
     let spoken: string[];
 
