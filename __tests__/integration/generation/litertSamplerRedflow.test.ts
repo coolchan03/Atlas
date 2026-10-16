@@ -29,6 +29,7 @@ function loadLiteRT() {
   jest.doMock('react-native', () => ({
     NativeModules: { LiteRTModule: nativeModule },
     NativeEventEmitter: jest.fn(() => emitter),
+    AppState: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Platform: { OS: 'android', select: (s: Record<string, any>) => s.android ?? s.default ?? null },
   }));
   jest.doMock('../../../src/utils/logger', () => {

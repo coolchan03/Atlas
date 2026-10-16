@@ -469,6 +469,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
+      const spy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
       const { getByTestId } = renderHomeScreen();
       const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByTestId('new-chat-button'));

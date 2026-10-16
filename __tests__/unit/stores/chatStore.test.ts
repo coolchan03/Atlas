@@ -23,10 +23,9 @@ describe('chatStore', () => {
   });
 
   describe('Atlas agent, privacy and archive controls', () => {
-    it('defaults new conversations to No Agent and supports selecting another agent', () => {
-      require('../../../src/stores/agentStore').useAgentStore.getState().setActiveAgent(null);
+    it('defaults new conversations to no agent and supports selecting another agent', () => {
       const id = useChatStore.getState().createConversation('model');
-      expect(getChatState().conversations[0].agentId).toBeNull();
+      expect(getChatState().conversations[0].agentId).toBeUndefined();
       useChatStore.getState().setConversationAgent(id, 'teacher');
       expect(getChatState().conversations[0].agentId).toBe('teacher');
     });

@@ -110,7 +110,7 @@ describe('Batch 8 — remote server tool-calling capability gate (request builde
    * the exact fails-before / passes-after case for that fix. Skipped until src is
    * fixed (per assignment: real src bug → do not edit src, mark BUG-FOUND + .skip).
    */
-  it.skip('BUG-FOUND: omits tools + tool_choice when the server advertised supportsToolCalling=false', async () => {
+  it('omits tools + tool_choice when the server advertised supportsToolCalling=false', async () => {
     const body = await captureRequestBody({ supportsToolCalling: false, tools: TOOLS });
     expect(body.tools).toBeUndefined();
     expect(body.tool_choice).toBeUndefined();

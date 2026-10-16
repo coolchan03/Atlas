@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - uses: actions/setup-java@v5
         with:
@@ -29,7 +29,7 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc || true
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -42,11 +42,38 @@ jobs:
         run: node node_modules/llama.rn/install/download-native-artifacts.js
       - name: Apply audited native dependency patches
         run: ./node_modules/.bin/patch-package
-      - name: Type check (informational, Atlas files reported as warnings)
+      - name: TypeScript gate
+        run: ./node_modules/.bin/tsc --noEmit -p .
+      - name: Core regression gate
+        run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent
+      - name: Checkout pinned public llama.kt sources (exclude private Pro)
         run: |
-          ./node_modules/.bin/tsc --noEmit -p . > tsc.log 2>&1 || true
-          grep -E "error TS" tsc.log | grep -iE "atlas|MyModels|officeExtract|documentService|modelManager|importHelpers|quickImport|textGenAdvanced|Popovers|ChatInput|accel|thinking|storage|loaders|types/index|App.tsx|Maps|About|Onboarding|RemoteServers|ModelDownload|Agents|theme/|constants/|sharePrompt|Upsell|learning|agent|websearch|useWideLayout|handlers.ts|llmHelpers|generationToolLoop|ChatScreen/index|AgentChip|Emergency|KnowledgeBaseScreen|SettingsScreen|HomeScreen|OfflineLibrary|offlineLibrary|survival|Survival|lowPower|Phrase|Study|study|deviceTools|Private|AssistantAccess|ProjectDetail|ModelTest|ChatContextSection|AudioInput|contextCompaction|navigation/|ReplyEta|DailyBrief|Attachments|LowPowerCard|ctxGuard|loaders|useModelsScreen|llmHelpers|tools/handlers|ChatMessageArea|services/llm|litert.ts" | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
-          echo "::notice title=TypeScript::total TS errors: $(grep -c 'error TS' tsc.log)"
+          set -euo pipefail
+          git submodule sync -- vendor/llama-kt
+          git submodule update --init --depth=1 -- vendor/llama-kt
+          git -C vendor/llama-kt submodule update --init --recursive --depth=1
+          node scripts/check-llamakt-source.cjs
+          test -f vendor/llama-kt/llama-kt/src/main/cpp/CMakeLists.txt
+          echo "Pinned llama.kt native CMake source is present."
+      - name: Install Vulkan shader-generator dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev ninja-build cmake python3
+          command -v glslc
+      - name: Bootstrap pinned llama.kt Vulkan sources
+        working-directory: vendor/llama-kt
+        run: |
+          set -euo pipefail
+          bash scripts/bootstrap.sh
+          test -s llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan.cpp
+          test -n "$(find llama-kt/src/main/cpp/ggml-vulkan/shaders -name '*.cpp' -print -quit)"
+      - name: Isolate llama.kt Vulkan backend from llama.rn OpenCL
+        run: |
+          set -euo pipefail
+          node scripts/prepare-llamakt-vulkan.cjs
+          node scripts/check-llamakt-vulkan-cmake.cjs
+          node scripts/verify-llamakt-gradle.cjs
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
           mkdir -p android/app/libs
@@ -55,11 +82,39 @@ jobs:
           # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
           ls -la android/app/libs
+      - name: Require permanent release-signing keystore
+        env:
+          ATLAS_UPLOAD_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          ATLAS_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ATLAS_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ATLAS_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in ATLAS_UPLOAD_KEYSTORE_B64 ATLAS_UPLOAD_STORE_PASSWORD ATLAS_UPLOAD_KEY_ALIAS ATLAS_UPLOAD_KEY_PASSWORD; do
+            if [ -z "${!variable}" ]; then
+              echo "::error::Missing required release-signing secret: $variable"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$ATLAS_UPLOAD_KEYSTORE_B64" | base64 --decode > android/app/atlas-upload-keystore.p12
+          test -s android/app/atlas-upload-keystore.p12
+          keytool -list -keystore android/app/atlas-upload-keystore.p12 \
+            -storetype PKCS12 -storepass:env ATLAS_UPLOAD_STORE_PASSWORD \
+            -alias "$ATLAS_UPLOAD_KEY_ALIAS" >/dev/null
+          keytool -exportcert -keystore android/app/atlas-upload-keystore.p12 \
+            -storetype PKCS12 -storepass:env ATLAS_UPLOAD_STORE_PASSWORD \
+            -alias "$ATLAS_UPLOAD_KEY_ALIAS" | sha256sum | awk '{print $1}' > android/app/signing-cert.sha256
       - name: Build release APK
         working-directory: android
+        env:
+          OFFGRID_UPLOAD_STORE_FILE: atlas-upload-keystore.p12
+          OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
+          ./gradlew assembleRelease -PatlasRequireReleaseSigning=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
@@ -73,6 +128,18 @@ jobs:
           grep -q 'lib/arm64-v8a/librnllama_v8_2.so' apk-contents.txt
           node -e "const p=require('./node_modules/llama.rn/package.json'); if(p.version!=='0.13.0-rc.4') { console.error('Unexpected llama.rn version:',p.version); process.exit(1) } console.log('Verified llama.rn',p.version)"
           echo "Verified Atlas release contains the ARM64 llama.rn native runtime."
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          # Confirm exact GitHub keystore identity, rejecting other valid certificates.
+          expected_cert_sha="$(cat android/app/signing-cert.sha256)"
+          actual_cert_sha="$("$APKSIGNER" verify --print-certs "$APK" |
+            sed -nE 's/^.*certificate SHA-256 digest:[[:space:]]*([[:xdigit:]]{64})[[:space:]]*$/\1/p' | head -1)"
+          if [ -z "$expected_cert_sha" ] || [ -z "$actual_cert_sha" ] ||
+             [ "${expected_cert_sha,,}" != "${actual_cert_sha,,}" ]; then
+            echo "::error::APK signing certificate does not match the configured release keystore"
+            exit 1
+          fi
+          echo "::notice title=Signing verified::APK certificate matches configured GitHub release key"
       - name: Rename APK
         run: |
           mkdir -p out
@@ -81,7 +148,8 @@ jobs:
         with:
           name: Atlas-apk
           path: out/*.apk
-      - name: Publish release
+      - name: Publish release (stable branch only)
+        if: github.ref == 'refs/heads/atlas-voice'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

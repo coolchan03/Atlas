@@ -1,8 +1,8 @@
 /**
  * Image inference uses distinct native runtimes. Never route a checkpoint into a
  * different model format's runtime. Imported (sd.cpp) checkpoints can run on the
- * Vulkan or the OpenCL diffusion engine or on the CPU: the decision carries the
- * backends to try next, so a GPU run that fails is retried with a visible notice.
+ * Vulkan or the OpenCL diffusion engine; CPU requires explicit selection. The
+ * plan carries supported GPU backends for retry, never a silent CPU downgrade.
  */
 export type ImageComputeMode = 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
 export type ImageBackend = 'sdcpp' | 'mnn' | 'qnn' | 'coreml' | string;
@@ -39,7 +39,7 @@ const sdAttempt = (backend: SdBackend, note: string): ImageComputeDecision => ({
 });
 
 /** Auto: Vulkan, then OpenCL, then CPU. A chosen GPU engine is tried first, then CPU. */
-async function planSdcpp(mode: ImageComputeMode, probe: Probes): Promise<ImageComputeDecision> {
+async function planSdcpp(mode: ImageComputeMode, probe: Probes, allowCpuFallback: boolean): Promise<ImageComputeDecision> {
   const gpus: Array<'vulkan' | 'opencl'> = mode === 'opencl' ? ['opencl']
     : mode === 'vulkan' || mode === 'gpu' ? ['vulkan'] : ['vulkan', 'opencl'];
   const plan: ImageComputeDecision[] = [];
@@ -51,7 +51,8 @@ async function planSdcpp(mode: ImageComputeMode, probe: Probes): Promise<ImageCo
     if (found?.enumerated) plan.push(sdAttempt(api, SD_LABEL[api] + ' device detected; diffusion shaders still need to execute'));
     else skipped.push(SD_LABEL[api] + ' unavailable (' + (found?.detail || 'not in this build') + ')');
   }
-  plan.push(sdAttempt('cpu', plan.length ? 'CPU fallback' : 'CPU fallback: ' + skipped.join('; ')));
+  if (allowCpuFallback) plan.push(sdAttempt('cpu', 'CPU fallback explicitly allowed in image settings'));
+  if (!plan.length) throw new Error('No supported diffusion GPU available: ' + skipped.join('; ') + '. Select CPU explicitly if desired.');
   const [first, ...rest] = plan;
   return { ...first, note: skipped.length && first.computeBackend !== 'cpu' ? first.note + '. ' + skipped.join('; ') : first.note, fallbacks: rest };
 }
@@ -60,6 +61,7 @@ export async function selectImageAccelerator(
   backend: ImageBackend,
   mode: ImageComputeMode,
   probe: Probes,
+  allowCpuFallback = false,
 ): Promise<ImageComputeDecision> {
   if (backend === 'coreml') {
     if (mode === 'cpu')
@@ -73,13 +75,13 @@ export async function selectImageAccelerator(
     }
     return { useOpenCL: false, selected: 'cpu', note: 'CPU explicitly selected' };
   }
-  if (backend === 'sdcpp') return planSdcpp(mode, probe);
+  if (backend === 'sdcpp') return planSdcpp(mode, probe, allowCpuFallback && mode === 'auto');
   if (mode === 'vulkan' || mode === 'opencl') mode = 'gpu'; // other runtimes have one accelerator
   if (backend === 'mnn') {
-    const gpu = await probe.opencl();
-    if (!gpu.supported) {
-      if (mode === 'gpu') throw new Error('OpenCL not detected for this image model (' + (gpu.reason ?? 'unknown reason') + ')');
-      return { useOpenCL: false, selected: 'cpu', note: 'CPU fallback: OpenCL unavailable (' + (gpu.reason ?? 'unknown reason') + ')' };
+    const gpu = await probe.opencl().catch(() => ({ supported: false, reason: 'probe failed' }));
+    if (!gpu?.supported) {
+      if (mode === 'auto' && allowCpuFallback) return { useOpenCL: false, selected: 'cpu', note: 'CPU fallback explicitly allowed in image settings' };
+      throw new Error(`OpenCL not detected for this image model (${  gpu.reason ?? 'unknown reason'  }). CPU was not chosen automatically; select CPU explicitly.`);
     }
     return { useOpenCL: true, selected: 'opencl',
       note: 'OpenCL requested; MNN compute support must be confirmed by rendering' };
@@ -90,5 +92,5 @@ export async function selectImageAccelerator(
     return { useOpenCL: false, selected: 'npu',
       note: 'QNN NPU package selected; no CPU fallback permitted' };
   }
-  throw new Error('Unknown image model backend: ' + backend);
+  throw new Error(`Unknown image model backend: ${  backend}`);
 }

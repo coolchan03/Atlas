@@ -12,6 +12,7 @@
  */
 
 import { renderHook, act } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 // ============================================================================
 // Service mocks
@@ -163,7 +164,7 @@ describe('useHomeScreen', () => {
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    it('creates conversation and navigates when local model is active', () => {
+    it('offers private choice before navigating a local-model chat', () => {
       (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [{ id: 'local-model-1', name: 'Local' }], setDownloadedModels: jest.fn(),
         activeModelId: 'local-model-1', setActiveModelId: jest.fn(),
@@ -172,9 +173,15 @@ describe('useHomeScreen', () => {
         deviceInfo: null, setDeviceInfo: jest.fn(),
         generatedImages: [], settings: { contextLength: 4096 },
       }; return sel ? sel(st) : st; });
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
+      const buttons = alertSpy.mock.calls[0][2]!;
+      act(() => { buttons.find(button => button.text === 'Regular chat')?.onPress?.(); });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
+      alertSpy.mockRestore();
     });
 
     it('uses remote text model id when no local model is active', () => {
@@ -184,9 +191,15 @@ describe('useHomeScreen', () => {
         activeRemoteImageModelId: null,
         activeServerId: 'server-1',
       }; return sel ? sel(st) : st; });
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
+      const buttons = alertSpy.mock.calls[0][2]!;
+      act(() => { buttons.find(button => button.text === 'Private (not saved)')?.onPress?.(); });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
+      alertSpy.mockRestore();
     });
   });
 

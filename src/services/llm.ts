@@ -19,6 +19,7 @@ import {
 } from './llmHelpers';
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
+import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
@@ -190,14 +191,9 @@ class LLMService {
           modelPath, !!mmProjPath,
         );
         candidates.push(INFERENCE_BACKENDS.CPU);
-      } else if (Platform.OS === 'android' && requested === INFERENCE_BACKENDS.VULKAN) {
-        // Vulkan is a separate engine: if it cannot load, fall back to llama.rn on CPU.
-        candidates.push(INFERENCE_BACKENDS.CPU);
       }
-      // Every path ends on CPU when the accelerator cannot load, and the reason is shown
-      // to the user (getBackendFallbackNotice). Explicit OpenCL/NPU choices fall back inside
-      // initContextWithFallback; Auto and Vulkan fall back through the candidate list.
-      const fallsBack = auto || requested === INFERENCE_BACKENDS.VULKAN;
+      // Only Auto may try a different engine. Explicit NPU, GPU, and Vulkan
+      // selections fail visibly rather than silently running on CPU.
       const failures: string[] = [];
       for (const backend of candidates) {
         try {
@@ -217,7 +213,7 @@ class LLMService {
             const active = await vulkanEngine.loadModel(modelPath, requestedLayers,
               Math.min(ctxLen, 32768), nThreads);
             if (!/vulkan/i.test(active)) throw new Error(
-              'Native model reported ' + active + ', not Vulkan',
+              `Native model reported ${active}, not Vulkan`,
             );
             this.vulkanLoaded = true;
             this.currentModelPath = modelPath;
@@ -259,7 +255,6 @@ class LLMService {
           const message = String(error?.message || error || 'Native load failed');
           // A memory refusal is about the model, not the backend: keep its type so the UI
           // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
-          const memoryRefusal = error?.name === 'OverridableMemoryError' || error instanceof OverridableMemoryError;
           if (backend === INFERENCE_BACKENDS.VULKAN) {
             try { await vulkanEngine.unload(); } catch { /* bridge may be unavailable */ }
             this.vulkanFallbackReason = message;
@@ -272,19 +267,21 @@ class LLMService {
             gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false,
           });
           failures.push(`${backend}: ${message.slice(0, 180)}`);
-          if (memoryRefusal) throw error;
-          if (!fallsBack) throw error instanceof Error ? error : new Error(message);
+          // Preserve typed memory refusals through the backend loader. Wrapping
+          // them in a generic Error removed the Load Anyway action in chat.
+          if (isOverridableMemoryError(error)) throw error;
+          if (!auto) {
+            if (backend === INFERENCE_BACKENDS.VULKAN)
+              throw new Error(`Vulkan GPU unavailable: ${message}. Select CPU explicitly to continue.`);
+            throw new Error(message);
+          }
           // A timed-out native context may still be initializing; do not race a
           // second native backend against that unresolved work.
           if (/timed out after/i.test(message)) break;
         }
       }
       this.acceleratorAttempts = failures;
-      if (failures.some(f => /timed out after/i.test(f))) throw new Error(
-        'The GPU/NPU took too long to start, so the load was stopped before trying the next backend. '
-        + 'Try loading again (the first start is the slowest), or pick CPU in Settings > Text generation. '
-        + failures.join(' | '));
-      throw new Error('No compatible backend could load this model (including CPU). ' + failures.join(' | '));
+      throw new Error(`No compatible backend could load this model (including CPU). ${failures.join(' | ')}`);
     } finally {
       mutex.release();
     }
@@ -698,10 +695,10 @@ class LLMService {
   isCpuForFileType(): boolean { return this.cpuForFileType; }
   getBackendFallbackNotice(): string | null {
     if (this.acceleratorAttempts.length && (this.context || this.vulkanLoaded)) {
-      const lead = this.requestedBackendAtLoad === INFERENCE_BACKENDS.AUTO ? 'Auto selected' : 'Running on';
-      return `${lead} ${this.selectedBackend.toUpperCase()} because: ${this.acceleratorAttempts.join(' | ')}`;
+      const verb = this.requestedBackendAtLoad === INFERENCE_BACKENDS.AUTO ? 'Auto selected' : 'Running on';
+      return `${verb} ${this.selectedBackend.toUpperCase()} after: ${this.acceleratorAttempts.join(' | ')}`;
     }
-    if (this.vulkanFallbackReason) return 'Vulkan unavailable: ' + this.vulkanFallbackReason;
+    if (this.vulkanFallbackReason) return `Vulkan unavailable: ${this.vulkanFallbackReason}${this.context ? '. Auto chose another accelerator.' : '. GPU-only mode did not fall back to CPU.'}`;
     if (!this.context) return null;
     if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });

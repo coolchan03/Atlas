@@ -130,7 +130,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // service); per hardening rules we do NOT edit src, so the correct-behavior
   // assertion is skipped and the actual (buggy) behavior is pinned below.
   describe('URL-encoded filename display decode (#17)', () => {
-    it.skip('BUG-FOUND: display fileName should be decoded (my%20notes.txt -> "my notes.txt")', async () => {
+    it('displays decoded file names (my%20notes.txt -> "my notes.txt")', async () => {
       stubReadableFile('body');
       const att = await documentService.processDocumentFromPath(
         '/docs/my%20notes.txt',
@@ -140,14 +140,13 @@ describe('Batch3 · document attach validation (real documentService)', () => {
       expect(att!.fileName).toBe('my notes.txt');
     });
 
-    it.skip('pins ACTUAL behavior: the display fileName is returned un-decoded (documents the bug) — SKIP: do not enshrine the bug as passing; see the desired-behavior skip above', async () => {
+    it('keeps a malformed percent sequence readable instead of crashing', async () => {
       stubReadableFile('body');
       const att = await documentService.processDocumentFromPath(
-        '/docs/my%20notes.txt',
-        'my%20notes.txt',
+        '/docs/my%bad.txt',
+        'my%bad.txt',
       );
-      // NOT decoded today — this is the current, incorrect behavior we are pinning.
-      expect(att!.fileName).toBe('my%20notes.txt');
+      expect(att!.fileName).toBe('my%bad.txt');
     });
 
     it('resolves the file even when the PATH is URL-encoded (path decode works)', async () => {

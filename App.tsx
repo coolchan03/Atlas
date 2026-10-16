@@ -37,6 +37,7 @@ import { autoPickAcceleration } from './src/atlasTools/accel';
 import { startCtxRecovery } from './src/atlasTools/ctxGuard';
 import { purgePrivateChatImages } from './src/services/privateImagePurge';
 import { startTextAppearance } from './src/theme/globalText';
+import { useNearbyPairingIntent } from './src/services/nearbySync/useNearbyPairingIntent';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
@@ -81,6 +82,7 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
+  useNearbyPairingIntent();
   useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount

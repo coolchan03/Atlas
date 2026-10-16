@@ -424,7 +424,13 @@ class ModelResidencyManager {
     return this.runExclusive(`evict:${key}`, async () => {
       const r = this.residents.get(key);
       if (!r) return false;
-      await r.unload().catch(err => logger.log(`[ModelResidency] evict ${key} unload failed:`, err));
+      try {
+        await r.unload();
+      } catch (err) {
+        // Never count memory as free when native unload failed; retry is still possible.
+        logger.log(`[ModelResidency] evict ${key} unload failed:`, err);
+        return false;
+      }
       this.residents.delete(key);
       logger.log(`[ModelResidency] evicted ${r.type} (${key}) by user request`);
       return true;

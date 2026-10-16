@@ -169,7 +169,8 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    ctx.store.setActiveModelId(null); // load FAILED → no active model, consistently (never a stale selection)
+    // Preserve selection on failed load; a retry after correcting backend settings
+    // must not require re-selecting the model or hide the chat composer.
     throw error;
   } finally {
     ctx.onFinally();
@@ -253,7 +254,8 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    ctx.store.setActiveModelId(null); // load FAILED → no active model, consistently (never a stale selection)
+    // Preserve selection on failed load; a retry after correcting backend settings
+    // must not require re-selecting the model or hide the chat composer.
     throw error;
   } finally {
     ctx.onFinally();

@@ -149,6 +149,8 @@ export const useChatStore = create<ChatState>()(
       isStreaming: false,
       isThinking: false,
 
+      // Preserve the existing four-argument API until chat callers migrate to options.
+      // eslint-disable-next-line max-params
       createConversation: (modelId, title, projectId, privateChat = false) => {
         if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
           throw new Error('This project is encrypted. Create chats separately until protected project content can be encrypted together.');
@@ -163,7 +165,7 @@ export const useChatStore = create<ChatState>()(
           updatedAt: new Date().toISOString(),
           projectId: projectId,
           isPrivate: privateChat,
-          agentId: require('./agentStore').useAgentStore.getState().activeAgentId,
+          agentId: undefined,
         };
 
         set((state) => ({

@@ -515,6 +515,7 @@ class ImageGenerationService {
           opencl: () => hardwareService.getOpenCLCapability(),
           npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
         },
+        settings.imageAllowCpuFallback === true,
       );
     } catch (error: any) {
       return this._fail('Image accelerator unavailable: ' + (error?.message || String(error)));

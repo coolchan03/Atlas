@@ -57,7 +57,7 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     // setupChatScreen performs the initial automatic capability probe before this
     // device-specific override, so clear that cached probe before the manual GPU reload.
     const { hardwareService } = require('../../../src/services/hardware');
-    (hardwareService as any).cachedOpenCLCapability = null;
+    jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
 
     h.enableGenerationDetailsViaUI(); // real segmented toggle → the details row renders under each reply
     h.render();
@@ -72,6 +72,7 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     // parent chain to the bound onPress and invoke it (the same thing a tap does — see the harness send helper).
     await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
+
 
     await h.send('hello', { text: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });

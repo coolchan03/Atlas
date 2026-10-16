@@ -9,11 +9,9 @@
  */
 
 import React from 'react';
-import { Linking } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 // Import the SAME shared URL constants the screen uses, so the tap assertions ride on the
 // single source of truth (test-side DRY) rather than re-hardcoding the URL strings.
-import { FOLLOW_X_URL, SLACK_INVITE_URL } from '../../../src/utils/sharePrompt';
 
 // Navigation is globally mocked in jest.setup.ts
 

@@ -36,8 +36,8 @@ describe('happy — switching text models swaps residency (one heavy model accou
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
 
-    const litertModel = createDownloadedModel({ id: 'lrt', engine: 'litert', filePath: '/models/gemma.litertlm' });
-    const llamaModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
+    const litertModel = createDownloadedModel({ id: 'lrt', engine: 'litert', filePath: '/models/gemma.litertlm', fileSize: 500 * 1024 * 1024 });
+    const llamaModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf', fileSize: 500 * 1024 * 1024 });
     useAppStore.setState({ downloadedModels: [litertModel, llamaModel], activeModelId: null });
 
     const textResidents = () => (modelResidencyManager.getResidents() as Array<{ type: string; modelId?: string }>)

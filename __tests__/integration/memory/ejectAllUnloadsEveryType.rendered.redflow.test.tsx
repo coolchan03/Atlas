@@ -29,14 +29,18 @@ describe('T023b (rendered) — Eject All frees every resident, sidecars included
     // A heavy (4GB) text model so its "one heavy at a time" premise holds: loading the image model
     // must EVICT the text model (they can't co-reside), leaving residents = image + whisper. The
     // harness default is a lighter 2GB model (fits chat-flow budgets) which would co-reside here.
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 4 * 1024 * 1024 * 1024 });
+    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 2 * 1024 * 1024 * 1024 });
     h.render();
     await h.placeImageModel({ backend: 'mnn' });
     /* eslint-disable @typescript-eslint/no-var-requires */
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     /* eslint-enable @typescript-eslint/no-var-requires */
+    // Explicit one-heavy-model policy: the image load must evict the text model.
+    modelResidencyManager.setLoadPolicy('conservative');
     await activeModelService.loadImageModel('sd');
+    // Sidecars are allowed to coexist with the image model in balanced mode.
+    modelResidencyManager.setLoadPolicy('balanced');
     await h.setupWhisperModel();
 
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();

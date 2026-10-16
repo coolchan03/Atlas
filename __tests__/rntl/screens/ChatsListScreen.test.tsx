@@ -11,7 +11,8 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
@@ -168,16 +169,14 @@ describe('ChatsListScreen', () => {
     });
 
     it('enables New when downloadable models exist but none are loaded', () => {
-      useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [createDownloadedModel()], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
+      expect(spy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
+      act(() => { spy.mock.calls[0][2]!.find(choice => choice.text === 'Regular chat')?.onPress?.(); });
       expect(getByText('Select Model')).toBeTruthy();
+      spy.mockRestore();
     });
   });
 
@@ -212,16 +211,13 @@ describe('ChatsListScreen', () => {
     });
 
     it('shows New button flow when only image models are available', () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        activeModelId: null,
-        downloadedImageModels: [createONNXImageModel()],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [createONNXImageModel()], activeImageModelId: null });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
+      act(() => { spy.mock.calls[0][2]!.find(choice => choice.text === 'Private (not saved)')?.onPress?.(); });
       expect(getByText('Select Model')).toBeTruthy();
+      spy.mockRestore();
     });
 
     it('shows "New Chat" button in empty state when models are downloaded', () => {
@@ -355,13 +351,10 @@ describe('ChatsListScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('navigates to new Chat when New button is pressed and models exist', () => {
+    it('offers regular or private chat before navigating', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByText('New'));
@@ -500,17 +493,16 @@ describe('ChatsListScreen', () => {
   // Empty State with Models
   // ==========================================================================
   describe('empty state new chat button', () => {
-    it('navigates when New Chat empty state button pressed', () => {
+    it('navigates privately when New Chat empty state button pressed and private is chosen', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New Chat'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(mockNavigate).not.toHaveBeenCalled();
+      spy.mock.calls[0][2]!.find(choice => choice.text === 'Private (not saved)')?.onPress?.();
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
+      spy.mockRestore();
     });
   });
 

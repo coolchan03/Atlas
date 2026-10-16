@@ -20,33 +20,40 @@ describe('image runtime accelerator selection', () => {
   it('Auto falls back to CPU (with a note) when no diffusion GPU is found', async () => {
     const probe = probes();
     probe.vulkan.mockResolvedValue({ enumerated: false, detail: 'no supported GPU' });
-    const auto = await selectImageAccelerator('sdcpp', 'auto', probe);
+    const auto = await selectImageAccelerator('sdcpp', 'auto', probe, true);
     expect(auto.selected).toBe('cpu');
     expect(auto.note).toMatch(/CPU fallback/);
     expect(probe.opencl).not.toHaveBeenCalled();
   });
   it('plans Vulkan, then OpenCL, then CPU for imported checkpoints in Auto', async () => {
     const probe = { ...probes(), sdOpencl: jest.fn(async () => ({ enumerated: true, detail: 'GPUOpenCL' })) };
-    const plan = await selectImageAccelerator('sdcpp', 'auto', probe);
+    const plan = await selectImageAccelerator('sdcpp', 'auto', probe, true);
     expect([plan.computeBackend, ...(plan.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['vulkan', 'opencl', 'cpu']);
     probe.vulkan.mockResolvedValue({ enumerated: false, detail: 'no device' });
-    const noVulkan = await selectImageAccelerator('sdcpp', 'auto', probe);
+    const noVulkan = await selectImageAccelerator('sdcpp', 'auto', probe, true);
     expect([noVulkan.computeBackend, ...(noVulkan.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['opencl', 'cpu']);
   });
   it('a chosen OpenCL or Vulkan engine is tried first, then the CPU', async () => {
     const probe = { ...probes(), sdOpencl: jest.fn(async () => ({ enumerated: true, detail: 'GPUOpenCL' })) };
     const opencl = await selectImageAccelerator('sdcpp', 'opencl', probe);
-    expect([opencl.computeBackend, ...(opencl.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['opencl', 'cpu']);
+    expect([opencl.computeBackend, ...(opencl.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['opencl']);
     expect(probe.vulkan).not.toHaveBeenCalled();
     const vulkan = await selectImageAccelerator('sdcpp', 'vulkan', probe);
-    expect([vulkan.computeBackend, ...(vulkan.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['vulkan', 'cpu']);
+    expect([vulkan.computeBackend, ...(vulkan.fallbacks ?? []).map(f => f.computeBackend)]).toEqual(['vulkan']);
   });
   it('uses OpenCL for MNN in Auto when present, else CPU; GPU mode requires it', async () => {
     const probe = probes();
     expect((await selectImageAccelerator('mnn', 'auto', probe)).selected).toBe('opencl');
     probe.opencl.mockResolvedValue({ supported: false });
-    expect((await selectImageAccelerator('mnn', 'auto', probe)).selected).toBe('cpu');
+    expect((await selectImageAccelerator('mnn', 'auto', probe, true)).selected).toBe('cpu');
     await expect(selectImageAccelerator('mnn', 'gpu', probe)).rejects.toThrow('OpenCL not detected');
+  });
+  it('does not silently choose CPU when fallback permission is absent', async () => {
+    const probe = probes();
+    probe.vulkan.mockResolvedValue({ enumerated: false, detail: 'not detected' });
+    await expect(selectImageAccelerator('sdcpp', 'auto', probe)).rejects.toThrow('Select CPU explicitly');
+    probe.opencl.mockResolvedValue({ supported: false });
+    await expect(selectImageAccelerator('mnn', 'auto', probe)).rejects.toThrow('CPU was not chosen automatically');
   });
   it('honors manual CPU only with an eligible image runtime', async () => {
     const probe = probes();

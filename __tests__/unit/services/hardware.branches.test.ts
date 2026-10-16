@@ -11,6 +11,10 @@ import { Platform, NativeModules } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
+import { getBackendDevicesInfo } from 'llama.rn';
+
+jest.mock('llama.rn', () => ({ getBackendDevicesInfo: jest.fn() }));
+const mockedBackendDevicesInfo = getBackendDevicesInfo as jest.Mock;
 
 const mockedDeviceInfo = DeviceInfo as jest.Mocked<typeof DeviceInfo>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

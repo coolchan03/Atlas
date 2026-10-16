@@ -96,23 +96,14 @@ android {
             keyPassword 'android'
         }
         release {
-            // Real release key: Gradle properties first, then the ATLAS_* environment
-            // variables that CI sets from GitHub secrets. With neither, storeFile stays
-            // unset and the release build falls back to debug signing (see buildTypes).
-            def atlasStore = System.getenv('ATLAS_KEYSTORE_FILE')
-            if (project.hasProperty('OFFGRID_UPLOAD_STORE_FILE')) {
-                storeFile file(OFFGRID_UPLOAD_STORE_FILE)
-                storePassword OFFGRID_UPLOAD_STORE_PASSWORD
-                keyAlias OFFGRID_UPLOAD_KEY_ALIAS
-                keyPassword OFFGRID_UPLOAD_KEY_PASSWORD
-            } else if (atlasStore && file(atlasStore).exists()
-                    && System.getenv('ATLAS_KEYSTORE_PASSWORD')
-                    && System.getenv('ATLAS_KEY_ALIAS')
-                    && System.getenv('ATLAS_KEY_PASSWORD')) {
-                storeFile file(atlasStore)
-                storePassword System.getenv('ATLAS_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('ATLAS_KEY_ALIAS')
-                keyPassword System.getenv('ATLAS_KEY_PASSWORD')
+            // CI release secrets are injected as environment variables; local signing
+            // through Gradle properties is also supported without storing credentials.
+            def signingPath = System.getenv('OFFGRID_UPLOAD_STORE_FILE') ?: project.findProperty('OFFGRID_UPLOAD_STORE_FILE')
+            if (signingPath) {
+                storeFile file(signingPath)
+                storePassword System.getenv('OFFGRID_UPLOAD_STORE_PASSWORD') ?: project.findProperty('OFFGRID_UPLOAD_STORE_PASSWORD')
+                keyAlias System.getenv('OFFGRID_UPLOAD_KEY_ALIAS') ?: project.findProperty('OFFGRID_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('OFFGRID_UPLOAD_KEY_PASSWORD') ?: project.findProperty('OFFGRID_UPLOAD_KEY_PASSWORD')
             }
         }
     }
@@ -138,9 +129,23 @@ android {
             applicationIdSuffix ".dev"
         }
         release {
-            // Vulkan builds upgrade the normal Atlas app in place (same id and signing
-            // key), so chats, models and settings carry over.
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            if (project.findProperty('atlasVulkanEnabled') == 'true') {
+                applicationIdSuffix '.vulkantest'
+                versionNameSuffix '-vulkan-test'
+            }
+            // Experimental builds may retain debug signing. Published releases must
+            // be signed with the permanent upload key and fail closed otherwise.
+            if (project.findProperty('atlasRequireReleaseSigning') == 'true') {
+                if (!signingConfigs.release.storeFile ||
+                    !signingConfigs.release.storePassword ||
+                    !signingConfigs.release.keyAlias ||
+                    !signingConfigs.release.keyPassword) {
+                    throw new GradleException('Permanent Atlas release-signing credentials are required.')
+                }
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

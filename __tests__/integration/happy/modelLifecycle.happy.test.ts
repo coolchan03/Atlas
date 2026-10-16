@@ -29,7 +29,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
-    const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
+    const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf', fileSize: 500 * 1024 * 1024 });
     useAppStore.setState({ downloadedModels: [model], activeModelId: null });
 
     // Load — becomes ready + resident.
