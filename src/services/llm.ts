@@ -228,8 +228,9 @@ class LLMService {
             this.multimodalInitialized = false;
             this.multimodalSupport = null;
           } else {
-            // Strict only while Auto is still trying candidates (it has CPU next in the list).
-            const requireAcceleration = Platform.OS === 'android' && auto &&
+            // An explicitly selected GPU/NPU must not silently initialize on CPU.
+            // Auto may try other candidate engines, including CPU, and report the choice.
+            const requireAcceleration = Platform.OS === 'android' &&
               backend !== INFERENCE_BACKENDS.CPU;
             const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } =
               await this.initWithAutoContext(

@@ -42,6 +42,8 @@ jobs:
         run: node node_modules/llama.rn/install/download-native-artifacts.js
       - name: Apply audited native dependency patches
         run: ./node_modules/.bin/patch-package
+      - name: Reconciled feature contract gate
+        run: node scripts/release/check-reconciled-release.cjs
       - name: TypeScript gate
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Core regression gate

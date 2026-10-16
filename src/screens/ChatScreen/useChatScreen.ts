@@ -369,7 +369,17 @@ export const useChatScreen = () => {
     // activeModelService.unloadTextModel now unloads whichever engine is active (LiteRT or llama)
     // and no-ops when nothing is loaded — so no engine branch here.
     await activeModelService.unloadTextModel(true);
-    await initiateModelLoad(modelDeps, false);
+    const outcome = await initiateModelLoad(modelDeps, false);
+    // A failed explicitly selected accelerator must remain visible in the conversation
+    // after the transient alert is dismissed. Never claim that CPU was used.
+    if (!outcome.ok && outcome.detail && activeConversationId &&
+        ['opencl', 'htp', 'vulkan'].includes(String(settings.inferenceBackend)) &&
+        /gpu|opencl|npu|vulkan|context init|timed out|accelerator/i.test(outcome.detail)) {
+      addMessage(activeConversationId, {
+        role: 'assistant', isSystemInfo: true,
+        content: `GPU/NPU initialization failed: ${outcome.detail}. CPU was not selected automatically.`,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
 

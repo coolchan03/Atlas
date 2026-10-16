@@ -71,15 +71,14 @@ it('rejects tool calls on explicit Vulkan without unloading or switching to CPU'
   expect(llmService.getLoadedModelPath()).toBe('/models/small.gguf');
 });
 
-it('falls back to CPU with a visible notice when explicitly selected Vulkan is unavailable', async () => {
+it('does not silently run on CPU when explicitly selected Vulkan is unavailable', async () => {
   jest.spyOn(vulkanEngine,'isAvailable').mockResolvedValue(false);
   const unload = jest.spyOn(vulkanEngine,'unload').mockResolvedValue();
   native.mockResolvedValue(createMockLlamaContext() as any);
-  await llmService.loadModel('/models/small.gguf');
+  await expect(llmService.loadModel('/models/small.gguf')).rejects.toThrow(/Vulkan GPU unavailable/i);
   expect(unload).toHaveBeenCalled();
-  expect(llmService.isModelLoaded()).toBe(true);
-  expect(llmService.getSelectedBackend()).toBe('cpu');
-  expect(llmService.getBackendFallbackNotice()).toMatch(/Running on CPU because: vulkan/);
+  expect(llmService.isModelLoaded()).toBe(false);
+  expect(native).not.toHaveBeenCalled();
 });
 
 it('still allows CPU when the caller explicitly requests it', async () => {

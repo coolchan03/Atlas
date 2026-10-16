@@ -100,12 +100,24 @@ describe('selective protection for metadata-only projects', () => {
     await relockProjects();
     expect(disk.get(KEY)).toBe(before);
   });
-  it('refuses to claim projects with unencrypted knowledge-base documents are protected', async () => {
+  it('seals knowledge-base documents in the protected vault before replacing project metadata', async () => {
     fakeProjects.projects = [project('secret')];
     await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
-    mockDocuments.mockResolvedValueOnce([{ id: 1 }]);
-    await expect(protectProject('secret', '123456')).rejects.toThrow(/cannot yet be encrypted/);
-    expect(disk.get(KEY)).toContain('Private story notes');
+    const { ragService } = require('../../../src/services/rag');
+    const { protectedVault } = require('../../../src/stores/protectedProjectVault');
+    const docs = [{ id: 1, name: 'Notes', path: '/private', size: 12, createdAt: '2026-01-01', enabled: 1, chunks: [] }];
+    const exportSpy = jest.spyOn(ragService, 'exportProjectDocuments').mockResolvedValueOnce(docs);
+    const sealSpy = jest.spyOn(protectedVault, 'seal').mockResolvedValueOnce(undefined);
+    try {
+      await protectProject('secret', '123456');
+      expect(exportSpy).toHaveBeenCalledWith('secret');
+      expect(sealSpy).toHaveBeenCalledWith('secret', '123456', 'pin:v1:123456', docs);
+      expect(disk.get(KEY)).not.toContain('Private story notes');
+      expect(fakeProjects.projects[0].name).toBe('Locked project');
+    } finally {
+      exportSpy.mockRestore();
+      sealSpy.mockRestore();
+    }
   });
   it('refuses projects with associated chats or saved study outputs', async () => {
     fakeProjects.projects = [project('secret')];

@@ -85,8 +85,8 @@ android {
         // The optional llama.kt Vulkan library requires API 29 (Android 10).
         minSdkVersion project.findProperty('atlasVulkanEnabled') == 'true' ? 29 : rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1784144537
-        versionName "0.0.103"
+        versionCode 1784144538
+        versionName "0.0.104"
     }
     signingConfigs {
         debug {

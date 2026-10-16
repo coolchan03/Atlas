@@ -173,15 +173,9 @@ describe('useHomeScreen', () => {
         deviceInfo: null, setDeviceInfo: jest.fn(),
         generatedImages: [], settings: { contextLength: 4096 },
       }; return sel ? sel(st) : st; });
-      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
-      const buttons = alertSpy.mock.calls[0][2]!;
-      act(() => { buttons.find(button => button.text === 'Regular chat')?.onPress?.(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: false });
-      alertSpy.mockRestore();
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
 
     it('uses remote text model id when no local model is active', () => {
@@ -191,15 +185,9 @@ describe('useHomeScreen', () => {
         activeRemoteImageModelId: null,
         activeServerId: 'server-1',
       }; return sel ? sel(st) : st; });
-      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockNavigate).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith('New conversation', expect.any(String), expect.any(Array));
-      const buttons = alertSpy.mock.calls[0][2]!;
-      act(() => { buttons.find(button => button.text === 'Private (not saved)')?.onPress?.(); });
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
-      alertSpy.mockRestore();
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 

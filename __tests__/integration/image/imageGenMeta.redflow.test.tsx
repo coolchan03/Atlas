@@ -47,6 +47,7 @@ async function generateWithSettings(settings: Record<string, unknown>) {
 
   const messages = useChatStore.getState().getConversationMessages(conversationId);
   const assistant = [...messages].reverse().find((m: { role: string }) => m.role === 'assistant');
+  if (!assistant) throw new Error('Image generation failed before chat creation: ' + String(imageGenerationService.getState().error));
   return render(React.createElement(ChatMessage, { message: assistant, showGenerationDetails: true }));
 }
 
