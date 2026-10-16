@@ -150,7 +150,7 @@ it('explicit OpenCL fails visibly without retrying CPU when GPU init fails', asy
     .rejects.toThrow(/GPU\/NPU initialization failed: GPU unavailable/);
   expect(llmService.isModelLoaded()).toBe(false);
   expect(native).toHaveBeenCalled();
-  expect(native.mock.calls.every(call => call[0].n_gpu_layers > 0)).toBe(true);
+  expect(native.mock.calls.every(call => (call[0]?.n_gpu_layers ?? 0) > 0)).toBe(true);
 });
 
 it('uses a user-selected Vulkan context above the former 4K limit and honors sampling settings', async () => {
