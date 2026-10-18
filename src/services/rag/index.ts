@@ -84,17 +84,23 @@ class RagService {
 
     if (isProtected) {
       // Protected project: chunks and embeddings go only into the encrypted vault, never rag.db.
-      onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
-      await embeddingService.load();
-      const embeddings = await embeddingService.embedBatch(chunks.map(c => c.content));
-      onProgress?.({ stage: 'indexing', message: 'Encrypting...' });
-      const id = await protectedVault.addDocument(projectId, {
-        name: fileName, path: filePath, size: fileSize,
-        chunks: chunks.map((c, i) => ({ content: c.content, position: c.position, embedding: embeddings[i] })),
-      });
-      await removeOwnCopy(filePath);
-      onProgress?.({ stage: 'done', message: 'Done' });
-      return id;
+      // The extractor's durable copy (attachment.uri) holds the ORIGINAL plaintext bytes, so it
+      // is deleted with the picked file whether or not the vault write succeeds.
+      try {
+        onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
+        await embeddingService.load();
+        const embeddings = await embeddingService.embedBatch(chunks.map(c => c.content));
+        onProgress?.({ stage: 'indexing', message: 'Encrypting...' });
+        const id = await protectedVault.addDocument(projectId, {
+          name: fileName, path: filePath, size: fileSize,
+          chunks: chunks.map((c, i) => ({ content: c.content, position: c.position, embedding: embeddings[i] })),
+        });
+        onProgress?.({ stage: 'done', message: 'Done' });
+        return id;
+      } finally {
+        await removeOwnCopy(filePath);
+        if (attachment.uri && attachment.uri !== filePath) await removeOwnCopy(attachment.uri);
+      }
     }
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
