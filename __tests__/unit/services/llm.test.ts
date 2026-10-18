@@ -574,7 +574,7 @@ describe('LLMService', () => {
         const onComplete = jest.fn();
         const result = await llmService.generateResponse([createUserMessage('hi')], { onComplete });
         expect(result).toBe('The clean answer.');
-        expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning' });
+        expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning', parsedContent: 'The clean answer.' });
       });
 
       it('FAIL-SAFE: empty filtered content from auto → the raw text still surfaces (answer never blank)', async () => {

@@ -7,7 +7,7 @@ import { useAppStore } from '../stores/appStore';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta, nextStreamedContent } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
@@ -188,11 +188,11 @@ export async function generateWithToolsImpl(
       // into content. Route each to its own channel so the thinking block renders and the raw
       // <|channel> markers (data.token) never leak into the answer. (The tool path previously appended
       // data.token verbatim, so gemma's reasoning + its <|channel> delimiters landed in the reply.)
-      const contentPiece = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
+      const contentPiece = getStreamingDelta(nextStreamedContent(data, streamedContentSoFar), streamedContentSoFar);
       const reasoningPiece = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
-      if (data.content) streamedContentSoFar = data.content;
-      else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
-      if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+      // Track what was displayed, not the parser's latest value (see getStreamingDelta).
+      if (contentPiece) streamedContentSoFar += contentPiece;
+      if (reasoningPiece) streamedReasoningSoFar += reasoningPiece;
       if (reasoningPiece) { fullReasoning += reasoningPiece; options.onStream?.({ reasoningContent: reasoningPiece }); }
       if (contentPiece) {
         const visible = toolCallFilter ? toolCallFilter.process(contentPiece) : contentPiece;

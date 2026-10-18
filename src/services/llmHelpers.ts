@@ -340,10 +340,28 @@ export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4:
   // keep the known-good 'deepseek' path.)
   return { enable_thinking: true, reasoning_format: isGemma4 ? 'auto' : 'deepseek' };
 }
-export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
+/**
+ * New text in an ACCUMULATED stream value (llama.rn re-parses all generated text into
+ * `content` on every token) relative to what was already DISPLAYED. The parser can revise
+ * displayed text: a held-back partial tag such as "<tool_call" released, trimmed
+ * whitespace, or a switch from raw token pieces to parsed content after a failed partial
+ * parse. Returning the whole value then re-appended the entire reply (repeated text and
+ * characters, stored in the chat). Only characters beyond the displayed length are new;
+ * the final reply is reconciled with the authoritative content when generation completes.
+ */
+export function getStreamingDelta(nextValue: string | undefined, displayed: string): string | undefined {
   if (!nextValue) return undefined;
-  if (!previousValue) return nextValue;
-  return nextValue.startsWith(previousValue) ? nextValue.slice(previousValue.length) || undefined : nextValue;
+  if (!displayed) return nextValue;
+  if (nextValue.startsWith(displayed)) return nextValue.slice(displayed.length) || undefined;
+  return nextValue.length > displayed.length ? nextValue.slice(displayed.length) : undefined;
+}
+
+/** Accumulated content for a stream event: parsed content, else displayed text + raw token. */
+export function nextStreamedContent(
+  data: { content?: string; reasoning_content?: string; token?: string }, displayed: string,
+): string | undefined {
+  if (data.content != null) return data.content;
+  return !data.reasoning_content && data.token ? displayed + data.token : undefined;
 }
 
 /** Reads the model's trained context length from metadata, or null if unavailable. */

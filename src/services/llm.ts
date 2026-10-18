@@ -11,7 +11,7 @@ import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores/appStore';
 import {
   initContextWithFallback, captureGpuInfo, logContextMetadata, getModelMaxContext,
-  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
+  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta, nextStreamedContent,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
@@ -33,7 +33,8 @@ import logger from '../utils/logger';
 import type { StreamToken } from './llmStreamTypes';
 export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
-type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
+/** parsedContent: llama.rn's final parsed answer (no reasoning or tool markup), when it reported one. */
+type CompleteCallback = (result: { content: string; reasoningContent: string; parsedContent?: string }) => void;
 function resolveGpuBackend(enabled: boolean, devices: string[]): string {
   if (!enabled) return 'CPU';
   return Platform.OS === 'ios' ? 'Metal' : (devices.length > 0 ? devices.join(', ') : 'OpenCL');
@@ -511,11 +512,11 @@ class LLMService {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log('[LLM] First token received'); }
         tokenCount++;
-        const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
+        const content = getStreamingDelta(nextStreamedContent(data, streamedContentSoFar), streamedContentSoFar);
         const reasoningContent = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
-        if (data.content) streamedContentSoFar = data.content;
-        else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
-        if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+        // Track what was displayed, not the parser's latest value (see getStreamingDelta).
+        if (content) streamedContentSoFar += content;
+        if (reasoningContent) streamedReasoningSoFar += reasoningContent;
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
@@ -528,7 +529,7 @@ class LLMService {
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
       recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
-      const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent };
+      const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent, parsedContent: typeof cr?.content === 'string' ? cr.content : undefined };
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);
       onComplete?.(result);
       return result.content;

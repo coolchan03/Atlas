@@ -7,6 +7,7 @@ import {
   estimateTokens,
   fitMessagesInBudget,
   getStreamingDelta,
+  nextStreamedContent,
   buildModelParams,
   effectiveCacheType,
   backendForcesF16Cache,
@@ -330,8 +331,50 @@ describe('getStreamingDelta', () => {
     expect(getStreamingDelta('same', 'same')).toBeUndefined();
   });
 
-  it('returns nextValue when it does not start with previousValue', () => {
-    expect(getStreamingDelta('different', 'prev')).toBe('different');
+  it('never re-sends already displayed text when the parser revises it', () => {
+    // Re-sending the whole value duplicated the reply (Qwen repeated-text glitch).
+    expect(getStreamingDelta('abc d', 'abc <')).toBeUndefined();
+    expect(getStreamingDelta('abc de', 'abc <')).toBe('e');
+    expect(getStreamingDelta('Hello', 'Hello ')).toBeUndefined();
+  });
+
+  it('does not duplicate the answer when raw tokens switch to parsed content', () => {
+    const displayed = 'Hi there';
+    expect(getStreamingDelta('Hi there', displayed)).toBeUndefined();
+    expect(getStreamingDelta('Hi there!', displayed)).toBe('!');
+  });
+});
+
+describe('nextStreamedContent', () => {
+  it('prefers parsed accumulated content', () => {
+    expect(nextStreamedContent({ content: 'Hello', token: 'lo' }, 'Hel')).toBe('Hello');
+    expect(nextStreamedContent({ content: '', token: 'x' }, 'abc')).toBe('');
+  });
+
+  it('accumulates raw token pieces when the partial parse reported no content', () => {
+    expect(nextStreamedContent({ token: ' world' }, 'Hello')).toBe('Hello world');
+  });
+
+  it('ignores reasoning-only events', () => {
+    expect(nextStreamedContent({ token: 'x', reasoning_content: 'thinking' }, 'abc')).toBeUndefined();
+  });
+
+  it('replays a revised llama.rn stream without repeating text', () => {
+    const events = [
+      { token: 'Hel', content: 'Hel' },
+      { token: 'lo', content: 'Hello' },
+      { token: ' <', content: 'Hello <' },
+      { token: 'b', content: 'Hello b' },          // parser released the held-back "<"
+      { token: 'ye' },                              // partial parse threw: raw token only
+      { token: '!', content: 'Hello bye!' },
+    ];
+    let displayed = '';
+    for (const event of events) {
+      const delta = getStreamingDelta(nextStreamedContent(event, displayed), displayed);
+      if (delta) displayed += delta;
+    }
+    expect(displayed.length).toBe('Hello bye!'.length);
+    expect(displayed.match(/Hello/g)).toHaveLength(1);
   });
 });
 

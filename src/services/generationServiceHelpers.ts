@@ -12,6 +12,7 @@ import { clearModelFailure } from './modelFailureHandler';
 import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
+import { stripStreamingControlTokens } from '../utils/messageContent';
 
 // ~12 streamed UI updates/sec stays smooth while reducing redraw competition with inference.
 const FLUSH_INTERVAL_MS = 80;
@@ -321,6 +322,17 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   }
 }
 
+/**
+ * Streaming can only append, so a parser revision mid-stream can leave a stale character
+ * in the shown text. Replace it with llama.rn's final parsed answer before it is stored.
+ */
+function reconcileStreamedAnswer(parsedContent: string | undefined): void {
+  if (!parsedContent) return;
+  const store = useChatStore.getState();
+  const final = stripStreamingControlTokens(parsedContent);
+  if (final.trim() && final !== store.streamingMessage) store.setStreamingMessage(final);
+}
+
 export async function generateResponseImpl(
   svc: any,
   req: GenerationRequest,
@@ -357,10 +369,11 @@ export async function generateResponseImpl(
           svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
         }
       },
-      onComplete: () => {
+      onComplete: (result) => {
         // If aborted, stopGeneration() already handled cleanup — don't clobber new generation state.
         if (svc.abortRequested) return;
         svc.forceFlushTokens();
+        reconcileStreamedAnswer(result?.parsedContent);
         const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
         chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
         svc.checkSharePrompt();
