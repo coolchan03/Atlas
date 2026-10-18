@@ -45,14 +45,14 @@ export function warmUp(): void {
   Native.warmUp().catch(() => undefined);
 }
 
-/** Speak text. `messageId` lets a speak button know it is the one playing. */
-export function speak(text: string, messageId?: string): void {
+/** Speak text. `messageId` lets a speak button know it is the one playing. `rate` overrides the saved speed. */
+export function speak(text: string, messageId?: string, rate?: number): void {
   if (!ttsAvailable() || !text.trim()) return;
   ensureListeners();
   const key = `${messageId ?? 'msg'}~${++counter}`;
   const s = useAtlasVoiceStore.getState();
   s.setSpeaking(key, messageId ?? null);
-  Native.setRate(s.rate).catch(() => undefined);
+  Native.setRate(rate ?? s.rate).catch(() => undefined);
   Native.speak(text, key).catch((err: unknown) => {
     logger.error('[AtlasTts] speak failed', err);
     // An earlier failed utterance must not clear a newer active one.

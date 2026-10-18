@@ -25,8 +25,18 @@ export const KOKORO_SPEAKERS = [
   { sid: 10, name: 'Lewis', female: false, accent: 'UK' },
 ];
 
+/**
+ * KittenTTS built-in styles. Upstream names alternate male/female, but Atlas does not claim
+ * a gender it has not verified for each packaged model: users preview and pick by ear.
+ */
+export const KITTEN_SPEAKERS = Array.from({ length: 8 }, (_, sid) => ({
+  sid, name: `Kitten ${sid + 1}`, female: sid % 2 === 1, accent: 'US',
+}));
+
 export const NEURAL_VOICES: NeuralVoice[] = [
   { id: 'kokoro-en', name: 'Kokoro (best)', desc: 'Very natural. 11 voices (US and UK, men and women) - podcasts can use several. Needs a fast phone.', size: '~140 MB', speakers: KOKORO_SPEAKERS },
+  { id: 'kitten-nano-en', name: 'KittenTTS Nano', desc: 'Tiny and quick: 8 built-in voices in a ~29 MB download. Good on older phones.', size: '~29 MB', speakers: KITTEN_SPEAKERS },
+  { id: 'kitten-mini-en', name: 'KittenTTS Mini', desc: 'Richer KittenTTS voice quality: same 8 voices, larger model (~163 MB). Slower than Nano.', size: '~163 MB', speakers: KITTEN_SPEAKERS },
   { id: 'piper-amy', name: 'Amy (Piper)', desc: 'Clear US woman. Fast on any phone.', size: '~65 MB' },
   { id: 'piper-ryan', name: 'Ryan (Piper)', desc: 'US man. Fast on any phone.', size: '~65 MB' },
   { id: 'piper-lessac', name: 'Lessac (Piper)', desc: 'Calm US woman, good for long reading.', size: '~65 MB' },
@@ -78,11 +88,17 @@ export async function deleteVoice(id: string): Promise<void> {
   await refreshInstalled();
 }
 
+/** Voice/speaker the native engine currently has loaded (may differ from the saved choice
+ *  while an agent's own voice profile is speaking). */
+let loadedKey = '';
+const keyOf = (id: string, sid: number) => (id ? `${id}#${sid}` : '');
+
 /** Switch the reading voice ('' = phone's own voice). Resolves the number of speakers in the model. */
 export async function selectVoice(id: string, sid?: number): Promise<number> {
   const st = useAtlasVoiceStore.getState();
   const s = sid ?? (id === st.neuralVoice ? st.neuralSid : 0);
   const n: number = neuralAvailable() ? await Native.setNeuralVoice(id, s) : 0;
+  loadedKey = keyOf(id, s);
   st.setNeural(id, s);
   return n;
 }
@@ -91,7 +107,29 @@ export async function selectVoice(id: string, sid?: number): Promise<number> {
 export async function restoreVoice(): Promise<void> {
   const st = useAtlasVoiceStore.getState();
   if (!st.neuralVoice || !neuralAvailable()) return;
-  try { await Native.setNeuralVoice(st.neuralVoice, st.neuralSid); } catch { st.setNeural(''); }
+  try { await Native.setNeuralVoice(st.neuralVoice, st.neuralSid); loadedKey = keyOf(st.neuralVoice, st.neuralSid); }
+  catch { st.setNeural(''); loadedKey = ''; }
+}
+
+/**
+ * Load a voice for the next utterance WITHOUT changing the saved choice (agent voice
+ * profiles). Unchanged voices are not reloaded. A missing voice falls back to the saved one.
+ */
+export async function loadVoiceForSpeech(id: string, sid: number): Promise<void> {
+  if (!neuralAvailable() || keyOf(id, sid) === loadedKey) return;
+  try {
+    await Native.setNeuralVoice(id, sid);
+    loadedKey = keyOf(id, sid);
+  } catch {
+    const st = useAtlasVoiceStore.getState();
+    if (keyOf(st.neuralVoice, st.neuralSid) !== loadedKey) await restoreVoice();
+  }
+}
+
+/** Put the saved voice back after an agent's own voice has spoken. */
+export async function restoreSavedVoice(): Promise<void> {
+  const st = useAtlasVoiceStore.getState();
+  await loadVoiceForSpeech(st.neuralVoice, st.neuralSid);
 }
 
 /** Voices for podcast hosts: distinct-sounding speakers when the model has many. */

@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text
 import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
 import { speak } from './tts';
+import { VoiceProfilesCard } from './VoiceProfilesCard';
 import { NEURAL_VOICES, useNeuralVoices, refreshInstalled, downloadVoice, cancelVoiceDownload, deleteVoice, selectVoice, neuralAvailable } from './neural';
 
 const RATES = [0.75, 1, 1.25, 1.5];
@@ -91,6 +92,7 @@ export function AtlasVoicePanel() {
           })}
         </View>
       )}
+      <VoiceProfilesCard />
       <View style={card}>
         <Text style={[styles.h, { color: colors.text }]}>Phone voice settings</Text>
         <Text style={[styles.p, { color: colors.textSecondary }]}>

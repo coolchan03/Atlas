@@ -4,12 +4,27 @@ import { useUiModeStore } from '../stores/uiModeStore';
 import { useChatStore } from '../stores/chatStore';
 import { prepareMessageForSpeech } from '../utils/messageContent';
 import { speak, stop, ttsAvailable, warmUp } from './tts';
-import { restoreVoice } from './neural';
+import { restoreVoice, restoreSavedVoice, loadVoiceForSpeech } from './neural';
+import { profileForConversation, profileForMessage, type VoiceProfile } from './profiles';
 import { useAtlasVoiceStore } from './store';
 import { AtlasAudioInput } from './AudioInput';
 import { AtlasModeToggle, AtlasSpeakButton } from './Buttons';
 import { AtlasVoicePanel } from './VoicePanel';
 import logger from '../utils/logger';
+
+/**
+ * Read a reply in the answering agent's own voice profile (if any), then put the saved
+ * voice back so emergency cards, study and other screens keep the user's choice.
+ */
+function speakAsAgent(text: string, messageId: string, profile: VoiceProfile | null): void {
+  if (!profile) {
+    restoreSavedVoice().catch(() => undefined).finally(() => speak(text, messageId));
+    return;
+  }
+  loadVoiceForSpeech(profile.voiceId, profile.sid).catch(() => undefined).finally(() => {
+    speak(text, messageId, profile.rate);
+  });
+}
 
 /**
  * Atlas voice: read-aloud, voice mode and hands-free "phone call" mode for the free
@@ -33,7 +48,9 @@ export function registerAtlasVoice(): void {
   const ps: any = (useAtlasVoiceStore as any).persist;
   if (ps?.hasHydrated?.()) restore(); else ps?.onFinishHydration?.(restore);
   registerHook(HOOKS.audioCanSpeak, () => true);
-  registerHook(HOOKS.audioSpeak, (text: string, messageId: string) => speak(prepareMessageForSpeech(text), messageId));
+  registerHook(HOOKS.audioSpeak, (text: string, messageId: string) => {
+    speakAsAgent(prepareMessageForSpeech(text), messageId, profileForMessage(messageId));
+  });
   registerHook(HOOKS.audioStop, () => stop());
   registerHook(HOOKS.audioOnStreamingEnd, (conversationId: string) => {
     const voiceMode = useUiModeStore.getState().interfaceMode === 'audio';
@@ -45,7 +62,7 @@ export function registerAtlasVoice(): void {
       if (voiceMode && useAtlasVoiceStore.getState().handsFree) setTimeout(() => useAtlasVoiceStore.getState().markDone(), 300);
       return;
     }
-    speak(prepareMessageForSpeech(last.content), last.id);
+    speakAsAgent(prepareMessageForSpeech(last.content), last.id, profileForConversation(conversationId));
   });
   registerHook(HOOKS.audioAugmentPrompt, (base: string) =>
     useUiModeStore.getState().interfaceMode === 'audio'

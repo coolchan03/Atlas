@@ -28,6 +28,8 @@ export interface Agent {
   memories?: string[];
   /** Preferred text model: chosen automatically when this agent is picked. Unset = keep the current model. */
   modelId?: string;
+  /** Voice profile used to read this agent's replies aloud. Unset = the saved voice. */
+  voiceProfileId?: string;
   /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
   enabledTools?: string[];
   createdAt: string;

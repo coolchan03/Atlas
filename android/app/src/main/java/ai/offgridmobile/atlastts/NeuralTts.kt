@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
@@ -15,7 +16,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * Natural-sounding offline voices (Kokoro / Piper neural models via sherpa-onnx).
+ * Natural-sounding offline voices (Kokoro / KittenTTS / Piper neural models via sherpa-onnx).
  * Text is generated sentence by sentence on one thread and played on another, so speech
  * starts after the first sentence instead of after the whole answer.
  */
@@ -49,7 +50,13 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             mc.numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
             mc.debug = false
             mc.provider = "cpu"
-            if (File(f, "voices.bin").exists()) {
+            // KittenTTS and Kokoro both ship voices.bin; Atlas names KittenTTS folders "kitten-*".
+            if (isKitten(f)) {
+                val k = OfflineTtsKittenModelConfig()
+                k.model = onnx.path; k.voices = File(f, "voices.bin").path; k.tokens = tokens; k.dataDir = espeak
+                k.lengthScale = 1.0f
+                mc.kitten = k
+            } else if (File(f, "voices.bin").exists()) {
                 val k = OfflineTtsKokoroModelConfig()
                 k.model = onnx.path; k.voices = File(f, "voices.bin").path; k.tokens = tokens; k.dataDir = espeak
                 val lex = f.listFiles { x -> x.name.startsWith("lexicon") && x.name.endsWith(".txt") }?.joinToString(",") { it.path } ?: ""
@@ -71,6 +78,12 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     }
 
     fun numSpeakers(): Int = if (tts != null) speakers else 0
+
+    companion object {
+        /** KittenTTS voice folder: the downloaded id starts with "kitten" and holds voices.bin. */
+        fun isKitten(dir: File): Boolean =
+            dir.name.startsWith("kitten", ignoreCase = true) && File(dir, "voices.bin").exists()
+    }
 
     private fun freeEngine() {
         try { tts?.release() } catch (_: Throwable) {}
