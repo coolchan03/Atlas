@@ -35,7 +35,7 @@ const getNative = (): VulkanModule | null =>
   (NativeModules.AtlasVulkan as VulkanModule | undefined) ?? null;
 
 const isVulkanGpu = (b: Backend) =>
-  b.type.toLowerCase().includes('gpu') && /vulkan/i.test(b.description + ' ' + b.name);
+  b.type.toLowerCase().includes('gpu') && /vulkan/i.test(`${b.description} ${b.name}`);
 
 /** User-facing explanation for a non-ok runtime state. */
 export function describeVulkanStatus(status: VulkanRuntimeStatus): string {

@@ -309,6 +309,7 @@ export const ChatScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView testID="chat-screen" style={styles.keyboardView} behavior="padding" keyboardVerticalOffset={0}>
+        <View style={wide.column}>
         <ChatHeader
           styles={styles} colors={colors}
           activeConversation={chat.activeConversation}
@@ -323,6 +324,7 @@ export const ChatScreen: React.FC = () => {
           modelRuntimeLabel={textRuntime.compact}
           modelRuntimeState={textRuntime.state}
         />
+        </View>
         <ModelsManagerSheet
           visible={modelsManagerOpen}
           onClose={() => setModelsManagerOpen(false)}

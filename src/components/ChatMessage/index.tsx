@@ -9,6 +9,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { AnimatedEntry } from '../AnimatedEntry';
 import { triggerHaptic } from '../../utils/haptics';
 import { createStyles } from './styles';
+import { useWideLayout } from '../../hooks/useWideLayout';
 import { MessageAttachments } from './components/MessageAttachments';
 import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
@@ -328,9 +329,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const isUser = message.role === 'user';
   const hasAttachments = Boolean(message.attachments?.length);
+  // Tablet/unfolded column: shorter user bubbles, more room for long answers and code.
+  const { isWide } = useWideLayout();
   const bubbleStyle = [
     styles.bubble,
     isUser ? styles.userBubble : styles.assistantBubble,
+    isWide ? { maxWidth: isUser ? '70%' as const : '92%' as const } : undefined,
     hasAttachments ? styles.bubbleWithAttachments : undefined,
   ];
 

@@ -12,7 +12,7 @@ import { clearModelFailure } from './modelFailureHandler';
 import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
-import { stripStreamingControlTokens } from '../utils/messageContent';
+import { reconcileStreamedAnswer } from './streamReconcile';
 
 // ~12 streamed UI updates/sec stays smooth while reducing redraw competition with inference.
 const FLUSH_INTERVAL_MS = 80;
@@ -320,17 +320,6 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
     keepShownPartialOnError(svc, conversationId);
     throw error;
   }
-}
-
-/**
- * Streaming can only append, so a parser revision mid-stream can leave a stale character
- * in the shown text. Replace it with llama.rn's final parsed answer before it is stored.
- */
-function reconcileStreamedAnswer(parsedContent: string | undefined): void {
-  if (!parsedContent) return;
-  const store = useChatStore.getState();
-  const final = stripStreamingControlTokens(parsedContent);
-  if (final.trim() && final !== store.streamingMessage) store.setStreamingMessage(final);
 }
 
 export async function generateResponseImpl(

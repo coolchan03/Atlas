@@ -53,6 +53,7 @@ import {
   AboutScreen,
   ToolsScreen,
 } from '../screens';
+import { useLayoutClass } from '../hooks/useLayoutClass';
 import {
   RootStackParamList,
   MainTabParamList,
@@ -143,6 +144,28 @@ const MainTabs: React.FC = () => {
   const density = appearance?.density ?? (appearance?.layoutMode === 'compact' ? 'compact' : appearance?.layoutMode === 'simple' ? 'spacious' : 'comfortable');
   const bar = density === 'compact' ? (labels ? 48 : 43) : density === 'spacious' ? (labels ? 70 : 57) : (labels ? 60 : 48);
   const tabBarHeight = bar + bottomInset;
+  // Tablets, unfolded foldables and landscape phones get a side rail; compact phones keep the bar.
+  const { navigationRail } = useLayoutClass();
+  const barStyle = navigationRail
+    ? {
+      backgroundColor: colors.surface,
+      borderRightColor: colors.border,
+      borderRightWidth: 1,
+      borderTopWidth: 0,
+      paddingTop: insets.top + 12,
+      paddingBottom: insets.bottom,
+      paddingLeft: insets.left,
+      minWidth: 88 + insets.left,
+    }
+    : {
+      backgroundColor: colors.surface,
+      borderTopColor: colors.border,
+      borderTopWidth: 1,
+      height: tabBarHeight,
+      paddingBottom: bottomInset,
+      paddingTop: density === 'compact' ? 4 : density === 'spacious' ? 13 : 10,
+      ...shadows.medium,
+    };
 
   return (
     <View style={mainTabsStyles.container}>
@@ -155,15 +178,9 @@ const MainTabs: React.FC = () => {
           animation: 'fade',
           lazy: true,
           tabBarShowLabel: labels,
-          tabBarStyle: {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
-            height: tabBarHeight,
-            paddingBottom: bottomInset,
-            paddingTop: density === 'compact' ? 4 : density === 'spacious' ? 13 : 10,
-            ...shadows.medium,
-          },
+          tabBarPosition: navigationRail ? 'left' : 'bottom',
+          tabBarVariant: navigationRail ? 'material' : 'uikit',
+          tabBarStyle: barStyle,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textMuted,
           tabBarIcon: ({ focused }) => (
