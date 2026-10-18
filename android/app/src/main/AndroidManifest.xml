@@ -51,6 +51,10 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Android 11+: lets Atlas find the phone's own speech recognizer (e.g. Google/Gboard). -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application

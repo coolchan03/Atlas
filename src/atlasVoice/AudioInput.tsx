@@ -85,7 +85,7 @@ export function AtlasAudioInput(props: any) {
     if (isRecording) { onStopRecording?.(); return; }
     if (isGenerating) { onStop?.(); return; }
     if (!voiceAvailable) {
-      setNote('To talk, download a speech-to-text (Whisper) model in the Models screen. Answers can still be read aloud.');
+      setNote("To talk, download a speech-to-text (Whisper) model in the Models screen, or install your phone's speech recognition (Google speech / Gboard voice typing) with its offline language. Answers can still be read aloud.");
       return;
     }
     onStartRecording?.();

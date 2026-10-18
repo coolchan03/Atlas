@@ -133,8 +133,10 @@ export function AtlasVoicePanel() {
       <View style={card}>
         <Text style={[styles.h, { color: colors.text }]}>Talking to the app</Text>
         <Text style={[styles.p, { color: colors.textSecondary }]}>
-          To talk instead of type, download a speech-to-text (Whisper) model in the Transcription tab. Then tap the
-          phone icon at the top of a chat. Turn on Hands-free for a back-and-forth conversation like a phone call.
+          To talk instead of type, download a speech-to-text (Whisper) model in the Transcription tab. Without one,
+          Atlas uses your phone's own speech recognition (for example Google speech, used by Gboard voice typing),
+          asking it to stay offline; download its offline language in the phone's settings so nothing is sent online.
+          Then tap the phone icon at the top of a chat. Turn on Hands-free for a back-and-forth conversation like a phone call.
         </Text>
       </View>
     </ScrollView>
