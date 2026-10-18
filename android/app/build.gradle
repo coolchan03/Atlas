@@ -86,8 +86,8 @@ android {
         // overrides the library minimum and AtlasVulkanModule refuses to load it below API 29.
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1784144538
-        versionName "0.0.104"
+        versionCode 1784144539
+        versionName "0.0.105"
     }
     signingConfigs {
         debug {
