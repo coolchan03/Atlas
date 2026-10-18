@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- llama.kt is API 29; AtlasVulkanModule only loads it on API 29+. -->
+    <uses-sdk tools:overrideLibrary="com.tensai.llamakt" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

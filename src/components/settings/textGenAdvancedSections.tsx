@@ -22,6 +22,8 @@ import {
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
 import { hardwareService } from '../../services/hardware';
+import { llmService } from '../../services/llm';
+import { describeOffload } from '../../services/gpuOffload';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
 
 const isAndroid = Platform.OS === 'android';
@@ -98,6 +100,14 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Run without hardware acceleration. Always works, can be considerably slower.' },
 ];
 
+/** What the currently loaded model actually got, never the requested number. */
+function describeLoadedOffload(): string {
+  if (!llmService.isModelLoaded()) return 'Load a model to see how many layers run on the accelerator.';
+  const info = llmService.getGpuInfo();
+  if (!info.gpu) return 'Loaded model is running on the CPU (no accelerator layers).';
+  return `Loaded model: ${describeOffload(info.gpuLayers, info.totalLayers ?? -1)} on ${info.gpuBackend || 'the accelerator'}.`;
+}
+
 export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
@@ -130,11 +140,23 @@ export const BackendSelector: React.FC = () => {
           <SliderSetting
             testID="gpu-layers-stepper"
             label={layersLabel}
-            description="Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload."
+            description="Layers offloaded to the GPU/NPU. Higher is faster but uses more memory. Maximum safe offloads every layer this device's RAM allows. Requires model reload."
             value={gpuLayersEffective}
             min={1} max={GPU_LAYERS_MAX} step={1}
             onChange={(value) => updateSettings({ gpuLayers: value })}
           />
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              testID="gpu-layers-max-button"
+              style={[styles.button, gpuLayersEffective >= GPU_LAYERS_MAX && styles.buttonActive]}
+              onPress={() => updateSettings({ gpuLayers: GPU_LAYERS_MAX })}
+            >
+              <Text style={[styles.buttonText, gpuLayersEffective >= GPU_LAYERS_MAX && styles.buttonTextActive]}>
+                Maximum safe
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.desc} testID="gpu-layers-actual">{describeLoadedOffload()}</Text>
         </View>
       )}
     </SegmentedRow>

@@ -7,7 +7,8 @@ import { useTheme } from '../theme';
 import { useAppStore } from '../stores';
 import { activeModelService } from '../services/activeModelService';
 import { llmService } from '../services/llm';
-import { vulkanEngine } from '../services/vulkanEngine';
+import { vulkanEngine, describeVulkanStatus } from '../services/vulkanEngine';
+import { describeOffload } from '../services/gpuOffload';
 import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
 import type { Message } from '../types';
@@ -169,8 +170,7 @@ const TextModelTestScreen: React.FC = () => {
         const quant = /q4_k/i.test(model.fileName || '') ? ' Q4_K GPU performance depends on native backend support.' : '';
         const note = llmService.getBackendFallbackNotice();
         if (llmService.isCpuForFileType()) set('accel', 'warn', 'CPU fallback: this model quantization is not eligible for the selected accelerator. OpenCL and Hexagon support different formats.');
-        else if (g.gpu && g.gpuBackend === 'Vulkan') set('accel', 'warn', `Vulkan backend reported; actual GPU-offloaded layers have not been verified.${quant}`);
-        else set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${g.gpuLayers} layers.${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
+        else set('accel', g.gpu ? 'ok' : 'warn', g.gpu ? `GPU (${g.gpuBackend || 'on'}), ${describeOffload(g.gpuLayers, g.totalLayers ?? -1)} on the accelerator.${g.reasonNoGPU ? ` ${g.reasonNoGPU}.` : ''}${quant}` : `CPU only.${note ? ` ${note}` : ' Turn on the GPU in Settings > Text generation.'}${quant}`);
       }
 
       // 7. Abilities
@@ -214,19 +214,23 @@ const TextModelTestScreen: React.FC = () => {
     setVulkanBusy(true);
     setVulkanResult('Checking Vulkan GPU availability...');
     try {
-      const backends = await vulkanEngine.listBackends();
-      const gpu = backends.find(b => /vulkan/i.test(b.description + ' ' + b.name) && /gpu/i.test(b.type));
-      if (!gpu) throw new Error('Vulkan GPU not available in this APK or on this device');
+      const runtime = await vulkanEngine.runtimeStatus();
+      if (runtime.status !== 'ok') throw new Error(describeVulkanStatus(runtime));
       if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still running. Stop it before testing Vulkan.');
       // Release llama.rn weights before opening a second native GGUF runtime.
       await activeModelService.unloadTextModel(false);
+      const requested = Math.max(1, useAppStore.getState().settings.gpuLayers || 99);
       const started = Date.now();
-      const active = await vulkanEngine.loadModel(model.filePath, 8, 2048, 0);
-      if (!/vulkan/i.test(active)) throw new Error('Model loaded without Vulkan offload (active: ' + active + ')');
+      const loaded = await vulkanEngine.loadModel(model.filePath, requested, 2048, 0);
+      if (!/vulkan/i.test(loaded.backend)) throw new Error('Model loaded without Vulkan offload (active: ' + loaded.backend + ')');
+      if (loaded.offloadedGpuLayers === 0) throw new Error('Vulkan loaded the model with no GPU layers');
       let output = '';
       const prompt = await vulkanEngine.formatChat([{ role: 'user', content: 'Reply with the word OK.' }]);
       await vulkanEngine.generate(prompt, 24, text => { output += text; });
-      setVulkanResult('Backend reported: ' + active + ' / ' + gpu.name + '. Requested 8 GPU layers; actual offload is unverified. Total load + generation time: ' + ((Date.now() - started) / 1000).toFixed(1) + 's. Reply: ' + (output.trim() || '(empty; check model template)'));
+      const layers = loaded.offloadedGpuLayers > 0
+        ? describeOffload(loaded.offloadedGpuLayers, loaded.totalLayers) + ' on the GPU'
+        : `${requested} layers requested (model header unreadable, count unconfirmed)`;
+      setVulkanResult(`${describeVulkanStatus(runtime)}. Backend: ${loaded.backend}. ${layers}. Load + reply: ${((Date.now() - started) / 1000).toFixed(1)}s. Reply: ${output.trim() || '(empty; check model template)'}`);
     } catch (e: any) {
       setVulkanResult('Vulkan test failed: ' + (e?.message || String(e)));
     } finally {
@@ -264,8 +268,8 @@ const TextModelTestScreen: React.FC = () => {
             </View>
             {model.engine === 'llama' && (
               <View style={card}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>Experimental Vulkan GPU test</Text>
-                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Requests 8 GPU layers, but actual GPU offload is not yet verified. This test unloads the active text model to save memory.</Text>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Vulkan GPU test</Text>
+                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Loads this model with your accelerator layer limit on the Vulkan engine and reports the layers actually placed on the GPU. This unloads the active text model to save memory.</Text>
                 <TouchableOpacity onPress={runVulkan} disabled={running || vulkanBusy} style={{ marginTop: 10, backgroundColor: colors.primary, borderRadius: 10, padding: 11 }}>
                   <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{vulkanBusy ? 'Testing Vulkan...' : 'Test Vulkan GPU'}</Text>
                 </TouchableOpacity>

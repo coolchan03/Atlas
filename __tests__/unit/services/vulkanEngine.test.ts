@@ -36,7 +36,7 @@ jest.mock('react-native', () => {
 });
 
 import { NativeModules } from 'react-native';
-import { vulkanEngine } from '../../../src/services/vulkanEngine';
+import { vulkanEngine, describeVulkanStatus } from '../../../src/services/vulkanEngine';
 
 const native = (NativeModules as any).AtlasVulkan;
 
@@ -48,7 +48,9 @@ it('detects a physically enumerated Vulkan GPU without depending on model name',
 });
 
 it('loads a GGUF with a bounded offload request and delegates chat templates', async () => {
-  await expect(vulkanEngine.loadModel('/models/qwen.gguf', 8, 2048, 4)).resolves.toBe('Vulkan');
+  // A legacy bridge resolving only the backend name reports an unknown layer count.
+  await expect(vulkanEngine.loadModel('/models/qwen.gguf', 8, 2048, 4)).resolves.toEqual(
+    { backend: 'Vulkan', requestedGpuLayers: 8, offloadedGpuLayers: -1, totalLayers: -1 });
   expect(native.loadModel).toHaveBeenCalledWith('/models/qwen.gguf', 8, 2048, 4);
   await expect(vulkanEngine.formatChat([{role:'user',content:'hi'}])).resolves.toBe('<user>hi</user>');
   expect(native.formatChat).toHaveBeenCalledWith('[{"role":"user","content":"hi"}]');
@@ -94,4 +96,28 @@ it('propagates streaming callback failures and interrupts native generation', as
 it('unloads the native model safely', async () => {
   await vulkanEngine.unload();
   expect(native.unload).toHaveBeenCalledTimes(1);
+});
+
+it('passes through the structured native load result with offloaded layers', async () => {
+  const result = { backend: 'Vulkan: Mali-G615', requestedGpuLayers: 99, offloadedGpuLayers: 29, totalLayers: 29 };
+  native.loadModel.mockResolvedValueOnce(result);
+  await expect(vulkanEngine.loadModel('/models/qwen.gguf', 99, 2048, 4)).resolves.toEqual(result);
+});
+
+it('uses the native runtime status so a missing engine is not reported as missing hardware', async () => {
+  native.runtimeStatus = jest.fn().mockResolvedValue(
+    { status: 'not_packaged', packaged: false, message: 'not packaged', devices: [] });
+  try {
+    const status = await vulkanEngine.runtimeStatus();
+    expect(status.status).toBe('not_packaged');
+    expect(describeVulkanStatus(status)).toMatch(/not included in this APK/);
+    expect(await vulkanEngine.isAvailable()).toBe(false);
+  } finally { delete native.runtimeStatus; }
+});
+
+it('classifies a legacy bridge without runtimeStatus from its device list', async () => {
+  native.listBackends.mockResolvedValueOnce([{ name: 'CPU', description: 'CPU', type: 'cpu' }]);
+  const status = await vulkanEngine.runtimeStatus();
+  expect(status.status).toBe('no_vulkan_device');
+  expect(describeVulkanStatus(status)).toMatch(/reports no Vulkan GPU/);
 });

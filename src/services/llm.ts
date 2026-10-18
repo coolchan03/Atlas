@@ -1,7 +1,8 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
-import { vulkanEngine } from './vulkanEngine';
+import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
+import { modelLayerTotal, effectiveOffloadedLayers } from './gpuOffload';
 import { acceleratorCandidates, requireGpuLayers } from './acceleratorSelection';
 import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
@@ -56,6 +57,8 @@ class LLMService {
   private gpuReason: string = '';
   private gpuDevices: string[] = [];
   private activeGpuLayers: number = 0;
+  /** Offloadable layers in the loaded model (block_count + 1); -1 when unknown. */
+  private totalModelLayers: number = -1;
   private gpuAttemptFailed: boolean = false;
   private toolCallingSupported: boolean = false;
   private thinkingSupported: boolean = false;
@@ -158,6 +161,8 @@ class LLMService {
     this.thinkingSupported = thinkingSupported;
     this.requestedGpuLayers = requestedGpuLayers;
     Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+    this.totalModelLayers = modelLayerTotal((context as any).model?.metadata);
+    this.activeGpuLayers = effectiveOffloadedLayers(this.activeGpuLayers, this.totalModelLayers);
     useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
@@ -207,22 +212,30 @@ class LLMService {
           this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
           logger.log(`[LLM] Trying ${backend}: ctx=${ctxLen}, file=${(fileSize / (1024 * 1024)).toFixed(0)}MB, RAM=${memCheck.availableMB.toFixed(0)}MB`);
           if (backend === INFERENCE_BACKENDS.VULKAN) {
-            if (!await vulkanEngine.isAvailable()) throw new Error('Vulkan GPU not detected in this build');
-            const requestedLayers = Math.max(1,
-              useAppStore.getState().settings.gpuLayers || 99);
-            const active = await vulkanEngine.loadModel(modelPath, requestedLayers,
-              Math.min(ctxLen, 32768), nThreads);
-            if (!/vulkan/i.test(active)) throw new Error(
-              `Native model reported ${active}, not Vulkan`,
+            const runtime = await vulkanEngine.runtimeStatus();
+            if (runtime.status !== 'ok') throw new Error(describeVulkanStatus(runtime));
+            // Same device-RAM cap as OpenCL; 99 means "all layers that are safe here".
+            const deviceInfo = await hardwareService.getDeviceInfo();
+            const requestedLayers = getGpuLayersForDevice(deviceInfo.totalMemory,
+              useAppStore.getState().settings.gpuLayers || 99,
+              { modelBytes: fileSize, availableBytes: deviceInfo.availableMemory });
+            requireGpuLayers('vulkan', requestedLayers);
+            const contextLength = Math.min(ctxLen, 32768);
+            const loaded = await vulkanEngine.loadModel(modelPath, requestedLayers, contextLength, nThreads);
+            if (!/vulkan/i.test(loaded.backend)) throw new Error(
+              `Native model reported ${loaded.backend}, not Vulkan`,
             );
+            if (loaded.offloadedGpuLayers === 0) throw new Error('Vulkan loaded the model with no GPU layers');
             this.vulkanLoaded = true;
             this.currentModelPath = modelPath;
             this.gpuEnabled = true;
-            this.gpuDevices = [active];
-            this.gpuReason = 'Native Vulkan backend selected; offloaded layer count unverified';
+            this.gpuDevices = [loaded.backend];
+            this.totalModelLayers = loaded.totalLayers;
             this.requestedGpuLayers = requestedLayers;
-            this.activeGpuLayers = 0;
-            this.currentSettings.contextLength = Math.min(ctxLen, 32768);
+            this.activeGpuLayers = loaded.offloadedGpuLayers > 0 ? loaded.offloadedGpuLayers : requestedLayers;
+            this.gpuReason = loaded.offloadedGpuLayers > 0 ? ''
+              : 'Model header unreadable; showing the requested Vulkan layer count';
+            this.currentSettings.contextLength = contextLength;
             this.toolCallingSupported = false;
             this.thinkingSupported = false;
             this.multimodalInitialized = false;
@@ -264,7 +277,7 @@ class LLMService {
           this.multimodalSupport = null; this.multimodalInitialized = false;
           this.toolCallingSupported = false; this.thinkingSupported = false;
           Object.assign(this, {
-            gpuEnabled: false, gpuReason: '', activeGpuLayers: 0,
+            gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, totalModelLayers: -1,
             gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false,
           });
           failures.push(`${backend}: ${message.slice(0, 180)}`);
@@ -684,11 +697,11 @@ class LLMService {
   }
   getSelectedBackend(): InferenceBackend { return this.selectedBackend; }
   getAcceleratorAttempts(): string[] { return [...this.acceleratorAttempts]; }
-  getGpuInfo() {
-    if (this.vulkanLoaded) return { gpu: true, gpuBackend: 'Vulkan', gpuLayers: 0, reasonNoGPU: 'Actual GPU offload layer count not reported by llama.kt; requested layers are not proof of offload' };
+  getGpuInfo(): { gpu: boolean; gpuBackend: string; gpuLayers: number; totalLayers?: number; requestedLayers?: number; reasonNoGPU: string } {
+    if (this.vulkanLoaded) return { gpu: true, gpuBackend: 'Vulkan', gpuLayers: this.activeGpuLayers, totalLayers: this.totalModelLayers, requestedLayers: this.requestedGpuLayers, reasonNoGPU: this.gpuReason };
     const name = this.gpuEnabled && this.selectedBackend === INFERENCE_BACKENDS.HTP
       ? 'HTP / Hexagon NPU' : resolveGpuBackend(this.gpuEnabled, this.gpuDevices);
-    return { gpu: this.gpuEnabled, gpuBackend: name, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.vulkanFallbackReason ?? this.gpuReason };
+    return { gpu: this.gpuEnabled, gpuBackend: name, gpuLayers: this.activeGpuLayers, totalLayers: this.totalModelLayers, requestedLayers: this.requestedGpuLayers, reasonNoGPU: this.vulkanFallbackReason ?? this.gpuReason };
   }
   /** The user-facing notice for a load that silently downgraded to CPU (GPU requested, 0 layers
    *  offloaded — init failure/timeout, capability refusal, or a RAM cap). Null when nothing to report. */
