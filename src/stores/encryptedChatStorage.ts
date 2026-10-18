@@ -143,6 +143,8 @@ async function recover(conv: Conversation, pin: string): Promise<{ restored: Con
   latestBlobs.set(conv.id, blob);
   return { restored, blob };
 }
+/** True while a PIN-protected chat is open in this session. */
+export const isChatUnlocked = (id: string): boolean => sessionPins.has(id);
 export async function unlockChat(id: string, pin: string): Promise<void> {
   const { useChatStore } = require('./chatStore');
   await writes;

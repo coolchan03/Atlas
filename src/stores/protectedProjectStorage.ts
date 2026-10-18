@@ -85,10 +85,16 @@ export async function protectProject(id: string, pin: string): Promise<void> {
   await pending;
   const project: Project | undefined = useProjectStore.getState().projects.find((p: Project) => p.id === id);
   if (!project || project.pinVerifier) throw new Error('Choose an existing unprotected project.');
-  if (useChatStore.getState().conversations.some((c: any) => c.projectId === id) ||
-      (useStudyStore.getState().saved[id] || []).length) {
-    throw new Error('Move or remove associated chats and study outputs first. They are not yet part of the protected project vault.');
+  if ((useStudyStore.getState().saved[id] || []).length) {
+    throw new Error('Delete or export this project\'s saved study outputs first. They cannot be encrypted with the project yet.');
   }
+  // The project's chats are encrypted with the same PIN first (each write is verified), so
+  // nothing in the project stays readable once it locks. A chat that already has its own PIN
+  // stays sealed under it. If one fails, the project is not locked; protecting again resumes.
+  const { protectChat } = require('./encryptedChatStorage');
+  const chats = useChatStore.getState().conversations
+    .filter((c: any) => c.projectId === id && !c.isPrivate && !c.pinVerifier);
+  for (const chat of chats) await protectChat(chat.id, pin);
   const api = native();
   const verifier = await api.createChatPinVerifier(pin);
   const plain = JSON.stringify(clearSecurity(project));
@@ -112,6 +118,48 @@ export async function protectProject(id: string, pin: string): Promise<void> {
   try { await ragService.eraseProjectDocumentsFromIndex(id); }
   catch (e) { throw new Error(`The project is protected, but its old plain document index could not be erased (${e instanceof Error ? e.message : e}). Unlock and protect it again to retry.`); }
 }
+/**
+ * Opens the project's locked chats that use the same PIN (chats with their own PIN stay
+ * locked), and seals any of its chats that are still plain (e.g. the app closed before a
+ * new chat was sealed) so they are encrypted from now on.
+ */
+async function unlockProjectChats(id: string, pin: string): Promise<void> {
+  const { useChatStore } = require('./chatStore');
+  const { unlockChat, isChatUnlocked, protectChat } = require('./encryptedChatStorage');
+  const chats = useChatStore.getState().conversations.filter((c: any) => c.projectId === id && !c.isPrivate);
+  for (const chat of chats) {
+    try {
+      if (!chat.pinVerifier) await protectChat(chat.id, pin);
+      else if (isChatUnlocked(chat.id)) continue;
+      await unlockChat(chat.id, pin);
+    } catch { /* different PIN, or not saved yet: left as it is */ }
+  }
+}
+
+const SEAL_RETRIES = 20;
+const SEAL_RETRY_MS = 250;
+/**
+ * Seals a chat just created inside an unlocked protected project with the project PIN, then
+ * reopens it for this session. Retries while the new chat is still being saved.
+ */
+export async function sealNewProjectChat(chatId: string, projectId: string): Promise<void> {
+  const { protectChat, unlockChat } = require('./encryptedChatStorage');
+  for (let attempt = 0; attempt < SEAL_RETRIES; attempt++) {
+    const pin = pins.get(projectId);
+    if (!pin) return; // project re-locked: sealed on the next unlock instead
+    try {
+      await protectChat(chatId, pin);
+      await unlockChat(chatId, pin);
+      return;
+    } catch (e) {
+      if (!/not yet saved|missing from saved data/i.test(String((e as Error)?.message))) {
+        logger.error('[ProtectedProject] new chat could not be sealed', e);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, SEAL_RETRY_MS));
+    }
+  }
+}
 async function decryptProject(p: Project, pin: string): Promise<Project> {
   if (!p.pinVerifier || !p.protectedBlob) throw new Error('Project is not protected.');
   const blob = blobs.get(p.id) || p.protectedBlob;
@@ -129,6 +177,7 @@ export async function unlockProject(id: string, pin: string): Promise<void> {
   pins.set(id, pin); lastEncrypted.set(id, JSON.stringify(clearSecurity(original)));
   try { await protectedVault.open(id, pin, p.pinVerifier!); }
   catch (e) { logger.error('[ProtectedProject] documents could not be opened', e); } // the project still opens; its documents stay hidden
+  await unlockProjectChats(id, pin);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((x: Project) => x.id === id
     ? { ...original, pinVerifier: p.pinVerifier, protectedBlob: p.protectedBlob } : x) }));
 }

@@ -152,8 +152,9 @@ export const useChatStore = create<ChatState>()(
       // Preserve the existing four-argument API until chat callers migrate to options.
       // eslint-disable-next-line max-params
       createConversation: (modelId, title, projectId, privateChat = false) => {
-        if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
-          throw new Error('This project is encrypted. Create chats separately until protected project content can be encrypted together.');
+        const protectedProject = !!projectId && !!require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier;
+        if (protectedProject && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {
+          throw new Error('Unlock this protected project to start a chat in it.');
         }
         const id = generateId();
         const conversation: Conversation = {
@@ -172,6 +173,8 @@ export const useChatStore = create<ChatState>()(
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
         }));
+        // A chat in a protected project is sealed with the project's PIN as soon as it is saved.
+        if (protectedProject && !privateChat) require('./protectedProjectStorage').sealNewProjectChat(id, projectId);
 
         return id;
       },

@@ -82,7 +82,7 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
             <View style={styles.projectOptionInfo}>
               <Text style={styles.projectOptionName}>{project.name}</Text>
               <Text style={styles.projectOptionDesc} numberOfLines={1}>
-                {project.pinVerifier ? 'Protected project · chats cannot be added until permanently unprotected' : project.description}
+                {project.pinVerifier ? 'Protected project · start new chats from inside the unlocked project' : project.description}
               </Text>
             </View>
             {activeProject?.id === project.id && (

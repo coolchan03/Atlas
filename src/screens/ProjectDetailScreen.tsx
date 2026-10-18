@@ -16,6 +16,8 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './ProjectDetailScreen.styles';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { isChatUnlocked } from '../stores/encryptedChatStorage';
+import { isProtectedProjectUnlocked } from '../stores/protectedProjectStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
@@ -53,8 +55,8 @@ export const ProjectDetailScreen: React.FC = () => {
   };
 
   const handleNewChat = () => {
-    if (project?.pinVerifier) {
-      setAlertState(showAlert('Protected project', 'Chats cannot be attached to a protected project until its content vault is supported. Permanently unprotect this project to create chats.'));
+    if (project?.pinVerifier && !isProtectedProjectUnlocked(project.id)) {
+      setAlertState(showAlert('Protected project', 'Unlock this project to start a chat in it. New chats are encrypted with the project PIN.'));
       return;
     }
     if (!hasModels) {
@@ -116,11 +118,11 @@ export const ProjectDetailScreen: React.FC = () => {
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.pinVerifier ? 'Locked conversation' : item.title}
+                {item.pinVerifier && !isChatUnlocked(item.id) ? 'Locked conversation' : item.title}
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
+            {item.pinVerifier && !isChatUnlocked(item.id) ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
                 {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>

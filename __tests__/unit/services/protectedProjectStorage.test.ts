@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
-import { protectedProjectStorage, protectProject, unlockProject, permanentlyUnprotectProject, relockProjects } from '../../../src/stores/protectedProjectStorage';
+import { protectedProjectStorage, protectProject, unlockProject, permanentlyUnprotectProject, relockProjects, sealNewProjectChat } from '../../../src/stores/protectedProjectStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true, default: {
@@ -19,6 +19,14 @@ jest.mock('../../../src/stores/projectStore', () => ({
   },
 }));
 jest.mock('../../../src/stores/chatStore', () => ({ useChatStore: { getState: () => fakeChats } }));
+const mockProtectChat = jest.fn(async (..._args: any[]) => undefined);
+const mockUnlockChat = jest.fn(async (..._args: any[]) => undefined);
+const mockUnlocked = new Set<string>();
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({
+  protectChat: (...args: any[]) => mockProtectChat(...args),
+  unlockChat: (...args: any[]) => mockUnlockChat(...args),
+  isChatUnlocked: (id: string) => mockUnlocked.has(id),
+}));
 jest.mock('../../../src/study/engine', () => ({ useStudyStore: { getState: () => fakeStudy } }));
 jest.mock('../../../src/services/rag', () => ({ ragService: {
   getDocumentsByProject: (...args: any[]) => mockDocuments(...args),
@@ -39,6 +47,7 @@ describe('selective protection for metadata-only projects', () => {
     disk.clear(); fakeProjects.projects = []; fakeProjects.isHydrated = true; fakeChats.conversations = []; fakeStudy.saved = {};
     (Platform as any).OS = 'android';
     mockDocuments.mockReset().mockResolvedValue([]);
+    mockProtectChat.mockReset().mockResolvedValue(undefined); mockUnlockChat.mockReset().mockResolvedValue(undefined); mockUnlocked.clear();
     (NativeModules as any).AtlasDevice = {
       createChatPinVerifier: jest.fn(async (pin: string) => `pin:v1:${  pin}`),
       encryptProtectedItem: jest.fn(async (_kind: string, _id: string, text: string, pin: string, verifier: string) => {
@@ -119,13 +128,66 @@ describe('selective protection for metadata-only projects', () => {
       sealSpy.mockRestore();
     }
   });
-  it('refuses projects with associated chats or saved study outputs', async () => {
+  it('refuses projects with saved study outputs (not yet encryptable with the project)', async () => {
     fakeProjects.projects = [project('secret')];
     await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
-    fakeChats.conversations = [{ projectId: 'secret' }];
-    await expect(protectProject('secret', '123456')).rejects.toThrow(/associated chats/);
-    fakeChats.conversations = [];
     fakeStudy.saved.secret = [{ title: 'Quiz' }];
-    await expect(protectProject('secret', '123456')).rejects.toThrow(/associated chats/);
+    await expect(protectProject('secret', '123456')).rejects.toThrow(/study outputs/);
+    expect(mockProtectChat).not.toHaveBeenCalled();
+  });
+  it("encrypts the project's existing chats with the project PIN before locking it", async () => {
+    fakeProjects.projects = [project('therapy')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    fakeChats.conversations = [
+      { id: 'c1', projectId: 'therapy' }, { id: 'c2', projectId: 'therapy' },
+      { id: 'own-pin', projectId: 'therapy', pinVerifier: 'pin:v1:999999' },
+      { id: 'temp', projectId: 'therapy', isPrivate: true }, { id: 'other', projectId: 'elsewhere' },
+    ];
+    await protectProject('therapy', '123456');
+    expect(mockProtectChat.mock.calls).toEqual([['c1', '123456'], ['c2', '123456']]);
+    expect(fakeProjects.projects[0].pinVerifier).toBe('pin:v1:123456');
+  });
+  it('does not lock the project when a chat cannot be encrypted', async () => {
+    fakeProjects.projects = [project('therapy')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    fakeChats.conversations = [{ id: 'c1', projectId: 'therapy' }];
+    mockProtectChat.mockRejectedValueOnce(new Error('Chat is not yet saved'));
+    await expect(protectProject('therapy', '123456')).rejects.toThrow(/not yet saved/);
+    expect(fakeProjects.projects[0].pinVerifier).toBeUndefined();
+  });
+  it("unlocking the project opens its chats that share the PIN", async () => {
+    fakeProjects.projects = [project('therapy')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    await protectProject('therapy', '123456');
+    fakeChats.conversations = [
+      { id: 'c1', projectId: 'therapy', pinVerifier: 'v' }, { id: 'open', projectId: 'therapy', pinVerifier: 'v' },
+      { id: 'plain', projectId: 'therapy' },
+    ];
+    mockUnlocked.add('open');
+    mockProtectChat.mockClear();
+    await unlockProject('therapy', '123456');
+    // The still-plain chat is sealed with the project PIN, then opened with the locked one.
+    expect(mockProtectChat.mock.calls).toEqual([['plain', '123456']]);
+    expect(mockUnlockChat.mock.calls).toEqual([['c1', '123456'], ['plain', '123456']]);
+  });
+  it('seals a chat created inside an unlocked protected project, retrying until it is saved', async () => {
+    jest.useFakeTimers();
+    try {
+      fakeProjects.projects = [project('therapy')];
+      await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+      await protectProject('therapy', '123456');
+      await unlockProject('therapy', '123456');
+      mockProtectChat.mockReset().mockRejectedValueOnce(new Error('Protected chat is missing from saved data.')).mockResolvedValue(undefined);
+      mockUnlockChat.mockClear();
+      const sealing = sealNewProjectChat('new-chat', 'therapy');
+      await jest.advanceTimersByTimeAsync(300);
+      await sealing;
+      expect(mockProtectChat).toHaveBeenCalledTimes(2);
+      expect(mockUnlockChat).toHaveBeenCalledWith('new-chat', '123456');
+    } finally { jest.useRealTimers(); }
+  });
+  it('does not seal a new chat once the project is locked again', async () => {
+    await sealNewProjectChat('new-chat', 'never-unlocked');
+    expect(mockProtectChat).not.toHaveBeenCalled();
   });
 });
