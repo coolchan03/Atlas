@@ -322,9 +322,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     if (workObservers.containsKey(download.id)) continue
                     // After an app update WorkManager can drop or cancel work that was running
                     // before. Those rows would otherwise stay "running" forever with no progress.
-                    val states = withContext(Dispatchers.IO) {
-                        workManager.getWorkInfosForUniqueWork(WorkerDownload.workName(download.id)).get()
-                            .map { it.state }
+                    val states: List<WorkInfo.State> = withContext(Dispatchers.IO) {
+                        workManager.getWorkInfosForUniqueWorkFlow(WorkerDownload.workName(download.id)).first()
+                            .map { info: WorkInfo -> info.state }
                     }
                     if (isStrandedWork(states)) {
                         markInterrupted(download.id, download.fileName, download.modelId)
