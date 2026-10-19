@@ -101,6 +101,18 @@ separate native project; voice sample recording/import was not built until it ex
 The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-nano-en.zip` and
 `kitten-mini-en.zip` are on the `atlas-voices` release.
 
+### Kokoro v1.0 voices (chosen by ear from rendered samples)
+- New downloadable voice **Kokoro v1.0** (`kokoro-v1-en`, sherpa-onnx `kokoro-int8-multi-lang-v1_0`,
+  Apache-2.0, LICENSE checked by the voices workflow): 28 English speakers, US and UK.
+- British speakers load the UK pronunciation dictionary only with `lang="en"`; American speakers load
+  the US one with `en-us` (`NeuralTts.kokoroDictionary`). `lang="en-gb"` renders silence, so it is not used.
+- **Voice depth:** a speaker can be played lower without changing its pace. Atlas generates the speech
+  faster and plays it back slower by the same factor (`NeuralTts.deepen`). "Lewis (deep)" is Lewis at 0.9
+  (about 81 Hz instead of 91 Hz).
+- Models -> Voice -> Voice profiles offers ready-made profiles once the voice is downloaded:
+  **Echo** and **Puck** (American), **Fable** (British) and **Deep British** (Lewis at 0.9).
+- Rendered and listened to on a computer only. Phone speed on Kokoro v1.0 is not measured yet.
+
 ## 4. Image and LLM reliability
 
 ### Implemented

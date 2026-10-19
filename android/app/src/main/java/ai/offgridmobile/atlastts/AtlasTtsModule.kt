@@ -8,6 +8,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.Locale
 
@@ -332,17 +333,23 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun isSpeaking(promise: Promise) { promise.resolve(tts?.isSpeaking ?: false) }
 
-    /** Use a downloaded natural voice (folder name under voices/), or "" for the phone's voice. Resolves the number of speakers. */
+    /**
+     * Use a downloaded natural voice (folder name under voices/), or "" for the phone's voice.
+     * `style` may hold `accent` ("gb"/"us": pronunciation dictionary of multi-accent Kokoro) and
+     * `depth` (1 = as recorded, lower = deeper). Resolves the number of speakers.
+     */
     @ReactMethod
-    fun setNeuralVoice(id: String, sid: Int, promise: Promise) {
+    fun setNeuralVoice(id: String, sid: Int, style: ReadableMap?, promise: Promise) {
         neuralSid = sid
+        val accent = if (style?.hasKey("accent") == true) style.getString("accent") ?: "" else ""
+        neural.depth = if (style?.hasKey("depth") == true) style.getDouble("depth").toFloat() else 1f
         val g = ++voiceGen
         if (id.isBlank()) { neuralDir = ""; neural.releaseAsync(); promise.resolve(0); return }
         val dir = findVoice(id)
         if (dir == null) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded (if it was on an SD card, put the card back)"); return }
         Thread {
             try {
-                neural.load(dir.path)
+                neural.load(dir.path, accent)
                 if (g == voiceGen) { neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
                 else promise.resolve(0) // a newer choice was made while this one loaded
             } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }

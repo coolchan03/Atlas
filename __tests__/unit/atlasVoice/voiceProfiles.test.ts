@@ -61,6 +61,6 @@ describe('voice profiles', () => {
     expect(mockNative.setNeuralVoice).toHaveBeenCalledTimes(1);
     expect(useAtlasVoiceStore.getState().neuralVoice).toBe('kokoro-en');
     await restoreSavedVoice();
-    expect(mockNative.setNeuralVoice).toHaveBeenLastCalledWith('kokoro-en', 2);
+    expect(mockNative.setNeuralVoice).toHaveBeenLastCalledWith('kokoro-en', 2, { accent: '', depth: 1 });
   });
 });

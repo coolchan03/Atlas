@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
-import { useVoiceProfiles, type VoiceProfile } from './profiles';
-import { NEURAL_VOICES, loadVoiceForSpeech, restoreSavedVoice } from './neural';
+import { missingPresets, useVoiceProfiles, type VoiceProfile } from './profiles';
+import { KOKORO_V1_PRESETS, NEURAL_VOICES, loadVoiceForSpeech, restoreSavedVoice, useNeuralVoices } from './neural';
 import { speak } from './tts';
 
 /** Human label for a profile's voice, e.g. "KittenTTS Nano · Kitten 3 · 1.25x". */
@@ -28,7 +28,9 @@ export async function previewProfile(p: VoiceProfile): Promise<void> {
 export function VoiceProfilesCard() {
   const { colors } = useTheme();
   const profiles = useVoiceProfiles((s) => s.profiles);
-  const { addProfile, removeProfile } = useVoiceProfiles.getState();
+  const { addProfile, removeProfile, addPresets } = useVoiceProfiles.getState();
+  const hasKokoroV1 = useNeuralVoices((s) => s.installed['kokoro-v1-en'] !== undefined);
+  const presets = hasKokoroV1 ? missingPresets(profiles, KOKORO_V1_PRESETS) : [];
   const voiceId = useAtlasVoiceStore((s) => s.neuralVoice);
   const sid = useAtlasVoiceStore((s) => s.neuralSid);
   const rate = useAtlasVoiceStore((s) => s.rate);
@@ -45,7 +47,7 @@ export function VoiceProfilesCard() {
         Save the voice, speaker and speed chosen above under a name, then give it to an agent (Agents → edit) so
         that agent's answers are read in its own voice. Profiles stay on this device.
       </Text>
-      <Text style={[styles.p, { color: colors.textMuted, marginTop: 6 }]}>Current: {describeProfile({ voiceId, sid, rate })}</Text>
+      <Text style={[styles.p, styles.current, { color: colors.textMuted }]}>Current: {describeProfile({ voiceId, sid, rate })}</Text>
       <View style={styles.row}>
         <TextInput
           testID="voice-profile-name"
@@ -55,15 +57,20 @@ export function VoiceProfilesCard() {
           placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]}
         />
-        <TouchableOpacity testID="voice-profile-save" onPress={save} disabled={!name.trim()} style={[styles.btn, { borderColor: colors.primary, opacity: name.trim() ? 1 : 0.5 }]}>
+        <TouchableOpacity testID="voice-profile-save" onPress={save} disabled={!name.trim()} style={[styles.btn, !name.trim() && styles.disabled, { borderColor: colors.primary }]}>
           <Text style={{ color: colors.primary }}>Save</Text>
         </TouchableOpacity>
       </View>
+      {presets.length > 0 && (
+        <TouchableOpacity testID="voice-profile-presets" onPress={() => addPresets(presets)} style={[styles.btn, styles.presets, { borderColor: colors.primary }]}>
+          <Text style={{ color: colors.primary }}>Add ready-made: {presets.map((p) => p.name).join(', ')}</Text>
+        </TouchableOpacity>
+      )}
       {profiles.map((p) => (
         <View key={p.id} style={[styles.profile, { borderColor: colors.border }]}>
           <View style={styles.flex}>
-            <Text style={{ color: colors.text, fontWeight: '600' }}>{p.name}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{describeProfile(p)}</Text>
+            <Text style={[styles.name, { color: colors.text }]}>{p.name}</Text>
+            <Text style={[styles.meta, { color: colors.textMuted }]}>{describeProfile(p)}</Text>
           </View>
           <TouchableOpacity onPress={() => { previewProfile(p).catch(() => undefined); }} style={styles.action}>
             <Text style={{ color: colors.primary }}>Preview</Text>
@@ -90,6 +97,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   input: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   btn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  presets: { marginTop: 10 },
+  current: { marginTop: 6 },
+  disabled: { opacity: 0.5 },
+  name: { fontWeight: '600' },
+  meta: { fontSize: 12 },
   profile: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 10 },
   flex: { flex: 1, paddingRight: 8 },
   action: { paddingHorizontal: 8, paddingVertical: 6 },

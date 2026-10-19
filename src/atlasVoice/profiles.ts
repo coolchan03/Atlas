@@ -22,9 +22,15 @@ interface VoiceProfilesState {
   addProfile: (p: Omit<VoiceProfile, 'id' | 'createdAt'>) => VoiceProfile;
   renameProfile: (id: string, name: string) => void;
   removeProfile: (id: string) => void;
+  /** Adds the ready-made profiles not saved yet (same voice and speaker). Returns how many were added. */
+  addPresets: (presets: Omit<VoiceProfile, 'id' | 'createdAt'>[]) => number;
 }
 
-export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set) => ({
+/** Ready-made profiles that are not saved yet. */
+export const missingPresets = <T extends Pick<VoiceProfile, 'voiceId' | 'sid'>>(profiles: VoiceProfile[], presets: T[]): T[] =>
+  presets.filter((p) => !profiles.some((x) => x.voiceId === p.voiceId && x.sid === p.sid));
+
+export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set, get) => ({
   profiles: [],
   addProfile: (p) => {
     const profile: VoiceProfile = { ...p, name: p.name.trim() || 'Voice', id: generateId(), createdAt: new Date().toISOString() };
@@ -35,6 +41,11 @@ export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set) => ({
     profiles: s.profiles.map((p) => (p.id === id && name.trim() ? { ...p, name: name.trim() } : p)),
   })),
   removeProfile: (id) => set((s) => ({ profiles: s.profiles.filter((p) => p.id !== id) })),
+  addPresets: (presets) => {
+    const add = missingPresets(get().profiles, presets);
+    add.forEach((p) => get().addProfile(p));
+    return add.length;
+  },
 }), {
   name: 'atlas-voice-profiles',
   storage: createJSONStorage(() => AsyncStorage),

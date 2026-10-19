@@ -26,6 +26,12 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     private val genExec = Executors.newSingleThreadExecutor()
     @Volatile private var tts: OfflineTts? = null
     @Volatile var loadedDir: String = ""; private set
+    @Volatile private var loadedAccent: String = ""
+    /**
+     * Voice depth: 1 = as recorded. Below 1 the voice is generated faster and played back
+     * slower by the same factor, so the pace stays the same and the voice sounds lower and fuller.
+     */
+    @Volatile var depth = 1f
     private val tokenA = java.util.concurrent.atomic.AtomicInteger(0)
     private val token: Int get() = tokenA.get()
     /** Play through the earpiece (phone-call style) instead of the loudspeaker. */
@@ -35,11 +41,14 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
 
     val ready: Boolean get() = tts != null
 
-    /** Loads a voice folder. Blocks the caller (never call from the UI thread). */
-    fun load(dir: String) {
+    /**
+     * Loads a voice folder. `accent` ("gb", "us" or "") picks the pronunciation dictionary of
+     * multi-accent Kokoro packages. Blocks the caller (never call from the UI thread).
+     */
+    fun load(dir: String, accent: String = "") {
         tokenA.incrementAndGet()
         genExec.submit(Callable<Unit> {
-            if (dir == loadedDir && tts != null) return@Callable
+            if (dir == loadedDir && accent == loadedAccent && tts != null) return@Callable
             freeEngine()
             val f = File(dir)
             val onnx = f.listFiles { x -> x.name.endsWith(".onnx") }?.maxByOrNull { it.length() }
@@ -59,8 +68,10 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             } else if (File(f, "voices.bin").exists()) {
                 val k = OfflineTtsKokoroModelConfig()
                 k.model = onnx.path; k.voices = File(f, "voices.bin").path; k.tokens = tokens; k.dataDir = espeak
-                val lex = f.listFiles { x -> x.name.startsWith("lexicon") && x.name.endsWith(".txt") }?.joinToString(",") { it.path } ?: ""
-                if (lex.isNotEmpty()) k.lexicon = lex
+                val (lex, lang) = kokoroDictionary(f.listFiles()?.map { it.name } ?: emptyList(), accent)
+                if (lex.isNotEmpty()) k.lexicon = lex.joinToString(",") { File(f, it).path }
+                if (lang.isNotEmpty()) k.lang = lang
+                File(f, "dict").let { if (it.isDirectory) k.dictDir = it.path }
                 mc.kokoro = k
             } else {
                 val v = OfflineTtsVitsModelConfig()
@@ -74,6 +85,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             speakers = try { e.numSpeakers() } catch (_: Throwable) { 1 }
             tts = e
             loadedDir = dir
+            loadedAccent = accent
         }).get()
     }
 
@@ -83,6 +95,25 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         /** KittenTTS voice folder: the downloaded id starts with "kitten" and holds voices.bin. */
         fun isKitten(dir: File): Boolean =
             dir.name.startsWith("kitten", ignoreCase = true) && File(dir, "voices.bin").exists()
+
+        /**
+         * Pronunciation dictionaries and language for a Kokoro folder. Multi-accent packages
+         * (Kokoro v1.0) ship lexicon-gb-en.txt and lexicon-us-en.txt: British speakers need the
+         * UK dictionary alone with lang "en" ("en-gb" renders silence); everyone else gets the
+         * US one with "en-us". Older single-accent packages keep every lexicon and no lang.
+         */
+        fun kokoroDictionary(files: List<String>, accent: String): Pair<List<String>, String> {
+            val gb = "lexicon-gb-en.txt"; val us = "lexicon-us-en.txt"
+            if (accent == "gb" && gb in files) return Pair(listOf(gb), "en")
+            if (us in files && gb in files) return Pair(listOf(us), "en-us")
+            return Pair(files.filter { it.startsWith("lexicon") && it.endsWith(".txt") }.sorted(), "")
+        }
+
+        /** Generation speed and playback rate for a depth (see [depth]). */
+        fun deepen(speed: Float, rate: Int, depth: Float): Pair<Float, Int> {
+            val d = depth.coerceIn(0.7f, 1f)
+            return Pair(speed / d, Math.round(rate * d))
+        }
     }
 
     private fun freeEngine() {
@@ -90,6 +121,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         tts = null
         speakers = 0
         loadedDir = ""
+        loadedAccent = ""
     }
 
     /** Frees the voice later, in order with any load that follows (never blocks). */
@@ -117,13 +149,13 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     fun synthesize(parts: List<String>, sid: Int, speed: Float, cancelled: () -> Boolean): Pair<ShortArray, Int>? {
         return genExec.submit(Callable<Pair<ShortArray, Int>?> {
             val engine = tts ?: return@Callable null
-            val rate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
+            val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
             val out = java.io.ByteArrayOutputStream()
             val gap = ShortArray(rate / 8)
             fun put(a: ShortArray) { val b = java.nio.ByteBuffer.allocate(a.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN); b.asShortBuffer().put(a); out.write(b.array()) }
             for (p in parts) {
                 if (cancelled()) return@Callable null
-                val f = engine.generate(p, sid, speed).samples
+                val f = engine.generate(p, sid, genSpeed).samples
                 put(ShortArray(f.size) { (f[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() })
                 put(gap)
             }
@@ -148,7 +180,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     private fun run(parts: List<String>, id: String, sid: Int, speed: Float, my: Int) {
         val engine = tts
         if (engine == null || token != my) { emit(if (token == my) "AtlasTtsDone" else "AtlasTtsStopped", id); return }
-        val rate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
+        val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
         val queue = LinkedBlockingQueue<FloatArray>()
         val end = FloatArray(0)
         val player = Thread { play(queue, end, rate, id, my) }
@@ -156,7 +188,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         try {
             for (p in parts) {
                 if (token != my) break
-                val audio = engine.generate(p, sid, speed)
+                val audio = engine.generate(p, sid, genSpeed)
                 if (token != my) break
                 queue.put(audio.samples)
                 queue.put(FloatArray(rate / 8)) // short pause between sentences
