@@ -443,6 +443,38 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         }.start()
     }
 
+    /**
+     * Imports a voice file the user downloaded (a sherpa-onnx .tar.bz2 or .zip of a Piper/VITS,
+     * Kokoro or KittenTTS voice). Unpacks it into voices/<id>, checks it is a voice Atlas can
+     * play, and resolves the new id.
+     */
+    @ReactMethod
+    fun importNeuralVoice(uri: String, name: String, promise: Promise) {
+        Thread {
+            val id = VoiceImport.idFor(name)
+            val root = voicesRoot()
+            val tmp = java.io.File(root, "$id.part")
+            try {
+                tmp.deleteRecursively(); tmp.mkdirs()
+                val input = ctx.contentResolver.openInputStream(android.net.Uri.parse(uri))
+                    ?: throw IllegalStateException("Could not open the file")
+                input.use { VoiceImport.unpack(it, tmp) }
+                val kids = tmp.listFiles() ?: emptyArray()
+                val src = if (kids.size == 1 && kids[0].isDirectory) kids[0] else tmp
+                VoiceImport.problem(src)?.let { throw IllegalArgumentException(it) }
+                val dest = java.io.File(root, id)
+                if (dest.path == neuralDir || dest.path == neural.loadedDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
+                dest.deleteRecursively()
+                if (!src.renameTo(dest)) throw IllegalStateException("Could not move voice files")
+                tmp.deleteRecursively()
+                promise.resolve(id)
+            } catch (e: Throwable) {
+                tmp.deleteRecursively()
+                promise.reject("VOICE_IMPORT", e.message ?: e.toString())
+            }
+        }.start()
+    }
+
     private fun progress(id: String, p: Double) {
         try {
             val m = Arguments.createMap(); m.putString("id", id); m.putDouble("progress", p)

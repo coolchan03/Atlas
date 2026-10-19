@@ -3,13 +3,13 @@ import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'reac
 import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
 import { missingPresets, useVoiceProfiles, type VoiceProfile } from './profiles';
-import { KOKORO_V1_PRESETS, NEURAL_VOICES, loadVoiceForSpeech, restoreSavedVoice, useNeuralVoices } from './neural';
+import { KOKORO_V1_PRESETS, findNeuralVoice, loadVoiceForSpeech, restoreSavedVoice, useNeuralVoices } from './neural';
 import { speak } from './tts';
 
 /** Human label for a profile's voice, e.g. "KittenTTS Nano · Kitten 3 · 1.25x". */
 export function describeProfile(p: Pick<VoiceProfile, 'voiceId' | 'sid' | 'rate'>): string {
-  const voice = NEURAL_VOICES.find((v) => v.id === p.voiceId);
-  const speaker = voice?.speakers?.find((k) => k.sid === p.sid)?.name;
+  const voice = findNeuralVoice(p.voiceId);
+  const speaker = voice?.speakers?.find((k) => k.sid === p.sid)?.name ?? (voice?.imported && p.sid > 0 ? `Speaker ${p.sid + 1}` : undefined);
   return [voice?.name ?? 'Phone voice', speaker, `${p.rate}x`].filter(Boolean).join(' · ');
 }
 

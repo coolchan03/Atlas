@@ -16,6 +16,8 @@ export interface NeuralSpeaker {
 }
 export interface NeuralVoice {
   id: string; name: string; desc: string; size: string; speakers?: NeuralSpeaker[];
+  /** Added by the user from a voice file (not from Atlas's own voice list). */
+  imported?: boolean;
   /** The package has separate UK and US pronunciation dictionaries (Kokoro v1.0). */
   accents?: boolean;
 }
@@ -85,8 +87,34 @@ export const NEURAL_VOICES: NeuralVoice[] = [
   { id: 'piper-hfc', name: 'HFC (Piper)', desc: 'Bright US woman.', size: '~65 MB' },
 ];
 
-interface DlState { progress: Record<string, number>; installed: Record<string, number>; set: (p: Partial<DlState>) => void }
-export const useNeuralVoices = create<DlState>((set) => ({ progress: {}, installed: {}, set: (p) => set(p) }));
+interface DlState {
+  progress: Record<string, number>; installed: Record<string, number>;
+  /** Speakers in each voice the engine has loaded (imported voices only show this after loading). */
+  speakerCount: Record<string, number>;
+  set: (p: Partial<DlState>) => void;
+}
+export const useNeuralVoices = create<DlState>((set) => ({ progress: {}, installed: {}, speakerCount: {}, set: (p) => set(p) }));
+
+/** "vits-piper-en_GB-northern_english_male-medium" -> "Northern English Male (Piper, en GB)". */
+export function importedVoiceName(id: string): string {
+  const m = id.match(/^vits-piper-([a-z]{2})_([A-Z]{2})-(.+?)(-(x_low|low|medium|high))?$/);
+  const words = (t: string) => t.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+  if (m) return `${words(m[3])} (Piper, ${m[1]} ${m[2]})`;
+  return words(id.replace(/^(vits-|sherpa-onnx-)/, ''));
+}
+
+/** Atlas's own voices followed by voices the user imported from files. */
+export function voiceCatalog(installed: Record<string, number>): NeuralVoice[] {
+  const imported = Object.keys(installed)
+    .filter((id) => !NEURAL_VOICES.some((v) => v.id === id))
+    .sort()
+    .map((id) => ({ id, name: importedVoiceName(id), desc: 'Imported from a voice file.', size: '', imported: true }));
+  return [...NEURAL_VOICES, ...imported];
+}
+
+/** A voice from Atlas's list or one the user imported. */
+export const findNeuralVoice = (id: string): NeuralVoice | undefined =>
+  voiceCatalog(useNeuralVoices.getState().installed).find((v) => v.id === id);
 
 let listening = false;
 function listen() {
@@ -121,6 +149,20 @@ export async function downloadVoice(id: string): Promise<void> {
   }
 }
 
+/**
+ * Pick a voice file (a sherpa-onnx Piper, Kokoro or KittenTTS .tar.bz2 or .zip) and add it.
+ * Resolves the new voice id, or null when nothing was picked.
+ */
+export async function importVoiceFile(): Promise<string | null> {
+  const { pick } = require('@react-native-documents/picker');
+  const files = await pick({ mode: 'open', allowMultiSelection: false });
+  const f = files?.[0];
+  if (!f?.uri) return null;
+  const id: string = await Native.importNeuralVoice(f.uri, f.name || 'imported-voice');
+  await refreshInstalled();
+  return id;
+}
+
 export const cancelVoiceDownload = (id: string) => Native?.cancelNeuralDownload?.(id);
 
 export async function deleteVoice(id: string): Promise<void> {
@@ -134,7 +176,7 @@ export async function deleteVoice(id: string): Promise<void> {
  * pronunciation dictionary for multi-accent packages and the voice depth.
  */
 export function nativeVoice(id: string, sid: number): { sid: number; style: { accent: string; depth: number } } {
-  const voice = NEURAL_VOICES.find((v) => v.id === id);
+  const voice = findNeuralVoice(id);
   const speaker = voice?.speakers?.find((k) => k.sid === sid);
   const accent = voice?.accents ? (speaker?.accent === 'UK' ? 'gb' : 'us') : '';
   return { sid: speaker?.base ?? sid, style: { accent, depth: speaker?.depth ?? 1 } };
@@ -156,6 +198,7 @@ export async function selectVoice(id: string, sid?: number): Promise<number> {
   const s = sid ?? (id === st.neuralVoice ? st.neuralSid : 0);
   const n: number = neuralAvailable() ? await setNative(id, s) : 0;
   loadedKey = keyOf(id, s);
+  if (id) useNeuralVoices.getState().set({ speakerCount: { ...useNeuralVoices.getState().speakerCount, [id]: n } });
   st.setNeural(id, s);
   return n;
 }
