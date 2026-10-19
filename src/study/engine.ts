@@ -148,6 +148,18 @@ export function learningActivitiesEnabled(projectId: string): boolean {
 }
 
 /** Filter small-model puzzle output against the original project source text. */
+/**
+ * Everyday words that occur in almost any passage. They pass the "occurs in the source" check
+ * but say nothing about the study material, so they never become puzzle terms.
+ */
+const FILLER_TERMS = new Set(('ABOUT ABOVE AFTER AGAIN ALSO ALWAYS AMONG ANOTHER BECAUSE BEFORE BEING BELOW BETWEEN BOTH ' +
+  'CERTAIN COULD DIFFERENT DURING EACH EVERY EXAMPLE EXAMPLES FIRST FOLLOWING GENERAL GOOD GREAT HOWEVER IMPORTANT ' +
+  'INCLUDE INCLUDES INCLUDING INFORMATION LARGE LITTLE MANY MORE MOST MUCH MUST NEVER NUMBER OFTEN OTHER OTHERS PART ' +
+  'PEOPLE PERSON PLACE POSSIBLE SECOND SEVERAL SHOULD SIMILAR SINCE SMALL SOME SOMETHING SPECIFIC STILL SUCH THAN THAT ' +
+  'THEIR THEM THEN THERE THEREFORE THESE THEY THING THINGS THIS THOSE THROUGH TIME TIMES TOGETHER UNDER UNTIL USED USING ' +
+  'USUALLY VARIOUS VERY WAYS WELL WERE WHAT WHEN WHERE WHICH WHILE WITH WITHIN WITHOUT WOULD YEAR YEARS').split(' '));
+export const isFillerTerm = (word: string) => FILLER_TERMS.has(word.toUpperCase());
+
 export function parseGroundedLearningTerms(raw: string, sources: Source[]): LearningTerm[] {
   const out: LearningTerm[] = [];
   const used = new Set<string>();
@@ -157,7 +169,7 @@ export function parseGroundedLearningTerms(raw: string, sources: Source[]): Lear
     if (!match) continue;
     const answer = normalizeLearningWord(match[1]);
     const clue = match[2].trim();
-    if (answer.length < 3 || answer.length > 14 || used.has(answer) || clue.length < 8 ||
+    if (answer.length < 3 || answer.length > 14 || used.has(answer) || clue.length < 8 || isFillerTerm(answer) ||
         clue.toUpperCase().replace(/[^A-Z]/g, '').includes(answer)) continue;
     // The word must really occur in a source passage: prefer the cited one, else any.
     const word = new RegExp('\\b' + answer + '\\b', 'i');
