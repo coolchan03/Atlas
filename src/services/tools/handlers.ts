@@ -50,6 +50,12 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: query');
       return handleSearchKnowledgeBase(q, call.context?.projectId);
     }
+    case 'update_project_document': {
+      const name = requireString(call, 'name');
+      const content = requireString(call, 'content');
+      if (!name || !content) throw new Error('Missing required parameter: name and content');
+      return handleUpdateProjectDocument({ name, content, mode: call.arguments?.mode, projectId: call.context?.projectId });
+    }
     case 'search_offline_library': {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');
@@ -457,6 +463,14 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   return result.chunks
     .map((c: RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
     .join('\n\n---\n\n');
+}
+
+async function handleUpdateProjectDocument(p: { name: string; content: string; mode?: string; projectId?: string }): Promise<string> {
+  if (!p.projectId) return 'This chat is not in a project, so there is no shared document to update.';
+  const mode = p.mode === 'replace' ? 'replace' : 'append';
+  const { ragService } = require('../rag'); // NOSONAR
+  await ragService.saveProjectNote({ projectId: p.projectId, name: p.name, text: p.content, mode });
+  return `${mode === 'replace' ? 'Rewrote' : 'Added to'} the project document "${p.name}". Every chat in this project can now use it.`;
 }
 
 function formatBytes(bytes: number): string {

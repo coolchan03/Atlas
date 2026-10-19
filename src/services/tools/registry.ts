@@ -72,6 +72,18 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'update_project_document',
+    name: 'update_project_document',
+    displayName: 'Update project document',
+    description: 'Create or update a named text document in this chat\'s project, shared with every chat in the project (for example "Current Progress"). Use mode "append" to add a dated note, "replace" to rewrite it. Only when the user asks or the project instructions say so.',
+    icon: 'edit-3',
+    parameters: {
+      name: { type: 'string', description: 'Document name, e.g. Current Progress', required: true },
+      content: { type: 'string', description: 'Text to write', required: true },
+      mode: { type: 'string', description: 'append (default) or replace', enum: ['append', 'replace'] },
+    },
+  },
+  {
     id: 'search_offline_library',
     name: 'search_offline_library',
     displayName: 'Offline Library',

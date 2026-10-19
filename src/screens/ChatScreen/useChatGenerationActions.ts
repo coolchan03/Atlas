@@ -330,7 +330,8 @@ async function generateWithCompactionRetry(
   }
   return turnInterrupted;
 }
-async function injectRagContext(projectId: string | undefined, query: string, prompt: string): Promise<string> {
+/** Exported for tests: project knowledge reaches every chat in the project through this prompt. */
+export async function injectRagContext(projectId: string | undefined, query: string, prompt: string, enabledTools: string[] = []): Promise<string> {
   if (!projectId) return prompt;
   try {
     const docs = await ragService.getDocumentsByProject(projectId);
@@ -341,8 +342,11 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
       embeddingService.load().catch(err => logger.error('[RAG] Embedding warmup failed', err));
     }
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
-    let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
-    kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
+    let kbPrompt = `\n\nThis project has shared documents (the same for every chat in the project):\n${docList}`;
+    kbPrompt += '\nUse the excerpts below when they are relevant, and say which document you used.';
+    // Only point at tools this turn actually has: a missing tool makes small models stall or apologise.
+    if (enabledTools.includes('search_knowledge_base')) kbPrompt += '\nUse the search_knowledge_base tool to look up anything else in these documents.';
+    if (enabledTools.includes('update_project_document')) kbPrompt += '\nWhen the user asks, or the project instructions say so, update a shared document with update_project_document.';
     const r = await ragService.searchProject(projectId, query);
     if (r.chunks.length > 0) {
       kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
@@ -437,7 +441,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // Offline research already contains the selected document excerpts; do not inject them twice.
   let basePrompt = usedOfflineProjectEvidence
     ? rawPrompt
-    : await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+    : await injectRagContext(conversation?.projectId, messageText, rawPrompt, enabledTools);
 
   // In voice/audio mode the pro audio feature augments the prompt for spoken
   // output. No-op (returns undefined) in free builds.
@@ -694,7 +698,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(deps, conversation, messageText);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
-  const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+  const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt, enabledTools);
   const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
   // MCP/extension hints come solely from augmentSystemPromptForTools in the tool loop
   // (see the send path above) — adding them here too would double-inject.

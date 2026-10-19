@@ -26,6 +26,7 @@ import { Switch } from 'react-native';
 
 const TOOL_CHOICES: { id: string; label: string }[] = [
   { id: 'search_knowledge_base', label: 'Search knowledge base' },
+  { id: 'update_project_document', label: 'Update shared project documents' },
   { id: 'search_offline_library', label: 'Offline library (Kiwix)' },
   { id: 'web_search', label: 'Web search' },
   { id: 'read_url', label: 'Read web page' },

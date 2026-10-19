@@ -111,7 +111,7 @@ describe('PIN-protected projects keep their documents encrypted', () => {
     expect(sqliteHolds(env, 'purple-heron-4471')).toBe(true);
     expect((await ragService.getDocumentsByProject(project.id)).map((d: any) => d.name)).toEqual(['diary.txt']);
     expect([...env.files.keys()].some(k => k.includes('atlas-protected-docs'))).toBe(false);
-    expect(env.NativeModules.AtlasDevice.removeProtectedItemKey).toHaveBeenCalledTimes(2); // project key and documents key
+    expect(env.NativeModules.AtlasDevice.removeProtectedItemKey).toHaveBeenCalledTimes(3); // project, documents and study-outputs keys
   });
 
   it('does not unlock documents with a wrong PIN', async () => {

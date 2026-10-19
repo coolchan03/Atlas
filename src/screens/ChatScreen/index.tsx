@@ -1,6 +1,7 @@
 /* eslint-disable react-native/no-inline-styles, max-lines-per-function, complexity -- Existing chat orchestrator coordinates many native model and UI lifecycles. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useWideLayout } from '../../hooks/useWideLayout';
+import { isProtectedProjectUnlocked } from '../../stores/protectedProjectStorage';
 import { FlatList, Keyboard, InteractionManager, Platform, View } from 'react-native';
 // Edge-to-edge-aware KeyboardAvoidingView. RN's own version leaves a residual
 // padding band on Android under edge-to-edge (adjustResize is a no-op there);
@@ -295,7 +296,9 @@ export const ChatScreen: React.FC = () => {
       onRetry={chat.handleRetryMessage}
       onEdit={chat.handleEditMessage}
       onDelete={chat.handleDeleteMessage}
-      onSaveToProject={chat.activeProject && !chat.activeProject.pinVerifier && !chat.activeConversation?.pinVerifier && !chat.activeConversation?.isPrivate ? chat.handleSaveReportToProject : undefined}
+      onSaveToProject={chat.activeProject && !chat.activeConversation?.isPrivate &&
+        (chat.activeProject.pinVerifier ? isProtectedProjectUnlocked(chat.activeProject.id) : !chat.activeConversation?.pinVerifier)
+        ? chat.handleSaveReportToProject : undefined}
       onGenerateImage={chat.handleGenerateImageFromMessage}
       onImagePress={chat.handleImagePress}
     />
