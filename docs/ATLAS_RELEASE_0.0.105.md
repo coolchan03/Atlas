@@ -84,16 +84,22 @@ Rotation on the onn tablet, the Razr's inner screen in both orientations, split-
 - **Per-agent voice:** Agents → edit → Voice. That agent's replies are read in its profile; the saved app voice
   is restored afterwards for other screens.
 
-### Not implemented: voice sample recording/import and voice cloning
-KittenTTS **cannot clone voices** — it only has its 8 fixed style vectors. The pinned sherpa-onnx does support
-zero-shot cloning models (ZipVoice, Pocket TTS) that take a reference recording, but the only available
-weights are non-commercial (ZipVoice/Emilia, CC BY-NC) or gated (Pocket TTS cloning), so Atlas cannot
-redistribute them. Recording/importing samples was not built because nothing could use them yet. Needs a
-decision on which cloning model/licence to adopt.
+### Not implemented: voice cloning (KittenTTS 2)
+Correction to an earlier draft: **KittenTTS 2** (KittenML, 1.7B parameters, 506 MiB–1 GB) does clone a voice
+from 5–30 s of audio. The packages shipped here are the older lightweight KittenTTS models, which cannot.
+KittenTTS 2 is not in this release because:
+- its only non-Python runtime (`kitten-tts-2-cpp`, MIT) is a batch command-line tool with a LibTorch
+  (TorchScript) waveform decoder and no documented Android/ARM64 build;
+- its voice cloning needs an offline Python preparation step;
+- its weights use the separate "Stellon Labs Community License", which could not be read from this build
+  environment (Hugging Face blocked), so redistribution terms are unverified.
+A practical route: prepare the voice on a computer with KittenTTS 2, import the prepared voice into Atlas,
+and run a KittenTTS 2 engine ported to Android (llama.cpp fork + Android LibTorch decoder). That port is a
+separate native project; voice sample recording/import was not built until it exists.
 
-### Action required
-Run **Build Atlas voices** (`atlas-voices.yml`) once so `kitten-nano-en.zip` / `kitten-mini-en.zip` exist on
-the `atlas-voices` release; until then the KittenTTS download buttons will fail.
+### Done
+The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-nano-en.zip` and
+`kitten-mini-en.zip` are on the `atlas-voices` release.
 
 ## 4. Image and LLM reliability
 
@@ -122,18 +128,44 @@ the `atlas-voices` release; until then the KittenTTS download buttons will fail.
   an unlocked protected project and are sealed with the project PIN. Selective protection and permanent
   unprotect are unchanged.
 
+- **Study outputs** of a protected project are encrypted in their own file (project PIN key); never written to
+  plain storage, re-encrypted on every change while unlocked, dropped from memory on re-lock.
+- An existing chat can be **moved into an unlocked protected project**; it is sealed with the project PIN.
+- **Backup/restore audit:** restoring a backup used to delete every protected project on the phone (and
+  locked chats missing from the backup). Restore now keeps them. Unlocked protected projects are included
+  in password backups sealed with their own PIN and open on a new phone with that PIN.
+- Nearby phone/tablet transfer was checked: protected projects, protected chats and study outputs are never
+  sent.
+
 ### Not done
-- **Study outputs** of a project still block protection (clear message): they have no encrypted storage yet.
-- Moving an existing chat *into* a protected project is still disabled.
 - Original document bytes are not kept for protected projects (only encrypted text/embeddings) — by design.
 - Backup/restore and phone↔tablet transfer were not changed or re-audited beyond the above.
+
+## 6a. Daily briefing (user report: ignored interests, made things up, read ads as news, odd page)
+- Broad interests use Google News top-story sections (U.S., world, business, tech, science, health, sports,
+  entertainment); others use a 2-day search. Press releases, sponsored/shopping items and stories older than
+  48 hours are dropped; the same story from several outlets is merged; every interest gets a story first.
+  Bing's outlet field (`<News:Source>`) was never read before; fixed.
+- One part per real headline, written only from that story's own text, shorter when the source is thin. Fun
+  facts come only from the offline library, never the model's memory.
+- The page shows the exact headlines used (outlet, interest, time, link), uses the app's shared components,
+  and shows step-by-step progress with elapsed time while it is made.
+- Tested with fixtures in the real Google/Bing RSS formats; the live news hosts are blocked from the build
+  environment, so a real-day check on the phone is still needed.
 
 ## 6. Project learning / Therapy
 
 - The Therapy setup (six private chats sharing *Personal History*, *AI Instructions*, *Current Progress*) is now
   possible inside **one protected project**: create the project, add the three documents, create the chats,
   then protect it — or protect first and create chats while unlocked. No private data is in the repo or APK.
-- Not done: an automated test that a model actually *uses* the shared files, and learning-game relevance work.
+- **Shared files are now writable:** a chat can create or update a named project document (e.g. *Current
+  Progress*) with the new `update_project_document` tool (enable it like other tools). In a protected project
+  it is written straight into the encrypted vault. Save report to project works in protected projects too.
+- **Tested:** an integration test has chat A append to *Current Progress* in a protected project and checks that
+  chat B's prompt then contains that text, with only encrypted files written. The project prompt no longer
+  tells the model to use tools that are switched off.
+- Learning games: terms were already taken only from the project's passages; everyday filler words
+  ("however", "important") are now kept out of crosswords, word searches and term games.
   The obsolete 23-games request was not implemented, as instructed.
 
 ## 7. Voice mode ("phone call") speech input
