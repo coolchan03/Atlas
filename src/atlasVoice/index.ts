@@ -12,6 +12,18 @@ import { AtlasModeToggle, AtlasSpeakButton } from './Buttons';
 import { AtlasVoicePanel } from './VoicePanel';
 import logger from '../utils/logger';
 
+/** Voice mode is a phone call: talk like a person on the phone, not like a document. */
+export const VOICE_CALL_STYLE = [
+  'You are on a phone call with the user. Your reply is spoken aloud, so talk the way a person does on the phone.',
+  'Keep each turn short: usually one to three sentences. Answer the question first, then stop.',
+  'Do not list everything you know. If there is more worth saying, offer it ("Want the details?") and wait.',
+  'Use everyday words and contractions (it\'s, you\'re, don\'t). Vary how you start sentences.',
+  'It is fine to react briefly ("Oh, good question." "Got it.") but do not pad every reply with it.',
+  'Ask a short follow-up question when it helps the conversation move.',
+  'Never use markdown, bullet points, headings, tables, code, URLs, symbols or emojis. Spell numbers the way you would say them.',
+  'If the user interrupts you, do not repeat what you already said; respond to what they just said.',
+].join(' ');
+
 /**
  * Read a reply in the answering agent's own voice profile (if any), then put the saved
  * voice back so emergency cards, study and other screens keep the user's choice.
@@ -66,7 +78,7 @@ export function registerAtlasVoice(): void {
   });
   registerHook(HOOKS.audioAugmentPrompt, (base: string) =>
     useUiModeStore.getState().interfaceMode === 'audio'
-      ? `${base}\n\nThe user is talking to you by voice and your reply will be read aloud. Answer in short, plain spoken sentences. No markdown, tables, lists of symbols or emojis. Put the most important thing first.`
+      ? `${base}\n\n${VOICE_CALL_STYLE}`
       : base,
   );
   registerSlot(SLOTS.chatInputAudioMode, AtlasAudioInput);

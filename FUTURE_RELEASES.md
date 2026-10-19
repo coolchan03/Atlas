@@ -14,6 +14,7 @@ Repository: https://github.com/coolchan03/Atlas
 - [ ] **FF-02 - Actual phone call screen**
   - Original: "Actual phone call screen"
   - To decide later: phone-call-like full-screen AI voice UI, or integration with actual cellular calls; do not silently assume either interpretation.
+  - **Decided by the user (2026-10-19):** make voice mode look like a regular phone call (in-app UI, not cellular calls). Implemented in 0.0.105 (`src/atlasVoice/AudioInput.tsx`): full-screen call screen with caller name, call timer, Mute / Speaker / Hands-free, End call, talk-over interruption and a phone-conversation reply style. Not checked off until verified on the Razr and onn tablet.
 
 - [ ] **FF-03 - Automatic cloud backup**
   - Original: "Auto cloud backup"

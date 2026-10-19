@@ -145,14 +145,28 @@ the `atlas-voices` release; until then the KittenTTS download buttons will fail.
   offline recognition. If the offline language pack is missing it retries with the default recognizer (still
   asking for offline). The Android 11+ manifest query needed to find the recognizer was missing; added.
 - Text-chat mic behavior is unchanged (the keyboard's mic already dictates there).
-- Needs device test: Razr + Gboard with the offline English pack installed, airplane mode, hands-free on.
+- **Looks like a phone call (FF-02, chosen by the user: in-app call screen, not cellular calls):** voice mode
+  opens a full-screen call with the agent's name and initial, a call timer, status and live caption, round
+  Mute / Speaker-Earpiece / Hands-free buttons, a talk button and a red End call. A hands-free call starts
+  listening as soon as it opens.
+- **Talk over it to interrupt:** in hands-free mode the mic is metered (not recorded or transcribed) while an
+  answer plays. When you speak clearly over it for about 0.3 s, speech stops and a new turn starts. The
+  recorder has no echo cancellation, so the trigger adapts to the answer's own echo level. It works best on the
+  earpiece; on loudspeaker you may need to speak up.
+- **Less talkative, more like a person:** call mode tells the model it is on a phone call: one to three
+  sentences, answer first, offer details instead of listing them, contractions, short follow-up questions, no
+  markdown or symbols, and do not repeat itself after an interruption.
+- Needs device test: Razr + Gboard with the offline English pack installed, airplane mode, hands-free on;
+  barge-in on earpiece and loudspeaker; that loudspeaker playback does not interrupt itself.
+- Not built: the recorder/transcription app that labels speakers (FF-07). It needs a speaker-diarization model
+  and decisions on consent and storage; it stays on the roadmap.
 
 ## Build evidence and checks
 
 See the end of this file (filled in after the final CI run).
 
 ## Not changed
-- `FUTURE_RELEASES.md` nine-item roadmap (FF-01 … FF-09) untouched. FF-02 (call screen) and FF-07
-  (recording/speaker labelling) were not implemented.
+- `FUTURE_RELEASES.md` keeps all nine items. FF-02 (call screen) was implemented at the user's request and is
+  noted there, unchecked until device-verified. FF-07 (recording/speaker labelling) was not implemented.
 - The permanent signing key: the release workflow still requires and verifies the existing keystore; no new
   key was generated. No secrets, private chats or device data were committed.
