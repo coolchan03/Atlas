@@ -7,7 +7,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Source, StudyResult, useStudyStore, writeEpisode, trimSources } from '../study/engine';
+import { Source, StudyResult, useStudyStore, writeEpisode } from '../study/engine';
+import { cleanHeadlines, feedsFor, isPromotional, pickStories, similarity, splitOutlet, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
 
@@ -50,8 +51,6 @@ const decode = (t: string) => t
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
   .replace(/\s+/g, ' ').trim();
 
-interface Headline { title: string; desc: string; url?: string; source?: string; date?: number }
-
 async function fetchText(url: string, ms = 12000): Promise<string> {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
@@ -62,7 +61,7 @@ async function fetchText(url: string, ms = 12000): Promise<string> {
   } finally { clearTimeout(t); }
 }
 
-function parseRss(xml: string): Headline[] {
+export function parseRss(xml: string): Headline[] {
   const out: Headline[] = [];
   for (const m of xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)) {
     const it = m[0];
@@ -70,28 +69,43 @@ function parseRss(xml: string): Headline[] {
     const title = decode(tag('title'));
     if (!title) continue;
     const date = Date.parse(decode(tag('pubDate')));
-    out.push({ title, desc: decode(tag('description')).slice(0, 400), url: decode(tag('link')) || undefined, source: decode(tag('source')) || undefined, date: isNaN(date) ? undefined : date });
+    out.push({ title, desc: decode(tag('description')).slice(0, 400), url: decode(tag('link')) || undefined, source: decode(tag('source') || tag('News:Source')) || undefined, date: isNaN(date) ? undefined : date });
   }
   return out;
 }
 
-/** Fresh headlines for one interest: Bing News RSS (has summaries + direct links), Google News RSS as backup. */
-async function headlines(topic: string): Promise<Headline[]> {
-  const q = encodeURIComponent(topic);
-  const feeds = [
-    `https://www.bing.com/news/search?q=${q}&format=rss`,
-    `https://news.google.com/rss/search?q=${q}%20when:2d&hl=en-US&gl=US&ceid=US:en`,
-  ];
-  for (const f of feeds) {
+/** Fresh real headlines for one interest, from the first feed that has any (see newsSources). */
+async function headlines(topic: string, seen: string[]): Promise<Headline[]> {
+  for (const f of feedsFor(topic)) {
     try {
-      const items = parseRss(await fetchText(f));
-      if (items.length) {
-        const weekAgo = Date.now() - 7 * 864e5;
-        return items.filter((h) => !h.date || h.date > weekAgo).sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 4);
-      }
+      const items = cleanHeadlines(parseRss(await fetchText(f)), Date.now(), seen);
+      if (items.length) return items.slice(0, 6);
     } catch { /* try the next feed */ }
   }
   return [];
+}
+
+/**
+ * More detail for one story: the same story in Bing News (a summary and a direct link, since
+ * Google News links are redirects), then optionally the article itself.
+ */
+async function storyDetail(h: Headline, deep: boolean): Promise<{ text: string; url?: string }> {
+  let summary = '';
+  let url = h.url && !/news\.google\.com/.test(h.url) ? h.url : undefined;
+  try {
+    const match = parseRss(await fetchText(`https://www.bing.com/news/search?q=${encodeURIComponent(h.title)}&format=rss`, 8000))
+      .map(splitOutlet).find((x) => !isPromotional(x) && similarity(x.title, h.title) >= 0.5);
+    if (match) { summary = match.desc; url = url || match.url; }
+  } catch { /* the headline alone is enough */ }
+  let article = '';
+  if (deep && url) {
+    try {
+      const { readPage } = require('../services/tools/handlers');
+      const txt: string = await readPage(url, 2500);
+      if (txt && txt.length > 300) article = txt.replace(/\s+/g, ' ').slice(0, 1600);
+    } catch { /* summary is enough */ }
+  }
+  return { text: [summary, article].filter(Boolean).join('\n'), url };
 }
 
 async function libraryFacts(topic: string, startN: number): Promise<Source[]> {
@@ -107,59 +121,92 @@ async function libraryFacts(topic: string, startN: number): Promise<Source[]> {
   } catch { return []; }
 }
 
-/** Builds today's briefing and saves it. */
+type OutlineItem = { topic: string; sources: Source[] };
+
+function storyHeader(h: Headline): string {
+  const when = h.date ? new Date(h.date).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+  return [`Headline: ${h.title}`, h.source && `Outlet: ${h.source}`, when && `Published: ${when}`].filter(Boolean).join('\n');
+}
+
+/** One outline item for one real story: its headline, outlet, time and any detail found. */
+async function storyItem({ h, interest, deep, n }: { h: Headline; interest: string; deep: boolean; n: number }): Promise<OutlineItem> {
+  const detail = await storyDetail(h, deep);
+  const outlet = h.source ? ` (${h.source})` : '';
+  return {
+    topic: `${h.title}${outlet} - ${interest}`,
+    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
+  };
+}
+
+/** Library items: one fun fact with the news, or several for an offline edition. */
+async function libraryItems(interests: string[], withNews: boolean, firstN: number): Promise<OutlineItem[]> {
+  const out: OutlineItem[] = [];
+  let n = firstN;
+  for (const topic of interests.slice(0, withNews ? 2 : 6)) {
+    const facts = await libraryFacts(topic, n);
+    if (!facts.length) continue;
+    n += facts.length;
+    out.push({ topic: withNews ? `A fun fact about ${topic} from the offline library` : `From the offline library: ${topic}`, sources: facts });
+    if (withNews) break;
+  }
+  return out;
+}
+
+/** Builds today's briefing from real, current stories and saves it. */
 export async function makeBriefing(onStep: (m: string) => void, voicesAvailable: number): Promise<StudyResult> {
   const p = useBriefPrefs.getState();
   const interests = p.interests.length ? p.interests : ['world news'];
   let offline = false;
   try { offline = require('./offGrid').offGridOn(); } catch { /* ignore */ }
 
-  const sources: Source[] = [];
-  const add = (s: Omit<Source, 'n'>) => sources.push({ ...s, n: sources.length + 1 });
-  let gotNews = false;
+  // 1. Real headlines for each interest (top-story sections for broad ones), no ads or press releases.
+  const perInterest: Headline[][] = [];
   if (!offline) {
+    const seen: string[] = [];
     for (const topic of interests.slice(0, 8)) {
       onStep(`Checking news: ${topic}...`);
-      const hs = await headlines(topic);
-      if (!hs.length) continue;
-      gotNews = true;
-      const block = hs.map((h) => `- ${h.title}${h.source ? ` (${h.source})` : ''}${h.date ? ` [${new Date(h.date).toLocaleDateString()}]` : ''}${h.desc && h.desc !== h.title ? `: ${h.desc}` : ''}`).join('\n');
-      add({ doc: `News: ${topic}`, part: 1, text: block.slice(0, 1400), origin: 'web', url: hs[0].url });
-      if (p.deep && hs[0].url && !/news\.google\.com/.test(hs[0].url)) {
-        try {
-          onStep(`Reading the top ${topic} story...`);
-          const { readPage } = require('../services/tools/handlers');
-          const txt: string = await readPage(hs[0].url, 2500);
-          if (txt && txt.length > 300) add({ doc: hs[0].title, part: 1, text: txt.replace(/\s+/g, ' ').slice(0, 1600), origin: 'web', url: hs[0].url });
-        } catch { /* headline is enough */ }
-      }
+      const hs = await headlines(topic, seen);
+      perInterest.push(hs);
+      hs.forEach((h) => seen.push(h.title));
     }
   }
+  const stories = pickStories(perInterest, storyBudget(p.minutes));
+
+  // 2. One part per story, written only from that story's own sources.
+  const outline: OutlineItem[] = [];
+  for (const [i, { interest, headline }] of stories.entries()) {
+    onStep(`Reading story ${i + 1} of ${stories.length}: ${headline.title.slice(0, 50)}...`);
+    outline.push(await storyItem({ h: headline, interest: interests[interest], deep: p.deep, n: outline.length + 1 }));
+  }
+
+  // 3. Fun facts come only from the offline library, never from the model's memory.
+  const gotNews = outline.length > 0;
   if (p.funFacts || !gotNews) {
-    onStep(gotNews ? 'Finding fun facts in the offline library...' : 'No internet - making an offline edition from your library...');
-    for (const topic of interests.slice(0, gotNews ? 3 : 6)) {
-      for (const s of await libraryFacts(topic, sources.length + 1)) add({ ...s });
-    }
+    onStep(gotNews ? 'Finding a fun fact in the offline library...' : 'No news - making an offline edition from your library...');
+    outline.push(...await libraryItems(interests, gotNews, outline.length + 1));
   }
-  if (!sources.length) {
+  if (!outline.length) {
     throw new Error(offline
       ? 'Off-grid mode is on and the offline library has nothing on your interests yet. Turn off off-grid mode, or download a library pack in Offline library.'
       : 'Could not reach the news and found nothing in the offline library. Check your internet connection and try again.');
   }
 
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const trimmed = trimSources(sources);
-  const r = await writeEpisode(trimmed, {
+  const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date}. Go story by story through the most important and interesting news in the sources for these interests: ${interests.join(', ')}. Say where news comes from (the outlet) when it is given. Do not invent news that is not in the sources.`
-      : `An "offline edition" for ${date}: there is no live news today, so explore interesting things from the sources about these interests: ${interests.join(', ')}.`,
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: say what happened and name the outlet. Report only what its source says.`
+      : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.`,
     minutes: p.minutes,
     hosts: voicesAvailable >= 2 ? p.hosts : 1,
     style: 'news',
     research: false,
-    funFacts: p.funFacts,
+    funFacts: false,
+    outline,
   }, onStep);
+  r.headlines = stories.map(({ interest, headline: h }, i) => ({
+    title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,
+  }));
   useStudyStore.getState().add(BRIEF_PROJECT, r);
   return r;
 }

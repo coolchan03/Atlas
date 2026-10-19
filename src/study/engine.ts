@@ -33,6 +33,8 @@ export interface StudyResult {
   learningTerms?: LearningTerm[];
   crossword?: Crossword;
   wordSearch?: WordSearch;
+  /** Daily briefing: the real headlines it was written from (outlet, link, time). */
+  headlines?: { title: string; source?: string; url?: string; date?: number; interest?: string }[];
   /** Project learning game payload (kind === 'game'), see src/study/games. */
   game?: { type: string; data: any };
 }
@@ -306,6 +308,12 @@ export interface PodcastOptions {
   prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string;
   /** Checked between parts: true ends the episode early and keeps what is written so far. */
   shouldStop?: () => boolean;
+  /**
+   * Fixed outline: one part per item, each written ONLY from its own sources (news briefings:
+   * one part per real story). Skips planning, and keeps parts short when a source is thin so
+   * the model does not fill gaps with invented detail.
+   */
+  outline?: { topic: string; sources: Source[] }[];
   /** Fresh sources for one part's topic. Long episodes use it so each part draws on different passages. */
   sourcesFor?: (topic: string) => Promise<Source[]>;
 }
@@ -403,6 +411,46 @@ export async function generatePodcast(projectId: string, opts: PodcastOptions, o
 }
 
 /** Writes the episode script from ready-made sources (projects, the daily briefing, ...). */
+const parseLines = (t: string, hosts: number): PodcastLine[] => t.split('\n').map((l) => {
+  const m = l.match(LINE_RE);
+  if (!m) return null;
+  const h = m[1].toUpperCase() as 'A' | 'B' | 'C';
+  const text = m[2].replace(/\[\d+\]|\*/g, '').trim();
+  return text ? { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text } : null;
+}).filter(Boolean) as PodcastLine[];
+
+/** Lines a part may have: about one per 180 characters of source, 3 to 8. */
+export const outlineLines = (sources: Source[]) =>
+  Math.max(3, Math.min(8, Math.round(sources.reduce((n, x) => n + x.text.length, 0) / 180)));
+
+async function writeOutlinedEpisode(
+  outline: { topic: string; sources: Source[] }[], opts: PodcastOptions,
+  cfg: { cast: string; fmt: string; style: string; hosts: number }, onStep: (m: string) => void,
+): Promise<StudyResult> {
+  const title = opts.title || opts.prompt || 'Episode';
+  const lines: PodcastLine[] = [];
+  const all: Source[] = [];
+  for (let i = 0; i < outline.length; i++) {
+    if (opts.shouldStop?.() && lines.length >= 4) break;
+    onStep(`Writing part ${i + 1} of ${outline.length}: ${outline[i].topic.slice(0, 60)}...`);
+    const part = outline[i];
+    part.sources.forEach((x) => all.push(x));
+    const where = outline.length === 1 ? 'This is the WHOLE episode: welcome listeners, cover it, then say goodbye.'
+      : i === 0 ? 'This is the START: A welcomes listeners and names the episode, then covers this item.'
+        : i === outline.length - 1 ? 'This is the LAST item: cover it, then a one-line wrap-up and goodbye.'
+          : 'Move on to this item with a short natural transition.';
+    const recap = lines.slice(-3).map((l) => `${l.host}: ${l.text}`).join('\n');
+    const n = outlineLines(part.sources);
+    const t = await ask(
+      'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. If the source gives few details, keep it short instead of filling in. Never mention source numbers.',
+      `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${cfg.cast}.\nThis item: ${part.topic}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write at most ${n} lines (each 1-2 sentences), exactly in this format:\n${cfg.fmt}`,
+    );
+    lines.push(...parseLines(t, cfg.hosts).slice(0, n + 2));
+  }
+  if (lines.length < 2) throw new Error('The model did not write the script in the expected format. Try again or use a bigger model.');
+  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: all.slice(0, 60), podcast: lines, hosts: cfg.hosts };
+}
+
 export async function writeEpisode(sources: Source[], opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
   // About 1.5 minutes of speech per written part (10 lines of ~25 words).
@@ -417,6 +465,7 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
   const fmt = hosts === 1 ? 'A: ...' : hosts === 3 ? 'A: ...\nB: ...\nC: ...' : 'A: ...\nB: ...';
   const style = STYLE_TEXT[opts.style];
 
+  if (opts.outline?.length) return writeOutlinedEpisode(opts.outline, opts, { cast, fmt, style, hosts }, onStep);
   onStep('Planning the episode...');
   const ask0 = opts.prompt ? `The listener asked for: ${opts.prompt}\n` : 'Pick the most interesting angle in these sources yourself.\n';
   // Short episodes are planned in one call. Long ones are planned a dozen parts at a time, each

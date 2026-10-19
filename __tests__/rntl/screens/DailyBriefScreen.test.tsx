@@ -1,0 +1,51 @@
+import React from 'react';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { NavigationContainer } from '@react-navigation/native';
+
+let mockResolve: ((r: any) => void) | null = null;
+let mockStep: ((m: string) => void) | null = null;
+jest.mock('../../../src/atlasTools/dailyBrief', () => ({
+  ...jest.requireActual('../../../src/atlasTools/dailyBrief'),
+  makeBriefing: jest.fn((onStep: (m: string) => void) => new Promise((resolve) => { mockStep = onStep; mockResolve = resolve; })),
+}));
+jest.mock('../../../src/atlasVoice/tts', () => ({ listVoices: jest.fn(async () => []), keepScreenOn: jest.fn() }));
+
+import { DailyBriefScreen } from '../../../src/screens/DailyBriefScreen';
+import { useStudyStore } from '../../../src/study/engine';
+import { BRIEF_PROJECT, makeBriefing } from '../../../src/atlasTools/dailyBrief';
+
+const renderScreen = () => render(<NavigationContainer><DailyBriefScreen /></NavigationContainer>);
+
+beforeEach(() => { useStudyStore.setState({ saved: {} }); mockResolve = null; mockStep = null; });
+
+it('shows step-by-step progress while the briefing is being made', async () => {
+  const screen = renderScreen();
+  fireEvent.press(screen.getByTestId('brief-make'));
+  await waitFor(() => expect(screen.getByTestId('brief-progress')).toBeTruthy());
+  act(() => { mockStep!('Checking news: United States...'); });
+  act(() => { mockStep!('Reading story 1 of 3: Senate passes funding bill...'); });
+  expect(screen.getByText('Reading story 1 of 3: Senate passes funding bill...')).toBeTruthy();
+  expect(screen.getByText('Checking news: United States...')).toBeTruthy(); // finished step stays listed
+  expect(screen.queryByTestId('brief-make')).toBeNull();
+  await act(async () => { mockResolve!({ createdAt: 1, title: 'x', kind: 'podcast', topic: '', sources: [] }); });
+  await waitFor(() => expect(screen.queryByTestId('brief-progress')).toBeNull());
+});
+
+it("lists the real headlines today's briefing was made from", () => {
+  useStudyStore.setState({ saved: { [BRIEF_PROJECT]: [{
+    kind: 'podcast', createdAt: Date.now(), topic: '', title: 'Daily briefing - Monday', sources: [],
+    headlines: [{ title: 'Senate passes funding bill', source: 'Reuters', interest: 'United States', url: 'https://reuters.com/x' }],
+  }] } } as any);
+  const screen = renderScreen();
+  expect(screen.getByTestId('brief-headlines')).toBeTruthy();
+  expect(screen.getByText('Senate passes funding bill')).toBeTruthy();
+  expect(screen.getByText(/Reuters · United States/)).toBeTruthy();
+  expect(screen.getByTestId('brief-listen')).toBeTruthy();
+});
+
+it('shows a failure in place instead of a blocking alert', async () => {
+  (makeBriefing as jest.Mock).mockRejectedValueOnce(new Error('Could not reach the news'));
+  const screen = renderScreen();
+  await act(async () => { fireEvent.press(screen.getByTestId('brief-make')); });
+  await waitFor(() => expect(screen.getByText('Could not reach the news')).toBeTruthy());
+});

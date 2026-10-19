@@ -1,31 +1,66 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme } from '../theme';
-import { useStudyStore } from '../study/engine';
+import { useTheme, useThemedStyles } from '../theme';
+import { Button, Card } from '../components';
+import { useWideLayout } from '../hooks/useWideLayout';
+import { useStudyStore, type StudyResult } from '../study/engine';
 import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
+import { createStyles } from './DailyBriefScreen.styles';
 
 const EMPTY: never[] = [];
+const LENGTHS = [3, 5, 10, 15];
+const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-/** A short spoken news show about your interests, with fun facts. */
+/** Progress while today's briefing is being made: current step, steps done, time so far. */
+function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
+  const [step, setStep] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const started = useRef(0);
+  useEffect(() => {
+    if (!step) return;
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started.current) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [step]);
+  const start = async () => {
+    if (step) return;
+    started.current = Date.now();
+    setElapsed(0); setDone([]); setError(null); setStep('Starting...');
+    keepScreenOn(true);
+    try {
+      const r = await makeBriefing((m) => setStep((prev) => {
+        // Keep the finished steps visible under the current one.
+        if (prev && prev !== 'Starting...' && prev !== m) setDone((d) => [...d, prev].slice(-6));
+        return m;
+      }), voices);
+      onDone(r);
+    } catch (e: any) {
+      setError(String(e?.message || e));
+    } finally { setStep(null); keepScreenOn(false); }
+  };
+  return { step, done, error, elapsed, start };
+}
+
+/** A short spoken news show about your interests, made from real headlines of the day. */
 export const DailyBriefScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const wide = useWideLayout();
   const prefs = useBriefPrefs();
   const list = useStudyStore((s) => s.saved[BRIEF_PROJECT]) || EMPTY;
   const remove = useStudyStore((s) => s.remove);
   const today = list.find((r) => todayKey(new Date(r.createdAt)) === todayKey());
   const [say, setSay] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
   const [voices, setVoices] = useState(0);
   useEffect(() => { listVoices('en').then((v) => setVoices(v.length)).catch(() => undefined); }, []);
-
-  const card = { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 };
-  const chip = (on: boolean) => ({ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1, borderColor: on ? colors.primary : colors.border, backgroundColor: on ? colors.primary : 'transparent', marginRight: 8, marginTop: 8 });
   const open = (at: number) => navigation.navigate('Study', { projectId: BRIEF_PROJECT, openAt: at });
+  const job = useBriefingJob(voices, (r) => open(r.createdAt));
 
   const addInterests = () => {
     const found = parseInterests(say);
@@ -34,115 +69,140 @@ export const DailyBriefScreen: React.FC = () => {
     prefs.setInterests([...prefs.interests, ...found.filter((f) => !have.has(f.toLowerCase()))].slice(0, 12));
     setSay('');
   };
-
-  const make = async () => {
-    if (busy) return;
-    setBusy('Starting...');
-    keepScreenOn(true);
-    try {
-      const r = await makeBriefing((m) => setBusy(m), voices);
-      open(r.createdAt);
-    } catch (e: any) {
-      Alert.alert('Could not make the briefing', String(e?.message || e));
-    } finally { setBusy(null); keepScreenOn(false); }
-  };
+  const chip = (on: boolean) => [styles.chip, on && styles.chipOn];
+  const chipText = (on: boolean) => (on ? styles.chipTextOn : styles.chipText);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '700', fontFamily: 'serif', marginLeft: 8, flex: 1 }}>Daily briefing</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Back">
+          <Icon name="arrow-left" size={20} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Daily briefing</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 60, width: '100%', maxWidth: 900, alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
-        <View style={card}>
-          <Text style={{ color: colors.textSecondary }}>
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-          </Text>
-          {today ? (
-            <>
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 17, marginTop: 4 }}>{today.title}</Text>
-              <TouchableOpacity onPress={() => open(today.createdAt)} style={{ marginTop: 12, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                <Icon name="play" size={16} color="#fff" /><Text style={{ color: '#fff', fontWeight: '700', marginLeft: 8 }}>Listen to today's briefing</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={make} disabled={!!busy} style={{ marginTop: 10, alignItems: 'center' }}>
-                <Text style={{ color: colors.primary }}>{busy ? busy : 'Make a fresh one'}</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 17, marginTop: 4 }}>Today's news, read to you</Text>
-              <Text style={{ color: colors.textSecondary, marginTop: 4 }}>The latest stories on your interests{prefs.funFacts ? ', with fun facts' : ''}. With no internet you get an offline edition from your library instead.</Text>
-              <TouchableOpacity onPress={make} disabled={!!busy} style={{ marginTop: 12, backgroundColor: busy ? colors.border : colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Make today's briefing</Text>}
-              </TouchableOpacity>
-            </>
+      <ScrollView contentContainerStyle={[styles.content, wide.column]} keyboardShouldPersistTaps="handled">
+        <Card
+          title={today ? today.title : "Today's news, read to you"}
+          subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+          testID="brief-today-card"
+        >
+          {!today && (
+            <Text style={styles.desc}>
+              Real headlines from the last two days on your interests, one story at a time, with the outlet named.
+              Press releases and ads are left out. With no internet you get an offline edition from your library.
+            </Text>
           )}
-          {!!busy && <Text style={{ color: colors.textSecondary, marginTop: 8, textAlign: 'center' }}>{busy}{'\n'}This takes a few minutes on a phone - keep Atlas open.</Text>}
-        </View>
+          {job.step ? (
+            <View testID="brief-progress">
+              <View style={styles.progressRow}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.progressText}>{job.step}</Text>
+                <Text style={styles.meta}>{fmtElapsed(job.elapsed)}</Text>
+              </View>
+              {job.done.map((d, i) => (
+                <View key={`${i}-${d}`} style={styles.doneStep}>
+                  <Icon name="check" size={14} color={colors.textMuted} />
+                  <Text style={styles.meta} numberOfLines={1}>{d}</Text>
+                </View>
+              ))}
+              <Text style={styles.desc}>This takes a few minutes on a phone. Keep Atlas open.</Text>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              {today && <Button title="Listen to today's briefing" onPress={() => open(today.createdAt)} icon={<Icon name="play" size={16} color={colors.background} />} testID="brief-listen" />}
+              <Button
+                title={today ? 'Make a fresh one' : "Make today's briefing"}
+                variant={today ? 'outline' : 'primary'}
+                onPress={job.start}
+                testID="brief-make"
+              />
+            </View>
+          )}
+          {!!job.error && <Text style={styles.error}>{job.error}</Text>}
+        </Card>
 
-        <View style={card}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>Your interests</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {prefs.interests.map((it) => (
-              <TouchableOpacity key={it} onPress={() => prefs.setInterests(prefs.interests.filter((x) => x !== it))} style={[chip(false), { flexDirection: 'row', alignItems: 'center' }]}>
-                <Text style={{ color: colors.text }}>{it}</Text><Icon name="x" size={13} color={colors.textMuted} style={{ marginLeft: 6 }} />
+        {!!today?.headlines?.length && (
+          <Card title="Today's headlines" subtitle="The stories this briefing was made from. Tap one to read it." testID="brief-headlines">
+            {today.headlines.map((h, i) => (
+              <TouchableOpacity key={`${i}-${h.title}`} style={styles.headline} disabled={!h.url} onPress={() => h.url && Linking.openURL(h.url)}>
+                <View style={styles.headlineText}>
+                  <Text style={styles.body}>{h.title}</Text>
+                  <Text style={styles.meta}>
+                    {[h.source, h.interest, h.date && new Date(h.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
+                {!!h.url && <Icon name="external-link" size={16} color={colors.textMuted} />}
               </TouchableOpacity>
             ))}
-            {!prefs.interests.length && <Text style={{ color: colors.textMuted, marginTop: 8 }}>None yet - add some below.</Text>}
+          </Card>
+        )}
+
+        <Card title="Your interests" subtitle="Broad ones (U.S., world, business, tech, science, health, sports) use top-story sections; anything else is searched.">
+          <View style={styles.chips}>
+            {prefs.interests.map((it) => (
+              <TouchableOpacity key={it} onPress={() => prefs.setInterests(prefs.interests.filter((x) => x !== it))} style={chip(false)} accessibilityLabel={`Remove ${it}`}>
+                <Text style={styles.chipText}>{it}</Text>
+                <Icon name="x" size={13} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+            {!prefs.interests.length && <Text style={styles.meta}>None yet. Add some below.</Text>}
           </View>
           <TextInput value={say} onChangeText={setSay} onSubmitEditing={addInterests} returnKeyType="done"
-            placeholder="Tell me what you're into, e.g. space, the Chicago Bears and cooking"
-            placeholderTextColor={colors.textMuted} multiline blurOnSubmit
-            style={{ backgroundColor: colors.background, color: colors.text, borderRadius: 10, padding: 12, marginTop: 12, minHeight: 48 }} />
-          <TouchableOpacity onPress={addInterests} disabled={!say.trim()} style={{ alignSelf: 'flex-end', marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: say.trim() ? colors.primary : colors.border }}>
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Add</Text>
-          </TouchableOpacity>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6 }}>Tip: tap the microphone on your keyboard to say them. Tap an interest to remove it. Your interests are sent as search words to Bing News / Google News; everything else stays on the phone.</Text>
-        </View>
+            placeholder="e.g. United States, international news, the Chicago Bears"
+            placeholderTextColor={colors.textMuted} multiline blurOnSubmit style={styles.input} testID="brief-interest-input" />
+          <View style={styles.actions}>
+            <Button title="Add" size="small" variant="secondary" onPress={addInterests} disabled={!say.trim()} />
+          </View>
+          <Text style={styles.meta}>Your interests are sent as search words to Google News and Bing News. Everything else stays on the phone.</Text>
+        </Card>
 
-        <View style={card}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>Show options</Text>
-          <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Length</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {[3, 5, 10, 15].map((m) => (
+        <Card title="Show options">
+          <Text style={styles.sectionLabel}>Length</Text>
+          <View style={styles.chips}>
+            {LENGTHS.map((m) => (
               <TouchableOpacity key={m} onPress={() => prefs.set({ minutes: m })} style={chip(prefs.minutes === m)}>
-                <Text style={{ color: prefs.minutes === m ? '#fff' : colors.text }}>{m} min</Text>
+                <Text style={chipText(prefs.minutes === m)}>{m} min</Text>
               </TouchableOpacity>
             ))}
           </View>
           {voices >= 2 && (
             <>
-              <Text style={{ color: colors.textSecondary, marginTop: 10 }}>Hosts</Text>
-              <View style={{ flexDirection: 'row' }}>
+              <Text style={styles.sectionLabel}>Hosts</Text>
+              <View style={styles.chips}>
                 {([1, 2] as const).map((h) => (
                   <TouchableOpacity key={h} onPress={() => prefs.set({ hosts: h })} style={chip(prefs.hosts === h)}>
-                    <Text style={{ color: prefs.hosts === h ? '#fff' : colors.text }}>{h === 1 ? 'One narrator' : 'Two hosts'}</Text>
+                    <Text style={chipText(prefs.hosts === h)}>{h === 1 ? 'One narrator' : 'Two hosts'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </>
           )}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-            <Text style={{ color: colors.text, flex: 1 }}>Fun facts</Text>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Fun fact from your offline library</Text>
             <Switch value={prefs.funFacts} onValueChange={(v) => prefs.set({ funFacts: v })} />
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-            <Text style={{ color: colors.text, flex: 1 }}>Read the full top story for each interest (more detail, slower)</Text>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Read each full article (more detail, slower)</Text>
             <Switch value={prefs.deep} onValueChange={(v) => prefs.set({ deep: v })} />
           </View>
-        </View>
+        </Card>
 
-        {list.length > 0 && <Text style={{ color: colors.textSecondary, fontWeight: '700', marginTop: 8, marginBottom: 6 }}>EARLIER BRIEFINGS</Text>}
-        {list.map((r) => (
-          <TouchableOpacity key={r.createdAt} onPress={() => open(r.createdAt)} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
-            <Icon name="radio" size={18} color={colors.primary} />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>{r.title}</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(r.createdAt).toLocaleString()}</Text>
-            </View>
-            <TouchableOpacity onPress={() => remove(BRIEF_PROJECT, r.createdAt)} style={{ padding: 6 }}><Icon name="trash-2" size={16} color={colors.textMuted} /></TouchableOpacity>
-          </TouchableOpacity>
-        ))}
+        {list.length > 0 && (
+          <Card title="Earlier briefings">
+            {list.map((r) => (
+              <TouchableOpacity key={r.createdAt} onPress={() => open(r.createdAt)} style={[styles.headline, styles.earlier]}>
+                <Icon name="radio" size={18} color={colors.primary} />
+                <View style={styles.headlineText}>
+                  <Text style={styles.body}>{r.title}</Text>
+                  <Text style={styles.meta}>{new Date(r.createdAt).toLocaleString()}</Text>
+                </View>
+                <TouchableOpacity onPress={() => remove(BRIEF_PROJECT, r.createdAt)} accessibilityLabel="Delete briefing">
+                  <Icon name="trash-2" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+          </Card>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
