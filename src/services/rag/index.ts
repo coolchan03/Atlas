@@ -28,6 +28,7 @@ async function removeAppOwnedCopy(path: string | undefined): Promise<void> {
 export type { RagDocument, RagSearchResult } from './database';
 ;
 export { chunkDocument } from './chunking';
+export { isTextDocument } from './textDocument';
 export { retrievalService } from './retrieval';
 ;
 
@@ -171,10 +172,18 @@ class RagService {
   /** Full text of one project document, in order (works for protected and ordinary projects). */
   async readDocumentText(projectId: string, docId: number): Promise<string> {
     if (isVaultDocId(docId)) {
+      const note = protectedVault.noteText(docId);
+      if (note !== undefined) return note;
       return protectedVault.getEmbeddingsByProject(projectId).filter(r => r.doc_id === docId)
         .sort((a, b) => a.position - b.position).map(r => r.content).join('\n');
     }
     await this.ensureReady();
+    // A plain-text document (e.g. a note written in Atlas) keeps its exact text in the app's own copy.
+    const doc = ragDatabase.getDocumentById(docId);
+    if (doc?.path?.startsWith(`${RNFS.DocumentDirectoryPath}/`) && /\.(md|txt)$/i.test(doc.path)) {
+      const text = await RNFS.readFile(doc.path, 'utf8').catch(() => null);
+      if (text !== null) return text;
+    }
     return ragDatabase.getChunksByDocument(docId).map(c => c.content).join('\n');
   }
 
@@ -183,7 +192,7 @@ class RagService {
    * chat in the project (e.g. "Current Progress"). `append` adds to the end of the current text.
    * A protected project's note goes straight into its encrypted vault: no plain file is written.
    */
-  async saveProjectNote(params: { projectId: string; name: string; text: string; mode?: 'replace' | 'append' }): Promise<number> {
+  async saveProjectNote(params: { projectId: string; name: string; text: string; mode?: 'replace' | 'append'; replacesDocId?: number }): Promise<number> {
     const { projectId, mode = 'replace' } = params;
     const name = params.name.trim().replace(/[\\/]/g, '_').slice(0, 80);
     if (!name) throw new Error('The document needs a name.');
@@ -200,7 +209,7 @@ class RagService {
       await embeddingService.load();
       const embeddings = await embeddingService.embedBatch(chunks.map(c => c.content));
       id = await protectedVault.addDocument(projectId, {
-        name, path: `atlas-note:${name}`, size: text.length,
+        name, path: `atlas-note:${name}`, size: text.length, text,
         chunks: chunks.map((c, i) => ({ content: c.content, position: c.position, embedding: embeddings[i] })),
       });
     } else {
@@ -211,8 +220,11 @@ class RagService {
         id = await this.indexDocument({ projectId, filePath: tmp, fileName: name.endsWith('.md') ? name : `${name}.md`, fileSize: text.length, replaceExisting: true });
       } finally { await RNFS.unlink(tmp).catch(() => undefined); }
     }
-    // Remove the previous version only once the new one is stored.
+    // Remove the previous version only once the new one is stored (also the old name after a rename).
     if (existing) await this.deleteDocument(existing.id);
+    if (params.replacesDocId !== undefined && params.replacesDocId !== existing?.id && params.replacesDocId !== id) {
+      await this.deleteDocument(params.replacesDocId);
+    }
     return id;
   }
 

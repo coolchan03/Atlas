@@ -21,6 +21,7 @@ import { isProtectedProjectUnlocked } from '../stores/protectedProjectStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
+import { isTextDocument } from '../services/rag/textDocument';
 import { ProjectPinGate } from '../components/ProjectPinGate';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -189,7 +190,9 @@ export const ProjectDetailScreen: React.FC = () => {
             styles={styles}
             setAlertState={setAlertState}
             onNavigateToKb={() => navigation.navigate('KnowledgeBase', { projectId })}
-            onDocumentPress={(doc) => navigation.navigate('DocumentPreview', { filePath: doc.path, fileName: doc.name, fileSize: doc.size })}
+            onDocumentPress={(doc) => (isTextDocument(doc)
+              ? navigation.navigate('ProjectDocument', { projectId, docId: doc.id, name: doc.name })
+              : navigation.navigate('DocumentPreview', { filePath: doc.path, fileName: doc.name, fileSize: doc.size }))}
           />
         </View>
 

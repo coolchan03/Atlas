@@ -24,6 +24,7 @@ export type RootStackParamList = {
   ModelTest: { modelId: string };
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
+  ProjectDocument: { projectId: string; docId?: number; name?: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack
   ModelSettings: undefined;

@@ -15,11 +15,13 @@ import type { RagDocument } from '../services/rag/database';
 export interface VaultChunk { content: string; position: number; embedding: number[] }
 export interface VaultDoc {
   id: number; name: string; path: string; size: number; createdAt: string; enabled: number; chunks: VaultChunk[];
+  /** Exact text of a note written in Atlas (chunks alone drop spacing and overlap long paragraphs). */
+  text?: string;
 }
 export interface VaultEmbeddingRow {
   chunk_rowid: number; doc_id: number; name: string; content: string; position: number; embedding: number[];
 }
-export type NewVaultDoc = Pick<VaultDoc, 'name' | 'path' | 'size' | 'chunks'>;
+export type NewVaultDoc = Pick<VaultDoc, 'name' | 'path' | 'size' | 'chunks' | 'text'>;
 
 const open = new Map<string, VaultDoc[]>();
 let seq = 0;
@@ -99,6 +101,15 @@ export const protectedVault = {
 
   list(projectId: string): RagDocument[] {
     return (open.get(projectId) ?? []).map(d => asRag(projectId, d)).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  },
+
+  /** The exact text of a note written in Atlas, if this document is one. */
+  noteText(docId: number): string | undefined {
+    for (const docs of open.values()) {
+      const d = docs.find(x => x.id === docId);
+      if (d) return d.text;
+    }
+    return undefined;
   },
 
   ownerOf(docId: number): string | undefined {
