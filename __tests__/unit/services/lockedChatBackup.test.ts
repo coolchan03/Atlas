@@ -167,6 +167,9 @@ describe('locked chats in encrypted backups', () => {
     files.set('/picked/backup.atlasbackup', 'atlasbackup:v1:' + b64(PASSWORD + '\u0000' + JSON.stringify(data)));
     await importBackup(PASSWORD);
     const restored = JSON.parse(disk.get(KEY)!);
-    expect(restored.state.conversations.some((c: any) => c.id === 'locked1')).toBe(false);
+    // The tampered entry is refused; this phone's own sealed copy of that chat is kept, never deleted.
+    const kept = restored.state.conversations.filter((c: any) => c.id === 'locked1');
+    expect(kept.every((c: any) => c.protectedBlob !== 'plain text')).toBe(true);
+    expect(kept.length).toBeLessThanOrEqual(1);
   });
 });

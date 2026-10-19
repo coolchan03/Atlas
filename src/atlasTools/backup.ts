@@ -60,9 +60,17 @@ function portableStoreValue(key: string, raw: string): string | null {
     const { isLockedChatBlob } = require('../stores/encryptedChatStorage');
     // Protected projects are device-bound and never exported. A locked chat travels only as
     // its title-less placeholder plus ciphertext: never with readable messages or a title.
+    const { isPortableProjectBlob } = require('../stores/protectedProjectStorage');
     parsed.state[collection] = parsed.state[collection].flatMap((item: any) => {
       if (!item.pinVerifier && !item.protectedBlob) return [item];
-      if (!isChats || !item.pinVerifier || !isLockedChatBlob(item.protectedBlob)) return [];
+      // A protected project travels only as a PIN-sealed portable blob with no readable fields.
+      if (!isChats) {
+        return item.pinVerifier && isPortableProjectBlob(item.protectedBlob) ? [{
+          id: item.id, name: 'Locked project', description: '', systemPrompt: '', createdAt: item.createdAt,
+          updatedAt: item.updatedAt, pinVerifier: item.pinVerifier, protectedBlob: item.protectedBlob,
+        }] : [];
+      }
+      if (!item.pinVerifier || !isLockedChatBlob(item.protectedBlob)) return [];
       return [{ ...item, title: 'Locked conversation', messages: [] }];
     });
     return JSON.stringify(parsed);
@@ -106,6 +114,18 @@ export async function exportBackup(password?: string): Promise<string | null> {
         parsed.state.conversations = [...parsed.state.conversations.filter((c: any) => !ids.has(c.id)), ...portable];
         safe.push(['local-llm-chat-storage', JSON.stringify(parsed)]);
       }
+    }
+  }
+  if (password) {
+    // Unlocked protected projects go in sealed with their own PIN (record, documents and study
+    // outputs), so they can be restored on a new phone. Locked ones cannot be sealed portably.
+    const { openProtectedProjectsForBackup } = require('../stores/protectedProjectStorage');
+    const portable: any[] = await openProtectedProjectsForBackup();
+    const index = safe.findIndex(([key]) => key === 'local-llm-project-storage');
+    if (portable.length && index >= 0) {
+      const parsed = JSON.parse(safe[index][1]);
+      parsed.state.projects = [...parsed.state.projects, ...portable];
+      safe[index] = ['local-llm-project-storage', JSON.stringify(parsed)];
     }
   }
   // Only encrypted backups may carry original project files. Include the original
@@ -157,6 +177,25 @@ async function readPortableBackup(password?: string): Promise<{ data: any; encry
   return { data, encrypted };
 }
 
+/** Adds this phone's protected projects / locked chats that the restored list does not have. */
+export async function keepDeviceProtected(key: string, restored: string): Promise<string> {
+  if (key !== 'local-llm-project-storage' && key !== 'local-llm-chat-storage') return restored;
+  const collection = key === 'local-llm-chat-storage' ? 'conversations' : 'projects';
+  try {
+    const current = key === 'local-llm-chat-storage'
+      ? await require('../stores/encryptedChatStorage').encryptedChatStorage.getItem(key)
+      : await AsyncStorage.getItem(key);
+    const mine = current ? JSON.parse(current)?.state?.[collection] : null;
+    if (!Array.isArray(mine)) return restored;
+    const parsed = JSON.parse(restored);
+    const have = new Set(parsed.state[collection].map((x: any) => x.id));
+    const keep = mine.filter((x: any) => x.pinVerifier && x.protectedBlob && !have.has(x.id));
+    if (!keep.length) return restored;
+    parsed.state[collection] = [...parsed.state[collection], ...keep];
+    return JSON.stringify(parsed);
+  } catch { return restored; }
+}
+
 /** Returns the number of restored entries. The app must be closed and reopened afterwards. */
 export async function importBackup(password?: string): Promise<number | null> {
   const source = await readPortableBackup(password);
@@ -178,8 +217,12 @@ export async function importBackup(password?: string): Promise<number | null> {
   // Older v1 backups are supported without replacing existing knowledge-base data.
   const restoredDocs = data.version === 2
     ? await restoreProjectFiles(data.projectFiles as ProjectBackupFile[], projectIds) : 0;
-  const chatPair = pairs.find(([key]) => key === 'local-llm-chat-storage');
-  const settingsPairs = pairs.filter(([key]) => key !== 'local-llm-chat-storage');
+  // Restoring must never delete protected data that exists only on this phone (its keys and
+  // encrypted files are here): keep this phone's protected projects and locked chats that the
+  // backup does not contain.
+  const merged = await Promise.all(pairs.map(async ([key, value]) => [key, await keepDeviceProtected(key, value)] as [string, string]));
+  const chatPair = merged.find(([key]) => key === 'local-llm-chat-storage');
+  const settingsPairs = merged.filter(([key]) => key !== 'local-llm-chat-storage');
   if (chatPair && !encrypted) throw new Error('Chat restoration requires an encrypted backup.');
   // Restore via the selected-chat storage adapter. Ordinary chats are readable
   // on disk by design; protected chats must never enter a portable backup.

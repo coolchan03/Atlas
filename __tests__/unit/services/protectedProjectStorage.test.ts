@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
-import { protectedProjectStorage, protectProject, unlockProject, permanentlyUnprotectProject, relockProjects, sealNewProjectChat } from '../../../src/stores/protectedProjectStorage';
+import { protectedProjectStorage, protectProject, unlockProject, permanentlyUnprotectProject, relockProjects, sealNewProjectChat, openProtectedProjectsForBackup } from '../../../src/stores/protectedProjectStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true, default: {
@@ -77,6 +77,13 @@ describe('selective protection for metadata-only projects', () => {
         return decode(blob);
       }),
       removeProtectedItemKey: jest.fn(async () => true),
+      verifyChatPin: jest.fn(async (pin: string, verifier: string) => verifier === `pin:v1:${pin}`),
+      encryptPortableBackup: jest.fn(async (plain: string, pass: string) => `atlasbackup:v1:${Buffer.from(JSON.stringify({ plain, pass })).toString('base64')}`),
+      decryptPortableBackup: jest.fn(async (blob: string, pass: string) => {
+        const o = JSON.parse(Buffer.from(blob.slice('atlasbackup:v1:'.length), 'base64').toString());
+        if (o.pass !== pass) throw new Error('Wrong key');
+        return o.plain;
+      }),
     };
     (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => disk.get(key) ?? null);
     (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => { disk.set(key, value); });
@@ -238,5 +245,36 @@ describe('selective protection for metadata-only projects', () => {
   it('does not seal a new chat once the project is locked again', async () => {
     await sealNewProjectChat('new-chat', 'never-unlocked');
     expect(mockProtectChat).not.toHaveBeenCalled();
+  });
+  it('seals an unlocked protected project portably for a backup and opens it on a new phone with its PIN', async () => {
+    const { protectedVault } = require('../../../src/stores/protectedProjectVault');
+    const { protectedStudyVault } = require('../../../src/stores/protectedStudyVault');
+    fakeProjects.projects = [project('therapy')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    fakeStudy.saved.therapy = [{ title: 'Coping skills quiz', createdAt: 1 }];
+    await protectProject('therapy', '123456');
+    await unlockProject('therapy', '123456');
+    const docs = [{ id: -1, name: 'Personal History', path: 'atlas-note:Personal History', size: 5, createdAt: 'x', enabled: 1, chunks: [] }];
+    jest.spyOn(protectedVault, 'readAll').mockResolvedValueOnce(docs);
+    const [stubbed] = await openProtectedProjectsForBackup();
+    expect(stubbed.name).toBe('Locked project');
+    expect(stubbed.systemPrompt).toBe('');
+    expect(stubbed.protectedBlob!.startsWith('atlasbackup:v1:')).toBe(true);
+    expect(JSON.stringify(stubbed)).not.toMatch(/Private story notes|Personal History|Coping skills/);
+
+    // New phone: only the portable stub exists. The first unlock moves it onto on-phone keys.
+    await relockProjects();
+    mockFiles.clear(); disk.clear();
+    fakeProjects.projects = [stubbed];
+    await protectedProjectStorage.setItem(KEY, snapshot([stubbed]));
+    const sealDocs = jest.spyOn(protectedVault, 'seal').mockResolvedValue(undefined);
+    const sealStudy = jest.spyOn(protectedStudyVault, 'seal');
+    await expect(unlockProject('therapy', '000000')).rejects.toThrow(/Incorrect PIN/);
+    await unlockProject('therapy', '123456');
+    expect(sealDocs).toHaveBeenCalledWith('therapy', '123456', 'pin:v1:123456', docs);
+    expect(sealStudy).toHaveBeenCalledWith('therapy', '123456', 'pin:v1:123456', [{ title: 'Coping skills quiz', createdAt: 1 }]);
+    expect(fakeProjects.projects[0].systemPrompt).toBe('Private story notes');
+    const saved = JSON.parse(disk.get(KEY)!).state.projects[0];
+    expect(saved.protectedBlob.startsWith('atlasitem:v1:')).toBe(true); // now on this phone's keys
   });
 });

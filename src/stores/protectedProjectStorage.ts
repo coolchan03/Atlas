@@ -6,9 +6,8 @@ import { protectedStudyVault } from './protectedStudyVault';
 import logger from '../utils/logger';
 
 /** Selective encryption of a project's metadata and its documents. Document text, names and
- * embeddings live in an encrypted per-project vault (protectedProjectVault), never in rag.db.
- * Protecting projects with existing chats or study outputs is intentionally rejected;
- * otherwise the UI would promise false security. */
+ * embeddings live in an encrypted per-project vault (protectedProjectVault), never in rag.db;
+ * study outputs in protectedStudyVault; the project's chats are sealed with the same PIN. */
 const KEY = 'local-llm-project-storage';
 const pins = new Map<string, string>();
 const blobs = new Map<string, string>();
@@ -28,8 +27,15 @@ const native = () => {
     encryptProtectedItem(kind: string, id: string, plain: string, pin: string, verifier: string): Promise<string>;
     decryptProtectedItem(kind: string, id: string, blob: string, pin: string, verifier: string): Promise<string>;
     removeProtectedItemKey(kind: string, id: string, pin: string, verifier: string): Promise<boolean>;
+    verifyChatPin(pin: string, verifier: string): Promise<boolean>;
+    encryptPortableBackup(plain: string, passphrase: string): Promise<string>;
+    decryptPortableBackup(blob: string, passphrase: string): Promise<string>;
   };
 };
+/** Portable (backup) ciphertext: sealed with a key derived from the project's PIN, not this phone. */
+const PORTABLE = 'atlasbackup:v1:';
+const portablePass = (pin: string, id: string) => `${pin}:atlas-protected-project:${id}`;
+export const isPortableProjectBlob = (blob: unknown): boolean => typeof blob === 'string' && blob.startsWith(PORTABLE);
 const clearSecurity = (p: Project): Project => {
   const { pinVerifier: _pinVerifier, protectedBlob: _protectedBlob, ...rest } = p;
   return rest as Project;
@@ -211,11 +217,47 @@ async function decryptProject(p: Project, pin: string): Promise<Project> {
   if (decrypted.id !== p.id || typeof decrypted.systemPrompt !== 'string') throw new Error('Protected project data is invalid.');
   return decrypted;
 }
+/**
+ * Unlocked protected projects sealed for an encrypted backup: record, documents and study
+ * outputs in one blob keyed by the project's PIN, so they open on a new phone with that PIN.
+ * Projects still locked are skipped (there is no PIN in memory to seal them with).
+ */
+export async function openProtectedProjectsForBackup(): Promise<Project[]> {
+  await pending;
+  const { useProjectStore } = require('./projectStore');
+  const out: Project[] = [];
+  for (const [id, pin] of pins) {
+    const p: Project | undefined = useProjectStore.getState().projects.find((x: Project) => x.id === id);
+    if (!p?.pinVerifier) continue;
+    const docs = await protectedVault.readAll(id, pin, p.pinVerifier);
+    const study = await protectedStudyVault.open(id, pin, p.pinVerifier);
+    const plain = JSON.stringify({ v: 1, project: clearSecurity(p), docs, study });
+    out.push(stub(p, await native().encryptPortableBackup(plain, portablePass(pin, id))));
+  }
+  return out;
+}
+
+/** First unlock of a project restored from a backup: move it from PIN-derived to on-phone keys. */
+async function adoptPortableProject(p: Project, pin: string): Promise<void> {
+  const api = native();
+  if (!p.pinVerifier || !await api.verifyChatPin(pin, p.pinVerifier)) throw new Error('Incorrect PIN.');
+  const payload = JSON.parse(await api.decryptPortableBackup(p.protectedBlob!, portablePass(pin, p.id)));
+  if (payload?.v !== 1 || payload.project?.id !== p.id) throw new Error('Protected project backup is damaged.');
+  if (Array.isArray(payload.docs) && payload.docs.length) await protectedVault.seal(p.id, pin, p.pinVerifier, payload.docs);
+  if (Array.isArray(payload.study) && payload.study.length) await protectedStudyVault.seal(p.id, pin, p.pinVerifier, payload.study);
+  const plain = JSON.stringify(clearSecurity(payload.project));
+  const blob = await api.encryptProtectedItem('project', p.id, plain, pin, p.pinVerifier);
+  await writeReplacement(p.id, stub(p, blob));
+  blobs.set(p.id, blob);
+}
+
 export async function unlockProject(id: string, pin: string): Promise<void> {
   await pending;
   const { useProjectStore } = require('./projectStore');
   const p: Project | undefined = useProjectStore.getState().projects.find((x: Project) => x.id === id);
   if (!p) throw new Error('Project not found.');
+  // A record restored from a backup wins over any cached on-phone ciphertext of an older copy.
+  if (isPortableProjectBlob(p.protectedBlob)) { blobs.delete(id); await adoptPortableProject(p, pin); }
   const original = await decryptProject(p, pin);
   pins.set(id, pin); lastEncrypted.set(id, JSON.stringify(clearSecurity(original)));
   try { await protectedVault.open(id, pin, p.pinVerifier!); }
@@ -223,7 +265,7 @@ export async function unlockProject(id: string, pin: string): Promise<void> {
   await unlockProjectChats(id, pin);
   await openProjectStudy(id, pin, p.pinVerifier!);
   useProjectStore.setState((s: any) => ({ projects: s.projects.map((x: Project) => x.id === id
-    ? { ...original, pinVerifier: p.pinVerifier, protectedBlob: p.protectedBlob } : x) }));
+    ? { ...original, pinVerifier: p.pinVerifier, protectedBlob: blobs.get(id) || p.protectedBlob } : x) }));
 }
 export async function permanentlyUnprotectProject(id: string, pin: string): Promise<void> {
   await pending;

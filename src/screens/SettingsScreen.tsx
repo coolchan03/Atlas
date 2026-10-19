@@ -328,7 +328,7 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.backupBackdrop}>
           <View style={styles.backupSheet}>
             <Text style={styles.backupTitle}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
-            <Text style={{ color: colors.textSecondary }}>Use a password of at least 12 characters and keep it safe. Encrypted backups include chats (PIN-locked chats stay locked), project knowledge-base files and searchable text (up to 25 MB of project files), agents and settings. Protected project vaults and downloaded models are excluded.</Text>
+            <Text style={{ color: colors.textSecondary }}>Use a password of at least 12 characters and keep it safe. Encrypted backups include chats (PIN-locked chats stay locked), project knowledge-base files and searchable text (up to 25 MB of project files), agents and settings. Protected projects are included only if they are unlocked when you back up: they stay sealed with their own PIN and open on a new phone with that PIN. Locked protected projects and downloaded models are not included. Restoring never deletes a protected project or locked chat that is only on this phone.</Text>
             <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={styles.backupInput} />
             <View style={styles.backupActions}>
               <TouchableOpacity disabled={backupBusy} onPress={() => { setBackupPassword(''); setBackupPasswordAction(null); }}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>

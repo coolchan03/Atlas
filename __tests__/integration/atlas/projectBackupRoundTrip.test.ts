@@ -78,3 +78,16 @@ describe('portable backup project file round trip', () => {
     expect(AsyncStorage.multiSet).not.toHaveBeenCalled();
   });
 });
+
+describe('restoring a backup on the same phone', () => {
+  it("keeps this phone's protected projects that the backup does not contain", async () => {
+    const { keepDeviceProtected } = require('../../../src/atlasTools/backup');
+    const onPhone = { id: 'therapy', name: 'Locked project', pinVerifier: 'pin:v1:1', protectedBlob: 'atlasitem:v1:abc' };
+    mockStore.set('local-llm-project-storage', JSON.stringify({ state: { projects: [onPhone, { id: 'old', name: 'Old' }] }, version: 0 }));
+    const fromBackup = JSON.stringify({ state: { projects: [{ id: 'school', name: 'School' }] }, version: 0 });
+    (AsyncStorage as any).getItem = jest.fn(async (k: string) => mockStore.get(k) ?? null);
+    const merged = JSON.parse(await keepDeviceProtected('local-llm-project-storage', fromBackup));
+    // The backup replaces ordinary projects, but never deletes a protected one that lives only here.
+    expect(merged.state.projects.map((p: any) => p.id)).toEqual(['school', 'therapy']);
+  });
+});
