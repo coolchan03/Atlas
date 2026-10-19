@@ -43,6 +43,14 @@ interface StudyState {
   remove: (projectId: string, createdAt: number) => void;
   update: (projectId: string, createdAt: number, patch: Partial<StudyResult>) => void;
 }
+function withoutProtectedProjects(saved: Record<string, StudyResult[]>): Record<string, StudyResult[]> {
+  const { useProjectStore } = require('../stores/projectStore');
+  const locked = new Set((useProjectStore.getState().projects as { id: string; pinVerifier?: string }[])
+    .filter((p) => p.pinVerifier).map((p) => p.id));
+  if (!locked.size) return saved;
+  return Object.fromEntries(Object.entries(saved).filter(([pid]) => !locked.has(pid)));
+}
+
 export const useStudyStore = create<StudyState>()(
   persist(
     (set) => ({
@@ -52,7 +60,12 @@ export const useStudyStore = create<StudyState>()(
       update: (pid, at, patch) => set((s) => ({ saved: { ...s.saved, [pid]: (s.saved[pid] || []).map((x) => (x.createdAt === at ? { ...x, ...patch } : x)) } })),
       remove: (pid, at) => set((s) => ({ saved: { ...s.saved, [pid]: (s.saved[pid] || []).filter((x) => x.createdAt !== at) } })),
     }),
-    { name: 'atlas-study', storage: createJSONStorage(() => AsyncStorage) },
+    {
+      name: 'atlas-study',
+      storage: createJSONStorage(() => AsyncStorage),
+      // A protected project's outputs live in its encrypted study vault, never in plain storage.
+      partialize: (s) => ({ saved: withoutProtectedProjects(s.saved) }),
+    },
   ),
 );
 

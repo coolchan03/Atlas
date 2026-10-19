@@ -27,7 +27,25 @@ jest.mock('../../../src/stores/encryptedChatStorage', () => ({
   unlockChat: (...args: any[]) => mockUnlockChat(...args),
   isChatUnlocked: (id: string) => mockUnlocked.has(id),
 }));
-jest.mock('../../../src/study/engine', () => ({ useStudyStore: { getState: () => fakeStudy } }));
+const mockStudyListeners = new Set<(s: any, prev: any) => void>();
+jest.mock('../../../src/study/engine', () => ({ useStudyStore: {
+  getState: () => fakeStudy,
+  setState: (fn: any) => {
+    const prev = { ...fakeStudy };
+    Object.assign(fakeStudy, typeof fn === 'function' ? fn(fakeStudy) : fn);
+    mockStudyListeners.forEach((l) => l(fakeStudy, prev));
+  },
+  subscribe: (l: any) => { mockStudyListeners.add(l); return () => mockStudyListeners.delete(l); },
+} }));
+const mockFiles = new Map<string, string>();
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/docs', CachesDirectoryPath: '/cache',
+  exists: jest.fn(async (p: string) => mockFiles.has(p)),
+  readFile: jest.fn(async (p: string) => { if (!mockFiles.has(p)) throw new Error('missing'); return mockFiles.get(p); }),
+  writeFile: jest.fn(async (p: string, d: string) => { mockFiles.set(p, d); }),
+  unlink: jest.fn(async (p: string) => { mockFiles.delete(p); }),
+  mkdir: jest.fn(async () => undefined),
+}));
 jest.mock('../../../src/services/rag', () => ({ ragService: {
   getDocumentsByProject: (...args: any[]) => mockDocuments(...args),
   exportProjectDocuments: async () => [],
@@ -44,7 +62,7 @@ const decode = (blob: string) => Buffer.from(blob.slice('atlasitem:v1:'.length),
 describe('selective protection for metadata-only projects', () => {
   const disk = new Map<string, string>();
   beforeEach(async () => {
-    disk.clear(); fakeProjects.projects = []; fakeProjects.isHydrated = true; fakeChats.conversations = []; fakeStudy.saved = {};
+    disk.clear(); mockFiles.clear(); fakeProjects.projects = []; fakeProjects.isHydrated = true; fakeChats.conversations = []; fakeStudy.saved = {};
     (Platform as any).OS = 'android';
     mockDocuments.mockReset().mockResolvedValue([]);
     mockProtectChat.mockReset().mockResolvedValue(undefined); mockUnlockChat.mockReset().mockResolvedValue(undefined); mockUnlocked.clear();
@@ -128,12 +146,43 @@ describe('selective protection for metadata-only projects', () => {
       sealSpy.mockRestore();
     }
   });
-  it('refuses projects with saved study outputs (not yet encryptable with the project)', async () => {
+  it('moves study outputs into an encrypted file, out of plain storage and memory', async () => {
     fakeProjects.projects = [project('secret')];
     await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
-    fakeStudy.saved.secret = [{ title: 'Quiz' }];
-    await expect(protectProject('secret', '123456')).rejects.toThrow(/study outputs/);
-    expect(mockProtectChat).not.toHaveBeenCalled();
+    fakeStudy.saved.secret = [{ title: 'Private quiz', createdAt: 1 }];
+    fakeStudy.saved.other = [{ title: 'Public guide', createdAt: 2 }];
+    await protectProject('secret', '123456');
+    const file = [...mockFiles.entries()].find(([k]) => k.endsWith('secret.study'));
+    expect(file).toBeDefined();
+    expect(file![1].startsWith('atlasitem:v1:')).toBe(true);
+    expect(decode(file![1])).toContain('Private quiz');
+    expect(fakeStudy.saved.secret).toBeUndefined();
+    expect(fakeStudy.saved.other).toHaveLength(1);
+  });
+  it('opens study outputs on unlock, re-encrypts changes, and drops them on re-lock', async () => {
+    fakeProjects.projects = [project('secret')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    fakeStudy.saved.secret = [{ title: 'Private quiz', createdAt: 1 }];
+    await protectProject('secret', '123456');
+    await unlockProject('secret', '123456');
+    expect(fakeStudy.saved.secret).toEqual([{ title: 'Private quiz', createdAt: 1 }]);
+    const { useStudyStore } = require('../../../src/study/engine');
+    useStudyStore.setState((st: any) => ({ saved: { ...st.saved, secret: [...st.saved.secret, { title: 'New game', createdAt: 3 }] } }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const file = [...mockFiles.entries()].find(([k]) => k.endsWith('secret.study'))!;
+    expect(decode(file[1])).toContain('New game');
+    await relockProjects();
+    expect(fakeStudy.saved.secret).toBeUndefined();
+  });
+  it('permanently unprotecting returns study outputs to ordinary storage', async () => {
+    fakeProjects.projects = [project('secret')];
+    await protectedProjectStorage.setItem(KEY, snapshot(fakeProjects.projects));
+    fakeStudy.saved.secret = [{ title: 'Private quiz', createdAt: 1 }];
+    await protectProject('secret', '123456');
+    await permanentlyUnprotectProject('secret', '123456');
+    expect(fakeStudy.saved.secret).toEqual([{ title: 'Private quiz', createdAt: 1 }]);
+    expect([...mockFiles.keys()].some((k) => k.endsWith('secret.study'))).toBe(false);
   });
   it("encrypts the project's existing chats with the project PIN before locking it", async () => {
     fakeProjects.projects = [project('therapy')];
