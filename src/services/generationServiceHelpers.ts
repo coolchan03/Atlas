@@ -354,9 +354,7 @@ export async function generateResponseImpl(
         if (chunk.reasoningContent) {
           svc.reasoningBuffer += chunk.reasoningContent;
         }
-        if (!svc.flushTimer) {
-          svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
-        }
+        if (!svc.flushTimer) svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
       },
       onComplete: (result) => {
         // If aborted, stopGeneration() already handled cleanup — don't clobber new generation state.
