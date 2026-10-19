@@ -35,3 +35,34 @@ it('never seals a temporary private chat (it is not saved at all)', () => {
   useChatStore.getState().createConversation('m', 'Temp', 'therapy', true);
   expect(mockSeal).not.toHaveBeenCalled();
 });
+
+describe('moving an existing chat into a protected project', () => {
+  const existing = (over: any = {}) => ({ id: 'old', title: 'Notes', modelId: 'm', messages: [], createdAt: 'x', updatedAt: 'x', ...over });
+
+  it('is refused while the project is locked', () => {
+    useChatStore.setState({ conversations: [existing() as any] });
+    expect(() => useChatStore.getState().setConversationProject('old', 'therapy')).toThrow(/Unlock this protected project/);
+    expect(useChatStore.getState().conversations[0].projectId).toBeUndefined();
+  });
+
+  it('moves and seals the chat with the project PIN while unlocked', () => {
+    mockUnlockedProjects.add('therapy');
+    useChatStore.setState({ conversations: [existing() as any] });
+    useChatStore.getState().setConversationProject('old', 'therapy');
+    expect(useChatStore.getState().conversations[0].projectId).toBe('therapy');
+    expect(mockSeal).toHaveBeenCalledWith('old', 'therapy');
+  });
+
+  it('keeps a chat that already has its own PIN sealed under that PIN', () => {
+    mockUnlockedProjects.add('therapy');
+    useChatStore.setState({ conversations: [existing({ pinVerifier: 'own', protectedBlob: 'atlasitem:v1:c2VhbGVk' }) as any] });
+    useChatStore.getState().setConversationProject('old', 'therapy');
+    expect(mockSeal).not.toHaveBeenCalled();
+  });
+
+  it('refuses a temporary private chat', () => {
+    mockUnlockedProjects.add('therapy');
+    useChatStore.setState({ conversations: [existing({ isPrivate: true }) as any] });
+    expect(() => useChatStore.getState().setConversationProject('old', 'therapy')).toThrow(/Temporary private chats/);
+  });
+});

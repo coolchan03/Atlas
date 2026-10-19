@@ -746,5 +746,9 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
 }
 export type SelectProjectDeps = { activeConversationId: string | null | undefined; setConversationProject: (convId: string, projectId: string | null) => void; setShowProjectSelector: SetState<boolean> };
 export function handleSelectProjectFn(deps: SelectProjectDeps, project: Project | null): void {
-  if (deps.activeConversationId) deps.setConversationProject(deps.activeConversationId, project?.id || null);
+  try {
+    if (deps.activeConversationId) deps.setConversationProject(deps.activeConversationId, project?.id || null);
+  } catch (e) {
+    logger.warn('[Chat] could not move chat to project:', e instanceof Error ? e.message : e);
+  }
   deps.setShowProjectSelector(false); }

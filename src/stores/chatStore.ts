@@ -221,9 +221,12 @@ export const useChatStore = create<ChatState>()(
       },
 
       setConversationProject: (conversationId, projectId) => {
-        if (projectId && require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier) {
-          throw new Error('Protected projects cannot accept unencrypted chats. Permanently unprotect the project first.');
+        const into = !!projectId && !!require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier;
+        const conv = get().conversations.find((c) => c.id === conversationId);
+        if (into && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {
+          throw new Error('Unlock this protected project to move a chat into it.');
         }
+        if (into && conv?.isPrivate) throw new Error('Temporary private chats are not saved, so they cannot join a protected project.');
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id !== conversationId
@@ -231,6 +234,9 @@ export const useChatStore = create<ChatState>()(
               : { ...conv, projectId: projectId || undefined, updatedAt: nextUpdatedAt(conv.updatedAt) }
           ),
         }));
+        // Joining a protected project: seal the chat with the project's PIN (a chat that already
+        // has its own PIN keeps it).
+        if (into && !conv?.pinVerifier) require('./protectedProjectStorage').sealNewProjectChat(conversationId, projectId);
       },
 
       unfileConversationsForProject: (projectId) => {
