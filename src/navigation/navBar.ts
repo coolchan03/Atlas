@@ -29,7 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: 'settings', route: 'SettingsTab', description: 'Always shown, so you can always change this' },
   { id: 'emergency', label: 'Emergency', icon: 'alert-triangle', route: 'EmergencyTab', target: 'Emergency', description: 'Emergency mode' },
   { id: 'library', label: 'Library', icon: 'book-open', route: 'LibraryTab', target: 'OfflineLibrary', description: 'Offline library' },
-  { id: 'brief', label: 'Daily brief', icon: 'sun', route: 'BriefTab', target: 'DailyBrief', description: 'Daily briefing' },
+  { id: 'brief', label: 'Daily brief', icon: 'sun', route: 'BriefTab', description: 'Daily briefing' },
   { id: 'compass', label: 'Compass', icon: 'compass', route: 'CompassTab', target: 'Compass', description: 'Compass' },
   { id: 'phrases', label: 'Phrases', icon: 'globe', route: 'PhrasesTab', target: 'Phrases', description: 'Phrase trainer' },
   { id: 'survival', label: 'Manual', icon: 'life-buoy', route: 'SurvivalTab', target: 'SurvivalManual', description: 'Survival manual' },

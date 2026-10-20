@@ -1,4 +1,4 @@
-import { sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity } from '../../../src/atlasTools/newsSources';
+import { sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity, linesPerStory, onTopic, spokenMinutes } from '../../../src/atlasTools/newsSources';
 import { parseRss } from '../../../src/atlasTools/dailyBrief';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
@@ -63,6 +63,24 @@ describe('daily briefing news sources', () => {
     expect(picked.map(p => p.headline.title)).toEqual(['us1', 'w1', 'b1', 'us2', 'b2']);
     expect(storyBudget(1)).toBe(3);
     expect(storyBudget(5)).toBe(5);
-    expect(storyBudget(30)).toBe(10);
+    expect(storyBudget(10, false)).toBe(19);
+    expect(storyBudget(30)).toBe(20);
+  });
+
+  it('sizes the script to the length the user picked', () => {
+    // 10 minutes over 10 stories: about 150 words each, about 8 lines of 20 words.
+    expect(linesPerStory(10, 10)).toBe(8);
+    expect(linesPerStory(15, 3)).toBe(12);
+    expect(spokenMinutes(Array(75).fill('word '.repeat(20)))).toBe(10);
+  });
+
+  it('keeps sports and celebrity stories out of U.S. and world news unless asked for, and search results on topic', () => {
+    const h = (title: string) => ({ title, desc: '' });
+    const section = [h('Senate passes the budget bill'), h('Yankees beat Red Sox in MLB opener'), h('Storm closes highways in Texas')];
+    expect(onTopic(section, { interest: 'United States', interests: ['United States', 'international news'], fromSection: true }).map(x => x.title))
+      .toEqual(['Senate passes the budget bill', 'Storm closes highways in Texas']);
+    expect(onTopic(section, { interest: 'United States', interests: ['United States', 'sports'], fromSection: true })).toHaveLength(3);
+    const search = [h('Chicago Bears sign new quarterback'), h('Stock market closes higher')];
+    expect(onTopic(search, { interest: 'Chicago Bears', interests: ['Chicago Bears'], fromSection: false }).map(x => x.title)).toEqual(['Chicago Bears sign new quarterback']);
   });
 });

@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Source, StudyResult, useStudyStore, writeEpisode } from '../study/engine';
-import { cleanHeadlines, feedsFor, isPromotional, pickStories, similarity, splitOutlet, storyBudget, type Headline } from './newsSources';
+import { cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, pickStories, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
 
@@ -74,12 +74,13 @@ export function parseRss(xml: string): Headline[] {
   return out;
 }
 
-/** Fresh real headlines for one interest, from the first feed that has any (see newsSources). */
-async function headlines(topic: string, seen: string[]): Promise<Headline[]> {
+/** Fresh real headlines that fit one interest, from the first feed that has any (see newsSources). */
+async function headlines({ topic, interests, seen, want }: { topic: string; interests: string[]; seen: string[]; want: number }): Promise<Headline[]> {
   for (const f of feedsFor(topic)) {
     try {
-      const items = cleanHeadlines(parseRss(await fetchText(f)), Date.now(), seen);
-      if (items.length) return items.slice(0, 6);
+      const fromSection = f.includes('/headlines/section/');
+      const items = onTopic(cleanHeadlines(parseRss(await fetchText(f)), Date.now(), seen), { interest: topic, interests, fromSection });
+      if (items.length) return items.slice(0, Math.max(6, want));
     } catch { /* try the next feed */ }
   }
   return [];
@@ -161,16 +162,18 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
 
   // 1. Real headlines for each interest (top-story sections for broad ones), no ads or press releases.
   const perInterest: Headline[][] = [];
+  const budget = storyBudget(p.minutes, p.deep);
   if (!offline) {
     const seen: string[] = [];
-    for (const topic of interests.slice(0, 8)) {
+    const topics = interests.slice(0, 8);
+    for (const topic of topics) {
       onStep(`Checking news: ${topic}...`);
-      const hs = await headlines(topic, seen);
+      const hs = await headlines({ topic, interests, seen, want: Math.ceil(budget / topics.length) + 1 });
       perInterest.push(hs);
       hs.forEach((h) => seen.push(h.title));
     }
   }
-  const stories = pickStories(perInterest, storyBudget(p.minutes));
+  const stories = pickStories(perInterest, budget);
 
   // 2. One part per story, written only from that story's own sources.
   const outline: OutlineItem[] = [];
@@ -203,7 +206,10 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     research: false,
     funFacts: false,
     outline,
+    // Enough lines per story that the stories add up to the length the user picked.
+    linesPerItem: linesPerStory(p.minutes, Math.max(1, outline.length)),
   }, onStep);
+  r.minutes = Math.max(1, Math.round(spokenMinutes((r.podcast ?? []).map((l) => l.text))));
   r.headlines = stories.map(({ interest, headline: h }, i) => ({
     title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,
   }));

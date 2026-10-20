@@ -84,8 +84,52 @@ export function cleanHeadlines(items: Headline[], now = Date.now(), seen: string
   return out.sort((a, b) => (b.date || 0) - (a.date || 0));
 }
 
-/** About one story a minute, at least three and at most ten. */
-export const storyBudget = (minutes: number) => Math.max(3, Math.min(10, Math.round(minutes)));
+/** Spoken words per minute used to size the briefing to the chosen length. */
+export const WORDS_PER_MINUTE = 150;
+
+/**
+ * How many stories fill the chosen length: a story read in full carries about a minute of
+ * speech, a headline with a short summary about half that. At least three, at most twenty.
+ */
+export const storyBudget = (minutes: number, deep = true) =>
+  Math.max(3, Math.min(20, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 150 : 80))));
+
+/** Script lines per story (about 20 spoken words each) so the stories add up to the chosen length. */
+export const linesPerStory = (minutes: number, stories: number) =>
+  Math.max(3, Math.min(12, Math.round((minutes * WORDS_PER_MINUTE) / Math.max(1, stories) / 20)));
+
+/** Estimated listening time of a script, in minutes. */
+export const spokenMinutes = (texts: string[]) =>
+  texts.reduce((n, t) => n + t.split(/\s+/).filter(Boolean).length, 0) / WORDS_PER_MINUTE;
+
+const SPORTS = /\b(nfl|nba|wnba|mlb|nhl|mls|ncaa|playoffs?|quarterback|touchdown|home runs?|innings?|world series|super bowl|stanley cup|grand slam|wimbledon|premier league|champions league|head coach|draft picks?|halftime|game \d|series opener|season opener|transfer window|formula 1|f1|nascar|ufc|olympics?|world cup|golf|tennis|soccer|football|baseball|basketball|hockey|athletes?|pitcher|striker|linebacker)\b/i;
+const ENTERTAINMENT = /\b(box office|celebrit(y|ies)|album|grammys?|oscars?|emmys?|netflix|trailer|red carpet|reality tv|kardashians?|taylor swift|concert tour|movie review|tv series|streaming hit)\b/i;
+const CATEGORY: Record<'SPORTS' | 'ENTERTAINMENT', RegExp> = { SPORTS, ENTERTAINMENT };
+
+/**
+ * Broad sections such as U.S. or world news mix in sports and celebrity stories. Those are
+ * dropped unless one of the user's interests is about them (a section or a matching name).
+ */
+export function unwantedCategory(h: Pick<Headline, 'title' | 'desc'>, interests: string[]): boolean {
+  const text = `${h.title} ${h.desc.slice(0, 200)}`;
+  return (Object.keys(CATEGORY) as (keyof typeof CATEGORY)[]).some((cat) =>
+    CATEGORY[cat].test(text) && !interests.some((i) => sectionFor(i) === cat || CATEGORY[cat].test(i)));
+}
+
+const STOP = new Set(['the', 'and', 'news', 'about', 'with', 'from', 'latest', 'today', 'update', 'updates', 'stories']);
+
+/** A search result really is about the interest: it names at least one of its words. */
+export function mentions(h: Pick<Headline, 'title' | 'desc'>, interest: string): boolean {
+  const keys = interest.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
+  if (!keys.length) return true;
+  const text = `${h.title} ${h.desc}`.toLowerCase();
+  return keys.some((k) => text.includes(k.length > 4 ? k.slice(0, -1) : k));
+}
+
+/** Keeps only stories that fit this interest: no stray sports or celebrity items in sections, and on-topic search results. */
+export function onTopic(items: Headline[], { interest, interests, fromSection }: { interest: string; interests: string[]; fromSection: boolean }): Headline[] {
+  return items.filter((h) => (fromSection ? !unwantedCategory(h, interests) : mentions(h, interest)));
+}
 
 /** Spreads the story budget over the interests in turn, so every interest is covered. */
 export function pickStories(perInterest: Headline[][], budget: number): { interest: number; headline: Headline }[] {

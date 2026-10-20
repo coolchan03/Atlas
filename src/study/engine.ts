@@ -35,6 +35,8 @@ export interface StudyResult {
   wordSearch?: WordSearch;
   /** Daily briefing: the real headlines it was written from (outlet, link, time). */
   headlines?: { title: string; source?: string; url?: string; date?: number; interest?: string }[];
+  /** Estimated listening time of a podcast script, in minutes. */
+  minutes?: number;
   /** Project learning game payload (kind === 'game'), see src/study/games. */
   game?: { type: string; data: any };
 }
@@ -326,6 +328,8 @@ export interface PodcastOptions {
    * the model does not fill gaps with invented detail.
    */
   outline?: { topic: string; sources: Source[] }[];
+  /** Outline mode: script lines to aim for per item, to reach the chosen length. */
+  linesPerItem?: number;
   /** Fresh sources for one part's topic. Long episodes use it so each part draws on different passages. */
   sourcesFor?: (topic: string) => Promise<Source[]>;
 }
@@ -452,7 +456,8 @@ async function writeOutlinedEpisode(
         : i === outline.length - 1 ? 'This is the LAST item: cover it, then a one-line wrap-up and goodbye.'
           : 'Move on to this item with a short natural transition.';
     const recap = lines.slice(-3).map((l) => `${l.host}: ${l.text}`).join('\n');
-    const n = outlineLines(part.sources);
+    // Never more lines than the source can fill (no padding), but as many as the chosen length needs.
+    const n = opts.linesPerItem ? Math.min(opts.linesPerItem, Math.max(3, Math.round(part.sources.reduce((k, x) => k + x.text.length, 0) / 110))) : outlineLines(part.sources);
     const t = await ask(
       'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. If the source gives few details, keep it short instead of filling in. Never mention source numbers.',
       `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${cfg.cast}.\nThis item: ${part.topic}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write at most ${n} lines (each 1-2 sentences), exactly in this format:\n${cfg.fmt}`,

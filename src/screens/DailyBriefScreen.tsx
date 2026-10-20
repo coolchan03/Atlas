@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button, Card } from '../components';
@@ -49,6 +49,8 @@ function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
 /** A short spoken news show about your interests, made from real headlines of the day. */
 export const DailyBriefScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  // On the bottom bar it is a tab page (no back arrow); from the Atlas hub it is a pushed page.
+  const asTab = useRoute().name === 'BriefTab';
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const wide = useWideLayout();
@@ -75,15 +77,17 @@ export const DailyBriefScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Back">
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </TouchableOpacity>
+        {!asTab && (
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Back">
+            <Icon name="arrow-left" size={20} color={colors.text} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.title}>Daily briefing</Text>
       </View>
       <ScrollView contentContainerStyle={[styles.content, wide.column]} keyboardShouldPersistTaps="handled">
         <Card
           title={today ? today.title : "Today's news, read to you"}
-          subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+          subtitle={[new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), today?.minutes && `about ${today.minutes} min`].filter(Boolean).join(' · ')}
           testID="brief-today-card"
         >
           {!today && (
@@ -194,7 +198,7 @@ export const DailyBriefScreen: React.FC = () => {
                 <Icon name="radio" size={18} color={colors.primary} />
                 <View style={styles.headlineText}>
                   <Text style={styles.body}>{r.title}</Text>
-                  <Text style={styles.meta}>{new Date(r.createdAt).toLocaleString()}</Text>
+                  <Text style={styles.meta}>{[new Date(r.createdAt).toLocaleString(), r.minutes && `about ${r.minutes} min`].filter(Boolean).join(' · ')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => remove(BRIEF_PROJECT, r.createdAt)} accessibilityLabel="Delete briefing">
                   <Icon name="trash-2" size={16} color={colors.textMuted} />

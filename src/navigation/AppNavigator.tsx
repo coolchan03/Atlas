@@ -131,6 +131,8 @@ const EmptyTabPage: React.FC = () => null;
 
 const TAB_PAGES: Partial<Record<NavItemId, React.ComponentType<any>>> = {
   home: AdaptiveHomeScreen, chats: ChatsListScreen, workspace: WorkspaceScreen, models: ModelsScreen, settings: SettingsScreen,
+  // The briefing is a page of its own on the bar, like Chats, not a screen laid over the app.
+  brief: DailyBriefScreen,
 };
 const TAB_TEST_IDS: Record<string, string> = {
   HomeTab: 'home-tab', ChatsTab: 'chats-tab', ProjectsTab: 'projects-tab', ModelsTab: 'models-tab', SettingsTab: 'settings-tab',
