@@ -47,13 +47,14 @@ export function parseUnitLesson(raw: string, level: LevelGuide, code: string): {
 }
 
 /** Stories and podcasts at the learner's level, built around words they know. */
-export function listeningPrompt(o: { kind: 'story' | 'podcast'; language: string; level: LevelGuide; topic: string; known: string[] }): Msg[] {
-  const { kind, language, level, topic, known } = o;
+export function listeningPrompt(o: { kind: 'story' | 'podcast'; language: string; level: LevelGuide; topic: string; known: string[]; outline?: string }): Msg[] {
+  const { kind, language, level, topic, known, outline } = o;
+  const follow = outline ? `Tell this, in simple words for the learner's level, keeping what happens: ${outline}\n` : '';
   const shape = kind === 'story'
     ? '{"title": "...", "parts": [{"lines": [{"t": "two or three sentences in TARGET", "en": "English"}], "question": {"q": "a question in English about this part", "options": ["...", "...", "..."], "answer": 0}}], "vocab": [{"t": "word in TARGET", "en": "meaning"}]}'
     : '{"title": "...", "parts": [{"lines": [{"speaker": "Ana", "t": "one sentence in TARGET", "en": "English"}, {"speaker": "Leo", "t": "...", "en": "..."}], "question": {"q": "a question in English", "options": ["...", "...", "..."], "answer": 1}}], "vocab": [{"t": "word in TARGET", "en": "meaning"}]}';
   return msgs(
     `You write ${language} listening and reading practice. ${methodFor(level, language)}`,
-    `Write a ${kind === 'story' ? 'short story' : 'short podcast conversation between two friends, Ana and Leo,'} in ${language}${topic.trim() ? ` about ${topic.trim()}` : ''}, in ${storyParts(level)} parts.\n${known.length ? `The learner knows these words; use them often: ${known.slice(0, 80).join(', ')}.\n` : ''}After each part ask one question that checks understanding. Then list up to 10 words from it that are NOT in the known list, with their English meaning.\nReply with ONLY JSON like this (TARGET = ${language}):\n${shape}`,
+    `Write a ${kind === 'story' ? 'short story' : 'short podcast conversation between two friends, Ana and Leo,'} in ${language}${topic.trim() ? ` about ${topic.trim()}` : ''}, in ${storyParts(level)} parts.\n${follow}${known.length ? `The learner knows these words; use them often: ${known.slice(0, 80).join(', ')}.\n` : ''}After each part ask one question that checks understanding. Then list up to 10 words from it that are NOT in the known list, with their English meaning.\nReply with ONLY JSON like this (TARGET = ${language}):\n${shape}`,
   );
 }

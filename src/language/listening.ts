@@ -8,7 +8,11 @@ export interface Line { speaker?: string; t: string; en: string }
 export interface Question { q: string; options: string[]; answer: number }
 export interface Part { lines: Line[]; question?: Question }
 export interface Word { t: string; en: string }
-export interface Listening { kind: 'story' | 'podcast'; title: string; parts: Part[]; vocab: Word[]; createdAt: number }
+export interface Listening {
+  kind: 'story' | 'podcast'; title: string; parts: Part[]; vocab: Word[]; createdAt: number;
+  /** The pre-made piece this is (library.ts), if it is one. */
+  pieceId?: string;
+}
 
 const plain = (w: string) => w.toLowerCase().replace(/[.!?¡¿,;:"«»]/g, '').trim();
 

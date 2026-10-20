@@ -86,6 +86,10 @@ async function headlines({ topic, interests, seen, want }: { topic: string; inte
   return [];
 }
 
+/** A few of today's real headlines on a topic (for the language course's news square). */
+export const latestHeadlines = (topic: string, want: number): Promise<Headline[]> =>
+  headlines({ topic, interests: [topic], seen: [], want }).then((h) => h.slice(0, want));
+
 /**
  * More detail for one story: the same story in Bing News (a summary and a direct link, since
  * Google News links are redirects), then optionally the article itself.

@@ -10,6 +10,8 @@ import { UNITS, unitById, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
 import { starsFor, type Item } from './lessons';
 import { knownSet, newWords, parseListening, type Listening, type Word } from './listening';
+import { REAL_NEWS, pieceById } from './library';
+import { writtenPiece } from './libraryEs';
 import { dueItems, remember } from './review';
 import { useLanguage, type SavedLesson } from './store';
 import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
@@ -86,6 +88,28 @@ function syncProject(): void {
     ...(isGeneratedTutorPrompt(project.systemPrompt) ? { systemPrompt: tutorPrompt(langName(code), level) } : {}),
     ...(autoDescription ? { description: languageProjectDescription(langName(code)) } : {}),
   });
+}
+
+function keepListening(code: string, piece: Listening): void {
+  useLanguage.setState((s) => ({
+    listening: { ...s.listening, [code]: [piece, ...(s.listening[code] ?? []).filter((l) => !piece.pieceId || l.pieceId !== piece.pieceId)].slice(0, 60) },
+  }));
+}
+
+async function writeListening(o: { kind: Listening['kind']; topic: string; outline?: string; pieceId?: string }, onStep: (m: string) => void): Promise<Listening> {
+  const { language: code, level } = useLanguage.getState();
+  const name = langName(code);
+  onStep('Loading the language model...');
+  const llm = await model();
+  const known = languageService.knownItems(code);
+  onStep(o.kind === 'story' ? `Writing a story in ${name}...` : `Writing a podcast in ${name}...`);
+  const raw: string = await llm.generateResponse(
+    listeningPrompt({ kind: o.kind, language: name, level: levelGuide(level), topic: o.topic, known: known.map((x) => x.t), outline: o.outline }), { disableThinking: true });
+  const parsed = parseListening(raw, o.kind, knownSet(known));
+  if (!parsed) throw new Error('The model did not write it in the expected format. Try again, or use a bigger model.');
+  const piece: Listening = o.pieceId ? { ...parsed, pieceId: o.pieceId } : parsed;
+  keepListening(code, piece);
+  return piece;
 }
 
 export const languageService = {
@@ -262,19 +286,37 @@ export const languageService = {
   },
 
   /** Writes a story or two-person podcast at the learner's level, with questions and its new words. Kept, newest first. */
-  async makeListening(kind: Listening['kind'], topic: string, onStep: (m: string) => void = () => undefined): Promise<Listening> {
-    const { language: code, level } = useLanguage.getState();
-    const name = langName(code);
-    onStep('Loading the language model...');
-    const llm = await model();
-    const known = languageService.knownItems(code);
-    onStep(kind === 'story' ? `Writing a story in ${name}...` : `Writing a podcast in ${name}...`);
-    const raw: string = await llm.generateResponse(
-      listeningPrompt({ kind, language: name, level: levelGuide(level), topic, known: known.map((x) => x.t) }), { disableThinking: true });
-    const piece = parseListening(raw, kind, knownSet(known));
-    if (!piece) throw new Error('The model did not write it in the expected format. Try again, or use a bigger model.');
-    useLanguage.setState((s) => ({ listening: { ...s.listening, [code]: [piece, ...(s.listening[code] ?? [])].slice(0, 20) } }));
-    return piece;
+  makeListening(kind: Listening['kind'], topic: string, onStep: (m: string) => void = () => undefined): Promise<Listening> {
+    return writeListening({ kind, topic }, onStep);
+  },
+
+  /**
+   * A pre-made story or podcast (library.ts): kept from last time, written out on the phone
+   * (Spanish), or written once by the AI from its outline. Real news is fetched and written
+   * fresh each day.
+   */
+  async openPremade(id: string, onStep: (m: string) => void = () => undefined): Promise<Listening> {
+    const premade = pieceById(id);
+    if (!premade) throw new Error('That piece is not in the library.');
+    const code = useLanguage.getState().language;
+    const pieceId = id === REAL_NEWS ? `${REAL_NEWS}@${new Date().toDateString()}` : id;
+    const kept = useLanguage.getState().listening[code]?.find((l) => l.pieceId === pieceId);
+    if (kept) return kept;
+    const written = writtenPiece(id, code);
+    if (written) {
+      const piece: Listening = { ...written, vocab: newWords(written.vocab, knownSet(languageService.knownItems(code))), createdAt: Date.now(), pieceId };
+      keepListening(code, piece);
+      return piece;
+    }
+    let outline = premade.outline;
+    if (id === REAL_NEWS) {
+      onStep('Getting today\'s headlines...');
+      const { latestHeadlines } = require('../atlasTools/dailyBrief');
+      const heads: { title: string }[] = await latestHeadlines('world', 4).catch(() => []);
+      if (!heads.length) throw new Error('No headlines right now. Check the internet connection, or pick made-up or historical news.');
+      outline = `A short news bulletin read by two presenters, Ana and Leo, about these real headlines from today, one per part: ${heads.map((h) => h.title).join(' | ')}`;
+    }
+    return writeListening({ kind: premade.kind, topic: '', outline, pieceId }, onStep);
   },
 
   /** Saves words to My words (skips ones already there or already known). */
