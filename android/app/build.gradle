@@ -214,6 +214,12 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Atlas: unpacking voice files the user imports (.tar.bz2 from sherpa-onnx, .zip)
     implementation("org.apache.commons:commons-compress:1.27.1")
+    // In-app QR scanner for offline device pairing: CameraX plus ML Kit's bundled QR model
+    // (works offline; no Google Play services download).
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.13")
