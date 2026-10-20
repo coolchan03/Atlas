@@ -300,3 +300,18 @@ class NearbySyncService {
   }
 }
 export const nearbySync = new NearbySyncService();
+
+/** True when this build has the in-app QR scanner (Android). */
+export const qrScanAvailable = Platform.OS === 'android' && Boolean(NativeModules.AtlasQrScanner);
+
+/**
+ * Opens the in-app camera to read the other phone's pairing code. Resolves the pairing link,
+ * or null when the person closed the camera. Only Atlas pairing codes are accepted.
+ */
+export async function scanPairingCode(): Promise<string | null> {
+  if (!qrScanAvailable) throw new Error('The QR scanner needs the updated Android build.');
+  const { PermissionsAndroid } = require('react-native');
+  const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+  if (granted !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission is needed to scan the code.');
+  return NativeModules.AtlasQrScanner.scan('atlas://sync?', 'Point the camera at the QR code on the other device');
+}
