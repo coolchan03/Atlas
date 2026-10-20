@@ -22,6 +22,7 @@ import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { isTextDocument } from '../services/rag/textDocument';
+import { LanguageCourseCard } from '../language/LanguageCourseCard';
 import { ProjectPinGate } from '../components/ProjectPinGate';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -167,6 +168,8 @@ export const ProjectDetailScreen: React.FC = () => {
           <Icon name="edit-2" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
+
+      {project.course === 'language' && <LanguageCourseCard />}
 
       {/* Atlas: NotebookLM-style study tools for this project's documents */}
       <TouchableOpacity

@@ -6,6 +6,14 @@ import { generateId } from '../utils/generateId';
 import { ragService } from '../services/rag';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
+import { LANGUAGE_PROJECT_ID, LANGUAGE_PROJECT_NAME, languageProjectDescription, tutorPrompt } from '../language/tutor';
+
+/** Earlier versions shipped this as "Spanish Learning"; it becomes the Learn a language course project. */
+function upgradeLanguageProject(p: Project): Project {
+  if (p.id !== LANGUAGE_PROJECT_ID || p.course) return p;
+  const untouched = p.name === 'Spanish Learning';
+  return { ...p, course: 'language', ...(untouched ? { name: LANGUAGE_PROJECT_NAME, description: languageProjectDescription('Spanish') } : {}) };
+}
 
 interface ProjectState {
   projects: Project[];
@@ -30,18 +38,11 @@ const DEFAULT_PROJECTS: Project[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'spanish-learning',
-    name: 'Spanish Learning',
-    description: 'Practice Spanish conversation and get corrections',
-    systemPrompt: `You are a patient Spanish tutor. Help the user practice their Spanish conversation skills.
-
-Guidelines:
-- Respond in Spanish, but provide English translations in parentheses for difficult words
-- Gently correct any grammar or vocabulary mistakes the user makes
-- Explain corrections briefly
-- Adjust your complexity based on the user's apparent level
-- Encourage the user and make learning fun
-- When the user writes in English, respond in Spanish and encourage them to try in Spanish`,
+    id: LANGUAGE_PROJECT_ID,
+    name: LANGUAGE_PROJECT_NAME,
+    description: languageProjectDescription('Spanish'),
+    systemPrompt: tutorPrompt('Spanish'),
+    course: 'language',
     icon: '#F59E0B', // Amber
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -161,6 +162,11 @@ export const useProjectStore = create<ProjectState>()(
     {
       name: 'local-llm-project-storage',
       storage: createJSONStorage(() => protectedProjectStorage),
+      merge: (saved: any, current) => ({
+        ...current,
+        ...saved,
+        projects: Array.isArray(saved?.projects) ? saved.projects.map(upgradeLanguageProject) : current.projects,
+      }),
     }
   )
 );

@@ -378,6 +378,8 @@ export interface Project {
   allowGames?: boolean;
   allowQuizzes?: boolean;
   allowPodcasts?: boolean;
+  /** A built-in course shown on the project page (the Learn a language project). */
+  course?: 'language';
   id: string;
   name: string;
   description: string;

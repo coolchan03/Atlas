@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
 import { unitById } from './curriculum';
-import { LANGUAGES, languageService } from './languageService';
+import { LANGUAGES, MY_WORDS, languageService } from './languageService';
 import { buildLesson, sameAnswer, type Exercise } from './lessons';
 import { useLanguage } from './store';
 import { ExerciseView, type Attempt } from './Exercises';
@@ -22,7 +22,7 @@ export const LessonScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const code = useLanguage((s) => s.language);
   const langName = LANGUAGES.find((l) => l.code === code)?.name ?? code;
-  const unit = unitById(unitId)!;
+  const title = unitId === MY_WORDS ? 'My words' : unitById(unitId)?.title ?? 'Lesson';
   const [exercises, setExercises] = useState<Exercise[] | null>(null);
   const [step, setStep] = useState('Getting the words ready...');
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export const LessonScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center} testID="lesson-done">
-          <Text style={styles.big}>{unit.title} done</Text>
+          <Text style={styles.big}>{title} done</Text>
           <View style={styles.starsRow}>{[1, 2, 3].map((n) => <Icon key={n} name="star" size={36} color={n <= result.stars ? colors.primary : colors.border} />)}</View>
           <Text style={styles.feedback}>{right} of {exercises.length} right · +{result.xp} XP · {result.streak} day streak</Text>
           <Button title="Back to the board" onPress={() => navigation.goBack()} testID="lesson-back" />

@@ -68,6 +68,7 @@ import { RecorderScreen } from '../atlasRecorder/RecorderScreen';
 import { RecordingDetailScreen } from '../atlasRecorder/RecordingDetailScreen';
 import { LanguageScreen } from '../language/LanguageScreen';
 import { LessonScreen } from '../language/LessonScreen';
+import { ListeningScreen } from '../language/ListeningScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -298,6 +299,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="RecordingDetail" component={RecordingDetailScreen} />
         <RootStack.Screen name="Language" component={LanguageScreen} />
         <RootStack.Screen name="Lesson" component={LessonScreen} />
+        <RootStack.Screen name="Listening" component={ListeningScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />

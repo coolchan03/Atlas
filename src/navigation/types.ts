@@ -28,6 +28,7 @@ export type RootStackParamList = {
   Recorder: undefined;
   Language: undefined;
   Lesson: { unitId: string };
+  Listening: { kind: 'story' | 'podcast'; at?: number };
   RecordingDetail: { id: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack

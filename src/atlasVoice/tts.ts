@@ -99,6 +99,15 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
 
 /** Speak and wait until finished (resolves false if stopped). Optional pitch / voice for podcast hosts. */
 export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', voice = ''): Promise<boolean> {
+  return speakWait({ text, pitch, messageId, voice, lang: 'en-US' });
+}
+
+/** Speak in a language (e.g. "es-ES") and wait until finished (false if stopped). */
+export function speakInAndWait(text: string, lang: string, messageId = 'lesson'): Promise<boolean> {
+  return speakWait({ text, pitch: 1.0, messageId, voice: '', lang });
+}
+
+function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitch: number; messageId: string; voice: string; lang: string }): Promise<boolean> {
   return new Promise((resolve) => {
     if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
     ensureListeners();
@@ -122,7 +131,7 @@ export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', v
     waiters.set(myKey, finish);
     st.setSpeaking(myKey, messageId);
     Native.setRate(st.rate).catch(() => undefined);
-    (Native.speakIn ? Native.speakIn(text, myKey, 'en-US') : Native.speak(text, myKey)).catch(() => finish(false));
+    (Native.speakIn ? Native.speakIn(text, myKey, lang) : Native.speak(text, myKey)).catch(() => finish(false));
   });
 }
 

@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { UNITS } from './curriculum';
-import { LANGUAGES, languageService } from './languageService';
+import { LANGUAGES, MY_WORDS, languageService } from './languageService';
 import { useLanguage } from './store';
 import { createStyles } from './LanguageScreen.styles';
 
@@ -24,6 +24,9 @@ export const LanguageScreen: React.FC = () => {
   const progress = useLanguage((s) => s.progress[s.language]) ?? {};
   const xp = useLanguage((s) => s.xp);
   const streak = useLanguage((s) => s.streak.count);
+  const hasWords = useLanguage((s) => (s.myWords[s.language]?.length ?? 0) >= 4);
+  // Words saved from stories and podcasts become a last stop of their own.
+  const units = hasWords ? [...UNITS, { id: MY_WORDS, title: 'My words', icon: 'star', items: [] }] : UNITS;
   const current = UNITS.find((u) => (progress[u.id]?.stars ?? 0) <= 0)?.id;
 
   return (
@@ -48,7 +51,7 @@ export const LanguageScreen: React.FC = () => {
         ))}
       </ScrollView>
       <ScrollView contentContainerStyle={styles.board} testID="language-board">
-        {UNITS.map((u, i) => {
+        {units.map((u, i) => {
           const stars = progress[u.id]?.stars ?? 0;
           const open = languageService.unlocked(u.id, code);
           const isCurrent = u.id === current;

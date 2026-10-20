@@ -68,8 +68,15 @@ export function buildLesson(items: Item[], seed = Date.now(), length = 10): Exer
   const r = rng(seed);
   const all = shuffle(items, r);
   const out: Exercise[] = [];
+  const used = new Set<Item>();
   for (let i = 0; out.length < length - 1 && i < length * 2; i++) {
-    out.push(exerciseFor(KINDS[i % KINDS.length], all[i % all.length], { items, r }));
+    const kind = KINDS[i % KINDS.length];
+    // Phrase exercises take a phrase when one is left; every item is used before any repeats.
+    const fresh = all.filter((x) => !used.has(x));
+    const pool = fresh.length ? fresh : all;
+    const item = (FALLBACK[kind] && pool.find((x) => words(x.t).length >= 3)) || pool[0];
+    used.add(item);
+    out.push(exerciseFor(kind, item, { items, r }));
   }
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
   return out;
