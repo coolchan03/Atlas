@@ -4,8 +4,8 @@
  * not like random translation.
  *
  * Built on widely used, well-tested ideas:
- * - CEFR levels (Council of Europe): A1-A2 basic, B1 intermediate, B2 upper, C1-C2 fluent,
- *   each described by what the learner CAN DO.
+ * - CEFR levels (Council of Europe): A1 beginner, A2 elementary, B1 intermediate, B2 upper
+ *   intermediate, C1 advanced, C2 proficient, each described by what the learner CAN DO.
  * - Comprehensible input (Krashen's "i+1"): reading and listening should be about 95% known
  *   words, with a few new ones learned from context.
  * - Active recall and the testing effect: producing an answer (typing, ordering words) teaches
@@ -15,7 +15,7 @@
  * - Short daily sessions: about 5-10 minutes, so a streak is easy to keep.
  */
 
-export type LevelId = 1 | 2 | 3 | 4;
+export type LevelId = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface LevelGuide {
   id: LevelId;
@@ -36,11 +36,16 @@ export interface LevelGuide {
 }
 
 export const LEVELS: LevelGuide[] = [
-  { id: 1, name: 'Basic', cefr: 'A1-A2', canDo: 'introduce yourself, ask and answer simple questions about everyday things, numbers, places and needs', maxWords: 6, grammar: 'present tense of common verbs, to be / to have, articles and gender, plurals, simple questions and negatives', lessonLength: 10, items: 8, production: 0.2 },
-  { id: 2, name: 'Intermediate', cefr: 'B1', canDo: 'handle travel and daily situations, describe experiences and plans, give simple reasons and opinions', maxWords: 10, grammar: 'past and future tenses, reflexive verbs, comparisons, object pronouns, common connectors (because, but, so)', lessonLength: 12, items: 10, production: 0.35 },
-  { id: 3, name: 'Advanced', cefr: 'B2', canDo: 'follow the main ideas of news and talks, explain a viewpoint, talk fluently with native speakers on familiar topics', maxWords: 16, grammar: 'all main tenses, conditional (would), if-sentences, subjunctive or its equivalent, passive voice, relative clauses', lessonLength: 14, items: 10, production: 0.5 },
-  { id: 4, name: 'Fluent', cefr: 'C1-C2', canDo: 'understand long, complex texts and implied meaning, speak spontaneously and precisely, adapt between formal and casual speech', maxWords: 24, grammar: 'everything, including idioms, nuance, register (formal and informal), and literary or regional forms', lessonLength: 14, items: 10, production: 0.6 },
+  { id: 1, name: 'Beginner', cefr: 'A1', canDo: 'greet people, introduce yourself, and understand and use basic phrases about yourself, family, food and numbers', maxWords: 5, grammar: 'present tense of to be, to have and the most common verbs, articles and gender, plurals, simple questions and negatives', lessonLength: 10, items: 8, production: 0.15 },
+  { id: 2, name: 'Elementary', cefr: 'A2', canDo: 'use everyday expressions for shopping, directions, work, your day and simple plans', maxWords: 8, grammar: 'A1 grammar plus the simple past of common verbs, going to, can, possessives, there is, comparisons and frequency words', lessonLength: 11, items: 8, production: 0.25 },
+  { id: 3, name: 'Intermediate', cefr: 'B1', canDo: 'handle familiar topics and travel, describe experiences and plans, give simple reasons and opinions', maxWords: 10, grammar: 'past and future tenses, past habits, reflexive verbs, comparisons, object pronouns, commands, common connectors (because, but, so)', lessonLength: 12, items: 10, production: 0.35 },
+  { id: 4, name: 'Upper intermediate', cefr: 'B2', canDo: 'follow complex texts and news, explain a viewpoint, talk fluently and naturally with native speakers', maxWords: 16, grammar: 'all main tenses, conditional (would), if-sentences, subjunctive or its equivalent, passive voice, relative clauses, reported speech', lessonLength: 14, items: 10, production: 0.5 },
+  { id: 5, name: 'Advanced', cefr: 'C1', canDo: 'use the language flexibly for social, academic and professional purposes, and understand long texts and implied meaning', maxWords: 20, grammar: 'everything, including idioms, register (formal and informal), emphasis and precise connectors', lessonLength: 14, items: 10, production: 0.55 },
+  { id: 6, name: 'Proficient', cefr: 'C2', canDo: 'understand almost everything heard or read, and express yourself spontaneously, precisely and with fine shades of meaning', maxWords: 24, grammar: 'everything, including literary, archaic, regional and stylistic forms, wordplay and irony', lessonLength: 14, items: 10, production: 0.6 },
 ];
+
+/** Levels saved before the course had six (1 Basic, 2 Intermediate, 3 Advanced, 4 Fluent), as CEFR levels. */
+export const fromFourLevels = (old: number): LevelId => (([1, 3, 4, 5] as LevelId[])[old - 1] ?? 1);
 
 export const levelGuide = (id: LevelId | number) => LEVELS.find((l) => l.id === id) ?? LEVELS[0];
 
@@ -56,4 +61,4 @@ export function methodFor(level: LevelGuide, language: string): string {
 }
 
 /** Parts in a story or podcast: longer pieces as the learner can follow more. */
-export const storyParts = (level: LevelGuide) => (level.id <= 1 ? 4 : level.id === 2 ? 5 : 6);
+export const storyParts = (level: LevelGuide) => (level.id <= 2 ? 4 : level.id === 3 ? 5 : 6);

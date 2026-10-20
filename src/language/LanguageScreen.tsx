@@ -70,10 +70,10 @@ export const LanguageScreen: React.FC = () => {
         </ScrollView>
         <View style={styles.levels}>
           {LEVELS.map((l) => (
-            <TouchableOpacity key={l.id} onPress={() => languageService.setLevel(l.id as LevelId)} accessibilityLabel={`Level ${l.id}, ${l.name}`}
+            <TouchableOpacity key={l.id} onPress={() => languageService.setLevel(l.id as LevelId)} accessibilityLabel={`${l.cefr}, ${l.name}`}
               style={[styles.level, l.id === level && styles.levelOn]}>
-              <Text style={l.id === level ? styles.levelTextOn : styles.levelText}>{l.id}. {l.name}</Text>
-              <Text style={l.id === level ? styles.levelSubOn : styles.levelSub}>{l.cefr}</Text>
+              <Text style={l.id === level ? styles.levelTextOn : styles.levelText}>{l.cefr}</Text>
+              <Text style={l.id === level ? styles.levelSubOn : styles.levelSub} numberOfLines={2}>{l.name}</Text>
             </TouchableOpacity>
           ))}
         </View>

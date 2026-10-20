@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Exercise, Item } from './lessons';
 import type { Listening } from './listening';
 import type { Memory } from './review';
-import type { LevelId } from './teaching';
+import { fromFourLevels, type LevelId } from './teaching';
 import type { ExerciseKind, Pace } from './pace';
 
 export interface UnitProgress { stars: number; lessons: number }
@@ -56,4 +56,8 @@ interface LanguageState {
 export const useLanguage = create<LanguageState>()(persist((): LanguageState => ({
   language: 'es-ES', content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 }, listening: {}, myWords: {},
   level: 1, tips: {}, memory: {}, pace: {}, saved: {}, sounds: true, glossary: {},
-}), { name: 'atlas-language', storage: createJSONStorage(() => AsyncStorage) }));
+}), {
+  name: 'atlas-language', storage: createJSONStorage(() => AsyncStorage), version: 2,
+  // Version 2: six CEFR levels instead of four.
+  migrate: (state: any, version) => (version < 2 && state ? { ...state, level: fromFourLevels(state.level ?? 1) } : state),
+}));

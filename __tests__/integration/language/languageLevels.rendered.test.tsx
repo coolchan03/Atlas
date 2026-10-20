@@ -35,22 +35,22 @@ const past = [
 
 beforeEach(() => useLanguage.setState({ language: 'es-ES', level: 1, content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 }, listening: {}, myWords: {}, tips: {}, memory: {} }));
 
-it('shows four levels with vocabulary, grammar and theme units, and opens the first unit of each', () => {
+it('shows six CEFR levels with vocabulary, grammar and theme units, and opens the first unit of each', () => {
   const board = render(<LanguageScreen />);
   expect(board.getByLabelText('Basics')).toBeTruthy();
-  fireEvent.press(board.getByLabelText('Level 2, Intermediate'));
-  expect(useLanguage.getState().level).toBe(2);
+  fireEvent.press(board.getByLabelText('B1, Intermediate'));
+  expect(useLanguage.getState().level).toBe(3);
   // Grammar is split into two lessons; only the first space of the level is open.
   expect(board.getByLabelText('What happened 1/2')).toBeTruthy();
   expect(board.getByLabelText('What happened 2/2, locked')).toBeTruthy();
-  expect(boardFor(2).some((s) => s.unitId && unitById(s.unitId)?.kind === 'theme')).toBe(true);
-  // Practice chats in the project now follow level 2.
-  expect(useProjectStore.getState().getProject('spanish-learning')!.systemPrompt).toMatch(/level 2 \(Intermediate, CEFR B1\)/);
+  expect(boardFor(3).some((s) => s.unitId && unitById(s.unitId)?.kind === 'theme')).toBe(true);
+  // Practice chats in the project now follow B1.
+  expect(useProjectStore.getState().getProject('spanish-learning')!.systemPrompt).toMatch(/level 3 \(Intermediate, CEFR B1\)/);
 });
 
 it('checks a written grammar lesson and shows its rule before the exercises', async () => {
   const raw = JSON.stringify({ tip: 'The past tense says what you did. Add -é for I: hablé.', items: [...past, { en: 'Too long', t: 'uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciséis' }] });
-  const lesson = parseUnitLesson(raw, levelGuide(2), 'es-ES')!;
+  const lesson = parseUnitLesson(raw, levelGuide(3), 'es-ES')!;
   expect(lesson.items).toHaveLength(10);
   expect(lesson.items.find((x) => x.en === 'Too long')).toBeUndefined();
   useLanguage.setState({ content: { 'es-ES': { 'g-past': lesson.items } }, tips: { 'es-ES': { 'g-past': lesson.tip } } });
@@ -91,4 +91,15 @@ it('runs the speed round on a one-minute clock', async () => {
   expect(screen.getByTestId('lesson-done')).toBeTruthy();
   expect(screen.getByText(/right in 60 seconds/)).toBeTruthy();
   jest.useRealTimers();
+});
+
+it('moves a level saved by the four-level course to the matching CEFR level', async () => {
+  const mod = require('@react-native-async-storage/async-storage');
+  const AsyncStorage = mod.default ?? mod;
+  await AsyncStorage.setItem('atlas-language', JSON.stringify({ state: { ...useLanguage.getState(), level: 2 }, version: 0 }));
+  await useLanguage.persist.rehydrate();
+  expect(useLanguage.getState().level).toBe(3);
+  const board = render(<LanguageScreen />);
+  expect(board.getByLabelText('A1, Beginner')).toBeTruthy();
+  expect(board.getByLabelText('C2, Proficient')).toBeTruthy();
 });

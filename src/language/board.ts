@@ -1,6 +1,6 @@
 /**
  * The board for one level: every space is one sitting of about the same length. Each unit is
- * one lesson space, or two for harder topics (grammar, and themes from Advanced up, or units
+ * one lesson space, or two for harder topics (grammar, and themes from B2 up, or units
  * with many items), and every few lessons the player lands on a story, a podcast or a speed
  * round. Pure, so the board is tested without a device.
  */
@@ -33,7 +33,7 @@ const SPECIALS: { kind: SpaceKind; title: string; icon: string }[] = [
 
 /** Harder topics take two lessons so each sitting stays about the same length. */
 export const partsFor = (u: Unit) =>
-  (u.kind === 'grammar' || (u.kind === 'theme' && u.level >= 3) || u.items.length > 10 ? 2 : 1);
+  (u.kind === 'grammar' || (u.kind === 'theme' && u.level >= 4) || u.items.length > 10 ? 2 : 1);
 
 export const lessonKey = (unitId: string, part: number) => (part > 1 ? `${unitId}:${part}` : unitId);
 

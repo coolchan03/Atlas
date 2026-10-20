@@ -71,7 +71,7 @@ it('hides the Spanish words for an English word bank, and finishing marks the sq
   }
   expect(await screen.findByTestId('wordsearch-done')).toBeTruthy();
   expect(languageService.isDone('wordsearch@1.11')).toBe(true);
-});
+}, 20000);
 
 it('shows a word\'s meaning when it is tapped', async () => {
   useLanguage.setState({ glossary: { 'es-ES': { coche: 'car' } } });

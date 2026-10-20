@@ -119,7 +119,7 @@ export const languageService = {
     syncProject();
   },
 
-  /** Picks the level to work at (1 Basic .. 4 Fluent); stories, podcasts and chats follow it. */
+  /** Picks the level to work at (1 = A1 Beginner .. 6 = C2 Proficient); stories, podcasts and chats follow it. */
   setLevel(level: LevelId): void {
     useLanguage.setState({ level });
     syncProject();

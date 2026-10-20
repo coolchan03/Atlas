@@ -1,4 +1,4 @@
-import { LEVELS, levelGuide, methodFor, type LevelId } from './teaching';
+import { levelGuide, methodFor, type LevelId } from './teaching';
 
 /**
  * Instructions for chats in the Learn a language project, for the language and level being
@@ -16,11 +16,17 @@ Guidelines:
 - ${methodFor(levelGuide(level), language)}
 - Keep each reply short (two to four sentences) and end with a question so the user practises replying` : ''}`;
 
+const LEVELED_TAIL = /^\n- You teach [^\n]*\n- Keep each reply short \(two to four sentences\) and end with a question so the user practises replying$/;
+
 /** True for a prompt Atlas wrote (any language, any level), which may be updated; false once the user edits it. */
 export function isGeneratedTutorPrompt(prompt: string): boolean {
   const { PHRASE_LANGUAGES } = require('../phrases/data');
-  return PHRASE_LANGUAGES.some((l: { name: string }) =>
-    [undefined, ...LEVELS.map((x) => x.id)].some((lv) => prompt === tutorPrompt(l.name, lv as LevelId | undefined)));
+  return PHRASE_LANGUAGES.some((l: { name: string }) => {
+    const base = tutorPrompt(l.name);
+    if (prompt === base) return true;
+    // Any level, including ones written by an older version of the course method.
+    return prompt.startsWith(base) && LEVELED_TAIL.test(prompt.slice(base.length));
+  });
 }
 
 /** The id of the built-in language project (kept from its old name, Spanish Learning). */

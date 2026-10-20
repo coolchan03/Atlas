@@ -17,17 +17,17 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { ...TYPOGRAPHY.bodySmall, color: colors.text },
   chipTextOn: { ...TYPOGRAPHY.bodySmall, color: colors.background },
-  // Two per row on phones so "Intermediate" and "Advanced" are never cut off.
+  // Three per row (A1 A2 B1 / B2 C1 C2); the level name wraps instead of being cut off.
   levels: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.sm, paddingHorizontal: SPACING.lg },
   level: {
-    flexGrow: 1, flexBasis: '45%' as const, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md,
+    flexGrow: 1, flexBasis: '30%' as const, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.xs,
     borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: 'center' as const,
   },
   levelOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  levelText: { ...TYPOGRAPHY.bodySmall, color: colors.text },
-  levelTextOn: { ...TYPOGRAPHY.bodySmall, color: colors.background },
-  levelSub: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-  levelSubOn: { ...TYPOGRAPHY.meta, color: colors.background },
+  levelText: { ...TYPOGRAPHY.h3, color: colors.text },
+  levelTextOn: { ...TYPOGRAPHY.h3, color: colors.background },
+  levelSub: { ...TYPOGRAPHY.meta, color: colors.textMuted, textAlign: 'center' as const },
+  levelSubOn: { ...TYPOGRAPHY.meta, color: colors.background, textAlign: 'center' as const },
   extras: {
     flexDirection: 'row' as const, flexWrap: 'wrap' as const, alignItems: 'center' as const,
     columnGap: SPACING.lg, rowGap: SPACING.xs, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md,
