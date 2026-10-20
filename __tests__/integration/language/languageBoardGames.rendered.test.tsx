@@ -102,3 +102,12 @@ function findWord(letters: string[], size: number, word: string): [number, numbe
   }
   return null;
 }
+
+it('turns the right and wrong sounds off from the board', () => {
+  const { LanguageScreen } = require('../../../src/language/LanguageScreen');
+  useLanguage.setState({ sounds: true });
+  const board = render(<LanguageScreen />);
+  fireEvent.press(board.getByLabelText('Sounds on'));
+  expect(board.getByLabelText('Sounds off')).toBeTruthy();
+  expect(useLanguage.getState().sounds).toBe(false);
+});
