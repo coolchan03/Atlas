@@ -23,7 +23,9 @@ type BaseExercise =
   /** Put the letters of a word in order. */
   | { kind: 'scramble'; item: Item; tiles: string[]; answer: string }
   /** Does this sentence mean that? True or false. */
-  | { kind: 'truefalse'; item: Item; shownMeaning: string; options: string[]; answer: string };
+  | { kind: 'truefalse'; item: Item; shownMeaning: string; options: string[]; answer: string }
+  /** Say it out loud: the phone's speech recognizer hears it. */
+  | { kind: 'speak'; item: Item; answer: string };
 
 /** `again`: a missed exercise repeated at the end of the lesson (not scored a second time). */
 export type Exercise = BaseExercise & { again?: boolean };
@@ -64,6 +66,8 @@ export function blankOut(t: string, r: () => number): { shown: string; answer: s
 type Kind = Exercise['kind'];
 const RECOGNISE: Kind[] = ['choose', 'meaning', 'listen', 'blank', 'truefalse', 'scramble'];
 const PRODUCE: Kind[] = ['build', 'hear', 'type', 'dictation'];
+/** With a speech recognizer, speaking takes a turn among the producing games. */
+const PRODUCE_SPEAKING: Kind[] = ['build', 'speak', 'hear', 'type', 'dictation'];
 /** Phrase-only kinds fall back for single words, and the letter scramble for phrases. */
 const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'type', hear: 'dictation', blank: 'meaning' };
 const needsPhrase = (k: Kind) => k === 'build' || k === 'hear' || k === 'blank';
@@ -81,7 +85,7 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
       .slice(0, Math.min(3, Math.max(2, Math.round(words(item.t).length / 2))));
     return { kind: k, item, tiles: shuffle([...words(item.t), ...extra], r), answer: item.t };
   }
-  if (k === 'type' || k === 'dictation') return { kind: k, item, answer: item.t };
+  if (k === 'type' || k === 'dictation' || k === 'speak') return { kind: k, item, answer: item.t };
   if (k === 'scramble') {
     const letters = [...item.t.replace(/[.!?¡¿,]/g, '')];
     let tiles = shuffle(letters, r);
@@ -106,20 +110,22 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
 }
 
 /** The kinds for a lesson of `length` exercises: recognition first, then production. */
-function planKinds(length: number, production: number | undefined): Kind[] {
+function planKinds(length: number, { production, speaking }: { production?: number; speaking?: boolean }): Kind[] {
   const nProduce = production === 0 ? 0 : Math.max(2, Math.round((length - 1) * (production ?? 0.2)));
+  const produce = speaking ? PRODUCE_SPEAKING : PRODUCE;
   return Array.from({ length: length - 1 }, (_, i) =>
-    (i < length - 1 - nProduce ? RECOGNISE[i % RECOGNISE.length] : PRODUCE[(i - (length - 1 - nProduce)) % PRODUCE.length]));
+    (i < length - 1 - nProduce ? RECOGNISE[i % RECOGNISE.length] : produce[(i - (length - 1 - nProduce)) % produce.length]));
 }
 
 /**
  * How many exercises fill `seconds`, given how long each kind takes (pace.ts). Quick games
  * mean more exercises, slow ones fewer, so lessons last about the same time.
  */
-export function lengthForTime(seconds: number, production: number | undefined, secondsOf: (k: Kind) => number): number {
+export function lengthForTime(seconds: number, o: { production?: number; speaking?: boolean; secondsOf: (k: Kind) => number }): number {
+  const { secondsOf } = o;
   let best = 4;
   for (let n = 4; n <= 40; n++) {
-    const total = planKinds(n, production).reduce((t, k) => t + secondsOf(k), secondsOf('match'));
+    const total = planKinds(n, o).reduce((t, k) => t + secondsOf(k), secondsOf('match'));
     if (total > seconds) break;
     best = n;
   }
@@ -135,11 +141,11 @@ export const lessonSeconds = (exercises: Exercise[], secondsOf: (k: Kind) => num
  * `production` share. Sized by `seconds` (a time budget) or `length`. Every item is used
  * before any repeats.
  */
-export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number; seconds?: number; secondsOf?: (k: Kind) => number } = {}): Exercise[] {
-  const length = opts.seconds && opts.secondsOf ? lengthForTime(opts.seconds, opts.production, opts.secondsOf) : opts.length ?? 10;
+export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number; seconds?: number; secondsOf?: (k: Kind) => number; speaking?: boolean } = {}): Exercise[] {
+  const length = opts.seconds && opts.secondsOf ? lengthForTime(opts.seconds, { ...opts, secondsOf: opts.secondsOf }) : opts.length ?? 10;
   const r = rng(seed);
   const all = shuffle(items, r);
-  const plan = planKinds(length, opts.production);
+  const plan = planKinds(length, opts);
   const used = new Set<Item>();
   // Keep one single word back for the letter scramble, so it is not used up first.
   const forScramble = plan.includes('scramble') ? all.find(isWord) : undefined;
@@ -162,6 +168,18 @@ const noAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, 
 export function checkTyped(typed: string, answer: string): 'right' | 'accents' | 'wrong' {
   if (plain(typed) === plain(answer)) return 'right';
   return noAccents(plain(typed)) === noAccents(plain(answer)) ? 'accents' : 'wrong';
+}
+
+/**
+ * A spoken answer, as the recognizer wrote it: right when it has nearly all the answer's
+ * words (recognizers drop accents and punctuation and sometimes a small word).
+ */
+export function checkSpoken(heard: string, answer: string): 'right' | 'wrong' {
+  const norm = (x: string) => noAccents(plain(x)).split(' ').filter(Boolean);
+  const want = norm(answer);
+  const got = new Set(norm(heard));
+  if (!want.length || !got.size) return 'wrong';
+  return want.filter((w) => got.has(w)).length / want.length >= 0.75 ? 'right' : 'wrong';
 }
 
 /** Answers are compared without case, accents' spacing or end punctuation. */

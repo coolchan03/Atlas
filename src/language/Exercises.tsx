@@ -91,11 +91,52 @@ function Typed({ attempt, onPick, placeholder }: { attempt: Attempt; onPick: (v:
   );
 }
 
+/** Say it out loud: the phone's own speech recognizer (offline when the language pack is installed) writes what it heard. */
+function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { kind: 'speak' }>; lang: string; attempt: Attempt; onPick: (v: string) => void; onSkip: () => void }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [listening, setListening] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const listen = async () => {
+    setProblem(null); setListening(true);
+    try {
+      const { listenWithSystemSpeech } = require('../services/systemSpeech');
+      const session = await listenWithSystemSpeech({ locale: lang, onPartial: onPick });
+      const heard: string = await session.result;
+      if (heard) onPick(heard); else setProblem('Nothing heard. Tap the microphone and try again.');
+    } catch (e: any) {
+      if (e?.name !== 'SpeechCancelled') setProblem(String(e?.message || e));
+    } finally { setListening(false); }
+  };
+  return (
+    <View>
+      <Text style={styles.prompt}>Say this out loud</Text>
+      <View style={styles.sayRow}>
+        <Say item={ex.item} lang={lang} />
+        <View style={styles.sayText}><Tappable text={ex.item.t} style={styles.big} />{!!ex.item.r && <Text style={styles.roman}>{ex.item.r}</Text>}</View>
+      </View>
+      <Text style={styles.bodyText}>{ex.item.en}</Text>
+      <TouchableOpacity style={styles.speaker} onPress={listen} disabled={listening || attempt.checked} testID="lesson-speak"
+        accessibilityLabel={listening ? 'Listening' : 'Speak'}>
+        <Icon name={listening ? 'radio' : 'mic'} size={26} color={colors.background} />
+      </TouchableOpacity>
+      {!!attempt.value && <Text style={styles.bodyText} testID="lesson-heard">Heard: {attempt.value}</Text>}
+      {!!problem && <Text style={styles.roman}>{problem}</Text>}
+      {!attempt.checked && (
+        <TouchableOpacity onPress={onSkip} testID="lesson-skip-speaking"><Text style={styles.roman}>Can't speak now</Text></TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 /** One exercise. Match reports its own result; the others report the picked answer for Check. */
-export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }: {
+export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched, onSkip = () => undefined }: {
   ex: Exercise; lang: string; langName: string; attempt: Attempt; onPick: (v: string) => void; onMatched: (mistakes: number) => void;
+  /** Skips a speaking exercise (no microphone, or somewhere quiet is needed). */
+  onSkip?: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
+  if (ex.kind === 'speak') return <Speak ex={ex} lang={lang} attempt={attempt} onPick={onPick} onSkip={onSkip} />;
   if (ex.kind === 'match') return (<View><Text style={styles.prompt}>Match the pairs</Text><Match pairs={ex.pairs} onDone={onMatched} /></View>);
   if (ex.kind === 'build') return (
     <View>

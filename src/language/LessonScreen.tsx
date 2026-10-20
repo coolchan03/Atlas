@@ -10,7 +10,7 @@ import { LANGUAGES, MY_WORDS, PRACTICE, REVIEW, languageService } from './langua
 import { levelGuide } from './teaching';
 import { lessonKey, partItems } from './board';
 import { LESSON_SECONDS } from './pace';
-import { buildLesson, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
+import { buildLesson, checkSpoken, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
 import { useLanguage } from './store';
 import type { Item } from './lessons';
 import type { LevelId } from './teaching';
@@ -97,19 +97,19 @@ export const LessonScreen: React.FC = () => {
       setExercises(saved.exercises); setI(saved.index); setRight(saved.right); setResults(saved.results); setTip('');
       return;
     }
-    lessonWords({ unitId, mode, level: params.level, part, parts }, setStep)
-      .then((items) => {
+    Promise.all([lessonWords({ unitId, mode, level: params.level, part, parts }, setStep), languageService.canSpeak()])
+      .then(([items, speaking]) => {
         setTip(mode || part > 1 ? '' : languageService.tipFor(unitId));
         setExercises(buildLesson(items, Date.now(), speed
           ? { length: 40, production: 0 }
-          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production }));
+          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production, speaking }));
       })
       .catch((e) => setError(String(e?.message || e)));
   };
   useEffect(() => start(), [unitId, code, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ex = exercises?.[i];
-  const verdict = ex && ex.kind !== 'match' ? checkTyped(attempt.value, ex.answer) : 'wrong';
+  const verdict = !ex || ex.kind === 'match' ? 'wrong' : ex.kind === 'speak' ? checkSpoken(attempt.value, ex.answer) : checkTyped(attempt.value, ex.answer);
   const correct = verdict !== 'wrong';
   const finish = (score: number, done: { t: string; right: boolean }[], list = exercises!) => {
     languageService.saveLesson(null);
@@ -173,7 +173,7 @@ export const LessonScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.body}>
         {ex!.again && <Text style={styles.meta} testID="lesson-again">Once more: you missed this one earlier.</Text>}
         <ExerciseView key={i} ex={ex!} lang={code} langName={langName} attempt={attempt}
-          onPick={(value) => setAttempt({ value, checked: false })} onMatched={(mistakes) => { playFeedback(mistakes <= 1); next(mistakes <= 1); }} />
+          onPick={(value) => setAttempt({ value, checked: false })} onMatched={(mistakes) => { playFeedback(mistakes <= 1); next(mistakes <= 1); }} onSkip={() => next(true)} />
       </ScrollView>
       {ex!.kind !== 'match' && (
         <View style={styles.footer}>

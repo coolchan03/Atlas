@@ -148,3 +148,21 @@ it('reviews studied words on a review square', async () => {
   expect(lesson.getByTestId('lesson-done')).toBeTruthy();
   expect(languageService.isDone('review@1.9')).toBe(true);
 }, 20000);
+
+it('asks the learner to say phrases out loud when the phone has a speech recognizer', async () => {
+  const { playLesson } = require('./playLesson');
+  const RN = require('react-native');
+  const os = RN.Platform.OS;
+  RN.Platform.OS = 'android';
+  RN.PermissionsAndroid.request = jest.fn(async () => 'granted');
+  try {
+    useLanguage.setState({ speaking: true });
+    mockParams = { unitId: 'basics', key: 'basics' };
+    const lesson = render(<LessonScreen />);
+    await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
+    const seen = new Set<string>();
+    await playLesson(lesson, seen);
+    expect(seen.has('speak')).toBe(true);
+    expect(lesson.getByTestId('lesson-done')).toBeTruthy();
+  } finally { RN.Platform.OS = os; }
+}, 20000);

@@ -27,6 +27,7 @@ export const LanguageScreen: React.FC = () => {
   const streak = useLanguage((s) => s.streak.count);
   const level = useLanguage((s) => s.level);
   const sounds = useLanguage((s) => s.sounds);
+  const speaking = useLanguage((s) => s.speaking);
   const due = languageService.dueCount(code);
   const spaces = boardFor(level);
   const isDone = (key: string) => languageService.isDone(key, code);
@@ -91,6 +92,10 @@ export const LanguageScreen: React.FC = () => {
           <TouchableOpacity onPress={() => languageService.setSounds(!sounds)} testID="language-sounds"
             accessibilityLabel={sounds ? 'Sounds on' : 'Sounds off'}>
             <Icon name={sounds ? 'volume-2' : 'volume-x'} size={18} color={sounds ? colors.primary : colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => languageService.setSpeaking(!speaking)} testID="language-speaking"
+            accessibilityLabel={speaking ? 'Speaking exercises on' : 'Speaking exercises off'}>
+            <Icon name={speaking ? 'mic' : 'mic-off'} size={18} color={speaking ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
         </View>
         <Board spaces={spaces} isDone={isDone} isOpen={isOpen} current={current} onPress={play} />

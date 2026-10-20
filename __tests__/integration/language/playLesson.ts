@@ -8,7 +8,7 @@ const current = (screen: ReturnType<typeof render>) =>
 export async function playLesson(screen: ReturnType<typeof render>, seen = new Set<string>(), miss = false) {
   let missed = !miss;
   for (let guard = 0; guard < 60 && !screen.queryByTestId('lesson-done'); guard++) {
-    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank|Type this in Spanish|Type what you hear|Unscramble|True or false/);
+    const prompt = screen.queryByText(/Match the pairs|Say this out loud|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank|Type this in Spanish|Type what you hear|Unscramble|True or false/);
     if (!prompt) { await act(async () => {}); continue; }
     const items = current(screen);
     seen.add(items.kind);
@@ -22,6 +22,12 @@ export async function playLesson(screen: ReturnType<typeof render>, seen = new S
         const pool = screen.getAllByText(w);
         fireEvent.press(pool[pool.length - 1]);
       }
+    } else if (items.kind === 'speak') {
+      // The phone's recognizer hears the learner say it (device boundary: @react-native-voice/voice).
+      const Voice = require('@react-native-voice/voice');
+      fireEvent.press(screen.getByTestId('lesson-speak'));
+      await act(async () => {});
+      await act(async () => { Voice.onSpeechResults?.({ value: [items.answer.toLowerCase().replace(/[.,!?¿¡]/g, '')] }); });
     } else if (items.kind === 'type' || items.kind === 'dictation') {
       fireEvent.changeText(screen.getByTestId('lesson-typed'), items.answer);
     } else if (!missed && items.options) {

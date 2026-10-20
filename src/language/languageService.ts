@@ -280,6 +280,18 @@ export const languageService = {
     return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
   },
 
+  /** True when the phone has a speech recognizer, so lessons include speaking. */
+  async canSpeak(): Promise<boolean> {
+    if (!useLanguage.getState().speaking) return false;
+    try {
+      const { systemSpeechStatus } = require('../services/systemSpeech');
+      return (await systemSpeechStatus()).available;
+    } catch { return false; }
+  },
+
+  /** Speaking exercises on or off (somewhere you cannot talk out loud). */
+  setSpeaking(on: boolean): void { useLanguage.setState({ speaking: on }); },
+
   /** Words for a review square: the ones due first, topped up with words studied most recently. */
   reviewSquareWords(code = useLanguage.getState().language): Item[] {
     const studied = languageService.studiedItems(code);
