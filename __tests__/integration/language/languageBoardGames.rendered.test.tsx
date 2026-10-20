@@ -62,12 +62,17 @@ it('hides the Spanish words for an English word bank, and finishing marks the sq
   const size = Math.sqrt(cells.length);
   const letters = cells.map((l) => l.split(' ')[0]);
   const bank = ['ROJO', 'AZUL', 'VERDE', 'BLANCO', 'NEGRO', 'AMARILLO'];
+  const cell = (i: number) => screen.getByLabelText(`${letters[i]} ${Math.floor(i / size) + 1}-${(i % size) + 1}`);
   for (const w of bank) {
-    const at = findWord(letters, size, w);
-    expect(at).not.toBeNull();
-    const [start, end] = at!;
-    fireEvent.press(screen.getByLabelText(`${letters[start]} ${Math.floor(start / size) + 1}-${(start % size) + 1}`));
-    fireEvent.press(screen.getByLabelText(`${letters[end]} ${Math.floor(end / size) + 1}-${(end % size) + 1}`));
+    // Filler letters can spell a word by chance: try each place it appears until it counts.
+    const before = screen.getByText(/ of \d+$/).props.children.join('');
+    const places = findWord(letters, size, w);
+    expect(places.length).toBeGreaterThan(0);
+    for (const [start, end] of places) {
+      fireEvent.press(cell(start));
+      fireEvent.press(cell(end));
+      if (screen.queryByTestId('wordsearch-done') || screen.getByText(/ of \d+$/).props.children.join('') !== before) break;
+    }
   }
   expect(await screen.findByTestId('wordsearch-done')).toBeTruthy();
   expect(languageService.isDone('wordsearch@1.11')).toBe(true);
@@ -87,9 +92,10 @@ it('adds words that do not belong to the word-order tiles', () => {
   expect(build.tiles.length).toBeGreaterThanOrEqual(words(build.answer).length + 2);
 });
 
-/** First and last cell of a word placed in any of the eight directions. */
-function findWord(letters: string[], size: number, word: string): [number, number] | null {
+/** First and last cell of every place a word appears, in any of the eight directions. */
+function findWord(letters: string[], size: number, word: string): [number, number][] {
   const w = [...word];
+  const out: [number, number][] = [];
   for (let i = 0; i < letters.length; i++) {
     for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1], [0, -1], [-1, 0], [-1, -1], [-1, 1]]) {
       const r0 = Math.floor(i / size), c0 = i % size;
@@ -97,10 +103,10 @@ function findWord(letters: string[], size: number, word: string): [number, numbe
         const r = r0 + dr * k, c = c0 + dc * k;
         return r >= 0 && c >= 0 && r < size && c < size && letters[r * size + c] === ch;
       });
-      if (ok) return [i, (r0 + dr * (w.length - 1)) * size + c0 + dc * (w.length - 1)];
+      if (ok) out.push([i, (r0 + dr * (w.length - 1)) * size + c0 + dc * (w.length - 1)]);
     }
   }
-  return null;
+  return out;
 }
 
 it('turns the right and wrong sounds off from the board', () => {

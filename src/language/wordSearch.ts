@@ -47,12 +47,28 @@ export function buildLangWordSearch(items: Item[], { size = 10, max = 8, seed = 
   return { size, hidden, cells: cells.map((c) => c || fill[Math.floor(r() * fill.length)]) };
 }
 
-/** Cells of a hidden word, first to last. */
-export const cellsOf = (h: Hidden, size: number) =>
-  Array.from({ length: [...h.word].length }, (_, k) => (h.row + h.dr * k) * size + h.col + h.dc * k);
+/**
+ * The cells of a straight line (row, column or diagonal) from one tapped letter to another,
+ * or null when the two are not in line.
+ */
+export function lineCells([a, b]: [number, number], size: number): number[] | null {
+  const [r0, c0, r1, c1] = [Math.floor(a / size), a % size, Math.floor(b / size), b % size];
+  const dr = Math.sign(r1 - r0), dc = Math.sign(c1 - c0);
+  const n = Math.max(Math.abs(r1 - r0), Math.abs(c1 - c0));
+  if (n === 0 || (r1 - r0 !== dr * n) || (c1 - c0 !== dc * n)) return null;
+  return Array.from({ length: n + 1 }, (_, k) => (r0 + dr * k) * size + c0 + dc * k);
+}
 
-/** True when the learner tapped the first and last letter of the word (either way round). */
-export function tappedWord(h: Hidden, [first, last]: [number, number], size: number): boolean {
-  const c = cellsOf(h, size);
-  return (first === c[0] && last === c[c.length - 1]) || (first === c[c.length - 1] && last === c[0]);
+/**
+ * The hidden word the learner found by tapping its first and last letter, either way round,
+ * also where the filler letters happen to spell it a second time. Null when the line is not a
+ * word still to find.
+ */
+export function wordAt(puzzle: LangWordSearch, tap: [number, number], left: Hidden[]): { hidden: Hidden; cells: number[] } | null {
+  const cells = lineCells(tap, puzzle.size);
+  if (!cells) return null;
+  const text = cells.map((i) => puzzle.cells[i]).join('');
+  const back = [...text].reverse().join('');
+  const hidden = left.find((h) => h.word === text || h.word === back);
+  return hidden ? { hidden, cells } : null;
 }

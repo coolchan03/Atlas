@@ -9,7 +9,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { Button } from '../components/Button';
 import { LANGUAGES, PRACTICE, languageService } from './languageService';
 import { useLanguage } from './store';
-import { buildLangWordSearch, cellsOf, searchWords, tappedWord, type LangWordSearch } from './wordSearch';
+import { buildLangWordSearch, searchWords, wordAt, type LangWordSearch } from './wordSearch';
 import type { Item } from './lessons';
 import { playFeedback } from './sounds';
 
@@ -28,7 +28,7 @@ export const WordSearchScreen: React.FC = () => {
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [first, setFirst] = useState<number | null>(null);
-  const [found, setFound] = useState<number[]>([]);
+  const [found, setFound] = useState<{ id: number; cells: number[] }[]>([]);
   const [finished, setFinished] = useState(false);
 
   useEffect(() => {
@@ -39,7 +39,8 @@ export const WordSearchScreen: React.FC = () => {
   }, [unitId, code]);
   const puzzle: LangWordSearch | null = useMemo(() => (items ? buildLangWordSearch(items) : null), [items]);
   const cell = puzzle ? Math.floor((Math.min(width, 520) - SPACING.lg * 2) / puzzle.size) : 0;
-  const shown = new Set(puzzle ? found.flatMap((id) => cellsOf(puzzle.hidden[id], puzzle.size)) : []);
+  const shown = new Set(found.flatMap((f) => f.cells));
+  const isFound = (id: number) => found.some((f) => f.id === id);
 
   const finish = (n: number) => {
     if (key) languageService.completeSpace(key);
@@ -49,11 +50,11 @@ export const WordSearchScreen: React.FC = () => {
   const tap = (i: number) => {
     if (!puzzle || finished) return;
     if (first === null) { setFirst(i); return; }
-    const hit = puzzle.hidden.find((h) => !found.includes(h.id) && tappedWord(h, [first, i], puzzle.size));
+    const hit = wordAt(puzzle, [first, i], puzzle.hidden.filter((h) => !isFound(h.id)));
     setFirst(null);
     playFeedback(!!hit);
     if (!hit) return;
-    const next = [...found, hit.id];
+    const next = [...found, { id: hit.hidden.id, cells: hit.cells }];
     setFound(next);
     if (next.length === puzzle.hidden.length) finish(next.length);
   };
@@ -90,8 +91,8 @@ export const WordSearchScreen: React.FC = () => {
         <Text style={styles.meta}>Find these words in {langName}. Tap the first letter, then the last.</Text>
         <View style={styles.bank}>
           {puzzle.hidden.map((h) => (
-            <Text key={h.id} style={found.includes(h.id) ? styles.bankDone : styles.bankWord}>
-              {h.en}{found.includes(h.id) ? ` = ${h.word.toLocaleLowerCase()}` : ''}
+            <Text key={h.id} style={isFound(h.id) ? styles.bankDone : styles.bankWord}>
+              {h.en}{isFound(h.id) ? ` = ${h.word.toLocaleLowerCase()}` : ''}
             </Text>
           ))}
         </View>
