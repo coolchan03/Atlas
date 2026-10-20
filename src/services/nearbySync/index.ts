@@ -10,6 +10,7 @@ import type { SyncSnapshot } from './merge';
 import { applyTombstones, captureRemovals, combineTombstones, emptyTombstones, validateTombstones } from './tombstones';
 import type { Tombstones, SyncKind } from './tombstones';
 import { applyStores, localStores } from './stores';
+import { applySecrets, localSecrets } from './secrets';
 import { audioOnPhone, receiveAudio, sendMissingAudio, type AudioChunk } from './audio';
 import { useRecordings } from '../../atlasRecorder/store';
 
@@ -130,6 +131,7 @@ class NearbySyncService {
       version: 1, sourceId: this.deviceId, projects: [...projects, ...lockedProjects],
       conversations: [...conversations, ...lockedChats], agents, files, deleted: this.deleted,
       stores: await localStores(), audio: await audioOnPhone(recordings.map(r => r.id)),
+      secrets: await localSecrets(),
     };
   }
   /** After an exchange, send the other phone the recording audio it does not have yet. */
@@ -184,6 +186,8 @@ class NearbySyncService {
     // Everything else: settings, the language course, study, maps, notes, recordings...
     this.applyingRemote = true;
     try { await applyStores(remote.stores, this.deleted.recordings); } finally { this.applyingRemote = false; }
+    // API keys last, once the remote servers they belong to are here.
+    await applySecrets(remote.secrets);
     this.publish({ lastSync: new Date().toISOString(), lastError: undefined });
   }
   private async incoming(message: Incoming) {
