@@ -247,20 +247,26 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 ## 8. Learn a language (inside the "Learn a language" project)
 
 - The Spanish Learning project is now **Learn a language**: pick the language, then play a board game of
-  lessons. Four levels (Basic A1-A2, Intermediate B1, Advanced B2, Fluent C1-C2), about 90 units of
-  vocabulary, grammar and themes. The AI writes each unit once, following a written teaching method
+  lessons. Six CEFR levels (A1 Beginner, A2 Elementary, B1 Intermediate, B2 Upper intermediate, C1 Advanced,
+  C2 Proficient), 138 units of vocabulary, grammar and themes. A level saved by the earlier four-level course
+  moves to the matching CEFR level. The AI writes each unit once, following a written teaching method
   (comprehensible input, recognition before production, spaced review), and keeps it for offline use.
 - **Every square is one lesson of about five minutes.** Each game kind has a typical time (12 s to pick a
   word, 40 s to match pairs), and Atlas learns your own pace after a few answers, so quick games mean more
   exercises and slow ones fewer. Grammar, harder themes and big units are split into two lessons (part 2
   repeats two items from part 1).
-- **Board:** a bigger snake-shaped board with numbered squares and a pawn. Every three lessons you land on a
-  story, a podcast, a one-minute speed round or a word search. Levels are a 2 x 2 grid so names are no longer
+- **Board:** a much bigger snake-shaped board with numbered squares and a pawn. Every two lessons you land on
+  a story, a podcast, a one-minute speed round, a word search or a review square, and each level ends with a
+  checkpoint (a ten-minute test of the whole level, 80% to pass). Levels are a 2 x 2 grid so names are no longer
   cut off; lesson text wraps instead of being cut.
 - **Games:** pick the word, what does it mean, listen and pick, match pairs, true or false, letter scramble,
   fill in the blank, word order with extra words that do not belong, tap what you hear, type the
   translation, dictation (accents forgiven but pointed out), and the word search (English word bank, grid in
   the language you are learning, any alphabet).
+- **Speaking:** "Say this out loud" exercises use the phone's own speech recognizer (offline when the
+  language pack is installed). "Can't speak now" skips one; a microphone switch on the board turns them off.
+- **Missed answers come back** once at the end of the lesson; only the first try counts for stars.
+- **Daily goal:** a bar on the board shows today's XP against a goal (50, 100, 200 or 300; tap to change).
 - **Progress is saved:** stars, XP, streak, finished squares, and a lesson left halfway carries on where it
   stopped. The course is included in Atlas backups.
 - **Pre-made stories and podcasts:** a library of 60 pieces: simplified fairy tales and fables, funny everyday
