@@ -31,6 +31,8 @@ const RESTORABLE_STORE_KEYS = new Set([
   'atlas-maps', 'atlas-survival-manual', 'atlas-offline-library', 'atlas-off-grid',
   'atlas-chat-prefs', 'atlas-daily-brief', 'atlas-low-power', 'remote-servers',
   'atlas-study-progress', 'atlas-checklists',
+  // Language course: levels, stars, streak, written lessons, saved words and review schedule.
+  'atlas-language',
 ]);
 // Never export or restore credentials, vault contents, or authentication state.
 const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;

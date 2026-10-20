@@ -64,7 +64,13 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
   const long = words(item.t).length >= 3;
   let k = needsPhrase(kind) && !long ? FALLBACK[kind]! : kind;
   if (k === 'scramble' && !isWord(item)) k = 'listen';
-  if (k === 'build' || k === 'hear') return { kind: k, item, tiles: shuffle(words(item.t), r), answer: item.t };
+  if (k === 'build' || k === 'hear') {
+    // A few extra words from the other items, so it cannot be solved by using every tile.
+    const own = new Set(words(item.t).map((w) => w.toLowerCase()));
+    const extra = shuffle([...new Set(items.filter((x) => x !== item).flatMap((x) => words(x.t)))].filter((w) => !own.has(w.toLowerCase())), r)
+      .slice(0, Math.min(3, Math.max(2, Math.round(words(item.t).length / 2))));
+    return { kind: k, item, tiles: shuffle([...words(item.t), ...extra], r), answer: item.t };
+  }
   if (k === 'type' || k === 'dictation') return { kind: k, item, answer: item.t };
   if (k === 'scramble') {
     const letters = [...item.t.replace(/[.!?¡¿,]/g, '')];
@@ -89,17 +95,41 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
   return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r), answer: item.t };
 }
 
+/** The kinds for a lesson of `length` exercises: recognition first, then production. */
+function planKinds(length: number, production: number | undefined): Kind[] {
+  const nProduce = production === 0 ? 0 : Math.max(2, Math.round((length - 1) * (production ?? 0.2)));
+  return Array.from({ length: length - 1 }, (_, i) =>
+    (i < length - 1 - nProduce ? RECOGNISE[i % RECOGNISE.length] : PRODUCE[(i - (length - 1 - nProduce)) % PRODUCE.length]));
+}
+
 /**
- * A lesson of `length` exercises (one is a matching round): recognition first, then
- * production for the `production` share of it. Every item is used before any repeats.
+ * How many exercises fill `seconds`, given how long each kind takes (pace.ts). Quick games
+ * mean more exercises, slow ones fewer, so lessons last about the same time.
  */
-export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number } = {}): Exercise[] {
-  const length = opts.length ?? 10;
+export function lengthForTime(seconds: number, production: number | undefined, secondsOf: (k: Kind) => number): number {
+  let best = 4;
+  for (let n = 4; n <= 40; n++) {
+    const total = planKinds(n, production).reduce((t, k) => t + secondsOf(k), secondsOf('match'));
+    if (total > seconds) break;
+    best = n;
+  }
+  return best;
+}
+
+/** Estimated seconds for a built lesson. */
+export const lessonSeconds = (exercises: Exercise[], secondsOf: (k: Kind) => number) =>
+  exercises.reduce((t, e) => t + secondsOf(e.kind), 0);
+
+/**
+ * A lesson (one exercise is a matching round): recognition first, then production for the
+ * `production` share. Sized by `seconds` (a time budget) or `length`. Every item is used
+ * before any repeats.
+ */
+export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number; seconds?: number; secondsOf?: (k: Kind) => number } = {}): Exercise[] {
+  const length = opts.seconds && opts.secondsOf ? lengthForTime(opts.seconds, opts.production, opts.secondsOf) : opts.length ?? 10;
   const r = rng(seed);
   const all = shuffle(items, r);
-  const nProduce = opts.production === 0 ? 0 : Math.max(2, Math.round((length - 1) * (opts.production ?? 0.2)));
-  const plan: Kind[] = Array.from({ length: length - 1 }, (_, i) =>
-    (i < length - 1 - nProduce ? RECOGNISE[i % RECOGNISE.length] : PRODUCE[(i - (length - 1 - nProduce)) % PRODUCE.length]));
+  const plan = planKinds(length, opts.production);
   const used = new Set<Item>();
   // Keep one single word back for the letter scramble, so it is not used up first.
   const forScramble = plan.includes('scramble') ? all.find(isWord) : undefined;
