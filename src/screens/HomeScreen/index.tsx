@@ -213,6 +213,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             )
           }
 
+          {/* Recorder: record a conversation, get a transcript with speakers */}
+          <AnimatedPressable
+            style={styles.galleryCard}
+            onPress={() => navigation.navigate('Recorder')}
+            hapticType="selection"
+            testID="home-recorder"
+          >
+            <Icon name="mic" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Recorder</Text>
+              <Text style={styles.galleryCardMeta}>Record a conversation, get a transcript with speakers</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
           {/* Image Gallery */}
           <AnimatedPressable
             style={styles.galleryCard}

@@ -8,7 +8,7 @@ import type { RootStackParamList } from './types';
 
 export type NavItemId =
   | 'home' | 'chats' | 'workspace' | 'models' | 'settings'
-  | 'emergency' | 'library' | 'brief' | 'compass' | 'phrases' | 'survival';
+  | 'emergency' | 'library' | 'brief' | 'compass' | 'phrases' | 'recorder' | 'survival';
 
 export interface NavItem {
   id: NavItemId;
@@ -32,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'brief', label: 'Daily brief', icon: 'sun', route: 'BriefTab', description: 'Daily briefing' },
   { id: 'compass', label: 'Compass', icon: 'compass', route: 'CompassTab', target: 'Compass', description: 'Compass' },
   { id: 'phrases', label: 'Phrases', icon: 'globe', route: 'PhrasesTab', target: 'Phrases', description: 'Phrase trainer' },
+  { id: 'recorder', label: 'Record', icon: 'mic', route: 'RecorderTab', target: 'Recorder', description: 'Recorder with speaker labels' },
   { id: 'survival', label: 'Manual', icon: 'life-buoy', route: 'SurvivalTab', target: 'SurvivalManual', description: 'Survival manual' },
 ];
 
@@ -49,7 +50,7 @@ export const MIN_VISIBLE = 2;
 /** Settings cannot be hidden: it is where this is changed. */
 export const LOCKED: NavItemId = 'settings';
 /** Out of the box: Home, Chats, Workspace and Settings. Models and the shortcuts are one tap away elsewhere. */
-export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'survival'];
+export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'survival'];
 
 const ALL = NAV_ITEMS.map((i) => i.id);
 export const navItem = (id: NavItemId): NavItem => NAV_ITEMS.find((i) => i.id === id)!;
@@ -60,7 +61,9 @@ export interface ResolvedNavBar { order: NavItemId[]; visible: NavItemId[]; labe
 export function resolveNavBar(setting?: NavBarSetting): ResolvedNavBar {
   const known = (setting?.order ?? []).filter((id, i, a) => ALL.includes(id) && a.indexOf(id) === i);
   const order = [...known, ...ALL.filter((id) => !known.includes(id))];
-  const hidden = new Set(setting?.hidden ?? DEFAULT_HIDDEN);
+  // Items added in a later version (not in the saved order) start hidden, like on a fresh install.
+  const added = setting?.order ? DEFAULT_HIDDEN.filter((id) => !setting.order!.includes(id)) : [];
+  const hidden = new Set([...(setting?.hidden ?? DEFAULT_HIDDEN), ...added]);
   hidden.delete(LOCKED);
   let visible = order.filter((id) => !hidden.has(id));
   if (visible.length > MAX_VISIBLE) {

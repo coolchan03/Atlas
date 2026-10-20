@@ -58,6 +58,7 @@ export type MainTabParamList = {
   EmergencyTab: undefined;
   LibraryTab: undefined;
   BriefTab: undefined;
+  RecorderTab: undefined;
   CompassTab: undefined;
   PhrasesTab: undefined;
   SurvivalTab: undefined;
