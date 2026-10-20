@@ -44,6 +44,8 @@ interface LanguageState {
   saved: Record<string, SavedLesson | undefined>;
   /** Right / wrong sounds in the games. */
   sounds: boolean;
+  /** XP and lessons per day (day key "2026-10-20"), the last 90 days, for weekly progress. */
+  history: Record<string, { xp: number; lessons: number }>;
   /** Daily XP goal, and the XP earned on the last day practised. */
   goal: number;
   today: { day: string; xp: number };
@@ -60,7 +62,7 @@ interface LanguageState {
  */
 export const useLanguage = create<LanguageState>()(persist((): LanguageState => ({
   language: 'es-ES', content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 }, listening: {}, myWords: {},
-  level: 1, tips: {}, memory: {}, pace: {}, saved: {}, sounds: true, speaking: true, glossary: {}, goal: 100, today: { day: '', xp: 0 },
+  level: 1, tips: {}, memory: {}, pace: {}, saved: {}, sounds: true, speaking: true, glossary: {}, goal: 100, today: { day: '', xp: 0 }, history: {},
 }), {
   name: 'atlas-language', storage: createJSONStorage(() => AsyncStorage), version: 2,
   // Version 2: six CEFR levels instead of four.

@@ -89,6 +89,7 @@ export const LanguageScreen: React.FC = () => {
           <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(1, todayXp / goal) * 100}%` }]} /></View>
           <Text style={styles.progressText}>{todayXp >= goal ? 'Goal met' : `${todayXp} / ${goal} XP today`}</Text>
         </TouchableOpacity>
+        <WeekProgress onWordBook={() => navigation.navigate('WordBook')} />
         <View style={styles.extras}>
           <Text style={styles.progressText}>Square {Math.min(current + 1, spaces.length)} of {spaces.length} · {doneCount} done</Text>
           <TouchableOpacity disabled={!languageService.unlocked(REVIEW, code)} onPress={() => navigation.navigate('Lesson', { unitId: REVIEW })} testID="language-review">
@@ -150,6 +151,33 @@ function PrepareLevel({ level }: { level: LevelId }) {
         </>
       ) : <Text style={styles.progressText}>{cefr} is ready: every lesson and story works offline.</Text>}
       {!!live.error && !running && <Text style={styles.progressText}>{live.error}</Text>}
+    </View>
+  );
+}
+
+/** This week at a glance: XP per day as bars, lessons and words learned, and the word book. */
+function WeekProgress({ onWordBook }: { onWordBook: () => void }) {
+  const styles = useThemedStyles(createStyles);
+  useLanguage((s) => s.history);
+  const week = languageService.week();
+  const max = Math.max(1, ...week.map((d) => d.xp));
+  const xp = week.reduce((t, d) => t + d.xp, 0);
+  const lessons = week.reduce((t, d) => t + d.lessons, 0);
+  const words = languageService.wordBook().length;
+  return (
+    <View style={styles.week} testID="language-week">
+      <View style={styles.weekBars}>
+        {week.map((d) => (
+          <View key={d.day} style={styles.weekDay} accessibilityLabel={`${d.label}: ${d.xp} XP`}>
+            <View style={styles.weekTrack}><View style={[styles.weekFill, d.today && styles.weekToday, { height: `${(d.xp / max) * 100}%` }]} /></View>
+            <Text style={styles.progressText}>{d.label}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.weekText}>
+        <Text style={styles.progressText} testID="language-week-total">This week: {xp} XP, {plural(lessons, 'lesson')}</Text>
+        <TouchableOpacity onPress={onWordBook} testID="language-wordbook"><Text style={styles.extraOn}>Word book ({words})</Text></TouchableOpacity>
+      </View>
     </View>
   );
 }

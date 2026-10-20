@@ -31,6 +31,15 @@ export const DAILY_GOALS = [50, 100, 200, 300];
 export const LANGUAGES = PHRASE_LANGUAGES.map(({ code, name, native }) => ({ code, name, native }));
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Keeps the last 90 days of history. */
+const keepDays = (h: Record<string, { xp: number; lessons: number }>) => {
+  const cutoff = Date.now() - 90 * 864e5;
+  const time = (key: string) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+  return Object.fromEntries(Object.entries(h).filter(([d]) => time(d) >= cutoff));
+};
+
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 /** Checks the model's translations: one per item, in order, not just the English copied back. */
@@ -334,6 +343,27 @@ export const languageService = {
     return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
   },
 
+  /** The last seven days, oldest first, for the weekly chart. */
+  week(now = new Date()): { day: string; label: string; xp: number; lessons: number; today: boolean }[] {
+    const history = useLanguage.getState().history ?? {};
+    return Array.from({ length: 7 }, (_, k) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - k));
+      const key = dayKey(d);
+      return { day: key, label: WEEKDAYS[d.getDay()], xp: history[key]?.xp ?? 0, lessons: history[key]?.lessons ?? 0, today: k === 6 };
+    });
+  },
+
+  /**
+   * Every word learned so far (lessons finished, and My words), with how well it is known
+   * (Leitner box 1-5, 0 = not practised yet) and when it is next due for review.
+   */
+  wordBook(code = useLanguage.getState().language): { t: string; en: string; r?: string; box: number; due: number | null }[] {
+    const memory = useLanguage.getState().memory[code] ?? {};
+    const seen = new Set<string>();
+    return languageService.studiedItems(code).filter((x) => !seen.has(x.t) && seen.add(x.t))
+      .map((x) => ({ ...x, box: memory[x.t]?.box ?? 0, due: memory[x.t]?.due ?? null }));
+  },
+
   /** XP earned today. */
   todayXp(): number {
     const { today } = useLanguage.getState();
@@ -429,7 +459,7 @@ export const languageService = {
    * word's spaced-repetition box (`results`: the word in the language and whether it was right).
    */
   finishLesson(unitId: string, { right, total, results = [] }: { right: number; total: number; results?: { t: string; right: boolean }[] }): { stars: number; xp: number; streak: number } {
-    const { language: code, progress, xp, streak, memory, today: day } = useLanguage.getState();
+    const { language: code, progress, xp, streak, memory, today: day, history = {} } = useLanguage.getState();
     const stars = starsFor(right, total);
     const prev = progress[code]?.[unitId] ?? { stars: 0, lessons: 0 };
     const today = dayKey();
@@ -442,6 +472,7 @@ export const languageService = {
       progress: unitId === REVIEW || unitId === PRACTICE ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
       xp: xp + gained,
       today: { day: today, xp: (day?.day === today ? day.xp : 0) + gained },
+      history: keepDays({ ...history, [today]: { xp: (history[today]?.xp ?? 0) + gained, lessons: (history[today]?.lessons ?? 0) + 1 } }),
       streak: nextStreak,
       memory: { ...memory, [code]: mem },
     });

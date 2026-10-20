@@ -70,6 +70,7 @@ import { LanguageScreen } from '../language/LanguageScreen';
 import { LessonScreen } from '../language/LessonScreen';
 import { ListeningScreen } from '../language/ListeningScreen';
 import { WordSearchScreen } from '../language/WordSearchScreen';
+import { WordBookScreen } from '../language/WordBookScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -302,6 +303,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Lesson" component={LessonScreen} />
         <RootStack.Screen name="Listening" component={ListeningScreen} />
         <RootStack.Screen name="WordSearch" component={WordSearchScreen} />
+        <RootStack.Screen name="WordBook" component={WordBookScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
