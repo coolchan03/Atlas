@@ -13,7 +13,34 @@ export interface SyncSnapshot {
   agents: Agent[];
   files?: ProjectBackupFile[];
   deleted?: Tombstones;
+  /** Settings, the language course, study, maps, notes, recordings and more (stores.ts). */
+  stores?: Record<string, { value: string; changedAt: number }>;
+  /** Recordings whose audio this phone has, so the other phone sends only what is missing. */
+  audio?: string[];
   // Transport and storage are handled separately; no credentials, model weights or keys.
+}
+
+/** Ciphertext sealed with the item's own PIN, so it opens on any phone (never this phone's Keystore). */
+const PORTABLE = 'atlasbackup:v1:';
+export const portableLocked = (item: { pinVerifier?: string; protectedBlob?: string }) =>
+  Boolean(item.pinVerifier && typeof item.protectedBlob === 'string' && item.protectedBlob.startsWith(PORTABLE));
+
+/**
+ * A locked chat or project from the other phone, sealed with its PIN: added when this phone
+ * does not have it, and replacing this phone's copy when newer, unless it is open right now.
+ * Returns true when it was handled (protected), false for an ordinary item.
+ */
+function mergeLocked<T extends RecordItem & { pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }>(
+  output: T[], incoming: T, isOpen: (id: string) => boolean,
+): 'added' | 'updated' | 'skipped' | false {
+  if (!isProtected(incoming)) return false;
+  if (!portableLocked(incoming) || incoming.isPrivate) return 'skipped';
+  const index = output.findIndex((v) => v.id === incoming.id);
+  if (index < 0) { output.push(incoming); return 'added'; }
+  const current = output[index];
+  if (!isProtected(current) || isOpen(current.id) || validTime(incoming.updatedAt) <= validTime(current.updatedAt)) return 'skipped';
+  output[index] = incoming;
+  return 'updated';
 }
 export interface MergeResult<T> { items: T[]; added: number; updated: number; conflicts: number }
 type RecordItem = { id: string; updatedAt: string };
@@ -41,11 +68,13 @@ function preserveConflict<T extends RecordItem>(items: T[], candidate: T, suffix
   items.push(fork as T);
   return true;
 }
-export function mergeConversations(local: Conversation[], remote: Conversation[]): MergeResult<Conversation> {
+export function mergeConversations(local: Conversation[], remote: Conversation[], isOpen: (id: string) => boolean = () => true): MergeResult<Conversation> {
   const output = [...local];
   let added = 0, updated = 0, conflicts = 0;
   for (const incoming of remote) {
-    if (!safeRecord(incoming) || !Array.isArray(incoming.messages) || isProtected(incoming)) continue;
+    if (!safeRecord(incoming) || !Array.isArray(incoming.messages)) continue;
+    const locked = mergeLocked(output, incoming, isOpen);
+    if (locked) { added += Number(locked === 'added'); updated += Number(locked === 'updated'); continue; }
     const index = output.findIndex(v => v.id === incoming.id);
     if (index < 0) { output.push(incoming); added++; continue; }
     const current = output[index];
@@ -76,12 +105,14 @@ export function mergeConversations(local: Conversation[], remote: Conversation[]
   return { items: output, added, updated, conflicts };
 }
 function mergeNamed<T extends RecordItem & { name: string; pinVerifier?: string; protectedBlob?: string }>(
-  local: T[], remote: T[],
+  local: T[], remote: T[], isOpen: (id: string) => boolean = () => true,
 ): MergeResult<T> {
   const output = [...local];
   let added = 0, updated = 0, conflicts = 0;
   for (const incoming of remote) {
-    if (!safeRecord(incoming) || !incoming.name || isProtected(incoming)) continue;
+    if (!safeRecord(incoming) || !incoming.name) continue;
+    const locked = mergeLocked(output, incoming, isOpen);
+    if (locked) { added += Number(locked === 'added'); updated += Number(locked === 'updated'); continue; }
     const index = output.findIndex(item => item.id === incoming.id);
     if (index < 0) { output.push(incoming); added++; continue; }
     const existing = output[index];
@@ -95,8 +126,8 @@ function mergeNamed<T extends RecordItem & { name: string; pinVerifier?: string;
   }
   return { items: output, added, updated, conflicts };
 }
-export const mergeProjects = (local: Project[], remote: Project[]): MergeResult<Project> =>
-  mergeNamed(local, remote);
+export const mergeProjects = (local: Project[], remote: Project[], isOpen?: (id: string) => boolean): MergeResult<Project> =>
+  mergeNamed(local, remote, isOpen);
 export const mergeAgents = (local: Agent[], remote: Agent[]): MergeResult<Agent> =>
   mergeNamed(local, remote);
 

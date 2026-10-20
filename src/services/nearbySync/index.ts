@@ -9,6 +9,9 @@ import { mergeAgents, mergeConversations, mergeProjects, validateSnapshot } from
 import type { SyncSnapshot } from './merge';
 import { applyTombstones, captureRemovals, combineTombstones, emptyTombstones, validateTombstones } from './tombstones';
 import type { Tombstones, SyncKind } from './tombstones';
+import { applyStores, localStores } from './stores';
+import { audioOnPhone, receiveAudio, sendMissingAudio, type AudioChunk } from './audio';
+import { useRecordings } from '../../atlasRecorder/store';
 
 const PREF = 'atlas-sync-enabled-v1';
 const DELETED_PREF = 'atlas-sync-deletions-v1';
@@ -35,6 +38,11 @@ export interface NearbyStatus {
   syncing: boolean;
 }
 type Incoming = { requestId: string; peerId: string; payload: string; newPair: boolean };
+/** A piece of recording audio (not a full sync message), or null. */
+const audioChunk = (payload: string): (AudioChunk & { sourceId: string }) | null => {
+  if (!payload.startsWith('{"kind":"audio"')) return null;
+  try { return JSON.parse(payload); } catch { return null; }
+};
 export const nearbyAvailable = Platform.OS === 'android' && Boolean(NativeModules.AtlasNearbySync);
 const native = (): NativeNearby => {
   if (!nearbyAvailable) throw new Error('Offline peer sync needs the updated Android build.');
@@ -95,6 +103,10 @@ class NearbySyncService {
       if (next.agents !== previous.agents)
         this.observeRemovals('agents', previous.agents, next.agents);
     });
+    useRecordings.subscribe((next, previous) => {
+      if (next.recordings !== previous.recordings)
+        this.observeRemovals('recordings', previous.recordings, next.recordings);
+    });
   }
   private async snapshot(): Promise<SyncSnapshot> {
     await this.hydrated();
@@ -107,9 +119,25 @@ class NearbySyncService {
       .map(c => ({ ...c, messages: c.messages.map(m => ({ ...m, audioPath: undefined })) }));
     const agents = useAgentStore.getState().agents;
     const files = await collectProjectFiles(projects.map(p => p.id));
+    // Locked projects and chats go across sealed with their own PIN, so they open on the other
+    // phone with the same PIN. Only ones opened since Atlas started can be sealed that way.
+    const { openProtectedProjectsForBackup } = require('../../stores/protectedProjectStorage');
+    const { openLockedChatsForBackup } = require('../../stores/encryptedChatStorage');
+    const lockedProjects = await openProtectedProjectsForBackup().catch(() => []);
+    const lockedChats = await openLockedChatsForBackup().catch(() => []);
+    const recordings = useRecordings.getState().recordings;
     return {
-      version: 1, sourceId: this.deviceId, projects, conversations, agents, files, deleted: this.deleted,
+      version: 1, sourceId: this.deviceId, projects: [...projects, ...lockedProjects],
+      conversations: [...conversations, ...lockedChats], agents, files, deleted: this.deleted,
+      stores: await localStores(), audio: await audioOnPhone(recordings.map(r => r.id)),
     };
+  }
+  /** After an exchange, send the other phone the recording audio it does not have yet. */
+  private async sendAudio(peerId: string, remote: SyncSnapshot) {
+    await sendMissingAudio(useRecordings.getState().recordings, remote.audio, async (chunk) => {
+      const reply = await native().sync(peerId, JSON.stringify({ ...chunk, sourceId: this.deviceId }));
+      if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
+    }).catch(error => this.publish({ lastError: `Recording audio: ${String(error?.message ?? error)}` }));
   }
   private async apply(json: string, expectedPeerId: string): Promise<void> {
     const pending = this.mergeQueue.then(() => this.applyOne(json, expectedPeerId));
@@ -122,6 +150,8 @@ class NearbySyncService {
       throw new Error('Wrong device identity in encrypted sync message');
     await this.hydrated();
     const incomingDeleted = validateTombstones(remote.deleted);
+    const { isProtectedProjectOpen } = require('../../stores/protectedProjectStorage');
+    const { isLockedChatOpen } = require('../../stores/encryptedChatStorage');
     const projectsBefore = useProjectStore.getState().projects;
     const incomingProjects = applyTombstones(remote.projects, incomingDeleted.projects);
     const provisionalProjects = mergeProjects(projectsBefore, incomingProjects);
@@ -133,13 +163,13 @@ class NearbySyncService {
     const combined = combineTombstones(this.deleted, incomingDeleted);
     const nextProjects = mergeProjects(
       applyTombstones(useProjectStore.getState().projects, combined.projects),
-      applyTombstones(remote.projects, combined.projects));
+      applyTombstones(remote.projects, combined.projects), isProtectedProjectOpen);
     const projectIds = new Set(nextProjects.items.filter(p => !p.pinVerifier && !p.protectedBlob)
       .map(p => p.id));
     const nextChats = mergeConversations(
       applyTombstones(useChatStore.getState().conversations, combined.conversations),
-      applyTombstones(remote.conversations.filter(c => !c.projectId || projectIds.has(c.projectId)),
-        combined.conversations));
+      applyTombstones(remote.conversations.filter(c => !c.projectId || projectIds.has(c.projectId) || c.pinVerifier),
+        combined.conversations), isLockedChatOpen);
     const nextAgents = mergeAgents(
       applyTombstones(useAgentStore.getState().agents, combined.agents),
       applyTombstones(remote.agents, combined.agents));
@@ -151,11 +181,21 @@ class NearbySyncService {
       this.deleted = combined;
     } finally { this.applyingRemote = false; }
     await AsyncStorage.setItem(DELETED_PREF, JSON.stringify(this.deleted));
+    // Everything else: settings, the language course, study, maps, notes, recordings...
+    this.applyingRemote = true;
+    try { await applyStores(remote.stores, this.deleted.recordings); } finally { this.applyingRemote = false; }
     this.publish({ lastSync: new Date().toISOString(), lastError: undefined });
   }
   private async incoming(message: Incoming) {
     try {
       if (!this.enabled || !this.active || this.isLocked()) throw new Error('Offline sync is paused while Atlas is locked');
+      const audio = audioChunk(message.payload);
+      if (audio) {
+        if (audio.sourceId !== message.peerId) throw new Error('Wrong device identity in recording audio');
+        await receiveAudio(audio);
+        await native().respond(message.requestId, '{"ok":true}');
+        return;
+      }
       if (this.busy) throw new Error('Another synchronization is in progress');
       this.busy = true;
       this.publish({ syncing: true });
@@ -167,8 +207,7 @@ class NearbySyncService {
       this.publish({ lastError: reason });
       await native().respond(message.requestId, JSON.stringify({ error: reason })).catch(() => undefined);
     } finally {
-      this.busy = false;
-      this.publish({ syncing: false });
+      if (!audioChunk(message.payload)) { this.busy = false; this.publish({ syncing: false }); }
     }
   }
   async init() {
@@ -231,6 +270,7 @@ class NearbySyncService {
       const response = await native().pair(uri, JSON.stringify(await this.snapshot()));
       if (response.payload.startsWith('{"error":')) throw new Error(JSON.parse(response.payload).error);
       await this.apply(response.payload, response.peerId);
+      await this.sendAudio(response.peerId, JSON.parse(response.payload));
       await this.refreshPeers();
     } finally { this.busy = false; this.publish({ syncing: false }); }
   }
@@ -241,6 +281,7 @@ class NearbySyncService {
       const response = await native().sync(peerId, JSON.stringify(await this.snapshot()));
       if (response.payload.startsWith('{"error":')) throw new Error(JSON.parse(response.payload).error);
       await this.apply(response.payload, response.peerId);
+      await this.sendAudio(response.peerId, JSON.parse(response.payload));
     } catch (e) {
       this.publish({ lastError: String(e) });
       throw e;

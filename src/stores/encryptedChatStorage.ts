@@ -173,6 +173,9 @@ export async function openLockedChatsForBackup(): Promise<Conversation[]> {
   }
   return out;
 }
+/** True while a locked chat is open (its PIN is in memory this session). */
+export const isLockedChatOpen = (id: string): boolean => sessionPins.has(id);
+
 /** True for the ciphertext prefixes a locked chat may carry in a backup. */
 export const isLockedChatBlob = (blob: unknown): boolean =>
   typeof blob === 'string' && (blob.startsWith(PORTABLE) || blob.startsWith('atlasitem:v1:'));

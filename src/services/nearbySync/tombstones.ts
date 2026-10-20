@@ -1,9 +1,10 @@
 import { sha256 } from 'js-sha256';
 
-export type SyncKind = 'projects' | 'conversations' | 'agents';
+export type SyncKind = 'projects' | 'conversations' | 'agents' | 'recordings';
+const KINDS: SyncKind[] = ['projects', 'conversations', 'agents', 'recordings'];
 export type Tombstones = Record<SyncKind, Record<string, number>>;
 export const emptyTombstones = (): Tombstones => ({
-  projects: {}, conversations: {}, agents: {},
+  projects: {}, conversations: {}, agents: {}, recordings: {},
 });
 const goodId = (id: string) => /^[a-zA-Z0-9_.-]{1,160}$/.test(id);
 const protectedItem = (record: { pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }) =>
@@ -15,8 +16,10 @@ export function validateTombstones(value: unknown): Tombstones {
   if (!value || typeof value !== 'object') throw new Error('Invalid deleted-items ledger');
   const raw = value as Record<string, unknown>;
   const result = emptyTombstones();
-  for (const kind of ['projects', 'conversations', 'agents'] as SyncKind[]) {
+  for (const kind of KINDS) {
     const part = raw[kind];
+    // Phones on an older Atlas do not send recordings yet.
+    if (part === undefined && kind === 'recordings') continue;
     if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error(`Invalid deletions for ${  kind}`);
     const rows = Object.entries(part);
     if (rows.length > 25000) throw new Error('Too many deleted items in sync');
@@ -30,9 +33,9 @@ export function validateTombstones(value: unknown): Tombstones {
 }
 export function combineTombstones(a: Tombstones, b: Tombstones): Tombstones {
   const result = emptyTombstones();
-  for (const kind of ['projects', 'conversations', 'agents'] as SyncKind[]) {
+  for (const kind of KINDS) {
     result[kind] = { ...a[kind] };
-    for (const [id, at] of Object.entries(b[kind])) {
+    for (const [id, at] of Object.entries(b[kind] ?? {})) {
       result[kind][id] = Math.max(at, result[kind][id] ?? 0);
     }
   }

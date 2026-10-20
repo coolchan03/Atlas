@@ -35,6 +35,9 @@ const native = () => {
 /** Portable (backup) ciphertext: sealed with a key derived from the project's PIN, not this phone. */
 const PORTABLE = 'atlasbackup:v1:';
 const portablePass = (pin: string, id: string) => `${pin}:atlas-protected-project:${id}`;
+/** True while a protected project is open (its PIN is in memory this session). */
+export const isProtectedProjectOpen = (id: string): boolean => pins.has(id);
+
 export const isPortableProjectBlob = (blob: unknown): boolean => typeof blob === 'string' && blob.startsWith(PORTABLE);
 const clearSecurity = (p: Project): Project => {
   const { pinVerifier: _pinVerifier, protectedBlob: _protectedBlob, ...rest } = p;
