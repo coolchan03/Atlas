@@ -44,6 +44,22 @@ it('lists pre-made fairy tales and funny everyday stories, and opens a Spanish o
   expect(screen.getByText('lobo')).toBeTruthy();
 });
 
+it('has over a hundred pre-made pieces, with a dozen written out in Spanish that open with no model', async () => {
+  const { WRITTEN_ES } = require('../../../src/language/libraryEs');
+  expect(LIBRARY.length).toBeGreaterThanOrEqual(100);
+  expect(Object.keys(WRITTEN_ES).length).toBeGreaterThanOrEqual(12);
+  // Every written piece is in the library, has questions with valid answers, and new words.
+  for (const [id, piece] of Object.entries<any>(WRITTEN_ES)) {
+    expect(LIBRARY.find((x) => x.id === id)?.kind).toBe(piece.kind);
+    for (const part of piece.parts) expect(part.question.answer).toBeLessThan(part.question.options.length);
+    expect(piece.vocab.length).toBeGreaterThan(5);
+  }
+  mockParams = { kind: 'podcast' };
+  const screen = render(<ListeningScreen />);
+  fireEvent.press(screen.getByTestId('piece-holidays'));
+  expect(await screen.findByText('Las últimas vacaciones')).toBeTruthy();
+});
+
 it('offers made-up, historical and real news among the podcasts', () => {
   mockParams = { kind: 'podcast' };
   const screen = render(<ListeningScreen />);
