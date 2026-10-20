@@ -64,6 +64,8 @@ import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
 import { PresentationScreen } from '../screens/PresentationScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, resolveNavBar, type NavItemId } from './navBar';
+import { RecorderScreen } from '../atlasRecorder/RecorderScreen';
+import { RecordingDetailScreen } from '../atlasRecorder/RecordingDetailScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -288,6 +290,8 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="DailyBrief" component={DailyBriefScreen} />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="ProjectDocument" component={ProjectDocumentScreen} />
+        <RootStack.Screen name="Recorder" component={RecorderScreen} />
+        <RootStack.Screen name="RecordingDetail" component={RecordingDetailScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />

@@ -25,6 +25,8 @@ export type RootStackParamList = {
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   ProjectDocument: { projectId: string; docId?: number; name?: string };
+  Recorder: undefined;
+  RecordingDetail: { id: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack
   ModelSettings: undefined;
