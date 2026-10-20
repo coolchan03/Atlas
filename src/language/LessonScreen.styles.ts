@@ -8,15 +8,17 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   barFill: { height: 10, borderRadius: 5, backgroundColor: colors.primary },
   body: { flexGrow: 1, padding: SPACING.lg, gap: SPACING.md },
   prompt: { ...TYPOGRAPHY.label, color: colors.textSecondary },
-  big: { ...TYPOGRAPHY.h1, color: colors.text },
+  big: { ...TYPOGRAPHY.h2, color: colors.text, flexShrink: 1, marginVertical: SPACING.xs },
   roman: { ...TYPOGRAPHY.body, color: colors.textMuted },
   sayRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md },
+  // Text next to the play button wraps instead of running off the screen.
+  sayText: { flex: 1, flexShrink: 1 },
   speaker: {
     width: 56, height: 56, borderRadius: 28, alignItems: 'center' as const, justifyContent: 'center' as const,
     backgroundColor: colors.primary,
   },
   columns: { flexDirection: 'row' as const, gap: SPACING.md },
-  column: { flex: 1, gap: SPACING.sm },
+  column: { flex: 1, flexShrink: 1, gap: SPACING.sm },
   tiles: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.sm, minHeight: 52 },
   pool: { marginTop: SPACING.lg },
   typed: {
@@ -27,7 +29,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   tip: { ...TYPOGRAPHY.body, color: colors.text },
   answerLine: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: SPACING.sm },
   tile: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  tileText: { ...TYPOGRAPHY.body, color: colors.text },
+  tileText: { ...TYPOGRAPHY.body, color: colors.text, flexShrink: 1 },
   footer: { padding: SPACING.lg, gap: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
   feedback: { ...TYPOGRAPHY.body, color: colors.text },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },

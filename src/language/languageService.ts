@@ -4,21 +4,25 @@
  * and recording finished lessons (stars, XP, daily streak). Screens read useLanguage and call this.
  */
 import { PHRASE_LANGUAGES, PHRASES_EN } from '../phrases/data';
-import { ensureTextModel } from '../atlasTools/models';
+import { ensureTextModel, forceLoadTextModel } from '../atlasTools/models';
 import { parseJsonLoose, str } from '../study/games/json';
 import { UNITS, unitById, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
 import { starsFor, type Item } from './lessons';
 import { knownSet, newWords, parseListening, type Listening, type Word } from './listening';
 import { dueItems, remember } from './review';
-import { useLanguage } from './store';
-import { levelGuide, type LevelId } from './teaching';
+import { useLanguage, type SavedLesson } from './store';
+import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
+import { secondsFor, updatePace, type ExerciseKind } from './pace';
+import { levelGuide, methodFor, type LevelId } from './teaching';
 import { LANGUAGE_PROJECT_ID, isGeneratedTutorPrompt, languageProjectDescription, tutorPrompt } from './tutor';
 
 /** The personal unit made from words saved in stories and podcasts. */
 export const MY_WORDS = 'mine';
 /** A lesson of words due for spaced review, from every unit studied. */
 export const REVIEW = 'review';
+/** Practice that earns XP but no board progress (a speed round outside the board). */
+export const PRACTICE = 'practice';
 
 export const LANGUAGES = PHRASE_LANGUAGES.map(({ code, name, native }) => ({ code, name, native }));
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;
@@ -44,6 +48,23 @@ async function model(): Promise<any> {
   const { llmService } = require('../services/llm');
   if (llmService.isCurrentlyGenerating()) throw new Error('The model is busy with a chat. Try again in a moment.');
   return llmService;
+}
+
+/** A word as looked up: lower case, no punctuation around it. */
+export const plainWord = (w: string) => w.toLocaleLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+/** A meaning the phone already has: single-word lesson items, saved words, story word lists. */
+function localMeaning(w: string, code: string): string {
+  const st = useLanguage.getState();
+  const pools: { t: string; en: string }[][] = [
+    ...Object.values(st.content[code] ?? {}), st.myWords[code] ?? [],
+    ...(st.listening[code] ?? []).map((l) => l.vocab),
+  ];
+  for (const pool of pools) {
+    const hit = pool.find((x) => plainWord(x.t) === w);
+    if (hit) return hit.en;
+  }
+  return '';
 }
 
 function builtInWords(unit: Unit, code: string): Item[] {
@@ -80,9 +101,15 @@ export const languageService = {
     syncProject();
   },
 
+  /** True when a board space (lesson part, story, podcast or speed round) has been done. */
+  isDone(key: string, code = useLanguage.getState().language): boolean {
+    return (useLanguage.getState().progress[code]?.[key]?.stars ?? 0) > 0;
+  },
+
   /**
-   * The first unit of every level is open, so a learner who already knows some can start
-   * higher. Within a level, a unit opens when the one before it has a star.
+   * My words opens once it has words and Review once words are due. A unit is open when its
+   * first board space is: the first space of every level is open (so a learner who knows some
+   * can start higher), and after that a space opens when the one before it is done.
    */
   unlocked(unitId: string, code = useLanguage.getState().language): boolean {
     const st = useLanguage.getState();
@@ -90,9 +117,77 @@ export const languageService = {
     if (unitId === REVIEW) return languageService.dueCount(code) >= 4;
     const unit = unitById(unitId);
     if (!unit) return false;
-    const same = UNITS.filter((u) => u.level === unit.level);
-    const i = same.findIndex((u) => u.id === unitId);
-    return i <= 0 || (st.progress[code]?.[same[i - 1].id]?.stars ?? 0) > 0;
+    const spaces = boardFor(unit.level);
+    return spaceOpen(spaces, spaces.findIndex((s) => s.unitId === unitId), (k) => languageService.isDone(k, code));
+  },
+
+  /** Marks a story, podcast or speed-round space as done (stars and XP come from lessons). */
+  completeSpace(key: string): void {
+    const { language: code, progress } = useLanguage.getState();
+    const prev = progress[code]?.[key] ?? { stars: 0, lessons: 0 };
+    useLanguage.setState({ progress: { ...progress, [code]: { ...progress[code], [key]: { stars: Math.max(1, prev.stars), lessons: prev.lessons + 1 } } } });
+  },
+
+  setSounds(on: boolean): void { useLanguage.setState({ sounds: on }); },
+
+  /** Loads the AI model even when something else holds the memory (frees other models first). */
+  async forceLoadModel(onStep: (m: string) => void = () => undefined): Promise<void> {
+    await forceLoadTextModel(onStep);
+  },
+
+  /**
+   * The English meaning of one word (tap a word to see it). Words from lessons, saved words
+   * and stories are known already; anything else is asked of the model once and kept.
+   */
+  async lookupWord(word: string): Promise<string> {
+    const st = useLanguage.getState();
+    const code = st.language;
+    const w = plainWord(word);
+    if (!w) return '';
+    const cached = st.glossary[code]?.[w];
+    if (cached) return cached;
+    const local = localMeaning(w, code);
+    if (local) return local;
+    const llm = await model();
+    const raw: string = await llm.generateResponse([
+      { id: 's', role: 'system', content: `You are a ${langName(code)}-English dictionary. Reply with only the short English meaning, nothing else.`, timestamp: 0 },
+      { id: 'u', role: 'user', content: `${langName(code)} word: ${word}`, timestamp: 0 },
+    ], { disableThinking: true });
+    const meaning = str(raw.replace(/<think>[\s\S]*?<\/think>/g, '').split('\n').map((l) => l.trim()).filter(Boolean)[0], 80);
+    if (meaning) useLanguage.setState((s) => ({ glossary: { ...s.glossary, [code]: { ...s.glossary[code], [w]: meaning } } }));
+    return meaning;
+  },
+
+  /** Answers the learner's question about the exercise in front of them, at their level. */
+  async askTutor(question: string, context: string): Promise<string> {
+    const { language: code, level } = useLanguage.getState();
+    const llm = await model();
+    const raw: string = await llm.generateResponse([
+      { id: 's', role: 'system', content: `You are a friendly ${langName(code)} tutor helping during a lesson. ${methodFor(levelGuide(level), langName(code))} Explain in simple English in three sentences or fewer, with one short example. Do not just give away an answer the learner has not tried yet: give a hint first.`, timestamp: 0 },
+      { id: 'u', role: 'user', content: `${context}\n\nMy question: ${question}`, timestamp: 0 },
+    ], { disableThinking: true });
+    return raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  },
+
+  /** Seconds the learner took on one exercise, to size later lessons to their pace. */
+  recordPace(kind: ExerciseKind, seconds: number): void {
+    useLanguage.setState((s) => ({ pace: { ...s.pace, [kind]: updatePace(s.pace[kind], seconds) } }));
+  },
+
+  /** Seconds to plan for an exercise of this kind (the learner's own pace once known). */
+  secondsOf: (kind: ExerciseKind): number => secondsFor(kind, useLanguage.getState().pace),
+
+  /** The unfinished lesson for a space, if there is one (so it carries on where it stopped). */
+  savedLesson(key: string): SavedLesson | undefined {
+    const st = useLanguage.getState();
+    const s = st.saved[st.language];
+    return s && s.key === key ? s : undefined;
+  },
+
+  /** Keeps the lesson in progress (or clears it with null) so leaving and coming back loses nothing. */
+  saveLesson(lesson: Omit<SavedLesson, 'savedAt'> | null): void {
+    const code = useLanguage.getState().language;
+    useLanguage.setState((s) => ({ saved: { ...s.saved, [code]: lesson ? { ...lesson, savedAt: Date.now() } : undefined } }));
   },
 
   /** True when the unit's words came from the model rather than the built-in phrase cards. */
@@ -149,15 +244,15 @@ export const languageService = {
 
   /** Every word the learner has met: finished units and saved words. */
   knownItems(code = useLanguage.getState().language): Item[] {
-    const { content, progress, myWords } = useLanguage.getState();
-    const done = UNITS.filter((u) => (progress[code]?.[u.id]?.stars ?? 0) > 0);
+    const { content, myWords } = useLanguage.getState();
+    const done = UNITS.filter((u) => unitDone(u, (k) => languageService.isDone(k, code)));
     return [...done.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
   },
 
   /** Items from every unit the learner has practised at least once (for review). */
   studiedItems(code = useLanguage.getState().language): Item[] {
     const { content, progress, myWords } = useLanguage.getState();
-    const studied = UNITS.filter((u) => (progress[code]?.[u.id]?.lessons ?? 0) > 0);
+    const studied = UNITS.filter((u) => (progress[code]?.[lessonKey(u.id, 1)]?.lessons ?? 0) > 0);
     return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
   },
 
@@ -206,7 +301,7 @@ export const languageService = {
     const mem = { ...memory[code] };
     for (const r of results) mem[r.t] = remember(mem[r.t], r.right);
     useLanguage.setState({
-      progress: unitId === REVIEW ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
+      progress: unitId === REVIEW || unitId === PRACTICE ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
       xp: xp + gained,
       streak: nextStreak,
       memory: { ...memory, [code]: mem },

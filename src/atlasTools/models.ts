@@ -20,6 +20,24 @@ export async function ensureTextModel(modelId?: string | null, onStatus?: (s: st
   await activeModelService.loadTextModel(target);
 }
 
+/**
+ * Load a text model now, whatever else is in memory: frees every loaded model (image, speech,
+ * another text model) first, then loads the selected text model, or the first downloaded one
+ * when none is selected. For screens that need the model and could not get it the normal way.
+ */
+export async function forceLoadTextModel(onStatus?: (s: string) => void): Promise<void> {
+  const st = useAppStore.getState();
+  const target = st.activeModelId && st.downloadedModels.some((m) => m.id === st.activeModelId)
+    ? st.activeModelId : st.downloadedModels[0]?.id;
+  if (!target) throw new Error('No text model is downloaded. Download one in the Models tab first.');
+  const { activeModelService } = require('../services/activeModelService');
+  onStatus?.('Freeing memory...');
+  await activeModelService.unloadAllModels(true).catch((e: unknown) => logger.warn(`[Atlas] unload before force load: ${String(e)}`));
+  const name = st.downloadedModels.find((m) => m.id === target)?.name || target;
+  onStatus?.(`Loading ${name}...`);
+  await activeModelService.loadTextModel(target);
+}
+
 /** Fire-and-forget switch used when an agent with a preferred model is chosen. */
 export function switchToModelInBackground(modelId: string): void {
   const st = useAppStore.getState();

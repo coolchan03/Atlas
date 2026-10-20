@@ -6,6 +6,7 @@ import { Choice } from '../components/games/kit';
 import { speakIn } from '../atlasVoice/tts';
 import { rng, type Exercise, type Item } from './lessons';
 import { createStyles } from './LessonScreen.styles';
+import { Tappable } from './Tappable';
 
 /** What the learner has picked so far, and whether the answer was checked. */
 export interface Attempt { value: string; checked: boolean }
@@ -135,7 +136,7 @@ export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }:
       <Text style={styles.prompt}>True or false?</Text>
       <View style={styles.sayRow}>
         <Say item={ex.item} lang={lang} />
-        <Text style={styles.big}>{ex.item.t}</Text>
+        <View style={styles.sayText}><Tappable text={ex.item.t} style={styles.big} /></View>
       </View>
       <Text style={styles.bodyText}>means "{ex.shownMeaning}"</Text>
       <Options ex={ex} attempt={attempt} onPick={onPick} />
@@ -144,7 +145,7 @@ export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }:
   if (ex.kind === 'blank') return (
     <View>
       <Text style={styles.prompt}>Fill in the blank</Text>
-      <Text style={styles.big}>{ex.shown}</Text>
+      <Tappable text={ex.shown} style={styles.big} />
       <Text style={styles.roman}>{ex.item.en}</Text>
       <Options ex={ex} attempt={attempt} onPick={onPick} />
     </View>
@@ -156,7 +157,7 @@ export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }:
       {ex.kind === 'meaning' && (
         <View style={styles.sayRow}>
           <Say item={ex.item} lang={lang} />
-          <View><Text style={styles.big}>{ex.item.t}</Text>{!!ex.item.r && <Text style={styles.roman}>{ex.item.r}</Text>}</View>
+          <View style={styles.sayText}><Tappable text={ex.item.t} style={styles.big} />{!!ex.item.r && <Text style={styles.roman}>{ex.item.r}</Text>}</View>
         </View>
       )}
       {ex.kind === 'listen' && <Say item={ex.item} lang={lang} autoPlay />}

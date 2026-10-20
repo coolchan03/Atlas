@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -6,12 +6,16 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
 import { unitById } from './curriculum';
-import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
+import { LANGUAGES, MY_WORDS, PRACTICE, REVIEW, languageService } from './languageService';
 import { levelGuide } from './teaching';
+import { lessonKey, partItems } from './board';
+import { LESSON_SECONDS } from './pace';
 import { buildLesson, checkTyped, type Exercise } from './lessons';
 import { useLanguage } from './store';
 import { ExerciseView, type Attempt } from './Exercises';
 import { createStyles } from './LessonScreen.styles';
+import { playFeedback } from './sounds';
+import { HelpSheet, exerciseContext } from './HelpSheet';
 
 const EMPTY: Attempt = { value: '', checked: false };
 
@@ -23,22 +27,30 @@ const lessonTitle = (unitId: string, speed: boolean) =>
 const feedbackText = (verdict: 'right' | 'accents' | 'wrong', answer: string) =>
   (verdict === 'right' ? 'Right.' : verdict === 'accents' ? `Right, but watch the accents: ${answer}` : `Not quite. Answer: ${answer}`);
 
+/** Progress key: the board space, else the unit's lesson (practice-only for speed rounds without a space). */
+const progressKey = ({ key, unitId, part = 1 }: { key?: string; unitId: string; part?: number }, speed: boolean) =>
+  key ?? (speed ? PRACTICE : unitId === MY_WORDS || unitId === REVIEW ? unitId : lessonKey(unitId, part));
+
 /**
- * One lesson of a unit, sized by its level (teaching.ts): a grammar or theme note first,
- * then short exercises from recognising to producing, then stars, XP and the streak. Every
- * answer also updates the word's review schedule. Speed round: as many as you can in a minute.
+ * One board space's lesson, about five minutes long whatever its games (pace.ts): a grammar
+ * or theme note first, then exercises from recognising to producing, then stars, XP and the
+ * streak. Every answer updates the word's review schedule and the learner's pace, and the
+ * lesson is saved as it goes, so leaving and coming back carries on where it stopped.
+ * Speed round: as many as you can in a minute.
  */
 export const LessonScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { unitId, mode } = useRoute<any>().params as { unitId: string; mode?: 'speed' };
+  const params = useRoute<any>().params as { unitId: string; mode?: 'speed'; part?: number; parts?: number; key?: string };
+  const { unitId, mode, part = 1, parts = 1 } = params;
   const speed = mode === 'speed';
+  const key = progressKey(params, speed);
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const code = useLanguage((s) => s.language);
   const langName = LANGUAGES.find((l) => l.code === code)?.name ?? code;
   const unit = unitById(unitId);
   const guide = levelGuide(unit?.level ?? useLanguage.getState().level);
-  const title = lessonTitle(unitId, speed);
+  const title = parts > 1 && !speed ? `${lessonTitle(unitId, speed)} ${part}/${parts}` : lessonTitle(unitId, speed);
   const [exercises, setExercises] = useState<Exercise[] | null>(null);
   const [step, setStep] = useState('Getting the words ready...');
   const [error, setError] = useState<string | null>(null);
@@ -49,29 +61,50 @@ export const LessonScreen: React.FC = () => {
   const [results, setResults] = useState<{ t: string; right: boolean }[]>([]);
   const [tip, setTip] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(SPEED_SECONDS);
+  const [help, setHelp] = useState(false);
 
-  const start = () => {
+  const shownAt = useRef(Date.now());
+  useEffect(() => { shownAt.current = Date.now(); }, [i, exercises]);
+
+  const start = (fresh = false) => {
     setError(null); setExercises(null); setI(0); setRight(0); setAttempt(EMPTY); setResult(null); setResults([]); setSecondsLeft(SPEED_SECONDS);
+    const saved = !speed && !fresh ? languageService.savedLesson(key) : undefined;
+    if (saved) {
+      // Carry on where the learner stopped.
+      setExercises(saved.exercises); setI(saved.index); setRight(saved.right); setResults(saved.results); setTip('');
+      return;
+    }
     languageService.unitWords(unitId, setStep)
-      .then((items) => {
-        setTip(speed ? '' : languageService.tipFor(unitId));
-        setExercises(buildLesson(items, Date.now(), speed ? { length: 40, production: 0 } : { length: guide.lessonLength, production: guide.production }));
+      .then((all) => {
+        const items = unit && !speed ? partItems(all, part, parts) : all;
+        setTip(speed || part > 1 ? '' : languageService.tipFor(unitId));
+        setExercises(buildLesson(items, Date.now(), speed
+          ? { length: 40, production: 0 }
+          : { seconds: LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production }));
       })
       .catch((e) => setError(String(e?.message || e)));
   };
-  useEffect(start, [unitId, code]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => start(), [unitId, code, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ex = exercises?.[i];
   const verdict = ex && ex.kind !== 'match' ? checkTyped(attempt.value, ex.answer) : 'wrong';
   const correct = verdict !== 'wrong';
-  const finish = (score: number, done: { t: string; right: boolean }[]) =>
-    setResult(languageService.finishLesson(unitId, { right: score, total: speed ? Math.max(score, i + 1) : exercises!.length, results: done }));
+  const finish = (score: number, done: { t: string; right: boolean }[]) => {
+    languageService.saveLesson(null);
+    if (speed && params.key) languageService.completeSpace(params.key);
+    setResult(languageService.finishLesson(key, { right: score, total: speed ? Math.max(score, i + 1) : exercises!.length, results: done }));
+  };
   const next = (gotIt: boolean) => {
+    if (ex) languageService.recordPace(ex.kind, (Date.now() - shownAt.current) / 1000);
     const score = right + (gotIt ? 1 : 0);
     const words = ex?.kind === 'match' ? ex.pairs.map((p) => ({ t: p.t, right: gotIt })) : ex ? [{ t: ex.item.t, right: gotIt }] : [];
     const done = [...results, ...words];
     setRight(score); setResults(done); setAttempt(EMPTY);
-    if (i + 1 < (exercises?.length ?? 0)) { setI(i + 1); return; }
+    if (i + 1 < (exercises?.length ?? 0)) {
+      setI(i + 1);
+      if (!speed) languageService.saveLesson({ key, exercises: exercises!, index: i + 1, right: score, results: done });
+      return;
+    }
     finish(score, done);
   };
   // Speed round: the clock runs while exercises are on screen; when it hits zero the round ends.
@@ -83,27 +116,17 @@ export const LessonScreen: React.FC = () => {
   }, [speed, exercises, result, secondsLeft]); // eslint-disable-line react-hooks/exhaustive-deps
   const rewrite = () => Alert.alert('Write these words again?', 'The AI on your phone writes this unit\'s words again, for a wording that looks wrong.', [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Rewrite', onPress: () => { languageService.rewrite(unitId); start(); } },
+    { text: 'Rewrite', onPress: () => { languageService.rewrite(unitId); start(true); } },
   ]);
 
-  if (error || !exercises) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          {error ? <Text style={styles.feedback}>{error}</Text> : <><ActivityIndicator color={colors.primary} /><Text style={styles.meta}>{step}</Text></>}
-          {!!error && <Button title="Try again" onPress={start} />}
-          <Button title="Back" variant="ghost" onPress={() => navigation.goBack()} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (error || !exercises) return <LessonWaiting error={error} step={step} onRetry={() => start(true)} onFailed={setError} />;
 
   if (tip) return <LessonTip title={title} grammar={unit?.kind === 'grammar'} tip={tip} onStart={() => setTip('')} />;
 
   if (result) {
     return (
       <LessonDone title={title} result={result} summary={speed ? `${right} right in ${SPEED_SECONDS} seconds` : `${right} of ${exercises.length} right`}
-        aiMade={languageService.isAiMade(unitId)} onAgain={start} onRewrite={rewrite} />
+        aiMade={languageService.isAiMade(unitId)} onAgain={() => start(true)} onRewrite={rewrite} />
     );
   }
 
@@ -113,10 +136,14 @@ export const LessonScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Leave lesson"><Icon name="x" size={22} color={colors.text} /></TouchableOpacity>
         <View style={styles.bar}><View style={[styles.barFill, { width: `${(speed ? secondsLeft / SPEED_SECONDS : i / exercises.length) * 100}%` }]} /></View>
         {speed && <Text style={styles.meta} testID="speed-clock">{secondsLeft}s</Text>}
+        <TouchableOpacity onPress={() => setHelp(true)} accessibilityLabel="Ask the tutor" testID="lesson-help">
+          <Icon name="help-circle" size={22} color={colors.primary} />
+        </TouchableOpacity>
       </View>
+      <HelpSheet visible={help} onClose={() => setHelp(false)} context={exerciseContext(ex!, langName, languageService.tipFor(unitId))} />
       <ScrollView contentContainerStyle={styles.body}>
         <ExerciseView key={i} ex={ex!} lang={code} langName={langName} attempt={attempt}
-          onPick={(value) => setAttempt({ value, checked: false })} onMatched={(mistakes) => next(mistakes <= 1)} />
+          onPick={(value) => setAttempt({ value, checked: false })} onMatched={(mistakes) => { playFeedback(mistakes <= 1); next(mistakes <= 1); }} />
       </ScrollView>
       {ex!.kind !== 'match' && (
         <View style={styles.footer}>
@@ -127,12 +154,37 @@ export const LessonScreen: React.FC = () => {
           )}
           {attempt.checked
             ? <Button title="Continue" onPress={() => next(correct)} testID="lesson-continue" />
-            : <Button title="Check" disabled={!attempt.value} onPress={() => setAttempt({ ...attempt, checked: true })} testID="lesson-check" />}
+            : <Button title="Check" disabled={!attempt.value} onPress={() => { playFeedback(correct); setAttempt({ ...attempt, checked: true }); }} testID="lesson-check" />}
         </View>
       )}
     </SafeAreaView>
   );
 };
+
+/** Getting the words ready, or what went wrong, with a way to load the model by hand. */
+function LessonWaiting({ error, step, onRetry, onFailed }: { error: string | null; step: string; onRetry: () => void; onFailed: (e: string) => void }) {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [loading, setLoading] = useState<string | null>(null);
+  const forceLoad = () => {
+    setLoading('Loading...');
+    languageService.forceLoadModel(setLoading).then(() => { setLoading(null); onRetry(); })
+      .catch((e) => { setLoading(null); onFailed(String(e?.message || e)); });
+  };
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.center}>
+        {error ? <Text style={styles.feedback}>{error}</Text> : <><ActivityIndicator color={colors.primary} /><Text style={styles.meta}>{step}</Text></>}
+        {!!error && <Button title="Try again" onPress={onRetry} />}
+        {!!error && (loading
+          ? <Text style={styles.meta}>{loading}</Text>
+          : <Button title="Load the AI model now" variant="outline" testID="lesson-force-load" onPress={forceLoad} />)}
+        <Button title="Back" variant="ghost" onPress={() => navigation.goBack()} />
+      </View>
+    </SafeAreaView>
+  );
+}
 
 function LessonTip({ title, grammar, tip, onStart }: { title: string; grammar: boolean; tip: string; onStart: () => void }) {
   const styles = useThemedStyles(createStyles);
