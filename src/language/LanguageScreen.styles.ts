@@ -28,6 +28,8 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   levelTextOn: { ...TYPOGRAPHY.h3, color: colors.background },
   levelSub: { ...TYPOGRAPHY.meta, color: colors.textMuted, textAlign: 'center' as const },
   levelSubOn: { ...TYPOGRAPHY.meta, color: colors.background, textAlign: 'center' as const },
+  prepare: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, gap: SPACING.xs },
+  prepareButton: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.xs },
   goal: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
   goalBar: { flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' as const },
   goalFill: { height: 8, backgroundColor: colors.primary },

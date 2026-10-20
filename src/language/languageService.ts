@@ -10,10 +10,10 @@ import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
 import { starsFor, type Item } from './lessons';
 import { knownSet, newWords, parseListening, type Listening, type Word } from './listening';
-import { REAL_NEWS, pieceById } from './library';
+import { REAL_NEWS, pieceById, pieceForSpace } from './library';
 import { writtenPiece } from './libraryEs';
 import { dueItems, remember } from './review';
-import { useLanguage, type SavedLesson } from './store';
+import { useLanguage, usePrepareLive, type SavedLesson } from './store';
 import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
 import { secondsFor, updatePace, type ExerciseKind } from './pace';
 import { levelGuide, methodFor, type LevelId } from './teaching';
@@ -113,6 +113,8 @@ async function writeListening(o: { kind: Listening['kind']; topic: string; outli
   keepListening(code, piece);
   return piece;
 }
+
+let preparing: { stop: boolean } | null = null;
 
 export const languageService = {
   /** Switches the course to another language; the project's practice chats follow. */
@@ -257,6 +259,56 @@ export const languageService = {
     }));
     return items;
   },
+
+  /**
+   * What "Prepare this level" still has to write: units without words, and the board's
+   * pre-made stories and podcasts not yet written in this language.
+   */
+  levelToPrepare(level: LevelId, code = useLanguage.getState().language): { units: Unit[]; pieces: string[] } {
+    const { content, listening } = useLanguage.getState();
+    const units = unitsForLevel(level).filter((u) => !u.builtIn && !content[code]?.[u.id]?.length);
+    const pieces = [...new Set(boardFor(level).filter((x) => x.kind === 'story' || x.kind === 'podcast')
+      .map((x) => pieceForSpace(level, x.key)?.id).filter((id): id is string => !!id))]
+      .filter((id) => !writtenPiece(id, code) && !listening[code]?.some((l) => l.pieceId === id));
+    return { units, pieces };
+  },
+
+  /**
+   * Writes everything a level needs with the AI on the phone, one after another, so the whole
+   * level then works offline with no waiting. Stops early with stopPreparing(); a unit that
+   * fails is skipped and written again when it is opened.
+   */
+  async prepareLevel(level: LevelId): Promise<void> {
+    if (usePrepareLive.getState().level !== null) return;
+    const { units, pieces } = languageService.levelToPrepare(level);
+    const total = units.length + pieces.length;
+    preparing = { stop: false };
+    const job = preparing;
+    usePrepareLive.setState({ level, done: 0, total, step: 'Loading the language model...', error: null });
+    let failed = 0;
+    try {
+      const tasks: [string, () => Promise<unknown>][] = [
+        ...units.map((u): [string, () => Promise<unknown>] => [u.title, () => languageService.unitWords(u.id)]),
+        ...pieces.map((id): [string, () => Promise<unknown>] => [pieceById(id)?.title ?? id, () => languageService.openPremade(id)]),
+      ];
+      for (const [title, run] of tasks) {
+        if (job.stop) break;
+        usePrepareLive.setState({ step: `Writing ${title}` });
+        try { await run(); } catch (e: any) {
+          failed++;
+          // No model at all: nothing else will work either.
+          if (/model/i.test(String(e?.message)) && /download|load|busy/i.test(String(e?.message))) throw e;
+        }
+        usePrepareLive.setState((st) => ({ done: st.done + 1 }));
+      }
+      usePrepareLive.setState({ level: null, step: '', error: failed ? `${failed} could not be written; they are written when opened.` : null });
+    } catch (e: any) {
+      usePrepareLive.setState({ level: null, step: '', error: String(e?.message || e) });
+    } finally { preparing = null; }
+  },
+
+  /** Stops "Prepare this level" after the piece it is writing. */
+  stopPreparing(): void { if (preparing) preparing.stop = true; },
 
   /** Forget a unit's words so the model writes them again (for a bad translation). */
   rewrite(unitId: string): void {

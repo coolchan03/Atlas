@@ -66,3 +66,7 @@ export const useLanguage = create<LanguageState>()(persist((): LanguageState => 
   // Version 2: six CEFR levels instead of four.
   migrate: (state: any, version) => (version < 2 && state ? { ...state, level: fromFourLevels(state.level ?? 1) } : state),
 }));
+
+/** "Prepare this level" while it runs (not saved): how far it got, and what it is writing now. */
+export interface PrepareLive { level: LevelId | null; done: number; total: number; step: string; error: string | null }
+export const usePrepareLive = create<PrepareLive>(() => ({ level: null, done: 0, total: 0, step: '', error: null }));

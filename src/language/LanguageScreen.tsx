@@ -8,7 +8,7 @@ import { LEVELS, type LevelId } from './teaching';
 import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
 import { boardFor, spaceOpen, type Space } from './board';
 import { unitsForLevel } from './curriculum';
-import { useLanguage } from './store';
+import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
 import { createStyles } from './LanguageScreen.styles';
 
@@ -82,6 +82,7 @@ export const LanguageScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </View>
+        <PrepareLevel level={level} />
         <TouchableOpacity style={styles.goal} onPress={() => languageService.cycleGoal()} testID="language-goal"
           accessibilityLabel={`Daily goal: ${todayXp} of ${goal} XP. Tap to change the goal.`}>
           <Icon name={todayXp >= goal ? 'check-circle' : 'target'} size={16} color={colors.primary} />
@@ -117,3 +118,38 @@ export const LanguageScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "Prepare this level": the AI writes every lesson and story of the level now, so it works offline without waiting. */
+function PrepareLevel({ level }: { level: LevelId }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const live = usePrepareLive();
+  useLanguage((s) => s.content);
+  const cefr = LEVELS.find((l) => l.id === level)?.cefr;
+  const running = live.level === level;
+  const { units, pieces } = languageService.levelToPrepare(level);
+  const left = units.length + pieces.length;
+  return (
+    <View style={styles.prepare} testID="language-prepare">
+      {running ? (
+        <>
+          <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${(live.done / Math.max(1, live.total)) * 100}%` }]} /></View>
+          <Text style={styles.progressText}>Preparing {cefr}: {live.done} of {live.total}. {live.step}</Text>
+          <TouchableOpacity onPress={() => languageService.stopPreparing()} testID="language-prepare-stop"><Text style={styles.extraOn}>Stop</Text></TouchableOpacity>
+        </>
+      ) : left ? (
+        <>
+          <Text style={styles.progressText}>{plural(units.length, 'lesson')} and {plural(pieces.length, 'story', 'stories')} in {cefr} are written by the AI when first opened.</Text>
+          <TouchableOpacity onPress={() => { languageService.prepareLevel(level); }} disabled={live.level !== null} testID="language-prepare-start"
+            style={styles.prepareButton}>
+            <Icon name="download" size={14} color={colors.primary} />
+            <Text style={styles.extraOn}>Prepare this level now</Text>
+          </TouchableOpacity>
+        </>
+      ) : <Text style={styles.progressText}>{cefr} is ready: every lesson and story works offline.</Text>}
+      {!!live.error && !running && <Text style={styles.progressText}>{live.error}</Text>}
+    </View>
+  );
+}
