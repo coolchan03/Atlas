@@ -211,6 +211,14 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - Tested: a rendered test records, transcribes and labels a two-person conversation, renames a speaker and
   fixes a line (microphone, files, Whisper and the speaker engine faked at the device boundary). Kotlin unit
   tests cover model lookup and resampling. Not run on a phone yet.
+- **Upload audio or video files.** Recorder -> "Transcribe an audio or video file" opens the file picker for
+  any audio or video Android can play (mp3, m4a, aac, ogg, opus, flac, wav, mp4, mov, webm and more). Atlas
+  reads the first sound track on the phone (Android MediaExtractor + MediaCodec), streams it to a 16 kHz mono
+  WAV without loading the whole file into memory, then makes the same labelled transcript as a recording. The
+  title is the file name. Android only (the speaker engine is Android only); other phones do not show the
+  button. Tested: a rendered test uploads a video and gets a two-speaker transcript (picker, files, decoder,
+  Whisper and speaker engine faked at the device boundary); Kotlin tests cover the WAV header, stereo to
+  mono, and resampling across chunk edges. Needs device test with a real phone video and a voice memo.
 
 ## 7. Voice mode ("phone call") speech input
 
@@ -234,8 +242,39 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   markdown or symbols, and do not repeat itself after an interruption.
 - Needs device test: Razr + Gboard with the offline English pack installed, airplane mode, hands-free on;
   barge-in on earpiece and loudspeaker; that loudspeaker playback does not interrupt itself.
-- Not built: the recorder/transcription app that labels speakers (FF-07). It needs a speaker-diarization model
-  and decisions on consent and storage; it stays on the roadmap.
+- The recorder that labels speakers (FF-07) was later built at the user's request: see 6b.
+
+## 8. Learn a language (inside the "Learn a language" project)
+
+- The Spanish Learning project is now **Learn a language**: pick the language, then play a board game of
+  lessons. Four levels (Basic A1-A2, Intermediate B1, Advanced B2, Fluent C1-C2), about 90 units of
+  vocabulary, grammar and themes. The AI writes each unit once, following a written teaching method
+  (comprehensible input, recognition before production, spaced review), and keeps it for offline use.
+- **Every square is one lesson of about five minutes.** Each game kind has a typical time (12 s to pick a
+  word, 40 s to match pairs), and Atlas learns your own pace after a few answers, so quick games mean more
+  exercises and slow ones fewer. Grammar, harder themes and big units are split into two lessons (part 2
+  repeats two items from part 1).
+- **Board:** a bigger snake-shaped board with numbered squares and a pawn. Every three lessons you land on a
+  story, a podcast, a one-minute speed round or a word search. Levels are a 2 x 2 grid so names are no longer
+  cut off; lesson text wraps instead of being cut.
+- **Games:** pick the word, what does it mean, listen and pick, match pairs, true or false, letter scramble,
+  fill in the blank, word order with extra words that do not belong, tap what you hear, type the
+  translation, dictation (accents forgiven but pointed out), and the word search (English word bank, grid in
+  the language you are learning, any alphabet).
+- **Progress is saved:** stars, XP, streak, finished squares, and a lesson left halfway carries on where it
+  stopped. The course is included in Atlas backups.
+- **Pre-made stories and podcasts:** a library of 60 pieces: simplified fairy tales and fables, funny everyday
+  moments, friends talking, places and culture, made-up news, news from history, and today's real headlines
+  as a short bulletin. Four are written out in full in Spanish and open instantly; the rest are written once
+  by the AI at your level from an outline and kept. Story and podcast squares land on their own piece. Create
+  your own is still there.
+- **Help while learning:** tap any word in a lesson or story for its meaning; a help button asks the AI tutor
+  about the exercise on screen (it gives a hint before the answer); right and wrong sounds (on/off on the
+  board); "Load the AI model now" when a lesson or story needs the model and it is not loaded.
+- Tested: rendered tests play a lesson through, check levels and split lessons, resume a half-done lesson,
+  solve a word search, open a pre-made story from a board square and move on, tap a word for its meaning,
+  and turn sounds off. Needs device test: sound, pace and lesson length on the phone, and AI-written units
+  and stories with the model you use.
 
 ## Build evidence and checks
 
