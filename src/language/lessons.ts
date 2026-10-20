@@ -46,7 +46,8 @@ const KINDS: Kind[] = ['choose', 'meaning', 'blank', 'listen', 'build', 'hear'];
 /** Phrase-only kinds fall back to a word exercise for single words. */
 const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'choose', hear: 'listen', blank: 'meaning' };
 
-function exerciseFor(kind: Kind, item: Item, items: Item[], r: () => number): Exercise {
+function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => number }): Exercise {
+  const { items, r } = ctx;
   const long = words(item.t).length >= 3;
   const k = !long && FALLBACK[kind] ? FALLBACK[kind]! : kind;
   if (k === 'build' || k === 'hear') return { kind: k, item, tiles: shuffle(words(item.t), r), answer: item.t };
@@ -56,7 +57,7 @@ function exerciseFor(kind: Kind, item: Item, items: Item[], r: () => number): Ex
       const pool = items.flatMap((x) => words(x.t)).map((x) => x.replace(/[.!?¡¿,]/g, '')).filter((x) => x.length > 1);
       return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], r), answer: b.answer };
     }
-    return exerciseFor('meaning', item, items, r);
+    return exerciseFor('meaning', item, ctx);
   }
   if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), r), answer: item.en };
   return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r), answer: item.t };
@@ -68,7 +69,7 @@ export function buildLesson(items: Item[], seed = Date.now(), length = 10): Exer
   const all = shuffle(items, r);
   const out: Exercise[] = [];
   for (let i = 0; out.length < length - 1 && i < length * 2; i++) {
-    out.push(exerciseFor(KINDS[i % KINDS.length], all[i % all.length], items, r));
+    out.push(exerciseFor(KINDS[i % KINDS.length], all[i % all.length], { items, r }));
   }
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
   return out;
