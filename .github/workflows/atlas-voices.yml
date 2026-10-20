@@ -39,3 +39,22 @@ jobs:
             gh release upload atlas-voices "$id.zip" --clobber
             rm "$id.zip"
           done
+      - name: Package speaker-label models (recorder)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p speakers/atlas-speakers && cd speakers
+          base=https://github.com/k2-fsa/sherpa-onnx/releases/download
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o seg.tar.bz2 "$base/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
+          tar -xjf seg.tar.bz2
+          # pyannote segmentation-3.0 is MIT: only redistribute with its license.
+          grep -q "MIT License" sherpa-onnx-pyannote-segmentation-3-0/LICENSE || { echo "::error::segmentation model has no MIT LICENSE"; exit 1; }
+          cp sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx atlas-speakers/segmentation.onnx
+          cp sherpa-onnx-pyannote-segmentation-3-0/LICENSE atlas-speakers/LICENSE-segmentation
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o atlas-speakers/embedding.onnx "$base/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
+          printf '%s\n' "segmentation.onnx: pyannote/segmentation-3.0 (MIT, see LICENSE-segmentation), int8 export by sherpa-onnx." \
+            "embedding.onnx: 3D-Speaker ERes2Net-base (modelscope/3D-Speaker, Apache-2.0), ONNX export by sherpa-onnx." > atlas-speakers/NOTICE
+          (cd atlas-speakers && zip -q -r -1 ../atlas-speakers.zip .)
+          echo "::notice title=Speaker labels::$(du -h atlas-speakers.zip | cut -f1)"
+          gh release upload atlas-voices atlas-speakers.zip --clobber --repo "$GITHUB_REPOSITORY"

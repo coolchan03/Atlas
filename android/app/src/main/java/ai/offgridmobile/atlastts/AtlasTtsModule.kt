@@ -387,57 +387,10 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     fun downloadNeuralVoice(id: String, url: String, promise: Promise) {
         cancelled.remove(id)
         Thread {
-            val root = voicesRoot()
-            val tmp = java.io.File(root, "$id.part")
             try {
-                tmp.deleteRecursively(); tmp.mkdirs()
-                var conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.instanceFollowRedirects = true
-                conn.setRequestProperty("User-Agent", "Atlas")
-                var hops = 0
-                while (conn.responseCode in 300..399 && hops++ < 5) {
-                    val loc = conn.getHeaderField("Location") ?: break
-                    conn.disconnect()
-                    conn = java.net.URL(conn.url, loc).openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.setRequestProperty("User-Agent", "Atlas")
-                }
-                if (conn.responseCode >= 400) throw IllegalStateException("HTTP ${conn.responseCode}")
-                val total = conn.contentLengthLong
-                var read = 0L
-                var last = 0L
-                val counting = object : java.io.FilterInputStream(java.io.BufferedInputStream(conn.inputStream, 1 shl 16)) {
-                    override fun read(b: ByteArray, off: Int, len: Int): Int {
-                        if (cancelled.contains(id)) throw java.io.InterruptedIOException("cancelled")
-                        val n = super.read(b, off, len)
-                        if (n > 0) {
-                            read += n
-                            val now = System.currentTimeMillis()
-                            if (now - last > 500) { last = now; progress(id, if (total > 0) read.toDouble() / total else -1.0) }
-                        }
-                        return n
-                    }
-                }
-                java.util.zip.ZipInputStream(counting).use { zip ->
-                    val base = tmp.canonicalPath
-                    var e = zip.nextEntry
-                    while (e != null) {
-                        val out = java.io.File(tmp, e.name)
-                        if (!out.canonicalPath.startsWith(base + java.io.File.separator)) throw SecurityException("bad zip entry")
-                        if (e.isDirectory) out.mkdirs() else { out.parentFile?.mkdirs(); java.io.FileOutputStream(out).use { zip.copyTo(it, 1 shl 16) } }
-                        e = zip.nextEntry
-                    }
-                }
-                // the zip may contain one top folder: flatten it
-                val kids = tmp.listFiles() ?: emptyArray()
-                val src = if (kids.size == 1 && kids[0].isDirectory) kids[0] else tmp
-                val dest = java.io.File(root, id)
-                dest.deleteRecursively()
-                if (!src.renameTo(dest)) throw IllegalStateException("Could not move voice files")
-                tmp.deleteRecursively()
-                progress(id, 1.0)
+                val dest = ModelPack.download(url, voicesRoot(), id, { cancelled.contains(id) }) { p -> progress(id, p) }
                 promise.resolve(dest.path)
             } catch (e: Throwable) {
-                tmp.deleteRecursively()
                 promise.reject("VOICE_DOWNLOAD", if (cancelled.contains(id)) "cancelled" else (e.message ?: e.toString()))
             }
         }.start()
