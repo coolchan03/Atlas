@@ -58,4 +58,16 @@ it('transcribes and labels speakers in an uploaded video file', async () => {
   expect(rtl.within(t).getAllByText('Speaker 1').length).toBeGreaterThan(0);
   expect(rtl.within(t).getByText('Yes, first the budget.')).toBeTruthy();
   expect(rtl.within(t).getAllByText('Speaker 2').length).toBeGreaterThan(0);
+
+  // Keep a copy outside Atlas: share the transcript, download it, download the audio.
+  const share = jest.spyOn(RN.Share, 'share').mockResolvedValue({ action: 'sharedAction' });
+  rtl.fireEvent.press(detail.getByTestId('recording-share'));
+  await rtl.waitFor(() => expect(share).toHaveBeenCalled());
+  expect(share.mock.calls[0][0].message).toMatch(/^# Team meeting\n\n\[0:00\] Speaker 1: Shall we start\?/);
+  const picker = require('@react-native-documents/picker');
+  picker.saveDocuments = jest.fn(async ({ fileName }: { fileName: string }) => [{ name: fileName }]);
+  rtl.fireEvent.press(detail.getByTestId('recording-download-audio'));
+  await rtl.waitFor(() => expect(picker.saveDocuments).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'Team meeting.wav', mimeType: 'audio/wav' })));
+  rtl.fireEvent.press(detail.getByTestId('recording-download-text'));
+  await rtl.waitFor(() => expect(picker.saveDocuments).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'Team meeting.txt', mimeType: 'text/plain' })));
 });

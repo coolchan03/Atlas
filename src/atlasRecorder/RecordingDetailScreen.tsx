@@ -41,6 +41,7 @@ export const RecordingDetailScreen: React.FC = () => {
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: () => { recorderService.remove(id).then(() => navigation.goBack()); } },
   ]);
+  const saved = (name: string | null) => { if (name) Alert.alert('Saved', `Saved as ${name}.`); };
   const save = (projectId: string) => recorderService.saveToProject(id, projectId)
     .then(() => { setSaveOpen(false); Alert.alert('Saved', 'Every chat in that project can now read this transcript.'); })
     .catch(fail('Could not save'));
@@ -122,6 +123,10 @@ export const RecordingDetailScreen: React.FC = () => {
               </View>
             ))}
             <View style={styles.actions}>
+              <Button title="Share transcript" variant="outline" size="small" testID="recording-share"
+                onPress={() => { recorderService.shareTranscript(id).catch(fail('Could not share')); }} />
+              <Button title="Download transcript" variant="outline" size="small" testID="recording-download-text"
+                onPress={() => { recorderService.saveTranscript(id).then(saved).catch(fail('Could not save')); }} />
               <Button title="Save to a project" variant="outline" size="small" onPress={() => setSaveOpen(!saveOpen)} testID="recording-save" />
               {saveOpen && (
                 <View style={styles.chips}>
@@ -137,6 +142,9 @@ export const RecordingDetailScreen: React.FC = () => {
           </Card>
         )}
         {rec.status === 'done' && !rec.utterances?.length && <Text style={styles.desc}>No speech was found in this recording.</Text>}
+        <Button title="Download the audio" variant="ghost" size="small" testID="recording-download-audio"
+          onPress={() => { recorderService.saveAudio(id).then(saved).catch(fail('Could not save the audio')); }} />
+        <Text style={styles.meta}>Recordings stay in Atlas's private storage and are not in backups. Download one to keep a copy.</Text>
       </ScrollView>
     </SafeAreaView>
   );

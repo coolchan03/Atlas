@@ -11,6 +11,7 @@ import { generateId } from '../utils/generateId';
 import logger from '../utils/logger';
 import { useRecordings, useRecorderLive, type Recording } from './store';
 import { labelTranscript, transcriptText, type SpeakerTurn } from './transcript';
+import { safeFileName, saveExistingFile, saveToPhone } from '../study/exportFiles';
 
 const Speakers: any = NativeModules.AtlasSpeakers;
 const SPEAKER_MODELS_URL = 'https://github.com/coolchan03/Atlas/releases/download/atlas-voices/atlas-speakers.zip';
@@ -219,6 +220,32 @@ export const recorderService = {
     const rec = find(id);
     if (rec) await RNFS.unlink(rec.audioPath).catch(() => undefined);
     useRecordings.setState((s) => ({ recordings: s.recordings.filter((r) => r.id !== id) }));
+  },
+
+  /** The transcript as text, with speaker names and times. */
+  transcript(id: string): string {
+    const rec = find(id);
+    if (!rec?.utterances?.length) throw new Error('This recording has no transcript yet.');
+    return transcriptText(rec.title, rec.utterances, rec.speakerNames);
+  },
+
+  /** Opens the phone's share sheet with the transcript (to a messaging app, email, notes...). */
+  async shareTranscript(id: string): Promise<void> {
+    const { Share } = require('react-native');
+    await Share.share({ title: find(id)?.title, message: recorderService.transcript(id) });
+  },
+
+  /** Saves the transcript as a text file where the user chooses. Resolves the name, or null if cancelled. */
+  saveTranscript(id: string): Promise<string | null> {
+    const text = recorderService.transcript(id);
+    return saveToPhone(safeFileName(find(id)!.title, 'txt'), 'text/plain', (path) => RNFS.writeFile(path, text, 'utf8'));
+  },
+
+  /** Saves the recording's audio (WAV) where the user chooses. Resolves the name, or null if cancelled. */
+  async saveAudio(id: string): Promise<string | null> {
+    const rec = find(id);
+    if (!rec || !(await RNFS.exists(rec.audioPath))) throw new Error('The audio for this recording is missing.');
+    return saveExistingFile(rec.audioPath, safeFileName(rec.title, 'wav'), 'audio/wav');
   },
 
   /** Adds the transcript to a project's shared documents. */

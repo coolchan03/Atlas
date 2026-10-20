@@ -17,6 +17,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   utterance: { paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
   utteranceHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
   chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.sm, marginTop: SPACING.sm },
+  actions: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.sm, marginTop: SPACING.md },
   chip: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2, borderRadius: 16,
     borderWidth: 1, borderColor: colors.border,

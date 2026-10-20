@@ -46,5 +46,16 @@ export async function saveToPhone(fileName: string, mimeType: string, write: (pa
   }
 }
 
+/** Lets the person save an existing file on the phone where they choose (Downloads and so on). */
+export async function saveExistingFile(path: string, fileName: string, mimeType: string): Promise<string | null> {
+  try {
+    const [saved] = await saveDocuments({ sourceUris: [`file://${path.replace(/^file:\/\//, '')}`], mimeType, fileName, copy: true });
+    return saved?.name ?? fileName;
+  } catch (e) {
+    if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) return null;
+    throw e;
+  }
+}
+
 export const saveMarkdown = (fileName: string, text: string): Promise<string | null> =>
   saveToPhone(fileName, MIME_MARKDOWN, (path) => RNFS.writeFile(path, text, 'utf8'));
