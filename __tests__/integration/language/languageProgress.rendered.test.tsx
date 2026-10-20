@@ -37,8 +37,7 @@ it('shows this week on the board and the learned words in the word book', () => 
   expect(book.getByTestId('word-azul').findByProps({ children: 'Due now' })).toBeTruthy();
   expect(book.getByTestId('word-rojo').findByProps({ children: 'Due tomorrow' })).toBeTruthy();
   fireEvent.press(book.getByTestId('wordbook-sort-due'));
-  expect(book.UNSAFE_root.findAll((n) => typeof n.props.testID === 'string' && n.props.testID.startsWith('word-') && n.type === 'View')
-    .map((n) => n.props.testID)[0]).toBe('word-azul');
+  expect(book.getAllByTestId(/^word-/)[0].props.testID).toBe('word-azul');
   fireEvent.changeText(book.getByTestId('wordbook-search'), 'gree');
   expect(book.getByText('verde')).toBeTruthy();
   expect(book.queryByText('rojo')).toBeNull();
