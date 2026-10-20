@@ -113,6 +113,15 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   **Echo** and **Puck** (American), **Fable** (British) and **Deep British** (Lewis at 0.9).
 - Rendered and listened to on a computer only. Phone speed on Kokoro v1.0 is not measured yet.
 
+### Import your own voice
+- Models -> Voice -> **Import voice file** adds a voice the user downloaded: a sherpa-onnx Piper (`vits-piper-...`),
+  Kokoro or KittenTTS package as `.tar.bz2` or `.zip`. It is unpacked on the phone (paths outside the voice
+  folder are refused), checked for a model and `tokens.txt`, named readably ("Northern English Male (Piper,
+  en GB)") and used. Multi-speaker voices get a speaker stepper. Unconverted Piper files (`.onnx` + `.onnx.json`)
+  get a message pointing to the sherpa-onnx version.
+- Tested: Kotlin unit tests unpack real `.tar.bz2` and `.zip` archives and refuse path escapes; a rendered test
+  imports a voice and steps through speakers.
+
 ## 4. Image and LLM reliability
 
 ### Implemented
@@ -179,6 +188,29 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - Learning games: terms were already taken only from the project's passages; everyday filler words
   ("however", "important") are now kept out of crosswords, word searches and term games.
   The obsolete 23-games request was not implemented, as instructed.
+- **Read and edit shared documents:** Knowledge base -> pencil writes a new shared document; tapping a note or a
+  `.md`/`.txt` document opens it for editing (also from the project screen). Saving replaces the old version and a
+  rename removes the old name. Documents keep their exact text (protected-project notes store it inside the
+  encrypted vault) instead of being rebuilt from search chunks, which dropped spacing and repeated parts of long
+  paragraphs. Tested with a rendered test on a protected project: only encrypted files are written.
+
+## 6b. Recorder with speaker labels (FF-07, built at the user's request)
+
+- Atlas hub -> **Recorder**. Opt-in: the user first confirms they will tell everyone they are recording. A red
+  "Recording" indicator with a timer shows while it runs; leaving the screen asks to stop. Android's own
+  microphone indicator also shows.
+- After stopping, everything happens on the phone: Whisper writes timed text, sherpa-onnx speaker diarization
+  finds who spoke when (pyannote segmentation 3.0, MIT; 3D-Speaker ERes2Net, Apache-2.0, about 45 MB, one-time
+  download packaged by the voices workflow as `atlas-speakers.zip`), and the two are joined into lines per speaker.
+- Users name speakers, tap a line to fix who said it, re-label with a known number of people, save the
+  transcript to a project, and delete recordings. Recordings stay in Atlas's private storage and are not part
+  of backups. A transcript interrupted by closing Atlas can be retried.
+- **Accuracy (honest):** on a synthetic test conversation (three Kokoro voices) the labels were right for two
+  clearly different voices, but two similar male voices were merged into one speaker unless the number of
+  people was given. Real voices usually differ more; test on the phone with real people before relying on it.
+- Tested: a rendered test records, transcribes and labels a two-person conversation, renames a speaker and
+  fixes a line (microphone, files, Whisper and the speaker engine faked at the device boundary). Kotlin unit
+  tests cover model lookup and resampling. Not run on a phone yet.
 
 ## 7. Voice mode ("phone call") speech input
 
@@ -207,10 +239,14 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 
 ## Build evidence and checks
 
+- New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
+  touches `android/`; first run passed.
+
 See the end of this file (filled in after the final CI run).
 
 ## Not changed
 - `FUTURE_RELEASES.md` keeps all nine items. FF-02 (call screen) was implemented at the user's request and is
-  noted there, unchecked until device-verified. FF-07 (recording/speaker labelling) was not implemented.
+  noted there, unchecked until device-verified. FF-07 (recording/speaker labelling) was built at the user's
+  explicit request ("Do 2-6", then "build those"); it stays unchecked there until device-verified.
 - The permanent signing key: the release workflow still requires and verifies the existing keystore; no new
   key was generated. No secrets, private chats or device data were committed.

@@ -40,6 +40,8 @@ Repository: https://github.com/coolchan03/Atlas
   - Explore user-approved workflows with other apps; example: a recorder that saves audio and identifies/labels speakers.
   - **Wording to confirm:** original says "auto transactions"; it might mean "automatic transcriptions." Keep this uncertainty until clarified.
   - Define microphone permissions, recording consent, storage and whether processing must remain on-device before implementation.
+  - **0.0.105 (user-requested):** first version built: opt-in Recorder with a visible indicator, on-device
+    transcript with speaker labels, kept only on the phone and not in backups. Unchecked until tested on a device.
 
 - [ ] **FF-08 - Live camera**
   - Original: "Live camera?"
