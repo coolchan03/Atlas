@@ -211,6 +211,8 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - Tested: a rendered test records, transcribes and labels a two-person conversation, renames a speaker and
   fixes a line (microphone, files, Whisper and the speaker engine faked at the device boundary). Kotlin unit
   tests cover model lookup and resampling. Not run on a phone yet.
+- **Share and download:** share a transcript to any app, download it as a text file, or download the audio
+  (WAV) to keep a copy outside Atlas, since recordings are not in backups.
 - **Upload audio or video files.** Recorder -> "Transcribe an audio or video file" opens the file picker for
   any audio or video Android can play (mp3, m4a, aac, ogg, opus, flac, wav, mp4, mov, webm and more). Atlas
   reads the first sound track on the phone (Android MediaExtractor + MediaCodec), streams it to a 16 kHz mono
@@ -269,11 +271,18 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - **Daily goal:** a bar on the board shows today's XP against a goal (50, 100, 200 or 300; tap to change).
 - **Progress is saved:** stars, XP, streak, finished squares, and a lesson left halfway carries on where it
   stopped. The course is included in Atlas backups.
-- **Pre-made stories and podcasts:** a library of 60 pieces: simplified fairy tales and fables, funny everyday
-  moments, friends talking, places and culture, made-up news, news from history, and today's real headlines
-  as a short bulletin. Four are written out in full in Spanish and open instantly; the rest are written once
-  by the AI at your level from an outline and kept. Story and podcast squares land on their own piece. Create
+- **Pre-made stories and podcasts:** a library of 110 pieces across A1 to C2: simplified fairy tales and
+  fables, funny everyday moments, friends talking, places and culture, made-up news, news from history, and
+  today's real headlines as a short bulletin. Thirteen are written out in full in Spanish and open instantly;
+  the rest are written once by the AI at your level from an outline and kept.
+- **Prepare this level:** one tap on the board writes every lesson and board story of the level with the AI
+  on the phone, with progress and a Stop button, so the whole level then works offline without waiting.
+- **Word book:** every word learned, with its meaning, a play button, how well it is known (five dots) and
+  when it is next due; search in either language, sort A to Z or by what is due.
+- **Weekly progress:** XP for each of the last seven days as bars, with this week's XP and lessons. Story and podcast squares land on their own piece. Create
   your own is still there.
+- **Word search fix:** a word now counts wherever it is spelled in a line, also where the filler letters
+  happen to spell it a second time.
 - **Help while learning:** tap any word in a lesson or story for its meaning; a help button asks the AI tutor
   about the exercise on screen (it gives a hint before the answer); right and wrong sounds (on/off on the
   board); "Load the AI model now" when a lesson or story needs the model and it is not loaded.
