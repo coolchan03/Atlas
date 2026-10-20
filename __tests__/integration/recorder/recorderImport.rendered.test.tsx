@@ -63,7 +63,7 @@ it('transcribes and labels speakers in an uploaded video file', async () => {
   const share = jest.spyOn(RN.Share, 'share').mockResolvedValue({ action: 'sharedAction' });
   rtl.fireEvent.press(detail.getByTestId('recording-share'));
   await rtl.waitFor(() => expect(share).toHaveBeenCalled());
-  expect(share.mock.calls[0][0].message).toMatch(/^# Team meeting\n\n\[0:00\] Speaker 1: Shall we start\?/);
+  expect((share.mock.calls[0][0] as { message: string }).message).toMatch(/^# Team meeting\n\n\[0:00\] Speaker 1: Shall we start\?/);
   const picker = require('@react-native-documents/picker');
   picker.saveDocuments = jest.fn(async ({ fileName }: { fileName: string }) => [{ name: fileName }]);
   rtl.fireEvent.press(detail.getByTestId('recording-download-audio'));
