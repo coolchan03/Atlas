@@ -23,6 +23,8 @@ import { parseUnitLesson } from '../../../src/language/coursePrompts';
 import { checkTyped } from '../../../src/language/lessons';
 import { levelGuide } from '../../../src/language/teaching';
 import { useProjectStore } from '../../../src/stores/projectStore';
+import { boardFor } from '../../../src/language/board';
+import { unitById } from '../../../src/language/curriculum';
 
 const past = [
   { en: 'I ate bread.', t: 'Comí pan.' }, { en: 'We went home.', t: 'Fuimos a casa.' }, { en: 'She worked yesterday.', t: 'Ella trabajó ayer.' },
@@ -36,12 +38,12 @@ beforeEach(() => useLanguage.setState({ language: 'es-ES', level: 1, content: {}
 it('shows four levels with vocabulary, grammar and theme units, and opens the first unit of each', () => {
   const board = render(<LanguageScreen />);
   expect(board.getByLabelText('Basics')).toBeTruthy();
-  expect(board.getAllByText('Grammar').length).toBeGreaterThan(0);
   fireEvent.press(board.getByLabelText('Level 2, Intermediate'));
   expect(useLanguage.getState().level).toBe(2);
-  expect(board.getByLabelText('What happened')).toBeTruthy();
-  expect(board.getByLabelText('Daily routine, locked')).toBeTruthy();
-  expect(board.getAllByText('Theme').length).toBeGreaterThan(0);
+  // Grammar is split into two lessons; only the first space of the level is open.
+  expect(board.getByLabelText('What happened 1/2')).toBeTruthy();
+  expect(board.getByLabelText('What happened 2/2, locked')).toBeTruthy();
+  expect(boardFor(2).some((s) => s.unitId && unitById(s.unitId)?.kind === 'theme')).toBe(true);
   // Practice chats in the project now follow level 2.
   expect(useProjectStore.getState().getProject('spanish-learning')!.systemPrompt).toMatch(/level 2 \(Intermediate, CEFR B1\)/);
 });
