@@ -28,6 +28,9 @@ export const LanguageScreen: React.FC = () => {
   const level = useLanguage((s) => s.level);
   const sounds = useLanguage((s) => s.sounds);
   const speaking = useLanguage((s) => s.speaking);
+  const goal = useLanguage((s) => s.goal);
+  useLanguage((s) => s.today);
+  const todayXp = languageService.todayXp();
   const due = languageService.dueCount(code);
   const spaces = boardFor(level);
   const isDone = (key: string) => languageService.isDone(key, code);
@@ -79,6 +82,12 @@ export const LanguageScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity style={styles.goal} onPress={() => languageService.cycleGoal()} testID="language-goal"
+          accessibilityLabel={`Daily goal: ${todayXp} of ${goal} XP. Tap to change the goal.`}>
+          <Icon name={todayXp >= goal ? 'check-circle' : 'target'} size={16} color={colors.primary} />
+          <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(1, todayXp / goal) * 100}%` }]} /></View>
+          <Text style={styles.progressText}>{todayXp >= goal ? 'Goal met' : `${todayXp} / ${goal} XP today`}</Text>
+        </TouchableOpacity>
         <View style={styles.extras}>
           <Text style={styles.progressText}>Square {Math.min(current + 1, spaces.length)} of {spaces.length} · {doneCount} done</Text>
           <TouchableOpacity disabled={!languageService.unlocked(REVIEW, code)} onPress={() => navigation.navigate('Lesson', { unitId: REVIEW })} testID="language-review">

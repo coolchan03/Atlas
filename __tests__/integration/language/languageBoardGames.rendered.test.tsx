@@ -166,3 +166,16 @@ it('asks the learner to say phrases out loud when the phone has a speech recogni
     expect(lesson.getByTestId('lesson-done')).toBeTruthy();
   } finally { RN.Platform.OS = os; }
 }, 20000);
+
+it('tracks a daily XP goal on the board, and the goal can be changed', () => {
+  const { LanguageScreen } = require('../../../src/language/LanguageScreen');
+  useLanguage.setState({ goal: 100, today: { day: '', xp: 0 } });
+  languageService.finishLesson('basics', { right: 6, total: 8 });
+  const board = render(<LanguageScreen />);
+  expect(board.getByText('60 / 100 XP today')).toBeTruthy();
+  fireEvent.press(board.getByTestId('language-goal'));
+  expect(board.getByText('60 / 200 XP today')).toBeTruthy();
+  languageService.finishLesson('intro', { right: 8, total: 8 });
+  languageService.finishLesson('numbers', { right: 8, total: 8 });
+  expect(render(<LanguageScreen />).getByText('Goal met')).toBeTruthy();
+});

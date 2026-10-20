@@ -25,6 +25,8 @@ export const MY_WORDS = 'mine';
 export const REVIEW = 'review';
 /** Practice that earns XP but no board progress (a speed round outside the board). */
 export const PRACTICE = 'practice';
+/** Daily XP goals to pick from (10 XP per right answer: one lesson is about 100). */
+export const DAILY_GOALS = [50, 100, 200, 300];
 
 export const LANGUAGES = PHRASE_LANGUAGES.map(({ code, name, native }) => ({ code, name, native }));
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;
@@ -280,6 +282,18 @@ export const languageService = {
     return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
   },
 
+  /** XP earned today. */
+  todayXp(): number {
+    const { today } = useLanguage.getState();
+    return today?.day === dayKey() ? today.xp : 0;
+  },
+
+  /** The next daily goal in the list (tap to change it). */
+  cycleGoal(): void {
+    const { goal } = useLanguage.getState();
+    useLanguage.setState({ goal: DAILY_GOALS[(DAILY_GOALS.indexOf(goal) + 1) % DAILY_GOALS.length] });
+  },
+
   /** True when the phone has a speech recognizer, so lessons include speaking. */
   async canSpeak(): Promise<boolean> {
     if (!useLanguage.getState().speaking) return false;
@@ -363,7 +377,7 @@ export const languageService = {
    * word's spaced-repetition box (`results`: the word in the language and whether it was right).
    */
   finishLesson(unitId: string, { right, total, results = [] }: { right: number; total: number; results?: { t: string; right: boolean }[] }): { stars: number; xp: number; streak: number } {
-    const { language: code, progress, xp, streak, memory } = useLanguage.getState();
+    const { language: code, progress, xp, streak, memory, today: day } = useLanguage.getState();
     const stars = starsFor(right, total);
     const prev = progress[code]?.[unitId] ?? { stars: 0, lessons: 0 };
     const today = dayKey();
@@ -375,6 +389,7 @@ export const languageService = {
     useLanguage.setState({
       progress: unitId === REVIEW || unitId === PRACTICE ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
       xp: xp + gained,
+      today: { day: today, xp: (day?.day === today ? day.xp : 0) + gained },
       streak: nextStreak,
       memory: { ...memory, [code]: mem },
     });
