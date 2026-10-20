@@ -1,6 +1,7 @@
 # Atlas 0.0.105 — Changelog and Handoff
 
-Status: **release candidate — not published.** Built on `atlas-voice` @ `d334d31` (v0.0.104) on branch
+Status: **published** as [Atlas build 75](https://github.com/coolchan03/Atlas/releases/tag/atlas-75)
+(signed APK, commit `fbe7be78`; build 72 is an earlier publish of the same version). Built on `atlas-voice` @ `d334d31` (v0.0.104) on branch
 `claude/atlas-implementation-handoff-kvnfzs`. Android `versionName` 0.0.105, `versionCode` 1784144539.
 
 Nothing here has been run on a physical phone or tablet. Every item marked *needs device test* must be
