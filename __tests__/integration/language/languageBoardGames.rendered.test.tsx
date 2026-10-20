@@ -111,3 +111,16 @@ it('turns the right and wrong sounds off from the board', () => {
   expect(board.getByLabelText('Sounds off')).toBeTruthy();
   expect(useLanguage.getState().sounds).toBe(false);
 });
+
+it('brings a missed exercise back at the end, and scores only the first try', async () => {
+  const { playLesson } = require('./playLesson');
+  mockParams = { unitId: 'basics', key: 'basics' };
+  const lesson = render(<LessonScreen />);
+  await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
+  const seen = new Set<string>();
+  await playLesson(lesson, seen, true);
+  expect(seen.has('again')).toBe(true);
+  const summary = lesson.getByText(/ of \d+ right/).props.children.join('');
+  const [, right, total] = summary.match(/^(\d+) of (\d+) right/)!;
+  expect(Number(right)).toBe(Number(total) - 1);
+});

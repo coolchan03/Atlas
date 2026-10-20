@@ -6,7 +6,7 @@
  */
 export interface Item { en: string; t: string; r?: string }
 
-export type Exercise =
+type BaseExercise =
   | { kind: 'choose'; item: Item; options: string[]; answer: string }
   | { kind: 'meaning'; item: Item; options: string[]; answer: string }
   | { kind: 'listen'; item: Item; options: string[]; answer: string }
@@ -24,6 +24,16 @@ export type Exercise =
   | { kind: 'scramble'; item: Item; tiles: string[]; answer: string }
   /** Does this sentence mean that? True or false. */
   | { kind: 'truefalse'; item: Item; shownMeaning: string; options: string[]; answer: string };
+
+/** `again`: a missed exercise repeated at the end of the lesson (not scored a second time). */
+export type Exercise = BaseExercise & { again?: boolean };
+
+/** A missed exercise comes back once at the end, as in Duolingo; speed rounds and repeats do not. */
+export const repeatMissed = (list: Exercise[], ex: Exercise, gotIt: boolean): Exercise[] =>
+  (gotIt || ex.again ? list : [...list, { ...ex, again: true }]);
+
+/** Exercises that count towards the score (repeats do not). */
+export const scored = (list: Exercise[]) => list.filter((e) => !e.again).length;
 
 /** Small seeded random so a lesson can be rebuilt the same way in tests. */
 export function rng(seed: number): () => number {

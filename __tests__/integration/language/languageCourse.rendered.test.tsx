@@ -5,7 +5,7 @@
  * next unit. The model's translations are checked before they are kept.
  */
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 
 const mockNav = { navigate: jest.fn(), goBack: jest.fn() };
 let mockParams: any = {};
@@ -20,33 +20,9 @@ import { LessonScreen } from '../../../src/language/LessonScreen';
 import { useLanguage } from '../../../src/language/store';
 import { boardFor } from '../../../src/language/board';
 import { parseUnitWords } from '../../../src/language/languageService';
+import { playLesson } from './playLesson';
 
 beforeEach(() => useLanguage.setState({ language: 'es-ES', content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 } }));
-
-/** Plays a whole lesson answering correctly, the way a learner taps through it. */
-async function playLesson(screen: ReturnType<typeof render>, seen = new Set<string>()) {
-  for (let guard = 0; guard < 60 && !screen.queryByTestId('lesson-done'); guard++) {
-    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank|Type this in Spanish|Type what you hear|Unscramble|True or false/);
-    if (!prompt) { await act(async () => {}); continue; }
-    const items = (screen.UNSAFE_root.findAllByType(require('../../../src/language/Exercises').ExerciseView)[0].props.ex);
-    seen.add(items.kind);
-    if (items.kind === 'match') {
-      for (const p of items.pairs) { fireEvent.press(screen.getByLabelText(p.en)); fireEvent.press(screen.getByLabelText(p.t)); }
-      continue;
-    }
-    if (items.kind === 'build' || items.kind === 'hear' || items.kind === 'scramble') {
-      for (const w of items.kind === 'scramble' ? [...items.answer] : items.answer.split(/\s+/)) {
-        const pool = screen.getAllByText(w);
-        fireEvent.press(pool[pool.length - 1]);
-      }
-    } else if (items.kind === 'type' || items.kind === 'dictation') {
-      fireEvent.changeText(screen.getByTestId('lesson-typed'), items.answer);
-    } else fireEvent.press(screen.getByLabelText(items.answer));
-    fireEvent.press(screen.getByTestId('lesson-check'));
-    expect(screen.getByTestId('lesson-feedback').props.children).toBe('Right.');
-    fireEvent.press(screen.getByTestId('lesson-continue'));
-  }
-}
 
 it('plays the Health and help unit and moves along the board', async () => {
   // Health and help is the last Basic unit, split into two lessons: finish every space before it so it is open.

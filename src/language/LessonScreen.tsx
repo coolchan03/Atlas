@@ -10,7 +10,7 @@ import { LANGUAGES, MY_WORDS, PRACTICE, REVIEW, languageService } from './langua
 import { levelGuide } from './teaching';
 import { lessonKey, partItems } from './board';
 import { LESSON_SECONDS } from './pace';
-import { buildLesson, checkTyped, type Exercise } from './lessons';
+import { buildLesson, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
 import { useLanguage } from './store';
 import { ExerciseView, type Attempt } from './Exercises';
 import { createStyles } from './LessonScreen.styles';
@@ -89,23 +89,27 @@ export const LessonScreen: React.FC = () => {
   const ex = exercises?.[i];
   const verdict = ex && ex.kind !== 'match' ? checkTyped(attempt.value, ex.answer) : 'wrong';
   const correct = verdict !== 'wrong';
-  const finish = (score: number, done: { t: string; right: boolean }[]) => {
+  const finish = (score: number, done: { t: string; right: boolean }[], list = exercises!) => {
     languageService.saveLesson(null);
     if (speed && params.key) languageService.completeSpace(params.key);
-    setResult(languageService.finishLesson(key, { right: score, total: speed ? Math.max(score, i + 1) : exercises!.length, results: done }));
+    setResult(languageService.finishLesson(key, { right: score, total: speed ? Math.max(score, i + 1) : scored(list), results: done }));
   };
   const next = (gotIt: boolean) => {
-    if (ex) languageService.recordPace(ex.kind, (Date.now() - shownAt.current) / 1000);
-    const score = right + (gotIt ? 1 : 0);
-    const words = ex?.kind === 'match' ? ex.pairs.map((p) => ({ t: p.t, right: gotIt })) : ex ? [{ t: ex.item.t, right: gotIt }] : [];
+    if (!ex || !exercises) return;
+    languageService.recordPace(ex.kind, (Date.now() - shownAt.current) / 1000);
+    const list = speed ? exercises : repeatMissed(exercises, ex, gotIt);
+    if (list !== exercises) setExercises(list);
+    // A repeat is practice: the score and word memory count the first try only.
+    const score = right + (gotIt && !ex.again ? 1 : 0);
+    const words = ex.again ? [] : ex.kind === 'match' ? ex.pairs.map((p) => ({ t: p.t, right: gotIt })) : [{ t: ex.item.t, right: gotIt }];
     const done = [...results, ...words];
     setRight(score); setResults(done); setAttempt(EMPTY);
-    if (i + 1 < (exercises?.length ?? 0)) {
+    if (i + 1 < list.length) {
       setI(i + 1);
-      if (!speed) languageService.saveLesson({ key, exercises: exercises!, index: i + 1, right: score, results: done });
+      if (!speed) languageService.saveLesson({ key, exercises: list, index: i + 1, right: score, results: done });
       return;
     }
-    finish(score, done);
+    finish(score, done, list);
   };
   // Speed round: the clock runs while exercises are on screen; when it hits zero the round ends.
   useEffect(() => {
@@ -125,7 +129,7 @@ export const LessonScreen: React.FC = () => {
 
   if (result) {
     return (
-      <LessonDone title={title} result={result} summary={speed ? `${right} right in ${SPEED_SECONDS} seconds` : `${right} of ${exercises.length} right`}
+      <LessonDone title={title} result={result} summary={speed ? `${right} right in ${SPEED_SECONDS} seconds` : `${right} of ${scored(exercises)} right`}
         aiMade={languageService.isAiMade(unitId)} onAgain={() => start(true)} onRewrite={rewrite} />
     );
   }
@@ -142,6 +146,7 @@ export const LessonScreen: React.FC = () => {
       </View>
       <HelpSheet visible={help} onClose={() => setHelp(false)} context={exerciseContext(ex!, langName, languageService.tipFor(unitId))} />
       <ScrollView contentContainerStyle={styles.body}>
+        {ex!.again && <Text style={styles.meta} testID="lesson-again">Once more: you missed this one earlier.</Text>}
         <ExerciseView key={i} ex={ex!} lang={code} langName={langName} attempt={attempt}
           onPick={(value) => setAttempt({ value, checked: false })} onMatched={(mistakes) => { playFeedback(mistakes <= 1); next(mistakes <= 1); }} />
       </ScrollView>
