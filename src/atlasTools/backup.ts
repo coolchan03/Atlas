@@ -13,6 +13,7 @@ import { pick, saveDocuments, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { collectProjectFiles, restoreProjectFiles } from './projectBackupFiles';
 import type { ProjectBackupFile } from './projectBackupFiles';
+import { rehydrateStores } from './storeRegistry';
 
 /**
  * Backup = every saved app setting in one JSON file: agents and their lessons, projects,
@@ -23,7 +24,7 @@ import type { ProjectBackupFile } from './projectBackupFiles';
 const MAGIC = 'OffGridAtlasBackup';
 // Explicit persistent-store allowlist also permits restore on a fresh install.
 // Add other reviewed store keys here as their schemas are audited.
-const RESTORABLE_STORE_KEYS = new Set([
+export const RESTORABLE_STORE_KEYS = new Set([
   'local-llm-chat-storage', 'local-llm-app-storage', 'local-llm-project-storage',
   'atlas-agent-storage', 'atlas-learning', 'atlas-study', 'atlas-voice-settings',
   // Saved map places, Survival Manual notes, library list and app preferences.
@@ -35,7 +36,7 @@ const RESTORABLE_STORE_KEYS = new Set([
   'atlas-language',
 ]);
 // Never export or restore credentials, vault contents, or authentication state.
-const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
+export const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
 const SENSITIVE_FIELDS = /api.?key|secret|token|password|passphrase|credential/i;
 function stripSensitiveFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripSensitiveFields);
@@ -46,7 +47,7 @@ function stripSensitiveFields(value: unknown): unknown {
   }
   return value;
 }
-function sanitizeBackupValue(raw: string): string | null {
+export function sanitizeBackupValue(raw: string): string | null {
   try { return JSON.stringify(stripSensitiveFields(JSON.parse(raw))); }
   catch { return null; }
 }
@@ -234,24 +235,6 @@ export async function importBackup(password?: string): Promise<number | null> {
   }
   if (settingsPairs.length) await AsyncStorage.multiSet(settingsPairs);
   // Load the restored data into the running app right away, so nothing writes old data back over it.
-  const stores: [string, string][] = [
-    ['../stores/chatStore', 'useChatStore'], ['../stores/remoteServerStore', 'useRemoteServerStore'], ['../stores/whisperStore', 'useWhisperStore'],
-    ['../stores/appStore', 'useAppStore'], ['../stores/projectStore', 'useProjectStore'], ['../stores/agentStore', 'useAgentStore'],
-    ['../atlasVoice/store', 'useAtlasVoiceStore'], ['../services/tools/webSearchProviders', 'useSearchSettings'], ['../atlasMaps/maps', 'useMaps'],
-    ['../survival/store', 'useSurvivalStore'], ['./chatPrefs', 'useChatPrefs'], ['./offGrid', 'useOffGrid'], ['./offlineLibrary', 'useOfflineLibrary'],
-    ['./lowPower', 'useLowPower'], ['../learning/store', 'useLearningStore'], ['../study/engine', 'useStudyStore'],
-  ];
-  const mods: Record<string, () => any> = {
-    '../stores/chatStore': () => require('../stores/chatStore'), '../stores/remoteServerStore': () => require('../stores/remoteServerStore'),
-    '../stores/whisperStore': () => require('../stores/whisperStore'), '../stores/appStore': () => require('../stores/appStore'),
-    '../stores/projectStore': () => require('../stores/projectStore'), '../stores/agentStore': () => require('../stores/agentStore'),
-    '../atlasVoice/store': () => require('../atlasVoice/store'), '../services/tools/webSearchProviders': () => require('../services/tools/webSearchProviders'),
-    '../atlasMaps/maps': () => require('../atlasMaps/maps'), '../survival/store': () => require('../survival/store'),
-    './chatPrefs': () => require('./chatPrefs'), './offGrid': () => require('./offGrid'), './offlineLibrary': () => require('./offlineLibrary'),
-    './lowPower': () => require('./lowPower'), '../learning/store': () => require('../learning/store'), '../study/engine': () => require('../study/engine'),
-  };
-  for (const [m, name] of stores) {
-    try { await mods[m]()[name]?.persist?.rehydrate?.(); } catch { /* store not present */ }
-  }
+  await rehydrateStores(merged.map(([key]) => key));
   return pairs.length + restoredDocs;
 }
