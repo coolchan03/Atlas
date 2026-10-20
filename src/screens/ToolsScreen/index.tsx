@@ -3,13 +3,15 @@ import { useWideLayout } from '../../hooks/useWideLayout';
 import { WebSearchSettings } from '../../components/WebSearchSettings';
 import { View, Text, Switch, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../../theme';
 import { FONTS, TYPOGRAPHY, SPACING } from '../../constants';
 import { AVAILABLE_TOOLS } from '../../services/tools';
-import { useAppStore } from '../../stores';
+import { useAppStore, useChatStore } from '../../stores';
+import { useAgentStore } from '../../stores/agentStore';
+import { resetChatTools, toggleChatTool, toolSourceFor, toolsForConversation } from '../../services/tools/chatTools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 
@@ -29,12 +31,19 @@ export const ToolsScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const openProTools = useOpenProTools();
 
-  const enabledTools = useAppStore(st => st.settings.enabledTools) || [];
+  // Opened from a chat: the switches change that chat's tools only. From Settings: the app defaults.
+  const conversationId = (useRoute().params as { conversationId?: string } | undefined)?.conversationId;
+  const conv = useChatStore(st => (conversationId ? st.conversations.find(c => c.id === conversationId) : undefined));
+  const agentName = useAgentStore(st => st.agents.find(a => a.id === conv?.agentId)?.name);
+  const appTools = useAppStore(st => st.settings.enabledTools);
+  const enabledTools = conv ? toolsForConversation(conv) : appTools || [];
+  const source = conv ? toolSourceFor(conv) : null;
   const updateSettings = useAppStore(st => st.updateSettings);
   const toolCountHintDismissed = useAppStore(st => st.toolCountHintDismissed);
   const setToolCountHintDismissed = useAppStore(st => st.setToolCountHintDismissed);
 
   const handleToggleTool = (toolId: string) => {
+    if (conv) { toggleChatTool(conv.id, toolId); return; }
     const cur = useAppStore.getState().settings.enabledTools || [];
     updateSettings({
       enabledTools: cur.includes(toolId) ? cur.filter(id => id !== toolId) : [...cur, toolId],
@@ -53,11 +62,24 @@ export const ToolsScreen: React.FC = () => {
         >
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tools</Text>
+        <Text style={styles.headerTitle}>{conv ? 'Tools for this chat' : 'Default tools'}</Text>
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, wide.column]}>
         
+
+        <View style={styles.scopeNote} testID="tools-scope">
+          <Text style={styles.toolDescription}>
+            {!conv ? 'New chats start with these tools, unless their agent has its own (Agents -> edit -> Tools).'
+              : source === 'chat' ? 'This chat has its own tools. Other chats are not changed.'
+                : `Using ${source === 'agent' ? `${agentName ?? 'the agent'}'s default tools` : 'the default tools'}. Changing one here changes this chat only.`}
+          </Text>
+          {source === 'chat' && (
+            <TouchableOpacity onPress={() => resetChatTools(conv!.id)} testID="tools-reset">
+              <Text style={styles.scopeReset}>Use {conv?.agentId && agentName ? `${agentName}'s` : 'the default'} tools again</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <WebSearchSettings />
 
@@ -192,6 +214,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textMuted,
     marginTop: 2,
   },
+  scopeNote: { marginBottom: SPACING.md, gap: SPACING.xs },
+  scopeReset: { ...TYPOGRAPHY.bodySmall, color: colors.primary },
   hint: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,

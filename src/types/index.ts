@@ -260,6 +260,8 @@ export interface Conversation {
   protectedBlob?: string;
   /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
   instructions?: string;
+  /** Atlas: tools chosen for this chat only; unset = the agent's (or app's) default tools. */
+  enabledTools?: string[];
 }
 
 

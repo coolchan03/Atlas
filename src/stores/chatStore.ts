@@ -115,6 +115,8 @@ interface ChatState {
   renameConversation: (conversationId: string, title: string) => void;
   setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
   setConversationAgent: (conversationId: string, agentId: string | null) => void;
+  /** Tools for this chat only; null = back to the agent's or app's defaults. */
+  setConversationTools: (conversationId: string, tools: string[] | null) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
    *  so no chat is left pointing at a project that no longer exists). */
   unfileConversationsForProject: (projectId: string) => void;
@@ -198,6 +200,11 @@ export const useChatStore = create<ChatState>()(
       setConversationAgent: (conversationId, agentId) => {
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
           (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+
+      setConversationTools: (conversationId, tools) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, enabledTools: tools ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationPinVerifier: () => {

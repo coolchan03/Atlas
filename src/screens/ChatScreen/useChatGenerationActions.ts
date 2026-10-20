@@ -1,7 +1,8 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
 import { Dispatch, SetStateAction } from 'react';
-import { resolveAgentPrompt, activeAgentTools } from '../../stores/agentStore';
+import { resolveAgentPrompt } from '../../stores/agentStore';
+import { toolsForConversation } from '../../services/tools/chatTools';
 import { offGridOn, NETWORK_TOOLS } from '../../atlasTools/offGrid';
 import { useChatPrefs } from '../../atlasTools/chatPrefs';
 import { thinkingNote } from '../../atlasTools/thinking';
@@ -376,12 +377,13 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
   const canUseTools = deps.supportsToolCalling !== false && (localToolSupport || !!(activeServerId && activeRemoteTextModelId));
 
-  // SINGLE source of truth for the turn's tools: ONLY what the user toggled (settings.enabledTools).
+  // SINGLE source of truth for the turn's tools: this chat's own choice, else its agent's defaults,
+  // else the app defaults (toolsForConversation, also what the chat's tool count shows).
   // No auto-injection — a project no longer silently adds search_knowledge_base. This keeps the tools
   // SENT identical to the tools the quick-settings count SHOWS (both read settings.enabledTools), so
   // the two can never drift ("0 tools" in the popover but "Tools sent in request (1)" — device 2026-07-14).
   // The user enables KB search explicitly when they want it.
-  const enabledTools = (canUseTools ? (activeAgentTools() ?? deps.settings.enabledTools ?? []) : [])
+  const enabledTools = (canUseTools ? toolsForConversation(conversation, deps.settings.enabledTools ?? []) : [])
     .filter((t: string) => !(offGridOn() && NETWORK_TOOLS.includes(t))); // off-grid mode: no internet tools
 
   const chatNote = (conversation as any)?.instructions?.trim();

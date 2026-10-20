@@ -24,6 +24,7 @@ import { getDisplayMessages } from './types';
 import { saveReportToProject } from '../../services/researchReportStorage';
 import { saveImageToGallery } from './useSaveImage';
 import { needsVisionRepair } from '../../utils/visionRepair';
+import { toggleChatTool, toolsForConversation } from '../../services/tools/chatTools';
 import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
@@ -348,8 +349,10 @@ export const useChatScreen = () => {
     await startGenerationFn(genDeps, { setDebugInfo, targetConversationId, messageText });
   };
   startGenerationRef.current = startGeneration;
-  const enabledTools = supportsToolCalling ? (settings.enabledTools || []) : [];
+  // This chat's tools (its own choice, else its agent's, else the app defaults); toggling changes only this chat.
+  const enabledTools = supportsToolCalling ? toolsForConversation(activeConversation, settings.enabledTools || []) : [];
   const handleToggleTool = (toolId: string) => {
+    if (activeConversationId) { toggleChatTool(activeConversationId, toolId); return; }
     const cur = settings.enabledTools || [];
     useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
