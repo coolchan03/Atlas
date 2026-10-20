@@ -26,7 +26,7 @@ beforeEach(() => useLanguage.setState({ language: 'es-ES', content: {}, progress
 /** Plays a whole lesson answering correctly, the way a learner taps through it. */
 async function playLesson(screen: ReturnType<typeof render>, seen = new Set<string>()) {
   for (let guard = 0; guard < 20 && !screen.queryByTestId('lesson-done'); guard++) {
-    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank/);
+    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank|Type this in Spanish|Type what you hear|Unscramble|True or false/);
     if (!prompt) { await act(async () => {}); continue; }
     const items = (screen.UNSAFE_root.findAllByType(require('../../../src/language/Exercises').ExerciseView)[0].props.ex);
     seen.add(items.kind);
@@ -34,11 +34,13 @@ async function playLesson(screen: ReturnType<typeof render>, seen = new Set<stri
       for (const p of items.pairs) { fireEvent.press(screen.getByLabelText(p.en)); fireEvent.press(screen.getByLabelText(p.t)); }
       continue;
     }
-    if (items.kind === 'build' || items.kind === 'hear') {
-      for (const w of items.answer.split(/\s+/)) {
+    if (items.kind === 'build' || items.kind === 'hear' || items.kind === 'scramble') {
+      for (const w of items.kind === 'scramble' ? [...items.answer] : items.answer.split(/\s+/)) {
         const pool = screen.getAllByText(w);
         fireEvent.press(pool[pool.length - 1]);
       }
+    } else if (items.kind === 'type' || items.kind === 'dictation') {
+      fireEvent.changeText(screen.getByTestId('lesson-typed'), items.answer);
     } else fireEvent.press(screen.getByLabelText(items.answer));
     fireEvent.press(screen.getByTestId('lesson-check'));
     expect(screen.getByTestId('lesson-feedback').props.children).toBe('Right.');
@@ -47,8 +49,9 @@ async function playLesson(screen: ReturnType<typeof render>, seen = new Set<stri
 }
 
 it('plays the Health and help unit and moves along the board', async () => {
-  // Health and help is the last unit: open it directly for this test.
-  useLanguage.setState({ progress: { 'es-ES': Object.fromEntries(UNITS.slice(0, -1).map((u) => [u.id, { stars: 1, lessons: 1 }])) } });
+  // Health and help is the last Basic unit: finish the ones before it so it is open.
+  const basic = UNITS.filter((u) => u.level === 1);
+  useLanguage.setState({ progress: { 'es-ES': Object.fromEntries(basic.slice(0, basic.findIndex((u) => u.id === 'help')).map((u) => [u.id, { stars: 1, lessons: 1 }])) } });
   const board = render(<LanguageScreen />);
   expect(board.getByLabelText('Health and help')).toBeTruthy();
   fireEvent.press(board.getByTestId('unit-help'));
@@ -60,7 +63,7 @@ it('plays the Health and help unit and moves along the board', async () => {
   const seen = new Set<string>();
   await playLesson(lesson, seen);
   // Duolingo-style kinds: translate, meaning, fill in the blank, listen, word order, tap what you hear, match.
-  expect([...seen].sort()).toEqual(['blank', 'build', 'choose', 'hear', 'listen', 'match', 'meaning']);
+  expect([...seen].sort()).toEqual(['blank', 'build', 'choose', 'hear', 'listen', 'match', 'meaning', 'scramble', 'truefalse']);
   expect(lesson.getByTestId('lesson-done')).toBeTruthy();
   expect(useLanguage.getState().progress['es-ES'].help.stars).toBe(3);
   expect(useLanguage.getState().xp).toBe(100);

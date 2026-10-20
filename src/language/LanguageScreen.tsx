@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
-import { UNITS } from './curriculum';
-import { LANGUAGES, MY_WORDS, languageService } from './languageService';
+import { KIND_LABEL, unitsForLevel, type Unit } from './curriculum';
+import { LEVELS, type LevelId } from './teaching';
+import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
 import { useLanguage } from './store';
 import { createStyles } from './LanguageScreen.styles';
 
@@ -13,7 +14,8 @@ import { createStyles } from './LanguageScreen.styles';
 const SWAY = [0, 50, 80, 50, 0, -50, -80, -50];
 
 /**
- * Learn a language: a board-game path of topic units. Finish a unit's lesson to move your
+ * Learn a language: four levels (Basic, Intermediate, Advanced, Fluent), each a board-game
+ * path of vocabulary, grammar and theme units. Finish a unit's lesson to move your
  * token on and open the next one. Stars, XP and a daily streak show progress.
  */
 export const LanguageScreen: React.FC = () => {
@@ -24,10 +26,15 @@ export const LanguageScreen: React.FC = () => {
   const progress = useLanguage((s) => s.progress[s.language]) ?? {};
   const xp = useLanguage((s) => s.xp);
   const streak = useLanguage((s) => s.streak.count);
+  const level = useLanguage((s) => s.level);
   const hasWords = useLanguage((s) => (s.myWords[s.language]?.length ?? 0) >= 4);
+  const due = languageService.dueCount(code);
+  const levelUnits = unitsForLevel(level);
   // Words saved from stories and podcasts become a last stop of their own.
-  const units = hasWords ? [...UNITS, { id: MY_WORDS, title: 'My words', icon: 'star', items: [] }] : UNITS;
-  const current = UNITS.find((u) => (progress[u.id]?.stars ?? 0) <= 0)?.id;
+  const units: (Unit | { id: string; title: string; icon: string; kind?: undefined })[] =
+    hasWords ? [...levelUnits, { id: MY_WORDS, title: 'My words', icon: 'star' }] : levelUnits;
+  const current = levelUnits.find((u) => (progress[u.id]?.stars ?? 0) <= 0)?.id;
+  const doneInLevel = levelUnits.filter((u) => (progress[u.id]?.stars ?? 0) > 0).length;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -50,6 +57,23 @@ export const LanguageScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+      <View style={styles.levels}>
+        {LEVELS.map((l) => (
+          <TouchableOpacity key={l.id} onPress={() => languageService.setLevel(l.id as LevelId)} accessibilityLabel={`Level ${l.id}, ${l.name}`}
+            style={[styles.level, l.id === level && styles.levelOn]}>
+            <Text style={l.id === level ? styles.levelTextOn : styles.levelText}>{l.id} {l.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.extras}>
+        <Text style={styles.meta}>{doneInLevel} of {levelUnits.length} done · {LEVELS[level - 1].cefr}</Text>
+        <TouchableOpacity disabled={!languageService.unlocked(REVIEW, code)} onPress={() => navigation.navigate('Lesson', { unitId: REVIEW })} testID="language-review">
+          <Text style={languageService.unlocked(REVIEW, code) ? styles.extraOn : styles.extraOff}>Review ({due})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity disabled={!doneInLevel} onPress={() => navigation.navigate('Lesson', { unitId: levelUnits.filter((u) => (progress[u.id]?.stars ?? 0) > 0).slice(-1)[0].id, mode: 'speed' })} testID="language-speed">
+          <Text style={doneInLevel ? styles.extraOn : styles.extraOff}>Speed round</Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={styles.board} testID="language-board">
         {units.map((u, i) => {
           const stars = progress[u.id]?.stars ?? 0;
@@ -70,6 +94,7 @@ export const LanguageScreen: React.FC = () => {
               </TouchableOpacity>
               <Text style={styles.nodeNumber}>{i + 1}</Text>
               <Text style={styles.nodeTitle}>{u.title}</Text>
+              {!!u.kind && <Text style={styles.kind}>{KIND_LABEL[u.kind]}</Text>}
               {stars > 0 && (
                 <View style={styles.stars}>
                   {[1, 2, 3].map((n) => <Icon key={n} name="star" size={12} color={n <= stars ? colors.primary : colors.border} />)}
@@ -79,8 +104,9 @@ export const LanguageScreen: React.FC = () => {
           );
         })}
         <Text style={styles.note}>
-          Health and help uses the phone's phrase cards. Other units are written once by the AI on your phone, so
-          wording may be imperfect. Everything works offline after that.
+          Already know some? Pick a higher level: the first unit of every level is open. Lessons are written once
+          by the AI on your phone, following the course method, so wording may be imperfect. Health and help uses
+          the phone's phrase cards. Everything works offline after that.
         </Text>
       </ScrollView>
     </SafeAreaView>

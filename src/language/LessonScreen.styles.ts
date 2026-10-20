@@ -19,6 +19,12 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   column: { flex: 1, gap: SPACING.sm },
   tiles: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.sm, minHeight: 52 },
   pool: { marginTop: SPACING.lg },
+  typed: {
+    ...TYPOGRAPHY.h3, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+    padding: SPACING.md, marginTop: SPACING.md,
+  },
+  bodyText: { ...TYPOGRAPHY.body, color: colors.text, marginVertical: SPACING.sm },
+  tip: { ...TYPOGRAPHY.body, color: colors.text },
   answerLine: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: SPACING.sm },
   tile: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   tileText: { ...TYPOGRAPHY.body, color: colors.text },

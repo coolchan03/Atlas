@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Choice } from '../components/games/kit';
@@ -65,10 +65,10 @@ function Match({ pairs, onDone }: { pairs: Item[]; onDone: (mistakes: number) =>
   );
 }
 
-function Build({ ex, attempt, onPick }: { ex: Extract<Exercise, { tiles: string[] }>; attempt: Attempt; onPick: (v: string) => void }) {
+function Build({ ex, attempt, onPick, joiner = ' ' }: { ex: Extract<Exercise, { tiles: string[] }>; attempt: Attempt; onPick: (v: string) => void; joiner?: string }) {
   const styles = useThemedStyles(createStyles);
   const [used, setUsed] = useState<number[]>([]);
-  const set = (next: number[]) => { setUsed(next); onPick(next.map((i) => ex.tiles[i]).join(' ')); };
+  const set = (next: number[]) => { setUsed(next); onPick(next.map((i) => ex.tiles[i]).join(joiner)); };
   const tile = (i: number, onPress: () => void) => (
     <TouchableOpacity key={i} style={styles.tile} onPress={onPress} disabled={attempt.checked}><Text style={styles.tileText}>{ex.tiles[i]}</Text></TouchableOpacity>
   );
@@ -77,6 +77,16 @@ function Build({ ex, attempt, onPick }: { ex: Extract<Exercise, { tiles: string[
       <View style={[styles.tiles, styles.answerLine]} testID="build-answer">{used.map((i) => tile(i, () => set(used.filter((u) => u !== i))))}</View>
       <View style={[styles.tiles, styles.pool]}>{ex.tiles.map((_, i) => (used.includes(i) ? null : tile(i, () => set([...used, i]))))}</View>
     </View>
+  );
+}
+
+/** A box to type the answer in (the keyboard's accents and the language's keyboard both work). */
+function Typed({ attempt, onPick, placeholder }: { attempt: Attempt; onPick: (v: string) => void; placeholder: string }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <TextInput value={attempt.value} onChangeText={onPick} editable={!attempt.checked} placeholder={placeholder}
+      placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} style={styles.typed} testID="lesson-typed" />
   );
 }
 
@@ -98,6 +108,37 @@ export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }:
       <Text style={styles.prompt}>Tap what you hear</Text>
       <Say item={ex.item} lang={lang} autoPlay />
       <Build ex={ex} attempt={attempt} onPick={onPick} />
+    </View>
+  );
+  if (ex.kind === 'type') return (
+    <View>
+      <Text style={styles.prompt}>Type this in {langName}</Text>
+      <Text style={styles.big}>{ex.item.en}</Text>
+      <Typed attempt={attempt} onPick={onPick} placeholder={`In ${langName}...`} />
+    </View>
+  );
+  if (ex.kind === 'dictation') return (
+    <View>
+      <Text style={styles.prompt}>Type what you hear</Text>
+      <Say item={ex.item} lang={lang} autoPlay />
+      <Typed attempt={attempt} onPick={onPick} placeholder="What did you hear?" />
+    </View>
+  );
+  if (ex.kind === 'scramble') return (
+    <View>
+      <Text style={styles.prompt}>Unscramble the word for "{ex.item.en}"</Text>
+      <Build ex={ex} attempt={attempt} onPick={onPick} joiner="" />
+    </View>
+  );
+  if (ex.kind === 'truefalse') return (
+    <View>
+      <Text style={styles.prompt}>True or false?</Text>
+      <View style={styles.sayRow}>
+        <Say item={ex.item} lang={lang} />
+        <Text style={styles.big}>{ex.item.t}</Text>
+      </View>
+      <Text style={styles.bodyText}>means "{ex.shownMeaning}"</Text>
+      <Options ex={ex} attempt={attempt} onPick={onPick} />
     </View>
   );
   if (ex.kind === 'blank') return (

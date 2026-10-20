@@ -1,5 +1,10 @@
-/** Instructions for chats in the Learn a language project, for the language being learned. */
-export const tutorPrompt = (language: string) => `You are a patient ${language} tutor. Help the user practice their ${language} conversation skills.
+import { LEVELS, levelGuide, methodFor, type LevelId } from './teaching';
+
+/**
+ * Instructions for chats in the Learn a language project, for the language and level being
+ * learned. Without a level it is the original built-in prompt (so older installs are recognised).
+ */
+export const tutorPrompt = (language: string, level?: LevelId) => `You are a patient ${language} tutor. Help the user practice their ${language} conversation skills.
 
 Guidelines:
 - Respond in ${language}, but provide English translations in parentheses for difficult words
@@ -7,7 +12,16 @@ Guidelines:
 - Explain corrections briefly
 - Adjust your complexity based on the user's apparent level
 - Encourage the user and make learning fun
-- When the user writes in English, respond in ${language} and encourage them to try in ${language}`;
+- When the user writes in English, respond in ${language} and encourage them to try in ${language}${level ? `
+- ${methodFor(levelGuide(level), language)}
+- Keep each reply short (two to four sentences) and end with a question so the user practises replying` : ''}`;
+
+/** True for a prompt Atlas wrote (any language, any level), which may be updated; false once the user edits it. */
+export function isGeneratedTutorPrompt(prompt: string): boolean {
+  const { PHRASE_LANGUAGES } = require('../phrases/data');
+  return PHRASE_LANGUAGES.some((l: { name: string }) =>
+    [undefined, ...LEVELS.map((x) => x.id)].some((lv) => prompt === tutorPrompt(l.name, lv as LevelId | undefined)));
+}
 
 /** The id of the built-in language project (kept from its old name, Spanish Learning). */
 export const LANGUAGE_PROJECT_ID = 'spanish-learning';

@@ -1,6 +1,8 @@
 /**
- * Building a lesson from a unit's words, Duolingo-style: pick the translation, pick the meaning,
- * listen and pick, match pairs and put words in order. Pure, so it is tested without a device.
+ * Building a lesson from a unit's words, Duolingo-style. Following the course method
+ * (teaching.ts), a lesson starts with recognising (pick, listen, match, true or false) and
+ * moves to producing (put words in order, type the translation, type what you hear); higher
+ * levels produce more. Pure, so it is tested without a device.
  */
 export interface Item { en: string; t: string; r?: string }
 
@@ -13,7 +15,15 @@ export type Exercise =
   /** Hear a phrase, then tap its words in order (Duolingo's "tap what you hear"). */
   | { kind: 'hear'; item: Item; tiles: string[]; answer: string }
   /** A phrase with one word missing: pick the word that goes in the gap. */
-  | { kind: 'blank'; item: Item; shown: string; options: string[]; answer: string };
+  | { kind: 'blank'; item: Item; shown: string; options: string[]; answer: string }
+  /** Type the translation of an English word or sentence. */
+  | { kind: 'type'; item: Item; answer: string }
+  /** Hear it and type it (dictation). */
+  | { kind: 'dictation'; item: Item; answer: string }
+  /** Put the letters of a word in order. */
+  | { kind: 'scramble'; item: Item; tiles: string[]; answer: string }
+  /** Does this sentence mean that? True or false. */
+  | { kind: 'truefalse'; item: Item; shownMeaning: string; options: string[]; answer: string };
 
 /** Small seeded random so a lesson can be rebuilt the same way in tests. */
 export function rng(seed: number): () => number {
@@ -41,16 +51,32 @@ export function blankOut(t: string, r: () => number): { shown: string; answer: s
   return { shown: w.map((x, i) => (i === pick.i ? x.replace(answer, '____') : x)).join(' '), answer };
 }
 
-type Kind = 'choose' | 'meaning' | 'listen' | 'build' | 'hear' | 'blank';
-const KINDS: Kind[] = ['choose', 'meaning', 'blank', 'listen', 'build', 'hear'];
-/** Phrase-only kinds fall back to a word exercise for single words. */
-const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'choose', hear: 'listen', blank: 'meaning' };
+type Kind = Exercise['kind'];
+const RECOGNISE: Kind[] = ['choose', 'meaning', 'listen', 'blank', 'truefalse', 'scramble'];
+const PRODUCE: Kind[] = ['build', 'hear', 'type', 'dictation'];
+/** Phrase-only kinds fall back for single words, and the letter scramble for phrases. */
+const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'type', hear: 'dictation', blank: 'meaning' };
+const needsPhrase = (k: Kind) => k === 'build' || k === 'hear' || k === 'blank';
+const isWord = (it: Item) => words(it.t).length === 1 && it.t.replace(/[^\p{L}]/gu, '').length >= 4;
 
 function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => number }): Exercise {
   const { items, r } = ctx;
   const long = words(item.t).length >= 3;
-  const k = !long && FALLBACK[kind] ? FALLBACK[kind]! : kind;
+  let k = needsPhrase(kind) && !long ? FALLBACK[kind]! : kind;
+  if (k === 'scramble' && !isWord(item)) k = 'listen';
   if (k === 'build' || k === 'hear') return { kind: k, item, tiles: shuffle(words(item.t), r), answer: item.t };
+  if (k === 'type' || k === 'dictation') return { kind: k, item, answer: item.t };
+  if (k === 'scramble') {
+    const letters = [...item.t.replace(/[.!?¡¿,]/g, '')];
+    let tiles = shuffle(letters, r);
+    for (let n = 0; n < 5 && tiles.join('') === letters.join(''); n++) tiles = shuffle(letters, r);
+    return { kind: 'scramble', item, tiles, answer: letters.join('') };
+  }
+  if (k === 'truefalse') {
+    const other = items.filter((x) => x.en !== item.en);
+    const honest = !other.length || r() < 0.5;
+    return { kind: 'truefalse', item, shownMeaning: honest ? item.en : other[Math.floor(r() * other.length)].en, options: ['True', 'False'], answer: honest ? 'True' : 'False' };
+  }
   if (k === 'blank') {
     const b = blankOut(item.t, r);
     if (b) {
@@ -63,23 +89,39 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
   return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r), answer: item.t };
 }
 
-/** About ten exercises covering every item at least once, with one matching round. */
-export function buildLesson(items: Item[], seed = Date.now(), length = 10): Exercise[] {
+/**
+ * A lesson of `length` exercises (one is a matching round): recognition first, then
+ * production for the `production` share of it. Every item is used before any repeats.
+ */
+export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number } = {}): Exercise[] {
+  const length = opts.length ?? 10;
   const r = rng(seed);
   const all = shuffle(items, r);
-  const out: Exercise[] = [];
+  const nProduce = opts.production === 0 ? 0 : Math.max(2, Math.round((length - 1) * (opts.production ?? 0.2)));
+  const plan: Kind[] = Array.from({ length: length - 1 }, (_, i) =>
+    (i < length - 1 - nProduce ? RECOGNISE[i % RECOGNISE.length] : PRODUCE[(i - (length - 1 - nProduce)) % PRODUCE.length]));
   const used = new Set<Item>();
-  for (let i = 0; out.length < length - 1 && i < length * 2; i++) {
-    const kind = KINDS[i % KINDS.length];
-    // Phrase exercises take a phrase when one is left; every item is used before any repeats.
-    const fresh = all.filter((x) => !used.has(x));
+  // Keep one single word back for the letter scramble, so it is not used up first.
+  const forScramble = plan.includes('scramble') ? all.find(isWord) : undefined;
+  const out: Exercise[] = plan.map((kind) => {
+    const fresh = all.filter((x) => !used.has(x) && (kind === 'scramble' || x !== forScramble));
     const pool = fresh.length ? fresh : all;
-    const item = (FALLBACK[kind] && pool.find((x) => words(x.t).length >= 3)) || pool[0];
+    const item = (kind === 'scramble' && forScramble && !used.has(forScramble) && forScramble)
+      || (needsPhrase(kind) && pool.find((x) => words(x.t).length >= 3)) || pool[0];
     used.add(item);
-    out.push(exerciseFor(kind, item, { items, r }));
-  }
+    return exerciseFor(kind, item, { items, r });
+  });
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
   return out;
+}
+
+const plain = (s: string) => s.toLowerCase().replace(/[.!?¡¿,;:"«»]/g, '').replace(/\s+/g, ' ').trim();
+const noAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/** A typed answer: exactly right, right except for accents, or wrong. */
+export function checkTyped(typed: string, answer: string): 'right' | 'accents' | 'wrong' {
+  if (plain(typed) === plain(answer)) return 'right';
+  return noAccents(plain(typed)) === noAccents(plain(answer)) ? 'accents' : 'wrong';
 }
 
 /** Answers are compared without case, accents' spacing or end punctuation. */

@@ -1,0 +1,92 @@
+/**
+ * Levels and the course method: the board has Basic to Fluent with vocabulary, grammar and
+ * theme units (first unit of each level open), a grammar lesson shows its rule first, typed
+ * answers forgive missing accents, missed words come back in Review (spaced repetition),
+ * the speed round runs on a one-minute clock, and practice chats follow the chosen level.
+ */
+import React from 'react';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+
+const mockNav = { navigate: jest.fn(), goBack: jest.fn() };
+let mockParams: any = {};
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => mockNav,
+  useRoute: () => ({ params: mockParams }),
+}));
+
+import { LanguageScreen } from '../../../src/language/LanguageScreen';
+import { LessonScreen } from '../../../src/language/LessonScreen';
+import { useLanguage } from '../../../src/language/store';
+import { REVIEW, languageService } from '../../../src/language/languageService';
+import { parseUnitLesson } from '../../../src/language/coursePrompts';
+import { checkTyped } from '../../../src/language/lessons';
+import { levelGuide } from '../../../src/language/teaching';
+import { useProjectStore } from '../../../src/stores/projectStore';
+
+const past = [
+  { en: 'I ate bread.', t: 'Comí pan.' }, { en: 'We went home.', t: 'Fuimos a casa.' }, { en: 'She worked yesterday.', t: 'Ella trabajó ayer.' },
+  { en: 'They spoke a lot.', t: 'Ellos hablaron mucho.' }, { en: 'I lived in Madrid.', t: 'Viví en Madrid.' }, { en: 'You drank coffee.', t: 'Tomaste café.' },
+  { en: 'He bought a car.', t: 'Él compró un coche.' }, { en: 'We saw a film.', t: 'Vimos una película.' }, { en: 'I called my mother.', t: 'Llamé a mi madre.' },
+  { en: 'You opened the door.', t: 'Abriste la puerta.' },
+];
+
+beforeEach(() => useLanguage.setState({ language: 'es-ES', level: 1, content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 }, listening: {}, myWords: {}, tips: {}, memory: {} }));
+
+it('shows four levels with vocabulary, grammar and theme units, and opens the first unit of each', () => {
+  const board = render(<LanguageScreen />);
+  expect(board.getByLabelText('Basics')).toBeTruthy();
+  expect(board.getAllByText('Grammar').length).toBeGreaterThan(0);
+  fireEvent.press(board.getByLabelText('Level 2, Intermediate'));
+  expect(useLanguage.getState().level).toBe(2);
+  expect(board.getByLabelText('What happened')).toBeTruthy();
+  expect(board.getByLabelText('Daily routine, locked')).toBeTruthy();
+  expect(board.getAllByText('Theme').length).toBeGreaterThan(0);
+  // Practice chats in the project now follow level 2.
+  expect(useProjectStore.getState().getProject('spanish-learning')!.systemPrompt).toMatch(/level 2 \(Intermediate, CEFR B1\)/);
+});
+
+it('checks a written grammar lesson and shows its rule before the exercises', async () => {
+  const raw = JSON.stringify({ tip: 'The past tense says what you did. Add -é for I: hablé.', items: [...past, { en: 'Too long', t: 'uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciséis' }] });
+  const lesson = parseUnitLesson(raw, levelGuide(2), 'es-ES')!;
+  expect(lesson.items).toHaveLength(10);
+  expect(lesson.items.find((x) => x.en === 'Too long')).toBeUndefined();
+  useLanguage.setState({ content: { 'es-ES': { 'g-past': lesson.items } }, tips: { 'es-ES': { 'g-past': lesson.tip } } });
+
+  mockParams = { unitId: 'g-past' };
+  const screen = render(<LessonScreen />);
+  expect(await screen.findByTestId('lesson-tip')).toBeTruthy();
+  expect(screen.getByText('How it works')).toBeTruthy();
+  expect(screen.getByText(/Add -é for I/)).toBeTruthy();
+  fireEvent.press(screen.getByTestId('lesson-start'));
+  expect(screen.queryByTestId('lesson-tip')).toBeNull();
+});
+
+it('accepts a typed answer with missing accents, and tells the learner', () => {
+  expect(checkTyped('comi pan', 'Comí pan.')).toBe('accents');
+  expect(checkTyped('Comí pan', 'Comí pan.')).toBe('right');
+  expect(checkTyped('como pan', 'Comí pan.')).toBe('wrong');
+});
+
+it('brings missed words back in Review', () => {
+  useLanguage.setState({ content: { 'es-ES': { 'g-past': past } } });
+  languageService.finishLesson('g-past', { right: 6, total: 10, results: past.map((p, i) => ({ t: p.t, right: i >= 5 })) });
+  expect(languageService.dueCount()).toBe(5);
+  const board = render(<LanguageScreen />);
+  fireEvent.press(board.getByTestId('language-review'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('Lesson', { unitId: REVIEW });
+  return languageService.unitWords(REVIEW).then((items) => expect(items.map((x) => x.t)).toEqual(past.slice(0, 5).map((p) => p.t)));
+});
+
+it('runs the speed round on a one-minute clock', async () => {
+  jest.useFakeTimers();
+  useLanguage.setState({ content: { 'es-ES': { 'g-past': past } }, progress: { 'es-ES': { 'g-past': { stars: 1, lessons: 1 } } } });
+  mockParams = { unitId: 'g-past', mode: 'speed' };
+  const screen = render(<LessonScreen />);
+  await act(async () => { await Promise.resolve(); });
+  await waitFor(() => expect(screen.getByTestId('speed-clock')).toBeTruthy());
+  for (let s = 0; s < 61; s++) act(() => { jest.advanceTimersByTime(1000); });
+  expect(screen.getByTestId('lesson-done')).toBeTruthy();
+  expect(screen.getByText(/right in 60 seconds/)).toBeTruthy();
+  jest.useRealTimers();
+});

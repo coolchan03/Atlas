@@ -5,7 +5,8 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import { LANGUAGES, MY_WORDS, languageService } from './languageService';
+import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
+import { levelGuide } from './teaching';
 import { useLanguage } from './store';
 
 interface Action { icon: string; label: string; sub: string; onPress: () => void; testID: string; disabled?: boolean }
@@ -24,16 +25,20 @@ export function LanguageCourseCard() {
   const streak = useLanguage((s) => s.streak.count);
   const words = useLanguage((s) => s.myWords[s.language]?.length ?? 0);
   const name = LANGUAGES.find((l) => l.code === code)?.name ?? code;
+  const level = levelGuide(useLanguage((s) => s.level));
+  const due = languageService.dueCount(code);
   const actions: Action[] = [
     { icon: 'map', label: 'Lessons', sub: 'Board of topics', onPress: () => navigation.navigate('Language'), testID: 'course-lessons' },
     { icon: 'book-open', label: 'Story', sub: 'Read and listen', onPress: () => navigation.navigate('Listening', { kind: 'story' }), testID: 'course-story' },
     { icon: 'headphones', label: 'Podcast', sub: 'Two people talk', onPress: () => navigation.navigate('Listening', { kind: 'podcast' }), testID: 'course-podcast' },
+    { icon: 'refresh-cw', label: 'Review', sub: due ? `${due} words due` : 'Nothing due', onPress: () => navigation.navigate('Lesson', { unitId: REVIEW }), testID: 'course-review', disabled: !languageService.unlocked(REVIEW) },
     { icon: 'star', label: 'My words', sub: words ? `${words} saved` : 'Save from stories', onPress: () => navigation.navigate('Lesson', { unitId: MY_WORDS }), testID: 'course-words', disabled: !languageService.unlocked(MY_WORDS) },
   ];
   return (
     <View style={styles.card} testID="language-course">
       <View style={styles.row}>
         <Text style={styles.title}>Learning {name}</Text>
+        <Text style={styles.stat}>Level {level.id} {level.name}</Text>
         <Icon name="zap" size={14} color={colors.primary} /><Text style={styles.stat}>{streak}</Text>
         <Icon name="award" size={14} color={colors.primary} /><Text style={styles.stat}>{xp} XP</Text>
       </View>
