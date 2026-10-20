@@ -24,5 +24,6 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   english: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   link: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginBottom: SPACING.md },
   question: { marginVertical: SPACING.md, gap: SPACING.xs },
+  pieceText: { flex: 1 },
   word: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
 });
