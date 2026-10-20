@@ -98,6 +98,51 @@ export const recorderService = {
     return id;
   },
 
+  /** True when this phone can turn audio and video files into recordings (Android decoder). */
+  canImportFiles: (): boolean => !!Speakers?.decodeToWav,
+
+  /**
+   * Picks an audio or video file, turns its sound into a 16 kHz WAV on the phone, and makes
+   * a transcript with speaker labels like a recording. Resolves the new recording's id, or
+   * null when the picker was closed.
+   */
+  async importFile(): Promise<string | null> {
+    if (!Speakers?.decodeToWav) throw new Error('Transcribing files needs the updated Android Atlas.');
+    if (useRecorderLive.getState().phase !== 'idle') return null;
+    const { pick, types, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
+    let file: { uri: string; name?: string | null } | undefined;
+    try {
+      [file] = await pick({ type: [types.audio, types.video], allowMultiSelection: false });
+    } catch (e) {
+      if (isErrorWithCode(e) && (e as { code?: string }).code === errorCodes.OPERATION_CANCELED) return null;
+      throw e;
+    }
+    if (!file) return null;
+    const id = generateId();
+    await RNFS.mkdir(dir());
+    const audioPath = `${dir()}/${id}.wav`;
+    listenProgress();
+    cancelled = false;
+    live({ phase: 'processing', processingId: id, step: 'Reading the file', progress: 0 });
+    let seconds: number;
+    try {
+      seconds = await Speakers.decodeToWav(file.uri, audioPath);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      logger.warn(`[REC-SM] import failed: ${msg}`);
+      throw new Error(/cancel/i.test(msg) ? 'Stopped before the file was read.' : `Could not read this file: ${msg}`);
+    } finally {
+      live({ phase: 'idle', processingId: null, step: '', progress: 0 });
+    }
+    const rec: Recording = {
+      id, title: (file.name || 'Imported file').replace(/\.[^.]+$/, ''), createdAt: new Date().toISOString(),
+      durationSec: seconds, audioPath, status: 'processing',
+    };
+    useRecordings.setState((s) => ({ recordings: [rec, ...s.recordings] }));
+    recorderService.process(id).catch(() => undefined);
+    return id;
+  },
+
   /** Throws the recording away without saving. */
   discard(): void {
     if (useRecorderLive.getState().phase !== 'recording') return;

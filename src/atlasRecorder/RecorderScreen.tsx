@@ -100,6 +100,10 @@ export const RecorderScreen: React.FC = () => {
                     <Icon name="mic" size={34} color={colors.background} />
                   </TouchableOpacity>
                   <Text style={styles.meta}>Tap to start. A transcript is written when you stop.</Text>
+                  {recorderService.canImportFiles() && (
+                    <Button title="Transcribe an audio or video file" variant="outline" size="small" disabled={phase !== 'idle'} testID="recorder-import"
+                      onPress={() => { recorderService.importFile().then((id) => { if (id) navigation.navigate('RecordingDetail', { id }); }).catch(fail('Could not transcribe the file')); }} />
+                  )}
                 </>
               )}
             </View>
