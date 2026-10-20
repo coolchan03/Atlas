@@ -1,5 +1,6 @@
 package ai.offgridmobile.atlastts
 
+import android.net.Uri
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -83,6 +84,24 @@ class AtlasSpeakersModule(private val ctx: ReactApplicationContext) : ReactConte
             } catch (e: Throwable) {
                 promise.reject("SPEAKERS", if (cancelled) "cancelled" else (e.message ?: e.toString()))
             } finally { try { sd?.release() } catch (_: Throwable) {} }
+        }.start()
+    }
+
+    /**
+     * Turns an audio or video file (a content:// or file path) into a 16 kHz mono WAV at
+     * `outPath`, for transcription and speaker labels. Resolves the length in seconds.
+     */
+    @ReactMethod
+    fun decodeToWav(source: String, outPath: String, promise: Promise) {
+        cancelled = false
+        Thread {
+            try {
+                val uri = if (source.startsWith("/")) Uri.fromFile(File(source)) else Uri.parse(source)
+                val seconds = AudioDecoder.decode(ctx, uri, File(outPath.removePrefix("file://")), { cancelled }) { p -> progress(p) }
+                promise.resolve(seconds)
+            } catch (e: Throwable) {
+                promise.reject("DECODE", if (cancelled) "cancelled" else (e.message ?: e.toString()))
+            }
         }.start()
     }
 
