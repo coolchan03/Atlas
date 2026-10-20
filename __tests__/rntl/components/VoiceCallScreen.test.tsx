@@ -5,6 +5,7 @@ import { useUiModeStore } from '../../../src/stores/uiModeStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useAgentStore } from '../../../src/stores/agentStore';
 import { useAtlasVoiceStore } from '../../../src/atlasVoice/store';
+import { audioRecorderService } from '../../../src/services/audioRecorderService';
 
 const props = (over: any = {}) => ({
   onStartRecording: jest.fn(), onStopRecording: jest.fn(), onCancelRecording: jest.fn(), onStop: jest.fn(),
@@ -36,6 +37,22 @@ it('starts listening as soon as a hands-free call opens', () => {
   expect(p.onStartRecording).toHaveBeenCalledTimes(1);
 });
 
+it('sends by itself when you stop talking, even with hands-free off (no tap needed)', () => {
+  useAtlasVoiceStore.setState({ handsFree: false } as any);
+  const p = props({ isRecording: true });
+  const screen = render(<AtlasAudioInput {...p} />);
+  expect(screen.getByText('Listening... it answers when you stop talking')).toBeTruthy();
+  // The microphone's loudness, 10 readings a second, as the recorder reports it.
+  const mic = (rms: number, ms: number) => {
+    for (let t = 0; t < ms; t += 100) { act(() => { jest.advanceTimersByTime(100); (audioRecorderService as any).levelListener?.(rms); }); }
+  };
+  mic(0.005, 500); // room noise
+  mic(0.2, 1200); // talking
+  expect(p.onStopRecording).not.toHaveBeenCalled();
+  mic(0.005, 1700); // finished: quiet for longer than a pause between words
+  expect(p.onStopRecording).toHaveBeenCalledTimes(1);
+});
+
 it('End call stops listening and returns to typing', () => {
   const p = props({ isRecording: true });
   const screen = render(<AtlasAudioInput {...p} />);
@@ -61,7 +78,7 @@ describe('call screen helpers', () => {
     const base = { handsFree: true, muted: true, speakingKey: null, callerName: 'Coach' };
     expect(callStatus({ ...base, speakingKey: 'k' }).status).toMatch(/Coach is speaking/);
     expect(callStatus({ ...base, isGenerating: true }).icon).toBe('pause');
-    expect(callStatus({ ...base, isRecording: true }).status).toBe('Listening...');
+    expect(callStatus({ ...base, isRecording: true }).status).toBe('Listening... it answers when you stop talking');
     expect(callStatus(base).status).toBe('Muted');
   });
 });

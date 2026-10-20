@@ -34,19 +34,19 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const [isTranscribingFile, setIsTranscribingFile] = useState(false);
   const [directError, setDirectError] = useState<string | null>(null);
   // The phone's own recognizer (Google / Gboard speech): used when no Whisper model is downloaded.
-  const [systemSpeechReady, setSystemSpeechReady] = useState(false);
+  const [systemSpeech, setSystemSpeech] = useState({ available: false, onDevice: false });
   const [isSystemRecording, setIsSystemRecording] = useState(false);
   const [systemPartial, setSystemPartial] = useState('');
   const systemSessionRef = useRef<SystemSpeechSession | null>(null);
   useEffect(() => {
     let live = true;
-    systemSpeechStatus().then((st) => { if (live) setSystemSpeechReady(st.available); }).catch(() => undefined);
+    systemSpeechStatus().then((st) => { if (live) setSystemSpeech(st); }).catch(() => undefined);
     return () => { live = false; };
   }, []);
-  // Voice (call) mode only: in text chat the keyboard's own mic (e.g. Gboard) already
-  // dictates, and the mic button keeps offering the offline Whisper download.
+  // Call mode only (text chat keeps the keyboard mic / Whisper). The phone's ON-DEVICE recognizer
+  // is preferred even with Whisper: it ends the turn when you stop talking, like a real call.
   const usesSystemSpeech = (): boolean =>
-    useUiModeStore.getState().interfaceMode === 'audio' && !downloadedModelId && systemSpeechReady;
+    useUiModeStore.getState().interfaceMode === 'audio' && systemSpeech.available && (systemSpeech.onDevice || !downloadedModelId);
 
   const supportsDirectAudio = (): boolean =>
     activeModelService.supportsAudioInput() && audioRecorderService.supportsDirectAudioInput();
@@ -92,7 +92,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // Whisper model or the phone's recognizer. A direct-audio model alone used to count,
   // which left voice mode recording turns that nothing could transcribe.
   const voiceAvailable = isInAudioInterfaceMode()
-    ? !!downloadedModelId || systemSpeechReady
+    ? !!downloadedModelId || systemSpeech.available
     : supportsDirectAudio() || !!downloadedModelId;
 
   const showVoiceError = (message: string) => {

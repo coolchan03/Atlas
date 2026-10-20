@@ -11,8 +11,9 @@ import { audioRecorderService } from '../services/audioRecorderService';
 import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
+import logger from '../utils/logger';
 
-/** Silence detection for hands-free mode. */
+/** Silence detection: the turn ends by itself when the person stops talking (like a real call). */
 const SILENCE_END_MS = 1500;     // this much quiet after speech = you finished talking
 const NO_SPEECH_GIVE_UP_MS = 15000;
 const MAX_TURN_MS = 60000;
@@ -33,10 +34,10 @@ export function callStatus(p: {
   if (p.speakingKey) return { status: `${p.callerName} is speaking... talk or tap to interrupt`, icon: 'volume-x' };
   if (p.isGenerating) return { status: 'Thinking... tap to stop', icon: 'pause' };
   if (p.isTranscribing) return { status: 'Writing down what you said...', icon: 'mic' };
-  if (p.isRecording) return { status: p.handsFree ? 'Listening...' : 'Listening... tap to send', icon: 'square' };
+  if (p.isRecording) return { status: 'Listening... it answers when you stop talking', icon: 'square' };
   if (p.isModelLoading) return { status: 'Loading speech model...', icon: 'mic' };
   if (p.muted) return { status: 'Muted', icon: 'mic' };
-  return { status: p.handsFree ? 'Tap to talk. It listens again after each answer.' : 'Tap to talk, tap again to send.', icon: 'mic' };
+  return { status: p.handsFree ? 'Tap to talk. It listens again after each answer.' : 'Tap to talk.', icon: 'mic' };
 }
 
 /** Who is "on the line": the conversation's agent, else the active agent, else Atlas. */
@@ -84,11 +85,10 @@ export function AtlasAudioInput(props: any) {
 
   const latest = useRef(props);
   latest.current = props;
-  const vad = useRef({ heardAt: 0, startedAt: 0, lastLoud: 0, floor: 0.01, samples: 0 });
+  const vad = useRef({ heardAt: 0, startedAt: 0, lastLoud: 0, floor: 0.01, samples: 0, levels: 0 });
 
-  // Mic loudness -> decide when the person has finished talking (hands-free only).
+  // Mic loudness -> decide when the person has finished talking, so nobody has to tap to send.
   useEffect(() => {
-    if (!handsFree) { audioRecorderService.setLevelListener(null); return; }
     audioRecorderService.setLevelListener((rms) => {
       // While an answer is being spoken, the mic is only metered for barge-in.
       const watch = bargeIn.current;
@@ -99,6 +99,7 @@ export function AtlasAudioInput(props: any) {
       const v = vad.current;
       const now = Date.now();
       if (!latest.current.isRecording) return;
+      v.levels++;
       if (v.samples < 4) { v.floor = Math.max(0.003, (v.floor * v.samples + rms) / (v.samples + 1)); v.samples++; return; }
       const loud = rms > Math.max(0.02, Math.min(v.floor, 0.05) * 3);
       if (loud) { if (!v.heardAt) v.heardAt = now; v.lastLoud = now; }
@@ -112,7 +113,7 @@ export function AtlasAudioInput(props: any) {
       }
     });
     return () => audioRecorderService.setLevelListener(null);
-  }, [handsFree]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- reads live state through refs
 
   // Barge-in: in hands-free mode the mic is metered while the answer plays; if the user talks
   // over it, speech stops and a fresh turn starts (so the answer's echo is never transcribed).
@@ -138,9 +139,17 @@ export function AtlasAudioInput(props: any) {
     return endBargeIn;
   }, [speakingKey, handsFree, muted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset the silence detector at the start of every recording.
+  // Reset the silence detector at the start of every recording. If the microphone reports no
+  // loudness (some phones, or the phone's own recognizer which ends turns itself), say so.
   useEffect(() => {
-    if (isRecording) vad.current = { heardAt: 0, startedAt: Date.now(), lastLoud: 0, floor: 0.01, samples: 0 };
+    if (!isRecording) return;
+    vad.current = { heardAt: 0, startedAt: Date.now(), lastLoud: 0, floor: 0.01, samples: 0, levels: 0 };
+    const t = setTimeout(() => {
+      if (vad.current.levels || !latest.current.isRecording || !audioRecorderService.isCurrentlyRecording()) return;
+      logger.warn('[CALL] no microphone levels: automatic end of turn unavailable on this recording');
+      setNote('Tap the button when you finish talking.');
+    }, 2500);
+    return () => clearTimeout(t);
   }, [isRecording]);
 
   const mutedRef = useRef(muted);
