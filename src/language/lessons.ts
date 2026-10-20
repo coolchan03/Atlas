@@ -9,7 +9,11 @@ export type Exercise =
   | { kind: 'meaning'; item: Item; options: string[]; answer: string }
   | { kind: 'listen'; item: Item; options: string[]; answer: string }
   | { kind: 'match'; pairs: Item[] }
-  | { kind: 'build'; item: Item; tiles: string[]; answer: string };
+  | { kind: 'build'; item: Item; tiles: string[]; answer: string }
+  /** Hear a phrase, then tap its words in order (Duolingo's "tap what you hear"). */
+  | { kind: 'hear'; item: Item; tiles: string[]; answer: string }
+  /** A phrase with one word missing: pick the word that goes in the gap. */
+  | { kind: 'blank'; item: Item; shown: string; options: string[]; answer: string };
 
 /** Small seeded random so a lesson can be rebuilt the same way in tests. */
 export function rng(seed: number): () => number {
@@ -27,19 +31,44 @@ const options = (right: string, pool: string[], r: () => number) =>
 /** Words of a phrase for the word-order exercise (punctuation kept on its word). */
 export const words = (t: string) => t.split(/\s+/).filter(Boolean);
 
+/** The phrase with one word replaced by a gap, and the missing word. */
+export function blankOut(t: string, r: () => number): { shown: string; answer: string } | null {
+  const w = words(t);
+  const candidates = w.map((x, i) => ({ x, i })).filter(({ x }) => x.replace(/[.!?¡¿,]/g, '').length > 1);
+  if (w.length < 3 || !candidates.length) return null;
+  const pick = candidates[Math.floor(r() * candidates.length)];
+  const answer = pick.x.replace(/[.!?¡¿,]/g, '');
+  return { shown: w.map((x, i) => (i === pick.i ? x.replace(answer, '____') : x)).join(' '), answer };
+}
+
+type Kind = 'choose' | 'meaning' | 'listen' | 'build' | 'hear' | 'blank';
+const KINDS: Kind[] = ['choose', 'meaning', 'blank', 'listen', 'build', 'hear'];
+/** Phrase-only kinds fall back to a word exercise for single words. */
+const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'choose', hear: 'listen', blank: 'meaning' };
+
+function exerciseFor(kind: Kind, item: Item, items: Item[], r: () => number): Exercise {
+  const long = words(item.t).length >= 3;
+  const k = !long && FALLBACK[kind] ? FALLBACK[kind]! : kind;
+  if (k === 'build' || k === 'hear') return { kind: k, item, tiles: shuffle(words(item.t), r), answer: item.t };
+  if (k === 'blank') {
+    const b = blankOut(item.t, r);
+    if (b) {
+      const pool = items.flatMap((x) => words(x.t)).map((x) => x.replace(/[.!?¡¿,]/g, '')).filter((x) => x.length > 1);
+      return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], r), answer: b.answer };
+    }
+    return exerciseFor('meaning', item, items, r);
+  }
+  if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), r), answer: item.en };
+  return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r), answer: item.t };
+}
+
 /** About ten exercises covering every item at least once, with one matching round. */
 export function buildLesson(items: Item[], seed = Date.now(), length = 10): Exercise[] {
   const r = rng(seed);
   const all = shuffle(items, r);
   const out: Exercise[] = [];
-  const kinds: ('choose' | 'meaning' | 'listen' | 'build')[] = ['choose', 'meaning', 'listen', 'build'];
   for (let i = 0; out.length < length - 1 && i < length * 2; i++) {
-    const item = all[i % all.length];
-    let kind = kinds[i % kinds.length];
-    if (kind === 'build' && words(item.t).length < 3) kind = 'choose';
-    if (kind === 'build') out.push({ kind, item, tiles: shuffle(words(item.t), r), answer: item.t });
-    else if (kind === 'meaning') out.push({ kind, item, options: options(item.en, items.map((x) => x.en), r), answer: item.en });
-    else out.push({ kind, item, options: options(item.t, items.map((x) => x.t), r), answer: item.t });
+    out.push(exerciseFor(KINDS[i % KINDS.length], all[i % all.length], items, r));
   }
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
   return out;

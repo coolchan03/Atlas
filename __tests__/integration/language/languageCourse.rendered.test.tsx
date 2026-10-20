@@ -24,16 +24,17 @@ import { parseUnitWords } from '../../../src/language/languageService';
 beforeEach(() => useLanguage.setState({ language: 'es-ES', content: {}, progress: {}, xp: 0, streak: { day: '', count: 0 } }));
 
 /** Plays a whole lesson answering correctly, the way a learner taps through it. */
-async function playLesson(screen: ReturnType<typeof render>) {
+async function playLesson(screen: ReturnType<typeof render>, seen = new Set<string>()) {
   for (let guard = 0; guard < 20 && !screen.queryByTestId('lesson-done'); guard++) {
-    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish/);
+    const prompt = screen.queryByText(/Match the pairs|Pick the Spanish for|What does this mean\?|Listen and pick|Write this in Spanish|Tap what you hear|Fill in the blank/);
     if (!prompt) { await act(async () => {}); continue; }
     const items = (screen.UNSAFE_root.findAllByType(require('../../../src/language/Exercises').ExerciseView)[0].props.ex);
+    seen.add(items.kind);
     if (items.kind === 'match') {
       for (const p of items.pairs) { fireEvent.press(screen.getByLabelText(p.en)); fireEvent.press(screen.getByLabelText(p.t)); }
       continue;
     }
-    if (items.kind === 'build') {
+    if (items.kind === 'build' || items.kind === 'hear') {
       for (const w of items.answer.split(/\s+/)) {
         const pool = screen.getAllByText(w);
         fireEvent.press(pool[pool.length - 1]);
@@ -56,7 +57,10 @@ it('plays the Health and help unit and moves along the board', async () => {
   mockParams = { unitId: 'help' };
   const lesson = render(<LessonScreen />);
   await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
-  await playLesson(lesson);
+  const seen = new Set<string>();
+  await playLesson(lesson, seen);
+  // Duolingo-style kinds: translate, meaning, fill in the blank, listen, word order, tap what you hear, match.
+  expect([...seen].sort()).toEqual(['blank', 'build', 'choose', 'hear', 'listen', 'match', 'meaning']);
   expect(lesson.getByTestId('lesson-done')).toBeTruthy();
   expect(useLanguage.getState().progress['es-ES'].help.stars).toBe(3);
   expect(useLanguage.getState().xp).toBe(100);

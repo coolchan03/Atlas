@@ -65,7 +65,7 @@ function Match({ pairs, onDone }: { pairs: Item[]; onDone: (mistakes: number) =>
   );
 }
 
-function Build({ ex, attempt, onPick }: { ex: Extract<Exercise, { kind: 'build' }>; attempt: Attempt; onPick: (v: string) => void }) {
+function Build({ ex, attempt, onPick }: { ex: Extract<Exercise, { tiles: string[] }>; attempt: Attempt; onPick: (v: string) => void }) {
   const styles = useThemedStyles(createStyles);
   const [used, setUsed] = useState<number[]>([]);
   const set = (next: number[]) => { setUsed(next); onPick(next.map((i) => ex.tiles[i]).join(' ')); };
@@ -91,6 +91,21 @@ export function ExerciseView({ ex, lang, langName, attempt, onPick, onMatched }:
       <Text style={styles.prompt}>Write this in {langName}</Text>
       <Text style={styles.big}>{ex.item.en}</Text>
       <Build ex={ex} attempt={attempt} onPick={onPick} />
+    </View>
+  );
+  if (ex.kind === 'hear') return (
+    <View>
+      <Text style={styles.prompt}>Tap what you hear</Text>
+      <Say item={ex.item} lang={lang} autoPlay />
+      <Build ex={ex} attempt={attempt} onPick={onPick} />
+    </View>
+  );
+  if (ex.kind === 'blank') return (
+    <View>
+      <Text style={styles.prompt}>Fill in the blank</Text>
+      <Text style={styles.big}>{ex.shown}</Text>
+      <Text style={styles.roman}>{ex.item.en}</Text>
+      <Options ex={ex} attempt={attempt} onPick={onPick} />
     </View>
   );
   return (
