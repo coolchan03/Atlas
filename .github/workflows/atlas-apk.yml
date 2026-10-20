@@ -6,6 +6,11 @@ on:
   push:
     branches: [atlas-voice]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the signed APK on the Releases page (only after every check passes)'
+        type: boolean
+        default: false
 
 jobs:
   apk:
@@ -154,8 +159,8 @@ jobs:
         with:
           name: Atlas-apk
           path: out/*.apk
-      - name: Publish release (stable branch only)
-        if: github.ref == 'refs/heads/atlas-voice'
+      - name: Publish release (stable branch, or a manual run with publish ticked)
+        if: github.ref == 'refs/heads/atlas-voice' || inputs.publish == true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
