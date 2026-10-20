@@ -26,6 +26,8 @@ export type RootStackParamList = {
   KnowledgeBase: { projectId: string };
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
+  Language: undefined;
+  Lesson: { unitId: string };
   RecordingDetail: { id: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack

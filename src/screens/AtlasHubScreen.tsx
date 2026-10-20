@@ -30,6 +30,7 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Survival Manual', sub: 'Water, fire, shelter, food, plants', icon: 'book-open', color: '#3F6212', to: 'SurvivalManual' },
     { label: 'Maps', sub: 'Offline maps, GPS, saved places', icon: 'map', color: '#0F766E', to: 'Maps' },
     { label: 'Phrases', sub: 'Show or speak in 10+ languages', icon: 'globe', color: '#1D4ED8', to: 'Phrases' },
+    { label: 'Learn a language', sub: 'Lessons by topic, games and a board to climb', icon: 'book', color: '#047857', to: 'Language' },
     ...(hasCompass ? [{ label: 'Compass', sub: 'Works with no signal', icon: 'compass', color: '#6D28D9', to: 'Compass' }] : []),
     { label: 'Offline Library', sub: 'Atlas packs, WikiMed, Wikipedia', icon: 'database', color: '#92400E', to: 'OfflineLibrary' },
     { label: 'Daily briefing', sub: 'Your news, read aloud, with fun facts', icon: 'radio', color: '#BE185D', to: 'DailyBrief' },
