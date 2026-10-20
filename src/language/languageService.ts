@@ -6,7 +6,7 @@
 import { PHRASE_LANGUAGES, PHRASES_EN } from '../phrases/data';
 import { ensureTextModel, forceLoadTextModel } from '../atlasTools/models';
 import { parseJsonLoose, str } from '../study/games/json';
-import { UNITS, unitById, type Unit } from './curriculum';
+import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
 import { starsFor, type Item } from './lessons';
 import { knownSet, newWords, parseListening, type Listening, type Word } from './listening';
@@ -278,6 +278,24 @@ export const languageService = {
     const { content, progress, myWords } = useLanguage.getState();
     const studied = UNITS.filter((u) => (progress[code]?.[lessonKey(u.id, 1)]?.lessons ?? 0) > 0);
     return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
+  },
+
+  /** Words for a review square: the ones due first, topped up with words studied most recently. */
+  reviewSquareWords(code = useLanguage.getState().language): Item[] {
+    const studied = languageService.studiedItems(code);
+    const due = dueItems(studied, useLanguage.getState().memory[code] ?? {}, { n: 10 });
+    const more = studied.slice().reverse().filter((x) => !due.some((d) => d.t === x.t));
+    const words = [...due, ...more].slice(0, 10);
+    if (words.length < 4) throw new Error('Finish a few lessons first, then this square reviews their words.');
+    return words;
+  },
+
+  /** Every word of a level written so far, for its checkpoint. */
+  levelWords(level: LevelId, code = useLanguage.getState().language): Item[] {
+    const { content } = useLanguage.getState();
+    const words = unitsForLevel(level).flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? []));
+    if (words.length < 6) throw new Error('Do this level\'s lessons first: the checkpoint tests all of them.');
+    return words;
   },
 
   /** How many words are due for review now. */

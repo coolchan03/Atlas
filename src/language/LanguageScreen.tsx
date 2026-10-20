@@ -39,10 +39,11 @@ export const LanguageScreen: React.FC = () => {
     if (s.kind === 'lesson') navigation.navigate('Lesson', { unitId: s.unitId, part: s.part, parts: s.parts, key: s.key });
     else if (s.kind === 'story' || s.kind === 'podcast') navigation.navigate('Listening', { kind: s.kind, space: s.key, level, index: i });
     else {
-      // Speed rounds and word searches use the lessons just before them on the board.
+      // Speed rounds, word searches, reviews and the checkpoint use the lessons before them on the board.
       const before = spaces.slice(0, i).filter((x) => x.kind === 'lesson').map((x) => x.unitId!);
       const unitId = before[before.length - 1] ?? unitsForLevel(level)[0].id;
-      navigation.navigate(s.kind === 'speed' ? 'Lesson' : 'WordSearch', { unitId, mode: s.kind === 'speed' ? 'speed' : undefined, key: s.key });
+      if (s.kind === 'wordsearch') navigation.navigate('WordSearch', { unitId, key: s.key });
+      else navigation.navigate('Lesson', { unitId, mode: s.kind, key: s.key, level });
     }
   };
 

@@ -124,3 +124,27 @@ it('brings a missed exercise back at the end, and scores only the first try', as
   const [, right, total] = summary.match(/^(\d+) of (\d+) right/)!;
   expect(Number(right)).toBe(Number(total) - 1);
 });
+
+it('ends each level with a checkpoint that marks the square done when passed', async () => {
+  const { playLesson } = require('./playLesson');
+  const { boardFor } = require('../../../src/language/board');
+  const last = boardFor(1)[boardFor(1).length - 1];
+  expect(last).toMatchObject({ kind: 'checkpoint', title: 'A1 checkpoint' });
+  mockParams = { unitId: 'help', mode: 'checkpoint', key: last.key, level: 1 };
+  const lesson = render(<LessonScreen />);
+  await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
+  await playLesson(lesson);
+  expect(lesson.getByText(/^Passed: \d+ of \d+ right/)).toBeTruthy();
+  expect(languageService.isDone(last.key)).toBe(true);
+}, 20000);
+
+it('reviews studied words on a review square', async () => {
+  const { playLesson } = require('./playLesson');
+  useLanguage.setState({ progress: { 'es-ES': { basics: { stars: 1, lessons: 1 } } } });
+  mockParams = { unitId: 'basics', mode: 'review', key: 'review@1.9' };
+  const lesson = render(<LessonScreen />);
+  await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
+  await playLesson(lesson);
+  expect(lesson.getByTestId('lesson-done')).toBeTruthy();
+  expect(languageService.isDone('review@1.9')).toBe(true);
+}, 20000);

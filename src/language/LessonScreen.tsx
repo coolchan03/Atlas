@@ -12,6 +12,8 @@ import { lessonKey, partItems } from './board';
 import { LESSON_SECONDS } from './pace';
 import { buildLesson, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
 import { useLanguage } from './store';
+import type { Item } from './lessons';
+import type { LevelId } from './teaching';
 import { ExerciseView, type Attempt } from './Exercises';
 import { createStyles } from './LessonScreen.styles';
 import { playFeedback } from './sounds';
@@ -21,8 +23,29 @@ const EMPTY: Attempt = { value: '', checked: false };
 
 const SPEED_SECONDS = 60;
 
-const lessonTitle = (unitId: string, speed: boolean) =>
-  (speed ? 'Speed round' : unitId === MY_WORDS ? 'My words' : unitId === REVIEW ? 'Review' : unitById(unitId)?.title ?? 'Lesson');
+type Mode = 'speed' | 'review' | 'checkpoint';
+const MODE_TITLE: Record<Mode, string> = { speed: 'Speed round', review: 'Review', checkpoint: 'Checkpoint' };
+const lessonTitle = (unitId: string, mode?: Mode) =>
+  (mode ? MODE_TITLE[mode] : unitId === MY_WORDS ? 'My words' : unitId === REVIEW ? 'Review' : unitById(unitId)?.title ?? 'Lesson');
+
+/** A checkpoint is passed at 80% right. */
+const PASS_MARK = 0.8;
+
+/** The words for this sitting: a unit's (or one part of it), a review square's, or the whole level's. */
+function lessonWords(p: { unitId: string; mode?: Mode; level?: LevelId; part: number; parts: number }, onStep: (m: string) => void): Promise<Item[]> {
+  if (p.mode === 'review') return Promise.resolve().then(() => languageService.reviewSquareWords());
+  if (p.mode === 'checkpoint') return Promise.resolve().then(() => languageService.levelWords(p.level ?? useLanguage.getState().level));
+  return languageService.unitWords(p.unitId, onStep)
+    .then((all) => (unitById(p.unitId) && !p.mode ? partItems(all, p.part, p.parts) : all));
+}
+
+function summaryText({ mode, right, total }: { mode?: Mode; right: number; total: number }): string {
+  if (mode === 'speed') return `${right} right in ${SPEED_SECONDS} seconds`;
+  if (mode === 'checkpoint') return right / Math.max(1, total) >= PASS_MARK
+    ? `Passed: ${right} of ${total} right`
+    : `${right} of ${total} right. You need ${Math.ceil(total * PASS_MARK)} to pass: try again`;
+  return `${right} of ${total} right`;
+}
 
 const feedbackText = (verdict: 'right' | 'accents' | 'wrong', answer: string) =>
   (verdict === 'right' ? 'Right.' : verdict === 'accents' ? `Right, but watch the accents: ${answer}` : `Not quite. Answer: ${answer}`);
@@ -40,7 +63,7 @@ const progressKey = ({ key, unitId, part = 1 }: { key?: string; unitId: string; 
  */
 export const LessonScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const params = useRoute<any>().params as { unitId: string; mode?: 'speed'; part?: number; parts?: number; key?: string };
+  const params = useRoute<any>().params as { unitId: string; mode?: Mode; part?: number; parts?: number; key?: string; level?: LevelId };
   const { unitId, mode, part = 1, parts = 1 } = params;
   const speed = mode === 'speed';
   const key = progressKey(params, speed);
@@ -50,7 +73,7 @@ export const LessonScreen: React.FC = () => {
   const langName = LANGUAGES.find((l) => l.code === code)?.name ?? code;
   const unit = unitById(unitId);
   const guide = levelGuide(unit?.level ?? useLanguage.getState().level);
-  const title = parts > 1 && !speed ? `${lessonTitle(unitId, speed)} ${part}/${parts}` : lessonTitle(unitId, speed);
+  const title = parts > 1 && !mode ? `${lessonTitle(unitId)} ${part}/${parts}` : lessonTitle(unitId, mode);
   const [exercises, setExercises] = useState<Exercise[] | null>(null);
   const [step, setStep] = useState('Getting the words ready...');
   const [error, setError] = useState<string | null>(null);
@@ -74,13 +97,12 @@ export const LessonScreen: React.FC = () => {
       setExercises(saved.exercises); setI(saved.index); setRight(saved.right); setResults(saved.results); setTip('');
       return;
     }
-    languageService.unitWords(unitId, setStep)
-      .then((all) => {
-        const items = unit && !speed ? partItems(all, part, parts) : all;
-        setTip(speed || part > 1 ? '' : languageService.tipFor(unitId));
+    lessonWords({ unitId, mode, level: params.level, part, parts }, setStep)
+      .then((items) => {
+        setTip(mode || part > 1 ? '' : languageService.tipFor(unitId));
         setExercises(buildLesson(items, Date.now(), speed
           ? { length: 40, production: 0 }
-          : { seconds: LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production }));
+          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production }));
       })
       .catch((e) => setError(String(e?.message || e)));
   };
@@ -91,8 +113,11 @@ export const LessonScreen: React.FC = () => {
   const correct = verdict !== 'wrong';
   const finish = (score: number, done: { t: string; right: boolean }[], list = exercises!) => {
     languageService.saveLesson(null);
-    if (speed && params.key) languageService.completeSpace(params.key);
-    setResult(languageService.finishLesson(key, { right: score, total: speed ? Math.max(score, i + 1) : scored(list), results: done }));
+    const total = speed ? Math.max(score, i + 1) : scored(list);
+    const passed = mode !== 'checkpoint' || score / Math.max(1, total) >= PASS_MARK;
+    if (mode && params.key && passed) languageService.completeSpace(params.key);
+    // Special squares are practice: the square is marked above, the words' memory and XP here.
+    setResult(languageService.finishLesson(mode && params.key ? PRACTICE : key, { right: score, total, results: done }));
   };
   const next = (gotIt: boolean) => {
     if (!ex || !exercises) return;
@@ -129,7 +154,7 @@ export const LessonScreen: React.FC = () => {
 
   if (result) {
     return (
-      <LessonDone title={title} result={result} summary={speed ? `${right} right in ${SPEED_SECONDS} seconds` : `${right} of ${scored(exercises)} right`}
+      <LessonDone title={title} result={result} summary={summaryText({ mode, right, total: scored(exercises) })}
         aiMade={languageService.isAiMade(unitId)} onAgain={() => start(true)} onRewrite={rewrite} />
     );
   }

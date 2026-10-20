@@ -14,6 +14,8 @@ function tint(kind: SpaceKind, colors: ThemeColors): string {
   if (kind === 'story') return `${colors.success}33`;
   if (kind === 'podcast') return `${colors.primary}33`;
   if (kind === 'speed' || kind === 'wordsearch') return `${colors.error}26`;
+  if (kind === 'review') return `${colors.success}1A`;
+  if (kind === 'checkpoint') return `${colors.primary}55`;
   return colors.surface;
 }
 
