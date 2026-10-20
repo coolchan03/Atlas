@@ -27,8 +27,9 @@ export type RootStackParamList = {
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
   Language: undefined;
-  Lesson: { unitId: string };
-  Listening: { kind: 'story' | 'podcast'; at?: number };
+  Lesson: { unitId: string; mode?: 'speed'; part?: number; parts?: number; key?: string };
+  WordSearch: { unitId: string; key?: string };
+  Listening: { kind: 'story' | 'podcast'; at?: number; space?: string; level?: number; index?: number; pieceId?: string };
   RecordingDetail: { id: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack
