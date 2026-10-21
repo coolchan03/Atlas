@@ -11,6 +11,7 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue } from '../../atlasTools/backup';
 import { rehydrateStores } from '../../atlasTools/storeRegistry';
+import { DEVICE_SETTING, keepThisDevice } from '../../atlasTools/deviceSettings';
 
 const STAMPS = 'atlas-sync-store-stamps-v1';
 export const APP_STORE = 'local-llm-app-storage';
@@ -20,8 +21,6 @@ export const LANGUAGE = 'atlas-language';
 const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE]);
 /** Chats, projects and agents have their own record-by-record merge (merge.ts). */
 const OWN_MERGE = new Set(['local-llm-chat-storage', 'local-llm-project-storage', 'atlas-agent-storage']);
-/** Settings that describe one phone's hardware, not the person's choices. */
-const DEVICE_SETTING = /thread|gpu|opencl|vulkan|npu|backend|accel|cache|loading|classifier|layers/i;
 
 export interface StoreEntry { value: string; changedAt: number }
 export type StoreSnapshot = Record<string, StoreEntry>;
@@ -45,12 +44,13 @@ const recordingsDir = () => `${RNFS.DocumentDirectoryPath}/atlas-recordings`;
 /** Applies a remote store to the local raw value. Returns the new raw value, or null to leave it. */
 export function combine(key: string, { local, remote, deletedRecordings = {} }: { local: string | null; remote: string; deletedRecordings?: Record<string, number> }): string | null {
   if (key === APP_STORE) {
+    // The incoming copy is only the shared part (settings and theme): keep the rest of this
+    // device's app store, then this device's hardware settings over it.
     const mine = local ? JSON.parse(local) : { state: {} };
     const theirs = JSON.parse(remote);
-    const keep = Object.fromEntries(Object.entries(mine.state?.settings ?? {}).filter(([k]) => DEVICE_SETTING.test(k)));
-    mine.state = { ...mine.state, themeMode: theirs.state?.themeMode ?? mine.state?.themeMode,
-      settings: { ...mine.state?.settings, ...theirs.state?.settings, ...keep } };
-    return JSON.stringify(mine);
+    const merged = { ...mine, state: { ...mine.state, themeMode: theirs.state?.themeMode ?? mine.state?.themeMode,
+      settings: { ...mine.state?.settings, ...theirs.state?.settings } } };
+    return keepThisDevice(local, JSON.stringify(merged));
   }
   if (key === RECORDINGS) {
     const mine = local ? JSON.parse(local) : { state: { recordings: [], consent: false }, version: 0 };

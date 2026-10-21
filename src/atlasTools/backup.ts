@@ -14,6 +14,7 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { collectProjectFiles, restoreProjectFiles } from './projectBackupFiles';
 import type { ProjectBackupFile } from './projectBackupFiles';
 import { rehydrateStores } from './storeRegistry';
+import { keepThisDevice } from './deviceSettings';
 
 /**
  * Backup = every saved app setting in one JSON file: agents and their lessons, projects,
@@ -182,6 +183,9 @@ async function readPortableBackup(password?: string): Promise<{ data: any; encry
 
 /** Adds this phone's protected projects / locked chats that the restored list does not have. */
 export async function keepDeviceProtected(key: string, restored: string): Promise<string> {
+  // Hardware settings (backend, threads, GPU layers, cache, context) and the model list stay
+  // this device's own: a phone's NPU setting restored on a tablet stopped every model loading.
+  if (key === 'local-llm-app-storage') return keepThisDevice(await AsyncStorage.getItem(key), restored);
   if (key !== 'local-llm-project-storage' && key !== 'local-llm-chat-storage') return restored;
   const collection = key === 'local-llm-chat-storage' ? 'conversations' : 'projects';
   try {
