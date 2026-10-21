@@ -3,6 +3,7 @@
  * (background family), an accent color, a font and a text size. One source for
  * the options so the settings screen and the theme hook agree.
  */
+import { Platform } from 'react-native';
 import { FONTS, TYPOGRAPHY } from '../constants';
 import type { ThemeColors } from './palettes';
 
@@ -64,16 +65,23 @@ export const ACCENTS: Array<{ id: AccentId; name: string; light: Accent; dark: A
   { id: 'slate', name: 'Slate', light: { primary: '#334155', primaryDark: '#1E293B', primaryLight: '#64748B' }, dark: { primary: '#CBD5E1', primaryDark: '#94A3B8', primaryLight: '#E2E8F0' } },
 ];
 
-/** Android font families (built into every device). */
+/**
+ * Fonts bundled with Atlas (android/app/src/main/assets/fonts, SIL Open Font License), so
+ * every choice looks the same on every device. Android's own family names (serif, casual,
+ * sans-serif-condensed...) are not reliable: Motorola, Samsung and others let the system font
+ * replace them all, so on those phones every choice looked the same. "Atlas" keeps the
+ * system look. Other platforms use their system families.
+ */
+const bundled = (file: string, system: string) => (Platform.OS === 'android' ? file : system);
 export const FONT_CHOICES: Array<{ id: FontId; name: string; heading: string; body: string }> = [
   { id: 'atlas', name: 'Atlas', heading: 'serif', body: 'sans-serif' },
-  { id: 'sans', name: 'Clean', heading: 'sans-serif', body: 'sans-serif' },
-  { id: 'serif', name: 'Book', heading: 'serif', body: 'serif' },
-  { id: 'mono', name: 'Terminal', heading: 'monospace', body: 'monospace' },
-  { id: 'condensed', name: 'Narrow', heading: 'sans-serif-condensed', body: 'sans-serif-condensed' },
-  { id: 'light', name: 'Light', heading: 'sans-serif-light', body: 'sans-serif-light' },
-  { id: 'medium', name: 'Bold', heading: 'sans-serif-medium', body: 'sans-serif-medium' },
-  { id: 'casual', name: 'Handwritten', heading: 'casual', body: 'casual' },
+  { id: 'sans', name: 'Clean', heading: bundled('AtlasClean', 'sans-serif'), body: bundled('AtlasClean', 'sans-serif') },
+  { id: 'serif', name: 'Book', heading: bundled('AtlasBook', 'serif'), body: bundled('AtlasBook', 'serif') },
+  { id: 'mono', name: 'Terminal', heading: bundled('AtlasMono', 'monospace'), body: bundled('AtlasMono', 'monospace') },
+  { id: 'condensed', name: 'Narrow', heading: bundled('AtlasNarrow', 'sans-serif-condensed'), body: bundled('AtlasNarrow', 'sans-serif-condensed') },
+  { id: 'light', name: 'Light', heading: bundled('AtlasLight', 'sans-serif-light'), body: bundled('AtlasLight', 'sans-serif-light') },
+  { id: 'medium', name: 'Bold', heading: bundled('AtlasBold', 'sans-serif-medium'), body: bundled('AtlasBold', 'sans-serif-medium') },
+  { id: 'casual', name: 'Handwritten', heading: bundled('AtlasHand', 'casual'), body: bundled('AtlasHand', 'casual') },
 ];
 
 export const TEXT_SIZES: Array<{ id: TextSizeId; name: string; scale: number }> = [
