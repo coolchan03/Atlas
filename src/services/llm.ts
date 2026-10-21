@@ -190,7 +190,7 @@ class LLMService {
       if (auto) {
         const [acceleration, vulkan] = await Promise.all([
           hardwareService.getAccelerationCapability(),
-          mmProjPath ? Promise.resolve(false) : vulkanEngine.isAvailable(),
+          vulkanEngine.isAvailable(),
         ]);
         candidates = acceleratorCandidates(
           { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan },
@@ -203,9 +203,6 @@ class LLMService {
       const failures: string[] = [];
       for (const backend of candidates) {
         try {
-          if (backend === INFERENCE_BACKENDS.VULKAN && mmProjPath) {
-            throw new Error('Picture input is not available on the Vulkan GPU engine (llama.kt is text only). Choose OpenCL or Automatic in the text backend setting for pictures.');
-          }
           const { fileSize, memCheck, params } = await this.validateAndPrepareModel(
             modelPath, opts?.override, backend,
           );
@@ -236,6 +233,11 @@ class LLMService {
             this.activeGpuLayers = loaded.offloadedGpuLayers > 0 ? loaded.offloadedGpuLayers : requestedLayers;
             this.gpuReason = loaded.offloadedGpuLayers > 0 ? ''
               : 'Model header unreadable; showing the requested Vulkan layer count';
+            // The Vulkan engine (llama.kt) is text only: a model's picture file is not loaded.
+            if (mmProjPath) {
+              this.gpuReason = 'Pictures are off on the Vulkan GPU engine (text only). Choose CPU for pictures.';
+              logger.log('[LLM] Vulkan: loaded text only; the picture file is not used on this engine');
+            }
             this.currentSettings.contextLength = contextLength;
             this.toolCallingSupported = false;
             this.thinkingSupported = false;
