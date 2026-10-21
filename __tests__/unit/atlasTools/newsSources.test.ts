@@ -84,3 +84,23 @@ describe('daily briefing news sources', () => {
     expect(onTopic(search, { interest: 'Chicago Bears', interests: ['Chicago Bears'], fromSection: false }).map(x => x.title)).toEqual(['Chicago Bears sign new quarterback']);
   });
 });
+
+describe('the briefing does not drift into sports', () => {
+  const h = (title: string) => ({ title, desc: '' });
+  it('drops local team results from a search for a place, unless sports is an interest', () => {
+    const items = [
+      h('Austin city council approves new transit plan'),
+      h('Texas Longhorns coach praises defense after win'),
+      h('Austin FC tops league standings after weekend'),
+      h('Texas legislature debates property tax relief'),
+    ];
+    const interests = ['Austin Texas', 'climate'];
+    expect(onTopic(items, { interest: 'Austin Texas', interests, fromSection: false }).map((x: any) => x.title))
+      .toEqual(['Austin city council approves new transit plan', 'Texas legislature debates property tax relief']);
+    expect(onTopic(items, { interest: 'Austin Texas', interests: ['Austin Texas', 'sports'], fromSection: false })).toHaveLength(4);
+  });
+  it('keeps business news about the SEC and comparisons', () => {
+    const items = [h('SEC fines bank over reporting'), h('Renting vs. buying: what the numbers say')];
+    expect(onTopic(items, { interest: 'business', interests: ['business'], fromSection: true })).toHaveLength(2);
+  });
+});

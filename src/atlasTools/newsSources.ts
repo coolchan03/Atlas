@@ -102,7 +102,7 @@ export const linesPerStory = (minutes: number, stories: number) =>
 export const spokenMinutes = (texts: string[]) =>
   texts.reduce((n, t) => n + t.split(/\s+/).filter(Boolean).length, 0) / WORDS_PER_MINUTE;
 
-const SPORTS = /\b(nfl|nba|wnba|mlb|nhl|mls|ncaa|playoffs?|quarterback|touchdown|home runs?|innings?|world series|super bowl|stanley cup|grand slam|wimbledon|premier league|champions league|head coach|draft picks?|halftime|game \d|series opener|season opener|transfer window|formula 1|f1|nascar|ufc|olympics?|world cup|golf|tennis|soccer|football|baseball|basketball|hockey|athletes?|pitcher|striker|linebacker)\b/i;
+const SPORTS = /\b(nfl|nba|wnba|mlb|nhl|mls|ncaa|big ten|espn|playoffs?|postseason|preseason|quarterback|touchdown|field goal|home runs?|innings?|world series|super bowl|stanley cup|grand slam|wimbledon|premier league|champions league|la liga|serie a|bundesliga|coach(es|ing)?|draft picks?|halftime|game \d|series opener|season opener|regular season|transfer window|formula 1|f1|nascar|ufc|boxing|wrestling|olympics?|world cup|golf|pga|tennis|soccer|football|baseball|basketball|hockey|volleyball|softball|athletes?|pitcher|striker|linebacker|goalkeeper|rookie|roster|mvp|all-star|free agen(t|cy)|trade deadline|tournament|championships?|semifinals?|quarterfinals?|varsity|scoreboard|box score|standings|league)\b/i;
 const ENTERTAINMENT = /\b(box office|celebrit(y|ies)|album|grammys?|oscars?|emmys?|netflix|trailer|red carpet|reality tv|kardashians?|taylor swift|concert tour|movie review|tv series|streaming hit)\b/i;
 const CATEGORY: Record<'SPORTS' | 'ENTERTAINMENT', RegExp> = { SPORTS, ENTERTAINMENT };
 
@@ -126,9 +126,18 @@ export function mentions(h: Pick<Headline, 'title' | 'desc'>, interest: string):
   return keys.some((k) => text.includes(k.length > 4 ? k.slice(0, -1) : k));
 }
 
-/** Keeps only stories that fit this interest: no stray sports or celebrity items in sections, and on-topic search results. */
+/**
+ * Keeps only stories that fit this interest: no sports or celebrity items unless an interest
+ * is about them (in sections and in searches alike: a search for a city or a state is mostly
+ * its teams' results otherwise), and search results that really name the interest.
+ */
 export function onTopic(items: Headline[], { interest, interests, fromSection }: { interest: string; interests: string[]; fromSection: boolean }): Headline[] {
-  return items.filter((h) => (fromSection ? !unwantedCategory(h, interests) : mentions(h, interest)));
+  // An interest that is itself a team or player ("Chicago Bears") keeps its stories: the
+  // headline names the whole interest, not just one of its words (a place like "Austin Texas").
+  const named = (h: Headline) => h.title.toLowerCase().includes(interest.toLowerCase().trim());
+  return items.filter((h) => (fromSection
+    ? !unwantedCategory(h, interests)
+    : mentions(h, interest) && (!unwantedCategory(h, interests) || named(h))));
 }
 
 /** Spreads the story budget over the interests in turn, so every interest is covered. */
