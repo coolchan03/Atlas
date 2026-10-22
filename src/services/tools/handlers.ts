@@ -11,6 +11,7 @@ import { createCodeProject } from './codeProjects';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
+import { listLocalSkills, saveLocalSkill, readLocalSkill } from './localSkills';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -103,6 +104,19 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'list_files':
       return DT.listFiles(call.arguments?.path);
+    case 'list_local_skills':
+      return listLocalSkills();
+    case 'install_local_skill': {
+      const name = requireString(call, 'name');
+      const markdown = requireString(call, 'markdown');
+      if (!name || !markdown) throw new Error('Skill name and Markdown are required.');
+      return saveLocalSkill(name, markdown);
+    }
+    case 'read_local_skill': {
+      const name = requireString(call, 'name');
+      if (!name) throw new Error('Skill name required.');
+      return readLocalSkill(name);
+    }
     case 'read_file': {
       const p = requireString(call, 'path');
       if (!p) throw new Error('Missing required parameter: path');
