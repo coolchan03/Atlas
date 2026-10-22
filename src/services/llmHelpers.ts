@@ -184,7 +184,7 @@ function throwNativeLlamaRuntimeError(message: string): never {
   );
 }
 
-/** Init llama with GPU/HTP, fall back to CPU, then retry with ctx=2048 on failure. */
+/** Init llama with GPU/HTP, fall back to CPU, then retry without increasing context. */
 export async function initContextWithFallback(
   params: object,
   contextLength: number,
@@ -251,17 +251,18 @@ export async function initContextWithFallback(
       const cpuMsg = cpuError?.message || String(cpuError);
       if (isNativeLlamaRuntimeError(cpuMsg)) throwNativeLlamaRuntimeError(cpuMsg);
       logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
+      const retryContextLength = Math.min(contextLength, 2048);
       try {
-        logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
+        logger.log(`[LLM] Attempt 3/3: CPU init (ctx=${retryContextLength}, gpu_layers=0)`);
         const cpuMinParams = { ...(params as Record<string, unknown>) };
         delete cpuMinParams.devices;
-        const context = await initLlama({ ...cpuMinParams, n_ctx: 2048, n_gpu_layers: 0 } as any);
-        logger.log('[LLM] CPU init with ctx=2048 succeeded');
-        return { context, gpuAttemptFailed, actualLength: 2048 };
+        const context = await initLlama({ ...cpuMinParams, n_ctx: retryContextLength, n_gpu_layers: 0 } as any);
+        logger.log(`[LLM] CPU init with ctx=${retryContextLength} succeeded`);
+        return { context, gpuAttemptFailed, actualLength: retryContextLength };
       } catch (finalError: any) {
         const finalMsg = finalError?.message || String(finalError);
         if (isNativeLlamaRuntimeError(finalMsg)) throwNativeLlamaRuntimeError(finalMsg);
-        logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
+        logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=${retryContextLength}): ${finalMsg}`);
         logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
         logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);
         const errorParts = [
@@ -274,7 +275,7 @@ export async function initContextWithFallback(
         const nativeReason = recentNativeLog();
         logger.error(`[LLM] llama.cpp native log tail:\n${nativeReason}`);
         const nativeSuffix = nativeReason ? `\n\nllama.cpp: ${nativeReason}` : '';
-        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}${nativeSuffix}`);
+        throw new Error(`Failed to load model even at minimum context (${retryContextLength}). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}${nativeSuffix}`);
       }
     }
   }
