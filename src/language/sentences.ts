@@ -4,14 +4,14 @@
  */
 import { PHRASE_LANGUAGES } from '../phrases/data';
 import { unitById } from './curriculum';
-import { SENTENCES, parseSentences, sentencesPrompt } from './coursePrompts';
+import { SENTENCES, isExampleSentence, parseSentences, sentencesPrompt } from './coursePrompts';
 import type { Item } from './lessons';
 import { useLanguage } from './store';
 import { levelGuide, type LevelGuide } from './teaching';
 
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;
 
-const sentenceCount = (items: Item[]) => items.filter((x) => x.t.trim().split(/\s+/).length >= 3).length;
+const sentenceCount = (items: Item[]) => items.filter(isExampleSentence).length;
 
 /** Five everyday sentences using a vocabulary unit's words (none if the model cannot write them). */
 export async function writeSentences(llm: any, o: { words: Item[]; level: LevelGuide; name: string; code: string }): Promise<Item[]> {

@@ -44,9 +44,17 @@ export function sentencesPrompt({ language, level, code, words }: { language: st
 /** Example sentences per vocabulary unit. */
 export const SENTENCES = 5;
 
+/** Shared by parsing and cache reuse; a long English definition alone does not make a word a sentence. */
+export function isExampleSentence(item: Item): boolean {
+  const target = item.t.trim();
+  if (target.split(/\s+/).length >= 3) return true;
+  const cjk = target.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu);
+  return (cjk?.length ?? 0) >= 3 && /[.!?。！？]$/u.test(target) && item.en.trim().split(/\s+/).length >= 3;
+}
+
 /** Sentences written for a vocabulary unit: at least three usable ones, or null. */
 export function parseSentences(raw: string, level: LevelGuide, code: string): Item[] | null {
-  const items = parseItems(raw, level, code).filter((x) => x.t.split(/\s+/).length >= 3);
+  const items = parseItems(raw, level, code).filter(isExampleSentence);
   return items.length >= 3 ? items.slice(0, SENTENCES) : null;
 }
 
@@ -54,7 +62,7 @@ function parseItems(raw: string, level: LevelGuide, code: string): Item[] {
   const d = parseJsonLoose<any>(raw);
   const list: any[] = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [];
   const items: Item[] = list.map((x) => {
-    const r = needsRomanization(code) ? str(x?.r, 160) : '';
+    const r = needsRomanization(code) ? str(x?.r ?? x?.romanization, 160) : '';
     return { en: str(x?.en, 200), t: str(x?.t, 200), ...(r ? { r } : {}) };
   }).filter((x) => x.en && x.t && x.en.toLowerCase() !== x.t.toLowerCase() && x.t.split(/\s+/).length <= level.maxWords * 1.5);
   return items.filter((x, i) => items.findIndex((y) => y.t === x.t) === i);
