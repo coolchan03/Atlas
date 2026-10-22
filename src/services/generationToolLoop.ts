@@ -279,7 +279,12 @@ function getLastUserQuery(messages: Message[]): string {
  * model-facing string (toolResultModelContent) explicitly states failure/empty.
  */
 async function executeToolCallSafely(tc: ToolCall, allowed?: Set<string>): Promise<ToolResult> {
-  if (allowed && !allowed.has(tc.name)) {
+  // Text-tag based extensions (MCP legacy mode) may not expose an OpenAI schema.
+  // They are still authorized when their registered extension reports enabled
+  // tools and claims this exact name; an unregistered/disabled tool stays blocked.
+  const enabledLegacyExtension = getToolExtensions().some(
+    ext => ext.enabledToolCount() > 0 && ext.canHandle(tc.name));
+  if (allowed && !allowed.has(tc.name) && !enabledLegacyExtension) {
     return toolErrorResult(tc, new Error(`Tool ${tc.name} is disabled for this turn. Ask the user to enable it first.`), Date.now());
   }
   const exts = getToolExtensions();

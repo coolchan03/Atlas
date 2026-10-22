@@ -117,16 +117,17 @@ describe('Tool Registry', () => {
   // buildToolSystemPromptHint
   // ========================================================================
   describe('buildToolSystemPromptHint', () => {
-    it('returns empty string for empty array', () => {
+    it('describes disabled capabilities without enabling them', () => {
       const hint = buildToolSystemPromptHint([]);
-
-      expect(hint).toBe('');
+      expect(hint).toContain('(no tools enabled)');
+      expect(hint).toContain('currently OFF');
+      expect(hint).toContain('Never call a disabled tool');
     });
 
-    it('returns empty string for non-matching IDs', () => {
+    it('does not make unknown tool IDs available', () => {
       const hint = buildToolSystemPromptHint(['nonexistent_tool', 'another_fake']);
-
-      expect(hint).toBe('');
+      expect(hint).toContain('(no tools enabled)');
+      expect(hint).not.toContain('- nonexistent_tool:');
     });
 
     it('includes tool names and descriptions for enabled tools', () => {
@@ -134,16 +135,18 @@ describe('Tool Registry', () => {
 
       expect(hint).toContain('- calculator: Evaluate math expressions');
       expect(hint).toContain('- web_search: Search the live web');
-      expect(hint).toContain('Tools available');
+      expect(hint).toContain('Enabled tools you may call this turn');
     });
 
     it('only includes enabled tools, not all tools', () => {
       const hint = buildToolSystemPromptHint(['calculator']);
 
       expect(hint).toContain('calculator: Evaluate math expressions');
-      expect(hint).not.toContain('web_search');
-      expect(hint).not.toContain('get_current_datetime');
-      expect(hint).not.toContain('get_device_info');
+      const allowed = hint.split('Other available capabilities currently OFF:')[0];
+      expect(allowed).not.toContain('web_search');
+      expect(allowed).not.toContain('get_current_datetime');
+      expect(allowed).not.toContain('get_device_info');
+      expect(hint).toContain('web_search'); // advertised as disabled, never callable
     });
 
     it('includes read_url when read_url is enabled', () => {

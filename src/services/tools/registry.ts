@@ -22,6 +22,16 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'suggest_contextual_texts', name: 'suggest_contextual_texts', displayName: 'Contextual text ideas',
+    description: 'With user permission, connect conversation context to real calendar occasions and suggest helpful texts. Never send automatically; ask before resolving contacts or opening drafts.',
+    icon: 'message-circle',
+    parameters: {
+      person: { type: 'string', description: 'Optional person from conversation' },
+      topic: { type: 'string', description: 'Optional occasion or plan' },
+      days: { type: 'number', description: 'Look ahead 1-14 days, default 7' },
+    },
+  },
+  {
     id: 'draft_email', name: 'draft_email', displayName: 'Email draft',
     description: 'Open the email app with recipient, subject and body filled in. User reviews and sends. Never sends automatically.',
     icon: 'mail', parameters: {

@@ -7,6 +7,7 @@ import { searchWeb } from './webSearchProviders';
 import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
 import { openEmailDraft, openTextDraft, openPhoneDialer } from './contactDrafts';
+import { suggestContextualTexts } from './contextualTextSuggestions';
 import { createCodeProject } from './codeProjects';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
@@ -47,6 +48,12 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: query');
       return handleWebSearch(q);
     }
+    case 'suggest_contextual_texts':
+      return suggestContextualTexts({
+        person: typeof call.arguments?.person === 'string' ? call.arguments.person : undefined,
+        topic: typeof call.arguments?.topic === 'string' ? call.arguments.topic : undefined,
+        days: typeof call.arguments?.days === 'number' ? call.arguments.days : undefined,
+      });
     case 'draft_email': {
       const to = requireString(call, 'to');
       if (!to) throw new Error('An email recipient is required.');

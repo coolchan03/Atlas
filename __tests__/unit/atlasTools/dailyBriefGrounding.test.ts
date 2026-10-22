@@ -41,11 +41,14 @@ it('writes one part per real story, keeps the headlines, and never shows the mod
   expect(r.headlines?.map(h => h.source)).toEqual(['Reuters', 'BBC']);
   const all = mockPrompts.join('\n');
   expect(all).not.toMatch(/Acme|webinar|PR Newswire/);
-  // Two news parts plus one library fun fact; each part sees only its own story.
-  expect(mockPrompts).toHaveLength(3);
+  // Two news parts, one library fact, and English Word of the Day.
+  expect(mockPrompts).toHaveLength(4);
   expect(mockPrompts[0]).toContain('Senate passes funding bill');
   expect(mockPrompts[0]).not.toContain('Ceasefire');
   expect(mockPrompts[2]).toContain('three hearts');
+  expect(mockPrompts[3]).toContain('English Word of the Day');
+  expect(mockPrompts[3]).toContain('English vocabulary segment');
+  expect(r.headlines).toHaveLength(2);
   // Asks for enough lines to fill the chosen length, not just a ceiling.
   expect(mockPrompts[0]).toMatch(/about \d+ lines \(no fewer than \d+\)/);
 });

@@ -152,7 +152,10 @@ class RemoteServerManager {
     apiKey?: string,
     providerType: RemoteServer['providerType'] = 'openai-compatible'
   ): Promise<ServerTestResult> {
-    return useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey, providerType);
+    // Preserve original callers that supply two arguments.
+    return providerType === 'openai-compatible'
+      ? useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey)
+      : useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey, providerType);
   }
 
   /**
