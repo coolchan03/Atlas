@@ -140,6 +140,26 @@ export function onTopic(items: Headline[], { interest, interests, fromSection }:
     : mentions(h, interest) && (!unwantedCategory(h, interests) || named(h))));
 }
 
+/**
+ * True when a story is about a topic the user wants to avoid: every word of the avoided topic
+ * appears in the headline or summary (so "royal family" does not drop every story with "family").
+ */
+export function avoided(h: Pick<Headline, 'title' | 'desc'>, avoid: string[]): boolean {
+  const text = `${h.title} ${h.desc}`.toLowerCase();
+  return avoid.some((topic) => {
+    const keys = topic.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
+    return keys.length > 0 && keys.every((w) => text.includes(w.length > 4 ? w.slice(0, -1) : w));
+  });
+}
+
+/**
+ * Spoken words a story can carry from its sources (about one script line, ~20 words, per
+ * 80 characters of source, never more than the lines per story): used to keep adding
+ * stories until the briefing really fills the chosen length.
+ */
+export const storyWords = (sourceChars: number, maxLines: number) =>
+  Math.min(maxLines, Math.max(4, Math.round(sourceChars / 80))) * 20;
+
 /** Spreads the story budget over the interests in turn, so every interest is covered. */
 export function pickStories(perInterest: Headline[][], budget: number): { interest: number; headline: Headline }[] {
   const picked: { interest: number; headline: Headline }[] = [];

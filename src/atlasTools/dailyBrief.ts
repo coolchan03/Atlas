@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Source, StudyResult, useStudyStore, writeEpisode } from '../study/engine';
-import { cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, pickStories, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
+import { WORDS_PER_MINUTE, avoided, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, pickStories, similarity, splitOutlet, spokenMinutes, storyBudget, storyWords, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
 
@@ -19,8 +19,12 @@ interface BriefPrefs {
   funFacts: boolean;
   /** also read the top article per interest (slower, more detail) */
   deep: boolean;
+  /** Topics to leave out of the briefing entirely. */
+  avoid: string[];
+  /** Each topic presented by its own expert, with the anchor handing over. */
+  experts: boolean;
   setInterests: (v: string[]) => void;
-  set: (p: Partial<Pick<BriefPrefs, 'minutes' | 'hosts' | 'funFacts' | 'deep'>>) => void;
+  set: (p: Partial<Pick<BriefPrefs, 'minutes' | 'hosts' | 'funFacts' | 'deep' | 'avoid' | 'experts'>>) => void;
 }
 
 export const useBriefPrefs = create<BriefPrefs>()(persist((set) => ({
@@ -29,9 +33,22 @@ export const useBriefPrefs = create<BriefPrefs>()(persist((set) => ({
   hosts: 2,
   funFacts: true,
   deep: true,
+  avoid: [],
+  experts: false,
   setInterests: (interests) => set({ interests }),
   set: (p) => set(p),
-}), { name: 'atlas-daily-brief', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ interests: s.interests, minutes: s.minutes, hosts: s.hosts, funFacts: s.funFacts, deep: s.deep }) }));
+}), { name: 'atlas-daily-brief', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ interests: s.interests, minutes: s.minutes, hosts: s.hosts, funFacts: s.funFacts, deep: s.deep, avoid: s.avoid, experts: s.experts }) }));
+
+const EXPERT_NAMES = ['Maya', 'Theo', 'Priya', 'Marcus', 'Lena', 'Omar', 'Grace', 'Sam'];
+
+/**
+ * Cast for one part when each topic has its own expert: the anchor (A) introduces that
+ * topic's expert by name, who explains the story. Experts alternate between voices B and C.
+ */
+export function expertCast(interest: string, index: number): string {
+  const voice = index % 2 === 0 ? 'B' : 'C';
+  return `A (the anchor) and ${voice} (${EXPERT_NAMES[index % EXPERT_NAMES.length]}, our ${interest} expert). A introduces ${EXPERT_NAMES[index % EXPERT_NAMES.length]} by name the first time, then ${voice} explains the story and A asks a short follow-up. Only A and ${voice} speak in this part.`;
+}
 
 /** "I like space, the Bears and cooking" -> ['space', 'the Bears', 'cooking'] */
 export function parseInterests(text: string): string[] {
@@ -157,6 +174,40 @@ async function libraryItems(interests: string[], withNews: boolean, firstN: numb
   return out;
 }
 
+type Picked = { interest: number; headline: Headline };
+
+/**
+ * Real headlines for each interest (top-story sections for broad ones), no ads, press
+ * releases or avoided topics, read one by one until what the stories can carry adds up to the
+ * chosen length. Twice the planned number are fetched, so thin stories can be topped up.
+ */
+async function gatherStories(o: { interests: string[]; minutes: number; deep: boolean; avoid: string[] }, onStep: (m: string) => void): Promise<{ outline: OutlineItem[]; stories: Picked[] }> {
+  const { interests, minutes, deep, avoid } = o;
+  const perInterest: Headline[][] = [];
+  const budget = storyBudget(minutes, deep);
+  const seen: string[] = [];
+  const topics = interests.slice(0, 8);
+  for (const topic of topics) {
+    onStep(`Checking news: ${topic}...`);
+    const hs = (await headlines({ topic, interests, seen, want: Math.ceil((budget * 2) / topics.length) + 2 }))
+      .filter((h) => !avoided(h, avoid));
+    perInterest.push(hs);
+    hs.forEach((h) => seen.push(h.title));
+  }
+  const outline: OutlineItem[] = [];
+  const stories: Picked[] = [];
+  let words = 0;
+  for (const pick of pickStories(perInterest, Math.min(30, budget * 2))) {
+    if (stories.length >= budget && words >= minutes * WORDS_PER_MINUTE) break;
+    onStep(`Reading story ${stories.length + 1}: ${pick.headline.title.slice(0, 50)}...`);
+    const item = await storyItem({ h: pick.headline, interest: interests[pick.interest], deep, n: outline.length + 1 });
+    outline.push(item);
+    stories.push(pick);
+    words += storyWords(item.sources.reduce((n, x) => n + x.text.length, 0), 12);
+  }
+  return { outline, stories };
+}
+
 /** Builds today's briefing from real, current stories and saves it. */
 export async function makeBriefing(onStep: (m: string) => void, voicesAvailable: number): Promise<StudyResult> {
   const p = useBriefPrefs.getState();
@@ -164,27 +215,9 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   let offline = false;
   try { offline = require('./offGrid').offGridOn(); } catch { /* ignore */ }
 
-  // 1. Real headlines for each interest (top-story sections for broad ones), no ads or press releases.
-  const perInterest: Headline[][] = [];
-  const budget = storyBudget(p.minutes, p.deep);
-  if (!offline) {
-    const seen: string[] = [];
-    const topics = interests.slice(0, 8);
-    for (const topic of topics) {
-      onStep(`Checking news: ${topic}...`);
-      const hs = await headlines({ topic, interests, seen, want: Math.ceil(budget / topics.length) + 1 });
-      perInterest.push(hs);
-      hs.forEach((h) => seen.push(h.title));
-    }
-  }
-  const stories = pickStories(perInterest, budget);
-
-  // 2. One part per story, written only from that story's own sources.
-  const outline: OutlineItem[] = [];
-  for (const [i, { interest, headline }] of stories.entries()) {
-    onStep(`Reading story ${i + 1} of ${stories.length}: ${headline.title.slice(0, 50)}...`);
-    outline.push(await storyItem({ h: headline, interest: interests[interest], deep: p.deep, n: outline.length + 1 }));
-  }
+  const avoid = p.avoid ?? [];
+  const { outline, stories } = offline ? { outline: [] as OutlineItem[], stories: [] as Picked[] }
+    : await gatherStories({ interests, minutes: p.minutes, deep: p.deep, avoid }, onStep);
 
   // 3. Fun facts come only from the offline library, never from the model's memory.
   const gotNews = outline.length > 0;
@@ -199,13 +232,17 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   }
 
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const rules = avoid.length ? `Never bring up: ${avoid.join(', ')}.` : undefined;
+  const withExperts = p.experts && gotNews && voicesAvailable >= 2;
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
       ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: say what happened and name the outlet. Report only what its source says.`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.`,
     minutes: p.minutes,
-    hosts: voicesAvailable >= 2 ? p.hosts : 1,
+    hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
+    rules,
+    castFor: withExperts ? (i) => (stories[i] ? expertCast(interests[stories[i].interest], stories[i].interest) : undefined) : undefined,
     style: 'news',
     research: false,
     funFacts: false,

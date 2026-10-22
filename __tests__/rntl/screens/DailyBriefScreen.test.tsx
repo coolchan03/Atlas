@@ -49,3 +49,19 @@ it('shows a failure in place instead of a blocking alert', async () => {
   await act(async () => { fireEvent.press(screen.getByTestId('brief-make')); });
   await waitFor(() => expect(screen.getByText('Could not reach the news')).toBeTruthy());
 });
+
+it('adds topics to avoid, and deletes an earlier briefing by pressing and holding it', () => {
+  const { useBriefPrefs } = require('../../../src/atlasTools/dailyBrief');
+  const { Alert } = require('react-native');
+  useBriefPrefs.setState({ avoid: [] });
+  useStudyStore.setState({ saved: { [BRIEF_PROJECT]: [{ kind: 'podcast', createdAt: 5, topic: '', title: 'Old briefing', sources: [] }] } } as any);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t: any, _m: any, buttons: any) => buttons?.[1]?.onPress?.());
+  const screen = renderScreen();
+  fireEvent.changeText(screen.getByTestId('brief-avoid-input'), 'sports and celebrity gossip');
+  fireEvent.press(screen.getByTestId('brief-avoid-add'));
+  expect(useBriefPrefs.getState().avoid).toEqual(['sports', 'celebrity gossip']);
+  fireEvent(screen.getByTestId('brief-5'), 'longPress');
+  expect(alert).toHaveBeenCalledWith('Delete this briefing?', 'Old briefing', expect.any(Array));
+  expect(useStudyStore.getState().saved[BRIEF_PROJECT]).toEqual([]);
+  alert.mockRestore();
+});

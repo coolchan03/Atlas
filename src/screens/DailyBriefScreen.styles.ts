@@ -44,6 +44,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   switchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md, gap: SPACING.md },
   switchLabel: { ...TYPOGRAPHY.body, color: colors.text, flex: 1 },
+  deleteButton: { padding: SPACING.sm },
   earlier: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md },
   error: { ...TYPOGRAPHY.bodySmall, color: colors.error, marginTop: SPACING.sm },
 });

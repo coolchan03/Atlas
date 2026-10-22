@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -59,6 +59,7 @@ export const DailyBriefScreen: React.FC = () => {
   const remove = useStudyStore((s) => s.remove);
   const today = list.find((r) => todayKey(new Date(r.createdAt)) === todayKey());
   const [say, setSay] = useState('');
+  const [avoidText, setAvoidText] = useState('');
   const [voices, setVoices] = useState(0);
   useEffect(() => { listVoices('en').then((v) => setVoices(v.length)).catch(() => undefined); }, []);
   const open = (at: number) => navigation.navigate('Study', { projectId: BRIEF_PROJECT, openAt: at });
@@ -71,6 +72,17 @@ export const DailyBriefScreen: React.FC = () => {
     prefs.setInterests([...prefs.interests, ...found.filter((f) => !have.has(f.toLowerCase()))].slice(0, 12));
     setSay('');
   };
+  const addAvoid = () => {
+    const found = parseInterests(avoidText);
+    if (!found.length) return;
+    const have = new Set(prefs.avoid.map((x) => x.toLowerCase()));
+    prefs.set({ avoid: [...prefs.avoid, ...found.filter((f) => !have.has(f.toLowerCase()))].slice(0, 20) });
+    setAvoidText('');
+  };
+  const confirmDelete = (r: StudyResult) => Alert.alert('Delete this briefing?', r.title, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: () => remove(BRIEF_PROJECT, r.createdAt) },
+  ]);
   const chip = (on: boolean) => [styles.chip, on && styles.chipOn];
   const chipText = (on: boolean) => (on ? styles.chipTextOn : styles.chipText);
 
@@ -160,6 +172,24 @@ export const DailyBriefScreen: React.FC = () => {
           <Text style={styles.meta}>Your interests are sent as search words to Google News and Bing News. Everything else stays on the phone.</Text>
         </Card>
 
+        <Card title="Topics to avoid" subtitle="Stories about these are left out, even inside your interests.">
+          <View style={styles.chips}>
+            {prefs.avoid.map((it) => (
+              <TouchableOpacity key={it} onPress={() => prefs.set({ avoid: prefs.avoid.filter((x) => x !== it) })} style={chip(false)} accessibilityLabel={`Stop avoiding ${it}`}>
+                <Text style={styles.chipText}>{it}</Text>
+                <Icon name="x" size={13} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+            {!prefs.avoid.length && <Text style={styles.meta}>Nothing avoided yet.</Text>}
+          </View>
+          <TextInput value={avoidText} onChangeText={setAvoidText} onSubmitEditing={addAvoid} returnKeyType="done"
+            placeholder="e.g. sports, celebrity gossip, crypto"
+            placeholderTextColor={colors.textMuted} blurOnSubmit style={styles.input} testID="brief-avoid-input" />
+          <View style={styles.actions}>
+            <Button title="Avoid" size="small" variant="secondary" onPress={addAvoid} disabled={!avoidText.trim()} testID="brief-avoid-add" />
+          </View>
+        </Card>
+
         <Card title="Show options">
           <Text style={styles.sectionLabel}>Length</Text>
           <View style={styles.chips}>
@@ -181,6 +211,12 @@ export const DailyBriefScreen: React.FC = () => {
               </View>
             </>
           )}
+          {voices >= 2 && (
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>An expert for each topic (the anchor hands over to them)</Text>
+              <Switch value={prefs.experts} onValueChange={(v) => prefs.set({ experts: v })} testID="brief-experts" />
+            </View>
+          )}
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>Fun fact from your offline library</Text>
             <Switch value={prefs.funFacts} onValueChange={(v) => prefs.set({ funFacts: v })} />
@@ -192,16 +228,18 @@ export const DailyBriefScreen: React.FC = () => {
         </Card>
 
         {list.length > 0 && (
-          <Card title="Earlier briefings">
+          <Card title="Earlier briefings" subtitle="Press and hold one to delete it.">
             {list.map((r) => (
-              <TouchableOpacity key={r.createdAt} onPress={() => open(r.createdAt)} style={[styles.headline, styles.earlier]}>
+              <TouchableOpacity key={r.createdAt} onPress={() => open(r.createdAt)} onLongPress={() => confirmDelete(r)}
+                style={[styles.headline, styles.earlier]} testID={`brief-${r.createdAt}`}>
                 <Icon name="radio" size={18} color={colors.primary} />
                 <View style={styles.headlineText}>
                   <Text style={styles.body}>{r.title}</Text>
                   <Text style={styles.meta}>{[new Date(r.createdAt).toLocaleString(), r.minutes && `about ${r.minutes} min`].filter(Boolean).join(' · ')}</Text>
                 </View>
-                <TouchableOpacity onPress={() => remove(BRIEF_PROJECT, r.createdAt)} accessibilityLabel="Delete briefing">
-                  <Icon name="trash-2" size={16} color={colors.textMuted} />
+                <TouchableOpacity onPress={() => confirmDelete(r)} accessibilityLabel="Delete briefing" style={styles.deleteButton}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Icon name="trash-2" size={22} color={colors.textMuted} />
                 </TouchableOpacity>
               </TouchableOpacity>
             ))}

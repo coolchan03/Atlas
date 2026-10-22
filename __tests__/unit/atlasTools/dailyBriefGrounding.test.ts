@@ -32,7 +32,7 @@ beforeEach(() => {
     const body = section ? FEEDS[section] ?? '<rss></rss>' : '<rss></rss>'; // Bing detail lookups: nothing extra
     return { ok: true, status: 200, text: async () => body };
   });
-  useBriefPrefs.setState({ interests: ['United States', 'international news'], minutes: 3, hosts: 2, funFacts: true, deep: false });
+  useBriefPrefs.setState({ interests: ['United States', 'international news'], minutes: 3, hosts: 2, funFacts: true, deep: false, avoid: [], experts: false });
 });
 
 it('writes one part per real story, keeps the headlines, and never shows the model an ad', async () => {
@@ -46,7 +46,8 @@ it('writes one part per real story, keeps the headlines, and never shows the mod
   expect(mockPrompts[0]).toContain('Senate passes funding bill');
   expect(mockPrompts[0]).not.toContain('Ceasefire');
   expect(mockPrompts[2]).toContain('three hearts');
-  expect(mockPrompts[0]).toMatch(/at most \d+ lines/);
+  // Asks for enough lines to fill the chosen length, not just a ceiling.
+  expect(mockPrompts[0]).toMatch(/about \d+ lines \(no fewer than \d+\)/);
 });
 
 it('makes an offline edition from the library when there is no news', async () => {
@@ -55,4 +56,19 @@ it('makes an offline edition from the library when there is no news', async () =
   expect(r.title).toMatch(/^Offline edition/);
   expect(r.headlines).toEqual([]);
   expect(mockPrompts.join('\n')).toContain('three hearts');
+});
+
+it('leaves out stories about topics the user wants to avoid', async () => {
+  useBriefPrefs.setState({ avoid: ['ceasefire talks'] });
+  const r = await makeBriefing(() => undefined, 2);
+  expect(r.headlines?.map(h => h.title)).toEqual(['Senate passes funding bill']);
+  expect(mockPrompts.join('\n')).not.toContain('Geneva');
+  expect(mockPrompts.join('\n')).toContain('Never bring up: ceasefire talks');
+});
+
+it('gives each topic its own expert, introduced by the anchor', async () => {
+  useBriefPrefs.setState({ experts: true });
+  await makeBriefing(() => undefined, 3);
+  expect(mockPrompts[0]).toMatch(/A \(the anchor\) and B \(Maya, our United States expert\)/);
+  expect(mockPrompts[1]).toMatch(/A \(the anchor\) and C \(Theo, our international news expert\)/);
 });

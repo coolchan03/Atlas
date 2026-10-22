@@ -330,6 +330,10 @@ export interface PodcastOptions {
   outline?: { topic: string; sources: Source[] }[];
   /** Outline mode: script lines to aim for per item, to reach the chosen length. */
   linesPerItem?: number;
+  /** Outline mode: a rule every part must follow (e.g. topics never to bring up). */
+  rules?: string;
+  /** Outline mode: who speaks in each part (e.g. the anchor and that topic's expert). */
+  castFor?: (index: number) => string | undefined;
   /** Fresh sources for one part's topic. Long episodes use it so each part draws on different passages. */
   sourcesFor?: (topic: string) => Promise<Source[]>;
 }
@@ -457,10 +461,14 @@ async function writeOutlinedEpisode(
           : 'Move on to this item with a short natural transition.';
     const recap = lines.slice(-3).map((l) => `${l.host}: ${l.text}`).join('\n');
     // Never more lines than the source can fill (no padding), but as many as the chosen length needs.
-    const n = opts.linesPerItem ? Math.min(opts.linesPerItem, Math.max(3, Math.round(part.sources.reduce((k, x) => k + x.text.length, 0) / 110))) : outlineLines(part.sources);
+    const n = opts.linesPerItem ? Math.min(opts.linesPerItem, Math.max(4, Math.round(part.sources.reduce((k, x) => k + x.text.length, 0) / 80))) : outlineLines(part.sources);
+    // With a length to reach, ask for about n lines (the hosts may explain why the story
+    // matters, from the source); otherwise at most n.
+    const howMany = opts.linesPerItem ? `Write about ${n} lines (no fewer than ${Math.max(3, n - 2)}), each 1-2 sentences` : `Write at most ${n} lines (each 1-2 sentences)`;
+    const cast = opts.castFor?.(i) ?? cfg.cast;
     const t = await ask(
-      'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. If the source gives few details, keep it short instead of filling in. Never mention source numbers.',
-      `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${cfg.cast}.\nThis item: ${part.topic}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}Write at most ${n} lines (each 1-2 sentences), exactly in this format:\n${cfg.fmt}`,
+      'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. If the source gives few details, the hosts may say why it matters, using only what the source says. Never mention source numbers.',
+      `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${cast}.\nThis item: ${part.topic}\n${where}\n${recap ? `Last lines so far:\n${recap}\n` : ''}${opts.rules ? `${opts.rules}\n` : ''}${howMany}, exactly in this format:\n${cfg.fmt}`,
     );
     lines.push(...parseLines(t, cfg.hosts).slice(0, n + 2));
   }
