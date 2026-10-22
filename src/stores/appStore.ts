@@ -73,6 +73,8 @@ type AppSettings = {
    *  'aggressive' = co-reside with a larger RAM commitment. */
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
+  /** One-time migration for the always-offer-permission tool. */
+  toolAccessGatewayMigrated?: boolean;
   thinkingEnabled: boolean;
   /** Atlas: how much to think when thinking is on. */
   thinkingLevel?: 'low' | 'medium' | 'high';
@@ -259,7 +261,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   modelLoadingMode: 'balanced',
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
-  enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
+  enabledTools: ['web_search', 'read_url', 'search_knowledge_base', 'request_tool_access'],
+  toolAccessGatewayMigrated: true,
   thinkingEnabled: false,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
@@ -268,6 +271,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 function migrateEnabledTools(merged: any): void {
+  if (merged.settings?.enabledTools && !merged.settings.toolAccessGatewayMigrated) {
+    merged.settings = { ...merged.settings,
+      enabledTools: [...new Set([...merged.settings.enabledTools, 'request_tool_access'])],
+      toolAccessGatewayMigrated: true };
+  }
   if (merged.settings?.enabledTools && !merged.settings.enabledTools.includes('search_knowledge_base')) {
     merged.settings = { ...merged.settings, enabledTools: [...merged.settings.enabledTools, 'search_knowledge_base'] };
   }

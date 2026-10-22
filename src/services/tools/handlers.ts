@@ -7,8 +7,10 @@ import { searchWeb } from './webSearchProviders';
 import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
 import { openEmailDraft, openTextDraft, openPhoneDialer } from './contactDrafts';
+import { requestToolAccess } from './toolAccess';
 import { suggestContextualTexts } from './contextualTextSuggestions';
 import { createCodeProject } from './codeProjects';
+import { buildRunTestJavascript } from './codeExecution';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
@@ -43,6 +45,13 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
   }
   switch (call.name) {
+    case 'request_tool_access': {
+      const name = requireString(call, 'tool_name');
+      if (!name) throw new Error('A tool name is required.');
+      const argumentsJson = typeof call.arguments?.arguments_json === 'string' ? call.arguments.arguments_json : undefined;
+      return requestToolAccess(name, argumentsJson,
+        (target, parsed) => dispatchTool({ ...call, name: target, arguments: parsed }));
+    }
     case 'web_search': {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');
@@ -162,6 +171,12 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'create_web_page':
       return DT.createWebPage(String(call.arguments?.name ?? 'site'), String(call.arguments?.html ?? ''));
+    case 'build_run_test_code': {
+      const name = requireString(call, 'project');
+      if (!name) throw new Error('A project name is required.');
+      return buildRunTestJavascript(name,
+        typeof call.arguments?.tests_json === 'string' ? call.arguments.tests_json : '[]');
+    }
     case 'create_code_project': {
       const name = requireString(call, 'name');
       const filesJson = requireString(call, 'files_json');

@@ -33,6 +33,8 @@ jobs:
             __tests__/unit/services/tools/atlasLocalSkills.test.ts \
             __tests__/unit/services/tools/atlasMovieWatches.test.ts \
             __tests__/unit/services/tools/atlasConditionalWatches.test.ts \
-            __tests__/unit/services/providers/anthropicProvider.test.ts
+            __tests__/unit/services/providers/anthropicProvider.test.ts \
+            __tests__/unit/services/tools/toolAccess.test.ts \
+            __tests__/unit/services/tools/codeExecution.test.ts
       - name: Full Jest regression suite
         run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent

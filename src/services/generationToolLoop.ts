@@ -6,7 +6,7 @@ import type { StreamToken } from './llm';
 import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
 import { Message } from '../types';
-import { getToolsAsOpenAISchema, executeToolCall } from './tools';
+import { getToolsAsOpenAISchema, executeToolCall, buildToolSystemPromptHint } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
 import { normalizeToolResult, toolErrorResult, toolResultModelContent } from './tools/toolResult';
 import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
@@ -578,7 +578,7 @@ async function callLiteRTForLoop(
 const TOOL_BEHAVIOR_GUIDANCE = '\n\nMake good use of the tools available to you. If you are uncertain or lack current information, use the appropriate tool rather than guessing. Never refuse or say you cannot help when a tool is available. For multiple distinct items, make a separate tool call for each. Call tools silently — do not announce them first. To find or look up content, prefer a general search tool (e.g. a tool whose name contains "search" or "fetch") before specialized query tools. If a tool returns an error, try a different tool that could accomplish the task before giving up.';
 
 /** Tools that need precise time-of-day to resolve relative phrases like "in half an hour". */
-const TIME_SENSITIVE_TOOL_IDS = ['create_calendar_event', 'read_calendar_events'];
+const TIME_SENSITIVE_TOOL_IDS = ['add_calendar_event', 'calendar_events', 'schedule_message_draft', 'suggest_contextual_texts'];
 
 // Shared current-time parts, computed at send-time (on-device models have no clock).
 function nowParts() {
@@ -650,7 +650,16 @@ function augmentSystemPromptForTools(
   const parts = nowParts();
   // System prompt gets only the STABLE date (changes once a day) + tool guidance, so the
   // system+tools prefix stays cacheable turn-to-turn.
-  const updatedSys = { ...sys, content: existing + TOOL_BEHAVIOR_GUIDANCE + buildDateContext(parts) + extHints };
+  // The disabled-tool catalog only helps if the model actually sees it.
+  // Keep it out of tiny local contexts unless the user enabled the access gateway.
+  const accessHint = enabledToolIds.includes('request_tool_access')
+    ? buildToolSystemPromptHint(enabledToolIds)
+    : '';
+  const peopleHint = enabledToolIds.includes('suggest_contextual_texts') ||
+    enabledToolIds.includes('request_tool_access')
+    ? '\nWhen an existing conversation suggests a genuinely useful, relevant occasion to contact someone, you may offer one optional message idea. Do not invent personal facts, repeatedly suggest messages, or send anything. Calendar inspection and contact search require explicit approval.'
+    : '';
+  const updatedSys = { ...sys, content: existing + TOOL_BEHAVIOR_GUIDANCE + buildDateContext(parts) + accessHint + peopleHint + extHints };
   const out = [...messages.slice(0, sysIdx), updatedSys, ...messages.slice(sysIdx + 1)];
 
   // For time-sensitive (calendar) tools, append the EXACT time to the latest user

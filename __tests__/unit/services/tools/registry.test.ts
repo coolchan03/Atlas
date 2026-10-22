@@ -121,7 +121,7 @@ describe('Tool Registry', () => {
       const hint = buildToolSystemPromptHint([]);
       expect(hint).toContain('(no tools enabled)');
       expect(hint).toContain('currently OFF');
-      expect(hint).toContain('Never call a disabled tool');
+      expect(hint).toContain('never call a disabled tool directly');
     });
 
     it('does not make unknown tool IDs available', () => {

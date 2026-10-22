@@ -2,6 +2,15 @@ import { ToolDefinition } from './types';
 
 export const AVAILABLE_TOOLS: ToolDefinition[] = [
   {
+    id: 'request_tool_access', name: 'request_tool_access', displayName: 'Request tool access',
+    description: 'When an OFF tool would help the user, ask for access with a native confirmation dialog. The user can allow once or keep it enabled. Include the desired tool arguments as JSON to carry out the original task after approval. Never bypass permission.',
+    icon: 'shield-check',
+    parameters: {
+      tool_name: { type: 'string', description: 'Exact disabled built-in tool name', required: true },
+      arguments_json: { type: 'string', description: 'JSON object of arguments to execute after explicit approval' },
+    },
+  },
+  {
     id: 'read_health_summary', name: 'read_health_summary', displayName: 'Health Connect', icon: 'heart',
     description: 'With separate user approval, read steps and average recorded heart rate for the last 1-7 days from Android Health Connect. Not a live heart rate measurement.',
     parameters: { days: { type: 'number', description: 'Days including today (1-7), default 1' } },
@@ -247,6 +256,14 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'build_run_test_code', name: 'build_run_test_code', displayName: 'Build, run and test JavaScript',
+    description: 'After user approval, compile and execute dependency-free JavaScript source files from a saved code project, with automated *.test.js assertions, in a temporary offline WebView with network and native file access blocked. Reports passing and failed tests. Other languages need their own toolchains.',
+    icon: 'play', parameters: {
+      project: { type: 'string', description: 'Existing Atlas code-project name', required: true },
+      tests_json: { type: 'string', description: 'Optional additional JSON array of {name, code} test cases using assert(expr)' },
+    },
+  },
+  {
     id: 'create_code_project', name: 'create_code_project', displayName: 'Code project',
     description: 'Create multiple UTF-8 source files (Python, Kotlin, Java, Rust, TypeScript, etc.) with one confirmation. Does not execute or build the files.',
     icon: 'code', parameters: {
@@ -345,5 +362,5 @@ export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
     ? enabled.map(t => `- ${t.name}: ${t.description}`).join('\n')
     : '(no tools enabled)';
   const inactive = disabled.map(t => `${t.displayName} (${t.id})`).join(', ');
-  return `\n\nEnabled tools you may call this turn:\n${active}\nOther available capabilities currently OFF: ${inactive}. If a disabled tool would help, ask the user to enable it in Settings > Tools. Never call a disabled tool or assume permission was granted.`;
+  return `\n\nEnabled tools you may call this turn:\n${active}\nOther available capabilities currently OFF: ${inactive}. When a disabled tool would help, call request_tool_access with tool_name and arguments_json. Atlas will request confirmation: allow once or always. Never claim permission until the tool responds, never call a disabled tool directly, and never bypass a refusal.`;
 }
