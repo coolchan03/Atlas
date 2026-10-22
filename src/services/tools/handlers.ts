@@ -10,6 +10,7 @@ import { openEmailDraft, openTextDraft, openPhoneDialer } from './contactDrafts'
 import { createCodeProject } from './codeProjects';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
+import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -70,6 +71,20 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return readDeviceSensors();
     case 'scan_nearby_devices':
       return scanNearbyDevices();
+    case 'schedule_message_draft': {
+      const to = requireString(call, 'to');
+      const body = requireString(call, 'body');
+      const time = requireString(call, 'time');
+      if (!to || !body || !time) throw new Error('Recipient, message, and time are required.');
+      return scheduleTextDraft(to, body, time);
+    }
+    case 'list_scheduled_message_drafts':
+      return listScheduledTextDrafts();
+    case 'cancel_scheduled_message_draft': {
+      const id = requireString(call, 'id');
+      if (!id) throw new Error('Scheduled-draft ID required.');
+      return cancelScheduledTextDraft(id);
+    }
     case 'search_knowledge_base': {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');

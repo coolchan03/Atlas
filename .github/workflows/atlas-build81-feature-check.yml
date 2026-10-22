@@ -27,4 +27,5 @@ jobs:
           ./node_modules/.bin/jest --runInBand --coverage=false --silent \
             __tests__/unit/atlasTools/englishWordOfDay.test.ts \
             __tests__/unit/services/tools/atlasContactDrafts.test.ts \
-            __tests__/unit/services/tools/atlasCodeProjects.test.ts
+            __tests__/unit/services/tools/atlasCodeProjects.test.ts \
+            __tests__/unit/services/tools/atlasScheduledDrafts.test.ts

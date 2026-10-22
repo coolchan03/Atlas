@@ -81,6 +81,25 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     icon: 'bluetooth', parameters: {},
   },
   {
+    id: 'schedule_message_draft', name: 'schedule_message_draft', displayName: 'Schedule text draft',
+    description: 'With consent, schedule a local notification. Tapping it opens an UNSENT SMS draft for review. Never sends automatically; Android battery rules may delay reminders.',
+    icon: 'clock', parameters: {
+      to: { type: 'string', description: 'Recipient phone number', required: true },
+      body: { type: 'string', description: 'Unsent message', required: true },
+      time: { type: 'string', description: 'Future ISO 8601 time with timezone preferred', required: true },
+    },
+  },
+  {
+    id: 'list_scheduled_message_drafts', name: 'list_scheduled_message_drafts', displayName: 'List text reminders',
+    description: 'List pending scheduled text draft reminders with IDs/times but not the messages.',
+    icon: 'list', parameters: {},
+  },
+  {
+    id: 'cancel_scheduled_message_draft', name: 'cancel_scheduled_message_draft', displayName: 'Cancel text reminder',
+    description: 'Cancel a scheduled text draft notification by ID.',
+    icon: 'x-circle', parameters: { id: { type: 'string', description: 'Reminder UUID', required: true } },
+  },
+  {
     id: 'get_device_info',
     name: 'get_device_info',
     displayName: 'Device Info',
