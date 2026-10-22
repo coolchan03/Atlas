@@ -2,6 +2,11 @@ import { ToolDefinition } from './types';
 
 export const AVAILABLE_TOOLS: ToolDefinition[] = [
   {
+    id: 'read_health_summary', name: 'read_health_summary', displayName: 'Health Connect', icon: 'heart',
+    description: 'With separate user approval, read steps and average recorded heart rate for the last 1-7 days from Android Health Connect. Not a live heart rate measurement.',
+    parameters: { days: { type: 'number', description: 'Days including today (1-7), default 1' } },
+  },
+  {
     id: 'web_search',
     name: 'web_search',
     displayName: 'Web Search',

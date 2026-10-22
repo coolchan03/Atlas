@@ -45,6 +45,8 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return handleGetDatetime(call.arguments.timezone);
     case 'get_device_info':
       return handleGetDeviceInfo(call.arguments.info_type);
+    case 'read_health_summary':
+      return require('./healthConnect').readHealthSummary(call.arguments?.days ?? 1);
     case 'search_knowledge_base': {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');

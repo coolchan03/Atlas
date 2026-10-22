@@ -44,6 +44,9 @@
     <!-- Atlas assistant: optional "All files access" so agents can read/write your documents (you grant it in Settings) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Optional, user-granted Health Connect reads. No background health access. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <!-- Atlas: offline maps - GPS works without internet or a SIM -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
