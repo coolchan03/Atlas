@@ -10,6 +10,7 @@
 import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
+import { AnthropicProvider } from './providers/anthropicProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
 import { fetchModelsFromServer, testServerConnection } from '../stores/remoteServerHelpers';
@@ -85,13 +86,18 @@ class RemoteServerManager {
 
     const { apiKey: _, ...storeUpdates } = updates;
     store.updateServer(id, storeUpdates);
+    if (updates.providerType && updates.providerType !== existingServer.providerType) {
+      const next = store.getServerById(id);
+      if (next) await createProviderForServerImpl(next);
+      return;
+    }
 
     const provider = providerRegistry.getProvider(id);
-    if (provider && 'updateConfig' in provider) {
+    if (provider instanceof OpenAICompatibleProvider || provider instanceof AnthropicProvider) {
       const apiKey = await this.getApiKey(id);
-      (provider as OpenAICompatibleProvider).updateConfig({
+      provider.updateConfig({
         endpoint: updates.endpoint || existingServer.endpoint,
-        apiKey: apiKey || undefined,
+        apiKey: apiKey || '',
       });
     }
 
@@ -143,9 +149,10 @@ class RemoteServerManager {
   /** Test connection to a server by endpoint (before adding) */
   async testConnectionByEndpoint(
     endpoint: string,
-    apiKey?: string
+    apiKey?: string,
+    providerType: RemoteServer['providerType'] = 'openai-compatible'
   ): Promise<ServerTestResult> {
-    return useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey);
+    return useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey, providerType);
   }
 
   /**

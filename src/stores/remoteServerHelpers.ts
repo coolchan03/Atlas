@@ -7,6 +7,7 @@
  */
 
 import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
+import { assertClaudeEndpoint } from '../services/providers/anthropicProvider';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import {
@@ -60,6 +61,16 @@ export function displayModelName(id: string): string {
 }
 
 export async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
+  if (server.providerType === 'anthropic') {
+    const start = Date.now();
+    try {
+      const models = await fetchModelsFromServer(server);
+      return { success: true, latency: Date.now() - start, models,
+        serverInfo: { name: 'Claude API', type: 'anthropic' } };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Claude API unavailable' };
+    }
+  }
   try {
     const testResult = await testEndpoint(server.endpoint, 10000, server.apiKey);
 
@@ -104,7 +115,14 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
 export async function testEndpointAndGetModels(
   endpoint: string,
   apiKey?: string,
+  providerType: RemoteServer['providerType'] = 'openai-compatible',
 ): Promise<ServerTestResult> {
+  if (providerType === 'anthropic') {
+    return testServerConnection({
+      id: 'test', name: 'Claude API', endpoint, providerType: 'anthropic',
+      apiKey, createdAt: new Date().toISOString(),
+    });
+  }
   try {
     const testResult = await testEndpoint(endpoint, 10000, apiKey);
 
@@ -151,6 +169,33 @@ export async function testEndpointAndGetModels(
 }
 
 export async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
+  if (server.providerType === 'anthropic') {
+    const endpoint = assertClaudeEndpoint(server.endpoint);
+    // Get credentials from Keychain only when this caller did not supply them.
+    const key = server.apiKey || await (async () => {
+      if (server.id === 'test') return null;
+      const { getApiKeyImpl } = await import('../services/remoteServerManagerUtils');
+      return getApiKeyImpl(server.id);
+    })();
+    if (!key) throw new Error('A Claude API key is required.');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(endpoint + '/v1/models?limit=100', {
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('Claude model list returned HTTP ' + response.status);
+      const json: { data?: Array<{ id: string; display_name?: string }> } = await response.json();
+      return (json.data || []).filter(m => !!m.id).slice(0, 100).map(m => ({
+        id: m.id,
+        name: m.display_name || m.id,
+        serverId: server.id,
+        capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+        lastUpdated: new Date().toISOString(),
+      }));
+    } finally { clearTimeout(timeout); }
+  }
   let url = server.endpoint;
   let hadSuccessfulListResponse = false;
   while (url.endsWith('/')) url = url.slice(0, -1);

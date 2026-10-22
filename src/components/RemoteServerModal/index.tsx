@@ -71,6 +71,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
   const {
     name, setName,
     endpoint, setEndpoint,
+    providerType, setProviderType,
     apiKey, setApiKey,
     notes, setNotes,
     errors,
@@ -114,10 +115,37 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         />
         {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
 
+        <Text style={styles.label}>AI provider</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {([
+            { id: 'openai-compatible', label: 'OpenAI-compatible' },
+            { id: 'anthropic', label: 'Claude API' },
+          ] as const).map(option => (
+            <TouchableOpacity key={option.id} accessibilityRole="button"
+              accessibilityState={{ selected: providerType === option.id }}
+              testID={'remote-provider-' + option.id}
+              onPress={() => {
+                setProviderType(option.id);
+                if (option.id === 'anthropic') {
+                  setEndpoint('https://api.anthropic.com');
+                } else if (endpoint.trim() === 'https://api.anthropic.com') {
+                  setEndpoint('');
+                }
+              }}
+              style={[styles.testButton, { flex: 1, borderWidth: 1,
+                borderColor: providerType === option.id ? theme.colors.primary : theme.colors.border }]}>
+              <Text style={{ color: theme.colors.text, textAlign: 'center' }}>{option.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {providerType === 'anthropic' && <Text style={styles.helperText}>
+          Claude requires a separate API key from Claude Console. A Claude subscription does not include API credits.
+          Chats sent to Claude leave your device and may incur usage costs.
+        </Text>}
         <Text style={styles.label}>Endpoint URL</Text>
         <TextInput
           style={[styles.input, errors.endpoint && styles.inputError]}
-          placeholder="https://server.example:7878"
+          placeholder={providerType === 'anthropic' ? 'https://api.anthropic.com' : 'https://server.example:7878'}
           placeholderTextColor={theme.colors.textMuted}
           value={endpoint}
           onChangeText={setEndpoint}
@@ -135,11 +163,11 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         )}
         <Text style={styles.helperText}>
           {endpoint.trim()
-            ? `Will connect to: ${endpoint.trim().replace(/\/+$/, '')}/v1/models`
-            : 'Enter the base URL — /v1/models will be appended automatically'}
+            ? 'Model discovery: ' + endpoint.trim().replace(/\/+$/, '') + '/v1/models'
+            : 'Enter a base URL for your model provider.'}
         </Text>
 
-        <Text style={styles.label}>API Key (Optional)</Text>
+        <Text style={styles.label}>API Key {providerType === 'anthropic' ? '(Required)' : '(Optional)'}</Text>
         <View style={styles.apiKeyContainer}>
           <TextInput
             style={[styles.input, styles.apiKeyInput]}
@@ -155,8 +183,11 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
             <Icon name={showApiKey ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
+        {!!errors.apiKey && <Text style={styles.errorText}>{errors.apiKey}</Text>}
         <Text style={styles.helperText}>
-          Required for cloud APIs (Groq, OpenAI, OpenRouter, etc.)
+          {providerType === 'anthropic'
+            ? 'Your API key is saved in Android Keychain, not the chat database or source code.'
+            : 'Required for cloud APIs (Groq, OpenAI, OpenRouter, etc.).'}
         </Text>
 
         <Text style={styles.label}>Notes (Optional)</Text>

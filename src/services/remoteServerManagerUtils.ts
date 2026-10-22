@@ -6,6 +6,7 @@ import * as Keychain from 'react-native-keychain';
 import type { RemoteServer } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
+import { AnthropicProvider } from './providers/anthropicProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
 import { fetchModelsFromServer } from '../stores/remoteServerHelpers';
@@ -69,7 +70,9 @@ export { detectVisionCapability, detectToolCallingCapability } from '../utils/re
 export async function createProviderForServerImpl(server: RemoteServer): Promise<void> {
   const apiKey = await getApiKeyImpl(server.id);
   logger.log('[RemoteServerManager] createProvider:', server.name, '| endpoint:', server.endpoint, '| hasApiKey:', !!apiKey);
-  const provider = createOpenAIProvider(server.id, server.endpoint, { apiKey: apiKey || undefined });
+  const provider = server.providerType === 'anthropic'
+    ? new AnthropicProvider(server.id, server.endpoint, apiKey || undefined)
+    : createOpenAIProvider(server.id, server.endpoint, { apiKey: apiKey || undefined });
   providerRegistry.registerProvider(server.id, provider);
 }
 

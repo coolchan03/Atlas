@@ -63,7 +63,7 @@ interface RemoteServerState {
 
   // Health check
   testConnection: (serverId: string) => Promise<ServerTestResult>;
-  testConnectionByEndpoint: (endpoint: string, apiKey?: string) => Promise<ServerTestResult>;
+  testConnectionByEndpoint: (endpoint: string, apiKey?: string, providerType?: RemoteServer['providerType']) => Promise<ServerTestResult>;
   updateServerHealth: (serverId: string, isHealthy: boolean) => void;
 
   // Utility
@@ -262,10 +262,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         }
       },
 
-      testConnectionByEndpoint: async (endpoint, apiKey) => {
+      testConnectionByEndpoint: async (endpoint, apiKey, providerType = 'openai-compatible') => {
         set({ isLoading: true });
         try {
-          const result = await testEndpointAndGetModels(endpoint, apiKey);
+          const result = await testEndpointAndGetModels(endpoint, apiKey, providerType);
           set({ isLoading: false });
           return result;
         } catch (error) {

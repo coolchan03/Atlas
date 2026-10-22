@@ -32,4 +32,5 @@ jobs:
             __tests__/unit/services/atlasPresentationLayouts.test.ts \
             __tests__/unit/services/tools/atlasLocalSkills.test.ts \
             __tests__/unit/services/tools/atlasMovieWatches.test.ts \
-            __tests__/unit/services/tools/atlasConditionalWatches.test.ts
+            __tests__/unit/services/tools/atlasConditionalWatches.test.ts \
+            __tests__/unit/services/providers/anthropicProvider.test.ts

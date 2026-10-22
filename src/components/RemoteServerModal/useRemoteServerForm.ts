@@ -3,6 +3,7 @@ import { remoteServerManager } from '../../services/remoteServerManager';
 import { useRemoteServerStore } from '../../stores';
 import { RemoteServer, RemoteModel } from '../../types';
 import { isPrivateNetworkEndpoint } from '../../services/httpClient';
+import { assertClaudeEndpoint } from '../../services/providers/anthropicProvider';
 import { AlertState, initialAlertState, showAlert } from '../CustomAlert';
 
 interface FormOptions {
@@ -17,11 +18,18 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [notes, setNotes] = useState('');
+  const [providerType, setProviderType] = useState<RemoteServer['providerType']>('openai-compatible');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<RemoteModel[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+
+  // If credentials, endpoint or provider changes, an old successful test is stale.
+  useEffect(() => {
+    setTestResult(null);
+    setDiscoveredModels([]);
+  }, [providerType, endpoint, apiKey]);
 
   // Initialize form when editing existing server
   useEffect(() => {
@@ -30,6 +38,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       setName(server.name);
       setEndpoint(server.endpoint);
       setNotes(server.notes || '');
+      setProviderType(server.providerType || 'openai-compatible');
       // Load existing API key from keychain so user can see it's set
       remoteServerManager.getApiKey(server.id).then((key) => {
         if (!cancelled) setApiKey(key || '');
@@ -40,6 +49,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       setEndpoint('');
       setApiKey('');
       setNotes('');
+      setProviderType('openai-compatible');
     }
     setErrors({});
     setTestResult(null);
@@ -62,9 +72,14 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     } else {
       newErrors.endpoint = 'Endpoint URL is required';
     }
+    if (providerType === 'anthropic') {
+      try { assertClaudeEndpoint(endpoint); }
+      catch { newErrors.endpoint = 'Claude API requires https://api.anthropic.com'; }
+      if (!apiKey.trim()) newErrors.apiKey = 'A Claude API key is required';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, endpoint]);
+  }, [name, endpoint, providerType, apiKey]);
 
   const handleTestConnection = useCallback(async () => {
     if (!validateForm()) return;
@@ -72,7 +87,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     setTestResult(null);
     setDiscoveredModels([]);
     try {
-      const result = await remoteServerManager.testConnectionByEndpoint(endpoint, apiKey || undefined);
+      const result = await remoteServerManager.testConnectionByEndpoint(endpoint, apiKey || undefined, providerType);
       if (result.success) {
         const resolvedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
         setTestResult({ success: true, message: `Connected (${result.latency}ms)\n${resolvedUrl}` });
@@ -88,19 +103,19 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     } finally {
       setIsTesting(false);
     }
-  }, [endpoint, apiKey, validateForm]);
+  }, [endpoint, apiKey, providerType, validateForm]);
 
   const saveServer = useCallback(async () => {
     try {
       if (server) {
-        await remoteServerManager.updateServer(server.id, { name, endpoint, notes, apiKey });
+        await remoteServerManager.updateServer(server.id, { name, endpoint, notes, apiKey, providerType });
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(server.id, discoveredModels);
         }
         onSave?.(server);
       } else {
         const newServer = await remoteServerManager.addServer({
-          name, endpoint, providerType: 'openai-compatible', notes: notes || undefined, apiKey: apiKey || undefined,
+          name, endpoint, providerType, notes: notes || undefined, apiKey: apiKey || undefined,
         });
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(newServer.id, discoveredModels);
@@ -113,7 +128,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     } catch (error) {
       setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Failed to save server'));
     }
-  }, [server, name, endpoint, apiKey, notes, discoveredModels, onSave, onClose]);
+  }, [server, name, endpoint, apiKey, providerType, notes, discoveredModels, onSave, onClose]);
 
   const handleSave = useCallback(async () => {
     if (!validateForm()) return;
@@ -136,6 +151,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
   return {
     name, setName,
     endpoint, setEndpoint,
+    providerType, setProviderType,
     apiKey, setApiKey,
     notes, setNotes,
     errors,
