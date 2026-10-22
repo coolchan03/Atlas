@@ -9,7 +9,7 @@ import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService'
 import { boardFor, spaceOpen, type Space } from './board';
 import { unitsForLevel } from './curriculum';
 import { useLanguage, usePrepareLive } from './store';
-import { Board } from './Board';
+import { Board } from './CourseBoard';
 import { createStyles } from './LanguageScreen.styles';
 
 /**
