@@ -1,7 +1,7 @@
 /**
  * Image inference uses distinct native runtimes. Never route a checkpoint into a
  * different model format's runtime. Imported (sd.cpp) checkpoints can run on the
- * Vulkan or the OpenCL diffusion engine; CPU requires explicit selection. The
+ * Vulkan or the OpenCL diffusion engine; CPU requires explicit permission. The
  * plan carries supported GPU backends for retry, never a silent CPU downgrade.
  */
 export type ImageComputeMode = 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
@@ -75,7 +75,7 @@ export async function selectImageAccelerator(
     }
     return { useOpenCL: false, selected: 'cpu', note: 'CPU explicitly selected' };
   }
-  if (backend === 'sdcpp') return planSdcpp(mode, probe, allowCpuFallback && mode === 'auto');
+  if (backend === 'sdcpp') return planSdcpp(mode, probe, allowCpuFallback);
   if (mode === 'vulkan' || mode === 'opencl') mode = 'gpu'; // other runtimes have one accelerator
   if (backend === 'mnn') {
     const gpu = await probe.opencl().catch(() => ({ supported: false, reason: 'probe failed' }));

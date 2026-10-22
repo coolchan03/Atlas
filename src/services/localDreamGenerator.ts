@@ -6,6 +6,7 @@ import {
 } from '../types';
 import { generateRandomSeed } from '../utils/generateId';
 import logger from '../utils/logger';
+import type { ImageComputeDecision } from './imageAcceleratorSelection';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
 
@@ -21,7 +22,17 @@ type PreviewCallback = (preview: { previewPath: string; step: number; totalSteps
 type NativeImageParams = ImageGenerationParams & {
   previewInterval?: number; skipLoRA?: boolean; skipUpscaler?: boolean;
   threads?: number;
+  fallbacks?: ImageComputeDecision[];
+  onFallback?: (status: string) => void;
 };
+export type NativeImageResult = GeneratedImage & {
+  execution?: {
+    useOpenCL: boolean;
+    computeBackend?: ImageGenerationParams['computeBackend'];
+    fallbackNotes: string[];
+  };
+};
+const computeLabel = (backend?: string) => backend === 'opencl' ? 'OpenCL' : backend === 'cpu' ? 'CPU' : 'Vulkan';
 export type NativeImageRuntimeStatus = {
   running: boolean;
   stage: string;
@@ -52,6 +63,7 @@ export type NativeImageRuntimeStatus = {
 class LocalDreamGeneratorService {
   private loadedThreads: number | null = null;
   private generating = false;
+  private cancelRequested = false;
   private eventEmitter: NativeEventEmitter | null = null;
 
   private getEmitter(): NativeEventEmitter {
@@ -223,11 +235,37 @@ class LocalDreamGeneratorService {
     };
   }
 
+  private async generateWithFallbacks(params: NativeImageParams, prompt: string): Promise<NativeImageResult> {
+    let attempt = params;
+    const fallbacks = [...(params.fallbacks ?? [])];
+    const fallbackNotes: string[] = [];
+    for (;;) {
+      if (this.cancelRequested) throw new Error('Image generation cancelled');
+      try {
+        const result = await DiffusionModule.generateImage(this.buildNativeParams(attempt, prompt));
+        if (this.cancelRequested) throw new Error('Image generation cancelled');
+        return { ...this.buildResult(params, result), execution: {
+          useOpenCL: attempt.useOpenCL ?? true,
+          computeBackend: attempt.computeBackend, fallbackNotes,
+        } };
+      } catch (error: any) {
+        const message = String(error?.message || error || '');
+        const next = fallbacks.shift();
+        if (this.cancelRequested || /cancel/i.test(message) || !next) throw error;
+        const why = `${computeLabel(attempt.computeBackend)} failed (${message.slice(0, 160)})`;
+        fallbackNotes.push(why);
+        logger.warn(`[ImageGen] ${why}; trying ${computeLabel(next.computeBackend)}`);
+        params.onFallback?.(`${why}. Trying ${computeLabel(next.computeBackend)}...`);
+        attempt = { ...params, useOpenCL: next.useOpenCL, computeBackend: next.computeBackend };
+      }
+    }
+  }
+
   async generateImage(
     params: NativeImageParams,
     onProgress?: ProgressCallback,
     onPreview?: PreviewCallback,
-  ): Promise<GeneratedImage> {
+  ): Promise<NativeImageResult> {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
     }
@@ -240,15 +278,16 @@ class LocalDreamGeneratorService {
     }
 
     this.generating = true;
+    this.cancelRequested = false;
     const progressSubscription = this.subscribeToProgress(onProgress, onPreview);
 
     try {
-      const result = await DiffusionModule.generateImage(this.buildNativeParams(params, trimmedPrompt));
+      const result = await this.generateWithFallbacks(params, trimmedPrompt);
       // iOS releases the CoreML pipeline after generation to free memory.
       // Android keeps the LocalDream server/model resident, so preserve its
       // thread residency bookkeeping there or every next request looks stale.
       if (Platform.OS === 'ios') this.loadedThreads = null;
-      return this.buildResult(params, result);
+      return result;
     } catch (error: any) {
       const msg = error?.message || '';
       if (msg.includes('ERR_NO_MODEL') || msg.includes('unloaded') || msg.includes('Pipeline failed')) {
@@ -262,6 +301,7 @@ class LocalDreamGeneratorService {
   }
 
   async cancelGeneration(): Promise<boolean> {
+    this.cancelRequested = true;
     if (!this.isAvailable()) return true;
     // Keep the JS busy flag set until the in-flight native promise actually
     // unwinds. This prevents an immediate retry from overlapping the cancelled

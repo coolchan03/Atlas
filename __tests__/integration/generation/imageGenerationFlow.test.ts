@@ -153,7 +153,7 @@ describe('Image Generation Flow Integration', () => {
       }
     });
 
-    it('retries a failed Vulkan run on the CPU and says so in the chat', async () => {
+    it('delegates the permitted retry plan and reports the completed CPU render in chat', async () => {
       const conversationId = setupWithConversation();
       const imageModel = { ...createONNXImageModel({ id: 'img-model-1', modelPath: '/mock/image-model' }), backend: 'sdcpp', nativeImageFamily: 'sd15' } as any;
       useAppStore.setState({
@@ -164,16 +164,21 @@ describe('Image Generation Flow Integration', () => {
       mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
       (mockLocalDreamService as any).getNativeImageGpuDiagnostics = jest.fn(async (api?: string) =>
         api === 'opencl' ? { enumerated: false, detail: 'no OpenCL device' } : { enumerated: true, detail: 'vulkan0' });
-      mockLocalDreamService.generateImage
-        .mockRejectedValueOnce(new Error('Vulkan backend could not generate an image. Native engine exit 134'))
-        .mockResolvedValueOnce({ id: 'img-cpu', prompt: 'a cat', imagePath: '/mock/cpu.png', width: 512, height: 512,
-          steps: 20, seed: 1, modelId: 'img-model-1', createdAt: new Date().toISOString() });
+      mockLocalDreamService.generateImage.mockResolvedValueOnce({
+        id: 'img-cpu', prompt: 'a cat', imagePath: '/mock/cpu.png', width: 512, height: 512,
+        steps: 20, seed: 1, modelId: 'img-model-1', createdAt: new Date().toISOString(),
+        execution: { useOpenCL: false, computeBackend: 'cpu',
+          fallbackNotes: ['Vulkan failed (Native engine exit 134)'] },
+      });
 
       const result = await imageGenerationService.generateImage({ prompt: 'a cat', conversationId });
 
       expect(result?.id).toBe('img-cpu');
-      const backends = mockLocalDreamService.generateImage.mock.calls.map(c => (c[0] as any).computeBackend);
-      expect(backends).toEqual(['vulkan', 'cpu']);
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledTimes(1);
+      const plan = mockLocalDreamService.generateImage.mock.calls[0][0];
+      expect([plan.computeBackend, ...(plan.fallbacks ?? []).map(attempt => attempt.computeBackend)])
+        .toEqual(['vulkan', 'cpu']);
+      expect(result).not.toHaveProperty('execution');
       const last = getChatState().conversations.find(c => c.id === conversationId)!.messages.slice(-1)[0];
       expect(last.content).toMatch(/Vulkan failed/);
       expect(last.content).toMatch(/Made on the CPU instead/);

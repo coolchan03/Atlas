@@ -1,4 +1,4 @@
-/* eslint-disable max-lines, complexity, prefer-template -- Image generation's existing orchestrator owns retries, metadata, and model residency. */
+/* eslint-disable max-lines, complexity, prefer-template -- Image generation's existing orchestrator owns chat state, metadata, and model residency. */
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
 import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
@@ -423,29 +423,25 @@ class ImageGenerationService {
       const result = await onnxImageGeneratorService.generateImage(
         { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL,
           ...(computeBackend ? { computeBackend } : {}),
+          fallbacks: opts.fallbacks,
+          onFallback: status => {
+            if (!this._isRequestCurrent(requestEpoch)) return;
+            this.updateState({ status, progress: { step: 0, totalSteps: steps }, previewPath: null });
+          },
           threads: useAppStore.getState().settings.imageThreads ?? 4 },
         handlers.onProgress,
         handlers.onPreview,
       );
       if (!this._isRequestCurrent(requestEpoch)) return null;
       if (!result?.imagePath) { this.resetState(); return null; }
-      return this._saveResult(result, { params, activeImageModel: runtimeModel, meta: { steps, guidanceScale, useOpenCL, computeBackend, fallbackNotes: opts.fallbackNotes, startTime } });
+      const { execution, ...image } = result;
+      return this._saveResult(image, { params, activeImageModel: runtimeModel, meta: {
+        steps, guidanceScale, useOpenCL: execution?.useOpenCL ?? useOpenCL,
+        computeBackend: execution?.computeBackend ?? computeBackend,
+        fallbackNotes: [...(opts.fallbackNotes ?? []), ...(execution?.fallbackNotes ?? [])], startTime,
+      } });
     } catch (error: any) {
       if (!this._isRequestCurrent(requestEpoch)) return null;
-      // A GPU engine that fails (driver rejects a shader, unsupported op, stall) is not the
-      // end: try the next backend and say so, instead of leaving the user with no image.
-      const message = String(error?.message || error || '');
-      const [next, ...later] = opts.fallbacks ?? [];
-      if (next && !this.cancelRequested && !/cancel/i.test(message)) {
-        const label = (b?: string) => b === 'opencl' ? 'OpenCL' : b === 'cpu' ? 'CPU' : 'Vulkan';
-        const why = `${label(computeBackend)} failed (${message.slice(0, 160)})`;
-        logger.warn(`[ImageGen] ${why}; trying ${label(next.computeBackend)}`);
-        this.updateState({ status: `${why}. Trying ${label(next.computeBackend)}...` });
-        return this._runGenerationAndSave({
-          ...opts, useOpenCL: next.useOpenCL, computeBackend: next.computeBackend,
-          fallbacks: later, fallbackNotes: [...(opts.fallbackNotes ?? []), why],
-        }, requestEpoch);
-      }
       this._handleImageGenerationError(error);
       return null;
     } finally {

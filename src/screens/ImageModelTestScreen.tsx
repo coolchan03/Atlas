@@ -175,7 +175,7 @@ export const ImageModelTestScreen: React.FC = () => {
           sdOpencl: () => localDreamGeneratorService.getNativeImageGpuDiagnostics('opencl'),
           opencl: () => hardwareService.getOpenCLCapability(),
           npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
-        },
+        }, useAppStore.getState().settings.imageAllowCpuFallback === true,
       );
       if (cancelRequested.current) return;
       update('engine', 'run', imageDecision.note + '. Loading model...');
@@ -196,6 +196,12 @@ export const ImageModelTestScreen: React.FC = () => {
         negativePrompt: model.nativeImageFamily === 'flux' ? '' : 'blurry, distorted, watermark, text',
         useOpenCL: imageDecision.useOpenCL,
         ...(imageDecision.computeBackend ? { computeBackend: imageDecision.computeBackend } : {}),
+        fallbacks: imageDecision.fallbacks,
+        onFallback: status => {
+          if (cancelRequested.current || gone.current) return;
+          setDiffusionStep(0);
+          update('diffusion', 'run', status);
+        },
         previewInterval: 0,
         skipLoRA: !includeLoRA, skipUpscaler: !includeUpscaler,
         threads: useAppStore.getState().settings.imageThreads ?? 4,
@@ -215,10 +221,16 @@ export const ImageModelTestScreen: React.FC = () => {
       if (!await RNFS.exists(filePath)) throw new Error('The engine reported success, but the image file is missing.');
       const info = await RNFS.stat(filePath);
       const pngHeader = await RNFS.read(filePath, 8, 0, 'base64');
+      if (cancelRequested.current || gone.current) return;
       if (Number(info.size) < 64 || pngHeader !== 'iVBORw0KGgo=') {
         throw new Error('The output is too small or does not contain a valid PNG header.');
       }
-      if (!gone.current) { setResult(image); setDecision(testMode === 'smoke' ? 'engine' : 'review'); }
+      const { execution, ...renderedImage } = image;
+      const engineLabel = (backend || model.backend || 'unknown').toUpperCase();
+      const computeLabel = (execution?.computeBackend ?? imageDecision.selected).toUpperCase();
+      const recoveryNote = execution?.fallbackNotes.length ? ` ${execution.fallbackNotes.join('. ')}.` : '';
+      update('engine', 'ok', `${engineLabel} / ${computeLabel} selected for the completed render.${recoveryNote}`);
+      if (!gone.current) { setResult(renderedImage); setDecision(testMode === 'smoke' ? 'engine' : 'review'); }
       update('output', testMode === 'smoke' ? 'ok' : 'warn',
         image.width + 'x' + image.height + ' PNG (' +
         Math.round(Number(info.size) / 1024) + ' KB). ' +
