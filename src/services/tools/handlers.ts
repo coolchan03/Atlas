@@ -12,6 +12,7 @@ import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
 import { listLocalSkills, saveLocalSkill, readLocalSkill } from './localSkills';
+import { watchMovieRelease, listMovieWatches, cancelMovieWatch } from './movieWatches';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -81,6 +82,18 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'list_scheduled_message_drafts':
       return listScheduledTextDrafts();
+    case 'watch_movie_release': {
+      const title = requireString(call, 'title');
+      if (!title) throw new Error('A movie title is required.');
+      return watchMovieRelease(title);
+    }
+    case 'list_movie_watches':
+      return listMovieWatches();
+    case 'cancel_movie_watch': {
+      const id = requireString(call, 'id');
+      if (!id) throw new Error('Movie watch ID required.');
+      return cancelMovieWatch(id);
+    }
     case 'cancel_scheduled_message_draft': {
       const id = requireString(call, 'id');
       if (!id) throw new Error('Scheduled-draft ID required.');

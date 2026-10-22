@@ -16,6 +16,13 @@ interface OffGridState {
   setNightRed: (v: boolean) => void;
 }
 
+function mirrorMovieOffGrid(on: boolean): void {
+  try {
+    const native = require('react-native').NativeModules?.AtlasMovieWatches;
+    native?.setOffGrid?.(on)?.catch?.(() => undefined);
+  } catch { /* older APK has no movie-watch module */ }
+}
+
 export const useOffGrid = create<OffGridState>()(
   persist(
     (set) => ({
@@ -23,6 +30,7 @@ export const useOffGrid = create<OffGridState>()(
       nightRed: false,
       setOn: (on) => {
         set({ on });
+        mirrorMovieOffGrid(on);
         if (on) {
           try { require('../stores/agentStore').useAgentStore.getState().setActiveAgent('atlas'); } catch { /* ignore */ }
           try { require('./lowPower').useLowPower.getState().set({ enabled: true }); } catch { /* ignore */ }
@@ -30,11 +38,12 @@ export const useOffGrid = create<OffGridState>()(
       },
       setNightRed: (nightRed) => set({ nightRed }),
     }),
-    { name: 'atlas-off-grid', storage: createJSONStorage(() => AsyncStorage) },
+    { name: 'atlas-off-grid', storage: createJSONStorage(() => AsyncStorage),
+      onRehydrateStorage: () => (state) => mirrorMovieOffGrid(!!state?.on) },
   ),
 );
 
-export const NETWORK_TOOLS = ['web_search', 'read_url'];
+export const NETWORK_TOOLS = ['web_search', 'read_url', 'watch_movie_release'];
 export const offGridOn = (): boolean => useOffGrid.getState().on;
 
 export const NIGHT_COLORS: any = {

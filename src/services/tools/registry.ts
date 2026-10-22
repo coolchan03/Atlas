@@ -100,6 +100,22 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     icon: 'x-circle', parameters: { id: { type: 'string', description: 'Reminder UUID', required: true } },
   },
   {
+    id: 'watch_movie_release', name: 'watch_movie_release', displayName: 'Watch movie release',
+    description: 'With explicit approval, periodically check Google News and Bing News for reports that a movie is in US theaters. Alerts say POSSIBLE release and require showtime confirmation, not a guaranteed cinema listing.',
+    icon: 'film', requiresNetwork: true,
+    parameters: { title: { type: 'string', description: 'Movie title to monitor', required: true } },
+  },
+  {
+    id: 'list_movie_watches', name: 'list_movie_watches', displayName: 'Movie watchlist',
+    description: 'List upcoming movie-release-news watches and possible results.',
+    icon: 'list', parameters: {},
+  },
+  {
+    id: 'cancel_movie_watch', name: 'cancel_movie_watch', displayName: 'Cancel movie watch',
+    description: 'Stop watching for possible theatrical release announcements for a given movie.',
+    icon: 'x-circle', parameters: { id: { type: 'string', description: 'Movie-watch UUID', required: true } },
+  },
+  {
     id: 'get_device_info',
     name: 'get_device_info',
     displayName: 'Device Info',
