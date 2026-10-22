@@ -286,12 +286,13 @@ export const languageService = {
 
   /**
    * Writes everything a level needs with the AI on the phone, one after another, so the whole
-   * level then works offline with no waiting. Stops early with stopPreparing(); a unit that
-   * fails is skipped and written again when it is opened.
+   * level then works offline with no waiting. Stops after the current item on stopPreparing() or a
+   * course switch; a unit that fails is skipped and written again when it is opened.
    */
   async prepareLevel(level: LevelId): Promise<void> {
     if (usePrepareLive.getState().level !== null) return;
-    const { units, pieces } = languageService.levelToPrepare(level);
+    const { language: code, level: selectedLevel } = useLanguage.getState();
+    const { units, pieces } = languageService.levelToPrepare(level, code);
     const total = units.length + pieces.length;
     preparing = { stop: false };
     const job = preparing;
@@ -303,7 +304,8 @@ export const languageService = {
         ...pieces.map((id): [string, () => Promise<unknown>] => [pieceById(id)?.title ?? id, () => languageService.openPremade(id)]),
       ];
       for (const [title, run] of tasks) {
-        if (job.stop) break;
+        const selected = useLanguage.getState();
+        if (job.stop || selected.language !== code || selected.level !== selectedLevel) break;
         usePrepareLive.setState({ step: `Writing ${title}` });
         try { await run(); } catch (e: any) {
           failed++;
