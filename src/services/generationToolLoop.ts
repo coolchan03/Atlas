@@ -250,6 +250,7 @@ export interface ToolLoopContext {
   conversationId: string;
   messages: Message[];
   enabledToolIds: string[];
+  allowedToolNames?: Set<string>;
   projectId?: string;
   callbacks?: ToolLoopCallbacks;
   isAborted: () => boolean;
@@ -277,7 +278,10 @@ function getLastUserQuery(messages: Message[]): string {
  * handler behave identically: success/empty/error all become a typed result whose
  * model-facing string (toolResultModelContent) explicitly states failure/empty.
  */
-async function executeToolCallSafely(tc: ToolCall): Promise<ToolResult> {
+async function executeToolCallSafely(tc: ToolCall, allowed?: Set<string>): Promise<ToolResult> {
+  if (allowed && !allowed.has(tc.name)) {
+    return toolErrorResult(tc, new Error(`Tool ${tc.name} is disabled for this turn. Ask the user to enable it first.`), Date.now());
+  }
   const exts = getToolExtensions();
   const ext = exts.find(e => e.canHandle(tc.name));
   const start = Date.now();
@@ -303,7 +307,7 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
     }
     if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const result = await executeToolCallSafely(tc);
+    const result = await executeToolCallSafely(tc, ctx.allowedToolNames);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`, role: 'tool',
@@ -494,7 +498,7 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
     // the model (toolResultModelContent) is never empty — a failure/empty is stated
     // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
     // mistake it for a successful answer.
-    const result = await executeToolCallSafely(toolCall);
+    const result = await executeToolCallSafely(toolCall, ctx.allowedToolNames);
     ctx.callbacks?.onToolCallComplete?.(name, result);
     const resultContent = toolResultModelContent(result);
     const toolCallMsg: Message = { id: `tc-${Date.now()}-${name}`, role: 'assistant', content: '',
@@ -862,6 +866,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<ToolLoopOutcome
   const extSchemas = getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []);
 
   const effectiveSchemas = await selectEffectiveSchemas(ctx, builtInSchemas, extSchemas);
+  ctx.allowedToolNames = new Set(effectiveSchemas.map((s: any) => s?.function?.name).filter(Boolean));
   ctx.onToolsRouted?.(effectiveSchemas.map((s: any) => s?.function?.name).filter(Boolean));
 
   const loopMessages = [...ctx.messages];

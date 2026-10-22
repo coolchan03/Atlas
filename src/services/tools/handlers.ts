@@ -6,6 +6,9 @@ import logger from '../../utils/logger';
 import { searchWeb } from './webSearchProviders';
 import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
+import { openEmailDraft, openTextDraft, openPhoneDialer } from './contactDrafts';
+import { createCodeProject } from './codeProjects';
+import { lookupNamedContact } from './contactLookup';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -38,6 +41,21 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');
       return handleWebSearch(q);
+    }
+    case 'draft_email': {
+      const to = requireString(call, 'to');
+      if (!to) throw new Error('An email recipient is required.');
+      return openEmailDraft(to, String(call.arguments?.subject ?? ''), String(call.arguments?.body ?? ''));
+    }
+    case 'draft_text': {
+      const to = requireString(call, 'to');
+      if (!to) throw new Error('A phone number is required.');
+      return openTextDraft(to, String(call.arguments?.body ?? ''));
+    }
+    case 'open_dialer': {
+      const phone = requireString(call, 'phone');
+      if (!phone) throw new Error('A phone number is required.');
+      return openPhoneDialer(phone);
     }
     case 'calculator':
       return handleCalculator(call.arguments.expression);
@@ -77,6 +95,12 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'create_web_page':
       return DT.createWebPage(String(call.arguments?.name ?? 'site'), String(call.arguments?.html ?? ''));
+    case 'create_code_project': {
+      const name = requireString(call, 'name');
+      const filesJson = requireString(call, 'files_json');
+      if (!name || !filesJson) throw new Error('A name and files_json are required.');
+      return createCodeProject(name, filesJson);
+    }
     case 'open_file': {
       const p = requireString(call, 'path');
       if (!p) throw new Error('Missing required parameter: path');
@@ -84,6 +108,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'calendar_events':
       return DT.calendarEvents(Math.max(1, parseInt(String(call.arguments?.days_ahead ?? 7), 10) || 7), Math.max(0, parseInt(String(call.arguments?.days_back ?? 0), 10) || 0));
+    case 'find_contact': {
+      const name = requireString(call, 'name');
+      if (!name) throw new Error('A contact name is required.');
+      return lookupNamedContact(name);
+    }
     case 'add_calendar_event':
       return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), call.arguments?.end, call.arguments?.location ?? '');
     case 'my_location': {

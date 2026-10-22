@@ -12,8 +12,11 @@ export interface AiStyle {
   tone?: AiTone;
   level?: AiLevel;
   emoji?: boolean;
+  /** Fine-grained answer style. Legacy booleans remain readable. */
+  emojiFrequency?: 'model' | 'never' | 'sometimes' | 'often';
   /** Ask a follow-up question at the end of answers. */
   followUps?: boolean;
+  followUpFrequency?: 'model' | 'never' | 'when_useful' | 'often';
   /** Free-text standing instructions ("Always use metric units"). */
   custom?: string;
 }
@@ -56,8 +59,18 @@ export function aiStyleNote(style?: AiStyle): string {
     style.length && style.length !== 'balanced' ? LENGTH_NOTE[style.length] : '',
     style.tone && style.tone !== 'neutral' ? TONE_NOTE[style.tone] : '',
     style.level ? LEVEL_NOTE[style.level] : '',
-    style.emoji === true ? 'An occasional emoji is fine.' : style.emoji === false ? 'Do not use emoji.' : '',
-    style.followUps === true ? 'End with one short follow-up question when it would help.' : style.followUps === false ? 'Do not end with follow-up questions.' : '',
+    style.emojiFrequency === 'often' ? 'Use emoji frequently when they improve clarity or tone.' :
+      style.emojiFrequency === 'never' ? 'Do not use emoji.' :
+      style.emojiFrequency === 'sometimes' ? 'An occasional emoji is welcome.' :
+      style.emojiFrequency === 'model' ? '' :
+      style.emoji === true ? 'An occasional emoji is welcome.' :
+      style.emoji === false ? 'Do not use emoji.' : '',
+    style.followUpFrequency === 'often' ? 'Ask a brief, relevant follow-up question often when it would keep the conversation moving.' :
+      style.followUpFrequency === 'never' ? 'Do not end with a follow-up question.' :
+      style.followUpFrequency === 'when_useful' ? 'Ask a short follow-up question only when useful.' :
+      style.followUpFrequency === 'model' ? '' :
+      style.followUps === true ? 'Ask a brief follow-up question when useful.' :
+      style.followUps === false ? 'Do not end with follow-up questions.' : '',
   ].filter(Boolean);
   const custom = style.custom?.trim();
   if (!parts.length && !custom) return '';

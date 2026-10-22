@@ -128,11 +128,13 @@ export const AppearanceScreen: React.FC = () => {
         <Text style={styles.label}>Explanations</Text>
         <Chips testID="ai-level" value={ai.level ?? 'normal'} onPick={level => setAi({ level })} options={AI_LEVELS} />
         <Text style={styles.label}>Emoji</Text>
-        <Chips testID="ai-emoji" value={ai.emoji} onPick={emoji => setAi({ emoji })}
-          options={[{ id: undefined, name: 'Model decides' }, { id: false, name: 'Never' }, { id: true, name: 'Sometimes' }]} />
+        <Chips testID="ai-emoji" value={ai.emojiFrequency ?? (ai.emoji === false ? 'never' : ai.emoji === true ? 'sometimes' : 'model')}
+          onPick={emojiFrequency => setAi({ emojiFrequency })}
+          options={[{ id: 'model', name: 'Model decides' }, { id: 'never', name: 'Never' }, { id: 'sometimes', name: 'Sometimes' }, { id: 'often', name: 'Often' }]} />
         <Text style={styles.label}>Follow-up questions</Text>
-        <Chips testID="ai-followups" value={ai.followUps} onPick={followUps => setAi({ followUps })}
-          options={[{ id: undefined, name: 'Model decides' }, { id: false, name: 'Never' }, { id: true, name: 'When useful' }]} />
+        <Chips testID="ai-followups" value={ai.followUpFrequency ?? (ai.followUps === false ? 'never' : ai.followUps === true ? 'when_useful' : 'model')}
+          onPick={followUpFrequency => setAi({ followUpFrequency })}
+          options={[{ id: 'model', name: 'Model decides' }, { id: 'never', name: 'Never' }, { id: 'when_useful', name: 'When useful' }, { id: 'often', name: 'Often' }]} />
         <Text style={styles.label}>Always remember</Text>
         <TextInput testID="ai-custom" value={ai.custom ?? ''} onChangeText={custom => setAi({ custom: custom.slice(0, 1200) })}
           placeholder="e.g. Use metric units. I am studying nursing. Call me Sam."

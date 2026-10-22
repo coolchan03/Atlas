@@ -22,6 +22,28 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'draft_email', name: 'draft_email', displayName: 'Email draft',
+    description: 'Open the email app with recipient, subject and body filled in. User reviews and sends. Never sends automatically.',
+    icon: 'mail', parameters: {
+      to: { type: 'string', description: 'Email address', required: true },
+      subject: { type: 'string', description: 'Email subject' },
+      body: { type: 'string', description: 'Email body' },
+    },
+  },
+  {
+    id: 'draft_text', name: 'draft_text', displayName: 'SMS draft',
+    description: 'Open the SMS app with recipient and text filled in. Never sends automatically. Use calendar events to tailor a draft.',
+    icon: 'message-circle', parameters: {
+      to: { type: 'string', description: 'Phone number', required: true },
+      body: { type: 'string', description: 'Message body' },
+    },
+  },
+  {
+    id: 'open_dialer', name: 'open_dialer', displayName: 'Phone dialer',
+    description: 'Open the dialer with a phone number filled in; does not place the call.',
+    icon: 'phone', parameters: { phone: { type: 'string', description: 'Phone number', required: true } },
+  },
+  {
     id: 'calculator',
     name: 'calculator',
     displayName: 'Calculator',
@@ -133,9 +155,23 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'create_code_project', name: 'create_code_project', displayName: 'Code project',
+    description: 'Create multiple UTF-8 source files (Python, Kotlin, Java, Rust, TypeScript, etc.) with one confirmation. Does not execute or build the files.',
+    icon: 'code', parameters: {
+      name: { type: 'string', description: 'Project name', required: true },
+      files_json: { type: 'string', description: 'JSON array of {path, content}', required: true },
+    },
+  },
+  {
     id: 'open_file', name: 'open_file', displayName: 'Open file',
     description: 'Open a file on the phone in the right app (browser, document viewer).', icon: 'external-link',
     parameters: { path: { type: 'string', description: 'File path', required: true } },
+  },
+  {
+    id: 'find_contact', name: 'find_contact', displayName: 'Find contact',
+    description: 'Ask the user for permission to search a phone contact by name. Use with calendar events to draft a friend a text; confirm the matching person before composing. Never sends.',
+    icon: 'users',
+    parameters: { name: { type: 'string', description: 'Contact name fragment', required: true } },
   },
   {
     id: 'calendar_events', name: 'calendar_events', displayName: 'Read calendar',
@@ -211,9 +247,11 @@ export function getToolsAsOpenAISchema(enabledToolIds: string[]) {
 }
 
 export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
-  const enabledTools = AVAILABLE_TOOLS.filter(t => enabledToolIds.includes(t.id));
-  if (enabledTools.length === 0) return '';
-
-  const toolList = enabledTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
-  return `\n\nTools available:\n${toolList}\nUse these tools proactively and precisely — call the right tool at the right moment rather than guessing or saying you cannot help.`;
+  const enabled = AVAILABLE_TOOLS.filter(t => enabledToolIds.includes(t.id));
+  const disabled = AVAILABLE_TOOLS.filter(t => !enabledToolIds.includes(t.id));
+  const active = enabled.length
+    ? enabled.map(t => `- ${t.name}: ${t.description}`).join('\n')
+    : '(no tools enabled)';
+  const inactive = disabled.map(t => `${t.displayName} (${t.id})`).join(', ');
+  return `\n\nEnabled tools you may call this turn:\n${active}\nOther available capabilities currently OFF: ${inactive}. If a disabled tool would help, ask the user to enable it in Settings > Tools. Never call a disabled tool or assume permission was granted.`;
 }
