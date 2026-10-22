@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, NativeModules, Platform } from 'react-native';
 import type { Project } from '../types';
+import { adoptClosedProtectedBlob } from './protectedBlobCache';
 import { protectedVault } from './protectedProjectVault';
 import { protectedStudyVault } from './protectedStudyVault';
 import logger from '../utils/logger';
@@ -54,6 +55,7 @@ const seal = async (raw: string, reencryptUnlocked = true): Promise<string> => {
   const projects: Project[] = [];
   for (const p of root.state.projects as Project[]) {
     if (!p.pinVerifier) { projects.push(clearSecurity(p)); continue; }
+    adoptClosedProtectedBlob(p, { isOpen: pins.has(p.id), blobs, lastPlaintext: lastEncrypted });
     let blob = blobs.get(p.id) || p.protectedBlob;
     const pin = pins.get(p.id);
     const plain = JSON.stringify(clearSecurity(p));

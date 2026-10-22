@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, NativeModules, Platform } from 'react-native';
 import type { Conversation } from '../types';
+import { adoptClosedProtectedBlob } from './protectedBlobCache';
 
 // Ordinary chats are stored normally. Only individually PIN-protected chats
 // are persisted as encrypted, title-less placeholders.
@@ -63,6 +64,7 @@ async function sealedState(text: string, reencryptUnlocked = true): Promise<stri
       out.push(publicBody(conv));
       continue;
     }
+    adoptClosedProtectedBlob(conv, { isOpen: sessionPins.has(conv.id), blobs: latestBlobs, lastPlaintext: lastSealed });
     let blob = latestBlobs.get(conv.id) || conv.protectedBlob;
     const pin = sessionPins.get(conv.id);
     const plain = JSON.stringify(publicBody(conv));
