@@ -37,6 +37,13 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   weekFill: { width: '100%' as const, backgroundColor: `${colors.primary}88` },
   weekToday: { backgroundColor: colors.primary },
   weekText: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
+  wordDay: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm, marginHorizontal: SPACING.lg, marginTop: SPACING.sm,
+    padding: SPACING.md, borderRadius: 8, borderWidth: 1, borderColor: colors.border,
+  },
+  wordDayMain: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
+  wordDayText: { flex: 1 },
+  wordDayWord: { ...TYPOGRAPHY.h3, color: colors.text },
   goal: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm },
   goalBar: { flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' as const },
   goalFill: { height: 8, backgroundColor: colors.primary },

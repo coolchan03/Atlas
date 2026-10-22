@@ -400,6 +400,21 @@ export const languageService = {
     return words;
   },
 
+  /**
+   * The word of the day: the same short word or phrase all day, from the current level's
+   * lessons and the phone's built-in phrases, a different one each day.
+   */
+  wordOfTheDay(date = new Date()): Item | null {
+    const { language: code, level, content } = useLanguage.getState();
+    const lang = PHRASE_LANGUAGES.find((l) => l.code === code);
+    const builtIn = PHRASES_EN.map((en, i) => ({ en, t: lang?.phrases[i]?.[0] ?? '', ...(lang?.phrases[i]?.[1] ? { r: lang.phrases[i][1] } : {}) }));
+    const written = unitsForLevel(level).flatMap((u) => (u.builtIn ? [] : content[code]?.[u.id] ?? []));
+    const pool = [...written, ...builtIn].filter((x, i, all) => x.t && x.t.split(/\s+/).length <= 3 && all.findIndex((y) => y.t === x.t) === i);
+    if (!pool.length) return null;
+    const day = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5);
+    return pool[(day * 7919) % pool.length];
+  },
+
   /** Every word of a level written so far, for its checkpoint. */
   levelWords(level: LevelId, code = useLanguage.getState().language): Item[] {
     const { content } = useLanguage.getState();
