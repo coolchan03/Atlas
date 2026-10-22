@@ -141,20 +141,31 @@ export async function applyStores(remote: unknown, deletedRecordings: Record<str
   const stamps = await readStamps();
   const allowed = new Set(syncedStoreKeys());
   const changed: string[] = [];
-  for (const [key, entry] of Object.entries(remote as Record<string, StoreEntry>)) {
-    if (!allowed.has(key) || typeof entry?.value !== 'string' || typeof entry.changedAt !== 'number') continue;
-    const value = shareable(key, entry.value);
-    if (value == null || mine[key]?.value === value) continue;
-    // Recordings and the course always merge; other stores take the newer copy.
-    if (!ALWAYS_MERGE.has(key) && (mine[key]?.changedAt ?? 0) >= entry.changedAt) continue;
-    const next = combine(key, { local: await AsyncStorage.getItem(key), remote: value, deletedRecordings });
-    if (next == null) continue;
-    await AsyncStorage.setItem(key, next);
-    const shared = shareable(key, next);
-    if (shared) stamps[key] = { hash: sha256(shared), changedAt: Math.max(entry.changedAt, mine[key]?.changedAt ?? 0) };
-    changed.push(key);
+  let failed = false;
+  try {
+    for (const [key, entry] of Object.entries(remote as Record<string, StoreEntry>)) {
+      if (!allowed.has(key) || typeof entry?.value !== 'string' || typeof entry.changedAt !== 'number') continue;
+      const value = shareable(key, entry.value);
+      if (value == null || mine[key]?.value === value) continue;
+      // Recordings and the course always merge; other stores take the newer copy.
+      if (!ALWAYS_MERGE.has(key) && (mine[key]?.changedAt ?? 0) >= entry.changedAt) continue;
+      const next = combine(key, { local: await AsyncStorage.getItem(key), remote: value, deletedRecordings });
+      if (next == null) continue;
+      await AsyncStorage.setItem(key, next);
+      changed.push(key);
+      const shared = shareable(key, next);
+      if (shared) stamps[key] = { hash: sha256(shared), changedAt: Math.max(entry.changedAt, mine[key]?.changedAt ?? 0) };
+    }
+    await AsyncStorage.setItem(STAMPS, JSON.stringify(stamps));
+  } catch (error) {
+    failed = true;
+    throw error;
+  } finally {
+    // A later write can fail after earlier stores committed. Reload those stores now:
+    // retries skip equal disk values, and stale live state would overwrite the received data.
+    await rehydrateStores(changed).catch(error => {
+      if (!failed) throw error;
+    });
   }
-  await AsyncStorage.setItem(STAMPS, JSON.stringify(stamps));
-  await rehydrateStores(changed);
   return changed;
 }
