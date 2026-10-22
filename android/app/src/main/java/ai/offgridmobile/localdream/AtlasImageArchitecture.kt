@@ -5,6 +5,7 @@ package ai.offgridmobile.localdream
  */
 internal object AtlasImageArchitecture {
     private val supported = setOf("sd15", "sdxl", "flux", "z_image", "anima", "chroma")
+    private val animaName = Regex("(^|[^a-z0-9])anima[0-9]*([^a-z0-9]|$)")
     fun supported(family: String): Boolean = family in supported
 
     fun classify(fileName: String, architecture: String = "", tensorKeys: String = ""): String {
@@ -16,7 +17,8 @@ internal object AtlasImageArchitecture {
             name.contains("base-v7") || name.contains("auraflow") ||
             arch == "auraflow") return "auraflow"
         if (name.contains("chroma") || arch == "chroma") return "chroma"
-        if (name.contains("anima") || arch == "anima") return "anima"
+        // Animagine and ordinary words such as animation are not Anima family hints.
+        if (animaName.containsMatchIn(name) || arch == "anima") return "anima"
         if (name.contains("z_image") || name.contains("z-image") ||
             name.contains("zimage") || arch in setOf("lumina2", "z_image", "z-image")) return "z_image"
         if (arch == "flux" || (keys.contains("double_blocks.") &&

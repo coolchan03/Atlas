@@ -17,6 +17,25 @@ class AtlasImageArchitectureTest {
         assertEquals("unknown", AtlasImageArchitecture.classify("qwen3-4b.gguf", "qwen3"))
     }
 
+    @Test fun doesNotMistakeAnimagineOrAnimationNamesForAnima() {
+        listOf("animagine-xl.safetensors", "animation-style.safetensors", "animal-portraits.safetensors")
+            .forEach { name ->
+                assertEquals(name, "sdxl", AtlasImageArchitecture.classify(name,
+                    tensorKeys = "conditioner.embedders.1.model.weight"))
+            }
+        assertEquals("sd15", AtlasImageArchitecture.classify("animal-portrait.safetensors",
+            tensorKeys = "model.diffusion_model.input_blocks.0.weight"))
+        assertEquals("unknown", AtlasImageArchitecture.classify("animation.gguf"))
+    }
+
+    @Test fun keepsAnimaNamesAndArchitectureMetadataRecognized() {
+        listOf("anima.safetensors", "Anima2-Q4_K_M.gguf", "anima-preview2_q4_K_M.gguf",
+            "anima-aesthetic-v1.1.safetensors", "custom_anima-turbo.gguf").forEach { name ->
+            assertEquals(name, "anima", AtlasImageArchitecture.classify(name))
+        }
+        assertEquals("anima", AtlasImageArchitecture.classify("renamed.gguf", "anima"))
+    }
+
     @Test fun rejectsAuraFlowWithoutSilentlyTreatingPonyAsFluxOrText() {
         assertEquals("auraflow", AtlasImageArchitecture.classify("base-v7-Q4_0.gguf", "auraflow"))
         assertFalse(AtlasImageArchitecture.supported("auraflow"))
