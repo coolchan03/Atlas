@@ -43,20 +43,33 @@ export async function sendMissingAudio(
 }
 
 const expected = new Map<string, number>();
+const receiving = new Map<string, Promise<boolean>>();
+
+/** Serializes each recording's pieces so duplicate native events cannot race file promotion. */
+export async function receiveAudio(chunk: AudioChunk): Promise<boolean> {
+  const previous = receiving.get(chunk.id) ?? Promise.resolve(false);
+  const current = previous.catch(() => false).then(() => writeAudioChunk(chunk));
+  receiving.set(chunk.id, current);
+  try { return await current; }
+  finally { if (receiving.get(chunk.id) === current) receiving.delete(chunk.id); }
+}
 
 /** Writes one received piece; moves the file into place after the last piece. True when complete. */
-export async function receiveAudio(chunk: AudioChunk): Promise<boolean> {
+async function writeAudioChunk(chunk: AudioChunk): Promise<boolean> {
   const { id, index, total, data } = chunk;
   if (!ID.test(id) || !Number.isInteger(index) || !Number.isInteger(total) || index < 0 || index >= total || total > 4096 || typeof data !== 'string')
     throw new Error('Damaged recording piece');
-  const part = `${audioPathFor(id)}.part`;
+  const final = audioPathFor(id);
+  // Recording IDs are immutable. A late duplicate must never replace playable audio.
+  if (await RNFS.exists(final)) { expected.delete(id); return true; }
+  const part = `${final}.part`;
   await RNFS.mkdir(dir());
   if (index === 0) await RNFS.writeFile(part, data, 'base64');
   else if (expected.get(id) === index) await RNFS.appendFile(part, data, 'base64');
   else { expected.delete(id); throw new Error('Recording pieces arrived out of order; it is sent again next sync.'); }
   if (index + 1 < total) { expected.set(id, index + 1); return false; }
   expected.delete(id);
-  if (await RNFS.exists(audioPathFor(id))) await RNFS.unlink(audioPathFor(id));
-  await RNFS.moveFile(part, audioPathFor(id));
+  if (await RNFS.exists(final)) return true;
+  await RNFS.moveFile(part, final);
   return true;
 }
