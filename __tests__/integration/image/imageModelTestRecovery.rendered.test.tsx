@@ -38,6 +38,21 @@ async function setup(settings: Record<string, unknown> = {}) {
 }
 
 describe('image model Test shares runtime recovery', () => {
+  it('lets the user choose CPU directly when both GPU probes fail', async () => {
+    const { boundary, rtl, view } = await setup();
+    boundary.diffusion.module.getAtlasImageGpuDiagnostics.mockResolvedValue(
+      { enumerated: false, detail: 'Vulkan unavailable' },
+    );
+    boundary.diffusion.module.getAtlasImageGpuDiagnosticsFor.mockResolvedValue(
+      { enumerated: false, detail: 'OpenCL unavailable' },
+    );
+    rtl.fireEvent.press(view.getByTestId('image-engine-cpu'));
+    rtl.fireEvent.press(view.getByText('Start test'));
+    await rtl.waitFor(() => expect(view.getByText(/Generated image/)).toBeTruthy());
+    expect(boundary.diffusion.module.generateImage.mock.calls[0][0].computeBackend).toBe('cpu');
+    view.unmount();
+  });
+
   it('renders with OpenCL after Vulkan fails and shows the backend used', async () => {
     const { boundary, rtl, view } = await setup();
     boundary.diffusion.module.generateImage.mockRejectedValueOnce(

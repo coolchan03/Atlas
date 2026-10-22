@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, ScrollView, Share, Switch, Text, TouchableOpa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
+import { ImageBackendModePicker } from '../components/ImageBackendModePicker';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors } from '../theme';
 import type { GeneratedImage, ONNXImageModel } from '../types';
@@ -81,6 +82,8 @@ function ImageGpuControls(p: ViewContext) {
   if (p.model?.backend !== 'sdcpp') return null;
   const diagnostic = p.gpuDiagnostic;
   return <>
+    <ImageBackendModePicker backend={p.model.backend} />
+    <Text style={p.styles.small}>If Vulkan and OpenCL are unavailable, select CPU above and run the test again. CPU generation may be very slow.</Text>
     <View style={[p.styles.switchRow, p.styles.spaced]}>
       <Text style={p.styles.switchLabel}>Include style LoRAs</Text>
       <Switch accessibilityLabel="Include style LoRAs" disabled={p.running} value={p.includeLoRA} onValueChange={p.onLoRA} />
