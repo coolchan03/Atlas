@@ -255,5 +255,17 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,
   }));
   useStudyStore.getState().add(BRIEF_PROJECT, r);
+  preRenderBriefing(r);
   return r;
+}
+
+/** Saves the briefing's audio in the background now, so it starts at once and plays without gaps. */
+function preRenderBriefing(r: StudyResult): void {
+  try {
+    const { listVoices } = require('../atlasVoice/tts');
+    const { castLine, preRenderEpisode } = require('../atlasVoice/podcastAudio');
+    listVoices('en').then((voices: { name: string }[]) => preRenderEpisode(`${BRIEF_PROJECT}-${r.createdAt}`,
+      (r.podcast ?? []).map((l) => ({ text: l.text, ...castLine(l.host, r.hosts ?? 2, voices) }))))
+      .catch(() => undefined);
+  } catch { /* no voice engine: it is spoken live */ }
 }

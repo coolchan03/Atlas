@@ -7,6 +7,7 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
+import { castLine, playLine, stopPodcastAudio } from '../atlasVoice/podcastAudio';
 import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { deckSlides, savePptx } from '../study/pptx';
@@ -16,7 +17,6 @@ import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/gener
 import { dueItems, streakFrom, useStudyProgress } from '../study/progress';
 import { Switch } from 'react-native';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
-import { hostVoices } from '../atlasVoice/neural';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExportAvailable, VideoExportCancelled, type SavedVideo, type VideoProgress } from '../services/videoExport';
 
@@ -89,11 +89,7 @@ export const StudyScreen: React.FC = () => {
     return () => sub.remove();
   }, [view]);
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
-  const castVoice = (host: string, hosts: number) => {
-    const i = host === 'A' ? 0 : host === 'B' ? 1 : 2;
-    if (voices.length >= 2) { const names = hostVoices(voices); return { voice: names[i % names.length], pitch: 1 }; }
-    return { voice: '', pitch: hosts === 1 ? 1 : [1.12, 0.86, 1.0][i] };
-  };
+  const castVoice = (host: string, hosts: number) => castLine(host, hosts, voices);
   const rate = useAtlasVoiceStore((s) => s.rate);
   const [itemStart, setItemStart] = useState(0);
   const [resumeAt, setResumeAt] = useState(0);
@@ -161,7 +157,8 @@ export const StudyScreen: React.FC = () => {
     } finally { setBusy(null); }
   };
 
-  const play = async (items: { text: string; pitch: number; voice?: string }[], from = 0) => {
+  /** Plays from line `from`. A podcast (with `audioKey`) plays from pre-rendered audio files. */
+  const play = async (items: { text: string; pitch: number; voice?: string }[], from = 0, audioKey?: string) => {
     const my = ++playToken.current;
     stop();
     stopRef.current = false;
@@ -170,7 +167,7 @@ export const StudyScreen: React.FC = () => {
     for (let i = Math.max(0, from); i < items.length; i++) {
       if (stopRef.current || playToken.current !== my) break;
       setPlaying(i); setResumeAt(i); setItemStart(Date.now());
-      const ok = await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
+      const ok = audioKey ? await playLine(audioKey, items, i) : await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
       if (!ok || playToken.current !== my) break;
       if (i === items.length - 1) finished = true;
     }
@@ -179,7 +176,7 @@ export const StudyScreen: React.FC = () => {
     setPlaying(null);
     if (finished) setResumeAt(0);
   };
-  const halt = () => { playToken.current++; stopRef.current = true; stop(); keepScreenOn(false); setPlaying(null); };
+  const halt = () => { playToken.current++; stopRef.current = true; stop(); stopPodcastAudio(); keepScreenOn(false); setPlaying(null); };
 
   const [exporting, setExporting] = useState<VideoProgress | null>(null);
   const [savedVideo, setSavedVideo] = useState<SavedVideo | null>(null);
@@ -314,11 +311,11 @@ export const StudyScreen: React.FC = () => {
                 const items = v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }));
                 return (
                   <MediaBar durations={items.map((x) => secs(x.text))} playing={playing} resumeAt={resumeAt} itemStart={itemStart} colors={colors}
-                    onPlay={(i) => play(items, i)} onPause={halt} label="podcast" />
+                    onPlay={(i) => play(items, i, `${projectId}-${v.createdAt}`)} onPause={halt} label="podcast" />
                 );
               })()}
               {v.podcast.map((l, i) => (
-                <TouchableOpacity key={i} activeOpacity={0.8} onPress={() => play(v.podcast!.map((x) => ({ text: x.text, ...castVoice(x.host, v.hosts ?? 2) })), i)}
+                <TouchableOpacity key={i} activeOpacity={0.8} onPress={() => play(v.podcast!.map((x) => ({ text: x.text, ...castVoice(x.host, v.hosts ?? 2) })), i, `${projectId}-${v.createdAt}`)}
                   style={[card, { borderLeftWidth: 4, borderLeftColor: l.host === 'A' ? '#2563EB' : l.host === 'B' ? '#D97706' : '#16A34A', opacity: playing === null || playing === i ? 1 : 0.55 }]}>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>{(v.hosts ?? 2) === 1 ? 'Narrator' : `Host ${l.host}`}</Text>
                   <Text style={{ color: colors.text, fontSize: 16 }}>{l.text}</Text>
