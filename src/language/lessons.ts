@@ -55,7 +55,8 @@ const alike = (a: string, b: string) =>
  * The right answer among `wrong` distractors. With `hard`, distractors that look like the
  * answer are picked first, so recognising it takes real knowledge, not a lucky guess.
  */
-const options = (right: string, pool: string[], r: () => number, o: { wrong?: number; hard?: boolean } = {}) => {
+const options = (right: string, pool: string[], o: { r: () => number; wrong?: number; hard?: boolean }) => {
+  const { r } = o;
   const others = shuffle([...new Set(pool.filter((p) => p !== right))], r);
   const picked = o.hard ? others.sort((a, b) => alike(b, right) - alike(a, right)) : others;
   return shuffle([right, ...picked.slice(0, o.wrong ?? 3)], r);
@@ -119,12 +120,12 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
     const b = blankOut(item.t, r);
     if (b) {
       const pool = items.flatMap((x) => words(x.t)).map((x) => x.replace(/[.!?¡¿,]/g, '')).filter((x) => x.length > 1);
-      return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], r, d), answer: b.answer };
+      return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], { r, ...d }), answer: b.answer };
     }
     return exerciseFor('meaning', item, ctx);
   }
-  if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), r, d), answer: item.en };
-  return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r, d), answer: item.t };
+  if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), { r, ...d }), answer: item.en };
+  return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), { r, ...d }), answer: item.t };
 }
 
 /** The kinds for a lesson of `length` exercises: recognition first, then production. */
