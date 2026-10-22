@@ -9,6 +9,7 @@ import * as DT from '../../atlasTools/deviceTools';
 import { openEmailDraft, openTextDraft, openPhoneDialer } from './contactDrafts';
 import { createCodeProject } from './codeProjects';
 import { lookupNamedContact } from './contactLookup';
+import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -65,6 +66,10 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return handleGetDeviceInfo(call.arguments.info_type);
     case 'read_health_summary':
       return require('./healthConnect').readHealthSummary(call.arguments?.days ?? 1);
+    case 'get_environment':
+      return readDeviceSensors();
+    case 'scan_nearby_devices':
+      return scanNearbyDevices();
     case 'search_knowledge_base': {
       const q = requireString(call, 'query');
       if (!q) throw new Error('Missing required parameter: query');

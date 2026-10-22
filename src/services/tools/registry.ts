@@ -71,6 +71,16 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'get_environment', name: 'get_environment', displayName: 'Phone environment',
+    description: 'Read Wi-Fi and Bluetooth state, air pressure, physical ambient temperature and trend if those sensors are installed. Local, on-demand, not a weather forecast.',
+    icon: 'thermometer', parameters: {},
+  },
+  {
+    id: 'scan_nearby_devices', name: 'scan_nearby_devices', displayName: 'Nearby devices',
+    description: 'Ask user approval and Android nearby-device permission before a seven-second BLE scan. Returns names and signal strengths, no MAC addresses.',
+    icon: 'bluetooth', parameters: {},
+  },
+  {
     id: 'get_device_info',
     name: 'get_device_info',
     displayName: 'Device Info',
