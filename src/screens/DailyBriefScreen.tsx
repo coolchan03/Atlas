@@ -8,6 +8,7 @@ import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
 import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
+import { englishWordOfDay } from '../atlasTools/englishWordOfDay';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
@@ -56,6 +57,7 @@ export const DailyBriefScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const wide = useWideLayout();
   const prefs = useBriefPrefs();
+  const englishWord = englishWordOfDay();
   const list = useStudyStore((s) => s.saved[BRIEF_PROJECT]) || EMPTY;
   const remove = useStudyStore((s) => s.remove);
   const today = list.find((r) => todayKey(new Date(r.createdAt)) === todayKey());
@@ -153,6 +155,13 @@ export const DailyBriefScreen: React.FC = () => {
             ))}
           </Card>
         )}
+
+        <Card title="English · Word of the Day" subtitle="A new English vocabulary word each day, included in your spoken news briefing." testID="brief-english-word-of-day">
+          <Text style={styles.title}>{englishWord.word}</Text>
+          <Text style={styles.meta}>{englishWord.part}</Text>
+          <Text style={styles.body}>{englishWord.meaning}</Text>
+          <Text style={styles.desc}>Example: {englishWord.example}</Text>
+        </Card>
 
         <Card title="Your interests" subtitle="Broad ones (U.S., world, business, tech, science, health, sports) use top-story sections; anything else is searched.">
           <View style={styles.chips}>

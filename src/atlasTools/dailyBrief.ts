@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Source, StudyResult, useStudyStore, writeEpisode } from '../study/engine';
+import { englishWordOfDay } from './englishWordOfDay';
 import { WORDS_PER_MINUTE, avoided, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, pickStories, similarity, splitOutlet, spokenMinutes, storyBudget, storyWords, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
@@ -231,6 +232,14 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
       : 'Could not reach the news and found nothing in the offline library. Check your internet connection and try again.');
   }
 
+  // The English Word of the Day belongs to the news briefing, not the foreign-language board.
+  // Use a curated definition to avoid inventing a news event or a word meaning.
+  const english = englishWordOfDay();
+  outline.push({
+    topic: `English Word of the Day: ${english.word}`,
+    sources: [{ n: outline.length + 1, doc: 'Atlas English vocabulary', part: 1,
+      text: `This is an English vocabulary segment, NOT a news story. Word: ${english.word}. Part of speech: ${english.part}. Meaning: ${english.meaning}. Example sentence: ${english.example}. Give a brief, approachable explanation, then transition to the ending.` }],
+  });
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const rules = avoid.length ? `Never bring up: ${avoid.join(', ')}.` : undefined;
   const withExperts = p.experts && gotNews && voicesAvailable >= 2;

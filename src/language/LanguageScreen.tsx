@@ -11,7 +11,6 @@ import { unitsForLevel } from './curriculum';
 import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
 import { createStyles } from './LanguageScreen.styles';
-import { speakIn } from '../atlasVoice/tts';
 
 /**
  * Learn a language: four levels (Basic, Intermediate, Advanced, Fluent), each a board game.
@@ -90,7 +89,6 @@ export const LanguageScreen: React.FC = () => {
           <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(1, todayXp / goal) * 100}%` }]} /></View>
           <Text style={styles.progressText}>{todayXp >= goal ? 'Goal met' : `${todayXp} / ${goal} XP today`}</Text>
         </TouchableOpacity>
-        <WordOfTheDay />
         <WeekProgress onWordBook={() => navigation.navigate('WordBook')} />
         <View style={styles.extras}>
           <Text style={styles.progressText}>Square {Math.min(current + 1, spaces.length)} of {spaces.length} · {doneCount} done</Text>
@@ -153,32 +151,6 @@ function PrepareLevel({ level }: { level: LevelId }) {
         </>
       ) : <Text style={styles.progressText}>{cefr} is ready: every lesson and story works offline.</Text>}
       {!!live.error && !running && <Text style={styles.progressText}>{live.error}</Text>}
-    </View>
-  );
-}
-
-/** The word of the day: tap to hear it, and save it to My words. */
-function WordOfTheDay() {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const code = useLanguage((s) => s.language);
-  useLanguage((s) => s.myWords);
-  const word = languageService.wordOfTheDay();
-  if (!word) return null;
-  const saved = (useLanguage.getState().myWords[code] ?? []).some((w) => w.t === word.t);
-  return (
-    <View style={styles.wordDay} testID="language-word-of-day">
-      <TouchableOpacity onPress={() => speakIn(word.t, code, 'lesson')} accessibilityLabel={`Play ${word.t}`} style={styles.wordDayMain}>
-        <Icon name="volume-2" size={18} color={colors.primary} />
-        <View style={styles.wordDayText}>
-          <Text style={styles.progressText}>Word of the day</Text>
-          <Text style={styles.wordDayWord}>{word.t}{word.r ? ` (${word.r})` : ''}</Text>
-          <Text style={styles.progressText}>{word.en}</Text>
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity disabled={saved} onPress={() => languageService.saveWords([{ t: word.t, en: word.en }])} testID="language-word-of-day-save">
-        <Text style={saved ? styles.extraOff : styles.extraOn}>{saved ? 'Saved' : 'Save'}</Text>
-      </TouchableOpacity>
     </View>
   );
 }
