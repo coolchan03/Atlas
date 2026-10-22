@@ -578,7 +578,7 @@ async function callLiteRTForLoop(
 const TOOL_BEHAVIOR_GUIDANCE = '\n\nMake good use of the tools available to you. If you are uncertain or lack current information, use the appropriate tool rather than guessing. Never refuse or say you cannot help when a tool is available. For multiple distinct items, make a separate tool call for each. Call tools silently — do not announce them first. To find or look up content, prefer a general search tool (e.g. a tool whose name contains "search" or "fetch") before specialized query tools. If a tool returns an error, try a different tool that could accomplish the task before giving up.';
 
 /** Tools that need precise time-of-day to resolve relative phrases like "in half an hour". */
-const TIME_SENSITIVE_TOOL_IDS = ['add_calendar_event', 'calendar_events', 'schedule_message_draft', 'suggest_contextual_texts'];
+const TIME_SENSITIVE_TOOL_IDS = ['create_calendar_event', 'read_calendar_events', 'add_calendar_event', 'calendar_events', 'schedule_message_draft', 'suggest_contextual_texts'];
 
 // Shared current-time parts, computed at send-time (on-device models have no clock).
 function nowParts() {

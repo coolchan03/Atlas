@@ -256,6 +256,19 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'build_run_test_remote', name: 'build_run_test_remote', displayName: 'Multi-language code runner',
+    description: 'With explicit per-run approval, send a saved Atlas code project to a trusted user-configured HTTPS Piston server to compile and run Python, Java, Kotlin, C, C++, Rust, TypeScript, or any installed runtime, and optionally execute a separate test entrypoint. Source leaves device only after consent. Requires a server you own or trust; there is no free public runner configured.',
+    icon: 'terminal', requiresNetwork: true,
+    parameters: {
+      project: { type: 'string', description: 'Existing Atlas code-project name', required: true },
+      main: { type: 'string', description: 'Top-level source filename that executes first (e.g. main.py)', required: true },
+      language: { type: 'string', description: 'Installed Piston language or alias, e.g. python or rust', required: true },
+      runner_url: { type: 'string', description: 'Trusted HTTPS server root that implements Piston API v2', required: true },
+      test_entry: { type: 'string', description: 'Optional test program filename to compile/run after main program' },
+      stdin: { type: 'string', description: 'Optional program input, maximum 3000 characters' },
+    },
+  },
+  {
     id: 'build_run_test_code', name: 'build_run_test_code', displayName: 'Build, run and test JavaScript',
     description: 'After user approval, compile and execute dependency-free JavaScript source files from a saved code project, with automated *.test.js assertions, in a temporary offline WebView with network and native file access blocked. Reports passing and failed tests. Other languages need their own toolchains.',
     icon: 'play', parameters: {

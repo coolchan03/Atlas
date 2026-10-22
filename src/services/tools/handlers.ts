@@ -11,6 +11,7 @@ import { requestToolAccess } from './toolAccess';
 import { suggestContextualTexts } from './contextualTextSuggestions';
 import { createCodeProject } from './codeProjects';
 import { buildRunTestJavascript } from './codeExecution';
+import { buildRunTestRemote } from './remoteCodeRunner';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
@@ -171,6 +172,20 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'create_web_page':
       return DT.createWebPage(String(call.arguments?.name ?? 'site'), String(call.arguments?.html ?? ''));
+    case 'build_run_test_remote': {
+      const project = requireString(call, 'project');
+      const main = requireString(call, 'main');
+      const language = requireString(call, 'language');
+      const runnerUrl = requireString(call, 'runner_url');
+      if (!project || !main || !language || !runnerUrl) {
+        throw new Error('Project, main source file, language and HTTPS runner URL are required.');
+      }
+      return buildRunTestRemote({
+        project, main, language, runner_url: runnerUrl,
+        test_entry: typeof call.arguments?.test_entry === 'string' ? call.arguments.test_entry : undefined,
+        stdin: typeof call.arguments?.stdin === 'string' ? call.arguments.stdin : undefined,
+      });
+    }
     case 'build_run_test_code': {
       const name = requireString(call, 'project');
       if (!name) throw new Error('A project name is required.');

@@ -34,7 +34,7 @@ jest.mock('@react-navigation/native', () => ({
  *  turns them OFF — the turn then runs the tool-FREE pipeline (the plain chat turn of the device
  *  report; the tool loop renders an inline "_(No response)_" bubble instead of this card). */
 function disableDefaultToolsViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>) {
-  for (const id of ['web_search', 'read_url', 'search_knowledge_base']) h.enableToolViaUI(id);
+  for (const id of ['web_search', 'read_url', 'search_knowledge_base', 'request_tool_access']) h.enableToolViaUI(id);
 }
 
 describe('stale text failure card cleared on a NEW attempt (rendered) — device IMG 00:23', () => {
@@ -57,10 +57,10 @@ describe('stale text failure card cleared on a NEW attempt (rendered) — device
     await rtl.waitFor(() => { expect(view.queryByTestId('model-failure-text')).not.toBeNull(); }, { timeout: 6000 });
     expect(view.queryByText(/No response/)).not.toBeNull();
 
-    // ---- Turn 2: the user starts a NEW attempt. The scripted completion streams and HOLDS
-    // mid-stream so the live-stream state is a real, observable frame — not a race.
+    // ---- Turn 2: the user starts a NEW attempt. The native stream holds
+    // mid-answer, so do not await the send until releaseStream unblocks it.
+    const pendingSend = h.send('try again please', { text: 'Fresh reply after the failure.', pauseAfter: 'Fresh' } as never);
     try {
-      await h.send('try again please', { text: 'Fresh reply after the failure.', pauseAfter: 'Fresh' } as never);
 
       // The new attempt is LIVE: stop control up, streamed tokens rendering.
       await rtl.waitFor(() => { expect(view.queryByTestId('stop-button')).not.toBeNull(); }, { timeout: 6000 });
@@ -72,6 +72,7 @@ describe('stale text failure card cleared on a NEW attempt (rendered) — device
       expect(view.queryByText(/No response/)).toBeNull();
     } finally {
       h.boundary.llama!.releaseStream(); // never leave the held native completion parked
+      await pendingSend;
     }
 
     // Terminal artifact: the new reply renders, and the stale card has not come back.
