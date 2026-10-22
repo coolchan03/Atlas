@@ -51,7 +51,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const name = requireString(call, 'tool_name');
       if (!name) throw new Error('A tool name is required.');
       const argumentsJson = typeof call.arguments?.arguments_json === 'string' ? call.arguments.arguments_json : undefined;
-      return requestToolAccess(name, argumentsJson,
+      return requestToolAccess({ toolName: name, json: argumentsJson, conversationId: call.context?.conversationId },
         (target, parsed) => dispatchTool({ ...call, name: target, arguments: parsed }));
     }
     case 'web_search': {

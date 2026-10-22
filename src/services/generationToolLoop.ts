@@ -310,7 +310,7 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
         tc.arguments = { ...tc.arguments, query: fallbackQuery };
       }
     }
-    if (ctx.projectId) tc.context = { projectId: ctx.projectId };
+    tc.context = { projectId: ctx.projectId, conversationId: ctx.conversationId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
     const result = await executeToolCallSafely(tc, ctx.allowedToolNames);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
@@ -497,7 +497,7 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
     }
     ctx.callbacks?.onToolCallStart?.(name, args as Record<string, any>);
     const toolCall: ToolCall = { id: `native-tc-${Date.now()}`, name, arguments: args as Record<string, any> };
-    if (ctx.projectId) (toolCall as any).context = { projectId: ctx.projectId };
+    toolCall.context = { projectId: ctx.projectId, conversationId: ctx.conversationId };
     // Route EVERY outcome through the same contract as the JS loop: a throw becomes a
     // typed error result (it never crashes the native turn), and the string handed to
     // the model (toolResultModelContent) is never empty — a failure/empty is stated

@@ -7,7 +7,7 @@ jest.mock('../../../../src/stores/appStore', () => ({
 import { Alert } from 'react-native';
 import { useAppStore } from '../../../../src/stores/appStore';
 import {
-  confirmToolEnable, parseRequestedToolArguments, requestToolAccess,
+  confirmToolEnable, requestToolAccess,
 } from '../../../../src/services/tools/toolAccess';
 
 const run = jest.fn().mockResolvedValue('performed requested action');
@@ -34,36 +34,36 @@ describe('disabled-tool enable and execute flow', () => {
     await expect(promise).resolves.toBe('once');
   });
   it('denies execution without approval', async () => {
-    const action = requestToolAccess('calculator', '{"expression":"1+1"}', run);
+    const action = requestToolAccess({ toolName: 'calculator', json: '{"expression":"1+1"}' }, run);
     choose('Not now');
     await expect(action).resolves.toContain('declined');
     expect(run).not.toHaveBeenCalled();
     expect(updateSettings).not.toHaveBeenCalled();
   });
   it('allows once and executes exactly the selected built-in tool', async () => {
-    const action = requestToolAccess('calculator', '{"expression":"1+1"}', run);
+    const action = requestToolAccess({ toolName: 'calculator', json: '{"expression":"1+1"}' }, run);
     choose('Once');
     expect(await action).toContain('approved for this request only');
     expect(run).toHaveBeenCalledWith('calculator', { expression: '1+1' });
     expect(updateSettings).not.toHaveBeenCalled();
   });
   it('always enables and executes once', async () => {
-    const action = requestToolAccess('calculator', '{"expression":"3+3"}', run);
+    const action = requestToolAccess({ toolName: 'calculator', json: '{"expression":"3+3"}' }, run);
     choose('Always');
     await action;
     expect(updateSettings).toHaveBeenCalledWith({ enabledTools: ['request_tool_access', 'calculator'] });
     expect(run).toHaveBeenCalledTimes(1);
   });
   it('blocks arbitrary plugin names, malformed JSON and self-invocation', async () => {
-    await expect(requestToolAccess('evil_script', '{}', run)).rejects.toThrow();
-    await expect(requestToolAccess('request_tool_access', '{}', run)).rejects.toThrow();
-    await expect(requestToolAccess('calculator', '[2]', run)).rejects.toThrow();
-    await expect(requestToolAccess('calculator', '{"__proto__":{}}', run)).rejects.toThrow();
+    await expect(requestToolAccess({ toolName: 'evil_script', json: '{}' }, run)).rejects.toThrow();
+    await expect(requestToolAccess({ toolName: 'request_tool_access', json: '{}' }, run)).rejects.toThrow();
+    await expect(requestToolAccess({ toolName: 'calculator', json: '[2]' }, run)).rejects.toThrow();
+    await expect(requestToolAccess({ toolName: 'calculator', json: '{"__proto__":{}}' }, run)).rejects.toThrow();
     expect(run).not.toHaveBeenCalled();
   });
   it('runs already-enabled tools without altering settings', async () => {
     settings.enabledTools = ['request_tool_access', 'calculator'];
-    expect(await requestToolAccess('calculator', '{"expression":"4"}', run)).toContain('approved for this request only');
+    expect(await requestToolAccess({ toolName: 'calculator', json: '{"expression":"4"}' }, run)).toContain('approved for this request only');
     expect(Alert.alert).not.toHaveBeenCalled();
     expect(updateSettings).not.toHaveBeenCalled();
     expect(run).toHaveBeenCalledTimes(1);
