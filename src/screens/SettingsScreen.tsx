@@ -38,6 +38,12 @@ type NavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+const confirmBackupRestore = (onConfirm: () => void) => Alert.alert(
+  'Restore backup?',
+  'This replaces your current agents, projects, chats and settings with the ones in the backup file.',
+  [{ text: 'Cancel', style: 'cancel' }, { text: 'Choose file', onPress: onConfirm }],
+);
+
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
@@ -162,7 +168,7 @@ export const SettingsScreen: React.FC = () => {
             placeholder="What agents call you"
             placeholderTextColor={colors.textMuted}
             accessibilityLabel="Your name, used by agents"
-            style={{ color: colors.text, minWidth: 150, textAlign: 'right', paddingVertical: 4 }}
+            style={styles.userNameInput}
           />
         </View>
 
@@ -244,7 +250,7 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} onPress={() => { setBackupPassword(''); setBackupPasswordAction('import'); }}>
+            <TouchableOpacity style={styles.navItem} onPress={() => confirmBackupRestore(() => { setBackupPassword(''); setBackupPasswordAction('import'); })}>
               <View style={styles.navItemIcon}><Icon name="unlock" size={16} color={colors.textSecondary} /></View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Restore encrypted backup</Text>
@@ -253,17 +259,14 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => {
-              Alert.alert('Restore backup?', 'This replaces your current agents, projects, chats and settings with the ones in the backup file.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Choose file', onPress: async () => {
-                  try {
-                    const n = await importBackup();
-                    if (n) Alert.alert('Restored', `${n} items restored. Close the app completely and open it again to finish.`);
-                  } catch (e: any) {
-                    if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Restore failed', String(e?.message || e));
-                  }
-                } },
-              ]);
+              confirmBackupRestore(async () => {
+                try {
+                  const n = await importBackup();
+                  if (n) Alert.alert('Restored', `${n} items restored. Close the app completely and open it again to finish.`);
+                } catch (e: any) {
+                  if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Restore failed', String(e?.message || e));
+                }
+              });
             }}>
               <View style={styles.navItemIcon}>
                 <Icon name="upload" size={16} color={colors.textSecondary} />
@@ -362,6 +365,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, marginBottom: SPACING.lg, ...shadows.small,
   },
   themeToggleLabel: { ...TYPOGRAPHY.body, color: colors.text },
+  userNameInput: { color: colors.text, minWidth: 150, textAlign: 'right' as const, paddingVertical: 4 },
   themeSelector: { flexDirection: 'row' as const, backgroundColor: colors.surfaceLight, borderRadius: 8, padding: 3, gap: 2 },
   themeSelectorOption: { width: 34, height: 30, borderRadius: 6, alignItems: 'center' as const, justifyContent: 'center' as const },
   themeSelectorOptionActive: { backgroundColor: colors.primary },

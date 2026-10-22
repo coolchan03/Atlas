@@ -11,7 +11,7 @@ function portableCrypto() {
 import RNFS from 'react-native-fs';
 import { pick, saveDocuments, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
-import { collectProjectFiles, restoreProjectFiles } from './projectBackupFiles';
+import { collectProjectFiles, restoreProjectFiles, validateProjectFiles } from './projectBackupFiles';
 import type { ProjectBackupFile } from './projectBackupFiles';
 import { rehydrateStores } from './storeRegistry';
 import { keepThisDevice } from './deviceSettings';
@@ -203,7 +203,7 @@ export async function keepDeviceProtected(key: string, restored: string): Promis
   } catch { return restored; }
 }
 
-/** Returns the number of restored entries. The app must be closed and reopened afterwards. */
+/** Restores reviewed entries and loads them into the running app. Returns their count. */
 export async function importBackup(password?: string): Promise<number | null> {
   const source = await readPortableBackup(password);
   if (!source) return null;
@@ -220,6 +220,17 @@ export async function importBackup(password?: string): Promise<number | null> {
   if (data.version === 2 && !projectPair && data.projectFiles?.length) throw new Error('Project file backup is missing the project records.');
   const projectIds: string[] = projectPair
     ? JSON.parse(projectPair[1]).state.projects.map((p: { id: string }) => p.id) : [];
+  const restoresChats = pairs.some(([key]) => key === 'local-llm-chat-storage');
+  if (restoresChats && !encrypted) throw new Error('Chat restoration requires an encrypted backup.');
+  if (data.version === 2) validateProjectFiles(data.projectFiles as ProjectBackupFile[], projectIds);
+  const { isChatGenerationRunning, relockProtectedChats } = require('../stores/encryptedChatStorage');
+  if (isChatGenerationRunning()) throw new Error('Finish or stop the current reply before restoring a backup.');
+  if (restoresChats || projectPair) {
+    // Flush live edits before merging retained records. Restored sealed placeholders must
+    // arrive with no session PIN, or normal persistence would encrypt their empty bodies.
+    await relockProtectedChats();
+    await require('../stores/protectedProjectStorage').relockProjects();
+  }
   // Do not claim restoration succeeded if a document is missing or damaged.
   // Older v1 backups are supported without replacing existing knowledge-base data.
   const restoredDocs = data.version === 2
@@ -230,9 +241,8 @@ export async function importBackup(password?: string): Promise<number | null> {
   const merged = await Promise.all(pairs.map(async ([key, value]) => [key, await keepDeviceProtected(key, value)] as [string, string]));
   const chatPair = merged.find(([key]) => key === 'local-llm-chat-storage');
   const settingsPairs = merged.filter(([key]) => key !== 'local-llm-chat-storage');
-  if (chatPair && !encrypted) throw new Error('Chat restoration requires an encrypted backup.');
-  // Restore via the selected-chat storage adapter. Ordinary chats are readable
-  // on disk by design; protected chats must never enter a portable backup.
+  // Restore through the chat storage adapter. Ordinary chats remain readable;
+  // protected chats keep the sealed ciphertext supplied by the encrypted backup.
   if (chatPair) {
     const { encryptedChatStorage } = require('../stores/encryptedChatStorage');
     await encryptedChatStorage.setItem('local-llm-chat-storage', chatPair[1]);

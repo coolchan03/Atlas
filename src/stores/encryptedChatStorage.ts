@@ -220,7 +220,7 @@ export function onProtectedChatsRelocked(fn: () => void): () => void {
   return () => { relockListeners.delete(fn); };
 }
 let relockTimer: ReturnType<typeof setTimeout> | null = null;
-function generationRunning(): boolean {
+export function isChatGenerationRunning(): boolean {
   try {
     const st = require('./chatStore').useChatStore.getState();
     if (st.isStreaming || st.isThinking) return true;
@@ -231,7 +231,7 @@ export function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
   if (relockTimer) clearTimeout(relockTimer);
   relockTimer = setTimeout(() => {
     relockTimer = null;
-    if (generationRunning()) { scheduleRelock(5_000); return; }
+    if (isChatGenerationRunning()) { scheduleRelock(5_000); return; }
     void relockProtectedChats().then(() => relockListeners.forEach(fn => fn())).catch(() => undefined);
   }, delayMs);
 }

@@ -11,6 +11,7 @@ const mockRestore = jest.fn(async (_files: any[], _ids: string[]) => 1);
 jest.mock('../../../src/atlasTools/projectBackupFiles', () => ({
   collectProjectFiles: (...a: any[]) => mockCollect(...a as [string[]]),
   restoreProjectFiles: (...a: any[]) => mockRestore(...a as [any[], string[]]),
+  validateProjectFiles: jest.fn(),
 }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ __esModule: true, default: {
   getAllKeys: jest.fn(async () => [...mockStore.keys()]),
@@ -34,6 +35,8 @@ jest.mock('../../../src/utils/resolvePickedFileUri', () => ({
 }));
 jest.mock('../../../src/stores/encryptedChatStorage', () => ({
   encryptedChatStorage: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) },
+  isChatGenerationRunning: () => false,
+  relockProtectedChats: async () => undefined,
 }));
 const projects = () => JSON.stringify({state:{projects:[{id:'therapy',name:'Therapy',systemPrompt:'Notes'}]},version:0});
 describe('portable backup project file round trip', () => {
