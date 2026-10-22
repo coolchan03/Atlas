@@ -7,6 +7,7 @@ import android.health.connect.AggregateRecordsResponse
 import android.health.connect.HealthConnectException
 import android.health.connect.HealthConnectManager
 import android.health.connect.TimeRangeFilter
+import android.health.connect.TimeInstantRangeFilter
 import android.health.connect.datatypes.AggregationType
 import android.health.connect.datatypes.HeartRateRecord
 import android.health.connect.datatypes.StepsRecord
@@ -124,7 +125,7 @@ class AtlasHealthConnectModule(private val app: ReactApplicationContext) :
             val end = Instant.now()
             val start = LocalDate.now(ZoneId.systemDefault()).minusDays((days - 1).toLong())
                 .atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val range = TimeRangeFilter.between(start, end)
+            val range = TimeInstantRangeFilter.Builder().setStartTime(start).setEndTime(end).build()
             val out = Arguments.createMap().apply {
                 putString("start", start.toString())
                 putString("end", end.toString())
