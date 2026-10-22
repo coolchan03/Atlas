@@ -33,15 +33,37 @@ export function unitPrompt({ unit, language, level, code, known }: { unit: Unit;
   );
 }
 
-/** Checks a written lesson: enough items, translated (not copied), within the level's sentence length. */
-export function parseUnitLesson(raw: string, level: LevelGuide, code: string): { items: Item[]; tip: string } | null {
+/** Vocabulary units: five everyday sentences that use the unit's words, so lessons are not the same few lines. */
+export function sentencesPrompt({ language, level, code, words }: { language: string; level: LevelGuide; code: string; words: Item[] }): Msg[] {
+  return msgs(
+    `You are an experienced ${language} teacher. ${methodFor(level, language)}`,
+    `Write ${SENTENCES} different, natural everyday sentences in ${language}, each at most ${level.maxWords} words, each using at least one of these words: ${words.map((w) => w.t).join(', ')}.\nVary them: questions, statements, a negative, different people (I, you, we, they).\nReply with ONLY JSON: {"items": [{"en": "English", "t": "${language}"${romanField(code)}}]}`,
+  );
+}
+
+/** Example sentences per vocabulary unit. */
+export const SENTENCES = 5;
+
+/** Sentences written for a vocabulary unit: at least three usable ones, or null. */
+export function parseSentences(raw: string, level: LevelGuide, code: string): Item[] | null {
+  const items = parseItems(raw, level, code).filter((x) => x.t.split(/\s+/).length >= 3);
+  return items.length >= 3 ? items.slice(0, SENTENCES) : null;
+}
+
+function parseItems(raw: string, level: LevelGuide, code: string): Item[] {
   const d = parseJsonLoose<any>(raw);
   const list: any[] = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [];
   const items: Item[] = list.map((x) => {
     const r = needsRomanization(code) ? str(x?.r, 160) : '';
     return { en: str(x?.en, 200), t: str(x?.t, 200), ...(r ? { r } : {}) };
   }).filter((x) => x.en && x.t && x.en.toLowerCase() !== x.t.toLowerCase() && x.t.split(/\s+/).length <= level.maxWords * 1.5);
-  const unique = items.filter((x, i) => items.findIndex((y) => y.t === x.t) === i);
+  return items.filter((x, i) => items.findIndex((y) => y.t === x.t) === i);
+}
+
+/** Checks a written lesson: enough items, translated (not copied), within the level's sentence length. */
+export function parseUnitLesson(raw: string, level: LevelGuide, code: string): { items: Item[]; tip: string } | null {
+  const d = parseJsonLoose<any>(raw);
+  const unique = parseItems(raw, level, code);
   if (unique.length < Math.max(4, level.items - 3)) return null;
   return { items: unique.slice(0, level.items), tip: str(d?.tip, 600) };
 }

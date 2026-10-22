@@ -8,6 +8,7 @@ import { ensureTextModel, forceLoadTextModel } from '../atlasTools/models';
 import { parseJsonLoose, str } from '../study/games/json';
 import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
+import { topUpSentences, writeSentences } from './sentences';
 import { starsFor, type Item } from './lessons';
 import { knownSet, newWords, parseListening, type Listening, type Word } from './listening';
 import { REAL_NEWS, pieceById, pieceForSpace } from './library';
@@ -242,7 +243,7 @@ export const languageService = {
     if (!unit) throw new Error('Unknown unit.');
     if (unit.builtIn) return builtInWords(unit, code);
     const kept = content[code]?.[unitId];
-    if (kept?.length) return kept;
+    if (kept?.length) return unit.items.length ? topUpSentences(unitId, kept, onStep) : kept;
     onStep('Loading the language model...');
     const llm = await model();
     const name = langName(code);
@@ -254,6 +255,7 @@ export const languageService = {
       const ask = (extra = '') => llm.generateResponse(vocabPrompt({ unit, language: name, level, code, extra }), { disableThinking: true });
       items = parseUnitWords(await ask(), unit.items, code)
         ?? parseUnitWords(await ask(' Translate every item; do not copy the English.'), unit.items, code);
+      if (items) items = [...items, ...await writeSentences(llm, { words: items, level, name, code })];
     } else {
       const known = languageService.knownItems(code).map((x) => x.t);
       for (let attempt = 0; attempt < 2 && !items; attempt++) {

@@ -43,4 +43,12 @@ it('writes the missing lessons of a level with the on-device AI', async () => {
   rtl.fireEvent.press(board.getByTestId('language-prepare-start'));
   expect(await board.findByText(/A1 is ready/, {}, { timeout: 8000 })).toBeTruthy();
   expect(useLanguage.getState().content['es-ES'].colors.map((x: any) => x.t)).toEqual(es);
+
+  // A unit written before it had example sentences gets five when it is opened with the model loaded.
+  const sentences = ['Mi coche es azul.', 'No me gusta el verde.', '¿Tu casa es blanca?', 'Ellos tienen un perro negro.', 'Nosotros pintamos la puerta roja.'];
+  boundary.llama!.scriptCompletion({ text: JSON.stringify({ items: sentences.map((t, i) => ({ en: `Sentence ${i}`, t })) }) });
+  useLanguage.setState({ content: { 'es-ES': { ...useLanguage.getState().content['es-ES'], colors: es.slice(0, 6).map((t) => ({ en: `${t} (en)`, t })) } } });
+  const words = await languageService.unitWords('colors');
+  expect(words.map((x: any) => x.t)).toEqual([...es.slice(0, 6), ...sentences]);
+  expect(useLanguage.getState().content['es-ES'].colors).toHaveLength(11);
 }, 20000);
