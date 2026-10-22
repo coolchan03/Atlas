@@ -27,7 +27,10 @@ export async function playLesson(screen: ReturnType<typeof render>, seen = new S
       const Voice = require('@react-native-voice/voice');
       fireEvent.press(screen.getByTestId('lesson-speak'));
       await act(async () => {});
-      await act(async () => { Voice.onSpeechResults?.({ value: [items.answer.toLowerCase().replace(/[.,!?¿¡]/g, '')] }); });
+      await act(async () => {});
+      // A phone without a speech recognizer: say it aloud and mark it yourself.
+      if (screen.queryByTestId('lesson-said-it')) fireEvent.press(screen.getByTestId('lesson-said-it'));
+      else await act(async () => { Voice.onSpeechResults?.({ value: [items.answer.toLowerCase().replace(/[.,!?¿¡]/g, '')] }); });
     } else if (items.kind === 'type' || items.kind === 'dictation') {
       fireEvent.changeText(screen.getByTestId('lesson-typed'), items.answer);
     } else if (!missed && items.options) {

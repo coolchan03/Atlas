@@ -10,7 +10,7 @@ import { LANGUAGES, MY_WORDS, PRACTICE, REVIEW, languageService } from './langua
 import { levelGuide } from './teaching';
 import { lessonKey, partItems } from './board';
 import { LESSON_SECONDS } from './pace';
-import { buildLesson, checkSpoken, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
+import { buildLesson, difficultyFor, checkSpoken, checkTyped, repeatMissed, scored, type Exercise } from './lessons';
 import { useLanguage } from './store';
 import type { Item } from './lessons';
 import type { LevelId } from './teaching';
@@ -102,7 +102,7 @@ export const LessonScreen: React.FC = () => {
         setTip(mode || part > 1 ? '' : languageService.tipFor(unitId));
         setExercises(buildLesson(items, Date.now(), speed
           ? { length: 40, production: 0 }
-          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production, speaking }));
+          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production, speaking, difficulty: difficultyFor(guide.id) }));
       })
       .catch((e) => setError(String(e?.message || e)));
   };

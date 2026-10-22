@@ -28,6 +28,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   bodyText: { ...TYPOGRAPHY.body, color: colors.text, marginVertical: SPACING.sm },
   tip: { ...TYPOGRAPHY.body, color: colors.text },
   answerLine: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: SPACING.sm },
+  selfRow: { flexDirection: 'row' as const, gap: SPACING.sm, marginTop: SPACING.sm },
   tile: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   tileText: { ...TYPOGRAPHY.body, color: colors.text, flexShrink: 1 },
   footer: { padding: SPACING.lg, gap: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },

@@ -377,12 +377,12 @@ export const languageService = {
   },
 
   /** True when the phone has a speech recognizer, so lessons include speaking. */
+  /**
+   * True when lessons include speaking. On by default: with the phone's speech recognizer
+   * Atlas checks what you said; without one you say it aloud and check yourself.
+   */
   async canSpeak(): Promise<boolean> {
-    if (!useLanguage.getState().speaking) return false;
-    try {
-      const { systemSpeechStatus } = require('../services/systemSpeech');
-      return (await systemSpeechStatus()).available;
-    } catch { return false; }
+    return useLanguage.getState().speaking;
   },
 
   /** Speaking exercises on or off (somewhere you cannot talk out loud). */

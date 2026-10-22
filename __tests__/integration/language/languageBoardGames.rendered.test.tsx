@@ -185,3 +185,39 @@ it('tracks a daily XP goal on the board, and the goal can be changed', () => {
   languageService.finishLesson('numbers', { right: 8, total: 8 });
   expect(render(<LanguageScreen />).getByText('Goal met')).toBeTruthy();
 });
+
+it('makes higher levels harder: more choices that look alike, more stray word tiles', () => {
+  const { difficultyFor } = require('../../../src/language/lessons');
+  const items = [
+    { en: 'house', t: 'casa' }, { en: 'hunting', t: 'caza' }, { en: 'face', t: 'cara' }, { en: 'cart', t: 'carro' },
+    { en: 'dog', t: 'perro' }, { en: 'bread', t: 'pan' }, { en: 'I live in a big house.', t: 'Vivo en una casa grande.' },
+    { en: 'The dog eats bread every day.', t: 'El perro come pan todos los días.' },
+  ];
+  const pick = (level: number) => {
+    for (let seed = 1; seed < 200; seed++) {
+      const ex = buildLesson(items, seed, { length: 10, difficulty: difficultyFor(level) })
+        .find((e: any) => e.kind === 'choose' && ['casa', 'caza', 'cara', 'carro'].includes(e.answer));
+      if (ex) return ex as any;
+    }
+    throw new Error('no choose exercise');
+  };
+  const easy = pick(1);
+  const hard = pick(4);
+  expect(easy.options).toHaveLength(4);
+  expect(hard.options).toHaveLength(6);
+  // At B2 the wrong choices start like the answer.
+  const sameStart = hard.options.filter((o: string) => o !== hard.answer && o[0] === hard.answer[0]).length;
+  expect(sameStart).toBeGreaterThanOrEqual(2);
+});
+
+it('lets a phone without a speech recognizer still practise speaking, checked by the learner', async () => {
+  const { ExerciseView } = require('../../../src/language/Exercises');
+  const picked: string[] = [];
+  const ex = { kind: 'speak', item: { en: 'Good morning.', t: 'Buenos días.' }, answer: 'Buenos días.' };
+  const view = render(<ExerciseView ex={ex} lang="es-ES" langName="Spanish" attempt={{ value: '', checked: false }}
+    onPick={(v: string) => picked.push(v)} onMatched={() => undefined} />);
+  fireEvent.press(view.getByTestId('lesson-speak'));
+  expect(await view.findByTestId('lesson-self-check')).toBeTruthy();
+  fireEvent.press(view.getByTestId('lesson-said-it'));
+  expect(picked).toEqual(['Buenos días.']);
+});

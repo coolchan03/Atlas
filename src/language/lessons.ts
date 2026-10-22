@@ -47,8 +47,19 @@ const shuffle = <T,>(a: T[], r: () => number): T[] => {
   for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
   return out;
 };
-const options = (right: string, pool: string[], r: () => number) =>
-  shuffle([right, ...shuffle(pool.filter((p) => p !== right), r).slice(0, 3)], r);
+/** How alike two answers look (same start, similar length): harder distractors look like the answer. */
+const alike = (a: string, b: string) =>
+  (a[0]?.toLowerCase() === b[0]?.toLowerCase() ? 2 : 0) - Math.abs(a.length - b.length) / Math.max(a.length, 1);
+
+/**
+ * The right answer among `wrong` distractors. With `hard`, distractors that look like the
+ * answer are picked first, so recognising it takes real knowledge, not a lucky guess.
+ */
+const options = (right: string, pool: string[], r: () => number, o: { wrong?: number; hard?: boolean } = {}) => {
+  const others = shuffle([...new Set(pool.filter((p) => p !== right))], r);
+  const picked = o.hard ? others.sort((a, b) => alike(b, right) - alike(a, right)) : others;
+  return shuffle([right, ...picked.slice(0, o.wrong ?? 3)], r);
+};
 
 /** Words of a phrase for the word-order exercise (punctuation kept on its word). */
 export const words = (t: string) => t.split(/\s+/).filter(Boolean);
@@ -73,8 +84,15 @@ const FALLBACK: Partial<Record<Kind, Kind>> = { build: 'type', hear: 'dictation'
 const needsPhrase = (k: Kind) => k === 'build' || k === 'hear' || k === 'blank';
 const isWord = (it: Item) => words(it.t).length === 1 && it.t.replace(/[^\p{L}]/gu, '').length >= 4;
 
-function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => number }): Exercise {
-  const { items, r } = ctx;
+/** How hard a lesson is: wrong choices offered, look-alike distractors, extra word tiles. */
+export interface Difficulty { wrong: number; hard: boolean; extraTiles: number }
+export const EASY: Difficulty = { wrong: 3, hard: false, extraTiles: 2 };
+/** By CEFR level (1 = A1 .. 6 = C2): more and closer choices, more words that do not belong. */
+export const difficultyFor = (level: number): Difficulty =>
+  ({ wrong: level <= 1 ? 3 : level <= 3 ? 4 : 5, hard: level >= 2, extraTiles: level <= 1 ? 2 : level <= 3 ? 3 : 4 });
+
+function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => number; d: Difficulty }): Exercise {
+  const { items, r, d } = ctx;
   const long = words(item.t).length >= 3;
   let k = needsPhrase(kind) && !long ? FALLBACK[kind]! : kind;
   if (k === 'scramble' && !isWord(item)) k = 'listen';
@@ -82,7 +100,7 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
     // A few extra words from the other items, so it cannot be solved by using every tile.
     const own = new Set(words(item.t).map((w) => w.toLowerCase()));
     const extra = shuffle([...new Set(items.filter((x) => x !== item).flatMap((x) => words(x.t)))].filter((w) => !own.has(w.toLowerCase())), r)
-      .slice(0, Math.min(3, Math.max(2, Math.round(words(item.t).length / 2))));
+      .slice(0, Math.min(d.extraTiles + 1, Math.max(d.extraTiles, Math.round(words(item.t).length / 2))));
     return { kind: k, item, tiles: shuffle([...words(item.t), ...extra], r), answer: item.t };
   }
   if (k === 'type' || k === 'dictation' || k === 'speak') return { kind: k, item, answer: item.t };
@@ -101,12 +119,12 @@ function exerciseFor(kind: Kind, item: Item, ctx: { items: Item[]; r: () => numb
     const b = blankOut(item.t, r);
     if (b) {
       const pool = items.flatMap((x) => words(x.t)).map((x) => x.replace(/[.!?¡¿,]/g, '')).filter((x) => x.length > 1);
-      return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], r), answer: b.answer };
+      return { kind: 'blank', item, shown: b.shown, options: options(b.answer, [...new Set(pool)], r, d), answer: b.answer };
     }
     return exerciseFor('meaning', item, ctx);
   }
-  if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), r), answer: item.en };
-  return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r), answer: item.t };
+  if (k === 'meaning') return { kind: k, item, options: options(item.en, items.map((x) => x.en), r, d), answer: item.en };
+  return { kind: k as 'choose' | 'listen', item, options: options(item.t, items.map((x) => x.t), r, d), answer: item.t };
 }
 
 /** The kinds for a lesson of `length` exercises: recognition first, then production. */
@@ -141,7 +159,8 @@ export const lessonSeconds = (exercises: Exercise[], secondsOf: (k: Kind) => num
  * `production` share. Sized by `seconds` (a time budget) or `length`. Every item is used
  * before any repeats.
  */
-export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number; seconds?: number; secondsOf?: (k: Kind) => number; speaking?: boolean } = {}): Exercise[] {
+export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: number; production?: number; seconds?: number; secondsOf?: (k: Kind) => number; speaking?: boolean; difficulty?: Difficulty } = {}): Exercise[] {
+  const d = opts.difficulty ?? EASY;
   const length = opts.seconds && opts.secondsOf ? lengthForTime(opts.seconds, { ...opts, secondsOf: opts.secondsOf }) : opts.length ?? 10;
   const r = rng(seed);
   const all = shuffle(items, r);
@@ -155,7 +174,7 @@ export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: n
     const item = (kind === 'scramble' && forScramble && !used.has(forScramble) && forScramble)
       || (needsPhrase(kind) && pool.find((x) => words(x.t).length >= 3)) || pool[0];
     used.add(item);
-    return exerciseFor(kind, item, { items, r });
+    return exerciseFor(kind, item, { items, r, d });
   });
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
   return out;

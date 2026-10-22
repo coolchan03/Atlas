@@ -97,9 +97,13 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
   const styles = useThemedStyles(createStyles);
   const [listening, setListening] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // No speech recognizer on this phone: say it aloud, compare with the voice, and mark it yourself.
+  const [selfCheck, setSelfCheck] = useState(false);
   const listen = async () => {
     setProblem(null); setListening(true);
     try {
+      const { systemSpeechStatus } = require('../services/systemSpeech');
+      if (!(await systemSpeechStatus()).available) { setSelfCheck(true); return; }
       const { listenWithSystemSpeech } = require('../services/systemSpeech');
       const session = await listenWithSystemSpeech({ locale: lang, onPartial: onPick });
       const heard: string = await session.result;
@@ -120,8 +124,17 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
         accessibilityLabel={listening ? 'Listening' : 'Speak'}>
         <Icon name={listening ? 'radio' : 'mic'} size={26} color={colors.background} />
       </TouchableOpacity>
-      {!!attempt.value && <Text style={styles.bodyText} testID="lesson-heard">Heard: {attempt.value}</Text>}
+      {!!attempt.value && !selfCheck && <Text style={styles.bodyText} testID="lesson-heard">Heard: {attempt.value}</Text>}
       {!!problem && <Text style={styles.roman}>{problem}</Text>}
+      {selfCheck && !attempt.checked && (
+        <View testID="lesson-self-check">
+          <Text style={styles.bodyText}>This phone has no speech recognizer. Say it out loud, play it to compare, then mark how it went.</Text>
+          <View style={styles.selfRow}>
+            <TouchableOpacity style={styles.tile} onPress={() => onPick(ex.answer)} testID="lesson-said-it"><Text style={styles.tileText}>I said it right</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.tile} onPress={() => onPick('-')} testID="lesson-not-yet"><Text style={styles.tileText}>Not yet</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
       {!attempt.checked && (
         <TouchableOpacity onPress={onSkip} testID="lesson-skip-speaking"><Text style={styles.roman}>Can't speak now</Text></TouchableOpacity>
       )}
