@@ -100,6 +100,23 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     icon: 'x-circle', parameters: { id: { type: 'string', description: 'Reminder UUID', required: true } },
   },
   {
+    id: 'create_conditional_watch', name: 'create_conditional_watch', displayName: 'Conditional alert',
+    description: 'With user approval, monitor an explicit public HTTPS source for a verified condition, not merely news. Supported types: required/excluded text phrases, JSON field comparison, HTTP status, and content changes. Requires two consecutive positive checks; no alert on unavailable sources. Movie showtimes require an actual showtime source.',
+    icon: 'bell', requiresNetwork: true,
+    parameters: {
+      rule_json: { type: 'string', description: 'JSON object with name, url, kind (text/json/status/change), pollHours (1-24), and relevant condition fields (allOf/noneOf, path/operator/target, or status)', required: true },
+    },
+  },
+  {
+    id: 'list_conditional_watches', name: 'list_conditional_watches', displayName: 'Condition watches',
+    description: 'List user-approved conditional watches and their last checked state.', icon: 'list', parameters: {},
+  },
+  {
+    id: 'cancel_conditional_watch', name: 'cancel_conditional_watch', displayName: 'Cancel conditional watch',
+    description: 'Cancel a condition watch by UUID.', icon: 'x-circle',
+    parameters: { id: { type: 'string', description: 'Watch UUID', required: true } },
+  },
+  {
     id: 'watch_movie_release', name: 'watch_movie_release', displayName: 'Watch movie release',
     description: 'With explicit approval, periodically check Google News and Bing News for reports that a movie is in US theaters. Alerts say POSSIBLE release and require showtime confirmation, not a guaranteed cinema listing.',
     icon: 'film', requiresNetwork: true,

@@ -13,6 +13,7 @@ import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
 import { listLocalSkills, saveLocalSkill, readLocalSkill } from './localSkills';
 import { watchMovieRelease, listMovieWatches, cancelMovieWatch } from './movieWatches';
+import { createConditionalWatch, listConditionalWatches, cancelConditionalWatch } from './conditionalWatches';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGrid';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -82,6 +83,18 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'list_scheduled_message_drafts':
       return listScheduledTextDrafts();
+    case 'create_conditional_watch': {
+      const config = requireString(call, 'rule_json');
+      if (!config) throw new Error('A structured condition is required.');
+      return createConditionalWatch(config);
+    }
+    case 'list_conditional_watches':
+      return listConditionalWatches();
+    case 'cancel_conditional_watch': {
+      const id = requireString(call, 'id');
+      if (!id) throw new Error('Watch ID required.');
+      return cancelConditionalWatch(id);
+    }
     case 'watch_movie_release': {
       const title = requireString(call, 'title');
       if (!title) throw new Error('A movie title is required.');

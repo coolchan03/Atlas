@@ -20,6 +20,7 @@ function mirrorMovieOffGrid(on: boolean): void {
   try {
     const native = require('react-native').NativeModules?.AtlasMovieWatches;
     native?.setOffGrid?.(on)?.catch?.(() => undefined);
+    require('react-native').NativeModules?.AtlasConditionalWatches?.setOffGrid?.(on)?.catch?.(() => undefined);
   } catch { /* older APK has no movie-watch module */ }
 }
 
@@ -43,7 +44,7 @@ export const useOffGrid = create<OffGridState>()(
   ),
 );
 
-export const NETWORK_TOOLS = ['web_search', 'read_url', 'watch_movie_release'];
+export const NETWORK_TOOLS = ['web_search', 'read_url', 'watch_movie_release', 'create_conditional_watch'];
 export const offGridOn = (): boolean => useOffGrid.getState().on;
 
 export const NIGHT_COLORS: any = {
