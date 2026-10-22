@@ -28,4 +28,5 @@ jobs:
             __tests__/unit/atlasTools/englishWordOfDay.test.ts \
             __tests__/unit/services/tools/atlasContactDrafts.test.ts \
             __tests__/unit/services/tools/atlasCodeProjects.test.ts \
-            __tests__/unit/services/tools/atlasScheduledDrafts.test.ts
+            __tests__/unit/services/tools/atlasScheduledDrafts.test.ts \
+            __tests__/unit/services/atlasPresentationLayouts.test.ts

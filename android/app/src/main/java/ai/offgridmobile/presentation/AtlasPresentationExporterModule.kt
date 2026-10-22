@@ -130,6 +130,61 @@ class AtlasPresentationExporterModule(private val context: ReactApplicationConte
         write(canvas, title, 64f, 265f, 840f, 49f, fg, true, 3, font)
         write(canvas, subtitle, 65f, 362f, 820f, 26f, alt, false, 4, font)
       }
+      "section" -> {
+        canvas.drawRoundRect(70f, 125f, 82f, 420f, 3f, 3f, brush)
+        write(canvas, title, 108f, 210f, 780f, 46f, fg, true, 3, font)
+        write(canvas, subtitle, 109f, 316f, 740f, 22f, alt, false, 4, font)
+      }
+      "quote" -> {
+        brush.color = panel
+        canvas.drawRoundRect(66f, 150f, 894f, 398f, 15f, 15f, brush)
+        brush.color = accent
+        canvas.drawRoundRect(66f, 150f, 77f, 398f, 3f, 3f, brush)
+        write(canvas, title, 83f, 96f, 800f, 34f, fg, true, 2, font)
+        val quote = slide.getArray("bullets")?.let { if (it.size() > 0) it.getString(0) else null } ?: "Add a quotation"
+        write(canvas, quote, 103f, 234f, 770f, 31f, fg, false, 5, font)
+        write(canvas, subtitle, 104f, 460f, 770f, 21f, alt, false, 2, font)
+      }
+      "two_column" -> {
+        write(canvas, title, 78f, 91f, 810f, 34f, fg, true, 2, font)
+        if (subtitle.isNotBlank()) write(canvas, subtitle, 78f, 137f, 810f, 19f, alt, false, 2, font)
+        val items = slide.getArray("bullets")
+        for (col in 0..1) {
+          val x = if (col == 0) 63f else 485f
+          brush.color = panel
+          canvas.drawRoundRect(x, 179f, x + 411f, 481f, 12f, 12f, brush)
+          var y = 217f
+          for (i in col until minOf(items?.size() ?: 0, 8) step 2) {
+            y = write(canvas, items?.getString(i) ?: "", x + 20f, y, 370f, 21f, fg, false, 3, font) + 12f
+          }
+        }
+      }
+      "timeline" -> {
+        write(canvas, title, 75f, 91f, 815f, 34f, fg, true, 2, font)
+        if (subtitle.isNotBlank()) write(canvas, subtitle, 78f, 139f, 790f, 19f, alt, false, 2, font)
+        val items = slide.getArray("bullets")
+        for (i in 0 until minOf(items?.size() ?: 0, 5)) {
+          val y = 190f + i * 63f
+          brush.color = accent
+          canvas.drawRoundRect(79f, y, 123f, y + 43f, 5f, 5f, brush)
+          write(canvas, (i + 1).toString(), 91f, y + 29f, 30f, 20f, android.graphics.Color.WHITE, true, 1, font)
+          write(canvas, items?.getString(i) ?: "", 152f, y + 28f, 735f, 22f, fg, false, 2, font)
+        }
+      }
+      "infographic", "emoji" -> {
+        write(canvas, title, 73f, 88f, 810f, 34f, fg, true, 2, font)
+        if (subtitle.isNotBlank()) write(canvas, subtitle, 76f, 140f, 780f, 19f, alt, false, 2, font)
+        val items = slide.getArray("bullets")
+        for (i in 0 until minOf(items?.size() ?: 0, 4)) {
+          val x = 60f + i * 222f
+          brush.color = panel
+          canvas.drawRoundRect(x, 211f, x + 209f, 426f, 12f, 12f, brush)
+          val parts = (items?.getString(i) ?: "").split("|", limit = 2)
+          write(canvas, parts[0].trim(), x + 13f, 286f, 185f,
+            if (slide.getString("layout") == "emoji") 42f else 38f, accent, true, 2, font)
+          write(canvas, (parts.getOrNull(1) ?: parts[0]).trim(), x + 14f, 360f, 185f, 20f, fg, false, 3, font)
+        }
+      }
       else -> {
         canvas.drawRoundRect(55f, 41f, 67f, 107f, 4f, 4f, brush)
         write(canvas, title, 79f, 89f, 800f, 34f, fg, true, 2, font)

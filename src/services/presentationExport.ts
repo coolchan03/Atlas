@@ -51,6 +51,64 @@ function slideXml(slide: PresentationSlide, t: PresentationTemplate): string {
       [paragraph(slide.title, t.foreground, t.font, 4900, true)]);
     shapes += shape(4, 'Follow up', 840000, 4480000, 10000000, 650000, null,
       [paragraph(slide.subtitle, t.secondary, t.font, 2300, false)]);
+  } else if (slide.layout === 'section') {
+    shapes += shape(2, 'Section stripe', 760000, 1600000, 120000, 3420000, t.accent, []);
+    shapes += shape(3, 'Section title', 1110000, 1900000, 10100000, 1250000, null,
+      [paragraph(slide.title, t.foreground, t.font, 4400, true)]);
+    shapes += shape(4, 'Section summary', 1110000, 3300000, 10000000, 780000, null,
+      [paragraph(slide.subtitle, t.secondary, t.font, 2300, false)]);
+  } else if (slide.layout === 'quote') {
+    shapes += shape(2, 'Quotation panel', 780000, 1770000, 10600000, 2900000, t.panel, []);
+    shapes += shape(3, 'Quotation accent', 780000, 1770000, 135000, 2900000, t.accent, []);
+    shapes += shape(4, 'Quotation title', 950000, 530000, 10100000, 800000, null,
+      [paragraph(slide.title, t.foreground, t.font, 3200, true)]);
+    shapes += shape(5, 'Quotation', 1270000, 2440000, 9700000, 1550000, null,
+      [paragraph(slide.bullets[0] || 'Add a quotation', t.foreground, t.font, 3100, false)]);
+    shapes += shape(6, 'Attribution', 1320000, 5130000, 9500000, 550000, null,
+      [paragraph(slide.subtitle, t.secondary, t.font, 2000, false)]);
+  } else if (slide.layout === 'two_column') {
+    shapes += shape(2, 'Two column title', 900000, 570000, 10200000, 870000, null,
+      [paragraph(slide.title, t.foreground, t.font, 3400, true)]);
+    if (slide.subtitle) shapes += shape(3, 'Two column subtitle', 920000, 1490000, 9800000, 570000, null,
+      [paragraph(slide.subtitle, t.secondary, t.font, 1900, false)]);
+    [0, 1].forEach(col => {
+      const x = col === 0 ? 800000 : 6200000;
+      shapes += shape(4 + col * 2, col === 0 ? 'Left column panel' : 'Right column panel', x, 2280000, 5200000, 3750000, t.panel, []);
+      const content = slide.bullets.filter((_, i) => i % 2 === col).slice(0, 4);
+      shapes += shape(5 + col * 2, col === 0 ? 'Left column text' : 'Right column text', x + 310000, 2570000,
+        4560000, 3190000, null, content.map(v => paragraph(v, t.foreground, t.font, 2050, false)));
+    });
+  } else if (slide.layout === 'timeline') {
+    shapes += shape(2, 'Timeline title', 860000, 550000, 10600000, 850000, null,
+      [paragraph(slide.title, t.foreground, t.font, 3400, true)]);
+    if (slide.subtitle) shapes += shape(3, 'Timeline subtitle', 900000, 1460000, 10000000, 500000, null,
+      [paragraph(slide.subtitle, t.secondary, t.font, 1900, false)]);
+    (slide.bullets.length ? slide.bullets : ['Add a milestone']).slice(0, 5).forEach((step, i) => {
+      const y = 2160000 + i * 760000;
+      shapes += shape(4 + i * 3, 'Milestone ' + (i + 1), 900000, y, 520000, 520000, t.accent, []);
+      shapes += shape(5 + i * 3, 'Milestone number ' + (i + 1), 1010000, y + 85000, 340000, 340000, null,
+        [paragraph(String(i + 1), t.background, t.font, 2100, true)]);
+      shapes += shape(6 + i * 3, 'Milestone label ' + (i + 1), 1770000, y + 60000, 9300000, 440000, null,
+        [paragraph(step, t.foreground, t.font, 2200, false)]);
+    });
+  } else if (slide.layout === 'infographic' || slide.layout === 'emoji') {
+    shapes += shape(2, 'Card slide title', 890000, 540000, 10000000, 900000, null,
+      [paragraph(slide.title, t.foreground, t.font, 3500, true)]);
+    if (slide.subtitle) shapes += shape(3, 'Card slide subtitle', 890000, 1530000, 10000000, 510000, null,
+      [paragraph(slide.subtitle, t.secondary, t.font, 1900, false)]);
+    const cards = (slide.bullets.length ? slide.bullets : ['42% | Example']).slice(0, 4);
+    cards.forEach((card, i) => {
+      const x = 770000 + i * 2790000;
+      const parts = card.split('|');
+      const lead = (parts[0] || '').trim();
+      const detail = (parts.slice(1).join('|') || parts[0] || '').trim();
+      const largeFont = slide.layout === 'emoji' ? 'Segoe UI Emoji' : t.font;
+      shapes += shape(4 + i * 3, 'Card ' + (i + 1) + ' panel', x, 2550000, 2540000, 2580000, t.panel, []);
+      shapes += shape(5 + i * 3, 'Card ' + (i + 1) + ' value', x + 140000, 3130000, 2260000, 790000, null,
+        [paragraph(lead, t.accent, largeFont, slide.layout === 'emoji' ? 5600 : 4200, true)]);
+      shapes += shape(6 + i * 3, 'Card ' + (i + 1) + ' label', x + 160000, 4280000, 2180000, 620000, null,
+        [paragraph(detail, t.foreground, t.font, 1900, false)]);
+    });
   } else {
     shapes += shape(2, 'Section accent', 680000, 520000, 150000, 820000, t.accent, []);
     shapes += shape(3, 'Slide title', 960000, 560000, 10500000, 900000, null,
@@ -60,7 +118,7 @@ function slideXml(slide: PresentationSlide, t: PresentationTemplate): string {
     shapes += shape(5, 'Content panel', 750000, 2220000, 10600000, 3980000, t.panel, []);
     shapes += shape(6, 'Bullet points', 1050000, 2560000, 9800000, 3450000, null,
       (slide.bullets.length ? slide.bullets : ['Add your main points']).slice(0, 9)
-        .map(b => paragraph('?  ' + b, t.foreground, t.font, 2200, false)));
+        .map(b => paragraph('•  ' + b, t.foreground, t.font, 2200, false)));
   }
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<p:sld ' + ns + '><p:cSld><p:bg><p:bgPr>' + rgb(t.background) +

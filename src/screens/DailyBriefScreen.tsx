@@ -149,6 +149,7 @@ export const DailyBriefScreen: React.FC = () => {
                   <Text style={styles.meta}>
                     {[h.source, h.interest, h.date && new Date(h.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })].filter(Boolean).join(' · ')}
                   </Text>
+                  {!!h.summary && <Text numberOfLines={5} style={styles.body}>{h.summary}</Text>}
                 </View>
                 {!!h.url && <Icon name="external-link" size={16} color={colors.textMuted} />}
               </TouchableOpacity>

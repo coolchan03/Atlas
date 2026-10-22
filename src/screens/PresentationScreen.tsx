@@ -14,7 +14,12 @@ const DRAFT_KEY = 'atlas-presentation-draft-v1';
 type Layout = PresentationSlide['layout'];
 const defaultSlide = (layout: Layout): PresentationSlide =>
   ({ layout, title: layout === 'closing' ? 'Thank You' : layout === 'title' ? 'New Presentation' : 'New Slide',
-    subtitle: '', bullets: layout === 'bullets' ? ['First point'] : [] });
+    subtitle: '', bullets: layout === 'bullets' ? ['First point']
+      : layout === 'quote' ? ['A quotation goes here']
+      : layout === 'two_column' ? ['Left: first point', 'Right: first point', 'Left: second point', 'Right: second point']
+      : layout === 'timeline' ? ['Research', 'Design', 'Launch']
+      : layout === 'infographic' ? ['42% | Growth', '3.5x | Increase', '2026 | Target']
+      : layout === 'emoji' ? ['★ | Main idea', '🚀 | Next step'] : [] });
 
 export const PresentationScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -36,7 +41,7 @@ export const PresentationScreen: React.FC = () => {
       const saved = JSON.parse(raw);
       if (Array.isArray(saved.slides) && saved.slides.length) {
         const cleaned = cleanPresentationSlides(saved.slides.filter((s: any) =>
-          s && ['title', 'bullets', 'closing'].includes(s.layout) && typeof s.title === 'string' &&
+          s && ['title', 'bullets', 'closing', 'section', 'quote', 'two_column', 'timeline', 'infographic', 'emoji'].includes(s.layout) && typeof s.title === 'string' &&
           typeof s.subtitle === 'string' && Array.isArray(s.bullets) && s.bullets.every((b: any) => typeof b === 'string')));
         if (cleaned.length) setSlides(cleaned);
       }
@@ -162,7 +167,35 @@ export const PresentationScreen: React.FC = () => {
             {slide.layout === 'bullets' && <View style={{ marginTop: 12, borderRadius: 9,
               backgroundColor: '#' + template.panel, padding: 12, gap: 5 }}>
               {slide.bullets.slice(0, 6).map((b,i) => <Text key={i} numberOfLines={1} style={{
-                color: '#' + template.foreground, fontSize: 12 }}>?  {b}</Text>)}
+                color: '#' + template.foreground, fontSize: 12 }}>•  {b}</Text>)}
+            </View>}
+            {slide.layout === 'quote' && <Text numberOfLines={4} style={{ color: '#' + template.foreground,
+              fontSize: 18, marginTop: 15, backgroundColor: '#' + template.panel, padding: 12 }}>
+              {slide.bullets[0] || 'A quotation goes here'}
+            </Text>}
+            {slide.layout === 'two_column' && <View style={{ flexDirection: 'row', gap: 9, marginTop: 12 }}>
+              {[0, 1].map(col => <View key={col} style={{ flex: 1, padding: 8,
+                backgroundColor: '#' + template.panel, gap: 5 }}>
+                {slide.bullets.filter((_, i) => i % 2 === col).slice(0, 4).map((b, i) => <Text key={i}
+                  numberOfLines={2} style={{ color: '#' + template.foreground, fontSize: 11 }}>{b}</Text>)}
+              </View>)}
+            </View>}
+            {slide.layout === 'timeline' && <View style={{ marginTop: 9, gap: 5 }}>
+              {slide.bullets.slice(0, 5).map((b, i) => <Text key={i} numberOfLines={1}
+                style={{ color: '#' + template.foreground, fontSize: 12 }}>{i + 1}. {b}</Text>)}
+            </View>}
+            {(slide.layout === 'infographic' || slide.layout === 'emoji') && <View
+              style={{ flexDirection: 'row', gap: 7, marginTop: 14 }}>
+              {slide.bullets.slice(0, 4).map((b, i) => {
+                const parts = b.split('|');
+                return <View key={i} style={{ flex: 1, backgroundColor: '#' + template.panel,
+                  padding: 6, alignItems: 'center' }}>
+                  <Text numberOfLines={1} style={{ color: '#' + template.accent,
+                    fontSize: slide.layout === 'emoji' ? 25 : 16 }}>{parts[0]?.trim()}</Text>
+                  <Text numberOfLines={2} style={{ color: '#' + template.foreground, fontSize: 10 }}>
+                    {parts.slice(1).join('|').trim() || parts[0]?.trim()}</Text>
+                </View>;
+              })}
             </View>}
           </View>
         </View>
@@ -173,15 +206,17 @@ export const PresentationScreen: React.FC = () => {
         </View>
         <View>{label('Slide layout')}
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            {(['title', 'bullets', 'closing'] as const).map(layout =>
-              action(layout === 'title' ? 'Title' : layout === 'bullets' ? 'Content' : 'Closing',
-                () => update({ layout }), layout === 'bullets' ? 'list' : 'layout', false, slide.layout === layout))}
+            {([['title', 'Title'], ['bullets', 'Content'], ['section', 'Section'], ['quote', 'Quote'],
+              ['two_column', 'Two columns'], ['timeline', 'Timeline'], ['infographic', 'Infographic'],
+              ['emoji', 'Emoji cards'], ['closing', 'Closing']] as Array<[Layout, string]>).map(([layout, name]) =>
+              action(name, () => update({ layout }), layout === 'bullets' ? 'list' : 'layout', false, slide.layout === layout))}
           </View>
         </View>
         <View>{label('Slide title')}{field(slide.title, text => update({ title: text.slice(0,140) }), 'Slide title')}</View>
         <View>{label('Subtitle')}{field(slide.subtitle, text => update({ subtitle: text.slice(0,260) }), 'Slide subtitle')}</View>
-        {slide.layout === 'bullets' && <View>
-          {label('Bullet points ? one per line')}
+        {slide.layout !== 'title' && slide.layout !== 'closing' && slide.layout !== 'section' && <View>
+          {label(slide.layout === 'infographic' || slide.layout === 'emoji'
+            ? 'Cards: value or symbol | caption, one per line' : 'Points: one per line')}
           {field(slide.bullets.join('\n'), text => update({ bullets: text.split('\n').slice(0, 10).map(b => b.slice(0,260)) }),
             'Main points', true)}
         </View>}
@@ -189,6 +224,12 @@ export const PresentationScreen: React.FC = () => {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {action('Title slide', () => add('title'), 'plus')}
             {action('Content slide', () => add('bullets'), 'plus')}
+            {action('Section', () => add('section'), 'plus')}
+            {action('Quote', () => add('quote'), 'plus')}
+            {action('Two columns', () => add('two_column'), 'plus')}
+            {action('Timeline', () => add('timeline'), 'plus')}
+            {action('Infographic', () => add('infographic'), 'plus')}
+            {action('Emoji cards', () => add('emoji'), 'plus')}
             {action('Closing', () => add('closing'), 'plus')}
           </View>
         </View>

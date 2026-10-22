@@ -105,27 +105,37 @@ async function headlines({ topic, interests, seen, want }: { topic: string; inte
 }
 
 /** A few of today's real headlines on a topic (for the language course's news square). */
-export const latestHeadlines = (topic: string, want: number): Promise<Headline[]> =>
-  headlines({ topic, interests: [topic], seen: [], want }).then((h) => h.slice(0, want));
+export async function latestHeadlines(topic: string, want: number): Promise<Headline[]> {
+  const items = (await headlines({ topic, interests: [topic], seen: [], want })).slice(0, Math.min(8, Math.max(1, want)));
+  return Promise.all(items.map(async h => {
+    const detail = await storyDetail(h, false);
+    return { ...h, desc: (detail.text || h.desc).slice(0, 1000), url: detail.url || h.url };
+  }));
+}
 
 /**
  * More detail for one story: the same story in Bing News (a summary and a direct link, since
  * Google News links are redirects), then optionally the article itself.
  */
 async function storyDetail(h: Headline, deep: boolean): Promise<{ text: string; url?: string }> {
-  let summary = '';
+  let summary = h.desc && h.desc.toLowerCase() !== h.title.toLowerCase() ? h.desc : '';
   let url = h.url && !/news\.google\.com/.test(h.url) ? h.url : undefined;
   try {
     const match = parseRss(await fetchText(`https://www.bing.com/news/search?q=${encodeURIComponent(h.title)}&format=rss`, 8000))
       .map(splitOutlet).find((x) => !isPromotional(x) && similarity(x.title, h.title) >= 0.5);
-    if (match) { summary = match.desc; url = url || match.url; }
+    if (match) {
+      if (match.desc && match.desc.toLowerCase() !== match.title.toLowerCase() && !summary.includes(match.desc)) {
+        summary = [summary, match.desc].filter(Boolean).join('\n');
+      }
+      url = url || match.url;
+    }
   } catch { /* the headline alone is enough */ }
   let article = '';
-  if (deep && url) {
+  if (url && (deep || summary.length < 180)) {
     try {
       const { readPage } = require('../services/tools/handlers');
-      const txt: string = await readPage(url, 2500);
-      if (txt && txt.length > 300) article = txt.replace(/\s+/g, ' ').slice(0, 1600);
+      const txt: string = await readPage(url, 4000);
+      if (txt && txt.length > 180) article = txt.replace(/\s+/g, ' ').slice(0, 2800);
     } catch { /* summary is enough */ }
   }
   return { text: [summary, article].filter(Boolean).join('\n'), url };
@@ -157,7 +167,7 @@ async function storyItem({ h, interest, deep, n }: { h: Headline; interest: stri
   const outlet = h.source ? ` (${h.source})` : '';
   return {
     topic: `${h.title}${outlet} - ${interest}`,
-    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
+    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}`.slice(0, 4000), origin: 'web', url: detail.url || h.url }],
   };
 }
 
@@ -246,7 +256,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: say what happened and name the outlet. Report only what its source says.`
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story. Explain what happened, who was involved, where and when it happened, and why it matters, but ONLY where supported by the source text. Name the outlet. If the source has only a headline, state that details are unavailable rather than inventing specifics.`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
@@ -260,9 +270,15 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     linesPerItem: linesPerStory(p.minutes, Math.max(1, outline.length)),
   }, onStep);
   r.minutes = Math.max(1, Math.round(spokenMinutes((r.podcast ?? []).map((l) => l.text))));
-  r.headlines = stories.map(({ interest, headline: h }, i) => ({
-    title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,
-  }));
+  r.headlines = stories.map(({ interest, headline: h }, i) => {
+    const context = (outline[i]?.sources[0]?.text || '').split('\n')
+      .filter(line => !/^(Headline|Outlet|Published):/.test(line)).join(' ').replace(/\s+/g, ' ').trim();
+    return {
+      title: h.title, source: h.source, date: h.date, interest: interests[interest],
+      url: outline[i]?.sources[0]?.url || h.url,
+      summary: context && context.toLowerCase() !== h.title.toLowerCase() ? context.slice(0, 650) : undefined,
+    };
+  });
   useStudyStore.getState().add(BRIEF_PROJECT, r);
   preRenderBriefing(r);
   return r;

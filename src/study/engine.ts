@@ -34,7 +34,7 @@ export interface StudyResult {
   crossword?: Crossword;
   wordSearch?: WordSearch;
   /** Daily briefing: the real headlines it was written from (outlet, link, time). */
-  headlines?: { title: string; source?: string; url?: string; date?: number; interest?: string }[];
+  headlines?: { title: string; source?: string; url?: string; date?: number; interest?: string; summary?: string }[];
   /** Estimated listening time of a podcast script, in minutes. */
   minutes?: number;
   /** Project learning game payload (kind === 'game'), see src/study/games. */

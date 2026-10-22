@@ -1,6 +1,6 @@
 /** Offline, editable 16:9 presentation templates shared by PPTX and PDF export. */
-export type PresentationStyleId = 'minimal' | 'modern' | 'colorful' | 'dark' | 'academic';
-export type SlideLayout = 'title' | 'bullets' | 'closing';
+export type PresentationStyleId = 'minimal' | 'modern' | 'colorful' | 'dark' | 'academic' | 'editorial' | 'pastel' | 'ocean';
+export type SlideLayout = 'title' | 'bullets' | 'closing' | 'section' | 'quote' | 'two_column' | 'timeline' | 'infographic' | 'emoji';
 export interface PresentationSlide {
   layout: SlideLayout;
   title: string;
@@ -24,6 +24,9 @@ export const PRESENTATION_TEMPLATES: PresentationTemplate[] = [
   { id: 'colorful', name: 'Colorful', description: 'Playful violet and pastel', background: 'F7F3FF', foreground: '281548', secondary: '65578C', accent: '8351E2', panel: 'EEE0FF', font: 'Aptos' },
   { id: 'dark', name: 'Dark', description: 'High-contrast midnight', background: '101827', foreground: 'F8FAFC', secondary: 'CBD5E1', accent: '38BDF8', panel: '253247', font: 'Aptos' },
   { id: 'academic', name: 'Academic', description: 'Traditional research presentation', background: 'FFFCF5', foreground: '292524', secondary: '57534E', accent: '995D23', panel: 'F4EBDA', font: 'Georgia' },
+  { id: 'editorial', name: 'Editorial', description: 'Warm print and strong contrast', background: 'F8F5EF', foreground: '292521', secondary: '75685A', accent: 'BA5537', panel: 'EDE5D9', font: 'Georgia' },
+  { id: 'pastel', name: 'Pastel', description: 'Soft colors for approachable talks', background: 'F8F7FF', foreground: '32304B', secondary: '706C8D', accent: '9F7FD6', panel: 'EDE7F8', font: 'Aptos' },
+  { id: 'ocean', name: 'Ocean', description: 'Blue-green data slides', background: '071A22', foreground: 'F2FAFD', secondary: 'B0D0D8', accent: '51D1CB', panel: '163340', font: 'Aptos' },
 ];
 export const defaultPresentationSlides = (): PresentationSlide[] => [
   { layout: 'title', title: 'My Presentation', subtitle: 'Add a subtitle or presenter name', bullets: [] },
