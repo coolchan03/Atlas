@@ -19,7 +19,7 @@ export function parseCodeFiles(filesJson: string): CodeProjectFile[] {
     if (!entry || typeof entry.path !== 'string' || typeof entry.content !== 'string') {
       throw new Error('Every file must have a path and UTF-8 content.');
     }
-    const name = entry.path.replace(/\\/g, '/');
+    const name: string = (entry.path as string).replace(/\\/g, '/');
     const parts = name.split('/');
     if (name.length > 180 || name.startsWith('/') ||
         parts.some(p => !p || p === '.' || p === '..' || p.toLowerCase() === '.git') ||

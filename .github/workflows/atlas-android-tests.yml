@@ -4,8 +4,8 @@ name: Android unit tests
 # image generation). Runs on every push to Atlas branches and on demand.
 on:
   push:
-    branches: [atlas-voice, 'claude/**']
-    paths: ['android/**', '.github/workflows/atlas-android-tests.yml']
+    branches: [atlas-voice, 'claude/**', atlas/build81-health-connect]
+    paths: ['android/**', 'src/**', 'package-lock.json', '.github/workflows/atlas-android-tests.yml']
   workflow_dispatch:
 
 jobs:
