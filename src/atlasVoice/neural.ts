@@ -235,6 +235,14 @@ export async function restoreSavedVoice(): Promise<void> {
 /** Voices for podcast hosts: distinct-sounding speakers when the model has many. */
 export function hostVoices(available: { name: string }[]): string[] {
   const st = useAtlasVoiceStore.getState();
+  const auto = automaticHostVoices(available);
+  // The person's own choice per host, where that voice is still on the phone.
+  const names = new Set(available.map((v) => v.name));
+  return auto.map((v, i) => (st.podcastVoices?.[i] && names.has(st.podcastVoices[i]) ? st.podcastVoices[i] : v));
+}
+
+function automaticHostVoices(available: { name: string }[]): string[] {
+  const st = useAtlasVoiceStore.getState();
   if (st.neuralVoice === 'kokoro-en' && available.length >= 11) {
     const main = KOKORO_SPEAKERS[st.neuralSid] || KOKORO_SPEAKERS[0];
     const other = KOKORO_SPEAKERS.find((k) => k.female !== main.female && k.accent === main.accent) || KOKORO_SPEAKERS[6];
@@ -242,4 +250,16 @@ export function hostVoices(available: { name: string }[]): string[] {
     return [`sid:${main.sid}`, `sid:${other.sid}`, `sid:${third.sid}`];
   }
   return available.slice(0, 3).map((v) => v.name);
+}
+
+/** A readable name for a voice: a Kokoro speaker's name, or the phone voice's language and letter code. */
+export function voiceLabel(name: string, index: number): string {
+  const sid = name.startsWith('sid:') ? Number(name.slice(4)) : NaN;
+  if (Number.isInteger(sid)) {
+    const st = useAtlasVoiceStore.getState();
+    const k = st.neuralVoice === 'kokoro-en' ? KOKORO_SPEAKERS.find((x) => x.sid === sid) : undefined;
+    return k ? `${k.name} (${k.accent})` : `Voice ${sid + 1}`;
+  }
+  const m = name.match(/^([a-z]{2})[-_]([a-z]{2})[-_]x[-_]([a-z]{3})/i);
+  return m ? `${m[2].toUpperCase()} ${m[3].toUpperCase()}` : name.length > 18 ? `Voice ${index + 1}` : name;
 }

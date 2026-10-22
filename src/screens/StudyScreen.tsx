@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
+import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
 import { safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { deckSlides, savePptx } from '../study/pptx';
@@ -496,6 +497,8 @@ export const StudyScreen: React.FC = () => {
                     </TouchableOpacity>
                   ))}
                 </View>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>VOICES</Text>
+                <PodcastVoicePicker hosts={pod.hosts} />
               </>
             )}
             <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>STYLE</Text>

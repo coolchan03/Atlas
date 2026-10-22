@@ -10,6 +10,7 @@ import { useStudyStore, type StudyResult } from '../study/engine';
 import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
+import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 
 const EMPTY: never[] = [];
 const LENGTHS = [3, 5, 10, 15];
@@ -209,6 +210,12 @@ export const DailyBriefScreen: React.FC = () => {
                   </TouchableOpacity>
                 ))}
               </View>
+            </>
+          )}
+          {voices >= 2 && (
+            <>
+              <Text style={styles.sectionLabel}>Voices</Text>
+              <PodcastVoicePicker hosts={prefs.experts ? 3 : prefs.hosts} />
             </>
           )}
           {voices >= 2 && (
