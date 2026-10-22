@@ -42,9 +42,9 @@ export function parseListening(raw: string, kind: Listening['kind'], known: Set<
       t: str(l?.t ?? l?.text, 400), en: str(l?.en ?? l?.english, 400),
     })).filter((l: Line) => l.t && l.en);
     const q = p?.question;
-    const options = Array.isArray(q?.options) ? q.options.map((o: unknown) => str(o, 120)).filter(Boolean) : [];
+    const options = Array.isArray(q?.options) ? q.options.map((o: unknown) => str(o, 120)) : [];
     const answer = Number(q?.answer);
-    const question = q && str(q.q, 200) && options.length >= 2 && Number.isInteger(answer) && answer >= 0 && answer < options.length
+    const question = q && str(q.q, 200) && options.length >= 2 && options.every(Boolean) && Number.isInteger(answer) && answer >= 0 && answer < options.length
       ? { q: str(q.q, 200), options, answer } : undefined;
     return { lines, ...(question ? { question } : {}) };
   }).filter((p: Part) => p.lines.length);
