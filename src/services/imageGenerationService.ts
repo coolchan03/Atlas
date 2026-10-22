@@ -505,13 +505,14 @@ class ImageGenerationService {
     let imageBackend;
     try {
       imageBackend = await selectImageAccelerator(
-        activeImageModel.backend || 'mnn', imageComputeMode(settings), {
+        activeImageModel.backend || 'mnn',
+        { mode: imageComputeMode(settings), allowCpuFallback: settings.imageAllowCpuFallback === true },
+        {
           vulkan: () => onnxImageGeneratorService.getNativeImageGpuDiagnostics(),
           sdOpencl: () => onnxImageGeneratorService.getNativeImageGpuDiagnostics('opencl'),
           opencl: () => hardwareService.getOpenCLCapability(),
           npu: async () => (await hardwareService.getSoCInfo()).hasNPU,
         },
-        settings.imageAllowCpuFallback === true,
       );
     } catch (error: any) {
       return this._fail('Image accelerator unavailable: ' + (error?.message || String(error)));

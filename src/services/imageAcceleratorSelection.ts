@@ -5,6 +5,7 @@
  * plan carries supported GPU backends for retry, never a silent CPU downgrade.
  */
 export type ImageComputeMode = 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
+export type ImageComputePreference = { mode: ImageComputeMode; allowCpuFallback?: boolean };
 export type ImageBackend = 'sdcpp' | 'mnn' | 'qnn' | 'coreml' | string;
 type SdBackend = 'vulkan' | 'opencl' | 'cpu';
 export type ImageComputeDecision = {
@@ -48,21 +49,22 @@ async function planSdcpp(mode: ImageComputeMode, probe: Probes, allowCpuFallback
     const run = api === 'opencl' ? probe.sdOpencl : probe.vulkan;
     let found: { enumerated: boolean; detail: string } | null = null;
     try { found = run ? await run() : null; } catch (e: any) { found = { enumerated: false, detail: e?.message || String(e) }; }
-    if (found?.enumerated) plan.push(sdAttempt(api, SD_LABEL[api] + ' device detected; diffusion shaders still need to execute'));
-    else skipped.push(SD_LABEL[api] + ' unavailable (' + (found?.detail || 'not in this build') + ')');
+    if (found?.enumerated) plan.push(sdAttempt(api, `${SD_LABEL[api]} device detected; diffusion shaders still need to execute`));
+    else skipped.push(`${SD_LABEL[api]} unavailable (${found?.detail || 'not in this build'})`);
   }
   if (allowCpuFallback) plan.push(sdAttempt('cpu', 'CPU fallback explicitly allowed in image settings'));
-  if (!plan.length) throw new Error('No supported diffusion GPU available: ' + skipped.join('; ') + '. Select CPU explicitly if desired.');
+  if (!plan.length) throw new Error(`No supported diffusion GPU available: ${skipped.join('; ')}. Select CPU explicitly if desired.`);
   const [first, ...rest] = plan;
-  return { ...first, note: skipped.length && first.computeBackend !== 'cpu' ? first.note + '. ' + skipped.join('; ') : first.note, fallbacks: rest };
+  return { ...first, note: skipped.length && first.computeBackend !== 'cpu' ? `${first.note}. ${skipped.join('; ')}` : first.note, fallbacks: rest };
 }
 
 export async function selectImageAccelerator(
   backend: ImageBackend,
-  mode: ImageComputeMode,
+  preference: ImageComputePreference,
   probe: Probes,
-  allowCpuFallback = false,
 ): Promise<ImageComputeDecision> {
+  let mode = preference.mode;
+  const allowCpuFallback = preference.allowCpuFallback ?? false;
   if (backend === 'coreml') {
     if (mode === 'cpu')
       throw new Error('Core ML CPU-only execution is not selectable in this image runtime.');

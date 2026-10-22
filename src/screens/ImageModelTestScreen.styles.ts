@@ -1,0 +1,31 @@
+import type { ThemeColors } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
+
+export const createImageTestStyles = (colors: ThemeColors) => ({
+  screen: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, padding: SPACING.md },
+  back: { padding: SPACING.sm, minWidth: 44, minHeight: 44, alignItems: 'center' as const, justifyContent: 'center' as const },
+  heading: { ...TYPOGRAPHY.h1, color: colors.text, marginLeft: SPACING.sm },
+  content: { padding: SPACING.md, paddingBottom: 56, maxWidth: 850, width: '100%' as const, alignSelf: 'center' as const },
+  card: { backgroundColor: colors.surface, borderRadius: 12, padding: SPACING.lg, marginBottom: SPACING.md },
+  title: { ...TYPOGRAPHY.h2, color: colors.text },
+  label: { ...TYPOGRAPHY.h3, color: colors.text },
+  body: { ...TYPOGRAPHY.body, color: colors.text },
+  secondary: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
+  muted: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  small: { ...TYPOGRAPHY.meta, color: colors.textMuted },
+  error: { color: colors.error },
+  success: { color: colors.success },
+  warning: { color: colors.warning },
+  spaced: { marginTop: SPACING.sm },
+  action: { marginTop: SPACING.md },
+  modeRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, marginTop: SPACING.md },
+  modeButton: { marginRight: SPACING.sm, marginBottom: SPACING.xs },
+  switchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  switchLabel: { ...TYPOGRAPHY.body, color: colors.text, flex: 1 },
+  row: { flexDirection: 'row' as const },
+  spinner: { width: 20 },
+  statusBody: { flex: 1, marginLeft: SPACING.sm },
+  detail: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: SPACING.xs },
+  preview: { width: '100%' as const, height: 330, backgroundColor: colors.background, marginTop: SPACING.sm },
+});
