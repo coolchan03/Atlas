@@ -36,6 +36,10 @@ jobs:
             __tests__/unit/services/providers/anthropicProvider.test.ts \
             __tests__/unit/services/tools/toolAccess.test.ts \
             __tests__/unit/services/tools/codeExecution.test.ts \
-            __tests__/unit/services/tools/remoteCodeRunner.test.ts
+            __tests__/unit/services/tools/remoteCodeRunner.test.ts \
+            __tests__/unit/services/tools/sensorToolkit.test.ts \
+            __tests__/unit/services/tools/releaseDiagnostics.test.ts \
+            __tests__/unit/services/tools/atlasContactPermission.test.ts \
+            __tests__/unit/services/tools/deviceSensorSnapshot.test.ts
       - name: Full Jest regression suite
         run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent

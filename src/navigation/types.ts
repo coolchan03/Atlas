@@ -18,6 +18,7 @@ export type RootStackParamList = {
   Study: { projectId: string; openAt?: number };
   DailyBrief: undefined;
   Compass: undefined;
+  SensorToolkit: undefined;
   Maps: undefined;
   AtlasHub: undefined;
   MyModels: undefined;

@@ -17,6 +17,7 @@ export { SurvivalManualScreen } from './SurvivalManualScreen';
 export { PhrasesScreen } from './PhrasesScreen';
 export { StudyScreen } from './StudyScreen';
 export { CompassScreen } from './CompassScreen';
+export { SensorToolkitScreen } from './SensorToolkitScreen';
 export { MapsScreen } from './MapsScreen';
 export { AtlasHubScreen } from './AtlasHubScreen';
 export { MyModelsScreen } from './MyModelsScreen';

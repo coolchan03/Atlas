@@ -116,6 +116,10 @@ export const CompassScreen: React.FC = () => {
             ))}
           </View>
         )}
+        <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('SensorToolkit')}
+          style={{ marginTop: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border }}>
+          <Text style={{ color: colors.text, fontWeight: '600' }}>Sensor toolkit: pressure, temperature, motion and more</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('SurvivalManual', { chapterId: 'DirectionFinding' })} style={{ marginTop: 16, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border }}>
           <Text style={{ color: colors.text }}>Find direction without a compass (sun, stars, shadows)</Text>
         </TouchableOpacity>

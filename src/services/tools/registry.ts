@@ -152,6 +152,11 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     icon: 'x-circle', parameters: { id: { type: 'string', description: 'Movie-watch UUID', required: true } },
   },
   {
+    id: 'run_release_self_test', name: 'run_release_self_test', displayName: 'Atlas release self-test',
+    description: 'With user approval, run a privacy-preserving diagnostic of installed sensors, Health Connect availability, scheduled draft worker metadata, on-device JavaScript, PowerPoint layouts, PDF exporter registration, and English Word of the Day. Does not send messages, read health records or upload files.',
+    icon: 'check-circle', parameters: {},
+  },
+  {
     id: 'get_device_info',
     name: 'get_device_info',
     displayName: 'Device Info',

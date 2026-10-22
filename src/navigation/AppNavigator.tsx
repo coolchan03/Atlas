@@ -60,6 +60,7 @@ import {
   MainTabParamList,
 } from './types';
 import { WorkspaceScreen } from '../screens/WorkspaceScreen';
+import { SensorToolkitScreen } from '../screens/SensorToolkitScreen';
 import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
 import { PresentationScreen } from '../screens/PresentationScreen';
 import { useRegisteredScreens } from './screenRegistry';
@@ -290,6 +291,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Phrases" component={PhrasesScreen} />
         <RootStack.Screen name="Study" component={StudyScreen} />
         <RootStack.Screen name="Compass" component={CompassScreen} />
+        <RootStack.Screen name="SensorToolkit" component={SensorToolkitScreen} />
         <RootStack.Screen name="Maps" component={MapsScreen} />
         <RootStack.Screen name="AtlasHub" component={AtlasHubScreen} />
         <RootStack.Screen name="MyModels" component={MyModelsScreen} />

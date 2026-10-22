@@ -50,6 +50,21 @@ export const DeviceInfoScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Open sensor toolkit"
+          onPress={() => (navigation as any).navigate('SensorToolkit')}
+          style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+            borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <Icon name="activity" size={22} color={colors.primary} />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>Sensor toolkit</Text>
+            <Text style={{ color: colors.textSecondary, marginTop: 2 }}>
+              Air pressure, temperature, motion, battery, light and more
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={20} color={colors.textMuted} />
+        </TouchableOpacity>
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Hardware</Text>
           <View style={styles.infoRow}>

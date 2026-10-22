@@ -14,6 +14,7 @@ import { buildRunTestJavascript } from './codeExecution';
 import { buildRunTestRemote } from './remoteCodeRunner';
 import { lookupNamedContact } from './contactLookup';
 import { readDeviceSensors, scanNearbyDevices } from './deviceSensors';
+import { runReleaseDiagnostics } from './releaseDiagnostics';
 import { scheduleTextDraft, listScheduledTextDrafts, cancelScheduledTextDraft } from './scheduledDrafts';
 import { listLocalSkills, saveLocalSkill, readLocalSkill } from './localSkills';
 import { watchMovieRelease, listMovieWatches, cancelMovieWatch } from './movieWatches';
@@ -83,6 +84,8 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return handleCalculator(call.arguments.expression);
     case 'get_current_datetime':
       return handleGetDatetime(call.arguments.timezone);
+    case 'run_release_self_test':
+      return runReleaseDiagnostics();
     case 'get_device_info':
       return handleGetDeviceInfo(call.arguments.info_type);
     case 'read_health_summary':

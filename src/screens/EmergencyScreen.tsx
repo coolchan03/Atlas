@@ -145,6 +145,16 @@ export const EmergencyScreen: React.FC = () => {
           <Icon name="tool" size={23} color={colors.primary} />
           <View style={{ marginLeft: 12, flex: 1 }}><Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Emergency tools</Text><Text style={{ color: colors.textSecondary }}>SOS signal · daylight left · kit checklists · survival drills</Text></View>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('SensorToolkit')} accessibilityRole="button"
+          accessibilityLabel="Open sensor toolkit" style={{ padding: 15, borderRadius: 12,
+            backgroundColor: colors.surface, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name="thermometer" size={23} color={colors.primary} />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Sensor toolkit</Text>
+            <Text style={{ color: colors.textSecondary }}>Pressure, temperature, humidity, movement, battery and connectivity</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setGamesOpen(true)} style={{ padding: 15, borderRadius: 12, backgroundColor: colors.surface, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
           <Icon name="grid" size={23} color={colors.primary} />
           <View style={{ marginLeft: 12, flex: 1 }}><Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Offline Arcade</Text><Text style={{ color: colors.textSecondary }}>Standalone games · no model or internet needed</Text></View>

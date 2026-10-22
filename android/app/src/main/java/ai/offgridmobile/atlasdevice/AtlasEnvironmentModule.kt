@@ -5,6 +5,9 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -56,28 +59,81 @@ class AtlasEnvironmentModule(private val ctx: ReactApplicationContext) : ReactCo
             })
             val pressure = sensors.getDefaultSensor(Sensor.TYPE_PRESSURE)
             val temp = sensors.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)
+            val humidity = sensors.getDefaultSensor(Sensor.TYPE_RELATIVE_HUMIDITY)
+            val light = sensors.getDefaultSensor(Sensor.TYPE_LIGHT)
+            val proximity = sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+            val accelerometer = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val gyroscope = sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            val magnetic = sensors.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
             out.putMap("sensors", Arguments.createMap().apply {
                 putBoolean("pressure", pressure != null)
                 putBoolean("ambientTemperature", temp != null)
+                putBoolean("humidity", humidity != null)
+                putBoolean("light", light != null)
+                putBoolean("proximity", proximity != null)
+                putBoolean("accelerometer", accelerometer != null)
+                putBoolean("gyroscope", gyroscope != null)
+                putBoolean("magneticField", magnetic != null)
             })
+            try {
+                val battery = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                if (battery != null) {
+                    val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                    val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    val tenthC = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+                    out.putMap("battery", Arguments.createMap().apply {
+                        if (level >= 0 && scale > 0) putDouble("percent", 100.0 * level / scale)
+                        if (tenthC != Int.MIN_VALUE) putDouble("batteryTemperatureC", tenthC / 10.0)
+                        val plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+                        putBoolean("charging", plugged != 0)
+                    })
+                }
+            } catch (_: Exception) { /* Battery read is optional. */ }
             out.putDouble("sampledAt", System.currentTimeMillis().toDouble())
-            if (pressure == null && temp == null) { promise.resolve(out); return }
-            val captured = mutableMapOf<Int, Float>()
+            val candidates = listOfNotNull(pressure, temp, humidity, light, proximity, accelerometer, gyroscope, magnetic)
+            if (candidates.isEmpty()) { promise.resolve(out); return }
+            val captured = mutableMapOf<Int, FloatArray>()
             val observer = object : SensorEventListener {
                 override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
                 override fun onSensorChanged(event: SensorEvent) {
-                    if (event.values.isNotEmpty()) captured[event.sensor.type] = event.values[0]
+                    if (event.values.isNotEmpty()) captured[event.sensor.type] = event.values.clone()
                 }
             }
             main.post {
                 try {
-                    pressure?.let { sensors.registerListener(observer, it, SensorManager.SENSOR_DELAY_NORMAL) }
-                    temp?.let { sensors.registerListener(observer, it, SensorManager.SENSOR_DELAY_NORMAL) }
+                    candidates.forEach { sensors.registerListener(observer, it, SensorManager.SENSOR_DELAY_NORMAL) }
                     main.postDelayed({
                         sensors.unregisterListener(observer)
                         try {
-                            captured[Sensor.TYPE_PRESSURE]?.let { out.putDouble("pressureHpa", it.toDouble()) }
-                            captured[Sensor.TYPE_AMBIENT_TEMPERATURE]?.let { value ->
+                            captured[Sensor.TYPE_PRESSURE]?.firstOrNull()?.let { value ->
+                                out.putDouble("pressureHpa", value.toDouble())
+                                val now = System.currentTimeMillis()
+                                val old = prefs.getLong("pressureTime", 0L)
+                                val hours = (now - old) / 3600000.0
+                                if (hours >= 5.0 / 60.0 && hours <= 48.0 && prefs.contains("pressure")) {
+                                    out.putDouble("pressureChangeHpaPerHour",
+                                        (value - prefs.getFloat("pressure", value)) / hours)
+                                }
+                                if (old == 0L || hours >= 5.0 / 60.0 || hours < 0 || hours > 48.0) {
+                                    prefs.edit().putLong("pressureTime", now).putFloat("pressure", value).apply()
+                                }
+                            }
+                            captured[Sensor.TYPE_RELATIVE_HUMIDITY]?.firstOrNull()?.let { out.putDouble("humidityPercent", it.toDouble()) }
+                            captured[Sensor.TYPE_LIGHT]?.firstOrNull()?.let { out.putDouble("lightLux", it.toDouble()) }
+                            captured[Sensor.TYPE_PROXIMITY]?.firstOrNull()?.let { out.putDouble("proximityCm", it.toDouble()) }
+                            fun vector(type: Int, key: String) {
+                                captured[type]?.takeIf { it.size >= 3 }?.let { v ->
+                                    out.putMap(key, Arguments.createMap().apply {
+                                        putDouble("x", v[0].toDouble())
+                                        putDouble("y", v[1].toDouble())
+                                        putDouble("z", v[2].toDouble())
+                                    })
+                                }
+                            }
+                            vector(Sensor.TYPE_ACCELEROMETER, "accelerationMs2")
+                            vector(Sensor.TYPE_GYROSCOPE, "rotationRadPerSec")
+                            vector(Sensor.TYPE_MAGNETIC_FIELD, "magneticMicroT")
+                            captured[Sensor.TYPE_AMBIENT_TEMPERATURE]?.firstOrNull()?.let { value ->
                                 out.putDouble("ambientTemperatureC", value.toDouble())
                                 val now = System.currentTimeMillis()
                                 val old = prefs.getLong("time", 0L)
