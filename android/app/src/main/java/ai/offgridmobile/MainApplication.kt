@@ -1,6 +1,9 @@
 package ai.offgridmobile
 
 import android.app.Application
+import android.content.res.AssetManager
+import android.graphics.Typeface
+import com.facebook.react.common.assets.ReactFontManager
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -43,6 +46,17 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    registerAtlasFonts(assets)
     loadReactNative(this)
+  }
+}
+
+/** Keep bold and italic requests on the selected asset instead of missing variant files. */
+internal fun registerAtlasFonts(assets: AssetManager) {
+  val fonts = ReactFontManager.getInstance()
+  assets.list("fonts").orEmpty().filter {
+    it.startsWith("Atlas") && (it.endsWith(".ttf") || it.endsWith(".otf"))
+  }.forEach { file ->
+    fonts.addCustomFont(file.substringBeforeLast('.'), Typeface.createFromAsset(assets, "fonts/$file"))
   }
 }

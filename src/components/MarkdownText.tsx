@@ -64,10 +64,11 @@ interface MarkdownTextProps {
 }
 
 export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
-  const { colors } = useTheme();
+  const { colors, typographyKey } = useTheme();
   const markdownStyles = useMemo(
     () => createMarkdownStyles(colors, dimmed),
-    [colors, dimmed],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Shared font tokens change with typographyKey even when colors do not.
+    [colors, dimmed, typographyKey],
   );
 
   const handleLinkPress = useCallback((url: string) => {

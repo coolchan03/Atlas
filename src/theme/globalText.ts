@@ -33,19 +33,22 @@ export function setTextAppearance(next: TextAppearance): void {
 export const getTextAppearance = (): TextAppearance => current;
 
 /** Plain system families the app uses by default; only these follow the chosen font. Code (monospace, Menlo) stays. */
-const FOLLOWS_FONT = new Set(['sans-serif', 'serif', ...FONT_CHOICES.filter(f => f.id !== 'mono').flatMap(f => [f.heading, f.body])]);
+const FOLLOWS_FONT = new Set(['sans-serif', 'serif', ...FONT_CHOICES.flatMap(f => [f.heading, f.body])]
+  .filter(family => family !== 'monospace' && family !== 'Menlo'));
 /** Every family that is real text, so it scales; anything else (an icon font) does not. */
 const TEXT_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'Menlo', ...FONT_CHOICES.flatMap(f => [f.heading, f.body])]);
 
 /** The style a text should render with under the given appearance. Returns the input untouched when nothing changes. */
 export function adjustTextStyle(style: unknown, a: TextAppearance, nested = false): unknown {
-  if (a.key === NEUTRAL.key) return style;
   const flat = (StyleSheet.flatten(style as any) ?? {}) as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...flat };
   const family = flat.fontFamily;
+  const followsFont = typeof family === 'string' && FOLLOWS_FONT.has(family);
+  // Static styles can retain a previously selected family, even when returning to Atlas.
+  if (a.key === NEUTRAL.key && (!followsFont || family === a.heading || family === a.body)) return style;
+  const out: Record<string, unknown> = { ...flat };
   // A Text inside another Text inherits the parent's family and size: only change what it sets itself.
   if (family === undefined) { if (!nested) out.fontFamily = a.body; }
-  else if (typeof family === 'string' && FOLLOWS_FONT.has(family)) out.fontFamily = family === 'serif' ? a.heading : a.body;
+  else if (followsFont) out.fontFamily = family === 'serif' ? a.heading : a.body;
   // Icon fonts (react-native-vector-icons draws icons as Text with their own family) keep their size.
   const textFamily = family === undefined || (typeof family === 'string' && TEXT_FAMILIES.has(family));
   if (a.scale !== 1 && textFamily) {
@@ -75,7 +78,8 @@ export function withTextAppearance<P extends { style?: unknown }>(Original: Reac
   const Wrapped = function TextWithAppearance(props: P) {
     const a = useSyncExternalStore(subscribe, snapshot);
     const nested = !!React.useContext(ancestorContext());
-    return React.createElement(Original as React.ComponentType<any>, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a, nested) });
+    const style = adjustTextStyle(props.style, a, nested);
+    return React.createElement(Original as React.ComponentType<any>, style === props.style ? props : { ...props, style });
   };
   Object.assign(Wrapped, Original); // statics such as TextInput.State
   (Wrapped as any).displayName = (Original as any).displayName ?? 'Text';
