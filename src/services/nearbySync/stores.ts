@@ -42,7 +42,7 @@ export function shareable(key: string, raw: string): string | null {
 const recordingsDir = () => `${RNFS.DocumentDirectoryPath}/atlas-recordings`;
 
 /** Applies a remote store to the local raw value. Returns the new raw value, or null to leave it. */
-export function combine(key: string, { local, remote, deletedRecordings = {} }: { local: string | null; remote: string; deletedRecordings?: Record<string, number> }): string | null {
+export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true }: { local: string | null; remote: string; deletedRecordings?: Record<string, number>; remoteNewer?: boolean }): string | null {
   if (key === APP_STORE) {
     // The incoming copy is only the shared part (settings and theme): keep the rest of this
     // device's app store, then this device's hardware settings over it.
@@ -65,7 +65,7 @@ export function combine(key: string, { local, remote, deletedRecordings = {} }: 
     mine.state = { ...mine.state, recordings: [...kept, ...fresh] };
     return JSON.stringify(mine);
   }
-  if (key === LANGUAGE) return local ? mergeLanguage(local, remote) : remote;
+  if (key === LANGUAGE) return local ? mergeLanguage(local, remote, remoteNewer) : remote;
   return remote;
 }
 
@@ -81,9 +81,10 @@ const unionBy = <T,>(x: T[] = [], y: T[] = [], id: (t: T) => string) => {
 /**
  * The language course from both phones: every written lesson, story, saved word and looked-up
  * word; for each square the best stars and most lessons; for each day the most XP; the newer
- * review schedule per word. Settings (language, level, goal) follow the copy given second.
+ * review schedule per word. Settings (language, level, goal) follow the copy changed most
+ * recently, so both phones end up with the same ones instead of swapping them.
  */
-export function mergeLanguage(localRaw: string, remoteRaw: string): string {
+export function mergeLanguage(localRaw: string, remoteRaw: string, remoteNewer = true): string {
   const a = JSON.parse(localRaw);
   const b = JSON.parse(remoteRaw);
   const x: Obj = a.state ?? {};
@@ -93,7 +94,7 @@ export function mergeLanguage(localRaw: string, remoteRaw: string): string {
   const memory = (p: Obj = {}, q: Obj = {}) => byLanguage(p, q, (m: any, n: any) => (!m ? n : !n ? m
     : (n.due >= m.due ? n : m)));
   const state = {
-    ...x, ...y,
+    ...(remoteNewer ? { ...x, ...y } : { ...y, ...x }),
     content: byLanguage(x.content, y.content, union),
     tips: byLanguage(x.tips, y.tips, union),
     glossary: byLanguage(x.glossary, y.glossary, union),
@@ -107,7 +108,7 @@ export function mergeLanguage(localRaw: string, remoteRaw: string): string {
     streak: (y.streak?.count ?? 0) >= (x.streak?.count ?? 0) ? y.streak : x.streak,
     saved: { ...x.saved, ...y.saved },
   };
-  return JSON.stringify({ ...a, ...b, state, version: Math.max(a.version ?? 0, b.version ?? 0) });
+  return JSON.stringify({ ...(remoteNewer ? { ...a, ...b } : { ...b, ...a }), state, version: Math.max(a.version ?? 0, b.version ?? 0) });
 }
 
 async function readStamps(): Promise<Stamps> {
@@ -147,7 +148,8 @@ export async function applyStores(remote: unknown, deletedRecordings: Record<str
     if (value == null || mine[key]?.value === value) continue;
     // Recordings and the course always merge; other stores take the newer copy.
     if (!ALWAYS_MERGE.has(key) && (mine[key]?.changedAt ?? 0) >= entry.changedAt) continue;
-    const next = combine(key, { local: await AsyncStorage.getItem(key), remote: value, deletedRecordings });
+    const remoteNewer = entry.changedAt > (mine[key]?.changedAt ?? 0);
+    const next = combine(key, { local: await AsyncStorage.getItem(key), remote: value, deletedRecordings, remoteNewer });
     if (next == null) continue;
     await AsyncStorage.setItem(key, next);
     const shared = shareable(key, next);

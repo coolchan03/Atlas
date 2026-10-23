@@ -67,6 +67,22 @@ it('takes the other phone\'s settings, merges the language course and recordings
   ]);
 });
 
+it('ends with the same course language on both phones, not swapped', async () => {
+  // Phone A switched to French more recently than phone B last changed its course.
+  await phone({ 'atlas-language': store({ language: 'fr-FR', level: 2, xp: 10 }, 2) });
+  const fromA = await localStores(2000);
+  await phone({ 'atlas-language': store({ language: 'es-ES', level: 1, xp: 20 }, 2) });
+  const fromB = await localStores(1000);
+
+  await applyStores(fromA); // on B
+  expect(useLanguage.getState()).toMatchObject({ language: 'fr-FR', level: 2, xp: 20 });
+
+  await phone({ 'atlas-language': store({ language: 'fr-FR', level: 2, xp: 10 }, 2) });
+  await localStores(2000);
+  await applyStores(fromB); // on A: keeps its own newer choice
+  expect(useLanguage.getState()).toMatchObject({ language: 'fr-FR', level: 2, xp: 20 });
+});
+
 it('does not bring back a recording deleted on the other phone, and removes this phone\'s copy', async () => {
   const rec = (id: string) => ({ id, title: id, status: 'done', audioPath: '' });
   await phone({ 'atlas-recordings': store({ recordings: [rec('gone'), rec('kept')] }) });
