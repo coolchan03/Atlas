@@ -288,7 +288,7 @@ class LLMService {
           if (isOverridableMemoryError(error)) throw error;
           if (!auto) {
             if (backend === INFERENCE_BACKENDS.VULKAN)
-              throw new Error(`Vulkan GPU unavailable: ${message}. Select CPU explicitly to continue.`);
+              throw new Error(`Vulkan GPU unavailable: ${message}. To keep going, set the backend to Automatic or CPU in the chat's generation settings.`);
             throw new Error(message);
           }
           // A timed-out native context may still be initializing; do not race a

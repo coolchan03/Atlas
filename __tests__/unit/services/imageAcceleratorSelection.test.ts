@@ -51,7 +51,7 @@ describe('image runtime accelerator selection', () => {
   it('does not silently choose CPU when fallback permission is absent', async () => {
     const probe = probes();
     probe.vulkan.mockResolvedValue({ enumerated: false, detail: 'not detected' });
-    await expect(selectImageAccelerator('sdcpp', 'auto', probe)).rejects.toThrow('Select CPU explicitly');
+    await expect(selectImageAccelerator('sdcpp', 'auto', probe)).rejects.toThrow('set the image engine to CPU');
     probe.opencl.mockResolvedValue({ supported: false });
     await expect(selectImageAccelerator('mnn', 'auto', probe)).rejects.toThrow('CPU was not chosen automatically');
   });
