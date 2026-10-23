@@ -218,7 +218,10 @@ class LLMService {
               { modelBytes: fileSize, availableBytes: deviceInfo.availableMemory });
             requireGpuLayers('vulkan', requestedLayers);
             const contextLength = Math.min(ctxLen, 32768);
-            const loaded = await vulkanEngine.loadModel(modelPath, requestedLayers, contextLength, nThreads);
+            // Automatic passes 0: llama.kt then picks the fast cores itself (4 big cores on a 4+4 chip)
+            // instead of a count that also pulls in the slow ones.
+            const vulkanThreads = useAppStore.getState().settings.nThreads === 0 ? 0 : nThreads;
+            const loaded = await vulkanEngine.loadModel(modelPath, requestedLayers, contextLength, vulkanThreads);
             if (!/vulkan/i.test(loaded.backend)) throw new Error(
               `Native model reported ${loaded.backend}, not Vulkan`,
             );

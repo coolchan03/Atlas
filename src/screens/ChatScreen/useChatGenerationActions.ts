@@ -275,7 +275,11 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
     setDebugInfo({ systemPrompt, ...contextDebug });
-    if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
+    // Clear when the context is nearly full. Clearing on every windowed chat threw away the cache each
+    // send, so the whole conversation was read again (minutes on a slow CPU). OpenCL keeps the old,
+    // cautious rule: its native cache must not be reused across a moved prompt start.
+    const openCl = /opencl/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
+    if (contextDebug.contextUsagePercent > 95 || (openCl && (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70))) {
       await llmService.clearKVCache(false).catch(() => { });
     }
   } catch { /* ignore */ }

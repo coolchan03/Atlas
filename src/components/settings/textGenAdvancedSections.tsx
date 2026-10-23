@@ -284,18 +284,28 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
 
 export const CpuThreadsSlider: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { updateSettings } = useAppStore();
-  const { cpuThreadsSliderValue } = useTextGenerationAdvanced();
+  const { settings, updateSettings } = useAppStore();
+  const { cpuThreadsSliderValue, cpuThreadsDisplayValue, cpuCores } = useTextGenerationAdvanced();
+  const auto = settings?.nThreads === 0;
   return (
     <View style={styles.container}>
       <SliderSetting
         testID="cpu-threads-stepper"
         label="CPU Threads"
-        description="Parallel threads for inference"
+        description={`Parallel threads for inference: ${cpuThreadsDisplayValue}. More than the ${cpuCores} cores this device has only slows it down.`}
         value={cpuThreadsSliderValue}
-        min={1} max={12} step={1}
+        min={1} max={Math.max(1, cpuCores)} step={1}
         onChange={(v) => updateSettings({ nThreads: v })}
       />
+      <View style={styles.buttons}>
+        <TouchableOpacity
+          testID="cpu-threads-auto-button"
+          style={[styles.button, auto && styles.buttonActive]}
+          onPress={() => updateSettings({ nThreads: 0 })}
+        >
+          <Text style={[styles.buttonText, auto && styles.buttonTextActive]}>Auto</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };

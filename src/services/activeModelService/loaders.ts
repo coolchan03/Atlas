@@ -229,7 +229,10 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     // (incompatible file), clear it so the eye icon reappears for repair.
     // Only applies when the link was already persisted before this load attempt — not
     // when resolveMmProjPath just discovered the file via directory scan.
-    if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
+    // The Vulkan engine is text only by design, so it reports no picture support for a model whose
+    // picture file is fine: leave the link in place for the engines that can use it.
+    const onVulkan = /vulkan/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
+    if (ctx.model.mmProjPath && !multimodalSupport?.vision && !onVulkan) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 

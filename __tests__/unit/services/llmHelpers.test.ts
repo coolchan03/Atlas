@@ -727,3 +727,12 @@ describe('backendForcesF16Cache / effectiveCacheType (single source)', () => {
     expect((params.baseParams as any).cache_type_k).toBe(effectiveCacheType(INFERENCE_BACKENDS.HTP, 'q8_0'));
   });
 });
+
+describe('Vulkan cache type', () => {
+  it('reports an f16 cache, because the Vulkan engine is never given the cache type setting', () => {
+    const { effectiveCacheType, backendForcesF16Cache } = require('../../../src/services/llmHelpers');
+    expect(backendForcesF16Cache('vulkan')).toBe(true);
+    expect(effectiveCacheType('vulkan', 'q8_0')).toBe('f16');
+    expect(effectiveCacheType('cpu', 'q8_0')).toBe('q8_0');
+  });
+});

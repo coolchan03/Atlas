@@ -66,7 +66,9 @@ export interface ModelLoadParams {
  * never shows one cache type while the model ran another.
  */
 export function backendForcesF16Cache(backend: string | undefined): boolean {
-  return backend === INFERENCE_BACKENDS.OPENCL || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
+  // Vulkan (llama.kt) is always loaded with an f16 cache: the cache type setting is not passed to it.
+  return backend === INFERENCE_BACKENDS.OPENCL || backend === INFERENCE_BACKENDS.VULKAN
+    || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
 }
 
 /** The KV cache type that will ACTUALLY be used, after backend coercion to f16. */

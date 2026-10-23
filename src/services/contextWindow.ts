@@ -2,6 +2,9 @@
  * The complete chat stays in storage. Only the inference prompt is windowed.
  * Never assume native KV-cache shifting is safe on Android OpenCL.
  */
+
+/** Messages dropped at a time when the history no longer fits (keeps the prompt start stable between drops). */
+const DROP_CHUNK = 8;
 export type ContextMessage = { role: string; content: string };
 export type ContextWindowResult<T> = {
   messages: T[];
@@ -89,7 +92,8 @@ export async function fitMessagesToContext<T extends ContextMessage>(options: {
   // by one. The prompt start then stays identical for several turns, so the
   // native KV cache can be reused instead of re-reading the whole prompt each send.
   const needed = history.length - low;
-  const chunk = Math.max(2, Math.ceil(history.length * 0.25));
+  // A fixed chunk (DROP_CHUNK): one that grows with the history moved the start of the prompt on most turns.
+  const chunk = DROP_CHUNK;
   const dropped = Math.min(history.length - 1, Math.ceil(needed / chunk) * chunk);
   const kept = [...systems, ...history.slice(dropped)];
   return {
