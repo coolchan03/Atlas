@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { useTheme } from '../theme';
@@ -44,6 +44,15 @@ export const OfflineLibraryScreen: React.FC = () => {
     setBusy(true); setArticle(null);
     try { setHits(await searchLibrary(q.trim(), 10)); } catch (e: any) { Alert.alert('Search failed', String(e?.message || e)); } finally { setBusy(false); }
   };
+
+  // System Back closes an open article first, like the header arrow, instead of leaving the screen.
+  useFocusEffect(React.useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (article) { setArticle(null); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [article]));
 
   const card = { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 12 };
   return (

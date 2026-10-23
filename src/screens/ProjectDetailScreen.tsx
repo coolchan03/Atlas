@@ -24,6 +24,7 @@ import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { isTextDocument } from '../services/rag/textDocument';
 import { LanguageCourseCard } from '../language/LanguageCourseCard';
 import { ProjectPinGate } from '../components/ProjectPinGate';
+import { useActiveTextModel } from '../hooks/useActiveTextModel';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
@@ -44,7 +45,9 @@ export const ProjectDetailScreen: React.FC = () => {
   const { downloadedModels, activeModelId } = useAppStore();
 
   const project = getProject(projectId);
-  const hasModels = downloadedModels.length > 0;
+  // A connected remote model (Ollama, LM Studio...) counts, as it does on Home and in the chat list.
+  const { modelId: activeTextModelId } = useActiveTextModel();
+  const hasModels = downloadedModels.length > 0 || !!activeTextModelId;
 
   // Get chats for this project
   const projectChats = visibleConversations(conversations, hideLocked, vaultOpen)
@@ -65,7 +68,7 @@ export const ProjectDetailScreen: React.FC = () => {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = activeTextModelId || activeModelId || downloadedModels[0]?.id;
     if (modelId) {
       const newConversationId = createConversation(modelId, undefined, projectId);
       navigation.navigate('Chat', { conversationId: newConversationId, projectId });

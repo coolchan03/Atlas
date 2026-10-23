@@ -21,6 +21,7 @@ import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { isChatUnlocked } from '../stores/encryptedChatStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
+import { useActiveTextModel } from '../hooks/useActiveTextModel';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectChats'>;
@@ -174,7 +175,9 @@ export const ProjectChatsScreen: React.FC = () => {
   const { downloadedModels, activeModelId } = useAppStore();
 
   const project = getProject(projectId);
-  const hasModels = downloadedModels.length > 0;
+  // A connected remote model (Ollama, LM Studio...) counts, as it does on Home and in the chat list.
+  const { modelId: activeTextModelId } = useActiveTextModel();
+  const hasModels = downloadedModels.length > 0 || !!activeTextModelId;
 
   // Get chats for this project
   const projectChats = visibleConversations(conversations, hideLocked, vaultOpen)
@@ -191,7 +194,7 @@ export const ProjectChatsScreen: React.FC = () => {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = activeTextModelId || activeModelId || downloadedModels[0]?.id;
     if (modelId) {
       try {
         const newConversationId = createConversation(modelId, undefined, projectId);

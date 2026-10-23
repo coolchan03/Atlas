@@ -1,7 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { MainTabParamList } from '../../navigation/types';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -26,6 +26,7 @@ export const ModelsScreen: React.FC = () => {
   // show an upsell so users can see what Pro adds.
   const VoiceModelsPanel = useSlot(SLOTS.modelsScreenVoiceTab);
   const route = useRoute<RouteProp<MainTabParamList, 'ModelsTab'>>();
+  const navigation = useNavigation<any>();
 
   // Reset to model list view when tab loses focus (e.g. user switches away)
   // vm.setSelectedModel / vm.setModelFiles are useState setters — stable across renders.
@@ -40,8 +41,14 @@ export const ModelsScreen: React.FC = () => {
       // tab with the HF search prefilled (the debounced search in useTextModels fires
       // on the query change). Guarded so it seeds once per navigation.
       if (initialSearchQuery && !didAutoSelect.current) {
+        didAutoSelect.current = true;
         vm.setActiveTab('text');
         vm.setSearchQuery(initialSearchQuery);
+      }
+      // Used once: tab params stay on the route, and would send the person back to this tab and
+      // search every time they return to Models.
+      if (initialTab || repairModelId || initialSearchQuery) {
+        navigation.setParams({ initialTab: undefined, repairModelId: undefined, initialSearchQuery: undefined });
       }
       if (repairModelId && !didAutoSelect.current) {
         didAutoSelect.current = true;

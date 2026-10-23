@@ -411,7 +411,14 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           settings: { ...state.settings, ...newSettings },
         })),
-      resetSettings: () => set({ settings: { ...DEFAULT_SETTINGS } }),
+      // Back to the defaults for every model setting. Personal choices that have no default (accent and
+      // font, bottom bar, name, tone, haptics) are not model settings and stay.
+      resetSettings: () => set((state) => ({
+        settings: {
+          ...Object.fromEntries(Object.entries(state.settings).filter(([key]) => !(key in DEFAULT_SETTINGS))),
+          ...DEFAULT_SETTINGS,
+        },
+      })),
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,

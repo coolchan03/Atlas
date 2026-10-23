@@ -138,7 +138,7 @@ export const PresentationScreen: React.FC = () => {
             ))}
           </ScrollView>
         </View>
-        <View>{label('Slides ? tap a number to edit')}
+        <View>{label('Slides - tap a number to edit')}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
             {slides.map((s,i) => (
               <TouchableOpacity key={i} testID={'presentation-slide-' + i} onPress={() => setActive(i)}
@@ -162,7 +162,7 @@ export const PresentationScreen: React.FC = () => {
             {slide.layout === 'bullets' && <View style={{ marginTop: 12, borderRadius: 9,
               backgroundColor: '#' + template.panel, padding: 12, gap: 5 }}>
               {slide.bullets.slice(0, 6).map((b,i) => <Text key={i} numberOfLines={1} style={{
-                color: '#' + template.foreground, fontSize: 12 }}>?  {b}</Text>)}
+                color: '#' + template.foreground, fontSize: 12 }}>{'\u2022'}  {b}</Text>)}
             </View>}
           </View>
         </View>
@@ -181,7 +181,7 @@ export const PresentationScreen: React.FC = () => {
         <View>{label('Slide title')}{field(slide.title, text => update({ title: text.slice(0,140) }), 'Slide title')}</View>
         <View>{label('Subtitle')}{field(slide.subtitle, text => update({ subtitle: text.slice(0,260) }), 'Slide subtitle')}</View>
         {slide.layout === 'bullets' && <View>
-          {label('Bullet points ? one per line')}
+          {label('Bullet points - one per line')}
           {field(slide.bullets.join('\n'), text => update({ bullets: text.split('\n').slice(0, 10).map(b => b.slice(0,260)) }),
             'Main points', true)}
         </View>}
@@ -205,7 +205,7 @@ export const PresentationScreen: React.FC = () => {
           </View>
           {!!busy && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ActivityIndicator color={colors.primary} />
-            <Text style={{ color: colors.textSecondary }}>Exporting {busy.toUpperCase()}?</Text>
+            <Text style={{ color: colors.textSecondary }}>Exporting {busy.toUpperCase()}...</Text>
           </View>}
           <Text style={{ color: colors.textMuted, fontSize: 12 }}>Your editable draft is saved automatically on this device.</Text>
         </View>
