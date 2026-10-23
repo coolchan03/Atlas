@@ -5,14 +5,12 @@ import { View, Text, Switch, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../../theme';
 import { FONTS, TYPOGRAPHY, SPACING } from '../../constants';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useAppStore, useChatStore } from '../../stores';
 import { useAgentStore } from '../../stores/agentStore';
 import { resetChatTools, toggleChatTool, toolSourceFor, toolsForConversation } from '../../services/tools/chatTools';
-import { useOpenProTools } from '../../hooks/useOpenProTools';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 
 const TOOL_WARNING_COLOR = '#F59E0B';
@@ -29,7 +27,6 @@ export const ToolsScreen: React.FC = () => {
   const { colors } = useTheme();
   const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
-  const openProTools = useOpenProTools();
 
   // Opened from a chat: the switches change that chat's tools only. From Settings: the app defaults.
   const conversationId = (useRoute().params as { conversationId?: string } | undefined)?.conversationId;

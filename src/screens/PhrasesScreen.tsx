@@ -18,7 +18,6 @@ export const PhrasesScreen: React.FC = () => {
   const { colors: baseColors } = useTheme();
   const colors = useEmergencyColors(baseColors);
   const night = useOffGrid((st) => st.nightRed);
-  const setNight = useOffGrid((st) => st.setNightRed);
   const bar = (c: string) => (night ? '#2A0000' : c);
   const { width } = useWindowDimensions();
   const [code, setCode] = useState(PHRASE_LANGUAGES[0].code);

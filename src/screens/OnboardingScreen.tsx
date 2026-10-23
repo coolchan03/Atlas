@@ -5,7 +5,6 @@ import {
   FlatList,
   Dimensions,
   Animated,
-  TouchableOpacity,
   } from 'react-native';
 import ReanimatedAnimated, {
   useSharedValue,

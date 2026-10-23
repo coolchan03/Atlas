@@ -1,6 +1,6 @@
 /** Word scramble, prize ladder and fix-the-mistake, from the project's own documents. */
 import React, { useMemo, useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import type { LearningTerm } from '../../study/learningGames';
 import type { McQuestion } from '../../study/games/generate';
 import {

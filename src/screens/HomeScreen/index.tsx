@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWideLayout } from '../../hooks/useWideLayout';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -11,7 +11,6 @@ import { useOnboardingSheet } from '../../components/onboarding/useOnboardingShe
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { AttachStep } from 'react-native-spotlight-tour';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
@@ -19,7 +18,6 @@ import { useHomeScreenSpotlight } from './hooks/useHomeScreenSpotlight';
 import { RecentConversations } from './components/RecentConversations';
 import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { DesktopPromoCard } from './components/DesktopPromoCard';
 import { ModelsSummaryRow } from '../../components/models/ModelsSummaryRow';
 import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';

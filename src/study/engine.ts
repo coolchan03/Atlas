@@ -521,13 +521,7 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
   if (!topics.length) topics.push(opts.prompt || 'the main ideas');
 
   const lines: PodcastLine[] = [];
-  const parse = (t: string) => t.split('\n').map((l) => {
-    const m = l.match(LINE_RE);
-    if (!m) return null;
-    const h = m[1].toUpperCase() as 'A' | 'B' | 'C';
-    const text = m[2].replace(/\[\d+\]|\*/g, '').trim();
-    return text ? { host: hosts === 1 ? 'A' : hosts === 2 && h === 'C' ? 'B' : h, text } : null;
-  }).filter(Boolean) as PodcastLine[];
+  const parse = (t: string) => parseLines(t, hosts);
 
   let episodeSources = sources;
   let stoppedEarly = false;

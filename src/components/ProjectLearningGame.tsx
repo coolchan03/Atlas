@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme';
 import type { StudyResult, Source } from '../study/engine';
-import { matchWordSearch, normalizeLearningWord, type LearningTerm } from '../study/learningGames';
+import { matchWordSearch, normalizeLearningWord } from '../study/learningGames';
 
 type Props = { activity: StudyResult; onOpenSource: (source: Source) => void };
 

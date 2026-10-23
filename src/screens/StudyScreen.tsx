@@ -8,7 +8,7 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 import { castLine, playLine, stopPodcastAudio } from '../atlasVoice/podcastAudio';
-import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastLength, PodcastStyle } from '../study/engine';
+import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastStyle } from '../study/engine';
 import { safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { deckSlides, savePptx } from '../study/pptx';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';

@@ -25,7 +25,6 @@ import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import { fitMessagesToContext } from './contextWindow';
-import { OverridableMemoryError } from '../utils/modelLoadErrors';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
