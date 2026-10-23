@@ -4,7 +4,7 @@ name: Build Atlas APK
 # and publishes it on the Releases page so it can be downloaded on the phone.
 on:
   push:
-    branches: [atlas-voice, atlas/build81-health-connect]
+    branches: [atlas-voice, atlas/build81-health-connect, fix/atlas-scoped-tool-consent-20261022]
   workflow_dispatch:
     inputs:
       publish:
