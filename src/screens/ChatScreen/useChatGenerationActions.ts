@@ -264,8 +264,10 @@ export async function handleImageGenerationFn(
     prompt, conversationId,
     previewInterval: 2,
   });
-  if (!result && deps.imageGenState.error && !deps.imageGenState.error.includes('cancelled')) {
-    deps.setAlertState(showAlert('Error', `Image generation failed: ${deps.imageGenState.error}`));
+  // Read the error fresh: deps is a render snapshot, so it held the previous run's error.
+  const failure = imageGenerationService.getState().error;
+  if (!result && failure && !failure.includes('cancelled')) {
+    deps.setAlertState(showAlert('Error', `Image generation failed: ${failure}`));
   }
   // Image gen finishes outside generationService — release any queued messages.
   generationService.drainQueue();

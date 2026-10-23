@@ -53,6 +53,6 @@ it('adds the chosen style to the picture: anime wording in, photo looks kept out
   await h.tapSend('draw a cat');
   await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 8000 });
   const sent = JSON.stringify(h.boundary.diffusion.calls.generateImage[0]);
-  expect(sent).toContain('draw a cat, anime style');
+  expect(sent).toContain('anime style, cel shading, clean line art, vibrant colors, detailed eyes, draw a cat');
   expect(sent).toMatch(/photorealistic/);
 }, 20000);

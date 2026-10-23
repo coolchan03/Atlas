@@ -22,9 +22,13 @@ export const IMAGE_STYLES: ImageStyle[] = [
 
 export const imageStyleById = (id?: string): ImageStyle => IMAGE_STYLES.find((s) => s.id === id) ?? IMAGE_STYLES[0];
 
-/** The prompt and negative prompt with the chosen style added. */
+/**
+ * The prompt and negative prompt with the chosen style added. The style comes FIRST: CLIP-based models
+ * (Stable Diffusion 1.5 and XL) read only about 75 tokens and cut the rest, and a long enhanced prompt
+ * would push words placed after it out of range.
+ */
 export function applyImageStyle(prompt: string, negative: string, styleId?: string): { prompt: string; negative: string } {
   const style = imageStyleById(styleId);
-  const join = (a: string, b: string) => [a.trim(), b].filter(Boolean).join(', ');
-  return { prompt: join(prompt, style.prompt), negative: join(negative, style.negative) };
+  const join = (a: string, b: string) => [a.trim(), b.trim()].filter(Boolean).join(', ');
+  return { prompt: join(style.prompt, prompt.trim()), negative: join(negative, style.negative) };
 }
