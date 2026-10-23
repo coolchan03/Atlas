@@ -22,7 +22,11 @@ const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE]);
 /** Chats, projects and agents have their own record-by-record merge (merge.ts). */
 const OWN_MERGE = new Set(['local-llm-chat-storage', 'local-llm-project-storage', 'atlas-agent-storage']);
 
-export interface StoreEntry { value: string; changedAt: number }
+export interface StoreEntry {
+  value: string; changedAt: number;
+  /** App settings: when each setting last changed, so each one goes to its newest choice. */
+  fields?: Record<string, number>;
+}
 export type StoreSnapshot = Record<string, StoreEntry>;
 type Stamps = Record<string, { hash: string; changedAt: number }>;
 
@@ -41,15 +45,30 @@ export function shareable(key: string, raw: string): string | null {
 
 const recordingsDir = () => `${RNFS.DocumentDirectoryPath}/atlas-recordings`;
 
+type Times = Record<string, number>;
+/** App-store fields that are timed one by one: every setting, and the theme. */
+const settingFields = (shared: string): Record<string, unknown> => {
+  const st = JSON.parse(shared)?.state ?? {};
+  return { ...Object.fromEntries(Object.entries(st.settings ?? {}).map(([k, v]) => [`settings.${k}`, v])), themeMode: st.themeMode };
+};
+
 /** Applies a remote store to the local raw value. Returns the new raw value, or null to leave it. */
-export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true }: { local: string | null; remote: string; deletedRecordings?: Record<string, number>; remoteNewer?: boolean }): string | null {
+export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true, times }: {
+  local: string | null; remote: string; deletedRecordings?: Record<string, number>; remoteNewer?: boolean;
+  /** App settings: when each setting changed on each phone (older phones send none). */
+  times?: { mine: Times; theirs?: Times };
+}): string | null {
   if (key === APP_STORE) {
     // The incoming copy is only the shared part (settings and theme): keep the rest of this
-    // device's app store, then this device's hardware settings over it.
+    // device's app store, take each of their settings that changed more recently than here,
+    // then this device's hardware settings over it.
     const mine = local ? JSON.parse(local) : { state: {} };
     const theirs = JSON.parse(remote);
-    const merged = { ...mine, state: { ...mine.state, themeMode: theirs.state?.themeMode ?? mine.state?.themeMode,
-      settings: { ...mine.state?.settings, ...theirs.state?.settings } } };
+    const newer = (field: string) => !times?.theirs || (times.theirs[field] ?? 0) > (times.mine[field] ?? 0);
+    const taken = Object.fromEntries(Object.entries(theirs.state?.settings ?? {}).filter(([k]) => newer(`settings.${k}`)));
+    if (times?.theirs && !Object.keys(taken).length && !newer('themeMode')) return null;
+    const themeMode = newer('themeMode') ? theirs.state?.themeMode ?? mine.state?.themeMode : mine.state?.themeMode;
+    const merged = { ...mine, state: { ...mine.state, themeMode, settings: { ...mine.state?.settings, ...taken } } };
     return keepThisDevice(local, JSON.stringify(merged));
   }
   if (key === RECORDINGS) {
@@ -111,6 +130,19 @@ export function mergeLanguage(localRaw: string, remoteRaw: string, remoteNewer =
   return JSON.stringify({ ...(remoteNewer ? { ...a, ...b } : { ...b, ...a }), state, version: Math.max(a.version ?? 0, b.version ?? 0) });
 }
 
+/** When each app setting last changed on this phone (noticed by its value changing). */
+function fieldTimes(stamps: Stamps, shared: string, now: number): Times {
+  const times: Times = {};
+  for (const [field, v] of Object.entries(settingFields(shared))) {
+    const id = `${APP_STORE}#${field}`;
+    const hash = sha256(JSON.stringify(v ?? null));
+    // A setting first seen now is dated by its store, so an untouched setting never looks new.
+    if (stamps[id]?.hash !== hash) stamps[id] = { hash, changedAt: stamps[id] ? now : stamps[APP_STORE]?.changedAt ?? now };
+    times[field] = stamps[id].changedAt;
+  }
+  return times;
+}
+
 async function readStamps(): Promise<Stamps> {
   try { return JSON.parse((await AsyncStorage.getItem(STAMPS)) ?? '{}'); } catch { return {}; }
 }
@@ -127,9 +159,40 @@ export async function localStores(now = Date.now()): Promise<StoreSnapshot> {
     const hash = sha256(value);
     if (stamps[key]?.hash !== hash) stamps[key] = { hash, changedAt: now };
     out[key] = { value, changedAt: stamps[key].changedAt };
+    if (key === APP_STORE) out[key].fields = fieldTimes(stamps, value, now);
   }
   await AsyncStorage.setItem(STAMPS, JSON.stringify(stamps));
   return out;
+}
+
+/** Applies one of the other phone's stores here. True when this phone's copy changed. */
+async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; stamps: Stamps; deletedRecordings: Record<string, number> }): Promise<boolean> {
+  const { mine, stamps } = o;
+  const value = shareable(key, entry.value);
+  if (value == null || mine?.value === value) return false;
+  // Recordings, the course and (setting by setting) app settings always merge; other stores
+  // take the newer copy.
+  const fields = key === APP_STORE && entry.fields && typeof entry.fields === 'object' ? entry.fields : undefined;
+  if (!ALWAYS_MERGE.has(key) && !fields && (mine?.changedAt ?? 0) >= entry.changedAt) return false;
+  const times = { mine: mine?.fields ?? {}, theirs: fields };
+  const next = combine(key, {
+    local: await AsyncStorage.getItem(key), remote: value, deletedRecordings: o.deletedRecordings,
+    remoteNewer: entry.changedAt > (mine?.changedAt ?? 0), times: key === APP_STORE ? times : undefined,
+  });
+  if (next == null) return false;
+  await AsyncStorage.setItem(key, next);
+  const shared = shareable(key, next);
+  if (!shared) return true;
+  stamps[key] = { hash: sha256(shared), changedAt: Math.max(entry.changedAt, mine?.changedAt ?? 0) };
+  if (fields) stampTaken(stamps, shared, { ...times, theirs: fields });
+  return true;
+}
+
+/** Settings taken from the other phone keep their time there, so they do not look newly changed here. */
+function stampTaken(stamps: Stamps, shared: string, times: { mine: Times; theirs: Times }): void {
+  for (const [field, v] of Object.entries(settingFields(shared))) {
+    stamps[`${APP_STORE}#${field}`] = { hash: sha256(JSON.stringify(v ?? null)), changedAt: Math.max(times.theirs[field] ?? 0, times.mine[field] ?? 0) };
+  }
 }
 
 /**
@@ -144,17 +207,7 @@ export async function applyStores(remote: unknown, deletedRecordings: Record<str
   const changed: string[] = [];
   for (const [key, entry] of Object.entries(remote as Record<string, StoreEntry>)) {
     if (!allowed.has(key) || typeof entry?.value !== 'string' || typeof entry.changedAt !== 'number') continue;
-    const value = shareable(key, entry.value);
-    if (value == null || mine[key]?.value === value) continue;
-    // Recordings and the course always merge; other stores take the newer copy.
-    if (!ALWAYS_MERGE.has(key) && (mine[key]?.changedAt ?? 0) >= entry.changedAt) continue;
-    const remoteNewer = entry.changedAt > (mine[key]?.changedAt ?? 0);
-    const next = combine(key, { local: await AsyncStorage.getItem(key), remote: value, deletedRecordings, remoteNewer });
-    if (next == null) continue;
-    await AsyncStorage.setItem(key, next);
-    const shared = shareable(key, next);
-    if (shared) stamps[key] = { hash: sha256(shared), changedAt: Math.max(entry.changedAt, mine[key]?.changedAt ?? 0) };
-    changed.push(key);
+    if (await applyOne(key, entry, { mine: mine[key], stamps, deletedRecordings })) changed.push(key);
   }
   await AsyncStorage.setItem(STAMPS, JSON.stringify(stamps));
   await rehydrateStores(changed);

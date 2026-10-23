@@ -120,3 +120,31 @@ it('carries a locked project sealed with its PIN, never one tied to this phone',
   expect(mergeProjects([portable], [newer], () => false).items[0].protectedBlob).toBe('atlasbackup:v1:def');
   expect(mergeProjects([portable], [newer], () => true).items[0].protectedBlob).toBe('atlasbackup:v1:abc');
 });
+
+it('takes each setting from the phone that changed it last, so one phone does not undo the other', async () => {
+  const app = (settings: object) => store({ themeMode: 'dark', settings });
+  // Both phones start the same.
+  await phone({ 'local-llm-app-storage': app({ enhanceImagePrompts: false, userName: 'Sam' }) });
+  await localStores(100);
+  // Phone A turns on prompt enhancement at 200.
+  await AsyncStorage.setItem('local-llm-app-storage', app({ enhanceImagePrompts: true, userName: 'Sam' }));
+  const fromA = await localStores(200);
+
+  await phone({ 'local-llm-app-storage': app({ enhanceImagePrompts: false, userName: 'Sam' }) });
+  await localStores(100);
+  // Phone B later changes only the name, at 300.
+  await AsyncStorage.setItem('local-llm-app-storage', app({ enhanceImagePrompts: false, userName: 'Alex' }));
+  const fromB = await localStores(300);
+
+  await applyStores(fromA); // on B: takes A's newer enhancement choice, keeps its own newer name
+  expect(JSON.parse((await AsyncStorage.getItem('local-llm-app-storage'))!).state.settings)
+    .toMatchObject({ enhanceImagePrompts: true, userName: 'Alex' });
+  const fromBAfter = await localStores(400);
+
+  await phone({ 'local-llm-app-storage': app({ enhanceImagePrompts: true, userName: 'Sam' }) });
+  await localStores(200);
+  await applyStores(fromB); // on A: the older copy from B does not turn enhancement back off
+  await applyStores(fromBAfter);
+  expect(JSON.parse((await AsyncStorage.getItem('local-llm-app-storage'))!).state.settings)
+    .toMatchObject({ enhanceImagePrompts: true, userName: 'Alex' });
+});
