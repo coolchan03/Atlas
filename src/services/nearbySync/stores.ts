@@ -12,13 +12,17 @@ import { sha256 } from 'js-sha256';
 import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue } from '../../atlasTools/backup';
 import { rehydrateStores } from '../../atlasTools/storeRegistry';
 import { DEVICE_SETTING, keepThisDevice } from '../../atlasTools/deviceSettings';
+import { LIST_STORES, listIds, mergeListStore, type Baseline } from './listMerge';
 
 const STAMPS = 'atlas-sync-store-stamps-v1';
 export const APP_STORE = 'local-llm-app-storage';
 export const RECORDINGS = 'atlas-recordings';
 export const LANGUAGE = 'atlas-language';
 /** Stores merged item by item every time, so work done on both phones is all kept. */
-const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE]);
+const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE, ...LIST_STORES]);
+/** The offline library list holds file paths that exist only on one phone: syncing it breaks the other's list. */
+const NOT_SYNCED = new Set(['atlas-offline-library']);
+const BASELINE = 'atlas-sync-list-baseline-v1';
 /** Chats, projects and agents have their own record-by-record merge (merge.ts). */
 const OWN_MERGE = new Set(['local-llm-chat-storage', 'local-llm-project-storage', 'atlas-agent-storage']);
 
@@ -32,7 +36,7 @@ type Stamps = Record<string, { hash: string; changedAt: number }>;
 
 export const syncedStoreKeys = (): string[] =>
   [...RESTORABLE_STORE_KEYS, RECORDINGS, 'atlas-voice-profiles']
-    .filter((k) => !OWN_MERGE.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
+    .filter((k) => !OWN_MERGE.has(k) && !NOT_SYNCED.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
 
 /** The part of a store that is shared: for app settings only the person's choices. */
 export function shareable(key: string, raw: string): string | null {
@@ -53,8 +57,10 @@ const settingFields = (shared: string): Record<string, unknown> => {
 };
 
 /** Applies a remote store to the local raw value. Returns the new raw value, or null to leave it. */
-export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true, times }: {
+export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true, times, baseline }: {
   local: string | null; remote: string; deletedRecordings?: Record<string, number>; remoteNewer?: boolean;
+  /** List stores: the ids both phones had at the last sync (listMerge.ts). */
+  baseline?: Baseline;
   /** App settings: when each setting changed on each phone (older phones send none). */
   times?: { mine: Times; theirs?: Times };
 }): string | null {
@@ -85,6 +91,7 @@ export function combine(key: string, { local, remote, deletedRecordings = {}, re
     return JSON.stringify(mine);
   }
   if (key === LANGUAGE) return local ? mergeLanguage(local, remote, remoteNewer) : remote;
+  if (LIST_STORES.has(key)) return local ? mergeListStore(key, { local, remote, remoteNewer, baseline }) : remote;
   return remote;
 }
 
@@ -143,6 +150,15 @@ function fieldTimes(stamps: Stamps, shared: string, now: number): Times {
   return times;
 }
 
+async function readBaseline(): Promise<Baseline> {
+  try { return JSON.parse((await AsyncStorage.getItem(BASELINE)) ?? '{}'); } catch { return {}; }
+}
+/** Remembers which items both phones have now, so a later merge can tell a deleted item from a new one. */
+async function saveBaseline(key: string, raw: string | null): Promise<void> {
+  if (!LIST_STORES.has(key) || !raw) return;
+  try { await AsyncStorage.setItem(BASELINE, JSON.stringify({ ...(await readBaseline()), ...listIds(key, raw) })); } catch { /* the next sync merges without it */ }
+}
+
 async function readStamps(): Promise<Stamps> {
   try { return JSON.parse((await AsyncStorage.getItem(STAMPS)) ?? '{}'); } catch { return {}; }
 }
@@ -179,7 +195,8 @@ async function removeDeletedAudio(deleted: Record<string, number>): Promise<void
 async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; stamps: Stamps; deletedRecordings: Record<string, number> }): Promise<boolean> {
   const { mine, stamps } = o;
   const value = shareable(key, entry.value);
-  if (value == null || mine?.value === value) return false;
+  if (value == null) return false;
+  if (mine?.value === value) { await saveBaseline(key, value); return false; }
   // Recordings, the course and (setting by setting) app settings always merge; other stores
   // take the newer copy.
   const fields = key === APP_STORE && entry.fields && typeof entry.fields === 'object' ? entry.fields : undefined;
@@ -188,9 +205,11 @@ async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; 
   const next = combine(key, {
     local: await AsyncStorage.getItem(key), remote: value, deletedRecordings: o.deletedRecordings,
     remoteNewer: entry.changedAt > (mine?.changedAt ?? 0), times: key === APP_STORE ? times : undefined,
+    baseline: LIST_STORES.has(key) ? await readBaseline() : undefined,
   });
   if (next == null) return false;
   await AsyncStorage.setItem(key, next);
+  await saveBaseline(key, next);
   if (key === RECORDINGS) await removeDeletedAudio(o.deletedRecordings);
   const shared = shareable(key, next);
   if (!shared) return true;

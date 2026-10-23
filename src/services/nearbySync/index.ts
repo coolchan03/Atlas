@@ -82,7 +82,7 @@ class NearbySyncService {
   }
   private observeRemovals(kind: SyncKind, before: { id: string; pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }[],
     after: { id: string }[]) {
-    if (this.applyingRemote || before === after) return;
+    if (this.applyingRemote || this.restoring > 0 || before === after) return;
     const next = captureRemovals(before, after, { current: this.deleted, kind });
     if (Object.keys(next[kind]).length === Object.keys(this.deleted[kind]).length) return;
     this.deleted = next;
@@ -108,6 +108,13 @@ class NearbySyncService {
       if (next.recordings !== previous.recordings)
         this.observeRemovals('recordings', previous.recordings, next.recordings);
     });
+  }
+  /** > 0 while a backup is being restored. */
+  private restoring = 0;
+  /** Runs `fn` (a restore) without the stores' changes counting as deletions to send to the other phone. */
+  async suppressRemovals<T>(fn: () => Promise<T>): Promise<T> {
+    this.restoring++;
+    try { return await fn(); } finally { this.restoring--; }
   }
   /** Set when the last snapshot had to leave project files out (kept visible after a sync that otherwise worked). */
   private fileNote: string | undefined;

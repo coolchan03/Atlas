@@ -9,6 +9,8 @@ export const emptyTombstones = (): Tombstones => ({
 const goodId = (id: string) => /^[a-zA-Z0-9_.-]{1,160}$/.test(id);
 const protectedItem = (record: { pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }) =>
   Boolean(record.pinVerifier || record.protectedBlob || record.isPrivate);
+/** A locked chat or project (it has its own PIN). Its id is recorded when it is deleted, like any other item's. */
+const isLocked = (record: { pinVerifier?: string; isPrivate?: boolean }) => Boolean(record.pinVerifier) && !record.isPrivate;
 const timestamp = (value: string) => Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0;
 
 export function validateTombstones(value: unknown): Tombstones {
@@ -41,7 +43,11 @@ export function combineTombstones(a: Tombstones, b: Tombstones): Tombstones {
   }
   return result;
 }
-/** Track deliberate removals, excluding private and PIN-protected items. */
+/**
+ * Track deliberate removals. Temporary private chats are never recorded. A locked chat or project is:
+ * its id alone says nothing about its content, and without it a deleted locked item comes back
+ * from the other phone's copy on the next sync.
+ */
 export function captureRemovals<T extends { id: string; pinVerifier?: string; protectedBlob?: string; isPrivate?: boolean }>(
   previous: T[], next: T[], options: { current: Tombstones; kind: SyncKind; now?: number },
 ): Tombstones {
@@ -49,7 +55,7 @@ export function captureRemovals<T extends { id: string; pinVerifier?: string; pr
   const kept = new Set(next.map(v => v.id));
   const changes = { ...current[kind] };
   for (const record of previous) {
-    if (!kept.has(record.id) && !protectedItem(record) && goodId(record.id))
+    if (!kept.has(record.id) && (!protectedItem(record) || isLocked(record)) && goodId(record.id))
       changes[record.id] = Math.max(changes[record.id] ?? 0, now);
   }
   return { ...current, [kind]: changes };
@@ -62,6 +68,8 @@ export function applyTombstones<T extends { id: string; updatedAt: string; name?
   const output: T[] = [];
   for (const item of records) {
     const at = deleted[item.id];
+    // A locked item deleted on the other phone goes here too, unless it was edited after that.
+    if (at && isLocked(item) && timestamp(item.updatedAt) <= at) continue;
     if (!at || protectedItem(item)) { output.push(item); continue; }
     if (timestamp(item.updatedAt) > at) {
       const id = `${item.id  }-saved-${  sha256(JSON.stringify(item)).slice(0, 12)}`;

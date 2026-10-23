@@ -243,6 +243,9 @@ export async function importBackup(password?: string): Promise<number | null> {
   }
   if (settingsPairs.length) await AsyncStorage.multiSet(settingsPairs);
   // Load the restored data into the running app right away, so nothing writes old data back over it.
-  await rehydrateStores(merged.map(([key]) => key));
+  // Items that drop out of the stores because the backup is older are not deliberate deletions: offline
+  // sync must not tell the other phone to delete them.
+  const reload = () => rehydrateStores(merged.map(([key]) => key));
+  await require('../services/nearbySync').nearbySync.suppressRemovals(reload);
   return pairs.length + restoredDocs;
 }

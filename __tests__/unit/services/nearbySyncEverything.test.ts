@@ -159,3 +159,71 @@ it('takes each setting from the phone that changed it last, so one phone does no
   expect(JSON.parse((await AsyncStorage.getItem('local-llm-app-storage'))!).state.settings)
     .toMatchObject({ enhanceImagePrompts: true, userName: 'Alex' });
 });
+
+it('does not tell the other phone to delete chats that drop out because an older backup was restored', async () => {
+  const { nearbySync } = require('../../../src/services/nearbySync');
+  const { useChatStore } = require('../../../src/stores/chatStore');
+  const chat = (id: string) => ({ id, title: id, messages: [], createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' });
+  useChatStore.setState({ conversations: [chat('older'), chat('newer')] });
+  (nearbySync as any).watchStores();
+  (nearbySync as any).deleted = { projects: {}, conversations: {}, agents: {}, recordings: {} };
+
+  // A restore brings back a backup that does not have 'newer'.
+  await nearbySync.suppressRemovals(async () => { useChatStore.setState({ conversations: [chat('older')] }); });
+  expect((nearbySync as any).deleted.conversations).toEqual({});
+
+  // A deliberate delete afterwards is still recorded.
+  useChatStore.setState({ conversations: [] });
+  expect(Object.keys((nearbySync as any).deleted.conversations)).toEqual(['older']);
+});
+
+describe('lists you add to on either phone', () => {
+  const MAPS = 'atlas-maps';
+  const wp = (id: string) => ({ id, name: id, lat: 1, lon: 2, createdAt: 1 });
+  const maps = (...ids: string[]) => store({ waypoints: ids.map(wp), imperial: true, external: [{ uri: 'file:///phone-a/x.map', name: 'x' }], current: null });
+  const ids = async () => JSON.parse((await AsyncStorage.getItem(MAPS))!).state.waypoints.map((w: { id: string }) => w.id).sort();
+
+  it('keeps the places added on both phones instead of the newest copy replacing the other', async () => {
+    await phone({ [MAPS]: maps('shared', 'from-a') });
+    const fromA = await localStores(2000);
+    await phone({ [MAPS]: maps('shared', 'from-b') });
+    await localStores(1000);
+    await applyStores(fromA); // on B
+    expect(await ids()).toEqual(['from-a', 'from-b', 'shared']);
+    // File paths that exist only on the other phone are not copied over.
+    expect(JSON.parse((await AsyncStorage.getItem(MAPS))!).state.external).toEqual([{ uri: 'file:///phone-a/x.map', name: 'x' }]);
+  });
+
+  it('keeps a place deleted on one phone deleted, and still keeps a place added on the other', async () => {
+    await phone({ [MAPS]: maps('keep', 'gone') });
+    const before = await localStores(1000);
+    await applyStores(before); // both phones agree: this records what they share
+    // Phone A deletes "gone" at 2000; this phone (B) added "new-on-b" meanwhile, at 1500.
+    await AsyncStorage.setItem(MAPS, maps('keep', 'gone', 'new-on-b'));
+    await localStores(1500);
+    await applyStores({ [MAPS]: { value: maps('keep'), changedAt: 2000 } });
+    expect(await ids()).toEqual(['keep', 'new-on-b']);
+  });
+
+  it('deletes nothing on the very first sync, when nothing is known about what was shared', async () => {
+    await phone({ [MAPS]: maps('only-here') });
+    await localStores(1000);
+    await applyStores({ [MAPS]: { value: maps('only-there'), changedAt: 2000 } });
+    expect(await ids()).toEqual(['only-here', 'only-there']);
+  });
+
+  it('merges checklist items by id, so both phones\' new items survive', async () => {
+    const list = (...texts: string[]) => store({ lists: [{ id: 'kit', title: 'Kit', items: texts.map((t) => ({ id: `kit-${t}`, text: t, done: false })) }] });
+    // This phone added "torch"; the other phone, changed later, added "radio".
+    await phone({ 'atlas-checklists': list('water', 'torch') });
+    await localStores(1000);
+    await applyStores({ 'atlas-checklists': { value: list('water', 'radio'), changedAt: 2000 } });
+    const items = JSON.parse((await AsyncStorage.getItem('atlas-checklists'))!).state.lists[0].items.map((i: { text: string }) => i.text);
+    expect(items).toEqual(['water', 'radio', 'torch']);
+  });
+
+  it('does not sync the offline library list: it holds file paths that exist only on one phone', async () => {
+    await phone({ 'atlas-offline-library': store({ files: [{ uri: 'file:///phone-a/wiki.zim', title: 'Wiki' }] }) });
+    expect(Object.keys(await localStores(1000))).not.toContain('atlas-offline-library');
+  });
+});
