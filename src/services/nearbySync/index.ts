@@ -316,6 +316,9 @@ export async function scanPairingCode(): Promise<string | null> {
   if (!qrScanAvailable) throw new Error('The QR scanner needs the updated Android build.');
   const { PermissionsAndroid } = require('react-native');
   const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+  if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+    throw new Error('The camera is turned off for Atlas. Allow it in Android Settings > Apps > Atlas > Permissions, then scan again.');
+  }
   if (granted !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission is needed to scan the code.');
   return NativeModules.AtlasQrScanner.scan('atlas://sync?', 'Point the camera at the QR code on the other device');
 }

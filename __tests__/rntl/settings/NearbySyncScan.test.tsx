@@ -35,3 +35,20 @@ it('pairs by scanning the other device\'s code in the app', async () => {
   RN.NativeModules.AtlasNearbySync.stop = jest.fn(async () => true);
   await require('../../../src/services/nearbySync').nearbySync.setEnabled(false);
 });
+
+it('says where to turn the camera back on when it was refused for good', async () => {
+  const RN = require('react-native');
+  RN.Platform.OS = 'android';
+  RN.PermissionsAndroid.request = jest.fn(async () => 'never_ask_again');
+  RN.NativeModules.AtlasQrScanner = { scan: jest.fn(async () => null) };
+  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation(() => undefined);
+  const { NearbySyncSettings } = require('../../../src/components/settings/NearbySyncSettings');
+
+  const screen = render(<NearbySyncSettings />);
+  fireEvent(screen.getByTestId('nearby-sync-toggle'), 'valueChange', true);
+  fireEvent.press(await screen.findByTestId('nearby-scan-button'));
+  await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not scan', expect.stringMatching(/Android Settings > Apps > Atlas/)));
+  expect(RN.NativeModules.AtlasQrScanner.scan).not.toHaveBeenCalled();
+  RN.NativeModules.AtlasNearbySync.stop = jest.fn(async () => true);
+  await require('../../../src/services/nearbySync').nearbySync.setEnabled(false);
+});
