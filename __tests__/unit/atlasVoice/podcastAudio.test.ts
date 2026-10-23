@@ -10,7 +10,12 @@ jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/cache',
   exists: jest.fn(async (p: string) => mockFiles.has(p)),
   mkdir: jest.fn(async () => undefined),
+  readDir: jest.fn(async () => Array.from({ length: 9 }, (_, i) => ({
+    path: `/cache/podcast-audio/ep${i}`, isDirectory: () => true, mtime: new Date(1000 * i),
+  }))),
+  unlink: jest.fn(async (p: string) => { mockDeleted.push(p); }),
 }));
+const mockDeleted: string[] = [];
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
     destination: {},
@@ -59,4 +64,11 @@ it('plays each line from a file rendered ahead in its host voice, without render
   await new Promise((r) => setTimeout(r, 10));
   expect(mockRendered).toHaveLength(5); // only the new line ahead (4) was rendered
   expect(mockPlayed[1]).toMatch(/\/1-/);
+});
+
+it('keeps the audio of only the newest episodes', async () => {
+  const { pruneEpisodes } = require('../../../src/atlasVoice/podcastAudio');
+  await pruneEpisodes('ep0');
+  // ep0 is the one being rendered: kept. Of the other eight, the five newest are kept.
+  expect(mockDeleted.sort()).toEqual(['/cache/podcast-audio/ep1', '/cache/podcast-audio/ep2', '/cache/podcast-audio/ep3']);
 });

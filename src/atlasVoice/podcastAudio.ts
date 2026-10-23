@@ -16,7 +16,10 @@ import logger from '../utils/logger';
 export interface CastLine { text: string; pitch: number; voice?: string }
 
 const AHEAD = 3;
-const dir = (key: string) => `${RNFS.CachesDirectoryPath}/podcast-audio/${key.replace(/[^\w-]/g, '_')}`;
+/** Episodes whose audio is kept; older ones are deleted (they can be rendered again). */
+const KEEP_EPISODES = 6;
+const root = () => `${RNFS.CachesDirectoryPath}/podcast-audio`;
+const dir = (key: string) => `${root()}/${key.replace(/[^\w-]/g, '_')}`;
 const pathFor = (key: string, i: number, line: CastLine) =>
   `${dir(key)}/${i}-${sha256(`${line.voice ?? ''}|${useAtlasVoiceStore.getState().rate}|${line.text}`).slice(0, 12)}.wav`;
 
@@ -52,9 +55,22 @@ function render(key: string, items: CastLine[], i: number): Promise<string | nul
   return job;
 }
 
+/** Deletes the audio of all but the newest episodes, so the cache does not grow forever. */
+export async function pruneEpisodes(keepKey: string): Promise<void> {
+  try {
+    const dirs = (await RNFS.readDir(root())).filter((d) => d.isDirectory() && d.path !== dir(keepKey));
+    const newest = dirs.sort((a, b) => (b.mtime?.getTime() ?? 0) - (a.mtime?.getTime() ?? 0));
+    for (const d of newest.slice(KEEP_EPISODES - 1)) {
+      for (const p of [...pending.keys()]) if (p.startsWith(`${d.path}/`)) pending.delete(p);
+      await RNFS.unlink(d.path);
+    }
+  } catch { /* nothing cached yet */ }
+}
+
 /** Renders a whole episode in the background (right after a briefing is written). */
 export function preRenderEpisode(key: string, items: CastLine[]): void {
   if (!renderable(items)) return;
+  pruneEpisodes(key).catch(() => undefined);
   items.forEach((_, i) => { render(key, items, i).catch(() => undefined); });
 }
 
