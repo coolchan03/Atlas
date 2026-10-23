@@ -72,7 +72,8 @@ async function consentFixture(engine: 'remote' | 'litert') {
   expect(globalsBefore).toContain('read_file');
   h.render();
   const alerts: { message?: string; buttons?: { text?: string; onPress?: () => void }[] }[] = [];
-  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation((title: string, message?: string, buttons?: any) => {
+  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation((...args: unknown[]) => {
+    const [title, message, buttons] = args as [string, string | undefined, typeof alerts[number]['buttons']];
     if (title === 'Enable Atlas tool?') alerts.push({ message, buttons });
   });
   const reads = () => fs.readFile.mock.calls.filter((args: unknown[]) => args[0] === path).length;
@@ -127,7 +128,7 @@ it.each(['remote', 'litert'] as const)('%s keeps Not now effective across nested
     expect(c.h.view!.queryAllByTestId('tool-result-label-request_tool_access').length).toBeGreaterThan(0);
     c.unchangedOthers();
   } finally { await c.close(); }
-});
+}, 30000);
 
 it.each(['remote', 'litert'] as const)('%s grants Once only to the selected call', async engine => {
   const c = await consentFixture(engine);

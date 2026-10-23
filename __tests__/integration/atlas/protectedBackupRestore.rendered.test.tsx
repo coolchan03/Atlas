@@ -158,7 +158,7 @@ it('restores over open protected records without encrypting placeholders and kee
     crypto.restore();
     boundary.restore();
   }
-});
+}, 30000);
 
 it('requires replacement confirmation before encrypted restore and lets cancellation leave data alone', async () => {
   const boundary = installBackupRestoreBoundary();

@@ -9,7 +9,8 @@ export function installBackupRestoreBoundary() {
   const files = new Map<string, string>();
   const restorePath = '/mock/documents/restore.atlasbackup';
   const nativeAlerts: { title: string; message?: string; buttons?: { text?: string; onPress?: () => unknown }[] }[] = [];
-  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation((title: string, message?: string, buttons?: any) => {
+  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation((...args: unknown[]) => {
+    const [title, message, buttons] = args as [string, string | undefined, typeof nativeAlerts[number]['buttons']];
     nativeAlerts.push({ title, message, buttons });
   });
   const implementations: [jest.Mock, (...args: any[]) => any][] = [

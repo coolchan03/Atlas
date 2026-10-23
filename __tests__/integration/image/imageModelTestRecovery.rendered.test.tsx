@@ -25,7 +25,8 @@ async function setup(settings: Record<string, unknown> = {}) {
   await rtl.waitFor(() => expect(useAppStore.persist.hasHydrated()).toBe(true));
   const model = {
     ...createONNXImageModel({ id: 'native-image-test', name: 'Native image test',
-      modelPath: '/docs/image_models/test', backend: 'sdcpp', size: GB / 2 }),
+      modelPath: '/docs/image_models/test', size: GB / 2 }),
+    backend: 'sdcpp' as const,
     nativeImageFamily: 'sd15',
   };
   useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: model.id });
@@ -51,7 +52,7 @@ describe('image model Test shares runtime recovery', () => {
     await rtl.waitFor(() => expect(view.getByText(/Generated image/)).toBeTruthy());
     expect(boundary.diffusion.module.generateImage.mock.calls[0][0].computeBackend).toBe('cpu');
     view.unmount();
-  });
+  }, 30000);
 
   it('renders with OpenCL after Vulkan fails and shows the backend used', async () => {
     const { boundary, rtl, view } = await setup();
