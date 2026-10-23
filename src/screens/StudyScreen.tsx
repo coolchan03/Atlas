@@ -80,12 +80,12 @@ export const StudyScreen: React.FC = () => {
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
     void listVoices('en').then(setVoices).catch(() => setVoices([]));
-    return () => { stopRef.current = true; stopEpisode.current = true; stop(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
+    return () => { stopRef.current = true; stopEpisode.current = true; stop(); stopPodcastAudio(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
   }, []);
   // Android back button closes the open item (and stops audio) instead of leaving the screen.
   React.useEffect(() => {
     if (!view) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { stopRef.current = true; stop(); setPlaying(null); if (openAt) { navigation.goBack(); return true; } setView(null); return true; });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { stopRef.current = true; stop(); stopPodcastAudio(); setPlaying(null); if (openAt) { navigation.goBack(); return true; } setView(null); return true; });
     return () => sub.remove();
   }, [view]);
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
@@ -161,15 +161,20 @@ export const StudyScreen: React.FC = () => {
   const play = async (items: { text: string; pitch: number; voice?: string }[], from = 0, audioKey?: string) => {
     const my = ++playToken.current;
     stop();
+    stopPodcastAudio(); // a line playing from a file would otherwise play on top of the new one
     stopRef.current = false;
     keepScreenOn(true);
     let finished = false;
-    for (let i = Math.max(0, from); i < items.length; i++) {
-      if (stopRef.current || playToken.current !== my) break;
-      setPlaying(i); setResumeAt(i); setItemStart(Date.now());
-      const ok = audioKey ? await playLine(audioKey, items, i) : await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
-      if (!ok || playToken.current !== my) break;
-      if (i === items.length - 1) finished = true;
+    try {
+      for (let i = Math.max(0, from); i < items.length; i++) {
+        if (stopRef.current || playToken.current !== my) break;
+        setPlaying(i); setResumeAt(i); setItemStart(Date.now());
+        const ok = audioKey ? await playLine(audioKey, items, i) : await speakAndWait(items[i].text, items[i].pitch, 'podcast', items[i].voice || '');
+        if (!ok || playToken.current !== my) break;
+        if (i === items.length - 1) finished = true;
+      }
+    } catch (e: any) {
+      Alert.alert('Playback stopped', String(e?.message || e));
     }
     if (playToken.current !== my) return; // a newer play (seek) took over
     keepScreenOn(false);

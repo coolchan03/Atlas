@@ -103,3 +103,15 @@ it('moves a level saved by the four-level course to the matching CEFR level', as
   expect(board.getByLabelText('A1, Beginner')).toBeTruthy();
   expect(board.getByLabelText('C2, Proficient')).toBeTruthy();
 });
+
+it('never builds a matching game with two pairs that cannot be told apart', () => {
+  const { matchPairs } = require('../../../src/language/lessons');
+  const items = [
+    { en: 'to be', t: 'ser' }, { en: 'to be', t: 'estar' }, { en: 'house', t: 'casa' },
+    { en: 'home', t: 'casa' }, { en: 'dog', t: 'perro' }, { en: 'cat', t: 'gato' },
+    { en: 'water', t: 'agua' }, { en: 'bread', t: 'pan' },
+  ];
+  const pairs = matchPairs(items);
+  expect(pairs.map((p: any) => p.t)).toEqual(['ser', 'casa', 'perro', 'gato', 'agua']);
+  expect(new Set(pairs.map((p: any) => p.en)).size).toBe(pairs.length);
+});

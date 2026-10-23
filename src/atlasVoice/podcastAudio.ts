@@ -78,21 +78,24 @@ let ctx: any = null;
 let source: any = null;
 let stopToken = 0;
 
-function playFile(path: string): Promise<boolean> {
+/** 'ended' (played through), 'stopped' (the listener stopped it) or 'failed' (the file could not be played). */
+type PlayResult = 'ended' | 'stopped' | 'failed';
+
+function playFile(path: string): Promise<PlayResult> {
   const token = stopToken;
   return new Promise((resolve) => {
     (async () => {
       await audioSessionManager.ensurePlayback();
       if (!ctx) { const { AudioContext } = require('react-native-audio-api'); ctx = new AudioContext(); }
       const buffer = await ctx.decodeAudioData(path);
-      if (token !== stopToken) { resolve(false); return; }
+      if (token !== stopToken) { resolve('stopped'); return; }
       const node = ctx.createBufferSource();
       node.buffer = buffer;
       node.connect(ctx.destination);
-      node.onEnded = () => { if (source === node) source = null; resolve(token === stopToken); };
+      node.onEnded = () => { if (source === node) source = null; resolve(token === stopToken ? 'ended' : 'stopped'); };
       source = node;
       node.start();
-    })().catch((e) => { logger.warn(`[POD] playback failed: ${e?.message ?? e}`); resolve(false); });
+    })().catch((e) => { logger.warn(`[POD] playback failed: ${e?.message ?? e}`); resolve('failed'); });
   });
 }
 
@@ -110,8 +113,15 @@ export async function playLine(key: string, items: CastLine[], i: number): Promi
   const path = await current;
   if (token !== stopToken) return false;
   if (!path) return speakAndWait(line.text, line.pitch, 'podcast', line.voice || '');
-  const ok = await playFile(path);
-  return ok && token === stopToken;
+  // A saved file the system could not play (cleared from the cache, cut short): forget it and say the
+  // line live instead of ending the whole podcast.
+  const result = await playFile(path);
+  if (result === 'failed' && token === stopToken) {
+    pending.delete(path);
+    await RNFS.unlink(path).catch(() => undefined);
+    return speakAndWait(line.text, line.pitch, 'podcast', line.voice || '');
+  }
+  return result === 'ended' && token === stopToken;
 }
 
 /** Stops whatever podcast line is playing from a file. */

@@ -6,6 +6,7 @@
 const mockFiles = new Set<string>();
 const mockRendered: string[] = [];
 const mockPlayed: string[] = [];
+let mockFailDecode = false;
 jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/cache',
   exists: jest.fn(async (p: string) => mockFiles.has(p)),
@@ -19,7 +20,7 @@ const mockDeleted: string[] = [];
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
     destination: {},
-    decodeAudioData: jest.fn(async (path: string) => ({ path })),
+    decodeAudioData: jest.fn(async (path: string) => { if (mockFailDecode) throw new Error('cannot decode'); return { path }; }),
     createBufferSource: jest.fn(() => {
       const node: any = { connect: jest.fn(), stop: jest.fn(), onEnded: null, buffer: null };
       node.start = jest.fn(() => { mockPlayed.push(node.buffer.path); setTimeout(() => node.onEnded?.(), 0); });
@@ -71,4 +72,22 @@ it('keeps the audio of only the newest episodes', async () => {
   await pruneEpisodes('ep0');
   // ep0 is the one being rendered: kept. Of the other eight, the five newest are kept.
   expect(mockDeleted.sort()).toEqual(['/cache/podcast-audio/ep1', '/cache/podcast-audio/ep2', '/cache/podcast-audio/ep3']);
+});
+
+it('says a line live when its saved audio cannot be played, instead of ending the podcast', async () => {
+  const { playLine } = require('../../../src/atlasVoice/podcastAudio');
+  const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
+  const spoken: string[] = [];
+  (NativeModules.AtlasTts as any).speak = jest.fn(async (text: string, key: string) => {
+    spoken.push(text);
+    // The engine says the line, then reports it finished.
+    setTimeout(() => useAtlasVoiceStore.getState().setSpeaking(null), 0);
+    return key;
+  });
+  const items = [{ text: 'Broken file line.', pitch: 1, voice: 'sid:4' }];
+  mockFailDecode = true;
+  try {
+    await playLine('fallback-episode', items, 0);
+  } finally { mockFailDecode = false; }
+  expect(spoken).toEqual(['Broken file line.']);
 });

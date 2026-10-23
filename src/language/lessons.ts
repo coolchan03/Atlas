@@ -177,7 +177,7 @@ export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: n
     used.add(item);
     return exerciseFor(kind, item, { items, r, d });
   });
-  out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: all.slice(0, Math.min(5, all.length)) });
+  out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: matchPairs(all) });
   return out;
 }
 
@@ -210,3 +210,20 @@ export const sameAnswer = (a: string, b: string) => {
 
 /** 3 stars at 90% right, 2 at 70%, otherwise 1 for finishing. */
 export const starsFor = (right: number, total: number) => (right / Math.max(1, total) >= 0.9 ? 3 : right / Math.max(1, total) >= 0.7 ? 2 : 1);
+
+/**
+ * Up to five pairs for the matching game. Two pairs with the same English or the same translation
+ * (ser / estar both "to be") cannot be told apart by the game and would leave it impossible to finish.
+ */
+export function matchPairs(items: Item[], n = 5): Item[] {
+  const en = new Set<string>();
+  const t = new Set<string>();
+  const out: Item[] = [];
+  for (const item of items) {
+    if (out.length >= n) break;
+    if (en.has(item.en) || t.has(item.t)) continue;
+    en.add(item.en); t.add(item.t);
+    out.push(item);
+  }
+  return out;
+}

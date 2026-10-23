@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
@@ -52,6 +52,17 @@ export const RecorderScreen: React.FC = () => {
       { text: 'Stop and save', onPress: () => { recorderService.stop().catch(fail('Could not save the recording')).finally(() => navigation.goBack()); } },
     ]);
   };
+  // System Back (or the back gesture) while recording asks first, like the header arrow: leaving the
+  // screen without it would keep the microphone on with nothing on screen to show it.
+  useFocusEffect(React.useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (phase !== 'recording') return false;
+      back();
+      return true;
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]));
   const getLabels = () => recorderService.downloadSpeakerModels()
     .catch((e) => { if (!/cancel/i.test(String(e?.message))) fail('Download failed')(e); });
 

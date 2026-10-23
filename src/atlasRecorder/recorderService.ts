@@ -55,6 +55,9 @@ async function speakerTurns(path: string, speakers: number): Promise<SpeakerTurn
   return Speakers.diarize(path, speakers);
 }
 
+/** True while a start is under way, so a second tap on Start cannot begin a second recording. */
+let starting = false;
+
 /**
  * The recorder: records with a visible indicator, then transcribes and labels speakers on
  * the phone. Owns the recording state machine; screens observe useRecorderLive /
@@ -67,10 +70,13 @@ export const recorderService = {
 
   async start(): Promise<void> {
     if (!useRecordings.getState().consent) throw new Error('Confirm that everyone knows they are being recorded first.');
-    if (useRecorderLive.getState().phase !== 'idle') return;
-    await audioRecorderService.startRecording();
-    keepScreenOn(true);
-    live({ phase: 'recording', startedAt: Date.now() });
+    if (useRecorderLive.getState().phase !== 'idle' || starting) return; // a second tap while the first is starting
+    starting = true;
+    try {
+      await audioRecorderService.startRecording();
+      keepScreenOn(true);
+      live({ phase: 'recording', startedAt: Date.now() });
+    } finally { starting = false; }
   },
 
   /** Stops, saves the audio and starts making the transcript. Resolves the new recording's id. */
@@ -86,9 +92,15 @@ export const recorderService = {
       throw new Error('The recording stopped early: another part of Atlas used the microphone.');
     }
     const id = generateId();
-    await RNFS.mkdir(dir());
     const audioPath = `${dir()}/${id}.wav`;
-    await RNFS.moveFile(result.path.replace(/^file:\/\//, ''), audioPath);
+    try {
+      await RNFS.mkdir(dir());
+      await RNFS.moveFile(result.path.replace(/^file:\/\//, ''), audioPath);
+    } catch (e: any) {
+      // Not saved (storage full?): leave the recording state so the screen is usable again.
+      live({ phase: 'idle' });
+      throw new Error(`The recording could not be saved: ${e?.message ?? 'no space or access'}. The audio is still at ${result.path}.`);
+    }
     const rec: Recording = {
       id, title: defaultTitle(new Date(started)), createdAt: new Date(started).toISOString(),
       durationSec: result.durationSeconds || (Date.now() - started) / 1000, audioPath, status: 'processing',

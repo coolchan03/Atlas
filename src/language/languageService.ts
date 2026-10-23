@@ -480,7 +480,7 @@ export const languageService = {
     const stars = starsFor(right, total);
     const prev = progress[code]?.[unitId] ?? { stars: 0, lessons: 0 };
     const today = dayKey();
-    const yesterday = dayKey(new Date(Date.now() - 864e5));
+    const yesterday = dayKey(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 1)); // by calendar: a day is not always 24 hours
     const nextStreak = streak.day === today ? streak : { day: today, count: streak.day === yesterday ? streak.count + 1 : 1 };
     const gained = right * 10;
     const mem = { ...memory[code] };
