@@ -221,3 +221,22 @@ it('lets a phone without a speech recognizer still practise speaking, checked by
   fireEvent.press(view.getByTestId('lesson-said-it'));
   expect(picked).toEqual(['Buenos días.']);
 });
+
+it('offers the learner check when the speech recognizer cannot listen (microphone refused)', async () => {
+  const { Platform, PermissionsAndroid } = require('react-native');
+  const os = Platform.OS;
+  Platform.OS = 'android';
+  const ask = jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
+  try {
+    const { ExerciseView } = require('../../../src/language/Exercises');
+    const picked: string[] = [];
+    const ex = { kind: 'speak', item: { en: 'Thank you.', t: 'Gracias.' }, answer: 'Gracias.' };
+    const view = render(<ExerciseView ex={ex} lang="es-ES" langName="Spanish" attempt={{ value: '', checked: false }}
+      onPick={(v: string) => picked.push(v)} onMatched={() => undefined} />);
+    fireEvent.press(view.getByTestId('lesson-speak'));
+    expect(await view.findByTestId('lesson-self-check')).toBeTruthy();
+    expect(view.getByText(/Microphone permission is needed/)).toBeTruthy();
+    fireEvent.press(view.getByTestId('lesson-not-yet'));
+    expect(picked).toEqual(['-']);
+  } finally { Platform.OS = os; ask.mockRestore(); }
+});

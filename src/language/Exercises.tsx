@@ -97,19 +97,20 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
   const styles = useThemedStyles(createStyles);
   const [listening, setListening] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  // No speech recognizer on this phone: say it aloud, compare with the voice, and mark it yourself.
-  const [selfCheck, setSelfCheck] = useState(false);
+  // No speech recognizer, or it failed (no microphone permission, language not installed): say it
+  // aloud, compare with the voice, and mark it yourself.
+  const [selfCheck, setSelfCheck] = useState<'none' | 'failed' | null>(null);
   const listen = async () => {
     setProblem(null); setListening(true);
     try {
       const { systemSpeechStatus } = require('../services/systemSpeech');
-      if (!(await systemSpeechStatus()).available) { setSelfCheck(true); return; }
+      if (!(await systemSpeechStatus()).available) { setSelfCheck('none'); return; }
       const { listenWithSystemSpeech } = require('../services/systemSpeech');
       const session = await listenWithSystemSpeech({ locale: lang, onPartial: onPick });
       const heard: string = await session.result;
       if (heard) onPick(heard); else setProblem('Nothing heard. Tap the microphone and try again.');
     } catch (e: any) {
-      if (e?.name !== 'SpeechCancelled') setProblem(String(e?.message || e));
+      if (e?.name !== 'SpeechCancelled') { setProblem(String(e?.message || e)); setSelfCheck('failed'); }
     } finally { setListening(false); }
   };
   return (
@@ -128,7 +129,9 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
       {!!problem && <Text style={styles.roman}>{problem}</Text>}
       {selfCheck && !attempt.checked && (
         <View testID="lesson-self-check">
-          <Text style={styles.bodyText}>This phone has no speech recognizer. Say it out loud, play it to compare, then mark how it went.</Text>
+          <Text style={styles.bodyText}>
+            {selfCheck === 'none' ? 'This phone has no speech recognizer.' : 'Speech recognition did not work.'} Say it out loud, play it to compare, then mark how it went.
+          </Text>
           <View style={styles.selfRow}>
             <TouchableOpacity style={styles.tile} onPress={() => onPick(ex.answer)} testID="lesson-said-it"><Text style={styles.tileText}>I said it right</Text></TouchableOpacity>
             <TouchableOpacity style={styles.tile} onPress={() => onPick('-')} testID="lesson-not-yet"><Text style={styles.tileText}>Not yet</Text></TouchableOpacity>
