@@ -88,8 +88,19 @@ it('does not bring back a recording deleted on the other phone, and removes this
   await phone({ 'atlas-recordings': store({ recordings: [rec('gone'), rec('kept')] }) });
   const fromA = await localStores(1000);
   await phone({ 'atlas-recordings': store({ recordings: [rec('gone')] }) });
+  mockFiles.set('/docs/atlas-recordings/gone.wav', Buffer.alloc(10, 1));
   await applyStores(fromA, { gone: 2000 });
   expect(useRecordings.getState().recordings.map((r) => r.id)).toEqual(['kept']);
+  // The audio of the deleted recording goes too, not only its record.
+  expect(mockFiles.has('/docs/atlas-recordings/gone.wav')).toBe(false);
+});
+
+it('keeps text-length settings such as maxTokens when sharing settings, but never credentials', () => {
+  const { sanitizeBackupValue } = require('../../../src/atlasTools/backup');
+  const shared = JSON.parse(sanitizeBackupValue(JSON.stringify({
+    maxTokens: 512, max_tokens: 256, contextTokens: 4096, tokensPerSecond: 3, apiKey: 'sk-secret', accessToken: 'abc', token: 'x', password: 'p',
+  })));
+  expect(shared).toEqual({ maxTokens: 512, max_tokens: 256, contextTokens: 4096, tokensPerSecond: 3 });
 });
 
 it('sends recording audio the other phone lacks, in pieces, and it arrives whole', async () => {

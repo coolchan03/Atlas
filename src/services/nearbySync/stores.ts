@@ -165,6 +165,16 @@ export async function localStores(now = Date.now()): Promise<StoreSnapshot> {
   return out;
 }
 
+/** A recording deleted on the other phone loses its audio file here too (the record alone was dropped before). */
+async function removeDeletedAudio(deleted: Record<string, number>): Promise<void> {
+  for (const id of Object.keys(deleted)) {
+    if (!/^[\w-]{1,80}$/.test(id)) continue;
+    for (const path of [`${recordingsDir()}/${id}.wav`, `${recordingsDir()}/${id}.wav.part`]) {
+      if (await RNFS.exists(path)) await RNFS.unlink(path).catch(() => undefined);
+    }
+  }
+}
+
 /** Applies one of the other phone's stores here. True when this phone's copy changed. */
 async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; stamps: Stamps; deletedRecordings: Record<string, number> }): Promise<boolean> {
   const { mine, stamps } = o;
@@ -181,6 +191,7 @@ async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; 
   });
   if (next == null) return false;
   await AsyncStorage.setItem(key, next);
+  if (key === RECORDINGS) await removeDeletedAudio(o.deletedRecordings);
   const shared = shareable(key, next);
   if (!shared) return true;
   stamps[key] = { hash: sha256(shared), changedAt: Math.max(entry.changedAt, mine?.changedAt ?? 0) };

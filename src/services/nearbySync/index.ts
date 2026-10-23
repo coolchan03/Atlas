@@ -109,6 +109,8 @@ class NearbySyncService {
         this.observeRemovals('recordings', previous.recordings, next.recordings);
     });
   }
+  /** Set when the last snapshot had to leave project files out (kept visible after a sync that otherwise worked). */
+  private fileNote: string | undefined;
   private async snapshot(): Promise<SyncSnapshot> {
     await this.hydrated();
     const projects = useProjectStore.getState().projects
@@ -119,7 +121,14 @@ class NearbySyncService {
         (!c.projectId || allowed.has(c.projectId)))
       .map(c => ({ ...c, messages: c.messages.map(m => ({ ...m, audioPath: undefined })) }));
     const agents = useAgentStore.getState().agents;
-    const files = await collectProjectFiles(projects.map(p => p.id));
+    // One missing attachment, or more files than the size limit, must not stop chats, settings and
+    // recordings from syncing: send everything else and say the files were skipped.
+    let files: Awaited<ReturnType<typeof collectProjectFiles>> = [];
+    this.fileNote = undefined;
+    try { files = await collectProjectFiles(projects.map(p => p.id)); } catch (e) {
+      this.fileNote = `Project files were not synced: ${e instanceof Error ? e.message : String(e)}`;
+      this.publish({ lastError: this.fileNote });
+    }
     // Locked projects and chats go across sealed with their own PIN, so they open on the other
     // phone with the same PIN. Only ones opened since Atlas started can be sealed that way.
     const { openProtectedProjectsForBackup } = require('../../stores/protectedProjectStorage');
@@ -188,9 +197,10 @@ class NearbySyncService {
     try { await applyStores(remote.stores, this.deleted.recordings); } finally { this.applyingRemote = false; }
     // API keys last, once the remote servers they belong to are here.
     await applySecrets(remote.secrets);
-    this.publish({ lastSync: new Date().toISOString(), lastError: undefined });
+    this.publish({ lastSync: new Date().toISOString(), lastError: this.fileNote });
   }
   private async incoming(message: Incoming) {
+    let ownsBusy = false;
     try {
       if (!this.enabled || !this.active || this.isLocked()) throw new Error('Offline sync is paused while Atlas is locked');
       const audio = audioChunk(message.payload);
@@ -202,6 +212,7 @@ class NearbySyncService {
       }
       if (this.busy) throw new Error('Another synchronization is in progress');
       this.busy = true;
+      ownsBusy = true;
       this.publish({ syncing: true });
       await this.apply(message.payload, message.peerId);
       await native().respond(message.requestId, JSON.stringify(await this.snapshot()));
@@ -211,7 +222,8 @@ class NearbySyncService {
       this.publish({ lastError: reason });
       await native().respond(message.requestId, JSON.stringify({ error: reason })).catch(() => undefined);
     } finally {
-      if (!audioChunk(message.payload)) { this.busy = false; this.publish({ syncing: false }); }
+      // Only the request that set the flag clears it: a refused second request must not mark a running sync as finished.
+      if (ownsBusy) { this.busy = false; this.publish({ syncing: false }); }
     }
   }
   async init() {

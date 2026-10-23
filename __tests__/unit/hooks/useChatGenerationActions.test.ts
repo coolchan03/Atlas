@@ -393,9 +393,11 @@ describe('handleImageGenerationFn', () => {
 
   it('shows alert when image generation returns null and there is a non-cancel error', async () => {
     mockGenerateImage.mockResolvedValueOnce(null);
+    // The alert reads the service's current error (deps is a render snapshot from before the run).
+    mockGetImageGenState.mockReturnValue({ isGenerating: false, error: 'out of memory' });
     const deps = makeGenerationDeps({
       activeImageModel: baseImageModel,
-      imageGenState: { isGenerating: false, error: 'out of memory' },
+      imageGenState: { isGenerating: false, error: null },
     });
     await handleImageGenerationFn(deps, { prompt: 'cat', conversationId: 'conv-1' });
     expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Error' }));
@@ -403,9 +405,10 @@ describe('handleImageGenerationFn', () => {
 
   it('does not show alert when error is "cancelled"', async () => {
     mockGenerateImage.mockResolvedValueOnce(null);
+    mockGetImageGenState.mockReturnValue({ isGenerating: false, error: 'cancelled by user' });
     const deps = makeGenerationDeps({
       activeImageModel: baseImageModel,
-      imageGenState: { isGenerating: false, error: 'cancelled by user' },
+      imageGenState: { isGenerating: false, error: null },
     });
     await handleImageGenerationFn(deps, { prompt: 'cat', conversationId: 'conv-1' });
     expect(deps.setAlertState).not.toHaveBeenCalled();
@@ -866,8 +869,8 @@ describe('startGenerationFn', () => {
     expect(generationSession.getConversationId()).toBeNull();
   });
 
-  it('clears cache when context usage is high', async () => {
-    mockGetContextDebugInfo.mockResolvedValueOnce({ truncatedCount: 0, contextUsagePercent: 75 });
+  it('clears cache when the context is nearly full', async () => {
+    mockGetContextDebugInfo.mockResolvedValueOnce({ truncatedCount: 0, contextUsagePercent: 97 });
     mockGetLoadedModelPath.mockReturnValue('/path/model.gguf');
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'test' });

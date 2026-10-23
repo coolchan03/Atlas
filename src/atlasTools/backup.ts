@@ -39,11 +39,15 @@ export const RESTORABLE_STORE_KEYS = new Set([
 // Never export or restore credentials, vault contents, or authentication state.
 export const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
 const SENSITIVE_FIELDS = /api.?key|secret|token|password|passphrase|credential/i;
+// Settings about text length that merely contain the word "token" (maxTokens, contextTokens, tokensPerSecond).
+// They are not credentials, and stripping them reset the value on every restore and sync.
+const TOKEN_COUNT_FIELDS = /^(max|min|context|ctx|n|num|total|prompt|completion|generated|reserved)[-_]?tokens?($|[-_A-Z0-9])|^tokens[-_]?(per|limit|used|count|budget)/i;
+const isSensitiveField = (key: string) => SENSITIVE_FIELDS.test(key) && !TOKEN_COUNT_FIELDS.test(key);
 function stripSensitiveFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripSensitiveFields);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value)
-      .filter(([key]) => !SENSITIVE_FIELDS.test(key))
+      .filter(([key]) => !isSensitiveField(key))
       .map(([key, item]) => [key, stripSensitiveFields(item)]));
   }
   return value;
