@@ -19,6 +19,7 @@ import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, 
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
 import { isOverridableMemoryError } from './modelLoadErrors';
+import { applyImageStyle } from './imageStyles';
 import {
   isInFlight,
   ImageGenerationState,
@@ -37,6 +38,12 @@ export { isInFlight } from './imageGenerationTypes';
 export type { ImageGenPhase, ImageGenerationState } from './imageGenerationTypes';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
+
+/** The prompt and negative prompt with the chosen image style added. */
+const styled = (prompt: string, negative?: string) => {
+  const s = applyImageStyle(prompt, negative || '', useAppStore.getState().settings.imageStyle);
+  return { prompt: s.prompt, negativePrompt: s.negative };
+};
 
 // ---------------------------------------------------------------------------
 // Service class
@@ -424,7 +431,7 @@ class ImageGenerationService {
     const handlers = this._imageProgressHandlers({ steps, isFirstRun, warmupStatus, requestEpoch });
     try {
       const result = await onnxImageGeneratorService.generateImage(
-        { prompt: enhancedPrompt, negativePrompt: params.negativePrompt || '', steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL,
+        { ...styled(enhancedPrompt, params.negativePrompt), steps, guidanceScale, seed: params.seed, width: imageWidth, height: imageHeight, previewInterval: params.previewInterval ?? 2, useOpenCL,
           ...(computeBackend ? { computeBackend } : {}),
           threads: useAppStore.getState().settings.imageThreads ?? 4 },
         handlers.onProgress,

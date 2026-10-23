@@ -61,6 +61,8 @@ type AppSettings = {
   /** CPU fallback is much slower; require explicit user opt-in. */
   imageAllowCpuFallback?: boolean;
   enhanceImagePrompts: boolean;
+  /** The look every picture gets (services/imageStyles.ts); 'none' adds nothing. */
+  imageStyle?: string;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
    *  load (with a "Load Anyway" override when the budget still blocks). Off by

@@ -33,3 +33,26 @@ it('enhances the prompt with a downloaded text model when none is selected', asy
   await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 8000 });
   expect(JSON.stringify(h.boundary.diffusion.calls.generateImage[0])).toContain('tabby cat');
 }, 20000);
+
+it('adds the chosen style to the picture: anime wording in, photo looks kept out', async () => {
+  const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+  const { ImageStylePicker } = require('../../../src/components/ImageStylePicker');
+  const React = require('react');
+  const picker = h.rtl.render(React.createElement(ImageStylePicker));
+  h.rtl.fireEvent.press(picker.getByTestId('image-style-anime'));
+  expect(picker.getByTestId('image-style-anime').props.accessibilityState).toEqual({ selected: true });
+  picker.unmount();
+
+  h.render();
+  await h.placeImageModel({ backend: 'coreml' });
+  const { activeModelService } = require('../../../src/services/activeModelService');
+  await activeModelService.loadImageModel('sd');
+  await h.cycleImageMode();
+  await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });
+  h.useAppStore.getState().updateSettings({ enhanceImagePrompts: false });
+  await h.tapSend('draw a cat');
+  await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 8000 });
+  const sent = JSON.stringify(h.boundary.diffusion.calls.generateImage[0]);
+  expect(sent).toContain('draw a cat, anime style');
+  expect(sent).toMatch(/photorealistic/);
+}, 20000);
