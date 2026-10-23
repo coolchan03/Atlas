@@ -200,8 +200,11 @@ class ImageGenerationService {
     logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', loaded);
     if (loaded) return true;
 
-    const { activeModelId, lastTextModelId } = useAppStore.getState();
-    const textModelId = activeModelId ?? lastTextModelId;
+    // The chosen text model, or the last one used; failing that, the smallest downloaded one
+    // (a prompt rewrite does not need a big model), so enhancement does not quietly stop.
+    const { activeModelId, lastTextModelId, downloadedModels } = useAppStore.getState();
+    const smallest = [...downloadedModels].sort((x, y) => (x.fileSize || 0) - (y.fileSize || 0))[0]?.id;
+    const textModelId = activeModelId ?? lastTextModelId ?? smallest;
     if (!textModelId) {
       logger.warn('[ImageGen] No text model available, skipping enhancement');
       this._noticeEnhancementSkipped('no text model is selected');
