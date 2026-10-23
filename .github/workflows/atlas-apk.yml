@@ -160,7 +160,7 @@ jobs:
           name: Atlas-apk
           path: out/*.apk
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: github.ref == 'refs/heads/atlas-voice' || inputs.publish == true
+        if: github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/fix/atlas-scoped-tool-consent-20261022' || inputs.publish == true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
