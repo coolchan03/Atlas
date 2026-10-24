@@ -47,6 +47,12 @@ it('detects a physically enumerated Vulkan GPU without depending on model name',
   expect(native.listBackends).toHaveBeenCalledTimes(1);
 });
 
+it('recognises a Mali GPU (Automatic leaves text on the CPU there) but not an Adreno', async () => {
+  expect(await vulkanEngine.isMaliGpu()).toBe(true);
+  native.listBackends.mockResolvedValueOnce([{ name: 'Adreno (TM) 830', description: 'Vulkan', type: 'gpu' }]);
+  expect(await vulkanEngine.isMaliGpu()).toBe(false);
+});
+
 it('loads a GGUF with a bounded offload request and delegates chat templates', async () => {
   // A legacy bridge resolving only the backend name reports an unknown layer count.
   await expect(vulkanEngine.loadModel('/models/qwen.gguf', 8, 2048, 4)).resolves.toEqual(

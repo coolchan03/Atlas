@@ -82,6 +82,18 @@ export const vulkanEngine = {
         message: String(error?.message || error) };
     }
   },
+  /**
+   * True when the Vulkan GPU is a Mali. On the onn tablet's Mali, text generation on the GPU measured
+   * about half the speed of the CPU (2.1 vs 4.5 tokens per second for a 4B Q4_0 model), so Automatic
+   * leaves it out. Choosing Vulkan by hand still works.
+   */
+  async isMaliGpu(): Promise<boolean> {
+    try {
+      return (await this.runtimeStatus()).devices.filter(isVulkanGpu).some((d) => /mali/i.test(`${d.name} ${d.description}`));
+    } catch {
+      return false;
+    }
+  },
   async isAvailable(): Promise<boolean> {
     try {
       return (await this.runtimeStatus()).status === 'ok';

@@ -187,12 +187,14 @@ class LLMService {
       const auto = Platform.OS === 'android' && requested === INFERENCE_BACKENDS.AUTO;
       let candidates: InferenceBackend[] = [requested];
       if (auto) {
-        const [acceleration, vulkan] = await Promise.all([
+        const [acceleration, vulkanFound, mali] = await Promise.all([
           hardwareService.getAccelerationCapability(),
           vulkanEngine.isAvailable(),
+          vulkanEngine.isMaliGpu(),
         ]);
+        // A Mali GPU runs text slower than the CPU (see isMaliGpu): Automatic uses the CPU there.
         candidates = acceleratorCandidates(
-          { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan },
+          { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan: vulkanFound && !mali },
           modelPath, !!mmProjPath,
         );
         candidates.push(INFERENCE_BACKENDS.CPU);
