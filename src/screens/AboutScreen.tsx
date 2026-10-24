@@ -9,6 +9,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import packageJson from '../../package.json';
+import { appVersionLabel } from '../utils/appVersion';
 import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
 
 
@@ -49,8 +50,8 @@ export const AboutScreen: React.FC = () => {
         <View style={styles.heroSection}>
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
           <Text style={styles.appName}>Atlas</Text>
-          <Text style={styles.version}>Version {packageJson.version}</Text>
-          <Text style={styles.runtimeInfo}>llama.rn {packageJson.dependencies['llama.rn']} · native build {BuildInfo.number}</Text>
+          <Text style={styles.version} testID="about-version">Version {appVersionLabel()}</Text>
+          <Text style={styles.runtimeInfo}>llama.rn {packageJson.dependencies['llama.rn']} · llama.rn build {BuildInfo.number}</Text>
           <Text style={styles.runtimeInfo}>LLM runtime: {llamaRuntimeStatus}</Text>
           <Text style={styles.description}>
             Your offline assistant, library and field guide. Runs on this device and keeps working with no internet.

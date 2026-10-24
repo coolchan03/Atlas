@@ -30,7 +30,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { clearProForTesting } from '../services/proLicenseService';
-import packageJson from '../../package.json';
+import { appVersionLabel } from '../utils/appVersion';
 
 
 type NavigationProp = CompositeNavigationProp<
@@ -286,7 +286,7 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>About</Text>
-                <Text style={styles.navItemDesc}>Version {packageJson.version}</Text>
+                <Text style={styles.navItemDesc}>Version {appVersionLabel()}</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
