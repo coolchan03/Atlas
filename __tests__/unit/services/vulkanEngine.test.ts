@@ -47,10 +47,12 @@ it('detects a physically enumerated Vulkan GPU without depending on model name',
   expect(native.listBackends).toHaveBeenCalledTimes(1);
 });
 
-it('recognises a Mali GPU (Automatic leaves text on the CPU there) but not an Adreno', async () => {
-  expect(await vulkanEngine.isMaliGpu()).toBe(true);
+it('treats only the Mali-G615 as slow for text: not an Adreno, and not another Mali', async () => {
+  expect(await vulkanEngine.isSlowTextGpu()).toBe(true);
   native.listBackends.mockResolvedValueOnce([{ name: 'Adreno (TM) 830', description: 'Vulkan', type: 'gpu' }]);
-  expect(await vulkanEngine.isMaliGpu()).toBe(false);
+  expect(await vulkanEngine.isSlowTextGpu()).toBe(false);
+  native.listBackends.mockResolvedValueOnce([{ name: 'Mali-G720-Immortalis MC12', description: 'Vulkan', type: 'gpu' }]);
+  expect(await vulkanEngine.isSlowTextGpu()).toBe(false);
 });
 
 it('loads a GGUF with a bounded offload request and delegates chat templates', async () => {

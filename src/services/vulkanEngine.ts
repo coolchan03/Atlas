@@ -83,13 +83,14 @@ export const vulkanEngine = {
     }
   },
   /**
-   * True when the Vulkan GPU is a Mali. On the onn tablet's Mali, text generation on the GPU measured
+   * True when the Vulkan GPU is the Mali-G615 (the onn 13" Pro tablet). Text generation on it measured
    * about half the speed of the CPU (2.1 vs 4.5 tokens per second for a 4B Q4_0 model), so Automatic
-   * leaves it out. Choosing Vulkan by hand still works.
+   * leaves Vulkan out there. Other GPUs, other Mali models included, are not measured and keep the
+   * normal order. Choosing Vulkan by hand still works.
    */
-  async isMaliGpu(): Promise<boolean> {
+  async isSlowTextGpu(): Promise<boolean> {
     try {
-      return (await this.runtimeStatus()).devices.filter(isVulkanGpu).some((d) => /mali/i.test(`${d.name} ${d.description}`));
+      return (await this.runtimeStatus()).devices.filter(isVulkanGpu).some((d) => /mali-?g615/i.test(`${d.name} ${d.description}`));
     } catch {
       return false;
     }
