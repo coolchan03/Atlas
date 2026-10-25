@@ -7,6 +7,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import { LEVELS, type LevelId } from './teaching';
 import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
 import { boardFor, spaceOpen, type Space } from './board';
+import { scenarioFor } from './phoneCall';
 import { unitsForLevel } from './curriculum';
 import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
@@ -45,10 +46,11 @@ export const LanguageScreen: React.FC = () => {
     if (s.kind === 'lesson') navigation.navigate('Lesson', { unitId: s.unitId, part: s.part, parts: s.parts, key: s.key });
     else if (s.kind === 'story' || s.kind === 'podcast') navigation.navigate('Listening', { kind: s.kind, space: s.key, level, index: i });
     else {
-      // Speed rounds, word searches, reviews and the checkpoint use the lessons before them on the board.
+      // Speed rounds, word searches, reviews, calls and the checkpoint use the lessons before them on the board.
       const before = spaces.slice(0, i).filter((x) => x.kind === 'lesson').map((x) => x.unitId!);
       const unitId = before[before.length - 1] ?? unitsForLevel(level)[0].id;
-      if (s.kind === 'wordsearch') navigation.navigate('WordSearch', { unitId, key: s.key });
+      if (s.kind === 'call') navigation.navigate('Call', { key: s.key, scenarioId: scenarioFor(unitId, i).id });
+      else if (s.kind === 'wordsearch') navigation.navigate('WordSearch', { unitId, key: s.key });
       else navigation.navigate('Lesson', { unitId, mode: s.kind, key: s.key, level });
     }
   };
@@ -97,6 +99,9 @@ export const LanguageScreen: React.FC = () => {
           <Text style={styles.progressText}>Square {Math.min(current + 1, spaces.length)} of {spaces.length} · {doneCount} done</Text>
           <TouchableOpacity disabled={!languageService.unlocked(REVIEW, code)} onPress={() => navigation.navigate('Lesson', { unitId: REVIEW })} testID="language-review">
             <Text style={languageService.unlocked(REVIEW, code) ? styles.extraOn : styles.extraOff}>Review ({due})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Call', {})} testID="language-call" accessibilityLabel="Practice call">
+            <Text style={styles.extraOn}>Practice call</Text>
           </TouchableOpacity>
           {languageService.unlocked(MY_WORDS, code) && (
             <TouchableOpacity onPress={() => navigation.navigate('Lesson', { unitId: MY_WORDS })} testID="language-mywords">

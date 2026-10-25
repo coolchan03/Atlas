@@ -50,7 +50,7 @@ export function parseUnitWords(raw: string, english: string[], code: string): It
   return items.every((x) => x.t) && copied <= 1 ? items : null;
 }
 
-async function model(): Promise<any> {
+export async function model(): Promise<any> {
   await ensureTextModel(null);
   const { llmService } = require('../services/llm');
   if (llmService.isCurrentlyGenerating()) throw new Error('The model is busy with a chat. Try again in a moment.');

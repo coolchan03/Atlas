@@ -1,0 +1,175 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme, useThemedStyles } from '../theme';
+import { Button } from '../components/Button';
+import { speakIn } from '../atlasVoice/tts';
+import { formatCallTime } from '../atlasVoice/AudioInput';
+import { LANGUAGES, languageService } from './languageService';
+import { useLanguage } from './store';
+import { SCENARIOS, customScenario, type Scenario } from './phoneCall';
+import { createCall, type Call, type CallState } from './callService';
+import { createStyles } from './CallScreen.styles';
+import { Tappable } from './Tappable';
+
+const STATUS: Record<CallState['phase'], string> = {
+  ringing: 'Ringing...',
+  speaking: 'Talking... tap the microphone to interrupt',
+  thinking: 'Thinking...',
+  listening: 'Listening... speak, then tap the square when you are done',
+  idle: 'Tap the microphone to speak',
+  ended: 'Call ended',
+};
+
+/** Follows a call's state; the call (callService) owns everything, this only re-renders. */
+function useCallState(call: Call | null): CallState | null {
+  const [, tick] = useState(0);
+  useEffect(() => call?.subscribe(() => tick((n) => n + 1)), [call]);
+  return call?.state() ?? null;
+}
+
+/** Pick a situation (or describe your own) for a practice call. */
+function Setup({ onStart }: { onStart: (s: Scenario) => void }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const [own, setOwn] = useState('');
+  return (
+    <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <Text style={styles.prompt}>Who are you calling?</Text>
+      {SCENARIOS.map((s) => (
+        <TouchableOpacity key={s.id} style={styles.scenario} onPress={() => onStart(s)} testID={`call-scenario-${s.id}`} accessibilityLabel={`Call: ${s.title}`}>
+          <Icon name={s.icon} size={22} color={colors.primary} />
+          <View style={styles.scenarioText}>
+            <Text style={styles.bubbleText}>{s.title}</Text>
+            <Text style={styles.meta}>You {s.goal}.</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
+      <Text style={styles.prompt}>Or describe your own</Text>
+      <TextInput value={own} onChangeText={setOwn} placeholder="Calling a plumber about a leak" placeholderTextColor={colors.textMuted}
+        style={styles.typed} testID="call-own" />
+      <Button title="Call" disabled={!own.trim()} onPress={() => onStart(customScenario(own))} testID="call-own-start" />
+    </ScrollView>
+  );
+}
+
+/** What went wrong in the learner's lines, once the call is over. */
+function Review({ state, onDone }: { state: CallState; onDone: () => void }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const list = state.corrections;
+  return (
+    <ScrollView contentContainerStyle={styles.body} testID="call-review">
+      <Text style={styles.big}>{state.passed ? 'Nice call.' : 'Call ended.'}</Text>
+      {list === null && <ActivityIndicator color={colors.primary} />}
+      {list !== null && !list.length && <Text style={styles.bodyText}>{state.turns.some((t) => t.who === 'me') ? 'No mistakes to fix.' : 'You did not say anything this time.'}</Text>}
+      {!!list?.length && <Text style={styles.prompt}>Say it like this next time</Text>}
+      {list?.map((c) => (
+        <View key={`${c.said}|${c.fixed}`} style={styles.fix}>
+          <Text style={styles.roman}>{c.said}</Text>
+          <Tappable text={c.fixed} style={styles.bodyText as any} />
+          {!!c.why && <Text style={styles.meta}>{c.why}</Text>}
+        </View>
+      ))}
+      {!!state.note && <Text style={styles.meta}>{state.note}</Text>}
+      <Button title="Done" onPress={onDone} testID="call-done" />
+    </ScrollView>
+  );
+}
+
+/**
+ * A practice phone call in the language being learned: the AI plays a person in an everyday
+ * situation and the learner talks to it. Opened from a board call square (with the scenario of the
+ * lesson before it) or from "Practice call" on the course screen (the learner picks one).
+ */
+export const CallScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const params = (useRoute<any>().params ?? {}) as { key?: string; scenarioId?: string };
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const code = useLanguage((s) => s.language);
+  const langName = LANGUAGES.find((l) => l.code === code)?.name ?? code;
+  const [scenario, setScenario] = useState<Scenario | null>(SCENARIOS.find((s) => s.id === params.scenarioId) ?? null);
+  const call = useMemo(() => (scenario ? createCall(scenario) : null), [scenario]);
+  const state = useCallState(call);
+  const [typed, setTyped] = useState('');
+  const [elapsed, setElapsed] = useState(0);
+  const scroll = useRef<ScrollView>(null);
+
+  useEffect(() => { call?.start(); return () => call?.dispose(); }, [call]);
+  useEffect(() => {
+    if (!call || state?.phase === 'ended') return;
+    const started = Date.now();
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [call, state?.phase === 'ended']); // eslint-disable-line react-hooks/exhaustive-deps
+  // A board call counts as done once the learner has said enough.
+  useEffect(() => { if (state?.phase === 'ended' && state.passed && params.key) languageService.completeSpace(params.key); }, [state?.phase, state?.passed, params.key]);
+
+  const header = (
+    <View style={styles.top}>
+      <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
+      <Text style={styles.prompt}>Practice call in {langName}</Text>
+    </View>
+  );
+
+  if (!call || !state) return <SafeAreaView style={styles.container}>{header}<Setup onStart={setScenario} /></SafeAreaView>;
+  if (state.phase === 'ended') return <SafeAreaView style={styles.container}>{header}<Review state={state} onDone={() => navigation.goBack()} /></SafeAreaView>;
+
+  const live = state.phase === 'speaking' || state.phase === 'listening';
+  const listening = state.phase === 'listening';
+  const send = () => { call.say(typed); setTyped(''); };
+  return (
+    <SafeAreaView style={styles.container} testID="language-call">
+      {header}
+      <View style={styles.callTop}>
+        <View style={[styles.avatar, live && styles.avatarLive]}><Icon name={scenario!.icon} size={36} color={colors.primary} /></View>
+        <Text style={styles.callTitle} numberOfLines={2}>{scenario!.title}</Text>
+        <Text style={styles.meta} testID="call-timer">{formatCallTime(elapsed)}</Text>
+        <Text style={styles.status} testID="call-status">{state.note ?? STATUS[state.phase]}</Text>
+      </View>
+      <ScrollView ref={scroll} contentContainerStyle={styles.transcript} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}>
+        {state.turns.map((t, i) => (
+          <View key={i} style={[styles.bubble, t.who === 'me' ? styles.bubbleMine : styles.bubbleTheirs]}>
+            {t.who === 'them' ? <Tappable text={t.text} style={styles.bubbleText as any} /> : <Text style={styles.bubbleText}>{t.text}</Text>}
+          </View>
+        ))}
+        {!!state.partial && <View style={[styles.bubble, styles.bubbleMine]}><Text style={styles.roman}>{state.partial}</Text></View>}
+        {state.phase === 'thinking' && <ActivityIndicator color={colors.primary} />}
+        {!!state.hint && (
+          <View style={styles.hint} testID="call-hint">
+            <Text style={styles.prompt}>You could say</Text>
+            <View style={styles.sayRow}>
+              <TouchableOpacity onPress={() => speakIn(state.hint!.say, code, 'call-hint')} accessibilityLabel="Hear the hint"><Icon name="volume-2" size={22} color={colors.primary} /></TouchableOpacity>
+              <View style={styles.sayText}><Tappable text={state.hint.say} style={styles.bubbleText as any} /></View>
+            </View>
+            {!!state.hint.en && <Text style={styles.meta}>{state.hint.en}</Text>}
+          </View>
+        )}
+      </ScrollView>
+      {state.typing && (
+        <View style={styles.top}>
+          <TextInput value={typed} onChangeText={setTyped} onSubmitEditing={send} placeholder="Type what you would say" placeholderTextColor={colors.textMuted}
+            autoCapitalize="none" style={[styles.typed, styles.sayText]} testID="call-typed" />
+          <TouchableOpacity onPress={send} accessibilityLabel="Send" testID="call-send"><Icon name="send" size={22} color={colors.primary} /></TouchableOpacity>
+        </View>
+      )}
+      <View style={styles.controls}>
+        <View style={styles.control}>
+          <TouchableOpacity style={styles.round} onPress={() => call.askHint()} testID="call-hint-button" accessibilityLabel="What do I say?"><Icon name="help-circle" size={24} color={colors.text} /></TouchableOpacity>
+          <Text style={styles.controlLabel}>What do I say?</Text>
+        </View>
+        <TouchableOpacity style={[styles.talk, listening && styles.talkOn]} onPress={() => (listening ? call.doneTalking() : call.talk())}
+          testID="call-talk" accessibilityLabel={listening ? 'Done talking' : 'Talk'}>
+          <Icon name={listening ? 'square' : 'mic'} size={30} color={colors.background} />
+        </TouchableOpacity>
+        <View style={styles.control}>
+          <TouchableOpacity style={[styles.round, styles.end]} onPress={() => call.hangUp()} testID="call-end" accessibilityLabel="End call"><Icon name="phone-off" size={24} color={colors.background} /></TouchableOpacity>
+          <Text style={styles.controlLabel}>End call</Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+};

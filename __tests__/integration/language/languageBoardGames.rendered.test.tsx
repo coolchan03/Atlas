@@ -98,6 +98,17 @@ it('shows how to conjugate a tapped verb, offline for Spanish', async () => {
   expect(screen.queryByTestId('conjugation-table')).toBeNull();
 });
 
+it('says a tapped word aloud and saves it to My words', async () => {
+  useLanguage.setState({ glossary: { 'es-ES': { coche: 'car' } }, myWords: {} });
+  const screen = render(<Tappable text="El coche es rojo." />);
+  fireEvent.press(screen.getByLabelText('Meaning of coche'));
+  await screen.findByText(/= car/);
+  fireEvent.press(screen.getByTestId('word-save'));
+  expect(useLanguage.getState().myWords['es-ES']).toEqual([{ en: 'car', t: 'coche' }]);
+  expect(screen.getByLabelText('Saved to My words')).toBeTruthy();
+  expect(screen.getByTestId('word-hear')).toBeTruthy();
+});
+
 it('adds words that do not belong to the word-order tiles', () => {
   const lesson = buildLesson(colours, 7, { length: 14, production: 0.5 });
   const build = lesson.find((e) => e.kind === 'build' || e.kind === 'hear') as { tiles: string[]; answer: string };

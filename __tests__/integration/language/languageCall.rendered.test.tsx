@@ -1,0 +1,64 @@
+/**
+ * A practice phone call: the AI plays a waiter and speaks only Spanish, the learner answers (typed here,
+ * because the test phone has no speech recognizer), asks for a hint, hangs up and sees the mistakes.
+ * Fakes only the device boundary (llama.rn text engine, files, RAM).
+ */
+import { installNativeBoundary, GB, requireRTL } from '../../harness/nativeBoundary';
+import { createDownloadedModel } from '../../utils/factories';
+
+const mockNav = { navigate: jest.fn(), goBack: jest.fn() };
+let mockParams: any = {};
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => mockNav,
+  useRoute: () => ({ params: mockParams }),
+}));
+
+it('plays a waiter in Spanish, offers a hint, and shows the learner\'s mistakes after the call', async () => {
+  const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { useAppStore } = require('../../../src/stores');
+  const { hardwareService } = require('../../../src/services/hardware');
+  const { useLanguage } = require('../../../src/language/store');
+  const { languageService } = require('../../../src/language/languageService');
+  const { CallScreen } = require('../../../src/language/CallScreen');
+
+  useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' });
+  boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+  await hardwareService.refreshMemoryInfo();
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf', fileSize: 500 * 1024 * 1024 })], activeModelId: 'llm' });
+  useLanguage.setState({ language: 'es-ES', level: 1, progress: {}, glossary: {}, memory: {} });
+
+  mockParams = { scenarioId: 'cafe', key: 'call@1.1' };
+  boundary.llama!.scriptCompletion({ text: 'Buenos días. ¿Qué desea tomar?' });
+  const screen = rtl.render(React.createElement(CallScreen));
+  expect(await screen.findByText(/Qué desea tomar/, {}, { timeout: 8000 })).toBeTruthy();
+
+  const say = async (line: string, reply: string) => {
+    boundary.llama!.scriptCompletion({ text: reply });
+    const box = await screen.findByTestId('call-typed');
+    rtl.fireEvent.changeText(box, line);
+    rtl.fireEvent.press(screen.getByTestId('call-send'));
+    expect(await screen.findByText(line)).toBeTruthy();
+  };
+
+  boundary.llama!.scriptCompletion({ text: 'Quiero un pastel.\nI want a cake.' });
+  rtl.fireEvent.press(await screen.findByTestId('call-hint-button'));
+  expect(await screen.findByText('I want a cake.', {}, { timeout: 8000 })).toBeTruthy();
+
+  await say('Yo quiero un café', 'Muy bien. ¿Algo más?');
+  await screen.findByText(/Algo más/, {}, { timeout: 8000 });
+  await say('Un pastel, por favor', 'Claro. ¿Algo más?');
+  await rtl.waitFor(() => expect(screen.getAllByText(/Algo más/).length).toBe(2), { timeout: 8000 });
+  await say('La cuenta, por favor', 'Son diez euros. Adiós.');
+  await screen.findByText(/Son diez euros/, {}, { timeout: 8000 });
+
+  boundary.llama!.scriptCompletion({ text: 'Yo quiero un café | Quiero un café | In Spanish the pronoun is usually left out' });
+  rtl.fireEvent.press(screen.getByTestId('call-end'));
+  expect(await screen.findByTestId('call-review', {}, { timeout: 8000 })).toBeTruthy();
+  expect(screen.getByText('Yo quiero un café')).toBeTruthy();
+  expect(screen.getByText(/pronoun is usually left out/)).toBeTruthy();
+  // Three lines said: the board's call square is done.
+  expect(languageService.isDone('call@1.1')).toBe(true);
+}, 40000);

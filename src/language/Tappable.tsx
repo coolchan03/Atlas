@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View, type TextStyle } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
+import { speakIn } from '../atlasVoice/tts';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { languageService, plainWord } from './languageService';
+import { useLanguage } from './store';
 
 /**
  * Text in the language being learned where every word can be tapped to see its English
@@ -13,12 +16,15 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState<{ word: string; meaning: string | null } | null>(null);
+  const code = useLanguage((s) => s.language);
+  const [saved, setSaved] = useState(false);
   const [table, setTable] = useState<{ verb: string; tenses: { name: string; lines: string[] }[] | null; error?: string } | null>(null);
   const tap = (word: string) => {
     if (!plainWord(word)) return;
     if (open?.word === word) { setOpen(null); setTable(null); return; }
     setOpen({ word, meaning: null });
     setTable(null);
+    setSaved(false);
     languageService.lookupWord(word)
       .then((m) => setOpen((o) => (o?.word === word ? { word, meaning: m || 'No meaning found' } : o)))
       .catch(() => setOpen((o) => (o?.word === word ? { word, meaning: 'Load the AI model to look this word up' } : o)));
@@ -45,6 +51,18 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
             : <Text style={styles.bubbleText}><Text style={styles.bubbleWord}>{plainWord(open.word)}</Text> = {open.meaning}</Text>}
         </TouchableOpacity>
       )}
+      {open?.meaning && (
+        <View style={styles.actions}>
+          <TouchableOpacity onPress={() => speakIn(plainWord(open.word), code, 'word')} testID="word-hear" accessibilityLabel="Hear the word" style={styles.action}>
+            <Icon name="volume-2" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { languageService.saveWords([{ t: plainWord(open.word), en: open.meaning!.replace(/\s*\(.*\)\s*$/, '') }]); setSaved(true); }}
+            testID="word-save" accessibilityLabel={saved ? 'Saved to My words' : 'Save to My words'} style={styles.action}>
+            <Icon name={saved ? 'check' : 'bookmark'} size={18} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
       {!!verb && (
         <TouchableOpacity onPress={() => showTable(verb)} style={styles.conjugate} testID="word-conjugate" accessibilityLabel={`How to conjugate ${verb}`}>
           <Text style={styles.bubbleWord}>{table?.verb === verb ? 'Hide' : 'How to conjugate'} {verb}</Text>
@@ -70,6 +88,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   // A dotted underline shows that a word can be tapped for its meaning.
   tappable: { textDecorationLine: 'underline' as const, textDecorationStyle: 'dotted' as const, textDecorationColor: colors.textMuted },
   picked: { backgroundColor: `${colors.primary}33`, color: colors.primary },
+  actions: { flexDirection: 'row' as const, gap: SPACING.md, marginTop: SPACING.xs },
+  action: { padding: SPACING.xs },
   conjugate: { alignSelf: 'flex-start' as const, marginTop: SPACING.xs, paddingVertical: SPACING.xs },
   table: { marginTop: SPACING.xs, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: SPACING.sm },
   tense: { gap: 2 },

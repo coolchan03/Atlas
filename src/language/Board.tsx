@@ -14,7 +14,7 @@ const BAND = 6;
 
 /** The coloured band across the top of a square, by kind (like the colour groups of a property board). */
 function band(kind: SpaceKind, colors: ThemeColors): string {
-  if (kind === 'story' || kind === 'review') return colors.success;
+  if (kind === 'story' || kind === 'review' || kind === 'call') return colors.success;
   if (kind === 'podcast' || kind === 'checkpoint') return colors.primary;
   if (kind === 'speed' || kind === 'wordsearch' || kind === 'exam') return colors.error;
   return colors.textMuted;

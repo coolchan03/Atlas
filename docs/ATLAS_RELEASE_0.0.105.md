@@ -292,6 +292,19 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   and turn sounds off. Needs device test: sound, pace and lesson length on the phone, and AI-written units
   and stories with the model you use.
 
+## 8b. Language course additions (0.0.106)
+
+- **Practice phone calls.** The AI plays a waiter, receptionist, taxi dispatcher and others and speaks only the
+  language being learned, at the learner's level. Pick a situation (or describe your own) from "Practice call"
+  on the course screen; a call square also sits on the board every 6 lessons with the situation of the lesson
+  before it (done after the learner has said 3 lines). Each sentence is spoken as soon as it is written. "What do
+  I say?" suggests a line with its English meaning. After hanging up the learner's lines are checked and real
+  mistakes are shown with the corrected sentence. Uses the phone's speech recognizer in the learned language; a phone
+  without one gets a typing box. Not checked on a device yet.
+- **Tap a word.** Words are dotted-underlined. The bubble gives the meaning, a speaker button, a save-to-My-words
+  button and, for verbs, a conjugation table (offline for Spanish by rule, written once by the AI for other languages).
+- **Exams** every 8 lessons (70% to pass), a board-game look for the board, and "next lesson only" when preparing a level.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
