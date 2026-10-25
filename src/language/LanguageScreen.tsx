@@ -12,6 +12,7 @@ import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
 import { createStyles } from './LanguageScreen.styles';
 import { speakIn } from '../atlasVoice/tts';
+import { pieceById } from './library';
 
 /**
  * Learn a language: four levels (Basic, Intermediate, Advanced, Fluent), each a board game.
@@ -134,6 +135,8 @@ function PrepareLevel({ level }: { level: LevelId }) {
   const running = live.level === level;
   const { units, pieces } = languageService.levelToPrepare(level);
   const left = units.length + pieces.length;
+  const next = languageService.nextToPrepare(level);
+  const nextTitle = next.units[0]?.title ?? (next.pieces[0] ? pieceById(next.pieces[0])?.title : undefined);
   return (
     <View style={styles.prepare} testID="language-prepare">
       {running ? (
@@ -145,10 +148,17 @@ function PrepareLevel({ level }: { level: LevelId }) {
       ) : left ? (
         <>
           <Text style={styles.progressText}>{plural(units.length, 'lesson')} and {plural(pieces.length, 'story', 'stories')} in {cefr} are written by the AI when first opened.</Text>
+          {!!nextTitle && (
+            <TouchableOpacity onPress={() => { languageService.prepareLevel(level, 'next'); }} disabled={live.level !== null} testID="language-prepare-next"
+              style={styles.prepareButton}>
+              <Icon name="download" size={14} color={colors.primary} />
+              <Text style={styles.extraOn}>Prepare only the next lesson: {nextTitle}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => { languageService.prepareLevel(level); }} disabled={live.level !== null} testID="language-prepare-start"
             style={styles.prepareButton}>
             <Icon name="download" size={14} color={colors.primary} />
-            <Text style={styles.extraOn}>Prepare this level now</Text>
+            <Text style={styles.extraOn}>Prepare the whole level now</Text>
           </TouchableOpacity>
         </>
       ) : <Text style={styles.progressText}>{cefr} is ready: every lesson and story works offline.</Text>}

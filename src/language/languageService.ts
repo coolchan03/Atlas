@@ -285,13 +285,32 @@ export const languageService = {
   },
 
   /**
-   * Writes everything a level needs with the AI on the phone, one after another, so the whole
-   * level then works offline with no waiting. Stops early with stopPreparing(); a unit that
-   * fails is skipped and written again when it is opened.
+   * What "Prepare the next lesson" has to write: the first square from where you are on the board that
+   * still needs writing (a lesson's words, or a story or podcast), and nothing else.
    */
-  async prepareLevel(level: LevelId): Promise<void> {
+  nextToPrepare(level: LevelId, code = useLanguage.getState().language): { units: Unit[]; pieces: string[] } {
+    const { content, listening } = useLanguage.getState();
+    for (const space of boardFor(level)) {
+      if (languageService.isDone(space.key, code)) continue;
+      if (space.kind === 'lesson') {
+        const unit = space.unitId ? unitById(space.unitId) : undefined;
+        if (unit && !unit.builtIn && !content[code]?.[unit.id]?.length) return { units: [unit], pieces: [] };
+      } else if (space.kind === 'story' || space.kind === 'podcast') {
+        const id = pieceForSpace(level, space.key)?.id;
+        if (id && !writtenPiece(id, code) && !listening[code]?.some((l) => l.pieceId === id)) return { units: [], pieces: [id] };
+      }
+    }
+    return { units: [], pieces: [] };
+  },
+
+  /**
+   * Writes what a level needs with the AI on the phone, one after another, so it then works offline
+   * with no waiting: the whole level, or with `scope: 'next'` only the next square that needs writing.
+   * Stops early with stopPreparing(); a unit that fails is skipped and written again when it is opened.
+   */
+  async prepareLevel(level: LevelId, scope: 'level' | 'next' = 'level'): Promise<void> {
     if (usePrepareLive.getState().level !== null) return;
-    const { units, pieces } = languageService.levelToPrepare(level);
+    const { units, pieces } = scope === 'next' ? languageService.nextToPrepare(level) : languageService.levelToPrepare(level);
     const total = units.length + pieces.length;
     preparing = { stop: false };
     const job = preparing;
