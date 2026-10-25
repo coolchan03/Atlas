@@ -92,7 +92,11 @@ it('shows how to conjugate a tapped verb, offline for Spanish', async () => {
   expect(await screen.findByText(/I speak/)).toBeTruthy();
   fireEvent.press(await screen.findByTestId('word-conjugate'));
   expect(await screen.findByText('yo hablo')).toBeTruthy();
+  // The other tenses are behind tabs.
+  expect(screen.queryByText('yo hablé')).toBeNull();
+  fireEvent.press(screen.getByTestId('tense-Past'));
   expect(screen.getByText('yo hablé')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('tense-Future'));
   expect(screen.getByText('nosotros hablaremos')).toBeTruthy();
   fireEvent.press(screen.getByTestId('word-conjugate'));
   expect(screen.queryByTestId('conjugation-table')).toBeNull();

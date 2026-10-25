@@ -8,7 +8,7 @@ import { unitsForLevel, type Unit } from './curriculum';
 import type { Item } from './lessons';
 import { levelGuide, type LevelId } from './teaching';
 
-export type SpaceKind = 'lesson' | 'story' | 'podcast' | 'speed' | 'wordsearch' | 'review' | 'exam' | 'call' | 'checkpoint';
+export type SpaceKind = 'lesson' | 'story' | 'podcast' | 'speed' | 'wordsearch' | 'review' | 'exam' | 'call' | 'crossword' | 'checkpoint';
 
 export interface Space {
   /** Progress key: the unit id for a one-lesson unit, "unit:2" for a second part, "story@4" for a special space. */
@@ -28,6 +28,8 @@ export const SPECIAL_EVERY = 2;
 export const EXAM_EVERY = 8;
 /** Lessons between practice phone calls: the AI plays someone in the situation of the lesson before. */
 export const CALL_EVERY = 6;
+/** Lessons between crosswords: an optional puzzle with English clues and answers in the language (Skip moves on). */
+export const CROSSWORD_EVERY = 5;
 const SPECIALS: { kind: SpaceKind; title: string; icon: string }[] = [
   { kind: 'story', title: 'Story', icon: 'book-open' },
   { kind: 'podcast', title: 'Podcast', icon: 'headphones' },
@@ -48,6 +50,7 @@ export function boardFor(level: LevelId): Space[] {
   let special = 0;
   let exams = 0;
   let calls = 0;
+  let crosswords = 0;
   for (const u of unitsForLevel(level)) {
     const parts = partsFor(u);
     for (let part = 1; part <= parts; part++) {
@@ -55,8 +58,8 @@ export function boardFor(level: LevelId): Space[] {
       lessons++;
       if (lessons % SPECIAL_EVERY === 0) {
         const s = SPECIALS[special++ % SPECIALS.length];
-        // Numbered without the exams and calls, so adding them did not change any saved square's key.
-        out.push({ key: `${s.kind}@${level}.${out.length - exams - calls}`, kind: s.kind, title: s.title, icon: s.icon });
+        // Numbered without the exams, calls and crosswords, so adding them did not change any saved square's key.
+        out.push({ key: `${s.kind}@${level}.${out.length - exams - calls - crosswords}`, kind: s.kind, title: s.title, icon: s.icon });
       }
       if (lessons % EXAM_EVERY === 0) {
         exams++;
@@ -65,6 +68,10 @@ export function boardFor(level: LevelId): Space[] {
       if (lessons % CALL_EVERY === 0) {
         calls++;
         out.push({ key: `call@${level}.${calls}`, kind: 'call', title: 'Phone call', icon: 'phone' });
+      }
+      if (lessons % CROSSWORD_EVERY === 0) {
+        crosswords++;
+        out.push({ key: `crossword@${level}.${crosswords}`, kind: 'crossword', title: 'Crossword', icon: 'layout' });
       }
     }
   }
@@ -80,6 +87,14 @@ export function partItems(items: Item[], part: number, parts: number): Item[] {
   if (parts <= 1 || items.length < 6) return items;
   const half = Math.ceil(items.length / 2);
   return part === 1 ? items.slice(0, half) : [...items.slice(half), ...items.slice(0, 2)];
+}
+
+/** How many lessons are left before the next exam that is not done yet, counting the one you are on; null when none is ahead. */
+export function lessonsUntilExam(spaces: Space[], current: number, done: (key: string) => boolean): number | null {
+  const exam = spaces.findIndex((s, i) => i >= current && s.kind === 'exam' && !done(s.key));
+  if (exam < 0) return null;
+  const left = spaces.slice(current, exam).filter((s) => s.kind === 'lesson' && !done(s.key)).length;
+  return left || null;
 }
 
 /** The first space of a level is open; after that a space opens when the one before it is done. */

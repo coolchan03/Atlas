@@ -1,4 +1,5 @@
 import React from 'react';
+import { SPACING } from '../constants';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -35,6 +36,7 @@ export const LanguageScreen: React.FC = () => {
   useLanguage((s) => s.today);
   const todayXp = languageService.todayXp();
   const due = languageService.dueCount(code);
+  const scroll = React.useRef<ScrollView>(null);
   const spaces = boardFor(level);
   const isDone = (key: string) => languageService.isDone(key, code);
   const isOpen = (i: number) => spaceOpen(spaces, i, isDone);
@@ -50,6 +52,7 @@ export const LanguageScreen: React.FC = () => {
       const before = spaces.slice(0, i).filter((x) => x.kind === 'lesson').map((x) => x.unitId!);
       const unitId = before[before.length - 1] ?? unitsForLevel(level)[0].id;
       if (s.kind === 'call') navigation.navigate('Call', { key: s.key, scenarioId: scenarioFor(unitId, i).id });
+      else if (s.kind === 'crossword') navigation.navigate('Crossword', { unitId, key: s.key });
       else if (s.kind === 'wordsearch') navigation.navigate('WordSearch', { unitId, key: s.key });
       else navigation.navigate('Lesson', { unitId, mode: s.kind, key: s.key, level });
     }
@@ -69,7 +72,7 @@ export const LanguageScreen: React.FC = () => {
           <Icon name="award" size={16} color={colors.primary} /><Text style={styles.statText}>{xp} XP</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scroll} contentContainerStyle={styles.scroll}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.langRow}>
           {LANGUAGES.map((l) => (
             <TouchableOpacity key={l.code} onPress={() => languageService.setLanguage(l.code)} style={[styles.chip, l.code === code && styles.chipOn]}>
@@ -117,7 +120,8 @@ export const LanguageScreen: React.FC = () => {
             <Icon name={speaking ? 'mic' : 'mic-off'} size={18} color={speaking ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
         </View>
-        <Board spaces={spaces} isDone={isDone} isOpen={isOpen} current={current} onPress={play} />
+        <Board spaces={spaces} isDone={isDone} isOpen={isOpen} current={current} onPress={play}
+          onFocus={(y) => scroll.current?.scrollTo({ y: Math.max(0, y - SPACING.xl), animated: false })} />
         <Text style={styles.note}>
           Already know some? Pick a higher level: the first square of every level is open. Lessons are written once
           by the AI on your phone, following the course method, so wording may be imperfect. Everything works

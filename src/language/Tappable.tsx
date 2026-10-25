@@ -18,6 +18,7 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
   const [open, setOpen] = useState<{ word: string; meaning: string | null } | null>(null);
   const code = useLanguage((s) => s.language);
   const [saved, setSaved] = useState(false);
+  const [tense, setTense] = useState(0);
   const [table, setTable] = useState<{ verb: string; tenses: { name: string; lines: string[] }[] | null; error?: string } | null>(null);
   const tap = (word: string) => {
     if (!plainWord(word)) return;
@@ -33,6 +34,7 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
   const showTable = (v: string) => {
     if (table?.verb === v) { setTable(null); return; }
     setTable({ verb: v, tenses: null });
+    setTense(0);
     languageService.conjugation(v)
       .then((tenses) => setTable((t) => (t?.verb === v ? { verb: v, tenses } : t)))
       .catch((e) => setTable((t) => (t?.verb === v ? { verb: v, tenses: null, error: String(e?.message || e) } : t)));
@@ -72,12 +74,22 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
         <View style={styles.table} testID="conjugation-table">
           {table.tenses === null && !table.error && <ActivityIndicator size="small" color={colors.primary} />}
           {!!table.error && <Text style={styles.bubbleText}>{table.error}</Text>}
-          {table.tenses?.map((t) => (
-            <View key={t.name} style={styles.tense}>
-              <Text style={styles.tenseName}>{t.name}</Text>
-              {t.lines.map((l) => <Text key={l} style={styles.bubbleText}>{l}</Text>)}
+          {(table.tenses?.length ?? 0) > 1 && (
+            <View style={styles.tabs}>
+              {table.tenses!.map((t, i) => (
+                <TouchableOpacity key={t.name} onPress={() => setTense(i)} style={[styles.tab, i === tense && styles.tabOn]}
+                  testID={`tense-${t.name.split(' ')[0]}`} accessibilityLabel={t.name}>
+                  <Text style={i === tense ? styles.bubbleWord : styles.tenseName}>{t.name.split(' ')[0]}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          ))}
+          )}
+          {table.tenses?.[tense] && (
+            <View style={styles.tense}>
+              <Text style={styles.tenseName}>{table.tenses[tense].name}</Text>
+              {table.tenses[tense].lines.map((l) => <Text key={l} style={styles.bubbleText}>{l}</Text>)}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -93,6 +105,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   conjugate: { alignSelf: 'flex-start' as const, marginTop: SPACING.xs, paddingVertical: SPACING.xs },
   table: { marginTop: SPACING.xs, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: SPACING.sm },
   tense: { gap: 2 },
+  tabs: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: SPACING.xs },
+  tab: { paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+  tabOn: { borderColor: colors.primary },
   tenseName: { ...TYPOGRAPHY.meta, color: colors.textMuted },
   bubble: {
     alignSelf: 'flex-start' as const, marginTop: SPACING.xs, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs,

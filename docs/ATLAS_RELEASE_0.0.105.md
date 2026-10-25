@@ -305,6 +305,15 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   button and, for verbs, a conjugation table (offline for Spanish by rule, written once by the AI for other languages).
 - **Exams** every 8 lessons (70% to pass), a board-game look for the board, and "next lesson only" when preparing a level.
 
+## 8c. Language course additions (0.0.107)
+
+- **Crossword square** every 5 lessons: the clues are in English and the answers are written in the language
+  being learned (tap a clue, type the answer, Check; Hint fills the first letter). It is optional: Skip marks
+  the square done with no XP so the board moves on. Words come from the lessons so far.
+- Conjugation tenses sit behind tabs (Present, Past, Imperfect, Future, Conditional).
+- The "Your turn" card says how many lessons are left before the next exam.
+- The course screen opens scrolled to the learner's square.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

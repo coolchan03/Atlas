@@ -29,6 +29,7 @@ export type RootStackParamList = {
   Language: undefined;
   Lesson: { unitId: string; mode?: 'speed' | 'review' | 'checkpoint' | 'exam'; part?: number; parts?: number; key?: string; level?: number };
   WordSearch: { unitId: string; key?: string };
+  Crossword: { unitId: string; key?: string };
   Call: { key?: string; scenarioId?: string } | undefined;
   WordBook: undefined;
   Listening: { kind: 'story' | 'podcast'; at?: number; space?: string; level?: number; index?: number; pieceId?: string };

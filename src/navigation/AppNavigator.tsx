@@ -70,6 +70,7 @@ import { LanguageScreen } from '../language/LanguageScreen';
 import { LessonScreen } from '../language/LessonScreen';
 import { ListeningScreen } from '../language/ListeningScreen';
 import { CallScreen } from '../language/CallScreen';
+import { CrosswordScreen } from '../language/CrosswordScreen';
 import { WordSearchScreen } from '../language/WordSearchScreen';
 import { WordBookScreen } from '../language/WordBookScreen';
 
@@ -304,6 +305,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Lesson" component={LessonScreen} />
         <RootStack.Screen name="Listening" component={ListeningScreen} />
         <RootStack.Screen name="Call" component={CallScreen} />
+        <RootStack.Screen name="Crossword" component={CrosswordScreen} />
         <RootStack.Screen name="WordSearch" component={WordSearchScreen} />
         <RootStack.Screen name="WordBook" component={WordBookScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />

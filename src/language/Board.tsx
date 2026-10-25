@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import type { Space, SpaceKind } from './board';
+import { lessonsUntilExam, type Space, type SpaceKind } from './board';
 
 const COLS = 4;
 /** Space between squares: the track runs through it. */
@@ -14,7 +14,7 @@ const BAND = 6;
 
 /** The coloured band across the top of a square, by kind (like the colour groups of a property board). */
 function band(kind: SpaceKind, colors: ThemeColors): string {
-  if (kind === 'story' || kind === 'review' || kind === 'call') return colors.success;
+  if (kind === 'story' || kind === 'review' || kind === 'call' || kind === 'crossword') return colors.success;
   if (kind === 'podcast' || kind === 'checkpoint') return colors.primary;
   if (kind === 'speed' || kind === 'wordsearch' || kind === 'exam') return colors.error;
   return colors.textMuted;
@@ -26,9 +26,11 @@ function band(kind: SpaceKind, colors: ThemeColors): string {
  * squares, a coloured band by kind (lesson, story, podcast, speed round, exam...), a pawn on the
  * square you are on, and a "your turn" button for it.
  */
-export function Board({ spaces, isDone, isOpen, current, onPress }: {
+export function Board({ spaces, isDone, isOpen, current, onPress, onFocus }: {
   spaces: Space[]; isDone: (key: string) => boolean; isOpen: (i: number) => boolean; current: number;
   onPress: (s: Space, i: number) => void;
+  /** Told once where the current square's row is (from the top of the board's parent), so the screen can scroll to it. */
+  onFocus?: (y: number) => void;
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -40,13 +42,23 @@ export function Board({ spaces, isDone, isOpen, current, onPress }: {
   // The track between square a and the one after it is lit once a is finished.
   const lit = (a: number) => (spaces[a] && isDone(spaces[a].key) ? colors.primary : colors.border);
   const turn = spaces[current];
+  const untilExam = lessonsUntilExam(spaces, current, isDone);
+  // Where the current row is: the board's place in its parent + the row's place in the board.
+  const place = React.useRef({ wrap: null as number | null, board: null as number | null, row: null as number | null, told: false });
+  const located = () => {
+    const p = place.current;
+    if (p.told || !onFocus || p.wrap === null || p.board === null || p.row === null) return;
+    p.told = true;
+    onFocus(p.wrap + p.board + p.row);
+  };
   return (
-    <View style={styles.wrap} testID="language-board">
+    <View style={styles.wrap} testID="language-board" onLayout={(e) => { place.current.wrap = e.nativeEvent.layout.y; located(); }}>
       {!!turn && isOpen(current) && !isDone(turn.key) && (
         <View style={styles.turnCard}>
           <View style={styles.turnText}>
             <Text style={styles.turnLabel}>Your turn</Text>
             <Text style={styles.turnTitle} numberOfLines={1}>{turn.title}</Text>
+            {untilExam !== null && <Text style={styles.turnLabel} testID="board-exam-countdown">Exam in {untilExam} {untilExam === 1 ? 'lesson' : 'lessons'}</Text>}
           </View>
           <TouchableOpacity style={styles.turnButton} onPress={() => onPress(turn, current)} testID="board-take-turn" accessibilityLabel={`Play ${turn.title}`}>
             <Icon name="play" size={16} color={colors.background} />
@@ -54,12 +66,12 @@ export function Board({ spaces, isDone, isOpen, current, onPress }: {
           </TouchableOpacity>
         </View>
       )}
-      <View style={styles.board}>
+      <View style={styles.board} testID="board-squares" onLayout={(e) => { place.current.board = e.nativeEvent.layout.y; located(); }}>
         {rows.map((row, r) => {
           const cells = row.map((s, c) => ({ s, i: r * COLS + c }));
           const ordered = r % 2 ? [...cells].reverse() : cells;
           return (
-            <View key={r}>
+            <View key={r} testID={`board-row-${r}`} onLayout={r === Math.floor(current / COLS) ? (e) => { place.current.row = e.nativeEvent.layout.y; located(); } : undefined}>
               <View style={[styles.row, r % 2 ? styles.rowReverse : null]}>
                 {ordered.map(({ s, i }, k) => {
                   const done = isDone(s.key);
