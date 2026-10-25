@@ -23,27 +23,29 @@ const EMPTY: Attempt = { value: '', checked: false };
 
 const SPEED_SECONDS = 60;
 
-type Mode = 'speed' | 'review' | 'checkpoint';
-const MODE_TITLE: Record<Mode, string> = { speed: 'Speed round', review: 'Review', checkpoint: 'Checkpoint' };
+type Mode = 'speed' | 'review' | 'checkpoint' | 'exam';
+const MODE_TITLE: Record<Mode, string> = { speed: 'Speed round', review: 'Review', checkpoint: 'Checkpoint', exam: 'Exam' };
 const lessonTitle = (unitId: string, mode?: Mode) =>
   (mode ? MODE_TITLE[mode] : unitId === MY_WORDS ? 'My words' : unitId === REVIEW ? 'Review' : unitById(unitId)?.title ?? 'Lesson');
 
-/** A checkpoint is passed at 80% right. */
-const PASS_MARK = 0.8;
+/** A checkpoint is passed at 80% right, an exam at 70%. */
+const passMark = (mode?: Mode) => (mode === 'exam' ? 0.7 : 0.8);
+const graded = (mode?: Mode) => mode === 'checkpoint' || mode === 'exam';
 
 /** The words for this sitting: a unit's (or one part of it), a review square's, or the whole level's. */
-function lessonWords(p: { unitId: string; mode?: Mode; level?: LevelId; part: number; parts: number }, onStep: (m: string) => void): Promise<Item[]> {
+function lessonWords(p: { unitId: string; mode?: Mode; level?: LevelId; key?: string; part: number; parts: number }, onStep: (m: string) => void): Promise<Item[]> {
   if (p.mode === 'review') return Promise.resolve().then(() => languageService.reviewSquareWords());
   if (p.mode === 'checkpoint') return Promise.resolve().then(() => languageService.levelWords(p.level ?? useLanguage.getState().level));
+  if (p.mode === 'exam') return Promise.resolve().then(() => languageService.examWords(p.level ?? useLanguage.getState().level, p.key));
   return languageService.unitWords(p.unitId, onStep)
     .then((all) => (unitById(p.unitId) && !p.mode ? partItems(all, p.part, p.parts) : all));
 }
 
 function summaryText({ mode, right, total }: { mode?: Mode; right: number; total: number }): string {
   if (mode === 'speed') return `${right} right in ${SPEED_SECONDS} seconds`;
-  if (mode === 'checkpoint') return right / Math.max(1, total) >= PASS_MARK
+  if (graded(mode)) return right / Math.max(1, total) >= passMark(mode)
     ? `Passed: ${right} of ${total} right`
-    : `${right} of ${total} right. You need ${Math.ceil(total * PASS_MARK)} to pass: try again`;
+    : `${right} of ${total} right. You need ${Math.ceil(total * passMark(mode))} to pass: try again`;
   return `${right} of ${total} right`;
 }
 
@@ -97,12 +99,12 @@ export const LessonScreen: React.FC = () => {
       setExercises(saved.exercises); setI(saved.index); setRight(saved.right); setResults(saved.results); setTip('');
       return;
     }
-    Promise.all([lessonWords({ unitId, mode, level: params.level, part, parts }, setStep), languageService.canSpeak()])
+    Promise.all([lessonWords({ unitId, mode, level: params.level, key, part, parts }, setStep), languageService.canSpeak()])
       .then(([items, speaking]) => {
         setTip(mode || part > 1 ? '' : languageService.tipFor(unitId));
         setExercises(buildLesson(items, Date.now(), speed
           ? { length: 40, production: 0 }
-          : { seconds: mode === 'checkpoint' ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production, speaking, difficulty: difficultyFor(guide.id) }));
+          : { seconds: graded(mode) ? LESSON_SECONDS * 2 : LESSON_SECONDS, secondsOf: languageService.secondsOf, production: guide.production, speaking, difficulty: difficultyFor(guide.id) }));
       })
       .catch((e) => setError(String(e?.message || e)));
   };
@@ -114,7 +116,7 @@ export const LessonScreen: React.FC = () => {
   const finish = (score: number, done: { t: string; right: boolean }[], list = exercises!) => {
     languageService.saveLesson(null);
     const total = speed ? Math.max(score, i + 1) : scored(list);
-    const passed = mode !== 'checkpoint' || score / Math.max(1, total) >= PASS_MARK;
+    const passed = !graded(mode) || score / Math.max(1, total) >= passMark(mode);
     if (mode && params.key && passed) languageService.completeSpace(params.key);
     // Special squares are practice: the square is marked above, the words' memory and XP here.
     setResult(languageService.finishLesson(mode && params.key ? PRACTICE : key, { right: score, total, results: done }));

@@ -65,3 +65,13 @@ it('keeps model translations only when every item is translated', () => {
   expect(parseUnitWords('[{"en":"hello","t":"hola"}]', en, 'es-ES')).toBeNull();
   expect(parseUnitWords('[{"t":"hello"},{"t":"goodbye"}]', en, 'es-ES')).toBeNull();
 });
+
+it('looks like a board game: START and FINISH squares, a pawn on your square, and a button for your turn', () => {
+  const board = render(<LanguageScreen />);
+  expect(board.getByText('START')).toBeTruthy();
+  expect(board.getByText('FINISH')).toBeTruthy();
+  expect(board.getByTestId('board-pawn')).toBeTruthy();
+  expect(board.getByText('Your turn')).toBeTruthy();
+  fireEvent.press(board.getByTestId('board-take-turn'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('Lesson', expect.objectContaining({ unitId: 'basics' }));
+});

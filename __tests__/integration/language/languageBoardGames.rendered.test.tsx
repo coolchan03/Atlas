@@ -144,6 +144,25 @@ it('ends each level with a checkpoint that marks the square done when passed', a
   expect(languageService.isDone(last.key)).toBe(true);
 }, 20000);
 
+it('puts an exam on the board every few lessons that tests the lessons before it, passed at 70%', async () => {
+  const { playLesson } = require('./playLesson');
+  const { boardFor } = require('../../../src/language/board');
+  const { unitById } = require('../../../src/language/curriculum');
+  const spaces = boardFor(1);
+  const at = spaces.findIndex((x: any) => x.kind === 'exam');
+  expect(at).toBeGreaterThan(8);
+  expect(spaces.filter((x: any) => x.kind === 'lesson').length).toBeGreaterThan(8);
+  // The lessons the exam covers are written; then the exam asks about them.
+  const covered = spaces.slice(0, at).filter((x: any) => x.kind === 'lesson').map((x: any) => unitById(x.unitId)).filter((u: any) => !u.builtIn);
+  useLanguage.setState({ content: { 'es-ES': Object.fromEntries(covered.map((u: any) => [u.id, u.items.map((en: string, i: number) => ({ en, t: `palabra ${u.id} ${i}` }))])) } });
+  mockParams = { unitId: covered[0]?.id ?? 'basics', mode: 'exam', key: spaces[at].key, level: 1 };
+  const lesson = render(<LessonScreen />);
+  await waitFor(() => expect(lesson.queryByText(/Getting the words ready/)).toBeNull());
+  await playLesson(lesson);
+  expect(lesson.getByText(/^Passed: \d+ of \d+ right/)).toBeTruthy();
+  expect(languageService.isDone(spaces[at].key)).toBe(true);
+}, 30000);
+
 it('reviews studied words on a review square', async () => {
   const { playLesson } = require('./playLesson');
   useLanguage.setState({ progress: { 'es-ES': { basics: { stars: 1, lessons: 1 } } } });

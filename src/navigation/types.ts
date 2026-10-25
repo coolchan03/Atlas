@@ -27,7 +27,7 @@ export type RootStackParamList = {
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
   Language: undefined;
-  Lesson: { unitId: string; mode?: 'speed'; part?: number; parts?: number; key?: string };
+  Lesson: { unitId: string; mode?: 'speed' | 'review' | 'checkpoint' | 'exam'; part?: number; parts?: number; key?: string; level?: number };
   WordSearch: { unitId: string; key?: string };
   WordBook: undefined;
   Listening: { kind: 'story' | 'podcast'; at?: number; space?: string; level?: number; index?: number; pieceId?: string };

@@ -8,7 +8,7 @@ import { unitsForLevel, type Unit } from './curriculum';
 import type { Item } from './lessons';
 import { levelGuide, type LevelId } from './teaching';
 
-export type SpaceKind = 'lesson' | 'story' | 'podcast' | 'speed' | 'wordsearch' | 'review' | 'checkpoint';
+export type SpaceKind = 'lesson' | 'story' | 'podcast' | 'speed' | 'wordsearch' | 'review' | 'exam' | 'checkpoint';
 
 export interface Space {
   /** Progress key: the unit id for a one-lesson unit, "unit:2" for a second part, "story@4" for a special space. */
@@ -24,6 +24,8 @@ export interface Space {
 
 /** Lessons between special spaces. */
 export const SPECIAL_EVERY = 2;
+/** Lessons between exams: a test of everything since the last one (70% to pass). */
+export const EXAM_EVERY = 8;
 const SPECIALS: { kind: SpaceKind; title: string; icon: string }[] = [
   { kind: 'story', title: 'Story', icon: 'book-open' },
   { kind: 'podcast', title: 'Podcast', icon: 'headphones' },
@@ -42,6 +44,7 @@ export function boardFor(level: LevelId): Space[] {
   const out: Space[] = [];
   let lessons = 0;
   let special = 0;
+  let exams = 0;
   for (const u of unitsForLevel(level)) {
     const parts = partsFor(u);
     for (let part = 1; part <= parts; part++) {
@@ -49,10 +52,17 @@ export function boardFor(level: LevelId): Space[] {
       lessons++;
       if (lessons % SPECIAL_EVERY === 0) {
         const s = SPECIALS[special++ % SPECIALS.length];
-        out.push({ key: `${s.kind}@${level}.${out.length}`, kind: s.kind, title: s.title, icon: s.icon });
+        // Numbered without the exams, so adding exams did not change any saved square's key.
+        out.push({ key: `${s.kind}@${level}.${out.length - exams}`, kind: s.kind, title: s.title, icon: s.icon });
+      }
+      if (lessons % EXAM_EVERY === 0) {
+        exams++;
+        out.push({ key: `exam@${level}.${exams}`, kind: 'exam', title: 'Exam', icon: 'clipboard' });
       }
     }
   }
+  // An exam right before the checkpoint would test the same thing twice.
+  if (out[out.length - 1]?.kind === 'exam') out.pop();
   // The level ends with a checkpoint: a longer test of the whole level (80% to pass).
   out.push({ key: `checkpoint@${level}`, kind: 'checkpoint', title: `${levelGuide(level).cefr} checkpoint`, icon: 'flag' });
   return out;

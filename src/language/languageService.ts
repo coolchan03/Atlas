@@ -442,6 +442,23 @@ export const languageService = {
     return words;
   },
 
+  /**
+   * The words an exam tests: everything taught in the lessons since the previous exam on the board
+   * (or since the start of the level), written so far.
+   */
+  examWords(level: LevelId, examKey: string | undefined, code = useLanguage.getState().language): Item[] {
+    const { content } = useLanguage.getState();
+    const spaces = boardFor(level);
+    const at = Math.max(0, spaces.findIndex((s) => s.key === examKey));
+    let from = at;
+    while (from > 0 && spaces[from - 1].kind !== 'exam') from--;
+    const units = [...new Set(spaces.slice(from, at).filter((s) => s.kind === 'lesson' && s.unitId).map((s) => s.unitId!))]
+      .map((id) => unitById(id)).filter((u): u is Unit => !!u);
+    const words = units.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? []));
+    if (words.length < 6) throw new Error('Do the lessons before this exam first: it tests them.');
+    return words;
+  },
+
   /** How many words are due for review now. */
   dueCount(code = useLanguage.getState().language): number {
     return dueItems(languageService.studiedItems(code), useLanguage.getState().memory[code] ?? {}, { n: 1000 }).length;
