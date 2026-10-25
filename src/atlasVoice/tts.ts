@@ -62,6 +62,35 @@ export function speak(text: string, messageId?: string, rate?: number): void {
   });
 }
 
+/**
+ * Starts speaking a reply that is still being written (natural voice only). Returns the utterance
+ * key, or null when this phone cannot (its own voice engine): the whole reply is spoken at the end then.
+ * `started` settles false if the voice refuses, and the speaking state is cleared.
+ */
+export function beginSpeechStream(messageId: string): { key: string; started: Promise<boolean> } | null {
+  if (!ttsAvailable() || !Native.speakStreamStart) return null;
+  ensureListeners();
+  const key = `${messageId}~${++counter}`;
+  const s = useAtlasVoiceStore.getState();
+  s.setSpeaking(key, messageId);
+  Native.setRate(s.rate).catch(() => undefined);
+  const clear = () => { if (useAtlasVoiceStore.getState().speakingKey === key) useAtlasVoiceStore.getState().setSpeaking(null); };
+  const started = Native.speakStreamStart(key)
+    .then((ok: boolean) => { if (!ok) clear(); return !!ok; })
+    .catch(() => { clear(); return false; });
+  return { key, started };
+}
+
+/** Adds text to the reply being spoken (see beginSpeechStream). */
+export function appendSpeechStream(text: string): void {
+  if (ttsAvailable() && text.trim()) Native.speakStreamAppend?.(text).catch(() => undefined);
+}
+
+/** No more text is coming: the voice finishes what it has and reports done. */
+export function endSpeechStream(): void {
+  if (ttsAvailable()) Native.speakStreamEnd?.().catch(() => undefined);
+}
+
 export function stop(): void {
   if (!ttsAvailable()) return;
   useAtlasVoiceStore.getState().setSpeaking(null);

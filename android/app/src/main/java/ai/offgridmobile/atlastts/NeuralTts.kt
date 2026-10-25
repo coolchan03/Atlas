@@ -174,10 +174,43 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     fun speak(parts: List<String>, id: String, sid: Int, speed: Float) {
         val my = tokenA.incrementAndGet()
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
-        genExec.execute { run(parts, id, sid, speed, my) }
+        val it = parts.iterator()
+        genExec.execute { run({ if (it.hasNext()) it.next() else null }, id, sid, speed, my) }
     }
 
-    private fun run(parts: List<String>, id: String, sid: Int, speed: Float, my: Int) {
+    /** Marks the end of a streamed reply (compared by identity, so no text can be mistaken for it). */
+    private val streamEnd = Any()
+    @Volatile private var streamIn: LinkedBlockingQueue<Any>? = null
+
+    /**
+     * Starts speaking a reply that is still being written: sentences are added with [speakStreamAppend]
+     * and the voice generates each one while the one before it plays, so it starts after the first
+     * sentence instead of after the whole reply. Ends (and reports done) after [speakStreamEnd].
+     */
+    fun speakStreamStart(id: String, sid: Int, speed: Float) {
+        val my = tokenA.incrementAndGet()
+        try { track?.pause(); track?.flush() } catch (_: Throwable) {}
+        val input = LinkedBlockingQueue<Any>()
+        streamIn = input
+        genExec.execute {
+            run({
+                var next: String? = null
+                while (token == my) {
+                    val v = input.poll(200, TimeUnit.MILLISECONDS) ?: continue
+                    next = if (v === streamEnd) null else v as String
+                    break
+                }
+                next
+            }, id, sid, speed, my)
+        }
+    }
+
+    fun speakStreamAppend(parts: List<String>) { val q = streamIn ?: return; parts.forEach { q.put(it) } }
+
+    fun speakStreamEnd() { streamIn?.put(streamEnd); streamIn = null }
+
+    /** Generates each part the source hands over (null = no more) and queues it for the player. */
+    private fun run(nextPart: () -> String?, id: String, sid: Int, speed: Float, my: Int) {
         val engine = tts
         if (engine == null || token != my) { emit(if (token == my) "AtlasTtsDone" else "AtlasTtsStopped", id); return }
         val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
@@ -186,8 +219,8 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         val player = Thread { play(queue, end, rate, id, my) }
         player.start()
         try {
-            for (p in parts) {
-                if (token != my) break
+            while (token == my) {
+                val p = nextPart() ?: break
                 val audio = engine.generate(p, sid, genSpeed)
                 if (token != my) break
                 queue.put(audio.samples)

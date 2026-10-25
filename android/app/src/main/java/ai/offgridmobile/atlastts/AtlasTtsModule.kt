@@ -271,6 +271,33 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         }.start()
     }
 
+    /**
+     * Speaks a reply while it is still being written (natural voice only; resolves false for the
+     * phone's own voice, which cannot take text this way). Add sentences with speakStreamAppend and
+     * finish with speakStreamEnd.
+     */
+    @ReactMethod
+    fun speakStreamStart(utteranceId: String, promise: Promise) {
+        try {
+            if (!useNeural("")) { promise.resolve(false); return }
+            try { tts?.stop() } catch (_: Exception) {}
+            val sid = if (voiceName.startsWith("sid:")) voiceName.removePrefix("sid:").toIntOrNull() ?: neuralSid else neuralSid
+            neural.speakStreamStart(utteranceId, sid, rate)
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+    }
+
+    @ReactMethod
+    fun speakStreamAppend(text: String, promise: Promise) {
+        try { neural.speakStreamAppend(SpeechChunks.chunks(text, 380)); promise.resolve(true) }
+        catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+    }
+
+    @ReactMethod
+    fun speakStreamEnd(promise: Promise) {
+        try { neural.speakStreamEnd(); promise.resolve(true) } catch (e: Exception) { promise.reject("TTS_ERROR", e) }
+    }
+
     @ReactMethod
     fun cancelSynthesis(promise: Promise) { fileCancel = true; promise.resolve(true) }
 

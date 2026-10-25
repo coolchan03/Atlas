@@ -4,6 +4,7 @@ import { useUiModeStore } from '../stores/uiModeStore';
 import { useChatStore } from '../stores/chatStore';
 import { prepareMessageForSpeech } from '../utils/messageContent';
 import { speak, stop, ttsAvailable, warmUp } from './tts';
+import { finishStreamSpeech, onStreamToken } from './streamSpeech';
 import { restoreVoice, restoreSavedVoice, loadVoiceForSpeech } from './neural';
 import { profileForConversation, profileForMessage, type VoiceProfile } from './profiles';
 import { useAtlasVoiceStore } from './store';
@@ -63,8 +64,18 @@ export function registerAtlasVoice(): void {
     speakAsAgent(prepareMessageForSpeech(text), messageId, profileForMessage(messageId));
   });
   registerHook(HOOKS.audioStop, () => stop());
+  // Call mode: speak the reply sentence by sentence while it is still being written.
+  registerHook(HOOKS.audioOnStreamingToken, (answerSoFar: string) => onStreamToken(answerSoFar));
   registerHook(HOOKS.audioOnStreamingEnd, (conversationId: string) => {
     const voiceMode = useUiModeStore.getState().interfaceMode === 'audio';
+    if (voiceMode) {
+      const whole = () => {
+        const conv = (useChatStore.getState() as any).conversations?.find((c: any) => c.id === conversationId);
+        const last = conv?.messages?.[conv.messages.length - 1];
+        if (last?.role === 'assistant' && last.content?.trim()) speakAsAgent(prepareMessageForSpeech(last.content), last.id, profileForConversation(conversationId));
+      };
+      if (finishStreamSpeech(conversationId, whole)) return;
+    }
     if (!voiceMode && !useAtlasVoiceStore.getState().autoSpeakInChat) return;
     const conv = (useChatStore.getState() as any).conversations?.find((c: any) => c.id === conversationId);
     const last = conv?.messages?.[conv.messages.length - 1];

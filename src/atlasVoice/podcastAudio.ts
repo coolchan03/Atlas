@@ -77,6 +77,24 @@ export function preRenderEpisode(key: string, items: CastLine[]): void {
 let ctx: any = null;
 let source: any = null;
 let stopToken = 0;
+/** Decoded audio by file, so the next line is ready to start the moment the current one ends. */
+const decoded = new Map<string, Promise<any>>();
+
+function audioContext(): any {
+  if (!ctx) { const { AudioContext } = require('react-native-audio-api'); ctx = new AudioContext(); }
+  return ctx;
+}
+
+function decode(path: string): Promise<any> {
+  let d = decoded.get(path);
+  if (!d) {
+    d = Promise.resolve(audioContext().decodeAudioData(path));
+    decoded.set(path, d);
+    d.catch(() => decoded.delete(path)); // a file that cannot be decoded is tried again, and fails for real, when played
+    if (decoded.size > 6) decoded.delete(decoded.keys().next().value as string);
+  }
+  return d;
+}
 
 /** 'ended' (played through), 'stopped' (the listener stopped it) or 'failed' (the file could not be played). */
 type PlayResult = 'ended' | 'stopped' | 'failed';
@@ -86,12 +104,12 @@ function playFile(path: string): Promise<PlayResult> {
   return new Promise((resolve) => {
     (async () => {
       await audioSessionManager.ensurePlayback();
-      if (!ctx) { const { AudioContext } = require('react-native-audio-api'); ctx = new AudioContext(); }
-      const buffer = await ctx.decodeAudioData(path);
+      const buffer = await decode(path);
+      decoded.delete(path);
       if (token !== stopToken) { resolve('stopped'); return; }
-      const node = ctx.createBufferSource();
+      const node = audioContext().createBufferSource();
       node.buffer = buffer;
-      node.connect(ctx.destination);
+      node.connect(audioContext().destination);
       node.onEnded = () => { if (source === node) source = null; resolve(token === stopToken ? 'ended' : 'stopped'); };
       source = node;
       node.start();
@@ -110,6 +128,8 @@ export async function playLine(key: string, items: CastLine[], i: number): Promi
   // This line first, then the next few behind it, so it never waits for the others.
   const current = render(key, items, i);
   for (let k = i + 1; k <= Math.min(items.length - 1, i + AHEAD); k++) render(key, items, k).catch(() => undefined);
+  // And the next line is decoded now, while this one plays, so the gap between lines is not a decode.
+  if (i + 1 < items.length) render(key, items, i + 1).then((next) => { if (next) decode(next).catch(() => undefined); }).catch(() => undefined);
   const path = await current;
   if (token !== stopToken) return false;
   if (!path) return speakAndWait(line.text, line.pitch, 'podcast', line.voice || '');

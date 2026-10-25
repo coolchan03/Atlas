@@ -14,7 +14,7 @@ import { BargeInDetector } from './bargeIn';
 import logger from '../utils/logger';
 
 /** Silence detection: the turn ends by itself when the person stops talking (like a real call). */
-const SILENCE_END_MS = 1500;     // this much quiet after speech = you finished talking
+const SILENCE_END_MS = 1000;     // this much quiet after speech = you finished talking (a phone answers about this fast)
 const NO_SPEECH_GIVE_UP_MS = 15000;
 const MAX_TURN_MS = 60000;
 
@@ -167,7 +167,7 @@ export function AtlasAudioInput(props: any) {
     if (doneTick === firstTick.current) return;
     const p = latest.current;
     if (!handsFree || mutedRef.current || !p.voiceAvailable || p.isRecording || p.isGenerating || p.isTranscribing) return;
-    const t = setTimeout(() => { setNote(null); latest.current.onStartRecording?.(); }, 400);
+    const t = setTimeout(() => { setNote(null); latest.current.onStartRecording?.(); }, 250);
     return () => clearTimeout(t);
   }, [doneTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
