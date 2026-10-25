@@ -147,17 +147,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    private fun chunks(text: String, max: Int): List<String> {
-        val out = mutableListOf<String>()
-        val sentences = text.split(Regex("(?<=[.!?\\n])\\s+"))
-        val sb = StringBuilder()
-        for (s in sentences) {
-            if (sb.length + s.length + 1 > max && sb.isNotEmpty()) { out.add(sb.toString()); sb.setLength(0) }
-            if (s.length > max) { s.chunked(max).forEach { out.add(it) } } else { if (sb.isNotEmpty()) sb.append(' '); sb.append(s) }
-        }
-        if (sb.isNotEmpty()) out.add(sb.toString())
-        return out.filter { it.isNotBlank() }
-    }
+    private fun chunks(text: String, max: Int): List<String> = SpeechChunks.chunks(text, max)
 
     private fun doSpeak(text: String, id: String, lang: String = "") {
         val engine = tts ?: return
@@ -190,7 +180,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
             if (useNeural(lang)) {
                 try { tts?.stop() } catch (_: Exception) {}
                 val sid = if (voiceName.startsWith("sid:")) voiceName.removePrefix("sid:").toIntOrNull() ?: neuralSid else neuralSid
-                val parts = chunks(text, 380)
+                // The first piece is one sentence, so the voice starts speaking sooner.
+                val parts = SpeechChunks.speechParts(text, 380)
                 if (parts.isEmpty()) emit("AtlasTtsDone", utteranceId) else neural.speak(parts, utteranceId, sid, rate)
                 promise.resolve(true); return
             }
