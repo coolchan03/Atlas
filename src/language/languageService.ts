@@ -3,7 +3,7 @@
  * chosen language (taught the way teaching.ts describes), stories and podcasts, spaced review,
  * and recording finished lessons (stars, XP, daily streak). Screens read useLanguage and call this.
  */
-import { PHRASE_LANGUAGES, PHRASES_EN } from '../phrases/data';
+import { PHRASE_LANGUAGES } from '../phrases/data';
 import { ensureTextModel, forceLoadTextModel } from '../atlasTools/models';
 import { parseJsonLoose, str } from '../study/games/json';
 import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
@@ -18,6 +18,9 @@ import { useLanguage, usePrepareLive, type SavedLesson } from './store';
 import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
 import { secondsFor, updatePace, type ExerciseKind } from './pace';
 import { levelGuide, methodFor, type LevelId } from './teaching';
+import { keepDays, dayKey, weekOf } from './days';
+import { builtInWords, examWordsFor, levelWordsFor, wordOfTheDayFor } from './wordPools';
+import { conjugationFor, verbOf } from './verbs';
 import { LANGUAGE_PROJECT_ID, isGeneratedTutorPrompt, languageProjectDescription, tutorPrompt } from './tutor';
 
 /** The personal unit made from words saved in stories and podcasts. */
@@ -32,16 +35,6 @@ export const DAILY_GOALS = [50, 100, 200, 300];
 export const LANGUAGES = PHRASE_LANGUAGES.map(({ code, name, native }) => ({ code, name, native }));
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-/** Keeps the last 90 days of history. */
-const keepDays = (h: Record<string, { xp: number; lessons: number }>) => {
-  const cutoff = Date.now() - 90 * 864e5;
-  const time = (key: string) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
-  return Object.fromEntries(Object.entries(h).filter(([d]) => time(d) >= cutoff));
-};
-
-const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 /** Checks the model's translations: one per item, in order, not just the English copied back. */
 export function parseUnitWords(raw: string, english: string[], code: string): Item[] | null {
@@ -79,14 +72,6 @@ function localMeaning(w: string, code: string): string {
     if (hit) return hit.en;
   }
   return '';
-}
-
-function builtInWords(unit: Unit, code: string): Item[] {
-  const lang = PHRASE_LANGUAGES.find((l) => l.code === code);
-  return unit.items.map((en) => {
-    const p = lang?.phrases[PHRASES_EN.indexOf(en)];
-    return { en, t: p?.[0] ?? '', ...(p?.[1] ? { r: p[1] } : {}) };
-  }).filter((x) => x.t);
 }
 
 /** Keeps the Learn a language project's chats on the course's language and level (unless the user wrote their own). */
@@ -188,12 +173,22 @@ export const languageService = {
     if (local) return local;
     const llm = await model();
     const raw: string = await llm.generateResponse([
-      { id: 's', role: 'system', content: `You are a ${langName(code)}-English dictionary. Reply with only the short English meaning, nothing else.`, timestamp: 0 },
+      { id: 's', role: 'system', content: `You are a ${langName(code)}-English dictionary. Reply with only the short English meaning, nothing else. If the word is a conjugated verb, add its infinitive in brackets, like: I speak (hablar: to speak).`, timestamp: 0 },
       { id: 'u', role: 'user', content: `${langName(code)} word: ${word}`, timestamp: 0 },
     ], { disableThinking: true });
     const meaning = str(raw.replace(/<think>[\s\S]*?<\/think>/g, '').split('\n').map((l) => l.trim()).filter(Boolean)[0], 80);
     if (meaning) useLanguage.setState((s) => ({ glossary: { ...s.glossary, [code]: { ...s.glossary[code], [w]: meaning } } }));
     return meaning;
+  },
+
+  /** The infinitive of a tapped word when it is a verb, from its meaning; null for other words. */
+  verbOf(word: string, meaning: string): string | null {
+    return verbOf(word, meaning);
+  },
+
+  /** How to conjugate a verb: offline by rule for Spanish, written once by the AI (and kept) for the other languages. */
+  conjugation(infinitive: string): Promise<{ name: string; lines: string[] }[]> {
+    return conjugationFor(infinitive, async (messages) => (await model()).generateResponse(messages, { disableThinking: true }), langName);
   },
 
   /** Answers the learner's question about the exercise in front of them, at their level. */
@@ -365,13 +360,8 @@ export const languageService = {
   },
 
   /** The last seven days, oldest first, for the weekly chart. */
-  week(now = new Date()): { day: string; label: string; xp: number; lessons: number; today: boolean }[] {
-    const history = useLanguage.getState().history ?? {};
-    return Array.from({ length: 7 }, (_, k) => {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - k));
-      const key = dayKey(d);
-      return { day: key, label: WEEKDAYS[d.getDay()], xp: history[key]?.xp ?? 0, lessons: history[key]?.lessons ?? 0, today: k === 6 };
-    });
+  week(now = new Date()): ReturnType<typeof weekOf> {
+    return weekOf(useLanguage.getState().history ?? {}, now);
   },
 
   /**
@@ -419,44 +409,19 @@ export const languageService = {
     return words;
   },
 
-  /**
-   * The word of the day: the same short word or phrase all day, from the current level's
-   * lessons and the phone's built-in phrases, a different one each day.
-   */
+  /** The word of the day: the same short word or phrase all day, a different one each day. */
   wordOfTheDay(date = new Date()): Item | null {
-    const { language: code, level, content } = useLanguage.getState();
-    const lang = PHRASE_LANGUAGES.find((l) => l.code === code);
-    const builtIn = PHRASES_EN.map((en, i) => ({ en, t: lang?.phrases[i]?.[0] ?? '', ...(lang?.phrases[i]?.[1] ? { r: lang.phrases[i][1] } : {}) }));
-    const written = unitsForLevel(level).flatMap((u) => (u.builtIn ? [] : content[code]?.[u.id] ?? []));
-    const pool = [...written, ...builtIn].filter((x, i, all) => x.t && x.t.split(/\s+/).length <= 3 && all.findIndex((y) => y.t === x.t) === i);
-    if (!pool.length) return null;
-    const day = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5);
-    return pool[(day * 7919) % pool.length];
+    return wordOfTheDayFor(date);
   },
 
   /** Every word of a level written so far, for its checkpoint. */
   levelWords(level: LevelId, code = useLanguage.getState().language): Item[] {
-    const { content } = useLanguage.getState();
-    const words = unitsForLevel(level).flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? []));
-    if (words.length < 6) throw new Error('Do this level\'s lessons first: the checkpoint tests all of them.');
-    return words;
+    return levelWordsFor(level, code);
   },
 
-  /**
-   * The words an exam tests: everything taught in the lessons since the previous exam on the board
-   * (or since the start of the level), written so far.
-   */
+  /** The words an exam tests: everything taught in the lessons since the previous exam (or the level start). */
   examWords(level: LevelId, examKey: string | undefined, code = useLanguage.getState().language): Item[] {
-    const { content } = useLanguage.getState();
-    const spaces = boardFor(level);
-    const at = Math.max(0, spaces.findIndex((s) => s.key === examKey));
-    let from = at;
-    while (from > 0 && spaces[from - 1].kind !== 'exam') from--;
-    const units = [...new Set(spaces.slice(from, at).filter((s) => s.kind === 'lesson' && s.unitId).map((s) => s.unitId!))]
-      .map((id) => unitById(id)).filter((u): u is Unit => !!u);
-    const words = units.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? []));
-    if (words.length < 6) throw new Error('Do the lessons before this exam first: it tests them.');
-    return words;
+    return examWordsFor(level, examKey, code);
   },
 
   /** How many words are due for review now. */

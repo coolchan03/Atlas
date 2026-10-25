@@ -85,6 +85,19 @@ it('shows a word\'s meaning when it is tapped', async () => {
   expect(await screen.findByText(/= car/)).toBeTruthy();
 });
 
+it('shows how to conjugate a tapped verb, offline for Spanish', async () => {
+  useLanguage.setState({ glossary: { 'es-ES': { hablo: 'I speak (hablar: to speak)', coche: 'car' } } });
+  const screen = render(<Tappable text="Yo hablo español." />);
+  fireEvent.press(screen.getByLabelText('Meaning of hablo'));
+  expect(await screen.findByText(/I speak/)).toBeTruthy();
+  fireEvent.press(await screen.findByTestId('word-conjugate'));
+  expect(await screen.findByText('yo hablo')).toBeTruthy();
+  expect(screen.getByText('yo hablé')).toBeTruthy();
+  expect(screen.getByText('nosotros hablaremos')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('word-conjugate'));
+  expect(screen.queryByTestId('conjugation-table')).toBeNull();
+});
+
 it('adds words that do not belong to the word-order tiles', () => {
   const lesson = buildLesson(colours, 7, { length: 14, production: 0.5 });
   const build = lesson.find((e) => e.kind === 'build' || e.kind === 'hear') as { tiles: string[]; answer: string };
