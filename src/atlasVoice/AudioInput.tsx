@@ -11,12 +11,10 @@ import { audioRecorderService } from '../services/audioRecorderService';
 import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
+import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
+import { describeTurn, nextTimes, type TurnEvent, type TurnTimes } from './turnTiming';
 import logger from '../utils/logger';
 
-/** Silence detection: the turn ends by itself when the person stops talking (like a real call). */
-const SILENCE_END_MS = 1000;     // this much quiet after speech = you finished talking (a phone answers about this fast)
-const NO_SPEECH_GIVE_UP_MS = 15000;
-const MAX_TURN_MS = 60000;
 
 /** mm:ss (or h:mm:ss) like a phone's call timer. */
 export function formatCallTime(seconds: number): string {
@@ -70,6 +68,18 @@ export function AtlasAudioInput(props: any) {
   const [note, setNote] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const callerName = useCallerName();
+  // Where the time of the last turn went (see turnTiming.ts): shown under the status and logged.
+  const times = useRef<TurnTimes>({});
+  const [timing, setTiming] = useState<string | null>(null);
+  const mark = (event: TurnEvent) => {
+    times.current = nextTimes(times.current, event, Date.now());
+    const text = describeTurn(times.current);
+    if (text && text !== timing) { logger.log(`[CALL-LAT] ${text}`); setTiming(text); }
+  };
+  const wasRecording = useRef(false);
+  useEffect(() => { if (wasRecording.current && !isRecording) mark('stopped'); wasRecording.current = !!isRecording; }, [isRecording]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isGenerating) mark('sent'); }, [isGenerating]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (speakingKey) mark('voice'); }, [speakingKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const started = Date.now();
@@ -85,7 +95,8 @@ export function AtlasAudioInput(props: any) {
 
   const latest = useRef(props);
   latest.current = props;
-  const vad = useRef({ heardAt: 0, startedAt: 0, lastLoud: 0, floor: 0.01, samples: 0, levels: 0 });
+  // The turn ends by itself when the person stops talking (like a real call): see endOfSpeech.ts.
+  const vad = useRef<EndOfSpeechDetector | null>(null);
 
   // Mic loudness -> decide when the person has finished talking, so nobody has to tap to send.
   useEffect(() => {
@@ -96,18 +107,10 @@ export function AtlasAudioInput(props: any) {
         if (watch.push(rms)) interrupt();
         return;
       }
-      const v = vad.current;
-      const now = Date.now();
       if (!latest.current.isRecording) return;
-      v.levels++;
-      if (v.samples < 4) { v.floor = Math.max(0.003, (v.floor * v.samples + rms) / (v.samples + 1)); v.samples++; return; }
-      const loud = rms > Math.max(0.02, Math.min(v.floor, 0.05) * 3);
-      if (loud) { if (!v.heardAt) v.heardAt = now; v.lastLoud = now; }
-      const stopNow =
-        (v.heardAt && now - v.lastLoud > SILENCE_END_MS) || now - v.startedAt > MAX_TURN_MS;
-      if (stopNow) { v.heardAt = 0; v.startedAt = now + 1e9; latest.current.onStopRecording?.(); return; }
-      if (!v.heardAt && now - v.startedAt > NO_SPEECH_GIVE_UP_MS) {
-        v.startedAt = now + 1e9;
+      const verdict = vad.current?.push(rms, Date.now());
+      if (verdict === 'end') latest.current.onStopRecording?.();
+      else if (verdict === 'nothing') {
         latest.current.onCancelRecording?.();
         setNote('Paused - tap the button when you want to talk.');
       }
@@ -143,9 +146,9 @@ export function AtlasAudioInput(props: any) {
   // loudness (some phones, or the phone's own recognizer which ends turns itself), say so.
   useEffect(() => {
     if (!isRecording) return;
-    vad.current = { heardAt: 0, startedAt: Date.now(), lastLoud: 0, floor: 0.01, samples: 0, levels: 0 };
+    vad.current = new EndOfSpeechDetector(Date.now(), CALL_END_OF_SPEECH);
     const t = setTimeout(() => {
-      if (vad.current.levels || !latest.current.isRecording || !audioRecorderService.isCurrentlyRecording()) return;
+      if (vad.current?.levels || !latest.current.isRecording || !audioRecorderService.isCurrentlyRecording()) return;
       logger.warn('[CALL] no microphone levels: automatic end of turn unavailable on this recording');
       setNote('Tap the button when you finish talking.');
     }, 2500);
@@ -228,6 +231,7 @@ export function AtlasAudioInput(props: any) {
           <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{callerName}</Text>
           <Text style={[styles.timer, { color: colors.textSecondary }]} testID="voice-call-timer">{formatCallTime(elapsed)}</Text>
           <Text style={[styles.status, { color: colors.textSecondary }]}>{note ?? (error ? String(error) : status)}</Text>
+          {!!timing && <Text style={[styles.timing, { color: colors.textMuted }]} testID="voice-call-timing">{timing}</Text>}
           {!!partialResult && isRecording && (
             <Text style={[styles.caption, { color: colors.text }]} numberOfLines={3}>{partialResult}</Text>
           )}
@@ -272,6 +276,7 @@ const styles = StyleSheet.create({
   name: { ...TYPOGRAPHY.h1, marginTop: SPACING.lg },
   timer: { ...TYPOGRAPHY.body, marginTop: SPACING.xs },
   status: { ...TYPOGRAPHY.bodySmall, marginTop: SPACING.md, textAlign: 'center' },
+  timing: { ...TYPOGRAPHY.meta, marginTop: SPACING.xs, textAlign: 'center' },
   caption: { ...TYPOGRAPHY.body, marginTop: SPACING.md, textAlign: 'center' },
   controls: { flexDirection: 'row', justifyContent: 'space-around' },
   control: { alignItems: 'center', width: 96 },

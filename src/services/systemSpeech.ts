@@ -50,7 +50,7 @@ async function micPermission(): Promise<boolean> {
 const firstResult = (e: { value?: string[] } | undefined) => (e?.value?.[0] ?? '').trim();
 
 /** Start one recognition turn. The recognizer ends by itself when the speaker goes quiet. */
-export async function listenWithSystemSpeech(opts: { onPartial?: (text: string) => void; locale?: string } = {}): Promise<SystemSpeechSession> {
+export async function listenWithSystemSpeech(opts: { onPartial?: (text: string) => void; locale?: string; endSilenceMs?: number } = {}): Promise<SystemSpeechSession> {
   if (active) active.cancel();
   if (!(await micPermission())) throw new Error('Microphone permission is needed to talk to Atlas.');
   let settle: { resolve: (t: string) => void; reject: (e: Error) => void } | null = null;
@@ -86,6 +86,12 @@ export async function listenWithSystemSpeech(opts: { onPartial?: (text: string) 
         EXTRA_PREFER_OFFLINE: true,
         EXTRA_PARTIAL_RESULTS: true,
         EXTRA_LANGUAGE_MODEL: 'LANGUAGE_MODEL_FREE_FORM',
+        // How much quiet means "finished": the recognizer's own default is long (a second and a half or more), which is
+        // most of the walkie-talkie pause in a call. These are hints; the recognizer may stretch them.
+        ...(opts.endSilenceMs ? {
+          EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: opts.endSilenceMs,
+          EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: Math.round(opts.endSilenceMs * 0.8),
+        } : {}),
       } as any);
     } catch (error: any) {
       finish(s => s.reject(new Error(error?.message ?? 'Could not start the speech recognizer.')));

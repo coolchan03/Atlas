@@ -3,7 +3,7 @@ jest.mock('react-native', () => {
   const native = {
     rejectErrorListener: false,
     listBackends: jest.fn().mockResolvedValue([
-      { name: 'Mali-G615', description: 'Vulkan', type: 'gpu' },
+      { name: 'Mali-G57 MC2', description: 'Vulkan', type: 'gpu' },
       { name: 'CPU', description: 'CPU', type: 'cpu' },
     ]),
     loadModel: jest.fn().mockResolvedValue('Vulkan'),
@@ -47,12 +47,16 @@ it('detects a physically enumerated Vulkan GPU without depending on model name',
   expect(native.listBackends).toHaveBeenCalledTimes(1);
 });
 
-it('treats only the Mali-G615 as slow for text: not an Adreno, and not another Mali', async () => {
+it('treats only the Mali-G57 as slow for text: not an Adreno, and not another Mali (the G615 was never measured)', async () => {
   expect(await vulkanEngine.isSlowTextGpu()).toBe(true);
   native.listBackends.mockResolvedValueOnce([{ name: 'Adreno (TM) 830', description: 'Vulkan', type: 'gpu' }]);
   expect(await vulkanEngine.isSlowTextGpu()).toBe(false);
   native.listBackends.mockResolvedValueOnce([{ name: 'Mali-G720-Immortalis MC12', description: 'Vulkan', type: 'gpu' }]);
   expect(await vulkanEngine.isSlowTextGpu()).toBe(false);
+  native.listBackends.mockResolvedValueOnce([{ name: 'Mali-G615', description: 'Vulkan', type: 'gpu' }]);
+  expect(await vulkanEngine.isSlowTextGpu()).toBe(false);
+  native.listBackends.mockResolvedValueOnce([{ name: 'Mali-G57', description: 'Vulkan', type: 'gpu' }]);
+  expect(await vulkanEngine.isSlowTextGpu()).toBe(true);
 });
 
 it('loads a GGUF with a bounded offload request and delegates chat templates', async () => {

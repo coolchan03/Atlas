@@ -330,6 +330,17 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - The course's model calls (lessons, word lookups, calls) now go through the background job queue, so they wait behind a chat answer or
   another job instead of failing with "Generation already in progress".
 
+## 8e. Calls and the tablet GPU (0.0.109)
+
+- **The tablet's GPU is the Mali-G57**, not the G615 (a wrong guess of mine): the "Automatic skips Vulkan" rule only matched the G615, so
+  it never applied on the onn 13" Pro. It now matches the Mali-G57, the GPU that was measured (CPU 4.5 tok/s vs Vulkan 2.1).
+- **Practice call listens with Whisper**, the same engine as transcription, told to expect the language being learned (multilingual models
+  only; the ".en" models cannot). Falls back to the phone's recognizer, then to typing. Same end-of-turn rule as the main call, now one
+  shared detector (`endOfSpeech.ts`).
+- **Call mode**: the phone recognizer is asked to end the turn after about a second of quiet (its own default is longer), and the call
+  screen shows where each turn's time went ("sent 0.8 s after you stopped, voice started 3.2 s later"; also logged as `[CALL-LAT]`).
+  Not measured on a device yet, so whether this removes the walkie-talkie feel is unknown.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

@@ -19,6 +19,7 @@ const STATUS: Record<CallState['phase'], string> = {
   speaking: 'Talking... tap the microphone to interrupt',
   thinking: 'Thinking...',
   listening: 'Listening... speak, then tap the square when you are done',
+  transcribing: 'Writing down what you said...',
   idle: 'Tap the microphone to speak',
   ended: 'Call ended',
 };

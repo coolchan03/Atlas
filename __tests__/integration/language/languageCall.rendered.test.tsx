@@ -69,3 +69,37 @@ it('plays a waiter in Spanish, offers a hint, and shows the learner\'s mistakes 
   // Three lines said: the board's call square is done.
   expect(languageService.isDone('call@1.1')).toBe(true);
 }, 40000);
+
+it('listens with the Whisper transcription model, in the language being learned, when one is downloaded', async () => {
+  const boundary = installNativeBoundary({ llama: true, whisper: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  const rtl = requireRTL();
+  const React = require('react');
+  const RNFS = require('react-native-fs');
+  const { useAppStore } = require('../../../src/stores');
+  const { useWhisperStore } = require('../../../src/stores/whisperStore');
+  const { useLanguage } = require('../../../src/language/store');
+  const { CallScreen } = require('../../../src/language/CallScreen');
+
+  boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+  boundary.fs!.seedFile(`${RNFS.DocumentDirectoryPath}/whisper-models/ggml-base.bin`, 142 * 1024 * 1024);
+  await useWhisperStore.getState().refreshPresentModels();
+  useWhisperStore.setState({ downloadedModelId: 'base' });
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf', fileSize: 500 * 1024 * 1024 })], activeModelId: 'llm' });
+  useLanguage.setState({ language: 'es-ES', level: 1, progress: {}, glossary: {}, memory: {} });
+
+  mockParams = { scenarioId: 'cafe' };
+  boundary.llama!.scriptCompletion({ text: 'Buenos días. ¿Qué desea?' });
+  const screen = rtl.render(React.createElement(CallScreen));
+  expect(await screen.findByText(/Qué desea/, {}, { timeout: 8000 })).toBeTruthy();
+
+  // The microphone is open (Whisper listening): tapping the square ends the turn and Whisper writes it down in Spanish.
+  boundary.whisper!.setFileTranscript('Un café, por favor');
+  boundary.llama!.scriptCompletion({ text: 'Muy bien. ¿Algo más?' });
+  await rtl.waitFor(() => expect(screen.getByTestId('call-talk').props.accessibilityLabel).toBe('Done talking'), { timeout: 8000 });
+  rtl.fireEvent.press(screen.getByTestId('call-talk'));
+  expect(await screen.findByText('Un café, por favor', {}, { timeout: 8000 })).toBeTruthy();
+  expect(await screen.findByText(/Algo más/, {}, { timeout: 8000 })).toBeTruthy();
+  // It was asked to expect Spanish.
+  const context = await require('../../../src/services/whisperService').whisperService['context'];
+  expect(context.transcribe.mock.calls[0][1]).toEqual(expect.objectContaining({ language: 'es' }));
+}, 40000);

@@ -8,13 +8,14 @@
  */
 import { speakInAndWait, stop as stopSpeech } from '../atlasVoice/tts';
 import { LANGUAGES, model } from './languageService';
+import { listenInLanguage } from './listenTurn';
 import { useLanguage } from './store';
 import {
   CALL_TURNS_TO_PASS, callMessages, callSystemPrompt, hintMessages, parseHint, parseReview, reviewMessages, sentencesOf,
   type Correction, type Scenario, type Turn,
 } from './phoneCall';
 
-export type CallPhase = 'ringing' | 'speaking' | 'thinking' | 'listening' | 'idle' | 'ended';
+export type CallPhase = 'ringing' | 'speaking' | 'thinking' | 'listening' | 'transcribing' | 'idle' | 'ended';
 
 export interface CallState {
   phase: CallPhase;
@@ -122,10 +123,10 @@ export function createCall(scenario: Scenario): Call {
     const turn = ++epoch;
     set({ phase: 'listening', partial: '', note: null, hint: null });
     try {
-      // required lazily: the native speech module only exists on a device
-      const speech = require('../services/systemSpeech');
-      if (!(await speech.systemSpeechStatus()).available) { set({ phase: 'idle', typing: true, note: 'This phone has no speech recognizer. Type what you would say.' }); return; }
-      const session = await speech.listenWithSystemSpeech({ locale: code, onPartial: (p: string) => { if (turn === epoch) set({ partial: p }); } });
+      // The same engine as Atlas's transcription (Whisper) when it can understand the language, else the phone's recognizer.
+      const session = await listenInLanguage(code, { onPartial: (p) => { if (turn === epoch) set({ partial: p }); }, onTranscribing: () => { if (turn === epoch) set({ phase: 'transcribing' }); } });
+      if (!session) { set({ phase: 'idle', typing: true, note: 'This phone has no speech recognizer. Type what you would say.' }); return; }
+      if (turn !== epoch) { session.cancel(); return; }
       listening = session;
       finishTurn(await session.result, turn);
     } catch (e: any) {

@@ -9,6 +9,7 @@ import { recordingController } from '../../services/recordingController';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import { listenWithSystemSpeech, systemSpeechStatus, SpeechCancelled, type SystemSpeechSession } from '../../services/systemSpeech';
+import { CALL_END_OF_SPEECH } from '../../atlasVoice/endOfSpeech';
 import logger from '../../utils/logger';
 
 interface UseVoiceInputParams {
@@ -112,7 +113,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     setIsSystemRecording(true);
     setSystemPartial('');
     try {
-      const session = await listenWithSystemSpeech({ onPartial: setSystemPartial });
+      const session = await listenWithSystemSpeech({ onPartial: setSystemPartial, endSilenceMs: CALL_END_OF_SPEECH.silenceMs }); // a call ends a turn on a short pause
       systemSessionRef.current = session;
       deliverSystemTranscript(await session.result);
     } catch (err) {

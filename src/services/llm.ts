@@ -192,7 +192,7 @@ class LLMService {
           vulkanEngine.isAvailable(),
           vulkanEngine.isSlowTextGpu(),
         ]);
-        // The Mali-G615 runs text slower than the CPU (see isSlowTextGpu): Automatic uses the CPU there.
+        // The Mali-G57 runs text slower than the CPU (see isSlowTextGpu): Automatic uses the CPU there.
         candidates = acceleratorCandidates(
           { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan: vulkanFound && !slowGpu },
           modelPath, !!mmProjPath,

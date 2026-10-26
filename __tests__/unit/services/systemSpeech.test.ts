@@ -19,6 +19,15 @@ describe('systemSpeech', () => {
     }));
   });
 
+  it('asks the recognizer to end the turn after a short pause when told to', async () => {
+    await listenWithSystemSpeech({ endSilenceMs: 1000 });
+    expect(voice.start.mock.calls[0][1]).toEqual(expect.objectContaining({
+      EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 1000, EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 800,
+    }));
+    await listenWithSystemSpeech();
+    expect(voice.start.mock.calls[1][1].EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS).toBeUndefined();
+  });
+
   it('resolves the final transcript and reports partial text while listening', async () => {
     const partials: string[] = [];
     const session = await listenWithSystemSpeech({ onPartial: t => partials.push(t) });
