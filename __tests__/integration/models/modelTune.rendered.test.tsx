@@ -27,6 +27,11 @@ it('tries each option, lists the speeds and applies the fastest', async () => {
   useAppStore.getState().updateSettings({ inferenceBackend: 'cpu', nThreads: 7, backendUserChosen: false });
   boundary.llama!.scriptCompletion({ text: 'Rivers run to the sea and carry water across the land.' });
 
+  // The fake model answers instantly, which a phone never does (speed = tokens / time, and no time reads as no speed).
+  // The clock is the device boundary here: every reading moves it on by 5 ms, so each reply takes a measurable time.
+  let clock = 1_700_000_000_000;
+  const now = jest.spyOn(Date, 'now').mockImplementation(() => (clock += 5));
+
   const screen = rtl.render(React.createElement(ModelTestScreen));
   rtl.fireEvent.press(screen.getByTestId('model-tune-start'));
   const result = await screen.findByTestId('model-tune-result', {}, { timeout: 20000 });
@@ -39,6 +44,7 @@ it('tries each option, lists the speeds and applies the fastest', async () => {
   expect(settings.backendUserChosen).toBe(true);
   expect(settings.nThreads).not.toBe(7);
   expect(useTuned.getState().at.llm).toBeGreaterThan(0);
+  now.mockRestore();
 }, 40000);
 
 it('suggests finding faster settings when replies are slow, opens the test, and can be dismissed', () => {
