@@ -1,7 +1,8 @@
 /** Pools of words the course draws on: a unit's own, the built-in phrases, a level's, an exam's, and the word of the day. */
 import { PHRASE_LANGUAGES, PHRASES_EN } from '../phrases/data';
-import { unitById, unitsForLevel, type Unit } from './curriculum';
-import { boardFor } from './board';
+import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
+import { boardFor, lessonKey, unitDone } from './board';
+import { dueItems } from './review';
 import type { Item } from './lessons';
 import type { LevelId } from './teaching';
 import { useLanguage } from './store';
@@ -46,5 +47,47 @@ export function examWordsFor(level: LevelId, examKey: string | undefined, code: 
     .map((id) => unitById(id)).filter((u): u is Unit => !!u);
   const words = wordsOf(units, code);
   if (words.length < 6) throw new Error('Do the lessons before this exam first: it tests them.');
+  return words;
+}
+
+/** Every word the learner has met: finished units and saved words. */
+export function knownItemsFor(code: string): Item[] {
+  const { content, myWords, progress } = useLanguage.getState();
+  const done = UNITS.filter((u) => unitDone(u, (k) => (progress[code]?.[k]?.stars ?? 0) > 0));
+  return [...done.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
+}
+
+/** Items from every unit the learner has practised at least once (for review). */
+export function studiedItemsFor(code: string): Item[] {
+  const { content, progress, myWords } = useLanguage.getState();
+  const studied = UNITS.filter((u) => (progress[code]?.[lessonKey(u.id, 1)]?.lessons ?? 0) > 0);
+  return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
+}
+
+export function wordBookFor(code: string): { t: string; en: string; r?: string; box: number; due: number | null }[] {
+  const memory = useLanguage.getState().memory[code] ?? {};
+  const seen = new Set<string>();
+  return studiedItemsFor(code).filter((x) => !seen.has(x.t) && seen.add(x.t))
+    .map((x) => ({ ...x, box: memory[x.t]?.box ?? 0, due: memory[x.t]?.due ?? null }));
+}
+
+/** The words missed most and not yet made up for, most missed first. */
+export function mistakeItemsFor(code: string, n = 10): Item[] {
+  const memory = useLanguage.getState().memory[code] ?? {};
+  const seen = new Set<string>();
+  return studiedItemsFor(code).filter((x) => (memory[x.t]?.misses ?? 0) > 0 && !seen.has(x.t) && seen.add(x.t))
+    .sort((a, b) => (memory[b.t].misses ?? 0) - (memory[a.t].misses ?? 0)).slice(0, n);
+}
+
+export function dueCountFor(code: string): number {
+  return dueItems(studiedItemsFor(code), useLanguage.getState().memory[code] ?? {}, { n: 1000 }).length;
+}
+
+export function reviewSquareWordsFor(code: string): Item[] {
+  const studied = studiedItemsFor(code);
+  const due = dueItems(studied, useLanguage.getState().memory[code] ?? {}, { n: 10 });
+  const more = studied.slice().reverse().filter((x) => !due.some((d) => d.t === x.t));
+  const words = [...due, ...more].slice(0, 10);
+  if (words.length < 4) throw new Error('Finish a few lessons first, then this square reviews their words.');
   return words;
 }

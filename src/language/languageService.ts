@@ -19,14 +19,17 @@ import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
 import { secondsFor, updatePace, type ExerciseKind } from './pace';
 import { levelGuide, methodFor, type LevelId } from './teaching';
 import { keepDays, dayKey, weekOf } from './days';
-import { builtInWords, examWordsFor, levelWordsFor, wordOfTheDayFor } from './wordPools';
+import { builtInWords, dueCountFor, examWordsFor, knownItemsFor, levelWordsFor, mistakeItemsFor, reviewSquareWordsFor, studiedItemsFor, wordBookFor, wordOfTheDayFor } from './wordPools';
 import { conjugationFor, verbOf } from './verbs';
+import { installSlowVoice } from './slowVoice';
 import { LANGUAGE_PROJECT_ID, isGeneratedTutorPrompt, languageProjectDescription, tutorPrompt } from './tutor';
 
 /** The personal unit made from words saved in stories and podcasts. */
 export const MY_WORDS = 'mine';
 /** A lesson of words due for spaced review, from every unit studied. */
 export const REVIEW = 'review';
+/** The words missed most, practised as a lesson of their own. */
+export const MISTAKES = 'mistakes';
 /** Practice that earns XP but no board progress (a speed round outside the board). */
 export const PRACTICE = 'practice';
 /** Daily XP goals to pick from (10 XP per right answer: one lesson is about 100). */
@@ -110,6 +113,7 @@ async function writeListening(o: { kind: Listening['kind']; topic: string; outli
 }
 
 let preparing: { stop: boolean } | null = null;
+installSlowVoice();
 
 export const languageService = {
   /** Switches the course to another language; the project's practice chats follow. */
@@ -138,6 +142,7 @@ export const languageService = {
     const st = useLanguage.getState();
     if (unitId === MY_WORDS) return (st.myWords[code]?.length ?? 0) >= 4;
     if (unitId === REVIEW) return languageService.dueCount(code) >= 4;
+    if (unitId === MISTAKES) return mistakeItemsFor(code).length >= 3;
     const unit = unitById(unitId);
     if (!unit) return false;
     const spaces = boardFor(unit.level);
@@ -224,7 +229,7 @@ export const languageService = {
   },
 
   /** True when the unit's words came from the model rather than the built-in phrase cards. */
-  isAiMade: (unitId: string) => unitId !== MY_WORDS && unitId !== REVIEW && !unitById(unitId)?.builtIn,
+  isAiMade: (unitId: string) => unitId !== MY_WORDS && unitId !== REVIEW && unitId !== MISTAKES && !unitById(unitId)?.builtIn,
 
   /** The grammar rule or theme note for a unit, once its words are written. */
   tipFor: (unitId: string): string => useLanguage.getState().tips[useLanguage.getState().language]?.[unitId] ?? '',
@@ -233,6 +238,7 @@ export const languageService = {
   async unitWords(unitId: string, onStep: (m: string) => void = () => undefined): Promise<Item[]> {
     const { language: code, content, myWords, memory } = useLanguage.getState();
     if (unitId === MY_WORDS) return myWords[code] ?? [];
+    if (unitId === MISTAKES) return mistakeItemsFor(code);
     if (unitId === REVIEW) return dueItems(languageService.studiedItems(code), memory[code] ?? {}, { n: 10 });
     const unit = unitById(unitId);
     if (!unit) throw new Error('Unknown unit.');
@@ -346,34 +352,18 @@ export const languageService = {
   },
 
   /** Every word the learner has met: finished units and saved words. */
-  knownItems(code = useLanguage.getState().language): Item[] {
-    const { content, myWords } = useLanguage.getState();
-    const done = UNITS.filter((u) => unitDone(u, (k) => languageService.isDone(k, code)));
-    return [...done.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
-  },
+  knownItems: (code = useLanguage.getState().language): Item[] => knownItemsFor(code),
 
   /** Items from every unit the learner has practised at least once (for review). */
-  studiedItems(code = useLanguage.getState().language): Item[] {
-    const { content, progress, myWords } = useLanguage.getState();
-    const studied = UNITS.filter((u) => (progress[code]?.[lessonKey(u.id, 1)]?.lessons ?? 0) > 0);
-    return [...studied.flatMap((u) => (u.builtIn ? builtInWords(u, code) : content[code]?.[u.id] ?? [])), ...(myWords[code] ?? [])];
-  },
+  studiedItems: (code = useLanguage.getState().language): Item[] => studiedItemsFor(code),
 
   /** The last seven days, oldest first, for the weekly chart. */
   week(now = new Date()): ReturnType<typeof weekOf> {
     return weekOf(useLanguage.getState().history ?? {}, now);
   },
 
-  /**
-   * Every word learned so far (lessons finished, and My words), with how well it is known
-   * (Leitner box 1-5, 0 = not practised yet) and when it is next due for review.
-   */
-  wordBook(code = useLanguage.getState().language): { t: string; en: string; r?: string; box: number; due: number | null }[] {
-    const memory = useLanguage.getState().memory[code] ?? {};
-    const seen = new Set<string>();
-    return languageService.studiedItems(code).filter((x) => !seen.has(x.t) && seen.add(x.t))
-      .map((x) => ({ ...x, box: memory[x.t]?.box ?? 0, due: memory[x.t]?.due ?? null }));
-  },
+  /** Every word learned so far, with how well it is known (Leitner box 1-5, 0 = not practised) and when it is next due. */
+  wordBook: (code = useLanguage.getState().language) => wordBookFor(code),
 
   /** XP earned today. */
   todayXp(): number {
@@ -399,15 +389,12 @@ export const languageService = {
   /** Speaking exercises on or off (somewhere you cannot talk out loud). */
   setSpeaking(on: boolean): void { useLanguage.setState({ speaking: on }); },
 
+  /** Slower voice for the course's spoken lines, and captions on practice calls. Both are the learner's choice. */
+  setSlowVoice(on: boolean): void { useLanguage.setState({ slowVoice: on }); },
+  setCaptions(on: boolean): void { useLanguage.setState({ captions: on }); },
+
   /** Words for a review square: the ones due first, topped up with words studied most recently. */
-  reviewSquareWords(code = useLanguage.getState().language): Item[] {
-    const studied = languageService.studiedItems(code);
-    const due = dueItems(studied, useLanguage.getState().memory[code] ?? {}, { n: 10 });
-    const more = studied.slice().reverse().filter((x) => !due.some((d) => d.t === x.t));
-    const words = [...due, ...more].slice(0, 10);
-    if (words.length < 4) throw new Error('Finish a few lessons first, then this square reviews their words.');
-    return words;
-  },
+  reviewSquareWords: (code = useLanguage.getState().language): Item[] => reviewSquareWordsFor(code),
 
   /** The word of the day: the same short word or phrase all day, a different one each day. */
   wordOfTheDay(date = new Date()): Item | null {
@@ -425,9 +412,7 @@ export const languageService = {
   },
 
   /** How many words are due for review now. */
-  dueCount(code = useLanguage.getState().language): number {
-    return dueItems(languageService.studiedItems(code), useLanguage.getState().memory[code] ?? {}, { n: 1000 }).length;
-  },
+  dueCount: (code = useLanguage.getState().language): number => dueCountFor(code),
 
   /** Writes a story or two-person podcast at the learner's level, with questions and its new words. Kept, newest first. */
   makeListening(kind: Listening['kind'], topic: string, onStep: (m: string) => void = () => undefined): Promise<Listening> {
@@ -487,7 +472,7 @@ export const languageService = {
     const mem = { ...memory[code] };
     for (const r of results) mem[r.t] = remember(mem[r.t], r.right);
     useLanguage.setState({
-      progress: unitId === REVIEW || unitId === PRACTICE ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
+      progress: unitId === REVIEW || unitId === MISTAKES || unitId === PRACTICE ? progress : { ...progress, [code]: { ...progress[code], [unitId]: { stars: Math.max(prev.stars, stars), lessons: prev.lessons + 1 } } },
       xp: xp + gained,
       today: { day: today, xp: (day?.day === today ? day.xp : 0) + gained },
       history: keepDays({ ...history, [today]: { xp: (history[today]?.xp ?? 0) + gained, lessons: (history[today]?.lessons ?? 0) + 1 } }),

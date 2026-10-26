@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
 import { unitById } from './curriculum';
-import { LANGUAGES, MY_WORDS, PRACTICE, REVIEW, languageService } from './languageService';
+import { LANGUAGES, MISTAKES, MY_WORDS, PRACTICE, REVIEW, languageService } from './languageService';
 import { levelGuide } from './teaching';
 import { lessonKey, partItems } from './board';
 import { LESSON_SECONDS } from './pace';
@@ -26,7 +26,7 @@ const SPEED_SECONDS = 60;
 type Mode = 'speed' | 'review' | 'checkpoint' | 'exam';
 const MODE_TITLE: Record<Mode, string> = { speed: 'Speed round', review: 'Review', checkpoint: 'Checkpoint', exam: 'Exam' };
 const lessonTitle = (unitId: string, mode?: Mode) =>
-  (mode ? MODE_TITLE[mode] : unitId === MY_WORDS ? 'My words' : unitId === REVIEW ? 'Review' : unitById(unitId)?.title ?? 'Lesson');
+  (mode ? MODE_TITLE[mode] : unitId === MY_WORDS ? 'My words' : unitId === REVIEW ? 'Review' : unitId === MISTAKES ? 'My mistakes' : unitById(unitId)?.title ?? 'Lesson');
 
 /** A checkpoint is passed at 80% right, an exam at 70%. */
 const passMark = (mode?: Mode) => (mode === 'exam' ? 0.7 : 0.8);
@@ -54,7 +54,7 @@ const feedbackText = (verdict: 'right' | 'accents' | 'wrong', answer: string) =>
 
 /** Progress key: the board space, else the unit's lesson (practice-only for speed rounds without a space). */
 const progressKey = ({ key, unitId, part = 1 }: { key?: string; unitId: string; part?: number }, speed: boolean) =>
-  key ?? (speed ? PRACTICE : unitId === MY_WORDS || unitId === REVIEW ? unitId : lessonKey(unitId, part));
+  key ?? (speed ? PRACTICE : unitId === MY_WORDS || unitId === REVIEW || unitId === MISTAKES ? unitId : lessonKey(unitId, part));
 
 /**
  * One board space's lesson, about five minutes long whatever its games (pace.ts): a grammar

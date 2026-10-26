@@ -35,6 +35,13 @@ it('plays a waiter in Spanish, offers a hint, and shows the learner\'s mistakes 
   const screen = rtl.render(React.createElement(CallScreen));
   expect(await screen.findByText(/Qué desea tomar/, {}, { timeout: 8000 })).toBeTruthy();
 
+  // With captions off the caller's lines are hidden until tapped, so the learner can listen first.
+  rtl.fireEvent.press(screen.getByTestId('call-captions'));
+  expect(screen.queryByText(/Qué desea tomar/)).toBeNull();
+  rtl.fireEvent.press(screen.getByTestId('call-reveal-0'));
+  expect(screen.getByText(/Qué desea tomar/)).toBeTruthy();
+  rtl.fireEvent.press(screen.getByTestId('call-captions'));
+
   const say = async (line: string, reply: string) => {
     boundary.llama!.scriptCompletion({ text: reply });
     const box = await screen.findByTestId('call-typed');

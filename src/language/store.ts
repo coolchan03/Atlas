@@ -51,6 +51,10 @@ interface LanguageState {
   today: { day: string; xp: number };
   /** Speaking exercises (when the phone has a speech recognizer). */
   speaking: boolean;
+  /** Lines in the language are spoken slower (off by default). */
+  slowVoice?: boolean;
+  /** Show what the caller says on a practice call (on by default; off = listen first, tap a line to read it). */
+  captions?: boolean;
   /** Word translations looked up by tapping a word, per language (lower-case word -> English). */
   glossary: Record<string, Record<string, string>>;
 }

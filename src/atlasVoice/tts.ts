@@ -109,6 +109,14 @@ export function keepScreenOn(on: boolean): void {
   Native.keepScreenOn?.(on).catch(() => undefined);
 }
 
+/**
+ * Lets a feature slow down some of its own spoken lines (the language course's slower-voice option)
+ * without this file knowing about the feature: `fn(messageId, rate)` returns the rate to use.
+ */
+let rateAdjuster: ((messageId: string, rate: number) => number) | null = null;
+export function setRateAdjuster(fn: ((messageId: string, rate: number) => number) | null): void { rateAdjuster = fn; }
+const adjusted = (messageId: string, rate: number) => (rateAdjuster ? rateAdjuster(messageId, rate) : rate);
+
 /** Speak in another language (BCP-47 like 'es-ES'). Calls onNoLanguage if the phone lacks that voice. */
 let noLangHandler: ((lang: string) => void) | null = null;
 export function onMissingLanguage(fn: ((lang: string) => void) | null): void { noLangHandler = fn; }
@@ -118,7 +126,7 @@ export function speakIn(text: string, lang: string, messageId = 'phrase'): void 
   const key = `${messageId}~${++counter}`;
   const s = useAtlasVoiceStore.getState();
   s.setSpeaking(key, messageId);
-  Native.setRate(Math.min(s.rate, 0.9)).catch(() => undefined);
+  Native.setRate(adjusted(messageId, Math.min(s.rate, 0.9))).catch(() => undefined);
   (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => {
     if (useAtlasVoiceStore.getState().speakingKey === key) {
       useAtlasVoiceStore.getState().setSpeaking(null);
@@ -159,7 +167,7 @@ function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitc
     const unsub = useAtlasVoiceStore.subscribe((s) => { if (s.speakingKey !== myKey) finish(false); });
     waiters.set(myKey, finish);
     st.setSpeaking(myKey, messageId);
-    Native.setRate(st.rate).catch(() => undefined);
+    Native.setRate(adjusted(messageId, st.rate)).catch(() => undefined);
     (Native.speakIn ? Native.speakIn(text, myKey, lang) : Native.speak(text, myKey)).catch(() => finish(false));
   });
 }

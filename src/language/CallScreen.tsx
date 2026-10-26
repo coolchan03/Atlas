@@ -94,6 +94,8 @@ export const CallScreen: React.FC = () => {
   const [scenario, setScenario] = useState<Scenario | null>(SCENARIOS.find((s) => s.id === params.scenarioId) ?? null);
   const call = useMemo(() => (scenario ? createCall(scenario) : null), [scenario]);
   const state = useCallState(call);
+  const captions = useLanguage((s) => s.captions !== false);
+  const [shown, setShown] = useState<number[]>([]);
   const [typed, setTyped] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const scroll = useRef<ScrollView>(null);
@@ -111,7 +113,10 @@ export const CallScreen: React.FC = () => {
   const header = (
     <View style={styles.top}>
       <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
-      <Text style={styles.prompt}>Practice call in {langName}</Text>
+      <Text style={[styles.prompt, styles.sayText]}>Practice call in {langName}</Text>
+      <TouchableOpacity onPress={() => languageService.setCaptions(!captions)} testID="call-captions" accessibilityLabel={captions ? 'Captions on' : 'Captions off'}>
+        <Icon name={captions ? 'type' : 'eye-off'} size={18} color={captions ? colors.primary : colors.textMuted} />
+      </TouchableOpacity>
     </View>
   );
 
@@ -133,7 +138,9 @@ export const CallScreen: React.FC = () => {
       <ScrollView ref={scroll} contentContainerStyle={styles.transcript} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}>
         {state.turns.map((t, i) => (
           <View key={i} style={[styles.bubble, t.who === 'me' ? styles.bubbleMine : styles.bubbleTheirs]}>
-            {t.who === 'them' ? <Tappable text={t.text} style={styles.bubbleText as any} /> : <Text style={styles.bubbleText}>{t.text}</Text>}
+            {t.who === 'them' && !captions && !shown.includes(i)
+              ? <TouchableOpacity onPress={() => setShown((s) => [...s, i])} testID={`call-reveal-${i}`} accessibilityLabel="Show what they said"><Text style={styles.roman}>Tap to read this line</Text></TouchableOpacity>
+              : t.who === 'them' ? <Tappable text={t.text} style={styles.bubbleText as any} /> : <Text style={styles.bubbleText}>{t.text}</Text>}
           </View>
         ))}
         {!!state.partial && <View style={[styles.bubble, styles.bubbleMine]}><Text style={styles.roman}>{state.partial}</Text></View>}

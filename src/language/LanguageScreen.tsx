@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { LEVELS, type LevelId } from './teaching';
-import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
+import { LANGUAGES, MISTAKES, MY_WORDS, REVIEW, languageService } from './languageService';
 import { boardFor, spaceOpen, type Space } from './board';
 import { scenarioFor } from './phoneCall';
 import { startTutorChat } from './tutorChat';
@@ -36,6 +36,7 @@ export const LanguageScreen: React.FC = () => {
   const level = useLanguage((s) => s.level);
   const sounds = useLanguage((s) => s.sounds);
   const speaking = useLanguage((s) => s.speaking);
+  const slowVoice = useLanguage((s) => !!s.slowVoice);
   const goal = useLanguage((s) => s.goal);
   useLanguage((s) => s.today);
   const todayXp = languageService.todayXp();
@@ -118,6 +119,11 @@ export const LanguageScreen: React.FC = () => {
           <TouchableOpacity disabled={!languageService.unlocked(REVIEW, code)} onPress={() => navigation.navigate('Lesson', { unitId: REVIEW })} testID="language-review">
             <Text style={languageService.unlocked(REVIEW, code) ? styles.extraOn : styles.extraOff}>Review ({due})</Text>
           </TouchableOpacity>
+          {languageService.unlocked(MISTAKES, code) && (
+            <TouchableOpacity onPress={() => navigation.navigate('Lesson', { unitId: MISTAKES })} testID="language-mistakes" accessibilityLabel="Practise the words you miss">
+              <Text style={styles.extraOn}>My mistakes</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => navigation.navigate('Call', {})} testID="language-call" accessibilityLabel="Practice call">
             <Text style={styles.extraOn}>Practice call</Text>
           </TouchableOpacity>
@@ -129,6 +135,10 @@ export const LanguageScreen: React.FC = () => {
           <TouchableOpacity onPress={() => languageService.setSounds(!sounds)} testID="language-sounds"
             accessibilityLabel={sounds ? 'Sounds on' : 'Sounds off'}>
             <Icon name={sounds ? 'volume-2' : 'volume-x'} size={18} color={sounds ? colors.primary : colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => languageService.setSlowVoice(!slowVoice)} testID="language-slow-voice"
+            accessibilityLabel={slowVoice ? 'Slower voice on' : 'Slower voice off'}>
+            <Icon name={slowVoice ? 'volume-1' : 'volume-2'} size={18} color={slowVoice ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => languageService.setSpeaking(!speaking)} testID="language-speaking"
             accessibilityLabel={speaking ? 'Speaking exercises on' : 'Speaking exercises off'}>
