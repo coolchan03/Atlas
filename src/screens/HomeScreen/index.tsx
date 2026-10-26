@@ -226,6 +226,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
 
+          {/* Learn a language: lessons, games and practice calls */}
+          <AnimatedPressable
+            style={styles.galleryCard}
+            onPress={() => navigation.navigate('Language')}
+            hapticType="selection"
+            testID="home-language"
+          >
+            <Icon name="book" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Learn a language</Text>
+              <Text style={styles.galleryCardMeta}>Lessons, games, stories and practice calls</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
           {/* Image Gallery */}
           <AnimatedPressable
             style={styles.galleryCard}

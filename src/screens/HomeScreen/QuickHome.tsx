@@ -14,6 +14,7 @@ const destinations: Destination[] = [
   { label: 'Models', hint: 'Choose or manage an AI', icon: 'cpu', tab: 'ModelsTab', tint: '#FFF0D4' },
   { label: 'Presentations', hint: 'Make PowerPoint slides or a PDF', icon: 'monitor', screen: 'Presentations', tint: '#EDE5FF' },
   { label: 'Recorder', hint: 'Record a talk, get a transcript with speakers', icon: 'mic', screen: 'Recorder', tint: '#FDE7E2' },
+  { label: 'Learn', hint: 'Lessons, games and practice calls in a language', icon: 'book', screen: 'Language', tint: '#E4F2F0' },
   { label: 'Settings', hint: 'Personalize Atlas', icon: 'settings', tab: 'SettingsTab', tint: '#FBE8F0' },
 ];
 

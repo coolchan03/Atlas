@@ -1,6 +1,6 @@
 import React from 'react';
 import { SPACING } from '../constants';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -9,6 +9,10 @@ import { LEVELS, type LevelId } from './teaching';
 import { LANGUAGES, MY_WORDS, REVIEW, languageService } from './languageService';
 import { boardFor, spaceOpen, type Space } from './board';
 import { scenarioFor } from './phoneCall';
+import { startTutorChat } from './tutorChat';
+import { useActiveTextModel } from '../hooks/useActiveTextModel';
+import { useAppStore } from '../stores';
+import { LANGUAGE_PROJECT_ID } from './tutor';
 import { unitsForLevel } from './curriculum';
 import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
@@ -37,6 +41,9 @@ export const LanguageScreen: React.FC = () => {
   const todayXp = languageService.todayXp();
   const due = languageService.dueCount(code);
   const scroll = React.useRef<ScrollView>(null);
+  const { modelId: textModelId } = useActiveTextModel();
+  const activeModelId = useAppStore((st) => st.activeModelId);
+  const downloaded = useAppStore((st) => st.downloadedModels);
   const spaces = boardFor(level);
   const isDone = (key: string) => languageService.isDone(key, code);
   const isOpen = (i: number) => spaceOpen(spaces, i, isDone);
@@ -96,6 +103,14 @@ export const LanguageScreen: React.FC = () => {
           <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(1, todayXp / goal) * 100}%` }]} /></View>
           <Text style={styles.progressText}>{todayXp >= goal ? 'Goal met' : `${todayXp} / ${goal} XP today`}</Text>
         </TouchableOpacity>
+        <View style={styles.extras}>
+          <TouchableOpacity onPress={() => { const r = startTutorChat(textModelId || activeModelId || downloaded[0]?.id); if ('error' in r) Alert.alert('Chat with your tutor', r.error); else navigation.navigate('Chat', { conversationId: r.conversationId, projectId: LANGUAGE_PROJECT_ID }); }} testID="language-tutor" accessibilityLabel="Chat with your tutor">
+            <Text style={styles.extraOn}>Chat with your tutor</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('ProjectChats', { projectId: LANGUAGE_PROJECT_ID })} testID="language-chats" accessibilityLabel="Past tutor chats">
+            <Text style={styles.extraOn}>Past chats</Text>
+          </TouchableOpacity>
+        </View>
         <WordOfTheDay />
         <WeekProgress onWordBook={() => navigation.navigate('WordBook')} />
         <View style={styles.extras}>

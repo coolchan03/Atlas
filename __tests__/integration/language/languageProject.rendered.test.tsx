@@ -19,6 +19,10 @@ import { LanguageCourseCard } from '../../../src/language/LanguageCourseCard';
 import { ListeningScreen } from '../../../src/language/ListeningScreen';
 import { useLanguage } from '../../../src/language/store';
 import { useProjectStore } from '../../../src/stores/projectStore';
+import { useAppStore } from '../../../src/stores/appStore';
+import { useChatStore } from '../../../src/stores/chatStore';
+import { LanguageScreen } from '../../../src/language/LanguageScreen';
+import { createDownloadedModel } from '../../utils/factories';
 import { knownSet, parseListening } from '../../../src/language/listening';
 import { MY_WORDS, languageService } from '../../../src/language/languageService';
 
@@ -74,4 +78,17 @@ it('reads a story with questions, then saves the new words for My words practice
 it('refuses a story that is not in the expected shape', () => {
   expect(parseListening('{"parts": [{"lines": [{"t": "Hola"}]}]}', 'story', new Set())).toBeNull();
   expect(parseListening('not json', 'podcast', new Set())).toBeNull();
+});
+
+it('opens a tutor chat from the Learn a language screen, which keeps the tutor\'s chats in the course project', () => {
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm' })], activeModelId: 'llm' });
+  const before = useChatStore.getState().conversations.length;
+  const screen = render(<LanguageScreen />);
+  fireEvent.press(screen.getByTestId('language-tutor'));
+  const made = useChatStore.getState().conversations;
+  expect(made).toHaveLength(before + 1);
+  expect(made[made.length - 1].projectId).toBe('spanish-learning');
+  expect(mockNav.navigate).toHaveBeenCalledWith('Chat', { conversationId: made[made.length - 1].id, projectId: 'spanish-learning' });
+  fireEvent.press(screen.getByTestId('language-chats'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('ProjectChats', { projectId: 'spanish-learning' });
 });

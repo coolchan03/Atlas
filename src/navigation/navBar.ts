@@ -8,7 +8,7 @@ import type { RootStackParamList } from './types';
 
 export type NavItemId =
   | 'home' | 'chats' | 'workspace' | 'models' | 'settings'
-  | 'emergency' | 'library' | 'brief' | 'compass' | 'phrases' | 'recorder' | 'survival';
+  | 'emergency' | 'library' | 'brief' | 'compass' | 'phrases' | 'recorder' | 'survival' | 'language';
 
 export interface NavItem {
   id: NavItemId;
@@ -33,6 +33,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'compass', label: 'Compass', icon: 'compass', route: 'CompassTab', target: 'Compass', description: 'Compass' },
   { id: 'phrases', label: 'Phrases', icon: 'globe', route: 'PhrasesTab', target: 'Phrases', description: 'Phrase trainer' },
   { id: 'recorder', label: 'Record', icon: 'mic', route: 'RecorderTab', target: 'Recorder', description: 'Recorder with speaker labels' },
+  { id: 'language', label: 'Learn', icon: 'book', route: 'LanguageTab', target: 'Language', description: 'Learn a language: lessons, games, calls' },
   { id: 'survival', label: 'Manual', icon: 'life-buoy', route: 'SurvivalTab', target: 'SurvivalManual', description: 'Survival manual' },
 ];
 
@@ -50,7 +51,7 @@ export const MIN_VISIBLE = 2;
 /** Settings cannot be hidden: it is where this is changed. */
 export const LOCKED: NavItemId = 'settings';
 /** Out of the box: Home, Chats, Workspace and Settings. Models and the shortcuts are one tap away elsewhere. */
-export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'survival'];
+export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'survival', 'language'];
 
 const ALL = NAV_ITEMS.map((i) => i.id);
 export const navItem = (id: NavItemId): NavItem => NAV_ITEMS.find((i) => i.id === id)!;
