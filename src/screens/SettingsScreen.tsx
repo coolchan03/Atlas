@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { lockedChatsNotOpen, exportBackup, importBackup } from '../atlasTools/backup';
+import { lastBackupText, useBackupReminder } from '../atlasTools/backupReminder';
 import { LowPowerCard } from '../components/LowPowerCard';
 import { NearbySyncSettings } from '../components/settings/NearbySyncSettings';
 
@@ -56,6 +57,7 @@ export const SettingsScreen: React.FC = () => {
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
 
+  const lastBackupAt = useBackupReminder((s) => s.lastBackupAt);
   const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
@@ -232,7 +234,7 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Back up</Text>
-                <Text style={styles.navItemDesc}>Agents, lessons, projects and settings (encrypted chats excluded)</Text>
+                <Text style={styles.navItemDesc}>{lastBackupText(lastBackupAt)}. Agents, lessons, projects and settings (encrypted chats excluded)</Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>

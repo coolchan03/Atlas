@@ -15,6 +15,7 @@ import { protectChat, permanentlyUnprotectChat } from '../stores/encryptedChatSt
 import { onnxImageGeneratorService } from '../services';
 import type { Conversation } from '../types';
 import { conversationToText, hasShareableTurns } from '../utils/chatExport';
+import { safeFileName, saveMarkdown } from '../study/exportFiles';
 
 /** Deletes a chat and the images generated in it. */
 export function deleteChatAndImages(conversationId: string): void {
@@ -98,6 +99,10 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
             })}
             {hasShareableTurns(menuTarget) && menuAction('share-2', 'Share as text', () => finishMenu(() => {
               Share.share({ title: menuTarget.title, message: conversationToText(menuTarget) }).catch(() => undefined);
+            }))}
+            {hasShareableTurns(menuTarget) && menuAction('download', 'Save as file', () => finishMenu(() => {
+              saveMarkdown(safeFileName(menuTarget.title || 'Chat', 'md'), conversationToText(menuTarget))
+                .catch((e) => Alert.alert('Could not save', String(e?.message || e)));
             }))}
             {menuAction(menuTarget.pinVerifier ? 'unlock' : 'lock',
               menuTarget.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', () => finishMenu(() => {

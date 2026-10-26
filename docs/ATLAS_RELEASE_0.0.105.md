@@ -314,6 +314,22 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - The "Your turn" card says how many lessons are left before the next exam.
 - The course screen opens scrolled to the learner's square.
 
+## 8d. Quality additions (0.0.108)
+
+- **Learn a language is its own tab** (Learn, in the bottom-bar settings; also a Home card and a quick-home entry). It no longer
+  shows in the Projects list. The built-in project record stays underneath, so earlier tutor chats, backups and sync are unchanged;
+  the course screen has Chat with your tutor and Past chats.
+- **Find the best settings** (model test page, GGUF models): loads the model with automatic acceleration and the CPU at a few thread
+  counts, times a short reply each way, lists the speeds and keeps the fastest. After two slow replies (under 3 tok/s) a one-line tip
+  above the message box suggests it. Optional **Warm up after loading** (Text generation, off by default) runs one silent reply after a
+  GPU model loads. Not verified on a device yet; whether the tablet's first-question wait is shader compilation is still unknown.
+- **My mistakes** (words missed most, a right answer takes one off), optional **Slower voice** for the course's spoken lines (off by
+  default), and **Captions** on practice calls (off = listen first, tap a line to read it).
+- **Save as file** in the chat menu (Markdown). **Backup reminder**: Settings shows when the last backup was; Home reminds after 7 days
+  with no backup, then every 14 days, and can be snoozed a week. Atlas cannot back up by itself (the person chooses where the file goes).
+- The course's model calls (lessons, word lookups, calls) now go through the background job queue, so they wait behind a chat answer or
+  another job instead of failing with "Generation already in progress".
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

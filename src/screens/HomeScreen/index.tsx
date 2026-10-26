@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { BackupReminderCard } from '../../components/BackupReminderCard';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
@@ -210,6 +211,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </AnimatedEntry>
             )
           }
+
+          <BackupReminderCard onOpenSettings={() => navigation.navigate('SettingsTab')} />
 
           {/* Recorder: record a conversation, get a transcript with speakers */}
           <AnimatedPressable

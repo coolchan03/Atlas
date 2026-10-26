@@ -9,7 +9,7 @@ import { speakIn } from '../atlasVoice/tts';
 import { formatCallTime } from '../atlasVoice/AudioInput';
 import { LANGUAGES, languageService } from './languageService';
 import { useLanguage } from './store';
-import { SCENARIOS, customScenario, type Scenario } from './phoneCall';
+import { SCENARIOS, customScenario, type Scenario, type Turn } from './phoneCall';
 import { createCall, type Call, type CallState } from './callService';
 import { createStyles } from './CallScreen.styles';
 import { Tappable } from './Tappable';
@@ -28,6 +28,32 @@ function useCallState(call: Call | null): CallState | null {
   const [, tick] = useState(0);
   useEffect(() => call?.subscribe(() => tick((n) => n + 1)), [call]);
   return call?.state() ?? null;
+}
+
+/** One line of the call. The caller's lines are tappable words, or hidden until tapped when captions are off. */
+function Bubble({ turn, index, hidden, onReveal }: { turn: Turn; index: number; hidden: boolean; onReveal: () => void }) {
+  const styles = useThemedStyles(createStyles);
+  const theirs = turn.who === 'them';
+  let body: React.ReactNode = <Text style={styles.bubbleText}>{turn.text}</Text>;
+  if (theirs) body = <Tappable text={turn.text} style={styles.bubbleText as any} />;
+  if (hidden) body = <TouchableOpacity onPress={onReveal} testID={`call-reveal-${index}`} accessibilityLabel="Show what they said"><Text style={styles.roman}>Tap to read this line</Text></TouchableOpacity>;
+  return <View style={[styles.bubble, theirs ? styles.bubbleTheirs : styles.bubbleMine]}>{body}</View>;
+}
+
+/** The suggested line from "What do I say?": hear it, tap its words, see what it means. */
+function HintBox({ hint, code }: { hint: { say: string; en: string }; code: string }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.hint} testID="call-hint">
+      <Text style={styles.prompt}>You could say</Text>
+      <View style={styles.sayRow}>
+        <TouchableOpacity onPress={() => speakIn(hint.say, code, 'call-hint')} accessibilityLabel="Hear the hint"><Icon name="volume-2" size={22} color={colors.primary} /></TouchableOpacity>
+        <View style={styles.sayText}><Tappable text={hint.say} style={styles.bubbleText as any} /></View>
+      </View>
+      {!!hint.en && <Text style={styles.meta}>{hint.en}</Text>}
+    </View>
+  );
 }
 
 /** Pick a situation (or describe your own) for a practice call. */
@@ -137,24 +163,11 @@ export const CallScreen: React.FC = () => {
       </View>
       <ScrollView ref={scroll} contentContainerStyle={styles.transcript} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}>
         {state.turns.map((t, i) => (
-          <View key={i} style={[styles.bubble, t.who === 'me' ? styles.bubbleMine : styles.bubbleTheirs]}>
-            {t.who === 'them' && !captions && !shown.includes(i)
-              ? <TouchableOpacity onPress={() => setShown((s) => [...s, i])} testID={`call-reveal-${i}`} accessibilityLabel="Show what they said"><Text style={styles.roman}>Tap to read this line</Text></TouchableOpacity>
-              : t.who === 'them' ? <Tappable text={t.text} style={styles.bubbleText as any} /> : <Text style={styles.bubbleText}>{t.text}</Text>}
-          </View>
+          <Bubble key={i} turn={t} index={i} hidden={t.who === 'them' && !captions && !shown.includes(i)} onReveal={() => setShown((s) => [...s, i])} />
         ))}
         {!!state.partial && <View style={[styles.bubble, styles.bubbleMine]}><Text style={styles.roman}>{state.partial}</Text></View>}
         {state.phase === 'thinking' && <ActivityIndicator color={colors.primary} />}
-        {!!state.hint && (
-          <View style={styles.hint} testID="call-hint">
-            <Text style={styles.prompt}>You could say</Text>
-            <View style={styles.sayRow}>
-              <TouchableOpacity onPress={() => speakIn(state.hint!.say, code, 'call-hint')} accessibilityLabel="Hear the hint"><Icon name="volume-2" size={22} color={colors.primary} /></TouchableOpacity>
-              <View style={styles.sayText}><Tappable text={state.hint.say} style={styles.bubbleText as any} /></View>
-            </View>
-            {!!state.hint.en && <Text style={styles.meta}>{state.hint.en}</Text>}
-          </View>
-        )}
+        {!!state.hint && <HintBox hint={state.hint} code={code} />}
       </ScrollView>
       {state.typing && (
         <View style={styles.top}>

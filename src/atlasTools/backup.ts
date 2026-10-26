@@ -15,6 +15,7 @@ import { collectProjectFiles, restoreProjectFiles } from './projectBackupFiles';
 import type { ProjectBackupFile } from './projectBackupFiles';
 import { rehydrateStores } from './storeRegistry';
 import { keepThisDevice } from './deviceSettings';
+import { useBackupReminder } from './backupReminder';
 
 /**
  * Backup = every saved app setting in one JSON file: agents and their lessons, projects,
@@ -158,6 +159,8 @@ export async function exportBackup(password?: string): Promise<string | null> {
   await RNFS.writeFile(path, output, 'utf8');
   try {
     const [res] = await saveDocuments({ sourceUris: [`file://${path}`], mimeType: password ? 'application/octet-stream' : 'application/json', fileName: name, copy: true });
+    // Only when the person actually saved it (cancelling throws above). A failure to note it must never fail the backup.
+    try { useBackupReminder.getState().markBackedUp(); } catch { /* the reminder just stays on */ }
     return res?.name ?? name;
   } finally {
     RNFS.unlink(path).catch(() => undefined);

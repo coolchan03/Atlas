@@ -5,8 +5,9 @@
  */
 import { PHRASE_LANGUAGES } from '../phrases/data';
 import { ensureTextModel, forceLoadTextModel } from '../atlasTools/models';
+import { runBackgroundJob } from '../services/llmJobQueue';
 import { parseJsonLoose, str } from '../study/games/json';
-import { UNITS, unitById, unitsForLevel, type Unit } from './curriculum';
+import { unitById, unitsForLevel, type Unit } from './curriculum';
 import { listeningPrompt, needsRomanization, parseUnitLesson, unitPrompt, vocabPrompt } from './coursePrompts';
 import { topUpSentences, writeSentences } from './sentences';
 import { starsFor, type Item } from './lessons';
@@ -15,7 +16,7 @@ import { REAL_NEWS, pieceById, pieceForSpace } from './library';
 import { writtenPiece } from './libraryEs';
 import { dueItems, remember } from './review';
 import { useLanguage, usePrepareLive, type SavedLesson } from './store';
-import { boardFor, lessonKey, spaceOpen, unitDone } from './board';
+import { boardFor, spaceOpen } from './board';
 import { secondsFor, updatePace, type ExerciseKind } from './pace';
 import { levelGuide, methodFor, type LevelId } from './teaching';
 import { keepDays, dayKey, weekOf } from './days';
@@ -53,11 +54,14 @@ export function parseUnitWords(raw: string, english: string[], code: string): It
   return items.every((x) => x.t) && copied <= 1 ? items : null;
 }
 
+/**
+ * The loaded text model for the course's own writing (lessons, lookups, calls). Every reply goes through the
+ * background job queue, so it waits its turn behind a chat answer or another course job instead of failing with "busy".
+ */
 export async function model(): Promise<any> {
   await ensureTextModel(null);
   const { llmService } = require('../services/llm');
-  if (llmService.isCurrentlyGenerating()) throw new Error('The model is busy with a chat. Try again in a moment.');
-  return llmService;
+  return { generateResponse: (messages: unknown[], opts?: unknown) => runBackgroundJob(() => llmService.generateResponse(messages, opts)) };
 }
 
 /** A word as looked up: lower case, no punctuation around it. */
