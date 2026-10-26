@@ -280,6 +280,22 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
   );
 };
 
+// ─── Warm-up after load ───────────────────────────────────────────────────────
+
+export const WarmUpToggle: React.FC = () => {
+  const { settings, updateSettings } = useAppStore();
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Warm up after loading"
+      description="After a model loads, run one tiny silent reply so a GPU does its one-time setup now instead of during your first question. Only used when the GPU is on. If you send a message while it runs (it can take a while the first time), wait a moment and send again."
+      options={BOOL_OPTIONS}
+      current={settings.warmUpAfterLoad ? 'on' : 'off'}
+      onSelect={(id) => updateSettings({ warmUpAfterLoad: id === 'on' })}
+      testIdFor={(id) => `warm-up-${id}-button`}
+    />
+  );
+};
+
 // ─── CPU Threads & Batch Size ────────────────────────────────────────────────
 
 export const CpuThreadsSlider: React.FC = () => {

@@ -16,6 +16,7 @@ import { useSpeedStats, estimateReply, fmtSec, speedHealthLabel } from '../atlas
 import { localUniqueId } from '../utils/uniqueId';
 import { ImageModelTestScreen } from './ImageModelTestScreen';
 import { isOverridableMemoryError } from '../utils/modelLoadErrors';
+import { cancelTuning, tuneDevice, type TuneOutcome, type TuneProgress } from '../services/deviceTuner';
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
 interface Step { key: string; title: string; status: Status; detail: string }
@@ -61,6 +62,10 @@ const TextModelTestScreen: React.FC = () => {
   const [faster, setFaster] = useState<string | null>(null);
   // Memory refusal can be overridden, the same "Load Anyway" the chat offers.
   const [canForce, setCanForce] = useState(false);
+  const [tuneBusy, setTuneBusy] = useState(false);
+  const [tune, setTune] = useState<TuneProgress | null>(null);
+  const [tuned, setTuned] = useState<TuneOutcome | null>(null);
+  const [tuneError, setTuneError] = useState<string | null>(null);
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
 
@@ -239,6 +244,14 @@ const TextModelTestScreen: React.FC = () => {
     }
   };
 
+  const findBest = async () => {
+    if (!model || tuneBusy || running || vulkanBusy) return;
+    setTuneBusy(true); setTuned(null); setTuneError(null); setTune(null);
+    try { setTuned(await tuneDevice(model.id, setTune)); }
+    catch (e: any) { setTuneError(e?.message || String(e)); }
+    finally { setTuneBusy(false); setTune(null); }
+  };
+
   const icon = (s: Status) => ({ wait: ['circle', colors.textMuted], run: ['loader', colors.primary], ok: ['check-circle', colors.success ?? '#3a9d5d'], warn: ['alert-triangle', '#d4a017'], fail: ['x-circle', colors.error], skip: ['minus-circle', colors.textMuted] } as Record<Status, [string, string]>)[s];
   const card = { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10 };
   const prevName = useAppStore((s) => s.downloadedModels.find((m) => m.id === prevId)?.name);
@@ -266,6 +279,29 @@ const TextModelTestScreen: React.FC = () => {
                 </TouchableOpacity>
               )}
             </View>
+            {model.engine === 'llama' && (
+              <View style={card} testID="model-tune">
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Find the best settings</Text>
+                <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Loads this model a few ways (automatic GPU or NPU, and the CPU with different thread counts), times a short reply each way and keeps the fastest. Takes a few minutes. Your chat is not touched.</Text>
+                <TouchableOpacity onPress={findBest} disabled={running || vulkanBusy || tuneBusy} testID="model-tune-start" style={{ marginTop: 10, backgroundColor: tuneBusy ? colors.border : colors.primary, borderRadius: 10, padding: 11 }}>
+                  <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>{tuneBusy ? `Trying ${tune?.step ?? 1} of ${tune?.steps ?? '...'}: ${tune?.label ?? ''}` : tuned ? 'Find again' : 'Find the best settings'}</Text>
+                </TouchableOpacity>
+                {tuneBusy && (
+                  <TouchableOpacity onPress={cancelTuning} style={{ marginTop: 8 }} testID="model-tune-cancel"><Text style={{ color: colors.error }}>Stop and keep my settings</Text></TouchableOpacity>
+                )}
+                {!!tuneError && <Text style={{ color: colors.error, marginTop: 8 }}>{tuneError}</Text>}
+                {tuned?.results.map((r) => (
+                  <Text key={r.option.id} style={{ color: colors.textSecondary, marginTop: 6 }}>
+                    {r.option.label}: {r.error ? `failed (${r.error})` : `${r.tps.toFixed(1)} tok/s, first words after ${r.firstWordSec.toFixed(1)} s`}
+                  </Text>
+                ))}
+                {!!tuned && (
+                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }} testID="model-tune-result">
+                    {tuned.best ? `Using ${tuned.best.option.label} (${tuned.best.tps.toFixed(1)} tok/s). Change it any time in Settings, Text generation.` : tuned.cancelled ? 'Stopped. Your settings are unchanged.' : 'None of the options worked, so your settings are unchanged.'}
+                  </Text>
+                )}
+              </View>
+            )}
             {model.engine === 'llama' && (
               <View style={card}>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>Vulkan GPU test</Text>

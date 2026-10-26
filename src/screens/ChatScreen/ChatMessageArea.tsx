@@ -9,6 +9,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } from '../../components';
 import { ReplyEta } from '../../components/ReplyEta';
+import { SlowReplyHint } from '../../components/SlowReplyHint';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { cancelDeepResearch } from '../../services/deepResearch';
@@ -301,6 +302,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
       >
         <ReplyEta remote={!!chat.activeModelInfo?.isRemote} />
+        {!chat.activeModelInfo?.isRemote && <SlowReplyHint />}
         <AttachStep index={[3, 15]} fill>
           <ChatInput
             onSend={chat.handleSend}

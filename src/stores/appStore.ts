@@ -86,6 +86,8 @@ type AppSettings = {
    *  auto-selected). */
   /** Atlas: the user picked the backend themselves (auto GPU never overrides it). */
   backendUserChosen?: boolean;
+  /** Run one tiny silent reply after a model loads so a GPU backend does its one-time setup early (off by default). */
+  warmUpAfterLoad?: boolean;
   /** Set once the one-time move of automatic installs to the Auto backend has run. */
   autoBackendMigrated?: boolean;
   /** What agents call the user (fills {{name}} in agent prompts). */
