@@ -76,3 +76,36 @@ it('offers one-tap kinds of story to leave out, and hides the ones already chose
   fireEvent.press(screen.getByTestId('brief-avoid-celebrity-gossip'));
   expect(useBriefPrefs.getState().avoid).toEqual(['Sports', 'Celebrity gossip']);
 });
+
+it('offers to avoid the kind of story, or stop following its interest, from a story of the finished briefing', () => {
+  const { useBriefPrefs } = require('../../../src/atlasTools/dailyBrief');
+  useBriefPrefs.setState({ avoid: [], interests: ['United States', 'technology'] });
+  useStudyStore.setState({ saved: { [BRIEF_PROJECT]: [{
+    kind: 'podcast', createdAt: Date.now(), topic: '', title: 'Daily briefing - Monday', sources: [],
+    headlines: [
+      { title: 'Bears beat Packers in overtime thriller', source: 'ESPN', interest: 'United States' },
+      { title: 'Senate passes funding bill', source: 'Reuters', interest: 'United States' },
+      { title: 'New battery doubles phone life', source: 'Wired', interest: 'technology' },
+    ],
+  }] } } as any);
+  const screen = renderScreen();
+
+  // A sports story: avoid Sports, and it leaves the list.
+  fireEvent.press(screen.getByTestId('brief-notforme-0'));
+  fireEvent.press(screen.getByTestId('brief-story-avoid-sports'));
+  expect(useBriefPrefs.getState().avoid).toEqual(['Sports']);
+  expect(screen.queryByText('Bears beat Packers in overtime thriller')).toBeNull();
+
+  // The senate story is now first: Sports is already avoided so it is not offered again; the other kinds are.
+  fireEvent.press(screen.getByTestId('brief-notforme-0'));
+  expect(screen.queryByTestId('brief-story-avoid-sports')).toBeNull();
+  expect(screen.getByTestId('brief-story-avoid-politics')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('brief-story-unfollow'));
+  expect(useBriefPrefs.getState().interests).toEqual(['technology']);
+
+  // Just hiding changes nothing else (the battery story is first now).
+  fireEvent.press(screen.getByTestId('brief-notforme-0'));
+  fireEvent.press(screen.getByTestId('brief-story-hide'));
+  expect(screen.queryByText('New battery doubles phone life')).toBeNull();
+  expect(useBriefPrefs.getState().avoid).toEqual(['Sports']);
+});

@@ -112,14 +112,20 @@ const CRIME = /\b(murder(ed|s)?|shooting|shot dead|stabb(ed|ing)|arrest(ed|s)?|h
  * Words a person types under "Topics to avoid" that mean a whole kind of story rather than a keyword. A headline
  * about the Bears never contains the word "sports", so avoiding "sports" must look for what sports stories are about.
  */
-const AVOID_KINDS: [RegExp, RegExp][] = [
-  [/^(sports?|athletics|games?)$/, SPORTS],
-  [/^(celebrity( gossip)?|celebrities|gossip|entertainment|showbiz|hollywood)$/, ENTERTAINMENT],
-  [/^(politics?|political news)$/, POLITICS],
-  [/^(crime|true crime|crime news)$/, CRIME],
+const AVOID_KINDS: { label: string; topic: RegExp; content: RegExp }[] = [
+  { label: 'Sports', topic: /^(sports?|athletics|games?)$/, content: SPORTS },
+  { label: 'Celebrity gossip', topic: /^(celebrity( gossip)?|celebrities|gossip|entertainment|showbiz|hollywood)$/, content: ENTERTAINMENT },
+  { label: 'Politics', topic: /^(politics?|political news)$/, content: POLITICS },
+  { label: 'Crime', topic: /^(crime|true crime|crime news)$/, content: CRIME },
 ];
 /** Topics offered as one-tap suggestions on the briefing screen. */
-export const AVOID_SUGGESTIONS = ['Sports', 'Celebrity gossip', 'Politics', 'Crime'];
+export const AVOID_SUGGESTIONS = AVOID_KINDS.map((k) => k.label);
+
+/** The kinds of story a headline is (Sports, Politics...), by what it is about: to offer "avoid this kind". */
+export function storyKinds(h: Pick<Headline, 'title' | 'desc'>): string[] {
+  const text = `${h.title} ${h.desc.slice(0, 200)}`;
+  return AVOID_KINDS.filter((k) => k.content.test(text)).map((k) => k.label);
+}
 
 /**
  * Broad sections such as U.S. or world news mix in sports and celebrity stories. Those are
@@ -163,8 +169,8 @@ export function avoided(h: Pick<Headline, 'title' | 'desc'>, avoid: string[]): b
   const text = `${h.title} ${h.desc}`.toLowerCase();
   const kinds = `${h.title} ${h.desc.slice(0, 200)}`;
   return avoid.some((topic) => {
-    const kind = AVOID_KINDS.find(([name]) => name.test(topic.trim().toLowerCase()));
-    if (kind) return kind[1].test(kinds);
+    const kind = AVOID_KINDS.find((k) => k.topic.test(topic.trim().toLowerCase()));
+    if (kind) return kind.content.test(kinds);
     const keys = topic.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
     return keys.length > 0 && keys.every((w) => text.includes(w.length > 4 ? w.slice(0, -1) : w));
   });

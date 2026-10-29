@@ -65,3 +65,21 @@ it('suggests finding faster settings when replies are slow, opens the test, and 
   rtl.fireEvent.press(hint.getByTestId('slow-reply-hint-dismiss'));
   expect(hint.queryByTestId('slow-reply-hint')).toBeNull();
 });
+
+it('says why replies are slow when the threads are set too high, and fixes it with one tap', async () => {
+  const rtl = requireRTL();
+  const React = require('react');
+  const { useAppStore } = require('../../../src/stores');
+  const { useSpeedStats, useTuned, useSlowHint } = require('../../../src/atlasTools/speed');
+  const { SlowReplyHint } = require('../../../src/components/SlowReplyHint');
+
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama' })], activeModelId: 'llm' });
+  useAppStore.getState().updateSettings({ nThreads: 8 });
+  useTuned.setState({ at: {} });
+  useSlowHint.setState({ off: {} });
+  useSpeedStats.setState({ byModel: { llm: { decode: 2.1, prefill: 0, outLen: 100, samples: 3 } } });
+  const hint = rtl.render(React.createElement(SlowReplyHint));
+  expect(await hint.findByText(/8 threads but only 4 cores are fast/)).toBeTruthy();
+  rtl.fireEvent.press(hint.getByTestId('slow-reply-hint-fix'));
+  expect(useAppStore.getState().settings.nThreads).toBe(0);
+});

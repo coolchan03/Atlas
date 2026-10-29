@@ -353,6 +353,14 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   Bears never says "sports"). Sports, Celebrity gossip, Politics and Crime now match what those stories are about, and the screen offers
   them as one-tap chips.
 
+## 8g. Briefing and slow-reply tips (0.0.111)
+
+- **Not for me** on every story of a finished briefing (the eye icon next to its headline): avoid a kind of story (Sports, Celebrity
+  gossip, Politics, Crime; the kind it looks like is listed first), stop following the interest it came from, or just hide it from the
+  list. The audio already made is not rewritten; the next briefing follows the choice.
+- **The slow-reply tip says why** when the settings show it: the GPU is slower than the CPU on this device (Mali-G57: "Use the CPU"), or
+  more threads are set than the phone has fast cores ("Use automatic threads"); otherwise it offers the settings test as before.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

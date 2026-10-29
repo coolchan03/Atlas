@@ -9,6 +9,7 @@ import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
 import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { AVOID_SUGGESTIONS } from '../atlasTools/newsSources';
+import { useStoryReview } from './BriefStorySheet';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
@@ -60,6 +61,7 @@ export const DailyBriefScreen: React.FC = () => {
   const list = useStudyStore((s) => s.saved[BRIEF_PROJECT]) || EMPTY;
   const remove = useStudyStore((s) => s.remove);
   const today = list.find((r) => todayKey(new Date(r.createdAt)) === todayKey());
+  const review = useStoryReview(today);
   const [say, setSay] = useState('');
   const [avoidText, setAvoidText] = useState('');
   const [voices, setVoices] = useState(0);
@@ -150,10 +152,15 @@ export const DailyBriefScreen: React.FC = () => {
                   </Text>
                 </View>
                 {!!h.url && <Icon name="external-link" size={16} color={colors.textMuted} />}
+                <TouchableOpacity onPress={() => review.open(i)} testID={`brief-notforme-${i}`} accessibilityLabel={`Not for me: ${h.title}`} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Icon name="eye-off" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </Card>
         )}
+
+        {review.element}
 
         <Card title="Your interests" subtitle="Broad ones (U.S., world, business, tech, science, health, sports) use top-story sections; anything else is searched.">
           <View style={styles.chips}>
