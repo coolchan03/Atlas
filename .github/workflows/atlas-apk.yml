@@ -245,6 +245,9 @@ jobs:
         with:
           name: Atlas-apk
           path: out/*.apk
+          # A published build keeps its APK on the release page; this copy is only for the official-publish
+          # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
+          retention-days: 1
       - name: Publish release (stable branch, or a manual run with publish ticked)
         if: github.ref == 'refs/heads/atlas-voice' || inputs.publish == true
         env:

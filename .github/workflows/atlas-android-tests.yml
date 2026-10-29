@@ -7,9 +7,15 @@ on:
     branches: [atlas-voice, 'claude/**']
     paths: ['android/**', '.github/workflows/atlas-android-tests.yml']
   workflow_dispatch:
+    inputs:
+      clean_artifacts:
+        description: 'Only delete saved build files older than a day (frees GitHub storage); runs no tests'
+        type: boolean
+        default: false
 
 jobs:
   kotlin-tests:
+    if: ${{ !inputs.clean_artifacts }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -59,3 +65,29 @@ jobs:
           name: android-unit-test-report
           path: android/app/build/reports/tests/
           if-no-files-found: ignore
+          retention-days: 3
+
+  # Run by hand (tick "clean_artifacts"): deletes saved build files (old APK copies) older than a day.
+  # Published APKs stay on their release pages; only the Actions copies go.
+  clean-artifacts:
+    if: ${{ inputs.clean_artifacts }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+    steps:
+      - name: Delete saved build files older than a day
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count=0
+          total=0
+          while IFS=$'\t' read -r id size name; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" --silent
+            count=$((count + 1))
+            total=$((total + size))
+            echo "Deleted $name ($((size / 1024 / 1024)) MB)"
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select((now - (.created_at | fromdateiso8601)) > 86400) | [.id, .size_in_bytes, .name] | @tsv')
+          echo "Deleted $count saved build files, $((total / 1024 / 1024)) MB in all"
