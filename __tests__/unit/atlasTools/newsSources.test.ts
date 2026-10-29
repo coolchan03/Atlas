@@ -1,4 +1,4 @@
-import { sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity, linesPerStory, onTopic, spokenMinutes } from '../../../src/atlasTools/newsSources';
+import { sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity, linesPerStory, onTopic, spokenMinutes, avoided } from '../../../src/atlasTools/newsSources';
 import { parseRss } from '../../../src/atlasTools/dailyBrief';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
@@ -102,5 +102,27 @@ describe('the briefing does not drift into sports', () => {
   it('keeps business news about the SEC and comparisons', () => {
     const items = [h('SEC fines bank over reporting'), h('Renting vs. buying: what the numbers say')];
     expect(onTopic(items, { interest: 'business', interests: ['business'], fromSection: true })).toHaveLength(2);
+  });
+});
+
+describe('topics to avoid', () => {
+  const h = (title: string, desc = '') => ({ title, desc });
+  it('"sports" leaves out sports stories even though they never say the word', () => {
+    expect(avoided(h('Bears beat Packers in overtime thriller', 'Quarterback throws for 300 yards'), ['Sports'])).toBe(true);
+    expect(avoided(h('Lakers trade deadline: roster moves explained'), ['sports'])).toBe(true);
+    expect(avoided(h('City council approves new transit plan'), ['Sports'])).toBe(false);
+  });
+
+  it('knows celebrity gossip, politics and crime as kinds of story', () => {
+    expect(avoided(h('Taylor Swift announces concert tour dates'), ['celebrity gossip'])).toBe(true);
+    expect(avoided(h('Senate passes funding bill after long debate'), ['Politics'])).toBe(true);
+    expect(avoided(h('Police say suspect arrested after robbery'), ['crime'])).toBe(true);
+    expect(avoided(h('New battery doubles phone life'), ['celebrity gossip', 'politics', 'crime'])).toBe(false);
+  });
+
+  it('still matches other topics by their words', () => {
+    expect(avoided(h('Bitcoin price hits new high as crypto rallies'), ['crypto'])).toBe(true);
+    expect(avoided(h('Royal family attends charity event'), ['royal family'])).toBe(true);
+    expect(avoided(h('Family recipes for the holidays'), ['royal family'])).toBe(false);
   });
 });

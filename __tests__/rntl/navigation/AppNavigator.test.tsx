@@ -295,7 +295,7 @@ describe('AppNavigator', () => {
       // all tabs should still be visible and not clipped by the system navigation bar
       mockInsets.bottom = 48;
       // The fullest bar: all five main tabs on.
-      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'survival'] } } });
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'language', 'survival'] } } });
       const { getAllByText, getByTestId } = renderAppNavigator();
 
       // All tab labels should be visible

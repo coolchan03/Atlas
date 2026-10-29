@@ -341,6 +341,18 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   screen shows where each turn's time went ("sent 0.8 s after you stopped, voice started 3.2 s later"; also logged as `[CALL-LAT]`).
   Not measured on a device yet, so whether this removes the walkie-talkie feel is unknown.
 
+## 8f. Pairing, Learn tab and briefing (0.0.110)
+
+- **QR pairing**: saving the other device failed with "Caller-provided IV not permitted": the pairing record is sealed with a key held in
+  the Android Keystore, which creates its own random nonce and refuses one supplied by the caller. Sync and pairing encryption now go
+  through `SyncCrypto` (the cipher picks the nonce and it is stored in front of the ciphertext), with JVM tests. Packets already on the
+  wire keep the same format. Not verified on two devices yet.
+- **Learn is a tab by default** (Home, Chats, Workspace, Learn, Settings). Someone who arranged their bottom bar before keeps it as it was
+  and turns Learn on in Settings, Bottom bar.
+- **Briefing**: "Topics to avoid" understood only the words in a headline, so avoiding "sports" removed almost nothing (a result about the
+  Bears never says "sports"). Sports, Celebrity gossip, Politics and Crime now match what those stories are about, and the screen offers
+  them as one-tap chips.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

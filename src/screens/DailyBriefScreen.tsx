@@ -8,6 +8,7 @@ import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
 import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
+import { AVOID_SUGGESTIONS } from '../atlasTools/newsSources';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
@@ -183,6 +184,20 @@ export const DailyBriefScreen: React.FC = () => {
             ))}
             {!prefs.avoid.length && <Text style={styles.meta}>Nothing avoided yet.</Text>}
           </View>
+          {AVOID_SUGGESTIONS.some((s) => !prefs.avoid.some((a) => a.toLowerCase() === s.toLowerCase())) && (
+            <>
+              <Text style={styles.meta}>Tap to leave out a whole kind of story:</Text>
+              <View style={styles.chips}>
+                {AVOID_SUGGESTIONS.filter((s) => !prefs.avoid.some((a) => a.toLowerCase() === s.toLowerCase())).map((s) => (
+                  <TouchableOpacity key={s} onPress={() => prefs.set({ avoid: [...prefs.avoid, s].slice(0, 20) })} style={chip(false)}
+                    testID={`brief-avoid-${s.toLowerCase().replace(/\s+/g, '-')}`} accessibilityLabel={`Avoid ${s}`}>
+                    <Icon name="plus" size={13} color={colors.textMuted} />
+                    <Text style={styles.chipText}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
           <TextInput value={avoidText} onChangeText={setAvoidText} onSubmitEditing={addAvoid} returnKeyType="done"
             placeholder="e.g. sports, celebrity gossip, crypto"
             placeholderTextColor={colors.textMuted} blurOnSubmit style={styles.input} testID="brief-avoid-input" />

@@ -25,6 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home', route: 'HomeTab', description: 'Your overview and quick starts' },
   { id: 'chats', label: 'Chats', icon: 'message-circle', route: 'ChatsTab', description: 'All conversations' },
   { id: 'workspace', label: 'Workspace', icon: 'folder', route: 'ProjectsTab', description: 'Projects, agents and study' },
+  { id: 'language', label: 'Learn', icon: 'book', route: 'LanguageTab', target: 'Language', description: 'Learn a language: lessons, games, calls' },
   { id: 'models', label: 'Models', icon: 'cpu', route: 'ModelsTab', description: 'Download and manage models' },
   { id: 'settings', label: 'Settings', icon: 'settings', route: 'SettingsTab', description: 'Always shown, so you can always change this' },
   { id: 'emergency', label: 'Emergency', icon: 'alert-triangle', route: 'EmergencyTab', target: 'Emergency', description: 'Emergency mode' },
@@ -33,7 +34,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'compass', label: 'Compass', icon: 'compass', route: 'CompassTab', target: 'Compass', description: 'Compass' },
   { id: 'phrases', label: 'Phrases', icon: 'globe', route: 'PhrasesTab', target: 'Phrases', description: 'Phrase trainer' },
   { id: 'recorder', label: 'Record', icon: 'mic', route: 'RecorderTab', target: 'Recorder', description: 'Recorder with speaker labels' },
-  { id: 'language', label: 'Learn', icon: 'book', route: 'LanguageTab', target: 'Language', description: 'Learn a language: lessons, games, calls' },
   { id: 'survival', label: 'Manual', icon: 'life-buoy', route: 'SurvivalTab', target: 'SurvivalManual', description: 'Survival manual' },
 ];
 
@@ -50,8 +50,8 @@ export const MAX_VISIBLE = 5;
 export const MIN_VISIBLE = 2;
 /** Settings cannot be hidden: it is where this is changed. */
 export const LOCKED: NavItemId = 'settings';
-/** Out of the box: Home, Chats, Workspace and Settings. Models and the shortcuts are one tap away elsewhere. */
-export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'survival', 'language'];
+/** Out of the box: Home, Chats, Workspace, Learn and Settings. Models and the other shortcuts are one tap away elsewhere. */
+export const DEFAULT_HIDDEN: NavItemId[] = ['models', 'emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'survival'];
 
 const ALL = NAV_ITEMS.map((i) => i.id);
 export const navItem = (id: NavItemId): NavItem => NAV_ITEMS.find((i) => i.id === id)!;

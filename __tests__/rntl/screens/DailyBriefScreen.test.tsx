@@ -65,3 +65,14 @@ it('adds topics to avoid, and deletes an earlier briefing by pressing and holdin
   expect(useStudyStore.getState().saved[BRIEF_PROJECT]).toEqual([]);
   alert.mockRestore();
 });
+
+it('offers one-tap kinds of story to leave out, and hides the ones already chosen', () => {
+  const { useBriefPrefs } = require('../../../src/atlasTools/dailyBrief');
+  useBriefPrefs.setState({ avoid: [] });
+  const screen = renderScreen();
+  fireEvent.press(screen.getByTestId('brief-avoid-sports'));
+  expect(useBriefPrefs.getState().avoid).toEqual(['Sports']);
+  expect(screen.queryByTestId('brief-avoid-sports')).toBeNull();
+  fireEvent.press(screen.getByTestId('brief-avoid-celebrity-gossip'));
+  expect(useBriefPrefs.getState().avoid).toEqual(['Sports', 'Celebrity gossip']);
+});
