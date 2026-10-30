@@ -38,6 +38,9 @@ import { startCtxRecovery } from './src/atlasTools/ctxGuard';
 import { purgePrivateChatImages } from './src/services/privateImagePurge';
 import { startTextAppearance } from './src/theme/globalText';
 import { useNearbyPairingIntent } from './src/services/nearbySync/useNearbyPairingIntent';
+import { startShareIntake, flushShare } from './src/share/shareIntake';
+import { navigationRef } from './src/navigation/navigationRef';
+import { startAppLinks, flushAppLink } from './src/navigation/appLinks';
 
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
@@ -83,6 +86,8 @@ const ensureRemoteServerStoreHydrated = async () => {
 
 function App() {
   useNearbyPairingIntent();
+  useEffect(() => startShareIntake(), []);
+  useEffect(() => startAppLinks(), []);
   useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
@@ -381,6 +386,8 @@ function App() {
         <SystemBars style={isDark ? 'light' : 'dark'} />
         {AppRoot ? <AppRoot /> : null}
         <NavigationContainer
+          ref={navigationRef}
+          onReady={() => { flushShare(); flushAppLink(); }}
           theme={{
             dark: isDark,
             colors: {

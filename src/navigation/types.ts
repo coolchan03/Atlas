@@ -27,6 +27,7 @@ export type RootStackParamList = {
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
   Search: undefined;
+  Share: { text: string };
   Skills: undefined;
   Language: undefined;
   Lesson: { unitId: string; mode?: 'speed' | 'review' | 'checkpoint' | 'exam'; part?: number; parts?: number; key?: string; level?: number };

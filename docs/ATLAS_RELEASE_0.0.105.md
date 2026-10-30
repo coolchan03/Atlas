@@ -374,6 +374,14 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
   preview first. A skill's instructions join the chat prompt when a message clearly fits its description or starts with /skill-name, cut to
   fit the model's context. Scripts and files next to SKILL.md are not run; programs a skill expects (curl, python) are listed. In backups.
 
+## 8i. Share into Atlas and launcher shortcuts (0.0.113)
+
+- **Share into Atlas**: text or a link shared from any app (Share, then Atlas), or text selected anywhere and sent with **Ask Atlas**,
+  opens "What should Atlas do with this?": Ask about it, Summarize, Explain simply, Translate to English, Draft a reply. Each opens a
+  new chat with the request already typed in the message box. Shared text waits if the app is still starting or locked behind a PIN.
+- **Launcher shortcuts** (hold the Atlas icon): New chat, Practice call, Record, Today's briefing (links atlas://app/chat, call, record, brief).
+- Native code only checked by the CI build and its JVM tests so far (ShareText); first use on a device will confirm both entry points.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

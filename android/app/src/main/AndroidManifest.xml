@@ -103,6 +103,18 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="atlas" android:host="sync" />
         </intent-filter>
+        <!-- Launcher shortcuts (hold the Atlas icon): atlas://app/chat, call, record, brief -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:scheme="atlas" android:host="app" />
+        </intent-filter>
+        <!-- Share text or a link from any app into Atlas. -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/plain" />
+        </intent-filter>
         <!-- MCP OAuth redirect: offgrid://oauth/callback returns from the browser -->
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
@@ -111,6 +123,19 @@
             <data android:scheme="offgrid" android:host="oauth" />
         </intent-filter>
       </activity>
+
+      <!-- "Ask Atlas" in the menu that appears when text is selected in any app. -->
+      <activity-alias
+          android:name=".AskAtlasText"
+          android:targetActivity=".MainActivity"
+          android:label="Ask Atlas"
+          android:exported="true">
+          <intent-filter>
+              <action android:name="android.intent.action.PROCESS_TEXT" />
+              <category android:name="android.intent.category.DEFAULT" />
+              <data android:mimeType="text/plain" />
+          </intent-filter>
+      </activity-alias>
 
 <!-- Receiver for background download completion events -->
       <receiver
