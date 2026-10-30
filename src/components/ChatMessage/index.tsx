@@ -236,6 +236,15 @@ interface MessageBubbleProps {
   clean?: boolean;
 }
 
+/** The bubble's styles: Clean = plain-text replies and a rounded bubble for your own message; Bubbles = every message boxed. */
+function bubbleStyleFor(o: { styles: any; isUser: boolean; clean: boolean; isWide: boolean; hasAttachments: boolean }) {
+  const { styles, isUser, clean, isWide, hasAttachments } = o;
+  const base = [styles.bubble, isUser ? styles.userBubble : styles.assistantBubble];
+  const width = isWide ? { maxWidth: isUser ? '70%' as const : '92%' as const } : undefined;
+  if (clean) return [...base, isUser ? styles.cleanUserBubble : styles.cleanAssistantBubble, isUser ? width : undefined, hasAttachments ? styles.bubbleWithAttachments : undefined];
+  return [...base, width, hasAttachments ? styles.bubbleWithAttachments : undefined];
+}
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message, styles, colors, isUser, isStreaming, hasAttachments, bubbleStyle,
   parsedContent, showThinking, showActions, showGenerationDetails, metaExtra,
@@ -335,15 +344,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // Tablet/unfolded column: shorter user bubbles, more room for long answers and code.
   const { isWide } = useWideLayout();
   const clean = useAppStore((s) => (s.settings.appearance?.chatLayout ?? 'clean') === 'clean');
-  const bubbleStyle = clean
-    ? [styles.bubble, isUser ? styles.userBubble : styles.assistantBubble, isUser ? styles.cleanUserBubble : styles.cleanAssistantBubble,
-      isWide && isUser ? { maxWidth: '70%' as const } : undefined, hasAttachments ? styles.bubbleWithAttachments : undefined]
-    : [
-      styles.bubble,
-      isUser ? styles.userBubble : styles.assistantBubble,
-      isWide ? { maxWidth: isUser ? '70%' as const : '92%' as const } : undefined,
-      hasAttachments ? styles.bubbleWithAttachments : undefined,
-    ];
+  const bubbleStyle = bubbleStyleFor({ styles, isUser, clean, isWide, hasAttachments });
 
   const handleCopy = () => {
     Clipboard.setString(displayContent);

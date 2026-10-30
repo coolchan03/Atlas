@@ -305,6 +305,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         {!chat.activeModelInfo?.isRemote && <SlowReplyHint />}
         <AttachStep index={[3, 15]} fill>
           <ChatInput
+            starterText={chat.starter}
             onSend={chat.handleSend}
             onStop={chat.handleStop}
             disabled={!chat.hasActiveModel}

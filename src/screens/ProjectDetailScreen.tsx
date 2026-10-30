@@ -11,6 +11,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useChatOptions } from '../components/ChatOptions';
 import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
 import Icon from 'react-native-vector-icons/Feather';
+import { projectType } from '../projects/projectTypes';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
@@ -59,7 +60,7 @@ export const ProjectDetailScreen: React.FC = () => {
     navigation.navigate('Chat', { conversationId: conversation.id });
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = (starter?: string) => {
     if (project?.pinVerifier && !isProtectedProjectUnlocked(project.id)) {
       setAlertState(showAlert('Protected project', 'Unlock this project to start a chat in it. New chats are encrypted with the project PIN.'));
       return;
@@ -71,7 +72,7 @@ export const ProjectDetailScreen: React.FC = () => {
     const modelId = activeTextModelId || activeModelId || downloadedModels[0]?.id;
     if (modelId) {
       const newConversationId = createConversation(modelId, undefined, projectId);
-      navigation.navigate('Chat', { conversationId: newConversationId, projectId });
+      navigation.navigate('Chat', { conversationId: newConversationId, projectId, ...(starter ? { starter } : {}) });
     }
   };
 
@@ -174,6 +175,20 @@ export const ProjectDetailScreen: React.FC = () => {
 
       {project.course === 'language' && <LanguageCourseCard />}
 
+      {projectType(project.kind).starts.length > 0 && (
+        <View style={styles.startsWrap} testID="project-quick-starts">
+          <Text style={styles.startsLabel}>{projectType(project.kind).name} quick starts</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.startsRow}>
+            {projectType(project.kind).starts.map((q) => (
+              <TouchableOpacity key={q.label} style={styles.start} onPress={() => handleNewChat(q.prompt)} testID={`project-start-${q.label.toLowerCase().replace(/\s+/g, '-')}`} accessibilityLabel={`${q.label}: start a chat`}>
+                <Icon name={q.icon} size={14} color={colors.primary} />
+                <Text style={styles.startText}>{q.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Atlas: NotebookLM-style study tools for this project's documents */}
       <TouchableOpacity
         onPress={() => navigation.navigate('Study', { projectId })}
@@ -220,7 +235,7 @@ export const ProjectDetailScreen: React.FC = () => {
                 title="New"
                 variant="primary"
                 size="small"
-                onPress={handleNewChat}
+                onPress={() => handleNewChat()}
                 disabled={!hasModels}
                 icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
               />
@@ -243,7 +258,7 @@ export const ProjectDetailScreen: React.FC = () => {
                     title="Start a Chat"
                     variant="primary"
                     size="small"
-                    onPress={handleNewChat}
+                    onPress={() => handleNewChat()}
                     style={styles.emptyStateButton}
                   />
                 )}

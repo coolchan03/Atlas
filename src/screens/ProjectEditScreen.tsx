@@ -12,6 +12,7 @@ import {
   Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
@@ -24,6 +25,7 @@ import { useProjectStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 import { ProjectPinGate } from '../components/ProjectPinGate';
 import { protectProject, permanentlyUnprotectProject } from '../stores/protectedProjectStorage';
+import { PROJECT_TYPES, isStarterInstructions, projectType, type ProjectKind } from '../projects/projectTypes';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProjectEdit'>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectEdit'>;
@@ -53,6 +55,7 @@ export const ProjectEditScreen: React.FC = () => {
     }
   }, []);
 
+  const [kind, setKind] = useState<ProjectKind>('general');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -62,6 +65,7 @@ export const ProjectEditScreen: React.FC = () => {
 
   useEffect(() => {
     if (existingProject) {
+      setKind(existingProject.kind ?? 'general');
       setFormData({
         name: existingProject.name,
         description: existingProject.description,
@@ -96,6 +100,7 @@ export const ProjectEditScreen: React.FC = () => {
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
+        kind,
       });
     } else {
       createProject({
@@ -103,6 +108,7 @@ export const ProjectEditScreen: React.FC = () => {
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
+        kind,
       });
     }
 
@@ -134,6 +140,26 @@ export const ProjectEditScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           {/* Name */}
+          {existingProject?.course !== 'language' && (
+            <>
+              <Text style={styles.label}>Type</Text>
+              <View style={styles.typeRow}>
+                {PROJECT_TYPES.map((t) => (
+                  <TouchableOpacity key={t.id} testID={`project-type-${t.id}`} accessibilityRole="button" accessibilityState={{ selected: kind === t.id }}
+                    onPress={() => {
+                      setKind(t.id);
+                      // Starting instructions follow the type, but never replace what the person wrote.
+                      setFormData((f) => (isStarterInstructions(f.systemPrompt) ? { ...f, systemPrompt: t.instructions } : f));
+                    }}
+                    style={[styles.typeChip, kind === t.id && styles.typeChipOn]}>
+                    <Icon name={t.icon} size={16} color={kind === t.id ? colors.background : colors.textSecondary} />
+                    <Text style={kind === t.id ? styles.typeChipTextOn : styles.typeChipText}>{t.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.hint}>{projectType(kind).hint}</Text>
+            </>
+          )}
           <Text style={styles.label}>Name *</Text>
           <AttachStep index={8} fill>
             <TextInput
@@ -211,6 +237,14 @@ export const ProjectEditScreen: React.FC = () => {
 };
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  typeRow: { flexDirection: 'row' as const, gap: SPACING.sm, marginBottom: SPACING.xs },
+  typeChip: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.xs,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: 18, borderWidth: 1, borderColor: colors.border,
+  },
+  typeChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  typeChipText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
+  typeChipTextOn: { ...TYPOGRAPHY.bodySmall, color: colors.background },
   container: {
     flex: 1,
     backgroundColor: colors.background,

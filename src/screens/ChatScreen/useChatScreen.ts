@@ -409,7 +409,7 @@ export const useChatScreen = () => {
     supportsToolCalling, supportsThinking,
     debugInfo, alertState, setAlertState,
     showScrollToBottom, setShowScrollToBottom,
-    isClassifying, animateLastN, queueCount, queuedTexts,
+    isClassifying, animateLastN, queueCount, queuedTexts, starter: route.params?.starter,
     viewerImageUri, setViewerImageUri, imageGenState,
     researchMode, setResearchMode, researchDepth, setResearchDepth, researchStatus,
     enabledTools, handleToggleTool,

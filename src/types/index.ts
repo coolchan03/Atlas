@@ -380,6 +380,8 @@ export interface Project {
   allowPodcasts?: boolean;
   /** A built-in course shown on the project page (the Learn a language project). */
   course?: 'language';
+  /** What the project is for (school, work...): sets its starting instructions and quick starts. Omitted = general. */
+  kind?: 'general' | 'school' | 'work';
   id: string;
   name: string;
   description: string;

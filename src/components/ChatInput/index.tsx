@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { RewriteButton } from '../RewriteButton';
 import { View, TextInput, TouchableOpacity, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -23,6 +23,8 @@ import { useUiModeStore } from '../../stores';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 interface ChatInputProps {
+  /** Text put in the box when it appears (a project's quick start); the person edits and sends it. */
+  starterText?: string;
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
   onStop?: () => void;
   disabled?: boolean;
@@ -111,6 +113,7 @@ const buildNoVisionAlert = (opts: {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export const ChatInput: React.FC<ChatInputProps> = ({
+  starterText,
   onSend,
   onStop,
   disabled,
@@ -139,7 +142,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(starterText ?? '');
+  useEffect(() => { if (starterText) setMessage(starterText); }, [starterText]);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const quickSettings = useKeyboardAwarePopover();
