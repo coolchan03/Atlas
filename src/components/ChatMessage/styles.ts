@@ -76,6 +76,26 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
   },
+  // Clean layout (like ChatGPT and Claude): the reply is plain text across the page, your own message keeps a
+  // rounded bubble, and the gaps between messages are smaller.
+  cleanContainer: {
+    marginVertical: 4,
+    paddingHorizontal: 12,
+  },
+  cleanAssistantBubble: {
+    backgroundColor: 'transparent' as const,
+    paddingHorizontal: 0,
+    paddingVertical: 2,
+    maxWidth: '100%' as const,
+    minWidth: undefined,
+    width: '100%' as const,
+  },
+  cleanUserBubble: {
+    maxWidth: '85%' as const,
+    borderRadius: 18,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
   assistantBubble: {
     backgroundColor: colors.surface,
     borderBottomLeftRadius: 4,

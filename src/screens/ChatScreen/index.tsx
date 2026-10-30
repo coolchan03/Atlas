@@ -135,7 +135,9 @@ export const ChatScreen: React.FC = () => {
   // (same as main, on both platforms). The custom androidKbPad mechanism that
   // previously lived here floated the input mid-screen, so it was removed.
 
-  const wide = useWideLayout();
+  // Clean layout (the default) uses more of a tablet's width; Bubbles keeps the narrower reading column.
+  const chatLayout = useAppStore((s) => s.settings.appearance?.chatLayout ?? 'clean');
+  const wide = useWideLayout(chatLayout === 'clean' ? 1180 : undefined);
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
   // Atlas: no share prompts.
 

@@ -13,6 +13,12 @@ export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'condensed' | 'light'
 export type TextSizeId = 'small' | 'normal' | 'large' | 'xlarge';
 export type LayoutMode = 'standard' | 'simple' | 'compact' | 'colorful';
 export type Density = 'comfortable' | 'compact' | 'spacious';
+/** How chat messages look: Clean = replies as plain text across the page with a bubble only for your own messages (like ChatGPT and Claude); Bubbles = every message in a box. */
+export type ChatLayout = 'clean' | 'bubbles';
+export const CHAT_LAYOUTS: Array<{ id: ChatLayout; name: string; hint: string }> = [
+  { id: 'clean', name: 'Clean', hint: 'Replies as plain text, tighter spacing, wider on a tablet' },
+  { id: 'bubbles', name: 'Bubbles', hint: 'Every message in a box (the earlier look)' },
+];
 export const LAYOUT_MODES: Array<{ id: LayoutMode; name: string; hint: string }> = [
   { id: 'standard', name: 'Standard', hint: 'Original Atlas home and layout' },
   { id: 'simple', name: 'Simple', hint: 'Large, labeled actions without clutter' },
@@ -27,6 +33,7 @@ export interface Appearance {
   textSize?: TextSizeId;
   layoutMode?: LayoutMode;
   density?: Density;
+  chatLayout?: ChatLayout;
 }
 
 type Surfaces = Pick<ThemeColors, 'background' | 'surface' | 'surfaceLight' | 'surfaceHover' | 'border' | 'borderLight' | 'divider'>;

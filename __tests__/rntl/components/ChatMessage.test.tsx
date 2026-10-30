@@ -1582,3 +1582,30 @@ describe('ChatMessage', () => {
     });
   });
 });
+
+describe('chat layout', () => {
+  const { useAppStore } = require('../../../src/stores');
+  const flat = (node: any) => (Array.isArray(node.props.style) ? Object.assign({}, ...node.props.style.flat(Infinity).filter(Boolean)) : node.props.style ?? {});
+  const setLayout = (chatLayout?: 'clean' | 'bubbles') =>
+    useAppStore.getState().updateSettings({ appearance: { ...(useAppStore.getState().settings.appearance ?? {}), chatLayout } });
+
+  afterEach(() => setLayout(undefined));
+
+  it('shows a reply as plain text across the page by default, with a bubble only for your own message', () => {
+    const { getByTestId, getByText } = render(<ChatMessage message={createAssistantMessage('A plain answer')} />);
+    const bubble = getByText('A plain answer');
+    expect(bubble).toBeTruthy();
+    expect(flat(getByTestId('assistant-message')).marginVertical).toBe(4); // tighter than the 8 of the Bubbles look
+    expect(flat(getByTestId('assistant-message').children[0] as any).backgroundColor).toBe('transparent');
+    const user = render(<ChatMessage message={createUserMessage('My question')} />);
+    expect(user.getByText('My question')).toBeTruthy();
+    expect(flat(user.getByTestId('user-message').children[0] as any).borderRadius).toBe(18);
+  });
+
+  it('keeps every message in a box when Bubbles is chosen', () => {
+    setLayout('bubbles');
+    const { getByTestId } = render(<ChatMessage message={createAssistantMessage('A boxed answer')} />);
+    expect(flat(getByTestId('assistant-message').children[0] as any).backgroundColor).not.toBe('transparent');
+    expect(flat(getByTestId('assistant-message')).marginVertical).toBe(8);
+  });
+});

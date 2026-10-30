@@ -14,8 +14,8 @@ import { useChatStore, useAppStore } from '../stores';
 import { protectChat, permanentlyUnprotectChat } from '../stores/encryptedChatStorage';
 import { onnxImageGeneratorService } from '../services';
 import type { Conversation } from '../types';
-import { conversationToText, hasShareableTurns } from '../utils/chatExport';
-import { safeFileName, saveMarkdown } from '../study/exportFiles';
+import { conversationToPlainText, conversationToText, hasShareableTurns } from '../utils/chatExport';
+import { safeFileName, saveMarkdown, saveText } from '../study/exportFiles';
 
 /** Deletes a chat and the images generated in it. */
 export function deleteChatAndImages(conversationId: string): void {
@@ -97,12 +97,16 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
               useChatStore.getState().setConversationPinned(menuTarget.id, !menuTarget.isPinned);
               finishMenu();
             })}
-            {hasShareableTurns(menuTarget) && menuAction('share-2', 'Share as text', () => finishMenu(() => {
-              Share.share({ title: menuTarget.title, message: conversationToText(menuTarget) }).catch(() => undefined);
-            }))}
-            {hasShareableTurns(menuTarget) && menuAction('download', 'Save as file', () => finishMenu(() => {
+            {hasShareableTurns(menuTarget) && menuAction('download', 'Save as Markdown', () => finishMenu(() => {
               saveMarkdown(safeFileName(menuTarget.title || 'Chat', 'md'), conversationToText(menuTarget))
                 .catch((e) => Alert.alert('Could not save', String(e?.message || e)));
+            }))}
+            {hasShareableTurns(menuTarget) && menuAction('file-text', 'Save as text file', () => finishMenu(() => {
+              saveText(safeFileName(menuTarget.title || 'Chat', 'txt'), conversationToPlainText(menuTarget))
+                .catch((e) => Alert.alert('Could not save', String(e?.message || e)));
+            }))}
+            {hasShareableTurns(menuTarget) && menuAction('share-2', 'Share to an app', () => finishMenu(() => {
+              Share.share({ title: menuTarget.title, message: conversationToText(menuTarget) }).catch(() => undefined);
             }))}
             {menuAction(menuTarget.pinVerifier ? 'unlock' : 'lock',
               menuTarget.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', () => finishMenu(() => {

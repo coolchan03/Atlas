@@ -57,5 +57,7 @@ export async function saveExistingFile(path: string, fileName: string, mimeType:
   }
 }
 
+export const saveText = (fileName: string, text: string): Promise<string | null> =>
+  saveToPhone(fileName, 'text/plain', (path) => RNFS.writeFile(path, text, 'utf8'));
 export const saveMarkdown = (fileName: string, text: string): Promise<string | null> =>
   saveToPhone(fileName, MIME_MARKDOWN, (path) => RNFS.writeFile(path, text, 'utf8'));

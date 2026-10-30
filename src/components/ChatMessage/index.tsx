@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useUiModeStore, useAccordionExpanded } from '../../stores';
+import { useUiModeStore, useAccordionExpanded, useAppStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
@@ -232,17 +232,20 @@ interface MessageBubbleProps {
   onToggleThinking: () => void;
   onLongPress: () => void;
   onMenuOpen: () => void;
+  /** Clean chat layout: smaller gaps between messages. */
+  clean?: boolean;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message, styles, colors, isUser, isStreaming, hasAttachments, bubbleStyle,
   parsedContent, showThinking, showActions, showGenerationDetails, metaExtra,
-  onImagePress, onToggleThinking, onLongPress, onMenuOpen,
+  onImagePress, onToggleThinking, onLongPress, onMenuOpen, clean,
 }) => (
   <TouchableOpacity
     testID={isUser ? 'user-message' : 'assistant-message'}
     style={[
       styles.container,
+      clean ? styles.cleanContainer : undefined,
       isUser ? styles.userContainer : styles.assistantContainer,
     ]}
     activeOpacity={0.8}
@@ -331,12 +334,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const hasAttachments = Boolean(message.attachments?.length);
   // Tablet/unfolded column: shorter user bubbles, more room for long answers and code.
   const { isWide } = useWideLayout();
-  const bubbleStyle = [
-    styles.bubble,
-    isUser ? styles.userBubble : styles.assistantBubble,
-    isWide ? { maxWidth: isUser ? '70%' as const : '92%' as const } : undefined,
-    hasAttachments ? styles.bubbleWithAttachments : undefined,
-  ];
+  const clean = useAppStore((s) => (s.settings.appearance?.chatLayout ?? 'clean') === 'clean');
+  const bubbleStyle = clean
+    ? [styles.bubble, isUser ? styles.userBubble : styles.assistantBubble, isUser ? styles.cleanUserBubble : styles.cleanAssistantBubble,
+      isWide && isUser ? { maxWidth: '70%' as const } : undefined, hasAttachments ? styles.bubbleWithAttachments : undefined]
+    : [
+      styles.bubble,
+      isUser ? styles.userBubble : styles.assistantBubble,
+      isWide ? { maxWidth: isUser ? '70%' as const : '92%' as const } : undefined,
+      hasAttachments ? styles.bubbleWithAttachments : undefined,
+    ];
 
   const handleCopy = () => {
     Clipboard.setString(displayContent);
@@ -417,6 +424,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
   const messageBody = (
     <MessageBubble
+      clean={clean}
       message={message}
       styles={styles}
       colors={colors}

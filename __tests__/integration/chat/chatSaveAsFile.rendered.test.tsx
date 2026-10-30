@@ -15,7 +15,7 @@ jest.mock('@react-native-documents/picker', () => ({
   isErrorWithCode: () => false,
 }));
 
-it('saves a chat as a Markdown file named after it', async () => {
+it('saves a chat as a Markdown or a plain text file named after it', async () => {
   installNativeBoundary({ fs: true });
   const rtl = requireRTL();
   const React = require('react');
@@ -34,10 +34,17 @@ it('saves a chat as a Markdown file named after it', async () => {
   };
   const screen = rtl.render(React.createElement(Host));
   rtl.fireEvent.press(screen.getByTestId('open'));
-  rtl.fireEvent.press(await screen.findByTestId('chat-option-save-as-file'));
+  rtl.fireEvent.press(await screen.findByTestId('chat-option-save-as-markdown'));
   await rtl.waitFor(() => expect(mockSaved).toHaveLength(1));
   expect(mockSaved[0].fileName).toBe('Trip Spain 2026.md');
   expect(mockSaved[0].text).toContain('# Trip: Spain / 2026');
   expect(mockSaved[0].text).toContain('**You:** Plan three days in Madrid.');
   expect(mockSaved[0].text).toContain('**Atlas:** Day 1: the Prado.');
+
+  // The same menu saves a plain .txt without the Markdown marks.
+  rtl.fireEvent.press(screen.getByTestId('open'));
+  rtl.fireEvent.press(await screen.findByTestId('chat-option-save-as-text-file'));
+  await rtl.waitFor(() => expect(mockSaved).toHaveLength(2));
+  expect(mockSaved[1].fileName).toBe('Trip Spain 2026.txt');
+  expect(mockSaved[1].text).toBe('Trip: Spain / 2026\n\nYou: Plan three days in Madrid.\n\nAtlas: Day 1: the Prado.\n');
 });

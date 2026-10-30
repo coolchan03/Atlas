@@ -8,7 +8,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
-import { ACCENTS, FONT_CHOICES, PALETTES, TEXT_SIZES, LAYOUT_MODES, type Appearance } from '../theme/appearance';
+import { ACCENTS, CHAT_LAYOUTS, FONT_CHOICES, PALETTES, TEXT_SIZES, LAYOUT_MODES, type Appearance } from '../theme/appearance';
 import { NavBarSettings } from '../components/NavBarSettings';
 import { AI_LENGTHS, AI_LEVELS, AI_TONES, type AiStyle } from '../services/aiStyle';
 
@@ -105,6 +105,10 @@ export const AppearanceScreen: React.FC = () => {
         <Text style={styles.label}>Text size</Text>
         <Chips testID="text-size" value={appearance.textSize ?? 'normal'} onPick={textSize => setLook({ textSize })}
           options={TEXT_SIZES.map(t => ({ id: t.id, name: t.name }))} />
+
+        <Text style={styles.label}>Chat layout</Text>
+        <Chips testID="chat-layout" value={appearance.chatLayout ?? 'clean'} onPick={chatLayout => setLook({ chatLayout })}
+          options={CHAT_LAYOUTS.map(l => ({ id: l.id, name: l.name, hint: l.hint }))} />
 
         <View style={styles.preview}>
           <Text style={[styles.previewTitle, { fontFamily: FONT_CHOICES.find(f => f.id === appearance.font)?.heading ?? 'serif' }]}>Preview</Text>
