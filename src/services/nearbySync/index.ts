@@ -16,6 +16,8 @@ import { useRecordings } from '../../atlasRecorder/store';
 
 const PREF = 'atlas-sync-enabled-v1';
 const DELETED_PREF = 'atlas-sync-deletions-v1';
+/** How long after the last local change the paired phones are synced. */
+const PUSH_DELAY_MS = 5000;
 type NativeReply = { peerId: string; payload: string; transport: 'wifi' | 'bluetooth' };
 type Peer = { id: string; address: string };
 type NativeNearby = {
@@ -89,24 +91,43 @@ class NearbySyncService {
     AsyncStorage.setItem(DELETED_PREF, JSON.stringify(this.deleted)).catch(error =>
       this.publish({ lastError: String(error) }));
   }
+  private pushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A change made on this phone goes to the paired phones a few seconds later, not at the next minute tick. */
+  private schedulePush() {
+    if (this.applyingRemote || this.restoring > 0 || !this.running) return;
+    if (this.pushTimer) clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => {
+      this.pushTimer = null;
+      this.syncAll().catch(() => undefined);
+    }, PUSH_DELAY_MS);
+  }
   private watchStores() {
     if (this.trackingStarted) return;
     this.trackingStarted = true;
     useChatStore.subscribe((next, previous) => {
-      if (next.conversations !== previous.conversations)
+      if (next.conversations !== previous.conversations) {
         this.observeRemovals('conversations', previous.conversations, next.conversations);
+        // Streaming a reply rewrites the chat on every token; wait until it is finished.
+        if (!next.isStreaming) this.schedulePush();
+      }
     });
     useProjectStore.subscribe((next, previous) => {
-      if (next.projects !== previous.projects)
+      if (next.projects !== previous.projects) {
         this.observeRemovals('projects', previous.projects, next.projects);
+        this.schedulePush();
+      }
     });
     useAgentStore.subscribe((next, previous) => {
-      if (next.agents !== previous.agents)
+      if (next.agents !== previous.agents) {
         this.observeRemovals('agents', previous.agents, next.agents);
+        this.schedulePush();
+      }
     });
     useRecordings.subscribe((next, previous) => {
-      if (next.recordings !== previous.recordings)
+      if (next.recordings !== previous.recordings) {
         this.observeRemovals('recordings', previous.recordings, next.recordings);
+        this.schedulePush();
+      }
     });
   }
   /** Forget that an item was deleted (the user undid the delete), so it is not removed from the other phone. */
@@ -270,6 +291,7 @@ class NearbySyncService {
   }
   private async stopRuntime() {
     if (this.polling) { clearInterval(this.polling); this.polling = null; }
+    if (this.pushTimer) { clearTimeout(this.pushTimer); this.pushTimer = null; }
     this.listener?.remove(); this.listener = null;
     this.running = false;
     if (nearbyAvailable) await native().stop();

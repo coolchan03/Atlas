@@ -382,6 +382,16 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - **Launcher shortcuts** (hold the Atlas icon): New chat, Practice call, Record, Today's briefing (links atlas://app/chat, call, record, brief).
 - Native code only checked by the CI build and its JVM tests so far (ShareText); first use on a device will confirm both entry points.
 
+## 8j. Undo, diagnostics, hold-a-tab, faster sync (0.0.114)
+
+- **Undo delete chat**: deleting an ordinary chat is immediate; an "Chat deleted / UNDO" bar stays for 8 seconds. Images generated in the chat
+  are deleted only when the bar goes away. Undo also clears the deletion record that sync would send, so the chat is not removed from the
+  other phone. Locked and private chats still ask first and cannot be undone.
+- **Copy diagnostics** (Settings, About): version, device, GPU, thread/GPU/context settings, measured speeds, last call timing. No chat text, keys or file paths.
+- **Hold a tab** on the bottom bar: Home opens Search, Chats starts a new chat, Learn starts a practice call, Projects starts a project, Models opens downloads, Settings opens Appearance.
+- **Sync pushes changes after ~5 seconds** (waiting for a streaming reply to finish) instead of only on the 60-second tick.
+- Not changed: tools sent per message stay the user's choice (not pruned automatically); speed ideas that need a device measurement wait for Copy diagnostics numbers.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
