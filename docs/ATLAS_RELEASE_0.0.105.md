@@ -361,6 +361,19 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - **The slow-reply tip says why** when the settings show it: the GPU is slower than the CPU on this device (Mali-G57: "Use the CPU"), or
   more threads are set than the phone has fast cores ("Use automatic threads"); otherwise it offers the settings test as before.
 
+## 8h. Chat, projects, search and skills (0.0.112)
+
+- **Save a chat as a file** from the chat menu: Markdown (.md) or plain text (.txt); "Share to an app" is last.
+- **Chat layout** (Appearance): Clean by default (replies as plain text across the page, a bubble only for your own message, smaller gaps,
+  wider column on a tablet); Bubbles keeps the earlier look.
+- **Project types** (General, School, Work): starting instructions that never replace your own, and quick starts (Quiz me, Study plan,
+  Summarize, Action items...) that open a new chat with the request typed in the box. Language learning is its own tab.
+- **Home**: a Search row (chats and what was said in them, screens and settings by what people call them, projects, models) and a
+  Continue card (your next Learn square, today's briefing).
+- **Skills** (Settings, Skills): import a SKILL.md or a zipped skill folder, or paste one, in the open format Claude and OpenClaw use; see a
+  preview first. A skill's instructions join the chat prompt when a message clearly fits its description or starts with /skill-name, cut to
+  fit the model's context. Scripts and files next to SKILL.md are not run; programs a skill expects (curl, python) are listed. In backups.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that

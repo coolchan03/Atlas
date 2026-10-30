@@ -6,6 +6,7 @@ import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { BackupReminderCard } from '../../components/BackupReminderCard';
+import { ContinueCard } from './components/ContinueCard';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
@@ -161,6 +162,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </AttachStep>
           </AnimatedEntry>
 
+          <AnimatedPressable style={styles.galleryCard} onPress={() => navigation.navigate('Search')} hapticType="selection" testID="home-search">
+            <Icon name="search" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Search</Text>
+              <Text style={styles.galleryCardMeta}>Chats, settings, models and projects</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
           {/* New Chat Button */}
           {
             (activeTextModel || activeImageModelId) ? (
@@ -211,6 +221,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </AnimatedEntry>
             )
           }
+
+          <ContinueCard navigation={navigation} />
 
           <BackupReminderCard onOpenSettings={() => navigation.navigate('SettingsTab')} />
 

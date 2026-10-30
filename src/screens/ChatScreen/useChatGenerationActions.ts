@@ -1,5 +1,7 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
+import { useSkills } from '../../skills/skillsStore';
+import { skillsNote } from '../../skills/selectSkills';
 import { Dispatch, SetStateAction } from 'react';
 import { resolveAgentPrompt } from '../../stores/agentStore';
 import { toolsForConversation } from '../../services/tools/chatTools';
@@ -374,7 +376,7 @@ const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | u
   return prepend ? `<|think|>\n${prompt}` : prompt;
 };
 
-function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; localToolSupport: boolean } {
+function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, messageText: string): { enabledTools: string[]; rawPrompt: string; localToolSupport: boolean } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
   // Native tool-calling of the ACTIVE LOCAL engine (llama Jinja support / LiteRT loaded), resolved
@@ -395,6 +397,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   const chatNote = (conversation as any)?.instructions?.trim();
   const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt)
     + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '')
+    + skillsNote(messageText, useSkills.getState().skills, llmService.getPerformanceSettings?.()?.contextLength || 4096)
     + (llmService.isThinkingEnabled?.() ? thinkingNote(deps.settings as any) : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }
