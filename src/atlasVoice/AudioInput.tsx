@@ -12,7 +12,7 @@ import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
-import { describeTurn, nextTimes, type TurnEvent, type TurnTimes } from './turnTiming';
+import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import logger from '../utils/logger';
 
 
@@ -74,7 +74,7 @@ export function AtlasAudioInput(props: any) {
   const mark = (event: TurnEvent) => {
     times.current = nextTimes(times.current, event, Date.now());
     const text = describeTurn(times.current);
-    if (text && text !== timing) { logger.log(`[CALL-LAT] ${text}`); setTiming(text); }
+    if (text && text !== timing) { logger.log(`[CALL-LAT] ${text}`); rememberCallTiming(text); setTiming(text); }
   };
   const wasRecording = useRef(false);
   useEffect(() => { if (wasRecording.current && !isRecording) mark('stopped'); wasRecording.current = !!isRecording; }, [isRecording]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet, Clipboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -10,6 +10,7 @@ import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import packageJson from '../../package.json';
 import { appVersionLabel } from '../utils/appVersion';
+import { gatherDiagnostics } from '../atlasTools/diagnostics';
 import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
 
 
@@ -19,6 +20,11 @@ export const AboutScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const focusTrigger = useFocusTrigger();
   const [llamaRuntimeStatus, setLlamaRuntimeStatus] = useState('Checking native runtime…');
+  const [copied, setCopied] = useState<string | null>(null);
+  const copyDiagnostics = () => {
+    gatherDiagnostics().then((text) => { Clipboard.setString(text); setCopied('Copied. Paste it into a message.'); })
+      .catch(() => setCopied('Could not read the diagnostics.'));
+  };
 
   useEffect(() => {
     let active = true;
@@ -46,6 +52,13 @@ export const AboutScreen: React.FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={staticStyles.diag}>
+          <TouchableOpacity onPress={copyDiagnostics} testID="copy-diagnostics" accessibilityLabel="Copy diagnostics" style={styles.backButton}>
+            <Icon name="copy" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <Text style={styles.runtimeInfo} testID="copy-diagnostics-note">{copied ?? 'Copy diagnostics: a summary of this phone and its speeds, with nothing personal in it.'}</Text>
+        </View>
+
         {/* App identity */}
         <View style={styles.heroSection}>
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
@@ -86,6 +99,7 @@ export const AboutScreen: React.FC = () => {
 
 const staticStyles = StyleSheet.create({
   appIcon: { width: 72, height: 72, borderRadius: 16, marginBottom: SPACING.md },
+  diag: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.lg },
 });
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({

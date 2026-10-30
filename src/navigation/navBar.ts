@@ -37,6 +37,19 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'survival', label: 'Manual', icon: 'life-buoy', route: 'SurvivalTab', target: 'SurvivalManual', description: 'Survival manual' },
 ];
 
+/**
+ * What holding a bottom tab does: the one thing you most often want from that area, without opening it first.
+ * `link` is an atlas://app/... link (see appLinks.ts); `screen` opens a full-screen page.
+ */
+export const TAB_LONG_PRESS: Partial<Record<NavItemId, { label: string; link?: string; screen?: keyof RootStackParamList }>> = {
+  home: { label: 'Search', screen: 'Search' },
+  chats: { label: 'New chat', link: 'atlas://app/chat' },
+  workspace: { label: 'New project', screen: 'ProjectEdit' },
+  language: { label: 'Practice call', link: 'atlas://app/call' },
+  models: { label: 'Downloads', screen: 'DownloadManager' },
+  settings: { label: 'Appearance', screen: 'Appearance' },
+};
+
 export interface NavBarSetting {
   /** Order of every item; items missing here are appended in their default place. */
   order?: NavItemId[];

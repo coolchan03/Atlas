@@ -109,6 +109,14 @@ class NearbySyncService {
         this.observeRemovals('recordings', previous.recordings, next.recordings);
     });
   }
+  /** Forget that an item was deleted (the user undid the delete), so it is not removed from the other phone. */
+  forgetDeletion(kind: SyncKind, id: string) {
+    if (!(id in this.deleted[kind])) return;
+    const { [id]: _gone, ...rest } = this.deleted[kind];
+    this.deleted = { ...this.deleted, [kind]: rest };
+    AsyncStorage.setItem(DELETED_PREF, JSON.stringify(this.deleted)).catch(error =>
+      this.publish({ lastError: String(error) }));
+  }
   /** > 0 while a backup is being restored. */
   private restoring = 0;
   /** Runs `fn` (a restore) without the stores' changes counting as deletions to send to the other phone. */

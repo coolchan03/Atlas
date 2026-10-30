@@ -39,6 +39,7 @@ import { purgePrivateChatImages } from './src/services/privateImagePurge';
 import { startTextAppearance } from './src/theme/globalText';
 import { useNearbyPairingIntent } from './src/services/nearbySync/useNearbyPairingIntent';
 import { startShareIntake, flushShare } from './src/share/shareIntake';
+import { UndoBar } from './src/chats/UndoBar';
 import { navigationRef } from './src/navigation/navigationRef';
 import { startAppLinks, flushAppLink } from './src/navigation/appLinks';
 
@@ -420,6 +421,7 @@ function App() {
         >
           <AppNavigator />
         </NavigationContainer>
+        <UndoBar />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

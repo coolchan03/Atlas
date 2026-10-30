@@ -107,6 +107,8 @@ interface ChatState {
   isThinking: boolean;
   createConversation: (modelId: string, title?: string, projectId?: string, privateChat?: boolean) => string;
   deleteConversation: (conversationId: string) => void;
+  /** Put back a conversation that was just deleted (the Undo bar). */
+  restoreConversation: (conversation: Conversation) => void;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
   setConversationProject: (conversationId: string, projectId: string | null) => void;
@@ -186,6 +188,12 @@ export const useChatStore = create<ChatState>()(
           conversations: state.conversations.filter((c) => c.id !== conversationId),
           activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
         }));
+      },
+
+      restoreConversation: (conversation) => {
+        set((state) => state.conversations.some((c) => c.id === conversation.id)
+          ? state
+          : { conversations: [conversation, ...state.conversations] });
       },
 
       setActiveConversation: (conversationId) => {

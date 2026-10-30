@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupWithActiveModel } from '../../utils/testHelpers';
@@ -219,6 +219,14 @@ describe('AppNavigator', () => {
       useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { labels: false } } });
       const { queryByText } = renderAppNavigator();
       expect(queryByText('Workspace')).toBeNull();
+    });
+  });
+
+  describe('holding a tab', () => {
+    it('opens the thing you most often want from it: Search from Home, Appearance from Settings', async () => {
+      const { getByTestId, findByTestId } = renderAppNavigator();
+      fireEvent(getByTestId('home-tab'), 'longPress');
+      expect(await findByTestId('search-input')).toBeTruthy();
     });
   });
 

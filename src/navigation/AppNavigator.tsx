@@ -63,7 +63,8 @@ import { WorkspaceScreen } from '../screens/WorkspaceScreen';
 import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
 import { PresentationScreen } from '../screens/PresentationScreen';
 import { useRegisteredScreens } from './screenRegistry';
-import { NAV_ITEMS, resolveNavBar, type NavItemId } from './navBar';
+import { NAV_ITEMS, TAB_LONG_PRESS, resolveNavBar, type NavItemId } from './navBar';
+import { openAppLink } from './appLinks';
 import { RecorderScreen } from '../atlasRecorder/RecorderScreen';
 import { RecordingDetailScreen } from '../atlasRecorder/RecordingDetailScreen';
 import { LanguageScreen } from '../language/LanguageScreen';
@@ -222,6 +223,14 @@ const MainTabs: React.FC = () => {
                 ...(shown ? {} : { tabBarButton: () => null, tabBarItemStyle: { display: 'none' as const } }),
               }}
               listeners={({ navigation }) => ({
+                // Hold a tab for the thing you most often want from it (New chat, Practice call, Search...).
+                tabLongPress: () => {
+                  const hold = TAB_LONG_PRESS[id];
+                  if (!hold) return;
+                  triggerHaptic('impactMedium');
+                  if (hold.link) openAppLink(hold.link);
+                  else if (hold.screen) (navigation.getParent() as any)?.navigate(hold.screen);
+                },
                 tabPress: (e: { preventDefault: () => void }) => {
                   triggerHaptic('selection');
                   if (item.target) {

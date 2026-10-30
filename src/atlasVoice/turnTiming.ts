@@ -13,6 +13,11 @@ export function nextTimes(t: TurnTimes, event: TurnEvent, now: number): TurnTime
   return t.sentAt !== undefined && t.voiceAt === undefined ? { ...t, voiceAt: now } : t;
 }
 
+let lastText: string | null = null;
+/** The newest finished turn's timing line, for the diagnostics summary. */
+export const rememberCallTiming = (text: string): void => { lastText = text; };
+export const lastCallTiming = (): string | null => lastText;
+
 const sec = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
 
 /** "Heard and sent 0.8 s, then the voice started 3.2 s later", once the voice has started. */
