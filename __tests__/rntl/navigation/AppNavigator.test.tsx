@@ -230,6 +230,16 @@ describe('AppNavigator', () => {
     });
   });
 
+  describe('Multicolor accent', () => {
+    it('gives each tab its own color', () => {
+      useAppStore.getState().updateSettings({ appearance: { accent: 'multi' } });
+      const view = renderAppNavigator();
+      const iconColor = (id: string) => view.getByTestId(id).findAll((n: any) => n.props?.size === 22 && n.props?.color).map((n: any) => n.props.color)[0];
+      expect(iconColor('home-tab')).not.toBe(iconColor('chats-tab'));
+      expect(String(iconColor('chats-tab')).toLowerCase()).toMatch(/^#(047857|34d399)$/);
+    });
+  });
+
   describe('Tab bar safe area insets', () => {
     it('uses minimum paddingBottom of 20 when bottom inset is 0 (gesture navigation)', () => {
       mockInsets.bottom = 0;

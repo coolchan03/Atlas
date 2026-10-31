@@ -8,7 +8,7 @@ import { FONTS, TYPOGRAPHY } from '../constants';
 import type { ThemeColors } from './palettes';
 
 export type PaletteId = 'classic' | 'black' | 'forest' | 'ocean' | 'dusk' | 'paper';
-export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal' | 'red' | 'slate';
+export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal' | 'red' | 'slate' | 'multi';
 export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'condensed' | 'light' | 'medium' | 'casual';
 export type TextSizeId = 'small' | 'normal' | 'large' | 'xlarge';
 export type LayoutMode = 'standard' | 'simple' | 'compact' | 'colorful';
@@ -69,8 +69,19 @@ export const ACCENTS: Array<{ id: AccentId; name: string; light: Accent; dark: A
   { id: 'rose', name: 'Rose', light: { primary: '#BE185D', primaryDark: '#9D174D', primaryLight: '#EC4899' }, dark: { primary: '#F472B6', primaryDark: '#EC4899', primaryLight: '#F9A8D4' } },
   { id: 'teal', name: 'Teal', light: { primary: '#0F766E', primaryDark: '#115E59', primaryLight: '#14B8A6' }, dark: { primary: '#2DD4BF', primaryDark: '#14B8A6', primaryLight: '#5EEAD4' } },
   { id: 'red', name: 'Red', light: { primary: '#B91C1C', primaryDark: '#991B1B', primaryLight: '#EF4444' }, dark: { primary: '#F87171', primaryDark: '#EF4444', primaryLight: '#FCA5A5' } },
+  // Multicolor: the app's main color is blue, and each section of the app (the bottom tabs) wears its own color (see SECTION_COLORS).
+  { id: 'multi', name: 'Multicolor', light: { primary: '#1D4ED8', primaryDark: '#1E3A8A', primaryLight: '#3B82F6' }, dark: { primary: '#60A5FA', primaryDark: '#3B82F6', primaryLight: '#93C5FD' } },
   { id: 'slate', name: 'Slate', light: { primary: '#334155', primaryDark: '#1E293B', primaryLight: '#64748B' }, dark: { primary: '#CBD5E1', primaryDark: '#94A3B8', primaryLight: '#E2E8F0' } },
 ];
+
+/** Each part of the app's own color in Multicolor mode: [light, dark]. */
+export const SECTION_COLORS: Record<string, [string, string]> = {
+  HomeTab: ['#1D4ED8', '#60A5FA'], ChatsTab: ['#047857', '#34D399'], ProjectsTab: ['#B3620F', '#F2A93B'],
+  LanguageTab: ['#6D28D9', '#A78BFA'], ModelsTab: ['#0F766E', '#2DD4BF'], SettingsTab: ['#BE185D', '#F472B6'],
+  EmergencyTab: ['#B91C1C', '#F87171'], LibraryTab: ['#0F766E', '#2DD4BF'], BriefTab: ['#B3620F', '#F2A93B'],
+  CompassTab: ['#1D4ED8', '#60A5FA'], PhrasesTab: ['#6D28D9', '#A78BFA'], RecorderTab: ['#BE185D', '#F472B6'], SurvivalTab: ['#047857', '#34D399'],
+};
+export const sectionColor = (route: string, isDark: boolean): string | undefined => SECTION_COLORS[route]?.[isDark ? 1 : 0];
 
 /**
  * Fonts bundled with Atlas (android/app/src/main/assets/fonts, SIL Open Font License), so

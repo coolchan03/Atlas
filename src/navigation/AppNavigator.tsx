@@ -11,6 +11,7 @@ import Animated, {
 import Icon from 'react-native-vector-icons/Feather';
 import { SpotlightTourProvider } from 'react-native-spotlight-tour';
 import { useTheme, useThemedStyles } from '../theme';
+import { sectionColor } from '../theme/appearance';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
@@ -85,7 +86,8 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const TAB_ICON_MAP: Record<string, string> = Object.fromEntries(NAV_ITEMS.map((i) => [i.route, i.icon]));
 
 const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const multi = useAppStore((st) => st.settings.appearance?.accent === 'multi');
   const tabStyles = useThemedStyles(createTabBarStyles);
   const scale = useSharedValue(focused ? 1.1 : 1);
 
@@ -100,11 +102,11 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
 
   return (
     <View style={tabStyles.iconContainer}>
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={[animatedStyle, multi && !focused && tabStyles.dimmed]}>
         <Icon
           name={TAB_ICON_MAP[name] || 'circle'}
           size={22}
-          color={focused ? colors.primary : colors.textMuted}
+          color={multi ? (sectionColor(name, isDark) ?? colors.primary) : focused ? colors.primary : colors.textMuted}
         />
       </Animated.View>
       {focused && <View style={tabStyles.focusDot} />}
@@ -113,6 +115,7 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
 };
 
 const createTabBarStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  dimmed: { opacity: 0.55 },
   iconContainer: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

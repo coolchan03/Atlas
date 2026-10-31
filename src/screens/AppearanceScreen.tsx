@@ -92,7 +92,7 @@ export const AppearanceScreen: React.FC = () => {
               <TouchableOpacity key={a.id} testID={`accent-${a.id}`} accessibilityRole="button" accessibilityLabel={a.name}
                 accessibilityState={{ selected: on }} onPress={() => setLook({ accent: a.id })}
                 style={[styles.swatch, { backgroundColor: (isDark ? a.dark : a.light).primary }, on && styles.swatchOn]}>
-                {on && <Icon name="check" size={16} color={colors.background} />}
+                {(on || a.id === 'multi') && <Icon name={on ? 'check' : 'grid'} size={16} color={colors.background} />}
               </TouchableOpacity>
             );
           })}
