@@ -392,6 +392,22 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - **Sync pushes changes after ~5 seconds** (waiting for a streaming reply to finish) instead of only on the 60-second tick.
 - Not changed: tools sent per message stay the user's choice (not pruned automatically); speed ideas that need a device measurement wait for Copy diagnostics numbers.
 
+## 8k. Your list (0.0.115)
+
+- **Briefing on Home**: the briefing row is always there ("Listen to today's briefing", or "Today's news briefing: not made yet, tap to make it").
+- **Briefing summarizes**: each story is a two-to-four sentence summary in the AI's own words, with more and shorter stories; only 900 characters of an article are read for background, and the script is told never to read or quote it.
+- **Calls end by themselves more reliably**: the quiet-after-speech rule now follows the room's noise (it no longer mistakes speech that starts at once for background noise, and handles a steady hum).
+- **Learn practice call looks like a phone call**: no header, big caller circle, timer, round Captions / Talk / "What do I say?" buttons and a large red End call.
+- **Lesson speaking exercise listens with Whisper** (the multilingual model, told the language) when one is downloaded, else the phone recognizer; tap the mic again to send.
+- **Prepare lessons**: no longer fails because no model is "selected"; it uses the last used or first downloaded model, and a missing model gives a clear message.
+- **Copy**: each table in a reply has "Copy table" (pastes as spreadsheet cells) and "Copy as Markdown"; code blocks have "Copy code".
+- **Draft text or email**: new tool opens Messages or Email with the message written; you press send. Enable it per agent (Draft texts and emails).
+- **Maps grounding**: "My location" now tells the model it only has coordinates and your saved places, so it should stop naming nearby airports or towns.
+- **Sync**: a chat made on both phones (same title, one is the other plus more) is merged into one; an agent or project that is identical on both is not added twice. Two different chats with the same title are still both kept.
+- **Learning mode without an agent**: choose "No agent" and the lessons are kept with the learning history.
+- **Multicolor accent** (Appearance): each bottom tab has its own color.
+- Not verified on a device: call end-of-turn, Whisper in lessons, the call screen look, Draft message links.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
