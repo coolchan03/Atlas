@@ -7,8 +7,8 @@ import { Platform } from 'react-native';
 import { FONTS, TYPOGRAPHY } from '../constants';
 import type { ThemeColors } from './palettes';
 
-export type PaletteId = 'classic' | 'black' | 'forest' | 'ocean' | 'dusk' | 'paper';
-export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal' | 'red' | 'slate' | 'multi';
+export type PaletteId = 'classic' | 'black' | 'forest' | 'ocean' | 'dusk' | 'paper' | 'mocha' | 'mint' | 'sakura' | 'graphite' | 'sunset';
+export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal' | 'red' | 'slate' | 'multi' | 'orange' | 'lime' | 'cyan' | 'indigo' | 'fuchsia' | 'gold';
 export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'condensed' | 'light' | 'medium' | 'casual';
 export type TextSizeId = 'small' | 'normal' | 'large' | 'xlarge';
 export type LayoutMode = 'standard' | 'simple' | 'compact' | 'colorful';
@@ -58,6 +58,21 @@ export const PALETTES: Array<{ id: PaletteId; name: string; light?: Surfaces; da
   { id: 'paper', name: 'Paper',
     light: surfaces(['#FFFDF7', '#F7F2E4', '#EFE7D3', '#E6DCC3', '#E9DFC8', '#D9CCAF']),
     dark: surfaces(['#1A1712', '#231F18', '#2C271F', '#363027', '#332D24', '#40392E']) },
+  { id: 'mocha', name: 'Mocha',
+    light: surfaces(['#FBF6F2', '#F1E6DE', '#E6D5C8', '#DAC5B5', '#E0CFC2', '#CDB6A4']),
+    dark: surfaces(['#171110', '#211918', '#2B2120', '#362A28', '#312624', '#42332F']) },
+  { id: 'mint', name: 'Mint',
+    light: surfaces(['#F2FBF7', '#E1F4EB', '#D1ECDF', '#C0E3D3', '#C9E8D9', '#B0D9C6']),
+    dark: surfaces(['#0A1512', '#10211C', '#162C26', '#1D3832', '#1A322B', '#254139']) },
+  { id: 'sakura', name: 'Sakura',
+    light: surfaces(['#FFF7F9', '#FBE9EE', '#F6D9E1', '#F0C8D3', '#F2D3DC', '#E7BDC9']),
+    dark: surfaces(['#1A0F13', '#25161B', '#301E24', '#3B272E', '#36222A', '#48303A']) },
+  { id: 'graphite', name: 'Graphite',
+    light: surfaces(['#F5F6F7', '#E9EBED', '#DCDFE2', '#CED2D6', '#D8DCDF', '#C3C8CC']),
+    dark: surfaces(['#121416', '#1A1D20', '#23272B', '#2D3236', '#292D31', '#383E43']) },
+  { id: 'sunset', name: 'Sunset',
+    light: surfaces(['#FFF8F1', '#FDEBDA', '#F9DCC3', '#F4CCAB', '#F6D5BB', '#EBBF9F']),
+    dark: surfaces(['#1A100C', '#261811', '#32211A', '#3F2B22', '#3A261D', '#4E352A']) },
 ];
 
 type Accent = Pick<ThemeColors, 'primary' | 'primaryDark' | 'primaryLight'>;
@@ -70,6 +85,12 @@ export const ACCENTS: Array<{ id: AccentId; name: string; light: Accent; dark: A
   { id: 'teal', name: 'Teal', light: { primary: '#0F766E', primaryDark: '#115E59', primaryLight: '#14B8A6' }, dark: { primary: '#2DD4BF', primaryDark: '#14B8A6', primaryLight: '#5EEAD4' } },
   { id: 'red', name: 'Red', light: { primary: '#B91C1C', primaryDark: '#991B1B', primaryLight: '#EF4444' }, dark: { primary: '#F87171', primaryDark: '#EF4444', primaryLight: '#FCA5A5' } },
   // Multicolor: the app's main color is blue, and each section of the app (the bottom tabs) wears its own color (see SECTION_COLORS).
+  { id: 'orange', name: 'Orange', light: { primary: '#C2410C', primaryDark: '#9A3412', primaryLight: '#F97316' }, dark: { primary: '#FB923C', primaryDark: '#F97316', primaryLight: '#FDBA74' } },
+  { id: 'lime', name: 'Lime', light: { primary: '#4D7C0F', primaryDark: '#3F6212', primaryLight: '#84CC16' }, dark: { primary: '#A3E635', primaryDark: '#84CC16', primaryLight: '#BEF264' } },
+  { id: 'cyan', name: 'Cyan', light: { primary: '#0E7490', primaryDark: '#155E75', primaryLight: '#06B6D4' }, dark: { primary: '#22D3EE', primaryDark: '#06B6D4', primaryLight: '#67E8F9' } },
+  { id: 'indigo', name: 'Indigo', light: { primary: '#4338CA', primaryDark: '#3730A3', primaryLight: '#6366F1' }, dark: { primary: '#818CF8', primaryDark: '#6366F1', primaryLight: '#A5B4FC' } },
+  { id: 'fuchsia', name: 'Fuchsia', light: { primary: '#A21CAF', primaryDark: '#86198F', primaryLight: '#D946EF' }, dark: { primary: '#E879F9', primaryDark: '#D946EF', primaryLight: '#F0ABFC' } },
+  { id: 'gold', name: 'Gold', light: { primary: '#A16207', primaryDark: '#854D0E', primaryLight: '#EAB308' }, dark: { primary: '#FACC15', primaryDark: '#EAB308', primaryLight: '#FDE047' } },
   { id: 'multi', name: 'Multicolor', light: { primary: '#1D4ED8', primaryDark: '#1E3A8A', primaryLight: '#3B82F6' }, dark: { primary: '#60A5FA', primaryDark: '#3B82F6', primaryLight: '#93C5FD' } },
   { id: 'slate', name: 'Slate', light: { primary: '#334155', primaryDark: '#1E293B', primaryLight: '#64748B' }, dark: { primary: '#CBD5E1', primaryDark: '#94A3B8', primaryLight: '#E2E8F0' } },
 ];
