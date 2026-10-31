@@ -124,7 +124,7 @@ export function createCall(scenario: Scenario): Call {
     set({ phase: 'listening', partial: '', note: null, hint: null });
     try {
       // The same engine as Atlas's transcription (Whisper) when it can understand the language, else the phone's recognizer.
-      const session = await listenInLanguage(code, { onPartial: (p) => { if (turn === epoch) set({ partial: p }); }, onTranscribing: () => { if (turn === epoch) set({ phase: 'transcribing' }); } });
+      const session = await listenInLanguage(code, { keepTextModel: true, onPartial: (p) => { if (turn === epoch) set({ partial: p }); }, onTranscribing: () => { if (turn === epoch) set({ phase: 'transcribing' }); } });
       if (!session) { set({ phase: 'idle', typing: true, note: 'This phone has no speech recognizer. Type what you would say.' }); return; }
       if (turn !== epoch) { session.cancel(); return; }
       listening = session;
