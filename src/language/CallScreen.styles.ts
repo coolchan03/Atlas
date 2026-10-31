@@ -4,11 +4,14 @@ import { createStyles as lessonStyles } from './LessonScreen.styles';
 
 export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   ...lessonStyles(colors, shadows),
-  callTop: { alignItems: 'center' as const, paddingTop: SPACING.lg, gap: SPACING.xs },
+  callTop: { alignItems: 'center' as const, paddingTop: SPACING.xl, gap: SPACING.xs },
   avatar: {
     width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: colors.border, backgroundColor: colors.surface,
     alignItems: 'center' as const, justifyContent: 'center' as const,
   },
+  avatarBig: { width: 112, height: 112, borderRadius: 56 },
+  endRow: { alignItems: 'center' as const, paddingBottom: SPACING.xl },
+  endBig: { width: 72, height: 72, borderRadius: 36 },
   avatarLive: { borderColor: colors.primary },
   callTitle: { ...TYPOGRAPHY.h2, color: colors.text, textAlign: 'center' as const, paddingHorizontal: SPACING.lg },
   status: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, textAlign: 'center' as const, paddingHorizontal: SPACING.lg },

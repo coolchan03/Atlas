@@ -33,4 +33,16 @@ describe('end of speech', () => {
     const out = feed(d, [...Array(4).fill(0.005), ...Array(60).fill(0.2)], 100);
     expect(out).toContain('end');
   });
+
+  it('still ends the turn when the person starts talking at once, before the room has been measured', () => {
+    const d = new EndOfSpeechDetector(0);
+    const out = feed(d, [...Array(3).fill(0.12), 0.004, ...Array(8).fill(0.12), ...Array(15).fill(0.004)], 100);
+    expect(out).toContain('end');
+  });
+
+  it('ends the turn in a room with a steady hum', () => {
+    const d = new EndOfSpeechDetector(0);
+    const out = feed(d, [...Array(4).fill(0.03), ...Array(8).fill(0.2), ...Array(15).fill(0.03)], 100);
+    expect(out).toContain('end');
+  });
 });

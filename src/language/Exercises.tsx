@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
@@ -91,11 +91,13 @@ function Typed({ attempt, onPick, placeholder }: { attempt: Attempt; onPick: (v:
   );
 }
 
-/** Say it out loud: the phone's own speech recognizer (offline when the language pack is installed) writes what it heard. */
+/** Say it out loud: Atlas's transcription model (Whisper) when a multilingual one is downloaded, else the phone's own speech recognizer, writes what it heard. */
 function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { kind: 'speak' }>; lang: string; attempt: Attempt; onPick: (v: string) => void; onSkip: () => void }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [listening, setListening] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const session = useRef<{ stop: () => void } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // No speech recognizer, or it failed (no microphone permission, language not installed): say it
   // aloud, compare with the voice, and mark it yourself.
@@ -103,15 +105,15 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
   const listen = async () => {
     setProblem(null); setListening(true);
     try {
-      const { systemSpeechStatus } = require('../services/systemSpeech');
-      if (!(await systemSpeechStatus()).available) { setSelfCheck('none'); return; }
-      const { listenWithSystemSpeech } = require('../services/systemSpeech');
-      const session = await listenWithSystemSpeech({ locale: lang, onPartial: onPick });
-      const heard: string = await session.result;
+      const { listenInLanguage } = require('./listenTurn');
+      const heardBy = await listenInLanguage(lang, { onPartial: onPick, onTranscribing: () => setWriting(true) });
+      if (!heardBy) { setSelfCheck('none'); return; }
+      session.current = heardBy;
+      const heard: string = await heardBy.result;
       if (heard) onPick(heard); else setProblem('Nothing heard. Tap the microphone and try again.');
     } catch (e: any) {
       if (e?.name !== 'SpeechCancelled') { setProblem(String(e?.message || e)); setSelfCheck('failed'); }
-    } finally { setListening(false); }
+    } finally { session.current = null; setListening(false); setWriting(false); }
   };
   return (
     <View>
@@ -121,8 +123,8 @@ function Speak({ ex, lang, attempt, onPick, onSkip }: { ex: Extract<Exercise, { 
         <View style={styles.sayText}><Tappable text={ex.item.t} style={styles.big} />{!!ex.item.r && <Text style={styles.roman}>{ex.item.r}</Text>}</View>
       </View>
       <Text style={styles.bodyText}>{ex.item.en}</Text>
-      <TouchableOpacity style={styles.speaker} onPress={listen} disabled={listening || attempt.checked} testID="lesson-speak"
-        accessibilityLabel={listening ? 'Listening' : 'Speak'}>
+      <TouchableOpacity style={styles.speaker} onPress={() => (listening ? session.current?.stop() : listen())} disabled={writing || attempt.checked} testID="lesson-speak"
+        accessibilityLabel={writing ? 'Writing down what you said' : listening ? 'Listening' : 'Speak'}>
         <Icon name={listening ? 'radio' : 'mic'} size={26} color={colors.background} />
       </TouchableOpacity>
       {!!attempt.value && !selfCheck && <Text style={styles.bodyText} testID="lesson-heard">Heard: {attempt.value}</Text>}

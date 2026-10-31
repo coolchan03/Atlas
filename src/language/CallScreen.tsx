@@ -18,7 +18,7 @@ const STATUS: Record<CallState['phase'], string> = {
   ringing: 'Ringing...',
   speaking: 'Talking... tap the microphone to interrupt',
   thinking: 'Thinking...',
-  listening: 'Listening... speak, then tap the square when you are done',
+  listening: 'Listening... talk, and it sends when you pause',
   transcribing: 'Writing down what you said...',
   idle: 'Tap the microphone to speak',
   ended: 'Call ended',
@@ -106,6 +106,39 @@ function Review({ state, onDone }: { state: CallState; onDone: () => void }) {
   );
 }
 
+/** The round buttons of a live call: captions, talk (it also sends by itself when you pause), a hint, and the big red End call. */
+function CallControls({ call, listening, captions }: { call: Call; listening: boolean; captions: boolean }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <>
+    <View style={styles.controls}>
+      <View style={styles.control}>
+        <TouchableOpacity style={styles.round} onPress={() => languageService.setCaptions(!captions)} testID="call-captions" accessibilityLabel={captions ? 'Captions on' : 'Captions off'}>
+          <Icon name={captions ? 'type' : 'eye-off'} size={24} color={captions ? colors.primary : colors.textMuted} />
+        </TouchableOpacity>
+        <Text style={styles.controlLabel}>Captions</Text>
+      </View>
+      <View style={styles.control}>
+        <TouchableOpacity style={[styles.talk, listening && styles.talkOn]} onPress={() => (listening ? call.doneTalking() : call.talk())}
+          testID="call-talk" accessibilityLabel={listening ? 'Done talking' : 'Talk'}>
+          <Icon name={listening ? 'square' : 'mic'} size={30} color={colors.background} />
+        </TouchableOpacity>
+        <Text style={styles.controlLabel}>{listening ? 'Pause to send' : 'Talk'}</Text>
+      </View>
+      <View style={styles.control}>
+        <TouchableOpacity style={styles.round} onPress={() => call.askHint()} testID="call-hint-button" accessibilityLabel="What do I say?"><Icon name="help-circle" size={24} color={colors.text} /></TouchableOpacity>
+        <Text style={styles.controlLabel}>What do I say?</Text>
+      </View>
+    </View>
+    <View style={styles.endRow}>
+      <TouchableOpacity style={[styles.round, styles.end, styles.endBig]} onPress={() => call.hangUp()} testID="call-end" accessibilityLabel="End call"><Icon name="phone-off" size={28} color={colors.background} /></TouchableOpacity>
+      <Text style={styles.controlLabel}>End call</Text>
+    </View>
+    </>
+  );
+}
+
 /**
  * A practice phone call in the language being learned: the AI plays a person in an everyday
  * situation and the learner talks to it. Opened from a board call square (with the scenario of the
@@ -155,9 +188,8 @@ export const CallScreen: React.FC = () => {
   const send = () => { call.say(typed); setTyped(''); };
   return (
     <SafeAreaView style={styles.container} testID="language-call">
-      {header}
       <View style={styles.callTop}>
-        <View style={[styles.avatar, live && styles.avatarLive]}><Icon name={scenario!.icon} size={36} color={colors.primary} /></View>
+        <View style={[styles.avatar, styles.avatarBig, live && styles.avatarLive]}><Icon name={scenario!.icon} size={48} color={colors.primary} /></View>
         <Text style={styles.callTitle} numberOfLines={2}>{scenario!.title}</Text>
         <Text style={styles.meta} testID="call-timer">{formatCallTime(elapsed)}</Text>
         <Text style={styles.status} testID="call-status">{state.note ?? STATUS[state.phase]}</Text>
@@ -177,20 +209,7 @@ export const CallScreen: React.FC = () => {
           <TouchableOpacity onPress={send} accessibilityLabel="Send" testID="call-send"><Icon name="send" size={22} color={colors.primary} /></TouchableOpacity>
         </View>
       )}
-      <View style={styles.controls}>
-        <View style={styles.control}>
-          <TouchableOpacity style={styles.round} onPress={() => call.askHint()} testID="call-hint-button" accessibilityLabel="What do I say?"><Icon name="help-circle" size={24} color={colors.text} /></TouchableOpacity>
-          <Text style={styles.controlLabel}>What do I say?</Text>
-        </View>
-        <TouchableOpacity style={[styles.talk, listening && styles.talkOn]} onPress={() => (listening ? call.doneTalking() : call.talk())}
-          testID="call-talk" accessibilityLabel={listening ? 'Done talking' : 'Talk'}>
-          <Icon name={listening ? 'square' : 'mic'} size={30} color={colors.background} />
-        </TouchableOpacity>
-        <View style={styles.control}>
-          <TouchableOpacity style={[styles.round, styles.end]} onPress={() => call.hangUp()} testID="call-end" accessibilityLabel="End call"><Icon name="phone-off" size={24} color={colors.background} /></TouchableOpacity>
-          <Text style={styles.controlLabel}>End call</Text>
-        </View>
-      </View>
+      <CallControls call={call} listening={listening} captions={captions} />
     </SafeAreaView>
   );
 };

@@ -31,14 +31,19 @@ export class EndOfSpeechDetector {
   push(rms: number, now: number): SpeechVerdict {
     if (this.decided) return 'none';
     this.levels++;
+    // The room's noise floor. The first samples seed it (the quietest one, so a person who starts talking at once
+    // does not become "the noise"); after that it follows the room down quickly and up slowly, on quiet samples only.
     if (this.samples < 4) {
-      this.floor = Math.max(0.003, (this.floor * this.samples + rms) / (this.samples + 1));
+      this.floor = this.samples === 0 ? Math.max(0.003, rms) : Math.max(0.003, Math.min(this.floor, rms));
       this.samples++;
       return 'none';
     }
-    if (rms > Math.max(0.02, Math.min(this.floor, 0.05) * 3)) {
+    const loud = rms > Math.max(0.02, Math.min(this.floor, 0.03) * 3);
+    if (loud) {
       if (!this.heardAt) this.heardAt = now;
       this.lastLoud = now;
+    } else {
+      this.floor = Math.max(0.003, rms < this.floor ? (this.floor + rms) / 2 : this.floor * 0.98 + rms * 0.02);
     }
     if ((this.heardAt && now - this.lastLoud > this.opts.silenceMs) || now - this.startedAt > this.opts.maxTurnMs) {
       this.decided = true;
