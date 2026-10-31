@@ -85,8 +85,17 @@ export function boardFor(level: LevelId): Space[] {
 /** A unit's items for one part: the first part teaches the first half (the easier items, as written), the second the rest with a short recap. */
 export function partItems(items: Item[], part: number, parts: number): Item[] {
   if (parts <= 1 || items.length < 6) return items;
-  const half = Math.ceil(items.length / 2);
-  return part === 1 ? items.slice(0, half) : [...items.slice(half), ...items.slice(0, 2)];
+  // Every sitting goes through all of the unit's example sentences; only the single words are shared out between sittings.
+  const isSentence = (x: Item) => x.t.trim().split(/\s+/).length >= 3;
+  const sentences = items.filter(isSentence);
+  const single = items.filter((x) => !isSentence(x));
+  if (single.length < 4) {
+    const half = Math.ceil(items.length / 2);
+    return part === 1 ? items.slice(0, half) : [...items.slice(half), ...items.slice(0, 2)];
+  }
+  const half = Math.ceil(single.length / 2);
+  const mine = part === 1 ? single.slice(0, half) : [...single.slice(half), ...single.slice(0, 2)];
+  return [...mine, ...sentences];
 }
 
 /** How many lessons are left before the next exam that is not done yet, counting the one you are on; null when none is ahead. */

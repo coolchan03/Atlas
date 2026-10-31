@@ -166,15 +166,23 @@ export function buildLesson(items: Item[], seed = Date.now(), opts: { length?: n
   const r = rng(seed);
   const all = shuffle(items, r);
   const plan = planKinds(length, opts);
-  const used = new Set<Item>();
+  const uses = new Map<Item, number>();
+  let last: Item | undefined;
+  // The least used item first, never the one just shown (unless it is the only choice), so a lesson goes through
+  // every sentence before any comes back and never repeats one twice in a row.
+  const pickFrom = (candidates: Item[]) => {
+    const pool = candidates.length > 1 ? candidates.filter((x) => x !== last) : candidates;
+    return pool.reduce((best, x) => ((uses.get(x) ?? 0) < (uses.get(best) ?? 0) ? x : best), pool[0]);
+  };
   // Keep one single word back for the letter scramble, so it is not used up first.
   const forScramble = plan.includes('scramble') ? all.find(isWord) : undefined;
   const out: Exercise[] = plan.map((kind) => {
-    const fresh = all.filter((x) => !used.has(x) && (kind === 'scramble' || x !== forScramble));
-    const pool = fresh.length ? fresh : all;
-    const item = (kind === 'scramble' && forScramble && !used.has(forScramble) && forScramble)
-      || (needsPhrase(kind) && pool.find((x) => words(x.t).length >= 3)) || pool[0];
-    used.add(item);
+    const spare = (x: Item) => x !== forScramble || uses.has(x);
+    const phrases = all.filter((x) => words(x.t).length >= 3);
+    const pool = needsPhrase(kind) && phrases.length ? phrases : all.filter((x) => kind === 'scramble' || spare(x));
+    const item = (kind === 'scramble' && forScramble && !uses.has(forScramble) && forScramble) || pickFrom(pool.length ? pool : all);
+    uses.set(item, (uses.get(item) ?? 0) + 1);
+    last = item;
     return exerciseFor(kind, item, { items, r, d });
   });
   out.splice(Math.min(4, out.length), 0, { kind: 'match', pairs: matchPairs(all) });

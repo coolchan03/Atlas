@@ -33,7 +33,7 @@ export function unitPrompt({ unit, language, level, code, known }: { unit: Unit;
   );
 }
 
-/** Vocabulary units: five everyday sentences that use the unit's words, so lessons are not the same few lines. */
+/** Vocabulary units: six everyday sentences that use the unit's words, so lessons are not the same few lines. */
 export function sentencesPrompt({ language, level, code, words }: { language: string; level: LevelGuide; code: string; words: Item[] }): Msg[] {
   return msgs(
     `You are an experienced ${language} teacher. ${methodFor(level, language)}`,
@@ -42,12 +42,12 @@ export function sentencesPrompt({ language, level, code, words }: { language: st
 }
 
 /** Example sentences per vocabulary unit. */
-export const SENTENCES = 5;
+export const SENTENCES = 6;
 
-/** Sentences written for a vocabulary unit: at least three usable ones, or null. */
+/** Sentences written for a vocabulary unit: at least four usable ones, or null. */
 export function parseSentences(raw: string, level: LevelGuide, code: string): Item[] | null {
   const items = parseItems(raw, level, code).filter((x) => x.t.split(/\s+/).length >= 3);
-  return items.length >= 3 ? items.slice(0, SENTENCES) : null;
+  return items.length >= 4 ? items.slice(0, SENTENCES) : null;
 }
 
 function parseItems(raw: string, level: LevelGuide, code: string): Item[] {

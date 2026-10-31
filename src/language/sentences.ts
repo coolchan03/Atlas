@@ -1,5 +1,5 @@
 /**
- * Example sentences for vocabulary units: five everyday sentences that use the unit's words,
+ * Example sentences for vocabulary units: six everyday sentences that use the unit's words,
  * so a lesson is not the same few lines every time.
  */
 import { PHRASE_LANGUAGES } from '../phrases/data';
@@ -13,7 +13,7 @@ const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)
 
 const sentenceCount = (items: Item[]) => items.filter((x) => x.t.trim().split(/\s+/).length >= 3).length;
 
-/** Five everyday sentences using a vocabulary unit's words (none if the model cannot write them). */
+/** Six everyday sentences using a vocabulary unit's words (none if the model cannot write them). */
 export async function writeSentences(llm: any, o: { words: Item[]; level: LevelGuide; name: string; code: string }): Promise<Item[]> {
   try {
     const raw = await llm.generateResponse(sentencesPrompt({ language: o.name, level: o.level, code: o.code, words: o.words }), { disableThinking: true });
