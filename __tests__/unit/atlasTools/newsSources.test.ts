@@ -126,3 +126,21 @@ describe('topics to avoid', () => {
     expect(avoided(h('Family recipes for the holidays'), ['royal family'])).toBe(false);
   });
 });
+
+describe('avoiding sports', () => {
+  const h = (title: string, desc = '') => ({ title, desc });
+  it('drops headlines about games that never say "sports"', () => {
+    for (const t of ['Chiefs beat Bills 27-20 in overtime', 'Lakers rally past Celtics', 'Yankees vs Red Sox: what to watch', 'City edge Arsenal 2-1', 'Quarterback signs three-year deal']) {
+      expect(avoided(h(t), ['sports'])).toBe(true);
+    }
+  });
+  it('understands "sports news" or "all sports" as sports', () => {
+    expect(avoided(h('Chiefs beat Bills 27-20'), ['sports news'])).toBe(true);
+    expect(avoided(h('Chiefs beat Bills 27-20'), ['All sports'])).toBe(true);
+  });
+  it('keeps ordinary stories', () => {
+    expect(avoided(h('Heat wave grips the Midwest as temperatures hit 100'), ['sports'])).toBe(false);
+    expect(avoided(h('Company beats earnings expectations'), ['sports'])).toBe(false);
+    expect(avoided(h('Scientists find water on Mars'), ['sports'])).toBe(false);
+  });
+});

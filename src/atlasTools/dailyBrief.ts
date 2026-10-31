@@ -211,7 +211,10 @@ async function gatherStories(o: { interests: string[]; minutes: number; deep: bo
 /** Builds today's briefing from real, current stories and saves it. */
 export async function makeBriefing(onStep: (m: string) => void, voicesAvailable: number): Promise<StudyResult> {
   const p = useBriefPrefs.getState();
-  const interests = p.interests.length ? p.interests : ['world news'];
+  const avoidList = p.avoid ?? [];
+  // An interest that is itself something to avoid is left out.
+  const wanted = p.interests.filter((i) => !avoided({ title: i, desc: '' }, avoidList));
+  const interests = wanted.length ? wanted : ['world news'];
   let offline = false;
   try { offline = require('./offGrid').offGridOn(); } catch { /* ignore */ }
 
@@ -232,7 +235,8 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   }
 
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const rules = avoid.length ? `Never bring up: ${avoid.join(', ')}.` : undefined;
+  const noWelcome = 'Do not say "welcome to the daily briefing" or name the show. Open with one short greeting and today\'s date, then go straight into the first story, and move between stories with a few words.';
+  const rules = [avoid.length ? `Never bring up: ${avoid.join(', ')}.` : '', gotNews ? noWelcome : ''].filter(Boolean).join(' ') || undefined;
   const withExperts = p.experts && gotNews && voicesAvailable >= 2;
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,

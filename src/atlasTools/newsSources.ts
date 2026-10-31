@@ -103,8 +103,13 @@ export const spokenMinutes = (texts: string[]) =>
   texts.reduce((n, t) => n + t.split(/\s+/).filter(Boolean).length, 0) / WORDS_PER_MINUTE;
 
 const SPORTS = /\b(nfl|nba|wnba|mlb|nhl|mls|ncaa|big ten|espn|playoffs?|postseason|preseason|quarterback|touchdown|field goal|home runs?|innings?|world series|super bowl|stanley cup|grand slam|wimbledon|premier league|champions league|la liga|serie a|bundesliga|coach(es|ing)?|draft picks?|halftime|game \d|series opener|season opener|regular season|transfer window|formula 1|f1|nascar|ufc|boxing|wrestling|olympics?|world cup|golf|pga|tennis|soccer|football|baseball|basketball|hockey|volleyball|softball|athletes?|pitcher|striker|linebacker|goalkeeper|rookie|roster|mvp|all-star|free agen(t|cy)|trade deadline|tournament|championships?|semifinals?|quarterfinals?|varsity|scoreboard|box score|standings|league)\b/i;
+
+/** Team nicknames and scorelines: most sports headlines ("Chiefs beat Bills 27-20") never use a sports word. */
+const TEAMS = /\b(chiefs|bills|bengals|ravens|browns|steelers|texans|colts|jaguars|broncos|raiders|chargers|dolphins|patriots|cowboys|commanders|packers|bears|lions|vikings|falcons|buccaneers|49ers|niners|seahawks|rams|cardinals|lakers|celtics|warriors|knicks|sixers|76ers|bucks|cavaliers|cavs|pistons|pacers|hornets|raptors|wizards|nuggets|timberwolves|blazers|clippers|mavericks|mavs|grizzlies|pelicans|yankees|red sox|dodgers|cubs|white sox|astros|braves|mets|phillies|padres|brewers|pirates|orioles|blue jays|guardians|tigers|royals|mariners|nationals|marlins|rockies|diamondbacks|bruins|canadiens|maple leafs|blackhawks|penguins|flyers|oilers|canucks|avalanche|panthers|golden knights|red wings|manchester united|man city|liverpool|arsenal|chelsea|tottenham|barcelona|real madrid|juventus|bayern|psg|inter miami)\b/i;
+const SCORELINE = /\b\d{1,3}\s?[-–]\s?\d{1,3}\b.*\b(win|wins|beat|beats|defeat|defeats|rout|routs|edge|edges|top|tops|lose|loses|lost|rally|rallies|upset|upsets)\b|\b(win|wins|beat|beats|defeat|defeats|rout|routs|edge|edges|tops?|lose|loses|lost|rally|rallies|upset|upsets)\b.*\b\d{1,3}\s?[-–]\s?\d{1,3}\b/i;
+const isSportsText = (t: string) => SPORTS.test(t) || SCORELINE.test(t) || (TEAMS.test(t) && /\b(game|win|wins|beat|beats|loss|lose|season|team|play|plays|score|scores|trade|signs?|injur\w+|coach|playoffs?|rally|rallies|defeat\w*|edge|edges|vs|versus)\b/i.test(t));
 const ENTERTAINMENT = /\b(box office|celebrit(y|ies)|album|grammys?|oscars?|emmys?|netflix|trailer|red carpet|reality tv|kardashians?|taylor swift|concert tour|movie review|tv series|streaming hit)\b/i;
-const CATEGORY: Record<'SPORTS' | 'ENTERTAINMENT', RegExp> = { SPORTS, ENTERTAINMENT };
+const CATEGORY: Record<'SPORTS' | 'ENTERTAINMENT', { test: (t: string) => boolean }> = { SPORTS: { test: isSportsText }, ENTERTAINMENT };
 const POLITICS = /\b(congress|senate|senators?|house (republicans|democrats)|democrats?|republicans?|gop|white house|election|midterms?|campaign trail|governors?|legislat(ure|ion|ors?)|supreme court|impeach\w*|lawmakers?|partisan|ballots?|primary (election|race)|prime minister|parliament)\b/i;
 const CRIME = /\b(murder(ed|s)?|shooting|shot dead|stabb(ed|ing)|arrest(ed|s)?|homicide|robbery|kidnapp\w*|manslaughter|police say|suspects?|sentenced|convicted|indicted|manhunt|carjacking|assault(ed)?)\b/i;
 
@@ -113,10 +118,10 @@ const CRIME = /\b(murder(ed|s)?|shooting|shot dead|stabb(ed|ing)|arrest(ed|s)?|h
  * about the Bears never contains the word "sports", so avoiding "sports" must look for what sports stories are about.
  */
 const AVOID_KINDS: { label: string; topic: RegExp; content: RegExp }[] = [
-  { label: 'Sports', topic: /^(sports?|athletics|games?)$/, content: SPORTS },
-  { label: 'Celebrity gossip', topic: /^(celebrity( gossip)?|celebrities|gossip|entertainment|showbiz|hollywood)$/, content: ENTERTAINMENT },
-  { label: 'Politics', topic: /^(politics?|political news)$/, content: POLITICS },
-  { label: 'Crime', topic: /^(crime|true crime|crime news)$/, content: CRIME },
+  { label: 'Sports', topic: /\b(sports?|sporting|athletics?)\b/, content: { test: isSportsText } as unknown as RegExp },
+  { label: 'Celebrity gossip', topic: /\b(celebrit\w*|gossip|entertainment|showbiz|hollywood)\b/, content: ENTERTAINMENT },
+  { label: 'Politics', topic: /\b(politics?|political)\b/, content: POLITICS },
+  { label: 'Crime', topic: /\bcrimes?\b/, content: CRIME },
 ];
 /** Topics offered as one-tap suggestions on the briefing screen. */
 export const AVOID_SUGGESTIONS = AVOID_KINDS.map((k) => k.label);

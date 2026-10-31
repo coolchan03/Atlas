@@ -96,6 +96,23 @@ function decode(path: string): Promise<any> {
   return d;
 }
 
+/**
+ * Where the speech starts and ends in a rendered line: voices leave a quarter second or more of silence at the start and
+ * end of every file, which made a gap between each line. Returns seconds (offset, and how long to play).
+ */
+export function speechSpan(samples: ArrayLike<number>, sampleRate: number): { offset: number; duration: number } {
+  const total = samples.length / sampleRate;
+  const quiet = 0.01;
+  let first = 0;
+  while (first < samples.length && Math.abs(samples[first]) < quiet) first++;
+  let last = samples.length - 1;
+  while (last > first && Math.abs(samples[last]) < quiet) last--;
+  if (first >= last) return { offset: 0, duration: total };
+  const offset = Math.max(0, first / sampleRate - 0.03);
+  const end = Math.min(total, last / sampleRate + 0.08);
+  return { offset, duration: Math.max(0.05, end - offset) };
+}
+
 /** 'ended' (played through), 'stopped' (the listener stopped it) or 'failed' (the file could not be played). */
 type PlayResult = 'ended' | 'stopped' | 'failed';
 
@@ -112,7 +129,9 @@ function playFile(path: string): Promise<PlayResult> {
       node.connect(audioContext().destination);
       node.onEnded = () => { if (source === node) source = null; resolve(token === stopToken ? 'ended' : 'stopped'); };
       source = node;
-      node.start();
+      let span = { offset: 0, duration: buffer.duration as number };
+      try { span = speechSpan(buffer.getChannelData(0), buffer.sampleRate); } catch { /* play the whole file */ }
+      node.start(0, span.offset, span.duration);
     })().catch((e) => { logger.warn(`[POD] playback failed: ${e?.message ?? e}`); resolve('failed'); });
   });
 }
