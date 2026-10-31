@@ -8,8 +8,11 @@ import logger from '../utils/logger';
  */
 export async function ensureTextModel(modelId?: string | null, onStatus?: (s: string) => void): Promise<void> {
   const st = useAppStore.getState();
-  const target = modelId || st.activeModelId;
-  if (!target) throw new Error('No model selected. Load a text model first (Models tab).');
+  // The chosen model, else the one used last, else the first downloaded: a course or study screen should not
+  // fail just because no model is selected right now.
+  const lastUsed = st.downloadedModels.some((m) => m.id === st.lastTextModelId) ? st.lastTextModelId : null;
+  const target = modelId || st.activeModelId || lastUsed || st.downloadedModels[0]?.id;
+  if (!target) throw new Error('No model downloaded. Download a text model first (Models tab).');
   const { llmService } = require('../services/llm');
   if (st.loadedTextModelId === target && llmService.isModelLoaded()) return;
   const exists = st.downloadedModels.some((m) => m.id === target);

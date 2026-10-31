@@ -338,7 +338,9 @@ export const languageService = {
       }
       usePrepareLive.setState({ level: null, step: '', error: failed ? `${failed} could not be written; they are written when opened.` : null });
     } catch (e: any) {
-      usePrepareLive.setState({ level: null, step: '', error: String(e?.message || e) });
+      const reason = String(e?.message || e);
+      usePrepareLive.setState({ level: null, step: '', error: /model/i.test(reason)
+        ? `Atlas needs a text model to write lessons: ${reason} Open Models, pick one, then tap Prepare again.` : reason });
     } finally { preparing = null; }
   },
 
