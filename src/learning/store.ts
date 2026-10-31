@@ -70,11 +70,13 @@ export interface PerAgent {
   sessionLessons: string;
   /** Last manager verdict: on track or drifting. */
   onTrack: boolean | null;
+  /** Lessons kept when learning without an agent (an agent keeps its own). */
+  lessons: string;
 }
 
 export const blankState = (): PerAgent => ({
   round: 0, bank: [], pendingReports: [], reportsSinceJudge: 0, judgesSinceManager: 0, totalReports: 0,
-  direction: '', judgeNote: '', pendingFindings: [], scores: [], notes: [], sessionLessons: '', onTrack: null,
+  direction: '', judgeNote: '', pendingFindings: [], scores: [], notes: [], sessionLessons: '', onTrack: null, lessons: '',
 });
 
 export const defaultLearnConfig = (): LearnConfig => ({

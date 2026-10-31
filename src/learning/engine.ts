@@ -23,7 +23,8 @@ import { llmService } from '../services/llm';
 import { activeModelService } from '../services/activeModelService';
 import { ragService } from '../services/rag';
 import { useAppStore } from '../stores/appStore';
-import { useAgentStore, Agent, agentPromptWithLessons } from '../stores/agentStore';
+import { Agent, agentPromptWithLessons } from '../stores/agentStore';
+import { learningAgent, setLessons } from './agents';
 import { useLearningStore, newItem, BankItem, LearnConfig, PerAgent } from './store';
 import type { Message } from '../types';
 import logger from '../utils/logger';
@@ -336,7 +337,7 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
   const lessons = tagged(out, 'LESSON').slice(0, 12);
   if (lessons.length) {
     const text = lessons.map((l) => `- ${l}`).join('\n');
-    if (cfg.mode === 'keep') useAgentStore.getState().updateAgent(agent.id, { lessons: text });
+    if (cfg.mode === 'keep') setLessons(agent.id, text);
     else L().patch(agent.id, { sessionLessons: text });
   }
   L().log({
@@ -359,7 +360,7 @@ export async function startLearning(agentId: string): Promise<void> {
   let workedThisRun = false;
   try {
     while (!stopRequested) {
-      const agent = useAgentStore.getState().getAgent(agentId);
+      const agent = learningAgent(agentId);
       const cfg = L().getConfig(agentId);
       roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
       if (!agent) throw new Error('Agent not found');
@@ -385,9 +386,9 @@ export async function startLearning(agentId: string): Promise<void> {
         const st2 = L().get(agentId);
         const noMoreQuestions = !st2.bank.some((b) => b.status === 'approved' && !st2.pendingReports.some((p) => p.itemId === b.id));
         if (st2.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) || noMoreQuestions) {
-          await judgeReports(useAgentStore.getState().getAgent(agentId)!, cfg);
+          await judgeReports(learningAgent(agentId)!, cfg);
           if (L().get(agentId).judgesSinceManager >= Math.max(1, cfg.judgesPerManager) && !stopRequested) {
-            await managerReview(useAgentStore.getState().getAgent(agentId)!, cfg);
+            await managerReview(learningAgent(agentId)!, cfg);
           }
         }
         problems = 0;
@@ -424,7 +425,7 @@ export function stopLearning(): void {
 
 /** Run the manager now. */
 export async function auditNow(agentId: string): Promise<void> {
-  const agent = useAgentStore.getState().getAgent(agentId);
+  const agent = learningAgent(agentId);
   const cfg = L().getConfig(agentId);
   if (!agent || running) return;
   running = true;
@@ -435,13 +436,13 @@ export async function auditNow(agentId: string): Promise<void> {
 
 /** Session mode: give the session's lessons and judge-approved answers to the agent. */
 export async function keepSession(agentId: string): Promise<string> {
-  const agent = useAgentStore.getState().getAgent(agentId);
+  const agent = learningAgent(agentId);
   const cfg = L().getConfig(agentId);
   const st = L().get(agentId);
   if (!agent) return 'Agent not found';
   const merged = [agent.lessons?.trim(), st.sessionLessons.trim()].filter(Boolean).join('\n');
   const lines = [...new Set(merged.split('\n').map((l) => l.trim()).filter(Boolean))].slice(-16);
-  useAgentStore.getState().updateAgent(agentId, { lessons: lines.join('\n') });
+  setLessons(agentId, lines.join('\n'));
   let saved = 0;
   if (cfg.projectId) {
     for (const n of st.notes.slice(0, 60)) { await saveNote(agent, { ...cfg, mode: 'keep' }, n.q, n.answer); saved++; }

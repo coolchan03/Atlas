@@ -7,6 +7,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
+import { NO_AGENT, isNoAgent, setLessons } from '../learning/agents';
 import { useProjectStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
@@ -40,7 +41,7 @@ export const LearningScreen: React.FC = () => {
   const wide = width >= 900; // tablets / unfolded screens: settings and feed side by side
 
   const agents = useAgentStore((s) => s.agents);
-  const [agentId, setAgentId] = useState<string>(route.params?.agentId || useAgentStore.getState().activeAgentId || agents[0]?.id);
+  const [agentId, setAgentId] = useState<string>(route.params?.agentId || useAgentStore.getState().activeAgentId || agents[0]?.id || NO_AGENT);
   const agent = agents.find((a) => a.id === agentId);
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
@@ -49,7 +50,6 @@ export const LearningScreen: React.FC = () => {
   const st = useLearningStore((s) => s.state[agentId]);
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
   const clearAgent = useLearningStore((s) => s.clearAgent);
-  const updateAgent = useAgentStore((s) => s.updateAgent);
   const [running, setRunning] = useState(isLearning());
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
   const [open, setOpen] = useState<string | null>(null);
@@ -77,6 +77,9 @@ export const LearningScreen: React.FC = () => {
     <View>
       <Text style={styles.label}>Agent</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <TouchableOpacity disabled={running} onPress={() => setAgentId(NO_AGENT)} style={[styles.chip, isNoAgent(agentId) && styles.chipOn]} testID="learning-no-agent">
+          <Text style={[styles.chipText, isNoAgent(agentId) && styles.chipTextOn]}>No agent</Text>
+        </TouchableOpacity>
         {agents.map((a) => (
           <TouchableOpacity key={a.id} disabled={running} onPress={() => setAgentId(a.id)} style={[styles.chip, a.id === agentId && styles.chipOn]}>
             <Text style={[styles.chipText, a.id === agentId && styles.chipTextOn]}>{a.name}</Text>
@@ -213,19 +216,19 @@ export const LearningScreen: React.FC = () => {
         </View>
       )}
 
-      <Text style={styles.label}>Lessons this agent uses in every chat</Text>
+      <Text style={styles.label}>{isNoAgent(agentId) ? 'Lessons learned (kept here; copy them wherever you want)' : 'Lessons this agent uses in every chat'}</Text>
       <TextInput
         style={[styles.input, styles.lessons]}
-        value={agent?.lessons || ''}
+        value={(isNoAgent(agentId) ? st?.lessons : agent?.lessons) || ''}
         editable={!running}
-        onChangeText={(t) => updateAgent(agentId, { lessons: t })}
+        onChangeText={(t) => setLessons(agentId, t)}
         placeholder="None yet. The manager writes these after auditing the judge. You can edit them."
         placeholderTextColor={colors.textMuted}
         multiline
         textAlignVertical="top"
       />
-      <TouchableOpacity disabled={running} onPress={() => { clearAgent(agentId); updateAgent(agentId, { lessons: '' }); }} style={styles.resetBtn}>
-        <Text style={styles.resetText}>Reset lessons and history for this agent</Text>
+      <TouchableOpacity disabled={running} onPress={() => { clearAgent(agentId); setLessons(agentId, ''); }} style={styles.resetBtn}>
+        <Text style={styles.resetText}>Reset lessons and history</Text>
       </TouchableOpacity>
       <Text style={styles.note}>
         Keep the app open while it learns (the screen stays on). Plugging in is a good idea. The model itself does not
