@@ -84,6 +84,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return DT.calendarEvents(Math.max(1, parseInt(String(call.arguments?.days_ahead ?? 7), 10) || 7), Math.max(0, parseInt(String(call.arguments?.days_back ?? 0), 10) || 0));
     case 'add_calendar_event':
       return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), call.arguments?.end, call.arguments?.location ?? '');
+    case 'draft_message': {
+      const body = requireString(call, 'body');
+      if (!body) throw new Error('Missing required parameter: body');
+      return DT.draftMessage(String(call.arguments?.kind ?? 'text'), body, String(call.arguments?.to ?? ''), String(call.arguments?.subject ?? ''));
+    }
     case 'my_location': {
       const M = require('../../atlasMaps/maps');
       let fix = M.useMaps.getState().lastFix;
@@ -96,7 +101,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const places = M.useMaps.getState().waypoints;
       if (!fix) return `No GPS position yet. Ask the user to open the Maps screen (Home > Maps) and allow location; GPS works without internet.${places.length ? ` Saved places: ${places.map((w: any) => `${w.name} (${M.fmtCoord(w.lat, w.lon)})`).join('; ')}` : ''}`;
       const age = Math.round((Date.now() - fix.time) / 60000);
-      const lines = [`Position: ${M.fmtCoord(fix.lat, fix.lon)} (decimal ${fix.lat.toFixed(6)}, ${fix.lon.toFixed(6)}), accuracy about ${M.fmtDistance(fix.accuracy, imperial)}, ${age <= 1 ? 'just now' : `${age} minutes ago`}.`];
+      const lines = ['Only coordinates and the saved places below are known. Atlas has no list of what is nearby, so do not name airports, towns, roads or landmarks; say "I only have your coordinates" if asked what is near.', `Position: ${M.fmtCoord(fix.lat, fix.lon)} (decimal ${fix.lat.toFixed(6)}, ${fix.lon.toFixed(6)}), accuracy about ${M.fmtDistance(fix.accuracy, imperial)}, ${age <= 1 ? 'just now' : `${age} minutes ago`}.`];
       if (fix.altitude > -99999) lines.push(`Altitude: ${imperial ? `${Math.round(fix.altitude * 3.28084)} ft` : `${Math.round(fix.altitude)} m`}.`);
       for (const w of places.slice(0, 20)) {
         const b = M.bearingDeg(fix, w);

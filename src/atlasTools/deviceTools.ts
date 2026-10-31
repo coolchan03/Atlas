@@ -151,6 +151,26 @@ export async function addCalendarEvent(title: string, start: string, end?: strin
   return 'Opened the calendar with the event filled in. The user confirms and saves it there.';
 }
 
+/** The link that opens the phone's Messages or Email app with a draft filled in (nothing is sent from here). */
+export function messageUrl(kind: 'text' | 'email', body: string, to = '', subject = ''): string {
+  const recipient = to.replace(/[^\w@+.,;-]/g, '');
+  if (kind === 'text') return `sms:${recipient}?body=${encodeURIComponent(body)}`;
+  return `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/** Opens Messages or Email with the draft ready; the user reads it and presses send themselves. */
+export async function draftMessage(kind: string, body: string, to = '', subject = ''): Promise<string> {
+  const which = kind === 'email' ? 'email' : 'text';
+  if (!body.trim()) return 'The draft has no text. Write the message first.';
+  const { Linking } = require('react-native');
+  try {
+    await Linking.openURL(messageUrl(which, body, to, subject));
+  } catch {
+    return `This phone could not open ${which === 'email' ? 'an email app' : 'a messaging app'}.`;
+  }
+  return `Opened ${which === 'email' ? 'the email app' : 'Messages'} with the draft filled in. Nothing is sent until the user presses send there.`;
+}
+
 /** Agent memory: facts the user wants the active agent to remember (stored on the phone). */
 export async function rememberFact(fact: string): Promise<string> {
   const { useAgentStore } = require('../stores/agentStore');

@@ -37,6 +37,7 @@ const TOOL_CHOICES: { id: string; label: string }[] = [
   { id: 'open_file', label: 'Open files in other apps' },
   { id: 'calendar_events', label: 'Read calendar' },
   { id: 'add_calendar_event', label: 'Add calendar events' },
+  { id: 'draft_message', label: 'Draft texts and emails' },
   { id: 'remember', label: 'Remember things you tell it' },
   { id: 'my_location', label: 'My location (GPS) and saved places' },
   { id: 'calculator', label: 'Calculator' },

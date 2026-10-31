@@ -151,8 +151,18 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'draft_message', name: 'draft_message', displayName: 'Draft text or email',
+    description: 'Open the Messages or Email app with a message already written, for the user to read and send themselves. Nothing is sent by Atlas. Use when the user asks to text or email someone.', icon: 'send',
+    parameters: {
+      kind: { type: 'string', description: 'text or email', enum: ['text', 'email'], required: true },
+      body: { type: 'string', description: 'The message', required: true },
+      to: { type: 'string', description: 'Phone number or email address (optional)' },
+      subject: { type: 'string', description: 'Email subject (optional)' },
+    },
+  },
+  {
     id: 'my_location', name: 'my_location', displayName: 'My location',
-    description: "The user's GPS position (works offline) and the distance and direction to their saved places (camp, car, water...). Use for 'where am I', 'how far to camp', 'which way is the car'.", icon: 'map-pin',
+    description: "The user's GPS position (works offline) and the distance and direction to their saved places (camp, car, water...). Use for 'where am I', 'how far to camp', 'which way is the car'. It gives coordinates only: it does not know what is nearby, so never name airports, towns or landmarks from it.", icon: 'map-pin',
     parameters: {},
   },
   {
