@@ -5,7 +5,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
-import { speakIn } from '../atlasVoice/tts';
 import { formatCallTime } from '../atlasVoice/AudioInput';
 import { LANGUAGES, languageService } from './languageService';
 import { useLanguage } from './store';
@@ -13,6 +12,7 @@ import { SCENARIOS, customScenario, type Scenario, type Turn } from './phoneCall
 import { createCall, type Call, type CallState } from './callService';
 import { createStyles } from './CallScreen.styles';
 import { Tappable } from './Tappable';
+import { speakVaried } from './voices';
 
 const STATUS: Record<CallState['phase'], string> = {
   ringing: 'Ringing...',
@@ -49,7 +49,7 @@ function HintBox({ hint, code }: { hint: { say: string; en: string }; code: stri
     <View style={styles.hint} testID="call-hint">
       <Text style={styles.prompt}>You could say</Text>
       <View style={styles.sayRow}>
-        <TouchableOpacity onPress={() => speakIn(hint.say, code, 'call-hint')} accessibilityLabel="Hear the hint"><Icon name="volume-2" size={22} color={colors.primary} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => speakVaried(hint.say, code, 'call-hint')} accessibilityLabel="Hear the hint"><Icon name="volume-2" size={22} color={colors.primary} /></TouchableOpacity>
         <View style={styles.sayText}><Tappable text={hint.say} style={styles.bubbleText as any} /></View>
       </View>
       {!!hint.en && <Text style={styles.meta}>{hint.en}</Text>}

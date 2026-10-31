@@ -120,9 +120,10 @@ const adjusted = (messageId: string, rate: number) => (rateAdjuster ? rateAdjust
 /** Speak in another language (BCP-47 like 'es-ES'). Calls onNoLanguage if the phone lacks that voice. */
 let noLangHandler: ((lang: string) => void) | null = null;
 export function onMissingLanguage(fn: ((lang: string) => void) | null): void { noLangHandler = fn; }
-export function speakIn(text: string, lang: string, messageId = 'phrase'): void {
+export function speakIn(text: string, lang: string, messageId = 'phrase', voice = ''): void {
   if (!ttsAvailable() || !text.trim()) return;
   ensureListeners();
+  Native.setVoice?.(voice).catch(() => undefined);
   const key = `${messageId}~${++counter}`;
   const s = useAtlasVoiceStore.getState();
   s.setSpeaking(key, messageId);
@@ -140,8 +141,8 @@ export function speakAndWait(text: string, pitch = 1.0, messageId = 'podcast', v
 }
 
 /** Speak in a language (e.g. "es-ES") and wait until finished (false if stopped). */
-export function speakInAndWait(text: string, lang: string, messageId = 'lesson'): Promise<boolean> {
-  return speakWait({ text, pitch: 1.0, messageId, voice: '', lang });
+export function speakInAndWait(text: string, lang: string, messageId = 'lesson', voice = ''): Promise<boolean> {
+  return speakWait({ text, pitch: 1.0, messageId, voice, lang });
 }
 
 function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitch: number; messageId: string; voice: string; lang: string }): Promise<boolean> {

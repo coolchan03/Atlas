@@ -3,10 +3,10 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { Choice } from '../components/games/kit';
-import { speakIn } from '../atlasVoice/tts';
 import { rng, type Exercise, type Item } from './lessons';
 import { createStyles } from './LessonScreen.styles';
 import { Tappable } from './Tappable';
+import { speakVaried } from './voices';
 
 /** What the learner has picked so far, and whether the answer was checked. */
 export interface Attempt { value: string; checked: boolean }
@@ -14,9 +14,9 @@ export interface Attempt { value: string; checked: boolean }
 function Say({ item, lang, autoPlay }: { item: Item; lang: string; autoPlay?: boolean }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  React.useEffect(() => { if (autoPlay) speakIn(item.t, lang, 'lesson'); }, [item.t]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (autoPlay) speakVaried(item.t, lang, 'lesson'); }, [item.t]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <TouchableOpacity style={styles.speaker} onPress={() => speakIn(item.t, lang, 'lesson')} accessibilityLabel="Play the word">
+    <TouchableOpacity style={styles.speaker} onPress={() => speakVaried(item.t, lang, 'lesson')} accessibilityLabel="Play the word">
       <Icon name="volume-2" size={26} color={colors.background} />
     </TouchableOpacity>
   );

@@ -58,6 +58,12 @@ it('has over a hundred pre-made pieces, with a dozen written out in Spanish that
   const screen = render(<ListeningScreen />);
   fireEvent.press(screen.getByTestId('piece-holidays'));
   expect(await screen.findByText('Las últimas vacaciones')).toBeTruthy();
+  // A podcast is for listening: it plays by itself and keeps the text hidden until asked for.
+  const firstLine: string = WRITTEN_ES.holidays.parts[0].lines[0].t;
+  expect(screen.getByTestId('listening-audio-only')).toBeTruthy();
+  expect(screen.queryByText(new RegExp(firstLine.split(' ')[0]))).toBeNull();
+  fireEvent.press(screen.getByTestId('listening-show-text'));
+  expect(screen.queryByTestId('listening-audio-only')).toBeNull();
 });
 
 it('offers made-up, historical and real news among the podcasts', () => {

@@ -17,8 +17,8 @@ import { unitsForLevel } from './curriculum';
 import { useLanguage, usePrepareLive } from './store';
 import { Board } from './Board';
 import { createStyles } from './LanguageScreen.styles';
-import { speakIn } from '../atlasVoice/tts';
 import { pieceById } from './library';
+import { speakVaried } from './voices';
 
 /**
  * Learn a language: four levels (Basic, Intermediate, Advanced, Fluent), each a board game.
@@ -212,7 +212,7 @@ function WordOfTheDay() {
   const saved = (useLanguage.getState().myWords[code] ?? []).some((w) => w.t === word.t);
   return (
     <View style={styles.wordDay} testID="language-word-of-day">
-      <TouchableOpacity onPress={() => speakIn(word.t, code, 'lesson')} accessibilityLabel={`Play ${word.t}`} style={styles.wordDayMain}>
+      <TouchableOpacity onPress={() => speakVaried(word.t, code, 'lesson')} accessibilityLabel={`Play ${word.t}`} style={styles.wordDayMain}>
         <Icon name="volume-2" size={18} color={colors.primary} />
         <View style={styles.wordDayText}>
           <Text style={styles.progressText}>Word of the day</Text>

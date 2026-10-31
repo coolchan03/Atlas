@@ -7,7 +7,6 @@ import { useTheme, useThemedStyles } from '../theme';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Choice } from '../components/games/kit';
-import { speakInAndWait, stop } from '../atlasVoice/tts';
 import { LANGUAGES, MY_WORDS, languageService } from './languageService';
 import { useLanguage } from './store';
 import type { Listening } from './listening';
@@ -15,6 +14,7 @@ import { createStyles } from './ListeningScreen.styles';
 import { ListeningLibrary } from './ListeningLibrary';
 import { pieceForSpace } from './library';
 import { Tappable } from './Tappable';
+import { useListeningAudio } from './useListeningAudio';
 import type { LevelId } from './teaching';
 
 /**
@@ -38,8 +38,6 @@ export const ListeningScreen: React.FC = () => {
   const [part, setPart] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [english, setEnglish] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  useEffect(() => () => stop(), []);
 
   const load = (job: (onStep: (m: string) => void) => Promise<Listening>) => {
     setError(null); setStep('Starting...');
@@ -53,13 +51,10 @@ export const ListeningScreen: React.FC = () => {
   const done = !!piece && part >= piece.parts.length;
   // Reaching the end of a board square's piece moves the token on.
   useEffect(() => { if (done && space) languageService.completeSpace(space); }, [done, space]);
-  const play = async () => {
-    if (!piece) return;
-    if (playing) { stop(); setPlaying(false); return; }
-    setPlaying(true);
-    for (const l of piece.parts[part].lines) { if (!(await speakInAndWait(l.t, code, 'listening'))) break; }
-    setPlaying(false);
-  };
+  const podcast = kind === 'podcast';
+  // A podcast is for listening: each part plays by itself, and the text stays hidden until asked for.
+  const [showText, setShowText] = useState(!podcast);
+  const { playing, toggle: play, halt } = useListeningAudio({ piece, code, part, done, autoPlay: podcast });
 
   const header = (
     <View style={styles.header}>
@@ -90,35 +85,14 @@ export const ListeningScreen: React.FC = () => {
     );
   }
 
-  const cur = piece.parts[Math.min(part, piece.parts.length - 1)];
-  const answered = !cur.question || picked !== null;
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {header}
       <ScrollView contentContainerStyle={styles.content}>
         {!done ? (
-          <Card title={`Part ${part + 1} of ${piece.parts.length}`} testID="listening-part"
-            headerRight={<TouchableOpacity onPress={play} accessibilityLabel={playing ? 'Stop' : 'Play'}><Icon name={playing ? 'square' : 'volume-2'} size={22} color={colors.primary} /></TouchableOpacity>}>
-            {cur.lines.map((l, i) => (
-              <View key={i} style={styles.line}>
-                {!!l.speaker && <Text style={styles.speaker}>{l.speaker}</Text>}
-                <Tappable text={l.t} style={styles.target} />
-                {english && <Text style={styles.english}>{l.en}</Text>}
-              </View>
-            ))}
-            <TouchableOpacity onPress={() => setEnglish(!english)}><Text style={styles.link}>{english ? 'Hide English' : 'Show English'}</Text></TouchableOpacity>
-            {cur.question && (
-              <View style={styles.question} testID="listening-question">
-                <Text style={styles.body}>{cur.question.q}</Text>
-                {cur.question.options.map((o, i) => (
-                  <Choice key={o} label={o} disabled={picked !== null} onPress={() => setPicked(i)}
-                    state={picked === null ? null : i === cur.question!.answer ? 'right' : i === picked ? 'wrong' : null} />
-                ))}
-              </View>
-            )}
-            <Button title={part + 1 < piece.parts.length ? 'Next part' : 'See my new words'} disabled={!answered}
-              onPress={() => { stop(); setPlaying(false); setPart(part + 1); setPicked(null); setEnglish(false); }} testID="listening-next" />
-          </Card>
+          <PartCard piece={piece} part={part} podcast={podcast} state={{ playing, showText, english, picked }}
+            on={{ play, toggleText: () => setShowText(!showText), toggleEnglish: () => setEnglish(!english), pick: setPicked,
+              next: () => { halt(); setPart(part + 1); setPicked(null); setEnglish(false); } }} />
         ) : (
           <NewWords piece={piece} kind={kind} onBoard={space ? () => navigation.goBack() : undefined} onAnother={() => { setPiece(null); setPart(0); }} />
         )}
@@ -126,6 +100,45 @@ export const ListeningScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+/** One part of a story or podcast: the lines (hidden for a podcast until asked for), the question and "Next part". */
+function PartCard({ piece, part, podcast, state, on }: {
+  piece: Listening; part: number; podcast: boolean;
+  state: { playing: boolean; showText: boolean; english: boolean; picked: number | null };
+  on: { play: () => void; toggleText: () => void; toggleEnglish: () => void; pick: (i: number) => void; next: () => void };
+}) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { playing, showText, english, picked } = state;
+  const cur = piece.parts[Math.min(part, piece.parts.length - 1)];
+  const answered = !cur.question || picked !== null;
+  return (
+          <Card title={`Part ${part + 1} of ${piece.parts.length}`} testID="listening-part"
+            headerRight={<TouchableOpacity onPress={on.play} accessibilityLabel={playing ? 'Stop' : 'Play'}><Icon name={playing ? 'square' : 'volume-2'} size={22} color={colors.primary} /></TouchableOpacity>}>
+            {podcast && !showText && <Text style={styles.body} testID="listening-audio-only">{playing ? 'Listening...' : 'Tap the speaker to hear it again.'}</Text>}
+            {showText && cur.lines.map((l, i) => (
+              <View key={i} style={styles.line}>
+                {!!l.speaker && <Text style={styles.speaker}>{l.speaker}</Text>}
+                <Tappable text={l.t} style={styles.target} />
+                {english && <Text style={styles.english}>{l.en}</Text>}
+              </View>
+            ))}
+            {podcast && <TouchableOpacity onPress={on.toggleText} testID="listening-show-text"><Text style={styles.link}>{showText ? 'Hide the text' : 'Show the text'}</Text></TouchableOpacity>}
+            {showText && <TouchableOpacity onPress={on.toggleEnglish}><Text style={styles.link}>{english ? 'Hide English' : 'Show English'}</Text></TouchableOpacity>}
+            {cur.question && (
+              <View style={styles.question} testID="listening-question">
+                <Text style={styles.body}>{cur.question.q}</Text>
+                {cur.question.options.map((o, i) => (
+                  <Choice key={o} label={o} disabled={picked !== null} onPress={() => on.pick(i)}
+                    state={picked === null ? null : i === cur.question!.answer ? 'right' : i === picked ? 'wrong' : null} />
+                ))}
+              </View>
+            )}
+            <Button title={part + 1 < piece.parts.length ? 'Next part' : 'See my new words'} disabled={!answered}
+              onPress={on.next} testID="listening-next" />
+          </Card>
+  );
+}
 
 /** The start page: write your own, or pick from the library. */
 function ListeningStart({ kind, langName, step, error, onClearError, onMake, onOpen }: {

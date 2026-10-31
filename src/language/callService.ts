@@ -8,6 +8,7 @@
  */
 import { speakInAndWait, stop as stopSpeech } from '../atlasVoice/tts';
 import { LANGUAGES, model } from './languageService';
+import { slotForText, voiceForSlot } from './voices';
 import { listenInLanguage } from './listenTurn';
 import { useLanguage } from './store';
 import {
@@ -61,6 +62,8 @@ export function createCall(scenario: Scenario): Call {
   const { language: code, level } = useLanguage.getState();
   const language = LANGUAGES.find((l) => l.code === code)?.name ?? code;
   const system = callSystemPrompt(scenario, language, level);
+  // The caller keeps one voice for the whole call, different from the voices of other scenarios.
+  const callerVoice = voiceForSlot(code, slotForText(scenario.id));
   let s: CallState = { phase: 'ringing', turns: [], partial: '', note: null, hint: null, typing: false, passed: false, corrections: null };
   const listeners = new Set<() => void>();
   // Every new turn bumps this, so a late result from a turn that was interrupted or ended is ignored.
@@ -80,7 +83,7 @@ export function createCall(scenario: Scenario): Call {
       queue = queue.then(async () => {
         if (turn !== epoch) return;
         set({ phase: 'speaking' });
-        await speakInAndWait(sentence, code, 'call');
+        await speakInAndWait(sentence, code, 'call', await callerVoice);
       });
     };
     try {

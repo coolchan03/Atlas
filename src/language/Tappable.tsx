@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View, type TextStyle } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
-import { speakIn } from '../atlasVoice/tts';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { languageService, plainWord } from './languageService';
 import { useLanguage } from './store';
+import { speakVaried } from './voices';
 
 /**
  * Text in the language being learned where every word can be tapped to see its English
@@ -55,7 +55,7 @@ export function Tappable({ text, style, testID }: { text: string; style?: TextSt
       )}
       {open?.meaning && (
         <View style={styles.actions}>
-          <TouchableOpacity onPress={() => speakIn(plainWord(open.word), code, 'word')} testID="word-hear" accessibilityLabel="Hear the word" style={styles.action}>
+          <TouchableOpacity onPress={() => speakVaried(plainWord(open.word), code, 'word')} testID="word-hear" accessibilityLabel="Hear the word" style={styles.action}>
             <Icon name="volume-2" size={18} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity

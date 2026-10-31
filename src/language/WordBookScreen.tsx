@@ -6,9 +6,9 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import { speakIn } from '../atlasVoice/tts';
 import { LANGUAGES, languageService } from './languageService';
 import { useLanguage } from './store';
+import { speakVaried } from './voices';
 
 type Sort = 'az' | 'due';
 const DAY = 864e5;
@@ -69,7 +69,7 @@ export const WordBookScreen: React.FC = () => {
         ListEmptyComponent={<Text style={styles.empty}>{all.length ? 'No words match.' : 'Finish a lesson and its words appear here.'}</Text>}
         renderItem={({ item }) => (
           <View style={styles.row} testID={`word-${item.t}`}>
-            <TouchableOpacity onPress={() => speakIn(item.t, code, 'lesson')} accessibilityLabel={`Play ${item.t}`}>
+            <TouchableOpacity onPress={() => speakVaried(item.t, code, 'lesson')} accessibilityLabel={`Play ${item.t}`}>
               <Icon name="volume-2" size={18} color={colors.primary} />
             </TouchableOpacity>
             <View style={styles.text}>
