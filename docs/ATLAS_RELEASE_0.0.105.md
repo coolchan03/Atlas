@@ -408,6 +408,17 @@ The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-n
 - **Multicolor accent** (Appearance): each bottom tab has its own color.
 - Not verified on a device: call end-of-turn, Whisper in lessons, the call screen look, Draft message links.
 
+## 8l. Second round from your list (0.0.116)
+
+- **Lessons**: every sitting goes through all six example sentences (the course now writes six, not five), and no sentence is shown twice in a row; single words are shared between the two sittings of a unit, sentences are not.
+- **Home**: the Simple, Compact and Colorful homes replace "Presentations" with **Daily briefing** (the standard home already showed the briefing row). Five more themes (Mocha, Mint, Sakura, Graphite, Sunset) and six more accent colors (Orange, Lime, Cyan, Indigo, Fuchsia, Gold).
+- **Learn a language listening**: Whisper is now found when any multilingual model is on the phone, even if an English one is selected; a lesson exercise frees the AI to make room for it; and if it cannot load, the screen says why (memory, error) instead of "no speech recognizer".
+- **Voices**: lessons, the word book, word taps, stories and podcasts use the phone's different voices (a dialogue gives each speaker their own), and the practice-call caller keeps one voice per scenario. Phones with a single voice for a language sound as before.
+- **Podcasts** play by themselves, part by part, with the text hidden until you tap "Show the text".
+- **Briefing**: "avoid sports" now catches team names and scorelines (Chiefs beat Bills 27-20), and "sports news" or "all sports" count as sports; interests you avoid are skipped; no "welcome to the daily briefing" opener; silence at the start and end of each voice line is trimmed so there is no gap between lines.
+- **Load the AI model now** button on the briefing screen and the Learn screen.
+- Not verified on a device: Whisper in lessons and calls on the tablet, voice variety, podcast autoplay, line gaps.
+
 ## Build evidence and checks
 
 - New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
