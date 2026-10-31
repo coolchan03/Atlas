@@ -70,6 +70,19 @@ function preserveConflict<T extends RecordItem>(items: T[], candidate: T, suffix
   items.push(fork as T);
   return true;
 }
+/**
+ * The same chat made twice on two phones (different ids, same title): when one has only the other's messages plus more,
+ * it is the same chat and the longer one is kept, not both. Returns the index of the local twin, or -1.
+ */
+function chatTwin(output: Conversation[], incoming: Conversation): number {
+  return output.findIndex(v => !isProtected(v) && v.id !== incoming.id && v.title === incoming.title &&
+    (messagesArePrefix(v, incoming) || messagesArePrefix(incoming, v)));
+}
+/** Same name and the same content apart from id and times: one thing that was created on both phones. */
+function sameApartFromId(a: object, b: object): boolean {
+  const strip = ({ id: _id, updatedAt: _u, createdAt: _c, ...rest }: any) => stable(rest);
+  return strip(a) === strip(b);
+}
 export function mergeConversations(local: Conversation[], remote: Conversation[], isOpen: (id: string) => boolean = () => true): MergeResult<Conversation> {
   const output = [...local];
   let added = 0, updated = 0, conflicts = 0;
@@ -78,7 +91,13 @@ export function mergeConversations(local: Conversation[], remote: Conversation[]
     const locked = mergeLocked(output, incoming, isOpen);
     if (locked) { added += Number(locked === 'added'); updated += Number(locked === 'updated'); continue; }
     const index = output.findIndex(v => v.id === incoming.id);
-    if (index < 0) { output.push(incoming); added++; continue; }
+    if (index < 0) {
+      const twin = chatTwin(output, incoming);
+      if (twin < 0) { output.push(incoming); added++; continue; }
+      // Same chat made on both phones: keep the longer one under this phone's id.
+      if (incoming.messages.length > output[twin].messages.length) { output[twin] = { ...incoming, id: output[twin].id }; updated++; }
+      continue;
+    }
     const current = output[index];
     if (isProtected(current)) continue;
     if (stable(current) === stable(incoming)) continue;
@@ -116,7 +135,10 @@ function mergeNamed<T extends RecordItem & { name: string; pinVerifier?: string;
     const locked = mergeLocked(output, incoming, isOpen);
     if (locked) { added += Number(locked === 'added'); updated += Number(locked === 'updated'); continue; }
     const index = output.findIndex(item => item.id === incoming.id);
-    if (index < 0) { output.push(incoming); added++; continue; }
+    if (index < 0) {
+      if (!output.some(item => !isProtected(item) && item.name === incoming.name && sameApartFromId(item, incoming))) { output.push(incoming); added++; }
+      continue;
+    }
     const existing = output[index];
     if (isProtected(existing) || stable(existing) === stable(incoming)) continue;
     const remoteWins = validTime(incoming.updatedAt) > validTime(existing.updatedAt) ||
