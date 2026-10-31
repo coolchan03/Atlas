@@ -13,6 +13,7 @@ import { useStoryReview } from './BriefStorySheet';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
+import { ForceLoadModel } from '../components/ForceLoadModel';
 
 const EMPTY: never[] = [];
 const LENGTHS = [3, 5, 10, 15];
@@ -161,6 +162,8 @@ export const DailyBriefScreen: React.FC = () => {
         )}
 
         {review.element}
+
+        <ForceLoadModel testID="brief-force-load" />
 
         <Card title="Your interests" subtitle="Broad ones (U.S., world, business, tech, science, health, sports) use top-story sections; anything else is searched.">
           <View style={styles.chips}>

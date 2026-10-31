@@ -19,6 +19,7 @@ import { Board } from './Board';
 import { createStyles } from './LanguageScreen.styles';
 import { pieceById } from './library';
 import { speakVaried } from './voices';
+import { ForceLoadModel } from '../components/ForceLoadModel';
 
 /**
  * Learn a language: four levels (Basic, Intermediate, Advanced, Fluent), each a board game.
@@ -112,6 +113,7 @@ export const LanguageScreen: React.FC = () => {
             <Text style={styles.extraOn}>Past chats</Text>
           </TouchableOpacity>
         </View>
+        <ForceLoadModel testID="language-force-load" />
         <WordOfTheDay />
         <WeekProgress onWordBook={() => navigation.navigate('WordBook')} />
         <View style={styles.extras}>
