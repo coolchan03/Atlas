@@ -49,7 +49,7 @@ class AtlasShareModule(private val ctx: ReactApplicationContext) : ReactContextB
 
     @ReactMethod
     fun getInitialShare(promise: Promise) {
-        promise.resolve(ShareBridge.read(currentActivity?.intent))
+        promise.resolve(ShareBridge.read(ctx.currentActivity?.intent))
     }
 
     // Required by NativeEventEmitter.
