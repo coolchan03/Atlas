@@ -153,8 +153,8 @@ export async function addCalendarEvent(title: string, start: string, end?: strin
 
 /** The link that opens the phone's Messages or Email app with a draft filled in (nothing is sent from here). */
 export function messageUrl(kind: 'text' | 'email', body: string, to = '', subject = ''): string {
+  if (kind === 'text') return `sms:${to.replace(/[^\d+,;]/g, '')}?body=${encodeURIComponent(body)}`;
   const recipient = to.replace(/[^\w@+.,;-]/g, '');
-  if (kind === 'text') return `sms:${recipient}?body=${encodeURIComponent(body)}`;
   return `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
