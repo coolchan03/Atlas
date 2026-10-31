@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
-import { Linking, Text } from 'react-native';
+import { Clipboard, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { tableRows, tableToMarkdown, tableToTsv } from './markdownTable';
 
 /**
  * Escape asterisks used as multiplication operators (digit*digit) so
@@ -47,14 +48,50 @@ const selectableRules = {
     </Text>
   ),
   fence: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (
-    <Text key={node.key} style={[inheritedStyles, styles.fence]} selectable>
-      {trimTrailingNewline(node.content)}
-    </Text>
+    <View key={node.key}>
+      <Text style={[inheritedStyles, styles.fence]} selectable>
+        {trimTrailingNewline(node.content)}
+      </Text>
+      <CopyActions testID="copy-code" actions={[{ label: 'Copy code', text: () => trimTrailingNewline(node.content) }]} />
+    </View>
   ),
   code_block: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (
     <Text key={node.key} style={[inheritedStyles, styles.code_block]} selectable>
       {trimTrailingNewline(node.content)}
     </Text>
+  ),
+};
+
+/** Small copy actions under a table or code block. */
+function CopyActions({ actions, testID }: { actions: { label: string; text: () => string }[]; testID: string }) {
+  const { colors } = useTheme();
+  const [done, setDone] = React.useState<string | null>(null);
+  return (
+    <View style={copyStyles.row} testID={testID}>
+      {actions.map((a) => (
+        <TouchableOpacity key={a.label} accessibilityRole="button" accessibilityLabel={a.label} testID={`${testID}-${a.label.toLowerCase().replace(/\s+/g, '-')}`}
+          onPress={() => { Clipboard.setString(a.text()); setDone(a.label); }}>
+          <Text style={[copyStyles.label, { color: done === a.label ? colors.primary : colors.textMuted }]}>{done === a.label ? 'Copied' : a.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const copyStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.sm },
+  label: { ...TYPOGRAPHY.meta },
+});
+
+const copyRules = {
+  table: (node: any, children: any, ...[, styles]: any[]) => (
+    <View key={node.key}>
+      <View style={styles._VIEW_SAFE_table}>{children}</View>
+      <CopyActions testID="copy-table" actions={[
+        { label: 'Copy table', text: () => tableToTsv(tableRows(node)) },
+        { label: 'Copy as Markdown', text: () => tableToMarkdown(tableRows(node)) },
+      ]} />
+    </View>
   ),
 };
 
@@ -77,7 +114,7 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
 
   const processed = useMemo(() => preprocessMarkdown(children), [children]);
   const rules = useMemo(
-    () => ({ link: createLinkRule(handleLinkPress), ...selectableRules }),
+    () => ({ link: createLinkRule(handleLinkPress), ...selectableRules, ...copyRules }),
     [handleLinkPress],
   );
 
