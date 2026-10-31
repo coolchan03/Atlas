@@ -88,15 +88,15 @@ export function cleanHeadlines(items: Headline[], now = Date.now(), seen: string
 export const WORDS_PER_MINUTE = 150;
 
 /**
- * How many stories fill the chosen length: a story read in full carries about a minute of
- * speech, a headline with a short summary about half that. At least three, at most twenty.
+ * How many stories fill the chosen length. Each story is a short summary (about 60 spoken words, 40 without
+ * reading the article), not a full read of it. At least three, at most twenty.
  */
 export const storyBudget = (minutes: number, deep = true) =>
-  Math.max(3, Math.min(20, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 150 : 80))));
+  Math.max(3, Math.min(20, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 60 : 40))));
 
 /** Script lines per story (about 20 spoken words each) so the stories add up to the chosen length. */
 export const linesPerStory = (minutes: number, stories: number) =>
-  Math.max(3, Math.min(12, Math.round((minutes * WORDS_PER_MINUTE) / Math.max(1, stories) / 20)));
+  Math.max(2, Math.min(5, Math.round((minutes * WORDS_PER_MINUTE) / Math.max(1, stories) / 20)));
 
 /** Estimated listening time of a script, in minutes. */
 export const spokenMinutes = (texts: string[]) =>

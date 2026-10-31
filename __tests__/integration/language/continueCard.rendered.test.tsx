@@ -16,9 +16,11 @@ beforeEach(() => {
   useLanguage.setState({ language: 'es-ES', level: 1, progress: {}, xp: 0 });
 });
 
-it('shows nothing before the course is started or a briefing made', () => {
+it('before the course is started or a briefing made, Home still offers to make the briefing', () => {
   const card = render(<ContinueCard navigation={navigation} />);
-  expect(card.queryByTestId('home-continue')).toBeNull();
+  expect(card.queryByTestId('home-continue-learn')).toBeNull();
+  fireEvent.press(card.getByTestId('home-continue-briefing-make'));
+  expect(navigation.navigate).toHaveBeenCalledWith('DailyBrief');
 });
 
 it('offers the next square after the ones done, and opens the course', () => {

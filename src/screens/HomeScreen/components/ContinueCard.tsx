@@ -10,7 +10,7 @@ import { useStudyStore } from '../../../study/engine';
 
 /**
  * "Pick up where you left off" for the two things Home does not already resume: your next Learn square and today's
- * briefing. (Recent chats above already have their own continue button.) Shows nothing when there is nothing to resume.
+ * briefing (always shown: listen to it, or make it). Recent chats above already have their own continue button.
  */
 export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors } = useTheme();
@@ -18,7 +18,6 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
   useLanguage((s) => s.level);
   const next = continueInfo();
   const briefing = useStudyStore((s) => (s.saved[BRIEF_PROJECT] ?? []).find((r) => todayKey(new Date(r.createdAt)) === todayKey()));
-  if (!next && !briefing) return null;
   const row = ({ icon, title, meta, onPress, testID }: { icon: string; title: string; meta: string; onPress: () => void; testID: string }) => (
     <AnimatedPressable key={testID} style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={onPress} hapticType="selection" testID={testID}>
       <Icon name={icon} size={18} color={colors.primary} />
@@ -32,7 +31,9 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
   return (
     <View style={styles.wrap} testID="home-continue">
       {!!next && row({ icon: 'book', title: `Continue ${next.language}: ${next.title}`, meta: 'Next square on your board', onPress: () => navigation.navigate('Language'), testID: 'home-continue-learn' })}
-      {!!briefing && row({ icon: 'headphones', title: "Listen to today's briefing", meta: briefing.title ?? 'Daily briefing', onPress: () => navigation.navigate('Study', { projectId: BRIEF_PROJECT, openAt: briefing.createdAt }), testID: 'home-continue-briefing' })}
+      {briefing
+        ? row({ icon: 'headphones', title: "Listen to today's briefing", meta: briefing.title ?? 'Daily briefing', onPress: () => navigation.navigate('Study', { projectId: BRIEF_PROJECT, openAt: briefing.createdAt }), testID: 'home-continue-briefing' })
+        : row({ icon: 'headphones', title: "Today's news briefing", meta: 'Not made yet. Tap to make it.', onPress: () => navigation.navigate('DailyBrief'), testID: 'home-continue-briefing-make' })}
     </View>
   );
 };

@@ -124,7 +124,7 @@ async function storyDetail(h: Headline, deep: boolean): Promise<{ text: string; 
     try {
       const { readPage } = require('../services/tools/handlers');
       const txt: string = await readPage(url, 2500);
-      if (txt && txt.length > 300) article = txt.replace(/\s+/g, ' ').slice(0, 1600);
+      if (txt && txt.length > 300) article = txt.replace(/\s+/g, ' ').slice(0, 900);
     } catch { /* summary is enough */ }
   }
   return { text: [summary, article].filter(Boolean).join('\n'), url };
@@ -237,7 +237,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: say what happened and name the outlet. Report only what its source says.`
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved, why it matters) and name the outlet. Never read an article aloud or quote it, and report only what its source says.`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
