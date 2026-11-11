@@ -42,7 +42,7 @@ export const BackupScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Backup &amp; sync</Text>
+        <Text style={styles.headerTitle}>{'Backup & sync'}</Text>
         <View style={styles.backButton} />
       </View>
 

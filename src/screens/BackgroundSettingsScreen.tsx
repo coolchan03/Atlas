@@ -26,7 +26,7 @@ export const BackgroundSettingsScreen: React.FC = () => {
   const updateSettings = useAppStore((s) => s.updateSettings);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const bg = selected ? (screenBackgrounds[selected] ?? { uri: '', blur: 0, dim: 0, opacity: 1 }) : null;
+  const bg = selected ? (screenBackgrounds[selected] ?? { uri: '', blur: 0, dim: 0 }) : null;
 
   const pickImage = async () => {
     if (!selected) return;
@@ -37,7 +37,7 @@ export const BackgroundSettingsScreen: React.FC = () => {
         : await pick({ mode: 'import', allowMultiSelection: false, type: ['public.image'] });
       if (!picked?.length) return;
       const uri = picked[0].uri;
-      updateSettings({ screenBackgrounds: { ...screenBackgrounds, [selected]: { ...(screenBackgrounds[selected] ?? { blur: 0, dim: 0, opacity: 1 }), uri } } });
+      updateSettings({ screenBackgrounds: { ...screenBackgrounds, [selected]: { ...(screenBackgrounds[selected] ?? { blur: 0, dim: 0 }), uri } } });
     } catch (e: any) {
       const { isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
       if (!isErrorWithCode(e) || e.code !== errorCodes.OPERATION_CANCELED) {
@@ -55,7 +55,7 @@ export const BackgroundSettingsScreen: React.FC = () => {
 
   const setBgProp = (prop: 'blur' | 'dim', value: number) => {
     if (!selected) return;
-    updateSettings({ screenBackgrounds: { ...screenBackgrounds, [selected]: { ...(screenBackgrounds[selected] ?? { uri: '', opacity: 1 }), [prop]: value } } });
+    updateSettings({ screenBackgrounds: { ...screenBackgrounds, [selected]: { ...(screenBackgrounds[selected] ?? { uri: '', blur: 0, dim: 0 }), [prop]: value } } });
   };
 
   return (

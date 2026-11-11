@@ -78,7 +78,7 @@ export const CompassScreen: React.FC = () => {
   const [accel, setAccel] = useState<{ x: number; y: number; z: number; g: number } | null>(null);
   const [orientation, setOrientation] = useState<{ pitch: number; roll: number } | null>(null);
   const [pressure, setPressure] = useState<{ hpa: number; altM: number } | null>(null);
-  const [batteryTemp, setBatteryTemp] = useState<number>(-999);
+  const [batteryTemp, setBatteryTemp] = useState<number | null>(null);
   useEffect(() => {
     if (!fix || !Native?.magneticDeclination) { setDeclination(null); return; }
     Native.magneticDeclination(fix.lat, fix.lon, Number.isFinite(fix.altitude) && fix.altitude > -1000 ? fix.altitude : 0)
@@ -112,7 +112,7 @@ export const CompassScreen: React.FC = () => {
 
   useEffect(() => {
     if (!Native?.getBatteryTemperature) return;
-    const fetchTemp = () => Native.getBatteryTemperature().then((t: number) => setBatteryTemp(t)).catch(() => undefined);
+    const fetchTemp = () => Native.getBatteryTemperature().then((t: number) => setBatteryTemp(t)).catch(() => null);
     fetchTemp();
     const id = setInterval(fetchTemp, 30000);
     return () => clearInterval(id);
@@ -180,7 +180,7 @@ export const CompassScreen: React.FC = () => {
             ))}
           </View>
         )}
-        {(accel !== null || orientation !== null || pressure !== null || batteryTemp > -999) && (
+        {(accel !== null || orientation !== null || pressure !== null || batteryTemp !== null) && (
           <View style={literalStyles.s25}>
             <View style={literalStyles.s26}>
               {accel && (
@@ -204,7 +204,7 @@ export const CompassScreen: React.FC = () => {
                   <Text style={[literalStyles.s29, { color: colors.textSecondary }]}>{pressure.altM >= 0 ? '+' : ''}{Math.round(pressure.altM)} m est.</Text>
                 </View>
               )}
-              {batteryTemp > -999 && (
+              {batteryTemp !== null && (
                 <View style={[literalStyles.s27, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={{ color: colors.textSecondary, fontSize: 11 }}>BATTERY TEMP</Text>
                   <Text style={[literalStyles.s28, { color: colors.text }]}>{batteryTemp.toFixed(1)} °C</Text>
