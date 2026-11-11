@@ -88,6 +88,9 @@ import { TopicsScreen, TopicBoardScreen, TopicSquareScreen } from '../topics/Top
 import { ShareScreen } from '../share/ShareScreen';
 import { WordSearchScreen } from '../language/WordSearchScreen';
 import { WordBookScreen } from '../language/WordBookScreen';
+import { NoiseMeterScreen } from '../screens/NoiseMeterScreen';
+import { MetalDetectorScreen } from '../screens/MetalDetectorScreen';
+import { PedometerScreen } from '../screens/PedometerScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -363,6 +366,9 @@ export const AppNavigator: React.FC = () => {
           options={{ headerShown: false }}
         />
         <RootStack.Screen name="Tools" component={ToolsScreen} />
+        <RootStack.Screen name="NoiseMeter" component={NoiseMeterScreen} />
+        <RootStack.Screen name="MetalDetector" component={MetalDetectorScreen} />
+        <RootStack.Screen name="Pedometer" component={PedometerScreen} />
         <RootStack.Screen
           name="DownloadManager"
           component={DownloadManagerScreen}

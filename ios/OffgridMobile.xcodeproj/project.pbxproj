@@ -26,6 +26,8 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A084C602C3B4A415DC74D43F /* libPods-OffgridMobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A3BA1A946E10FA48AA4C0EB /* libPods-OffgridMobile.a */; };
 		AABB000100000000000001AA /* OffgridMobileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB000200000000000002AA /* OffgridMobileTests.swift */; };
+		AA5301012F4A0001000AA001 /* AtlasSensorModule.m in Sources */ = {isa = PBXBuildFile; fileRef = AA5301002F4A0001000AA001 /* AtlasSensorModule.m */; };
+		AA5301022F4A0001000AA002 /* AtlasSensorModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5301032F4A0001000AA003 /* AtlasSensorModule.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +67,8 @@
 		D0917E571600B3FFEDA59EF7 /* Pods-OffgridMobileTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OffgridMobileTests.debug.xcconfig"; path = "Target Support Files/Pods-OffgridMobileTests/Pods-OffgridMobileTests.debug.xcconfig"; sourceTree = "<group>"; };
 		D1B1541769AADA563D6CC44E /* libPods-OffgridMobileTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-OffgridMobileTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		AA5301002F4A0001000AA001 /* AtlasSensorModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AtlasSensorModule.m; sourceTree = "<group>"; };
+		AA5301032F4A0001000AA003 /* AtlasSensorModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtlasSensorModule.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +110,8 @@
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				04B9D63E2F38E71E00F1A435 /* Images.xcassets */,
 				0A7B3D052F3A0B1200CC5FA1 /* all-MiniLM-L6-v2-Q8_0.gguf */,
+				AA5301002F4A0001000AA001 /* AtlasSensorModule.m */,
+				AA5301032F4A0001000AA003 /* AtlasSensorModule.swift */,
 			);
 			name = OffgridMobile;
 			sourceTree = "<group>";
@@ -385,6 +391,8 @@
 				0ADE3D052F3A0B1200CC5FA1 /* DeviceMemoryModule.m in Sources */,
 				0ADE3D062F3A0B1200CC5FA1 /* DeviceMemoryModule.swift in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				AA5301012F4A0001000AA001 /* AtlasSensorModule.m in Sources */,
+				AA5301022F4A0001000AA002 /* AtlasSensorModule.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

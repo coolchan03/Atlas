@@ -59,6 +59,9 @@ export type RootStackParamList = {
   AssistantAccess: undefined;
   BackgroundSettings: undefined;
   BriefingPaper: { createdAt: number };
+  NoiseMeter: undefined;
+  MetalDetector: undefined;
+  Pedometer: undefined;
   // Already in RootStack
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;

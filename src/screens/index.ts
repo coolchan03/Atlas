@@ -41,3 +41,6 @@ export { AppearanceScreen } from './AppearanceScreen';
 export { RemoteServersScreen } from './RemoteServersScreen';
 export { AboutScreen } from './AboutScreen';
 export { ToolsScreen } from './ToolsScreen';
+export { NoiseMeterScreen } from './NoiseMeterScreen';
+export { MetalDetectorScreen } from './MetalDetectorScreen';
+export { PedometerScreen } from './PedometerScreen';
