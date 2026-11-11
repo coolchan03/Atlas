@@ -84,6 +84,29 @@ export async function readCalendarContext(): Promise<CalendarContext | null> {
   }
 }
 
+/**
+ * Fetches live flight status text for a flight number (e.g. "AA2847") using the same
+ * readPage web scraper the AI uses. Tries FlightAware first, falls back to a Bing search.
+ * No API key required — the same mechanism Google/Bing use to show their flight cards.
+ * Returns null if the device is offline or both sources are unreachable.
+ */
+export async function fetchFlightStatus(flightNumber: string): Promise<string | null> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readPage } = require('../services/tools/handlers');
+  const id = flightNumber.toUpperCase().replace(/\s+/g, '');
+  const urls = [
+    `https://www.flightaware.com/live/flight/${id}`,
+    `https://www.bing.com/search?q=${encodeURIComponent(id + ' flight status')}`,
+  ];
+  for (const url of urls) {
+    try {
+      const text: string = await readPage(url, 1500);
+      if (text && text.length > 150) return text.slice(0, 1200);
+    } catch { /* try next source */ }
+  }
+  return null;
+}
+
 /** Returns a short sentence describing flight/travel context, or '' if none. */
 export function calendarSummary(ctx: CalendarContext): string {
   const parts: string[] = [];

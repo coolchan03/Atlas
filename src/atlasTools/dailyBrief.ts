@@ -294,9 +294,10 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
 
   // Read today's calendar events for flight/travel context (best-effort).
   let calendarNote = '';
+  let calendarFlights: { raw: string; airline: string }[] = [];
   try {
     const calCtx = await readCalendarContext();
-    if (calCtx) calendarNote = calendarSummary(calCtx);
+    if (calCtx) { calendarNote = calendarSummary(calCtx); calendarFlights = calCtx.flights; }
   } catch { /* non-critical */ }
 
   // Fetch weather early so it can be mentioned in the briefing.
@@ -329,6 +330,24 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
       : 'Could not reach the news and found nothing in the offline library. Check your internet connection and try again.');
   }
 
+  // Fetch live flight status for any flights detected in the calendar (best-effort).
+  if (!offline && calendarFlights.length) {
+    const { fetchFlightStatus } = require('./calendarBrief'); // eslint-disable-line @typescript-eslint/no-require-imports
+    for (const flight of calendarFlights) {
+      onStep(`Checking flight ${flight.raw} status...`);
+      try {
+        const statusText: string | null = await fetchFlightStatus(flight.raw);
+        if (statusText) {
+          outline.push({
+            topic: `Flight ${flight.raw} (${flight.airline}) live status`,
+            sources: [{ n: outline.length + 1, doc: 'Flight tracking', part: 1, text: statusText, origin: 'web' }],
+            always: true,
+          });
+        }
+      } catch { /* non-critical */ }
+    }
+  }
+
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const rules = briefingRules(avoid, gotNews);
   const withExperts = p.experts && gotNews && voicesAvailable >= 2;
@@ -336,7 +355,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote} Mention their travel naturally when relevant.` : ''}`
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote}${calendarFlights.length ? ' Live flight status is included in the sources — read it and report the current status (on time, delayed, gate, etc.) when covering their flight.' : ''} Mention their travel naturally when relevant.` : ''}`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` Mention the listener's plans: ${calendarNote}` : ''}`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
