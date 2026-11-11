@@ -11,6 +11,7 @@ import { Source, StudyResult, askModel, useStudyStore, writeEpisode } from '../s
 import { WORDS_PER_MINUTE, avoided, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
+import { readCalendarContext, calendarSummary } from './calendarBrief';
 
 interface BriefPrefs {
   interests: string[];
@@ -291,6 +292,27 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   let offline = false;
   try { offline = require('./offGrid').offGridOn(); } catch { /* ignore */ }
 
+  // Read today's calendar events for flight/travel context (best-effort).
+  let calendarNote = '';
+  try {
+    const calCtx = await readCalendarContext();
+    if (calCtx) calendarNote = calendarSummary(calCtx);
+  } catch { /* non-critical */ }
+
+  // Fetch weather early so it can be mentioned in the briefing.
+  let weatherLine = '';
+  if (!offline) {
+    try {
+      const { fetchWeather, weatherSummary } = require('./weather');
+      const { useMaps } = require('../atlasMaps/maps');
+      const fix = useMaps.getState().lastFix;
+      if (fix) {
+        const w = await fetchWeather(fix.lat, fix.lon);
+        if (w) weatherLine = weatherSummary(w);
+      }
+    } catch { /* weather is optional */ }
+  }
+
   const avoid = p.avoid ?? [];
   const { outline, stories } = offline ? { outline: [] as OutlineItem[], stories: [] as Picked[] }
     : await gatherStories({ interests, minutes: p.minutes, deep: p.deep, avoid }, onStep);
@@ -314,8 +336,8 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.`
-      : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.`,
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}`
+      : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
     rules,

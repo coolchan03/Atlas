@@ -58,6 +58,7 @@ export type RootStackParamList = {
   Backup: undefined;
   AssistantAccess: undefined;
   BackgroundSettings: undefined;
+  BriefingPaper: { createdAt: number };
   // Already in RootStack
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;

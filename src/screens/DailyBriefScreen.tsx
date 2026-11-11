@@ -14,6 +14,8 @@ import { listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { createStyles } from './DailyBriefScreen.styles';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 import { ForceLoadModel } from '../components/ForceLoadModel';
+import { useMaps } from '../atlasMaps/maps';
+import { uvAdvice, type WeatherData } from '../atlasTools/weather';
 
 const EMPTY: never[] = [];
 const LENGTHS = [3, 5, 10, 15];
@@ -66,7 +68,14 @@ export const DailyBriefScreen: React.FC = () => {
   const [say, setSay] = useState('');
   const [avoidText, setAvoidText] = useState('');
   const [voices, setVoices] = useState(0);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const fix = useMaps((s) => s.lastFix);
   useEffect(() => { listVoices('en').then((v) => setVoices(v.length)).catch(() => undefined); }, []);
+  useEffect(() => {
+    if (!fix) return;
+    const { fetchWeather } = require('../atlasTools/weather');
+    fetchWeather(fix.lat, fix.lon).then((w: WeatherData | null) => setWeather(w)).catch(() => undefined);
+  }, [fix?.lat, fix?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = (at: number) => navigation.navigate('Study', { projectId: BRIEF_PROJECT, openAt: at });
   const job = useBriefingJob(voices, (r) => open(r.createdAt));
 
@@ -131,6 +140,7 @@ export const DailyBriefScreen: React.FC = () => {
           ) : (
             <View style={styles.actions}>
               {today && <Button title="Listen to today's briefing" onPress={() => open(today.createdAt)} icon={<Icon name="play" size={16} color={colors.background} />} testID="brief-listen" />}
+              {today && <Button title="Read as newspaper" variant="outline" onPress={() => navigation.getParent()?.navigate('BriefingPaper', { createdAt: today.createdAt })} icon={<Icon name="file-text" size={16} color={colors.primary} />} testID="brief-read" />}
               <Button
                 title={today ? 'Make a fresh one' : "Make today's briefing"}
                 variant={today ? 'outline' : 'primary'}
@@ -141,6 +151,35 @@ export const DailyBriefScreen: React.FC = () => {
           )}
           {!!job.error && <Text style={styles.error}>{job.error}</Text>}
         </Card>
+
+        {weather && (
+          <Card title="Weather" subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} testID="brief-weather">
+            <View style={styles.chips}>
+              <View style={styles.weatherRow}>
+                <Icon name="thermometer" size={14} color={colors.textSecondary} />
+                <Text style={styles.meta}>{weather.tempMaxC}°C / {weather.tempMinC}°C</Text>
+              </View>
+              <View style={styles.weatherRow}>
+                <Icon name="cloud" size={14} color={colors.textSecondary} />
+                <Text style={styles.meta}>{weather.description}</Text>
+              </View>
+              {weather.precipProbPct > 10 && (
+                <View style={styles.weatherRow}>
+                  <Icon name="droplet" size={14} color={colors.textSecondary} />
+                  <Text style={styles.meta}>{weather.precipProbPct}% rain</Text>
+                </View>
+              )}
+              <View style={styles.weatherRow}>
+                <Icon name="sun" size={14} color={colors.textSecondary} />
+                <Text style={styles.meta}>UV {weather.uvMax} — {weather.uvWarning}</Text>
+              </View>
+            </View>
+            <Text style={[styles.desc, { marginTop: 6 }]}>{uvAdvice(weather.uvMax)}</Text>
+            {weather.tomorrow && (
+              <Text style={[styles.desc, { marginTop: 4 }]}>Tomorrow: {weather.tomorrow.description}, {weather.tomorrow.tempMaxC}°C / {weather.tomorrow.tempMinC}°C, UV {weather.tomorrow.uvMax}</Text>
+            )}
+          </Card>
+        )}
 
         {!!today?.headlines?.length && (
           <Card title="Today's headlines" subtitle="The stories this briefing was made from. Tap one to read it." testID="brief-headlines">

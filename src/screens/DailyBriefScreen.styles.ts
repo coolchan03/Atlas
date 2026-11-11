@@ -47,4 +47,5 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   deleteButton: { padding: SPACING.sm },
   earlier: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md },
   error: { ...TYPOGRAPHY.bodySmall, color: colors.error, marginTop: SPACING.sm },
+  weatherRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5 },
 });
