@@ -7,7 +7,7 @@ import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { useMaps, bearingDeg, distanceM, fmtDistance } from '../atlasMaps/maps';
 import { trueHeading } from '../atlasTools/compassMath';
-import { ScreenBackground } from '../components/ScreenBackground';;
+import { ScreenBackground } from '../components/ScreenBackground';
 const BORDERLEFTCOLOR_TRANSPARENT = 'transparent';
 const BORDERRIGHTCOLOR_TRANSPARENT = 'transparent';
 const BORDERBOTTOMCOLOR_16A34A = '#16A34A';
