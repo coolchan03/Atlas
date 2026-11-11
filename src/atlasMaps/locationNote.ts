@@ -7,6 +7,8 @@ import { NativeModules, Platform } from 'react-native';
 import { useAppStore } from '../stores/appStore';
 import { useMaps } from './maps';
 import { describePlace } from './whereAmI';
+import { getCachedPOINote } from './nearbyPOI';
+export { refreshNearbyPOI } from './nearbyPOI';
 
 /** A reading older than this is not offered as "where the user is". */
 const FRESH_MS = 12 * 3600e3;
@@ -24,7 +26,8 @@ export function locationNote(now = Date.now()): string {
   if (!fix || now - fix.time > FRESH_MS) return '';
   const place = describePlace(fix.lat, fix.lon);
   if (!place) return '';
-  return `\n\nThe user's phone GPS (read ${ago(now - fix.time)}) puts them ${place.sentence}. Use this when they ask where they are or what is near; only large cities are known, so for a small town say they are near the closest city, and do not name airports, roads or landmarks you were not given.`;
+  const poiNote = getCachedPOINote();
+  return `\n\nThe user's phone GPS (read ${ago(now - fix.time)}) puts them ${place.sentence}. Use this when they ask where they are or what is near; only large cities are known, so for a small town say they are near the closest city, and do not name airports, roads or landmarks you were not given.${poiNote ? ` ${poiNote}` : ''}`;
 }
 
 /** Reads the phone's last known position (only if location was already allowed) and keeps it for the note above. */

@@ -38,7 +38,7 @@ import { useNearbyPairingIntent } from './src/services/nearbySync/useNearbyPairi
 import { startShareIntake, flushShare } from './src/share/shareIntake';
 import { UndoBar } from './src/chats/UndoBar';
 import { startScheduler } from './src/schedule/runner';
-import { refreshLastFix } from './src/atlasMaps/locationNote';
+import { refreshLastFix, refreshNearbyPOI } from './src/atlasMaps/locationNote';
 import { navigationRef } from './src/utils/navigationRef';
 import { startAppLinks, flushAppLink } from './src/navigation/appLinks';
 import { registerAtlasHooks } from './src/bootstrap/atlasHooks';
@@ -94,8 +94,9 @@ function App() {
   // Keep the last GPS reading fresh (only if location was already allowed) so the AI can say roughly where you are.
   useEffect(() => {
     void refreshLastFix();
+    void refreshNearbyPOI();
     void require('./src/knowledge/controller').recoverKnowledge().catch(() => undefined);
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void refreshLastFix(); });
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { void refreshLastFix(); void refreshNearbyPOI(); } });
     return () => sub.remove();
   }, []);
   useDownloadListeners();
