@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   NativeEventEmitter,
   NativeModules,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -53,6 +55,13 @@ export const PedometerScreen: React.FC = () => {
 
   const startCounting = useCallback(async () => {
     if (!Native) { setAvailable(false); return; }
+    if (Platform.OS === 'android' && Platform.Version >= 29) {
+      const granted = await PermissionsAndroid.request(
+        'android.permission.ACTIVITY_RECOGNITION' as any,
+        { title: 'Activity Recognition', message: 'The step counter needs motion tracking permission.', buttonPositive: 'Allow' },
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) { setAvailable(false); return; }
+    }
     const ok = await Native.startPedometer().catch(() => false);
     setAvailable(!!ok);
     if (!ok) return;

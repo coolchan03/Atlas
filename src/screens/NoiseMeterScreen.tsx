@@ -75,13 +75,13 @@ export const NoiseMeterScreen: React.FC = () => {
     audioSessionManager.restorePlaybackAfterRecording().catch(() => {});
   }, []);
 
-  const startMeter = useCallback(async () => {
+  const startMeter = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'android') {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         { title: 'Microphone', message: 'The noise meter needs the microphone.', buttonPositive: 'Allow' },
       );
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) return;
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
     }
     await audioSessionManager.ensureRecording();
     const rec = new AudioRecorder();
@@ -100,7 +100,8 @@ export const NoiseMeterScreen: React.FC = () => {
         Animated.timing(barAnim, { toValue: fraction, duration: 80, useNativeDriver: false }).start();
       },
     );
-    try { (rec as any).start(); } catch { stopMeter(); return; }
+    try { (rec as any).start(); } catch { stopMeter(); return false; }
+    return true;
   }, [barAnim, stopMeter]);
 
   const toggle = useCallback(async () => {
@@ -110,8 +111,8 @@ export const NoiseMeterScreen: React.FC = () => {
       setDb(null);
       barAnim.setValue(0);
     } else {
-      await startMeter();
-      setRunning(true);
+      const ok = await startMeter();
+      if (ok) setRunning(true);
     }
   }, [running, startMeter, stopMeter, barAnim]);
 
