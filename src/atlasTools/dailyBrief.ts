@@ -336,8 +336,8 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}`
-      : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}`,
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote} Mention their travel naturally when relevant.` : ''}`
+      : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` Mention the listener's plans: ${calendarNote}` : ''}`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
     rules,
