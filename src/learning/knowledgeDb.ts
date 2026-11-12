@@ -4,6 +4,7 @@
  * model weights or the existing project documents, lesson files or reports.
  */
 import type { ClaimStatus, EvidenceSource } from './evidenceGate';
+import { claimSentences } from './claimText';
 
 declare const require: (id: string) => any;
 
@@ -13,7 +14,8 @@ export interface SqlAdapter {
 }
 
 export const KNOWLEDGE_DB_NAME = 'atlas_learning_knowledge.db';
-export const KNOWLEDGE_SCHEMA_VERSION = 1;
+/** 2 adds contradictions, mastery and exam items. Opening an older database only adds tables; nothing is dropped or rewritten. */
+export const KNOWLEDGE_SCHEMA_VERSION = 2;
 
 export const KNOWLEDGE_DDL = [
   `CREATE TABLE IF NOT EXISTS atlas_sources (
@@ -58,6 +60,18 @@ export const KNOWLEDGE_DDL = [
   `CREATE TABLE IF NOT EXISTS atlas_exam_results (
     id TEXT PRIMARY KEY, benchmark_version TEXT NOT NULL,
     mode TEXT NOT NULL, metrics_json TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS atlas_contradictions (
+    id TEXT PRIMARY KEY, claim_a TEXT NOT NULL, claim_b TEXT NOT NULL, reason TEXT NOT NULL,
+    detected_at TEXT NOT NULL, resolved_at TEXT, resolution TEXT,
+    FOREIGN KEY(claim_a) REFERENCES atlas_claims(id), FOREIGN KEY(claim_b) REFERENCES atlas_claims(id))`,
+  `CREATE TABLE IF NOT EXISTS atlas_mastery (
+    concept_id TEXT PRIMARY KEY, subject_id TEXT NOT NULL, topic TEXT NOT NULL, question TEXT NOT NULL,
+    strength REAL NOT NULL DEFAULT 0, streak INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
+    last_at TEXT, next_review TEXT NOT NULL, last_outcome TEXT)`,
+  `CREATE INDEX IF NOT EXISTS idx_atlas_mastery_due ON atlas_mastery(subject_id, next_review)`,
+  `CREATE TABLE IF NOT EXISTS atlas_exam_items (
+    id TEXT PRIMARY KEY, topic TEXT NOT NULL, question TEXT NOT NULL,
+    expected_json TEXT NOT NULL, created_at TEXT NOT NULL)`,
 ];
 
 export interface ReliabilityClaim {
@@ -86,6 +100,8 @@ export interface CandidateClaim {
   uncertainty: string;
   sources: EvidenceSource[];
   citedNumbers: number[];
+  /** Sources the claim does not cite but that share its words: kept as context for a reviewer, never as support. */
+  contextNumbers?: number[];
 }
 
 const isoNow = (): string => new Date().toISOString();
@@ -116,7 +132,8 @@ export class LearningKnowledgeDb {
     this.db = db;
   }
 
-  private sql(sql: string, params: Params = []): { rows?: unknown[]; insertId?: number } {
+  /** Runs one statement. The mastery and exam stores are built on this, so the schema lives in one place. */
+  sql(sql: string, params: Params = []): { rows?: unknown[]; insertId?: number } {
     this.ensureReady();
     return this.db!.executeSync(sql, params);
   }
@@ -149,8 +166,10 @@ export class LearningKnowledgeDb {
       db.executeSync(`INSERT OR IGNORE INTO atlas_claims
         (id, topic, question, claim_text, report_id, status, uncertainty, confidence, created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?)`, [c.id, c.topic, c.question, c.claimText, c.reportId, c.status, c.uncertainty, null, now, now]);
-      const unique = [...new Set(c.citedNumbers)];
-      for (const n of unique) {
+      const stances = new Map<number, 'cited' | 'context'>();
+      (c.contextNumbers ?? []).forEach((n) => stances.set(n, 'context'));
+      c.citedNumbers.forEach((n) => stances.set(n, 'cited'));
+      for (const [n, stance] of stances) {
         const source = c.sources.find((s) => s.n === n);
         if (!source) continue;
         // A report-local key is safer than incorrectly conflating same-title documents.
@@ -168,11 +187,56 @@ export class LearningKnowledgeDb {
           (id,claim_id,source_id,citation_number,passage,locator,stance,retrieved_at)
           VALUES (?,?,?,?,?,?,?,?)`, [
           `${c.id}:source:${n}`, c.id, sourceId, n, source.passage ?? null,
-          source.locator ?? null, 'cited', source.retrievedAt ?? now,
+          source.locator ?? null, stance, source.retrievedAt ?? now,
         ]);
       }
       db.executeSync('COMMIT');
     } catch (error) { db.executeSync('ROLLBACK'); throw error; }
+  }
+
+  /** Claims already known on a topic, newest first, for comparing a new claim against. Rejected and superseded ones are skipped. */
+  knownClaims(topic: string, limit = 300): Array<{ id: string; text: string; status: ClaimStatus }> {
+    return (this.sql("SELECT id, claim_text, status FROM atlas_claims WHERE topic = ? AND status NOT IN ('rejected','superseded') ORDER BY created_at DESC LIMIT ?", [topic, limit]).rows ?? [])
+      .map((r) => ({ id: String((r as any).id), text: String((r as any).claim_text), status: (r as any).status as ClaimStatus }));
+  }
+
+  /** A second source for a claim already stored: it strengthens the record without making a duplicate. */
+  addSupport(claimId: string, source: EvidenceSource & { reportId: string }): void {
+    const now = isoNow();
+    const sourceId = source.sourceId || `${source.reportId}:source:${source.n}`;
+    this.sql(`INSERT OR IGNORE INTO atlas_sources (id,kind,title,url,source_type,authority,publication_date,retrieved_at,version_hash,effective_from,effective_to,tax_year)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [sourceId, source.kind, source.title, source.url ?? null, source.kind, 'unassessed', source.publicationDate ?? null,
+      source.retrievedAt ?? now, null, source.effectiveFrom ?? null, source.effectiveTo ?? null, source.taxYear ?? null]);
+    this.sql(`INSERT OR IGNORE INTO atlas_evidence (id,claim_id,source_id,citation_number,passage,locator,stance,retrieved_at)
+      VALUES (?,?,?,?,?,?,?,?)`, [`${claimId}:support:${sourceId}`, claimId, sourceId, source.n, source.passage ?? null, source.locator ?? null, 'supporting', source.retrievedAt ?? now]);
+  }
+
+  /** Moves a candidate or verified claim to disputed because the checks found a conflict. A person can still review it back. */
+  flagDisputed(id: string, reason: string): void {
+    const claim = this.getClaim(id);
+    if (!claim || claim.status === 'disputed' || claim.status === 'rejected' || claim.status === 'superseded') return;
+    const now = isoNow();
+    this.sql('UPDATE atlas_claims SET status = ?, updated_at = ? WHERE id = ?', ['disputed', now, id]);
+    this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, claim.status, 'disputed', 'consistency-check', reason, now]);
+  }
+
+  /** Records that two claims conflict. The same pair is recorded once. */
+  recordContradiction(a: string, b: string, reason: string): void {
+    const [x, y] = [a, b].sort();
+    this.sql('INSERT OR IGNORE INTO atlas_contradictions (id,claim_a,claim_b,reason,detected_at) VALUES (?,?,?,?,?)', [`${x}|${y}`, x, y, reason, isoNow()]);
+  }
+
+  /** Conflicts nobody has resolved yet, with both claims' text. */
+  openContradictions(limit = 20): Array<{ id: string; reason: string; a: { id: string; text: string }; b: { id: string; text: string } }> {
+    return (this.sql(`SELECT k.id, k.reason, a.id AS a_id, a.claim_text AS a_text, b.id AS b_id, b.claim_text AS b_text
+      FROM atlas_contradictions k JOIN atlas_claims a ON a.id = k.claim_a JOIN atlas_claims b ON b.id = k.claim_b
+      WHERE k.resolved_at IS NULL ORDER BY k.detected_at DESC LIMIT ?`, [limit]).rows ?? []).map((r: any) => ({
+      id: String(r.id), reason: String(r.reason), a: { id: String(r.a_id), text: String(r.a_text) }, b: { id: String(r.b_id), text: String(r.b_text) },
+    }));
+  }
+
+  resolveContradiction(id: string, resolution: string): void {
+    this.sql('UPDATE atlas_contradictions SET resolved_at = ?, resolution = ? WHERE id = ?', [isoNow(), nonblank(resolution, 'resolution'), id]);
   }
 
   getClaim(id: string): Record<string, any> | null {
@@ -264,11 +328,4 @@ export const learningKnowledgeDb = new LearningKnowledgeDb(() =>
   require('@op-engineering/op-sqlite').open({ name: KNOWLEDGE_DB_NAME }));
 
 /** Candidate sentence extraction. The original report remains separate and unchanged. */
-export function extractCandidateClaims(text: string): string[] {
-  const section = text.split(/^\s*(?:REASONING|UNSURE)\s*:/im)[0];
-  const stripped = section.replace(/\bKEY POINTS\s*:/gi, '\nKEY POINTS:').replace(/^\s*(?:ANSWER|KEY POINTS)\s*:\s*/gim, '');
-  const parts = stripped.split(/\n|(?<=[.!?])\s+(?=[A-Z])/)
-    .map((p) => p.replace(/^\s*[-*\d.)]+\s*/, '').trim())
-    .filter((p) => p.length >= 16 && p.length <= 1200 && !/^(?:none|unknown|unsure)$/i.test(p));
-  return [...new Set(parts)].slice(0, 12);
-}
+export const extractCandidateClaims = claimSentences;

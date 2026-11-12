@@ -4,6 +4,9 @@
  * These checks catch some contradictions and citation mapping failures; they
  * deliberately do not pretend to establish that passages entail claims.
  */
+import { gateFromScore, parseDimensions, verdictMatchesScore, type Dimensions, type GateState } from './judgeDimensions';
+import { checkSupport, claimSentences } from './claimText';
+
 export type ClaimStatus = 'candidate' | 'verified' | 'disputed' | 'superseded' | 'rejected';
 
 export interface EvidenceSource {
@@ -29,6 +32,9 @@ export interface GateResult {
   reasons: string[];
   /** True means citations point to known source records, not that they support the claims. */
   citationMappingsValid: boolean;
+  dimensions: Dimensions;
+  /** Two independent gates: either one failing disputes the report, whatever the overall score. */
+  gates: { facts: GateState; citations: GateState };
 }
 
 export function parseJudgeScore(line: string): { value?: number; valid: boolean; reason?: string } {
@@ -85,6 +91,37 @@ export function taxErrorSignals(report: string): string[] {
   return alerts;
 }
 
+/** Cited sentences whose cited passages do not contain what the sentence states. Checked by text, not by the model. */
+function unsupportedSentences(text: string, sources: EvidenceSource[]): { checked: number; failed: string[] } {
+  let checked = 0;
+  const failed: string[] = [];
+  for (const sentence of claimSentences(text)) {
+    const cited = citedNumbers(sentence);
+    const passages = sources.filter((s) => cited.includes(s.n)).map((s) => s.passage ?? '');
+    const support = checkSupport(sentence.replace(/\[\d+\]/g, ''), passages);
+    if (support.supported === null) continue;
+    checked += 1;
+    if (support.supported === false) failed.push(support.missingNumbers.length ? `states ${support.missingNumbers.join(', ')} which the cited passage does not contain` : 'is not found in the cited passage');
+  }
+  return { checked, failed };
+}
+
+/** The citation gate: mapped numbers, the passage text itself, and the judge's own mark. Any failure fails the gate. */
+function citationGate(input: { invalid: number[]; support: { checked: number; failed: string[] }; mark: number | undefined; reasons: string[] }): GateState {
+  const markState = gateFromScore(input.mark);
+  input.support.failed.forEach((why) => input.reasons.push(`A cited sentence ${why}`));
+  if (markState === 'fail') input.reasons.push(`Judge rated citations ${input.mark}/10`);
+  if (input.invalid.length || input.support.failed.length || markState === 'fail') return 'fail';
+  return input.support.checked > 0 || markState === 'pass' ? 'pass' : 'unknown';
+}
+
+/** The facts gate: a known-error alarm or a low factual mark fails it. A pass means "no material error found", not "verified". */
+function factsGate(input: { alarms: string[]; mark: number | undefined; reasons: string[] }): GateState {
+  const markState = gateFromScore(input.mark);
+  if (markState === 'fail') input.reasons.push(`Judge rated factual correctness ${input.mark}/10`);
+  return input.alarms.length ? 'fail' : markState;
+}
+
 export function assessReport(input: {
   text: string;
   sources?: EvidenceSource[];
@@ -94,24 +131,30 @@ export function assessReport(input: {
   const reasons: string[] = [];
   const score = parseJudgeScore(input.judgeLine);
   if (!score.valid && score.reason) reasons.push(score.reason);
+  const dimensions = parseDimensions(input.judgeLine);
+  const sources = input.sources ?? [];
   const citedSourceNumbers = citedNumbers(input.text);
-  const sourceMap = new Map((input.sources ?? []).map((s) => [s.n, s]));
-  const invalidNumbers = citedSourceNumbers.filter((n) => !sourceMap.has(n));
+  const sourceMap = new Map(sources.map((s) => [s.n, s]));
+  const invalid = citedSourceNumbers.filter((n) => !sourceMap.has(n));
   if (!citedSourceNumbers.length) reasons.push('Report has no mapped source citations');
-  if (invalidNumbers.length) reasons.push(`Unknown citation numbers: ${invalidNumbers.join(', ')}`);
+  if (invalid.length) reasons.push(`Unknown citation numbers: ${invalid.join(', ')}`);
   const cited = citedSourceNumbers.map((n) => sourceMap.get(n)).filter((x): x is EvidenceSource => Boolean(x));
   if (cited.some((s) => !s.passage?.trim())) reasons.push('Cited source lacks a stored passage or original locator');
   const alarms = taxErrorSignals(input.text);
   reasons.push(...alarms);
-  const citationMappingsValid = citedSourceNumbers.length > 0 && invalidNumbers.length === 0;
-  const status: GateResult['status'] = input.judgePass === false ? 'rejected' : alarms.length ? 'disputed' : 'candidate';
+
+  const gates = {
+    citations: citationGate({ invalid, support: unsupportedSentences(input.text, sources), mark: dimensions.cites, reasons }),
+    facts: factsGate({ alarms, mark: dimensions.facts, reasons }),
+  };
+  const consistent = verdictMatchesScore(score.value, input.judgePass);
+  if (!consistent) reasons.push(`Judge verdict and score disagree (${input.judgePass ? 'PASS' : 'FAIL'} with ${score.value}/10)`);
+  let status: GateResult['status'] = 'candidate';
+  if (input.judgePass === false) status = 'rejected';
+  else if (gates.facts === 'fail' || gates.citations === 'fail' || !consistent) status = 'disputed';
   reasons.push('No independent claim-to-passage entailment check has verified the report');
   return {
-    status,
-    judgeScore: score.value,
-    scoreValid: score.valid,
-    citedSourceNumbers,
-    reasons,
-    citationMappingsValid,
+    status, judgeScore: score.value, scoreValid: score.valid, citedSourceNumbers, reasons,
+    citationMappingsValid: citedSourceNumbers.length > 0 && invalid.length === 0, dimensions, gates,
   };
 }

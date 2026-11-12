@@ -68,6 +68,9 @@ export interface LearnReport {
   /** Judge scoring and independent verification are intentionally separate. */
   verificationStatus?: 'candidate' | 'disputed' | 'rejected' | 'verified' | 'superseded';
   verificationReasons?: string[];
+  /** The judge's six separate scores, and the two gates (facts, citations) that decide acceptance on their own. */
+  dimensions?: import('./judgeDimensions').Dimensions;
+  gates?: { facts: 'pass' | 'fail' | 'unknown'; citations: 'pass' | 'fail' | 'unknown' };
 }
 
 export interface PendingReport { itemId: string; q: string; report: string; sources: string }

@@ -29,8 +29,11 @@ import { useLearningStore, newItem, BankItem, LearnConfig, LearnReport, ReportSo
 import type { Message } from '../types';
 import logger from '../utils/logger';
 import { ensureTextModel } from '../atlasTools/models';
-import { assessReport, citedNumbers } from './evidenceGate';
-import { extractCandidateClaims, learningKnowledgeDb } from './knowledgeDb';
+import { assessReport } from './evidenceGate';
+import { plainReason } from './judgeDimensions';
+import { learningKnowledgeDb } from './knowledgeDb';
+import { ingestClaims } from './claimIngest';
+import { mayRewrite } from './cycleRules';
 
 let running = false;
 let stopRequested = false;
@@ -247,6 +250,12 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   status(`Learner is researching: ${item.q.slice(0, 60)}...`);
   const { text: src, list: sourceList } = await research(cfg, item.q);
   if (stopRequested) return;
+  const again = mayRewrite((st.reportLog ?? []).find((r) => r.itemId === item.id), sourceList);
+  if (!again.ok) {
+    L().updateItem(agent.id, item.id, { status: 'uncertain', reason: again.reason });
+    L().log({ agentId: agent.id, kind: 'info', title: `Needs new evidence: ${item.q.slice(0, 60)}`, body: again.reason ?? '' });
+    return;
+  }
   status('Learner is writing a report...');
   const report = await ask(
     learnerSystem(agent, st, cfg),
@@ -301,7 +310,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   status('Judge is checking the reports...');
   const verdict = await ask(
     `You are a strict but fair judge. Check each report: does it answer the question, does the reasoning make logical sense, does it follow from its sources, is anything unsafe or invented?${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
-    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\nFor each report write one line: "<number>: PASS <score>/10 - <why>" or "<number>: FAIL <score>/10 - <what is wrong and how to fix it>". Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
+    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\nFor each report write one line: "<number>: PASS <score>/10 | FACTS <n> | CITES <n> | COMPLETE <n> | RELEVANT <n> | LOGIC <n> | CLEAR <n> - <why>" or the same with FAIL and what is wrong and how to fix it. Every <n> is 0 to 10. FACTS: is every statement true? Be strict about numbers, dates, limits and names. CITES: does each [n] source really say what the sentence says? Good writing, completeness or clarity never make up for a wrong fact: if a material fact is wrong, FACTS must be below 6 and the verdict FAIL. Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
     'judge',
   );
   const r = rulings(verdict, reps.length);
@@ -319,8 +328,9 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
     if (assessment.judgeScore !== undefined) scores.push(assessment.judgeScore);
     markReport(agent.id, rep.itemId, {
       status: v ? (v.ok && assessment.status !== 'disputed' ? 'pass' : 'fail') : 'waiting',
-      score: assessment.judgeScore, why: v?.reason,
+      score: assessment.judgeScore, why: v ? plainReason(v.reason) : undefined,
       verificationStatus: assessment.status, verificationReasons: assessment.reasons,
+      dimensions: assessment.dimensions, gates: assessment.gates,
     });
     if (!v) {
       // Neither an absent verdict nor a malformed score can approve knowledge.
@@ -335,17 +345,14 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
       L().updateItem(agent.id, item.id, { status: 'uncertain', reason });
       if (cfg.mode === 'keep') {
         try {
-          const claims = extractCandidateClaims(full);
-          for (let j = 0; j < claims.length; j++) {
-            learningKnowledgeDb.saveCandidate({
-              id: `${original?.id ?? rep.itemId}:claim:${j + 1}`,
-              topic: cfg.topic, question: rep.q, claimText: claims[j],
-              reportId: original?.id ?? rep.itemId,
-              status: assessment.status === 'disputed' ? 'disputed' : 'candidate',
-              uncertainty: reason, sources: original?.sourceList ?? [],
-              citedNumbers: citedNumbers(claims[j]),
-            });
-          }
+          const stored = ingestClaims(learningKnowledgeDb, {
+            topic: cfg.topic, question: rep.q, reportId: original?.id ?? rep.itemId, reportText: full,
+            sources: original?.sourceList ?? [], reportStatus: assessment.status === 'disputed' ? 'disputed' : 'candidate', reportNote: reason,
+          });
+          L().log({
+            agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,
+            body: `${stored.contradictions ? `${stored.contradictions} conflict with something already known and need a review.\n` : ''}${stored.unsupported ? `${stored.unsupported} cited a passage that does not contain what they state.` : ''}`.trim(),
+          });
         } catch (e) { L().log({ agentId: agent.id, kind: 'error', title: 'Knowledge storage needs attention', body: String(e) }); }
       }
       // Do not count a report as accepted while material errors remain unresolved.

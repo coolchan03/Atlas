@@ -1,6 +1,6 @@
 import { assessReport, citedNumbers, parseJudgeScore, taxErrorSignals } from '../../../src/learning/evidenceGate';
 
-const source = [{ n: 1, title: 'Section 199A', kind: 'statute', passage: 'Original legislative passage', locator: '26 USC 199A' }];
+const source = [{ n: 1, title: 'Section 199A', kind: 'statute', passage: 'The rule exists in the code. Qualified business income, deduction and AGI rules apply.', locator: '26 USC 199A' }];
 
 describe('independent evidence gate', () => {
   test.each(['8/5', '7/8', '11/10'])('invalid judge score %s cannot grant acceptance', (score) => {
@@ -36,5 +36,48 @@ describe('independent evidence gate', () => {
 
   it('does not flag an explicit correction as the error itself', () => {
     expect(taxErrorSignals('ANSWER: QBI is not an itemized deduction. [1]')).toEqual([]);
+  });
+});
+
+describe('facts and citations are gates of their own', () => {
+  const line = (verdict: string, dims = '') => `1: ${verdict}${dims ? ` | ${dims}` : ''} - because`;
+  const ok = { text: 'ANSWER: The rule exists in the code. [1]', sources: source, judgePass: true as boolean | null };
+
+  it('reads the six dimension scores and ignores impossible ones', () => {
+    const r = assessReport({ ...ok, judgeLine: line('PASS 9/10', 'FACTS 8 | CITES 7 | COMPLETE 6 | RELEVANT 9 | LOGIC 8 | CLEAR 99') });
+    expect(r.dimensions).toEqual({ facts: 8, cites: 7, complete: 6, relevant: 9, logic: 8 });
+    expect(r.gates).toEqual({ facts: 'pass', citations: 'pass' });
+    expect(r.status).toBe('candidate');
+  });
+
+  it('a perfect overall score cannot override a failed factual gate', () => {
+    const r = assessReport({ ...ok, judgeLine: line('PASS 10/10', 'FACTS 3 | CITES 9 | CLEAR 10') });
+    expect(r.gates.facts).toBe('fail');
+    expect(r.status).toBe('disputed');
+    expect(r.reasons.join(' ')).toContain('factual correctness 3/10');
+  });
+
+  it('a perfect overall score cannot override a failed citation gate', () => {
+    const r = assessReport({ ...ok, judgeLine: line('PASS 10/10', 'FACTS 9 | CITES 2') });
+    expect(r.gates.citations).toBe('fail');
+    expect(r.status).toBe('disputed');
+  });
+
+  it('checks the cited passage itself, whatever the judge says', () => {
+    const wrong = assessReport({ ...ok, text: 'ANSWER: The limit is 168600 dollars. [1]', judgeLine: line('PASS 9/10', 'FACTS 9 | CITES 9') });
+    expect(wrong.gates.citations).toBe('fail');
+    expect(wrong.status).toBe('disputed');
+    expect(wrong.reasons.join(' ')).toContain('168600');
+  });
+
+  it('treats missing dimension scores as unknown, never as a pass', () => {
+    const r = assessReport({ ...ok, judgeLine: line('PASS 8/10') });
+    expect(r.gates.facts).toBe('unknown');
+    expect(r.status).toBe('candidate');
+  });
+
+  it('disputes a verdict that contradicts its own score, and rejects a FAIL', () => {
+    expect(assessReport({ ...ok, judgeLine: line('PASS 2/10', 'FACTS 8 | CITES 8') }).status).toBe('disputed');
+    expect(assessReport({ ...ok, judgePass: false, judgeLine: line('FAIL 3/10') }).status).toBe('rejected');
   });
 });
