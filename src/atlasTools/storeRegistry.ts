@@ -12,6 +12,7 @@ const STORES: Record<string, () => any> = {
   'atlas-agent-storage': () => require('../stores/agentStore').useAgentStore,
   'atlas-voice-settings': () => require('../atlasVoice/store').useAtlasVoiceStore,
   'atlas-voice-profiles': () => require('../atlasVoice/profiles').useVoiceProfiles,
+  'atlas-voice-reference-metadata-v1': () => require('../atlasVoice/cloneStore').useCloneReferences,
   'atlas-search-settings': () => require('../services/tools/webSearchProviders').useSearchSettings,
   'atlas-maps': () => require('../atlasMaps/maps').useMaps,
   'atlas-survival-manual': () => require('../survival/store').useSurvivalStore,

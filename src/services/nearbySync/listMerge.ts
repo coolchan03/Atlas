@@ -16,6 +16,9 @@ const ITEM_LISTS: Record<string, { field: string; id: (x: any) => string }> = {
   'atlas-pins': { field: 'pins', id: (x) => x.id },
   'atlas-skills': { field: 'skills', id: (x) => x.name },
   'atlas-schedule': { field: 'tasks', id: (x) => x.id },
+  // Voices made on either phone all stay; the samples themselves travel separately (voiceReferences.ts).
+  'atlas-voice-profiles': { field: 'profiles', id: (x) => x.id },
+  'atlas-voice-reference-metadata-v1': { field: 'references', id: (x) => x.id },
 };
 export const LIST_STORES = new Set(['atlas-maps', 'atlas-checklists', 'atlas-survival-manual', ...Object.keys(ITEM_LISTS)]);
 

@@ -3,7 +3,7 @@
  * Each style is plain data (tempo, scale, chords, rhythm), so a new one needs no new code. Every tune is original:
  * no famous melody is used, only the feel (bells for Christmas, a slow waltz for winter, and so on).
  */
-import type { MusicNote } from './composition';
+import type { MusicNote } from './types';
 
 export type StyleMood =
   | 'jazz' | 'vaporwave' | 'eerie'

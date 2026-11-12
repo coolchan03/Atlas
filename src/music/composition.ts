@@ -4,13 +4,11 @@
  * Output is original synthesised note audio, not singing or a licensed recording.
  */
 import { composeStyled, isStyleMood, type StyleMood } from './styles';
+import type { MusicNote, MusicRole, MusicScore } from './types';
 
 export type MusicMood = 'study' | 'ambient' | 'cinematic' | 'electronic' | StyleMood;
 export type SoundPreset = 'keys' | 'bell' | 'synth' | 'ambient';
-/** `perc` (a kick or a noise tick) is made by the built-in composer only; a model's score cannot ask for it. */
-export type MusicRole = 'melody' | 'pad' | 'bass' | 'perc';
-export interface MusicNote { pitch: number; beat: number; length: number; gain: number; role?: MusicRole }
-export interface MusicScore { title: string; bpm: number; notes: MusicNote[] }
+export type { MusicRole, MusicNote, MusicScore } from './types';
 
 const SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export function pitchNumber(name: string): number | null {

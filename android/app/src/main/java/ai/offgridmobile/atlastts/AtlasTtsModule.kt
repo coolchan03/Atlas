@@ -469,6 +469,52 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         }.start()
     }
 
+    /** The ids of the voice samples stored on this phone (for syncing them to a paired phone). */
+    @ReactMethod
+    fun listVoiceReferences(promise: Promise) {
+        try {
+            val ids = Arguments.createArray()
+            referenceRoot.listFiles()?.filter { it.isFile && it.name.endsWith(".wav") }
+                ?.map { it.name.removeSuffix(".wav") }
+                ?.filter { it.matches(Regex("[a-f0-9-]{36}")) }
+                ?.forEach { ids.pushString(it) }
+            promise.resolve(ids)
+        } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_LIST", e.message ?: e.toString()) }
+    }
+
+    /** One stored voice sample as base64, to send to a paired phone. */
+    @ReactMethod
+    fun readVoiceReference(id: String, promise: Promise) {
+        try {
+            val file = referenceFile(id)
+            if (!file.isFile) throw IllegalArgumentException("That voice sample is not on this phone")
+            promise.resolve(android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP))
+        } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_READ", e.message ?: e.toString()) }
+    }
+
+    /**
+     * Keeps a voice sample received from a paired phone, after the same checks as an imported one (a real, usable
+     * recording). It never replaces a sample this phone already has. Resolves true when it was kept.
+     */
+    @ReactMethod
+    fun writeVoiceReference(id: String, base64: String, promise: Promise) {
+        Thread {
+            try {
+                val dest = referenceFile(id)
+                if (dest.exists()) { promise.resolve(false); return@Thread }
+                val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                require(bytes.size in 45..4_000_000) { "Invalid voice sample size" }
+                VoiceCloneWav.decode(bytes) // rejects silence, clipping and anything that is not a voice sample
+                val temp = java.io.File(referenceRoot, "$id.wav.part")
+                try {
+                    temp.writeBytes(bytes)
+                    if (!temp.renameTo(dest)) throw IllegalStateException("Voice sample could not be saved")
+                } finally { if (temp.exists()) temp.delete() }
+                promise.resolve(true)
+            } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_WRITE", e.message ?: e.toString()) }
+        }.start()
+    }
+
     @ReactMethod
     fun deleteVoiceReference(id: String, promise: Promise) {
         try {

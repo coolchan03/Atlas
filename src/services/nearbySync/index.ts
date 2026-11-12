@@ -12,6 +12,7 @@ import type { Tombstones, SyncKind } from './tombstones';
 import { applyStores, localStores } from './stores';
 import { applySecrets, localSecrets } from './secrets';
 import { audioOnPhone, receiveAudio, sendMissingAudio, type AudioChunk } from './audio';
+import { receiveVoiceRef, sendMissingVoiceRefs, voiceRefsOnPhone, type VoiceRefChunk } from './voiceReferences';
 import { useRecordings } from '../../atlasRecorder/store';
 
 const PREF = 'atlas-sync-enabled-v1';
@@ -46,6 +47,11 @@ type Incoming = { requestId: string; peerId: string; payload: string; newPair: b
 /** A piece of recording audio (not a full sync message), or null. */
 const audioChunk = (payload: string): (AudioChunk & { sourceId: string }) | null => {
   if (!payload.startsWith('{"kind":"audio"')) return null;
+  try { return JSON.parse(payload); } catch { return null; }
+};
+/** A cloned-voice sample (not a full sync message), or null. */
+const voiceRefChunk = (payload: string): (VoiceRefChunk & { sourceId: string }) | null => {
+  if (!payload.startsWith('{"kind":"voiceref"')) return null;
   try { return JSON.parse(payload); } catch { return null; }
 };
 export const nearbyAvailable = Platform.OS === 'android' && Boolean(NativeModules.AtlasNearbySync);
@@ -179,6 +185,7 @@ class NearbySyncService {
       version: 1, sourceId: this.deviceId, projects: [...projects, ...lockedProjects],
       conversations: [...conversations, ...lockedChats], agents, files, deleted: this.deleted,
       stores: await localStores(), audio: await audioOnPhone(recordings.map(r => r.id)),
+      voiceRefs: await voiceRefsOnPhone().catch(() => []),
       // Credentials never leave this device without an explicit opt-in.
       ...(this.shareSecrets ? { secrets: await localSecrets() } : {}),
     };
@@ -189,6 +196,13 @@ class NearbySyncService {
       const reply = await native().sync(peerId, JSON.stringify({ ...chunk, sourceId: this.deviceId }));
       if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
     }).catch(error => this.publish({ lastError: `Recording audio: ${String(error?.message ?? error)}` }));
+  }
+  /** After an exchange, send the other phone the cloned-voice samples it does not have yet. */
+  private async sendVoiceRefs(peerId: string, remote: SyncSnapshot) {
+    await sendMissingVoiceRefs(remote.voiceRefs, async (chunk) => {
+      const reply = await native().sync(peerId, JSON.stringify({ ...chunk, sourceId: this.deviceId }));
+      if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
+    }).catch(error => this.publish({ lastError: `Voice samples: ${String(error?.message ?? error)}` }));
   }
   private async apply(json: string, expectedPeerId: string): Promise<void> {
     const pending = this.mergeQueue.then(() => this.applyOne(json, expectedPeerId));
@@ -247,6 +261,13 @@ class NearbySyncService {
       if (audio) {
         if (audio.sourceId !== message.peerId) throw new Error('Wrong device identity in recording audio');
         await receiveAudio(audio);
+        await native().respond(message.requestId, '{"ok":true}');
+        return;
+      }
+      const voiceRef = voiceRefChunk(message.payload);
+      if (voiceRef) {
+        if (voiceRef.sourceId !== message.peerId) throw new Error('Wrong device identity in voice sample');
+        await receiveVoiceRef(voiceRef);
         await native().respond(message.requestId, '{"ok":true}');
         return;
       }
@@ -334,7 +355,9 @@ class NearbySyncService {
       const response = await native().pair(uri, JSON.stringify(await this.snapshot()));
       if (response.payload.startsWith('{"error":')) throw new Error(JSON.parse(response.payload).error);
       await this.apply(response.payload, response.peerId);
-      await this.sendAudio(response.peerId, JSON.parse(response.payload));
+      const theirs = JSON.parse(response.payload);
+      await this.sendAudio(response.peerId, theirs);
+      await this.sendVoiceRefs(response.peerId, theirs);
       await this.refreshPeers();
     } finally { this.busy = false; this.publish({ syncing: false }); }
   }
@@ -345,7 +368,9 @@ class NearbySyncService {
       const response = await native().sync(peerId, JSON.stringify(await this.snapshot()));
       if (response.payload.startsWith('{"error":')) throw new Error(JSON.parse(response.payload).error);
       await this.apply(response.payload, response.peerId);
-      await this.sendAudio(response.peerId, JSON.parse(response.payload));
+      const theirs = JSON.parse(response.payload);
+      await this.sendAudio(response.peerId, theirs);
+      await this.sendVoiceRefs(response.peerId, theirs);
     } catch (e) {
       this.publish({ lastError: String(e) });
       throw e;

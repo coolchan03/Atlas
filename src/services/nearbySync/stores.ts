@@ -35,7 +35,7 @@ export type StoreSnapshot = Record<string, StoreEntry>;
 type Stamps = Record<string, { hash: string; changedAt: number }>;
 
 export const syncedStoreKeys = (): string[] =>
-  [...RESTORABLE_STORE_KEYS, RECORDINGS, 'atlas-voice-profiles']
+  [...RESTORABLE_STORE_KEYS, RECORDINGS, 'atlas-voice-profiles', 'atlas-voice-reference-metadata-v1']
     .filter((k) => !OWN_MERGE.has(k) && !NOT_SYNCED.has(k) && !EXCLUDED_BACKUP_KEYS.test(k));
 
 /** The part of a store that is shared: for app settings only the person's choices. */
