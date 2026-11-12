@@ -38,7 +38,7 @@ it('shows what was learned, the conflict between two claims, and records that a 
   expect(screen.getByText(/No claim has been verified by you yet/)).toBeTruthy();
 
   rtl.fireEvent.press(screen.getByLabelText('Mark conflict resolved'));
-  const resolve = alert.mock.calls.at(-1)![2]!.find((b: any) => b.text === 'Resolved');
+  const resolve = (alert.mock.calls.at(-1)![2] as any[]).find((b) => b.text === 'Resolved');
   rtl.act(() => resolve.onPress());
   expect(db.openContradictions()).toHaveLength(0);
   await rtl.waitFor(() => expect(screen.queryByText('Two claims disagree')).toBeNull());
