@@ -100,5 +100,5 @@ export function weatherSummary(w: WeatherData, cityName?: string): string {
     w.precipProbPct > 10 ? `${w.precipProbPct}% chance of rain` : null,
     w.windKph > 20 ? `wind up to ${w.windKph} km/h` : null,
   ].filter(Boolean).join(', ');
-  return parts + '.';
+  return `${parts}.`;
 }

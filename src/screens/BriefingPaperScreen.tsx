@@ -11,7 +11,7 @@ import type { WeatherData } from '../atlasTools/weather';
 import { useMaps } from '../atlasMaps/maps';
 import type { RootStackParamList } from '../navigation/types';
 import { uvAdvice } from '../atlasTools/weather';
-import { TYPOGRAPHY, SPACING } from '../constants';
+import { TYPOGRAPHY } from '../constants';
 
 type Route = RouteProp<RootStackParamList, 'BriefingPaper'>;
 

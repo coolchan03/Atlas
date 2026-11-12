@@ -96,7 +96,7 @@ export async function fetchFlightStatus(flightNumber: string): Promise<string | 
   const id = flightNumber.toUpperCase().replace(/\s+/g, '');
   const urls = [
     `https://www.flightaware.com/live/flight/${id}`,
-    `https://www.bing.com/search?q=${encodeURIComponent(id + ' flight status')}`,
+    `https://www.bing.com/search?q=${encodeURIComponent(`${id} flight status`)}`,
   ];
   for (const url of urls) {
     try {

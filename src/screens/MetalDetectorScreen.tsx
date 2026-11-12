@@ -90,7 +90,6 @@ export const MetalDetectorScreen: React.FC = () => {
 
   const magnitude = mag?.magnitude ?? 0;
   const delta = baseline !== null ? magnitude - baseline : null;
-  const displayMag = delta !== null ? Math.abs(delta) : magnitude;
   const alert = alertLabel(magnitude, baseline);
 
   const barWidth = barAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });

@@ -31,7 +31,7 @@ export const BackgroundSettingsScreen: React.FC = () => {
   const pickImage = async () => {
     if (!selected) return;
     try {
-      const { pick, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
+      const { pick } = require('@react-native-documents/picker');
       const picked = Platform.OS === 'android'
         ? await pick({ mode: 'open', allowMultiSelection: false, type: ['image/*'] })
         : await pick({ mode: 'import', allowMultiSelection: false, type: ['public.image'] });

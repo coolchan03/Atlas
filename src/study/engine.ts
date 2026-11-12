@@ -7,9 +7,9 @@ import { ragService } from '../services/rag';
 import { runBackgroundJob } from '../services/llmJobQueue';
 import { knowledgeSource } from '../services/rag/knowledgeSource';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
-import { buildCrossword, buildWordSearch, Crossword, LearningTerm, WordSearch, normalizeLearningWord } from './learningGames';
+import { buildCrossword, buildWordSearch, LearningTerm, normalizeLearningWord } from './learningGames';
 export * from './store';
-import { useStudyStore, type Source, type StudyResult, type Card, type QuizItem, type PodcastLine, type Slide } from './store';
+import { type Source, type StudyResult, type Card, type QuizItem, type PodcastLine, type Slide } from './store';
 
 const SOURCE_CHARS = 700;
 /** Characters of source text that fit the loaded model's context (about 3 chars per token, minus room for the answer). */

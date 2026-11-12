@@ -78,10 +78,12 @@ function uriToPath(uri: string): string | null {
     const decoded = decodeURIComponent(uri);
     // Android SAF primary internal storage: .../tree/primary:Path/Subdir
     const treeMatch = decoded.match(/\/tree\/primary:(.+)$/);
-    if (treeMatch) return '/storage/emulated/0/' + treeMatch[1];
+    if (treeMatch) return `/storage/emulated/0/${treeMatch[1]}`;
     // iOS and some Android paths use file://
     if (uri.startsWith('file://')) return decodeURIComponent(uri.slice(7));
-  } catch {}
+  } catch {
+    // A malformed URI just means we cannot turn it into a path.
+  }
   return null;
 }
 

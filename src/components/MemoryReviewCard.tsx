@@ -28,11 +28,11 @@ export function MemoryReviewCard() {
       {enabled && <>
         <View style={styles.row}>
           <Text style={[styles.note, styles.flex, { color: colors.text }]}>Automatically remember simple non-sensitive preferences</Text>
-          <Switch value={autoSavePreferences} onValueChange={(autoSavePreferences) => set({ autoSavePreferences })} />
+          <Switch value={autoSavePreferences} onValueChange={(value) => set({ autoSavePreferences: value })} />
         </View>
         <View style={styles.row}>
           <Text style={[styles.note, styles.flex, { color: colors.text }]}>Offer therapy memory suggestions (always review before saving)</Text>
-          <Switch value={therapyReview} onValueChange={(therapyReview) => set({ therapyReview })} />
+          <Switch value={therapyReview} onValueChange={(value) => set({ therapyReview: value })} />
         </View>
       </>}
       {!!pending.length && <Text style={[styles.title, { color: colors.text }]}>Memory suggestions ({pending.length})</Text>}

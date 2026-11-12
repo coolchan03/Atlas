@@ -109,15 +109,15 @@ export function MusicStudioScreen() {
       if (selected === track.id) setSelected('');
     } },
   ]);
-  const option = (selected: boolean) => ({
-    borderColor: selected ? colors.primary : colors.border,
-    backgroundColor: selected ? colors.primary : colors.surface,
+  const option = (active: boolean) => ({
+    borderColor: active ? colors.primary : colors.border,
+    backgroundColor: active ? colors.primary : colors.surface,
   });
-  const chips = <T extends string | number>(values: Array<{ id: T; label: string }>, selected: T, change: (value: T) => void) => (
+  const chips = <T extends string | number>(values: Array<{ id: T; label: string }>, current: T, change: (value: T) => void) => (
     <View style={styles.options}>{values.map((v) => (
       <TouchableOpacity key={String(v.id)} onPress={() => change(v.id)} disabled={busy} accessibilityRole="radio"
-        accessibilityState={{ selected: v.id === selected }} style={[styles.option, option(v.id === selected)]}>
-        <Text style={{ color: v.id === selected ? colors.background : colors.text }}>{v.label}</Text>
+        accessibilityState={{ selected: v.id === current }} style={[styles.option, option(v.id === current)]}>
+        <Text style={{ color: v.id === current ? colors.background : colors.text }}>{v.label}</Text>
       </TouchableOpacity>
     ))}</View>
   );

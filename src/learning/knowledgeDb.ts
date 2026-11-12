@@ -253,7 +253,7 @@ export class LearningKnowledgeDb {
         status: c.status, uncertainty: c.uncertainty, reportId: c.report_id,
         createdAt: c.created_at, updatedAt: c.updated_at,
         // Default export references evidence without reproducing potentially copyrighted passages.
-        citations: (citations as any[]).map((e) => options.includePassages ? e : (({ passage, ...rest }) => rest)(e)),
+        citations: (citations as any[]).map((e) => options.includePassages ? e : (({ passage: _passage, ...rest }) => rest)(e)),
       };
     });
   }
