@@ -161,7 +161,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
           <View key={widget.id} style={[styles.savedRow, { borderTopColor: colors.border }]}>
             <View style={styles.flex}>
               <TouchableOpacity accessibilityRole="button" onPress={() => launch(widget)} testID={`launch-shortcut-${widget.id}`}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>{widget.title}{launchingId === widget.id ? ' · Loading model…' : ''}</Text>
+                <Text style={[styles.widgetTitle, { color: colors.text }]}>{widget.title}{launchingId === widget.id ? ' · Loading model…' : ''}</Text>
                 <Text style={[styles.small, { color: colors.textSecondary }]}>{inChat(widget.action)
                   ? `${widget.action === 'call' ? 'Call' : 'Chat'} · ${agent}${voice ? ` · ${voice}` : ''}${widget.modelId ? ' · selected model' : ''}`
                   : actionLabel(widget.action)}</Text>
@@ -192,7 +192,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
           {draft.action === 'resume-most' && <Text style={[styles.small, { color: colors.textSecondary }]}>Uses the number of your sent messages to find your most-used unlocked chat. No message content is inspected.</Text>}
           {draft.action === 'resume-last' && <Text style={[styles.small, { color: colors.textSecondary }]}>Opens your last active unlocked chat, or the most recently updated one.</Text>}
           <TouchableOpacity accessibilityRole="button" style={[styles.save, { borderColor: colors.primary }]} onPress={add} testID="home-save-shortcut">
-            <Text style={{ color: colors.primary, textAlign: 'center' }}>Add to Atlas home</Text>
+            <Text style={[styles.centered, { color: colors.primary }]}>Add to Atlas home</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -206,6 +206,8 @@ const styles = StyleSheet.create({
   small: { fontSize: 12, lineHeight: 18, marginTop: 4 },
   savedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderTopWidth: 1, paddingVertical: 10, marginTop: 8 },
   flex: { flex: 1 },
+  widgetTitle: { fontSize: 14, fontWeight: '600' },
+  centered: { textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 12 },
   selector: { marginTop: 10 },
   caption: { fontSize: 12, marginBottom: 5 },

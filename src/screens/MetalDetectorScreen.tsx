@@ -46,6 +46,11 @@ const literalStyles = StyleSheet.create({
   s16: { flexDirection: 'row', justifyContent: 'space-between' },
   s17: { fontSize: 12 },
   s18: { marginTop: 8, fontSize: 12, textAlign: 'center' },
+  centerContent: { justifyContent: 'center' },
+  centerText: { textAlign: 'center' },
+  outlined: { borderWidth: 1 },
+  alertText: { marginTop: SPACING.md, fontSize: 18 },
+  axisCell: { alignItems: 'center' },
 });
 
 export const MetalDetectorScreen: React.FC = () => {
@@ -79,8 +84,8 @@ export const MetalDetectorScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={[{ color: colors.text }, literalStyles.s4]}>Metal Detector</Text>
         </View>
-        <View style={[literalStyles.s5, { justifyContent: 'center' }]}>
-          <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.body, textAlign: 'center' }}>
+        <View style={[literalStyles.s5, literalStyles.centerContent]}>
+          <Text style={[{ color: colors.textSecondary, ...TYPOGRAPHY.body }, literalStyles.centerText]}>
             Magnetometer not available on this device.
           </Text>
         </View>
@@ -105,7 +110,7 @@ export const MetalDetectorScreen: React.FC = () => {
         <Text style={[{ color: colors.text }, literalStyles.s4]}>Metal Detector</Text>
       </View>
       <ScrollView contentContainerStyle={literalStyles.s5}>
-        <View style={[literalStyles.s6, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
+        <View style={[literalStyles.s6, literalStyles.outlined, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Animated.View style={[literalStyles.s7, { width: barWidth, backgroundColor: barColor }]} />
         </View>
         <Text style={[{ color: colors.text, ...TYPOGRAPHY.body }, literalStyles.s8]}>
@@ -119,7 +124,7 @@ export const MetalDetectorScreen: React.FC = () => {
             {delta >= 0 ? '+' : ''}{delta.toFixed(1)} µT from baseline
           </Text>
         )}
-        <Text style={[{ color: alert.color, ...TYPOGRAPHY.body }, { marginTop: SPACING.md, fontSize: 18 }]}>
+        <Text style={[{ color: alert.color, ...TYPOGRAPHY.body }, literalStyles.alertText]}>
           {alert.text}
         </Text>
         <View style={literalStyles.s11}>
@@ -143,7 +148,7 @@ export const MetalDetectorScreen: React.FC = () => {
             <Text style={[{ color: colors.textSecondary }, literalStyles.s15]}>RAW FIELD (µT)</Text>
             <View style={literalStyles.s16}>
               {(['x', 'y', 'z'] as const).map((axis) => (
-                <View key={axis} style={{ alignItems: 'center' }}>
+                <View key={axis} style={literalStyles.axisCell}>
                   <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.label }}>{axis.toUpperCase()}</Text>
                   <Text style={[{ color: colors.text }, literalStyles.s17]}>{mag[axis].toFixed(1)}</Text>
                 </View>

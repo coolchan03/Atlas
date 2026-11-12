@@ -42,6 +42,8 @@ const literalStyles = StyleSheet.create({
   s11: { marginTop: 24, flexDirection: 'row', gap: 12 },
   s12: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', gap: 8, borderWidth: 1 },
   s13: { fontSize: 15 },
+  centerContent: { justifyContent: 'center' },
+  centerText: { textAlign: 'center' },
 });
 
 export const PedometerScreen: React.FC = () => {
@@ -98,8 +100,8 @@ export const PedometerScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={[{ color: colors.text }, literalStyles.s4]}>Step Counter</Text>
         </View>
-        <View style={[literalStyles.s5, { justifyContent: 'center' }]}>
-          <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.body, textAlign: 'center' }}>
+        <View style={[literalStyles.s5, literalStyles.centerContent]}>
+          <Text style={[{ color: colors.textSecondary, ...TYPOGRAPHY.body }, literalStyles.centerText]}>
             Step counting is not available on this device.
           </Text>
         </View>

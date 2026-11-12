@@ -14,7 +14,7 @@ export const ScreenBackground: React.FC<{ screenKey: string }> = ({ screenKey })
   const bg = useAppStore((s) => s.settings.screenBackgrounds?.[screenKey]);
   if (!bg?.uri) return null;
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Image source={{ uri: bg.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={bg.blur ?? 0} />
       {(bg.dim ?? 0) > 0 && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${bg.dim})` }]} />

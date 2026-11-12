@@ -31,6 +31,9 @@ function dbLabel(db: number): string {
   return 'Dangerous';
 }
 
+/** Text and icon color on the accent-filled Start button. */
+const ON_ACCENT = '#FFFFFF';
+
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 14 },
@@ -47,6 +50,7 @@ const literalStyles = StyleSheet.create({
   s13: { flexDirection: 'row', marginTop: 24, gap: 32 },
   s14: { alignItems: 'center' },
   s15: { fontSize: 11, marginTop: 2 },
+  outlined: { borderWidth: 1 },
 });
 
 export const NoiseMeterScreen: React.FC = () => {
@@ -128,7 +132,7 @@ export const NoiseMeterScreen: React.FC = () => {
         <Text style={[{ color: colors.text }, literalStyles.s4]}>Noise Meter</Text>
       </View>
       <ScrollView contentContainerStyle={literalStyles.s5}>
-        <View style={[literalStyles.s6, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
+        <View style={[literalStyles.s6, literalStyles.outlined, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Animated.View style={[literalStyles.s7, { height: barHeight, backgroundColor: barColor }]} />
         </View>
         <Text style={[{ color: colors.text, ...TYPOGRAPHY.body }, literalStyles.s8]}>
@@ -139,9 +143,9 @@ export const NoiseMeterScreen: React.FC = () => {
         </Text>
         <TouchableOpacity
           onPress={toggle}
-          style={[literalStyles.s10, { backgroundColor: running ? colors.surface : accent, borderWidth: running ? 1 : 0, borderColor: colors.border }]}>
-          <Icon name={running ? 'square' : 'mic'} size={20} color={running ? colors.text : '#fff'} />
-          <Text style={[{ color: running ? colors.text : '#fff', marginTop: SPACING.xs }, literalStyles.s11]}>
+          style={[literalStyles.s10, running && literalStyles.outlined, { backgroundColor: running ? colors.surface : accent, borderColor: colors.border }]}>
+          <Icon name={running ? 'square' : 'mic'} size={20} color={running ? colors.text : ON_ACCENT} />
+          <Text style={[{ color: running ? colors.text : ON_ACCENT, marginTop: SPACING.xs }, literalStyles.s11]}>
             {running ? 'Stop' : 'Start'}
           </Text>
         </TouchableOpacity>
