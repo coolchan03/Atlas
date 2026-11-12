@@ -9,13 +9,14 @@ export type StyleMood =
   | 'jazz' | 'vaporwave' | 'eerie' | 'bossa' | 'lofi' | 'noir' | 'space' | 'rain' | 'spa' | 'campfire' | 'chiptune' | 'western'
   | 'spring' | 'summer' | 'fall' | 'winter'
   | 'thanksgiving' | 'halloween' | 'christmas' | 'newyear' | 'valentines' | 'easter' | 'july4' | 'stpatricks' | 'lunarnewyear' | 'cincodemayo'
-  | 'italian' | 'frenchcafe' | 'tiki' | 'tavern' | 'shanty' | 'carnival';
+  | 'italian' | 'frenchcafe' | 'tiki' | 'tavern' | 'shanty' | 'carnival'
+  | 'twenties' | 'fifties' | 'surf' | 'disco' | 'retro80s' | 'pop' | 'rock' | 'funk' | 'reggae' | 'country' | 'blues' | 'classical' | 'lullaby' | 'march' | 'edm' | 'hiphop';
 
-export type StyleGroup = 'Moods and genres' | 'Seasons and holidays' | 'Places and settings';
+export type StyleGroup = 'Moods and genres' | 'Eras and genres' | 'Seasons and holidays' | 'Places and settings';
 
 type SoundName = 'keys' | 'bell' | 'synth' | 'ambient';
 type Bass = 'root' | 'walk' | 'pulse' | 'drone';
-type Perc = 'none' | 'soft' | 'four' | 'swing' | 'sleigh' | 'industrial';
+type Perc = 'none' | 'soft' | 'four' | 'swing' | 'sleigh' | 'industrial' | 'backbeat' | 'offbeat';
 type Tune = 'arp' | 'walk' | 'sparse';
 
 export interface StyleSpec {
@@ -89,6 +90,22 @@ export const STYLES: Record<StyleMood, StyleSpec> = {
   tavern: { label: 'Medieval tavern', group: 'Places and settings', sound: 'keys', bpm: 108, beatsPerBar: 6, scale: DORIAN, progression: [0, 6, 0, 3, 0, 6, 3, 0], chord: [0, 4], tune: 'walk', density: 6, swing: 0, bass: 'pulse', perc: 'soft', padGain: 0.14 },
   shanty: { label: 'Pirate sea shanty', group: 'Places and settings', sound: 'keys', bpm: 102, beatsPerBar: 6, scale: DORIAN, progression: [0, 6, 0, 3, 0, 6, 3, 0], chord: TRIAD, tune: 'arp', density: 6, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.14 },
   carnival: { label: 'Carnival', group: 'Places and settings', sound: 'bell', bpm: 132, beatsPerBar: 3, scale: MAJOR, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'walk', density: 6, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.14 },
+  twenties: { label: '1920s', group: 'Eras and genres', sound: 'keys', bpm: 150, beatsPerBar: 4, scale: MAJOR, progression: [0, 0, 3, 0, 4, 4, 0, 0], chord: SEVENTH, tune: 'walk', density: 8, swing: 0.28, bass: 'pulse', perc: 'swing', padGain: 0.12 },
+  fifties: { label: '1950s', group: 'Eras and genres', sound: 'keys', bpm: 96, beatsPerBar: 4, scale: MAJOR, progression: [0, 5, 3, 4, 0, 5, 3, 4], chord: TRIAD, tune: 'walk', density: 6, swing: 0.2, bass: 'pulse', perc: 'backbeat', padGain: 0.15 },
+  surf: { label: 'Surf rock', group: 'Eras and genres', sound: 'synth', bpm: 148, beatsPerBar: 4, scale: HARMONIC_MINOR, progression: [0, 0, 3, 3, 4, 4, 0, 0], chord: TRIAD, tune: 'arp', density: 16, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.12 },
+  disco: { label: 'Disco', group: 'Eras and genres', sound: 'synth', bpm: 118, beatsPerBar: 4, scale: DORIAN, progression: [0, 3, 1, 4, 0, 3, 1, 4], chord: SEVENTH, tune: 'walk', density: 8, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.14 },
+  retro80s: { label: 'Retro 80s synth', group: 'Eras and genres', sound: 'synth', bpm: 112, beatsPerBar: 4, scale: MINOR, progression: [0, 5, 2, 6, 0, 5, 2, 6], chord: TRIAD, tune: 'arp', density: 8, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.18 },
+  pop: { label: 'Pop', group: 'Eras and genres', sound: 'keys', bpm: 108, beatsPerBar: 4, scale: MAJOR, progression: [0, 4, 5, 3, 0, 4, 5, 3], chord: TRIAD, tune: 'walk', density: 8, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.16 },
+  rock: { label: 'Rock', group: 'Eras and genres', sound: 'synth', bpm: 128, beatsPerBar: 4, scale: MIXOLYDIAN, progression: [0, 6, 3, 0, 0, 6, 3, 4], chord: [0, 4], tune: 'walk', density: 8, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.2 },
+  funk: { label: 'Funk', group: 'Eras and genres', sound: 'synth', bpm: 104, beatsPerBar: 4, scale: DORIAN, progression: [0, 0, 3, 0, 0, 0, 3, 4], chord: SEVENTH, tune: 'walk', density: 8, swing: 0.1, bass: 'pulse', perc: 'backbeat', padGain: 0.12 },
+  reggae: { label: 'Reggae', group: 'Eras and genres', sound: 'keys', bpm: 78, beatsPerBar: 4, scale: MAJOR, progression: [0, 3, 0, 4, 0, 3, 0, 4], chord: TRIAD, tune: 'sparse', density: 4, swing: 0, bass: 'root', perc: 'offbeat', padGain: 0.14 },
+  country: { label: 'Country', group: 'Eras and genres', sound: 'keys', bpm: 112, beatsPerBar: 4, scale: MAJOR, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'arp', density: 8, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.14 },
+  blues: { label: 'Blues', group: 'Eras and genres', sound: 'keys', bpm: 92, beatsPerBar: 4, scale: BLUES, progression: [0, 0, 0, 0, 3, 3, 0, 4], chord: SEVENTH, tune: 'walk', density: 6, swing: 0.3, bass: 'walk', perc: 'swing', padGain: 0.14 },
+  classical: { label: 'Classical', group: 'Eras and genres', sound: 'keys', bpm: 84, beatsPerBar: 4, scale: MAJOR, progression: [0, 3, 4, 0, 5, 3, 4, 0], chord: TRIAD, tune: 'arp', density: 8, swing: 0, bass: 'root', perc: 'none', padGain: 0.14 },
+  lullaby: { label: 'Lullaby', group: 'Eras and genres', sound: 'bell', bpm: 66, beatsPerBar: 3, scale: PENTATONIC, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'sparse', density: 3, swing: 0, bass: 'root', perc: 'none', padGain: 0.12 },
+  march: { label: 'March', group: 'Eras and genres', sound: 'synth', bpm: 116, beatsPerBar: 4, scale: MAJOR, progression: [0, 0, 3, 3, 4, 4, 0, 0], chord: TRIAD, tune: 'walk', density: 4, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.18 },
+  edm: { label: 'Dance and EDM', group: 'Eras and genres', sound: 'synth', bpm: 128, beatsPerBar: 4, scale: MINOR, progression: [0, 5, 2, 6, 0, 5, 2, 6], chord: TRIAD, tune: 'arp', density: 16, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.16 },
+  hiphop: { label: 'Boom bap beat', group: 'Eras and genres', sound: 'keys', bpm: 90, beatsPerBar: 4, scale: DORIAN, progression: [0, 0, 3, 3, 0, 0, 4, 3], chord: SEVENTH, tune: 'sparse', density: 4, swing: 0.2, bass: 'pulse', perc: 'backbeat', padGain: 0.14 },
 };
 
 export const isStyleMood = (mood: string): mood is StyleMood => mood in STYLES;
@@ -153,6 +170,8 @@ function percNotes(spec: StyleSpec, bar: number, seed: number): MusicNote[] {
   const hit = (beat: number, pitch: number, gain: number): MusicNote => ({ pitch, beat, length: 0.25, gain, role: 'perc' });
   switch (spec.perc) {
     case 'four': return Array.from({ length: spec.beatsPerBar * 2 }, (_, n) => (n % 2 === 0 ? hit(base + n / 2, 40, 0.5) : hit(base + n / 2, 90, 0.12)));
+    case 'backbeat': return Array.from({ length: spec.beatsPerBar }, (_, n) => (n % 2 === 0 ? hit(base + n, 40, 0.5) : hit(base + n, 82, 0.28)));
+    case 'offbeat': return Array.from({ length: spec.beatsPerBar }, (_, n) => hit(base + n + 0.5, 90, 0.16));
     case 'soft': return [hit(base, 40, 0.3), hit(base + spec.beatsPerBar / 2, 90, 0.1)];
     case 'swing': return Array.from({ length: spec.beatsPerBar * 2 }, (_, n) => hit(slot(spec, { bar, n, slices: spec.beatsPerBar * 2 }), 91, n % 2 ? 0.07 : 0.11));
     case 'sleigh': return Array.from({ length: spec.beatsPerBar }, (_, n) => hit(base + n, 91, n === 0 ? 0.16 : 0.1));

@@ -21,7 +21,7 @@ const BASIC_MOODS: Array<{ id: MusicMood; label: string }> = [
   { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
   { id: 'cinematic', label: 'Cinematic' }, { id: 'electronic', label: 'Electronic' },
 ];
-const STYLE_GROUPS: Array<{ title: StyleGroup; items: Array<{ id: MusicMood; label: string }> }> = (['Moods and genres', 'Seasons and holidays', 'Places and settings'] as const)
+const STYLE_GROUPS: Array<{ title: StyleGroup; items: Array<{ id: MusicMood; label: string }> }> = (['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'] as const)
   .map((title) => ({
     title,
     items: [

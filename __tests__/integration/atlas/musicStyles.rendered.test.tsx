@@ -12,8 +12,8 @@ it('shows holidays and places as their own groups and sets a fitting sound when 
   const React = require('react');
   const { MusicStudioScreen } = require('../../../src/screens/MusicStudioScreen');
   const view = rtl.render(React.createElement(MusicStudioScreen));
-  for (const title of ['Moods and genres', 'Seasons and holidays', 'Places and settings']) expect(view.getByText(title)).toBeTruthy();
-  for (const label of ['Jazz', 'Vaporwave', 'Thanksgiving', 'Halloween', 'Cinco de Mayo', 'Italian restaurant']) expect(view.getByText(label)).toBeTruthy();
+  for (const title of ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings']) expect(view.getByText(title)).toBeTruthy();
+  for (const label of ['Jazz', 'Vaporwave', 'Thanksgiving', 'Halloween', 'Cinco de Mayo', 'Italian restaurant', '1920s', 'Retro 80s synth', 'Pop', 'Rock']) expect(view.getByText(label)).toBeTruthy();
   rtl.fireEvent.press(view.getByText('Christmas'));
   const selected = view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected);
   expect(selected.some((r: any) => rtl.within(r).queryByText('Bells'))).toBe(true);
