@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
+import { StorageItemsSection } from './storage/StorageItemsSection';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
@@ -16,7 +17,6 @@ import { useAppStore, useChatStore } from '../stores';
 import { useDownloadStore } from '../stores/downloadStore';
 import { hardwareService, modelManager } from '../services';
 import { OrphanedFilesSection } from './OrphanedFilesSection';
-import { imageBackendLabel } from '../utils/imageBackend';
 import { createStyles } from './StorageSettingsScreen.styles';
 
 export const StorageSettingsScreen: React.FC = () => {
@@ -148,44 +148,7 @@ export const StorageSettingsScreen: React.FC = () => {
           </View>
         </Card>
 
-        {downloadedModels.length > 0 && (
-          <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>LLM Models</Text>
-            {downloadedModels.map((model, index) => (
-              <View
-                key={model.id}
-                style={[styles.modelRow, index === downloadedModels.length - 1 && styles.lastRow]}
-              >
-                <View style={styles.modelInfo}>
-                  <Text style={styles.modelName} numberOfLines={1}>{model.name}</Text>
-                  <Text style={styles.modelMeta}>{model.quantization}</Text>
-                </View>
-                <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
-              </View>
-            ))}
-          </Card>
-        )}
-
-        {downloadedImageModels.length > 0 && (
-          <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>Image Models</Text>
-            {downloadedImageModels.map((model, index) => (
-              <View
-                key={model.id}
-                style={[styles.modelRow, index === downloadedImageModels.length - 1 && styles.lastRow]}
-              >
-                <View style={styles.modelInfo}>
-                  <Text style={styles.modelName} numberOfLines={1}>{model.name}</Text>
-                  <Text style={styles.modelMeta}>
-                    {imageBackendLabel(model.backend, 'GPU')}
-                    {model.style ? ` • ${model.style}` : ''}
-                  </Text>
-                </View>
-                <Text style={styles.modelSize}>{hardwareService.formatBytes(model.size)}</Text>
-              </View>
-            ))}
-          </Card>
-        )}
+        <StorageItemsSection />
 
         {staleDownloads.length > 0 && (
           <Card style={styles.section}>
