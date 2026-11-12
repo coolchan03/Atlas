@@ -17,7 +17,7 @@ export function describeProfile(p: Pick<VoiceProfile, 'voiceId' | 'sid' | 'rate'
 }
 
 /** Plays a short sample in a profile's voice, then returns to the saved voice. */
-export async function previewProfile(p: VoiceProfile): Promise<void> {
+export async function previewProfile(p: Pick<VoiceProfile, 'name' | 'voiceId' | 'sid' | 'rate' | 'referenceId'>): Promise<void> {
   await loadVoiceForSpeech(p.voiceId, p.sid, p.referenceId);
   speak(`Hi, I'm ${p.name}. This is how I sound.`, 'voice-test', p.rate);
   const unsub = useAtlasVoiceStore.subscribe((s) => {
@@ -53,19 +53,21 @@ export function VoiceProfilesCard() {
         that agent's answers are read in its own voice. Profiles stay on this device.
       </Text>
       <Text style={[styles.p, styles.current, { color: colors.textMuted }]}>Current: {describeProfile({ voiceId, sid, rate })}</Text>
-      <View style={styles.row}>
+      {isPocketVoiceId(voiceId) ? (
+        <Text style={[styles.p, styles.current, { color: colors.textSecondary }]}>Cloned voices are named and created in the Clone a voice card above.</Text>
+      ) : <View style={styles.row}>
         <TextInput
           testID="voice-profile-name"
           value={name}
           onChangeText={setName}
-          placeholder="Profile name, e.g. Calm coach"
+          placeholder="Name for the voice chosen above"
           placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]}
         />
         <TouchableOpacity testID="voice-profile-save" onPress={save} disabled={!name.trim()} style={[styles.btn, !name.trim() && styles.disabled, { borderColor: colors.primary }]}>
           <Text style={{ color: colors.primary }}>Save</Text>
         </TouchableOpacity>
-      </View>
+      </View>}
       {presets.length > 0 && (
         <TouchableOpacity testID="voice-profile-presets" onPress={() => addPresets(presets)} style={[styles.btn, styles.presets, { borderColor: colors.primary }]}>
           <Text style={{ color: colors.primary }}>Add ready-made: {presets.map((p) => p.name).join(', ')}</Text>

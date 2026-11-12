@@ -31,15 +31,16 @@ export const useCloneReferences = create<CloneStore>()(persist((set) => ({
 }));
 
 /** The user must explicitly import/record a sample; no web upload or telemetry. */
-export async function importCloneReference(uri: string, name: string): Promise<VoiceReference> {
+export async function importCloneReference(uri: string, name: string): Promise<VoiceReference & { sourceSeconds: number }> {
   if (Platform.OS !== 'android' || !NativeModules.AtlasTts?.importVoiceReference) {
     throw new Error('On-device Pocket TTS cloning is currently available on Android only.');
   }
-  const result: { id: string; seconds: number } = await NativeModules.AtlasTts.importVoiceReference(uri, name);
+  // Any audio file works (mp3, m4a, wav...). A long recording is cut to its clearest part on the native side.
+  const result: { id: string; seconds: number; sourceSeconds?: number } = await NativeModules.AtlasTts.importVoiceReference(uri, name);
   if (!result?.id || !Number.isFinite(result.seconds)) throw new Error('The audio sample could not be imported.');
   const reference: VoiceReference = { id: result.id, seconds: result.seconds, name: voiceReferenceName(name), createdAt: new Date().toISOString() };
   useCloneReferences.getState().add(reference);
-  return reference;
+  return { ...reference, sourceSeconds: result.sourceSeconds ?? result.seconds };
 }
 
 export async function deleteCloneReference(id: string): Promise<void> {

@@ -359,33 +359,40 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         return java.io.File(referenceRoot, "$id.wav")
     }
 
+    /** Longest recording accepted as a source, so decoding it stays light on memory. */
+    private val MAX_REFERENCE_SOURCE_SECONDS = 600.0
+
+    /**
+     * Imports a voice sample from any audio Android can play (mp3, m4a, ogg, flac, wav...) of any length up to ten
+     * minutes. It is converted to 16 kHz mono; a long recording is cut to its clearest 20 seconds.
+     */
     @ReactMethod
     fun importVoiceReference(uri: String, name: String, promise: Promise) {
         Thread {
+            val converted = java.io.File(ctx.cacheDir, "voice-reference-${java.util.UUID.randomUUID()}.wav")
             try {
                 val parsed = android.net.Uri.parse(uri)
-                require(parsed.scheme == "file" || parsed.scheme == "content") { "Choose a local WAV file" }
-                val source = ctx.contentResolver.openInputStream(parsed)
-                    ?: throw IllegalArgumentException("Could not read recording")
-                val data = source.use { input ->
-                    val out = java.io.ByteArrayOutputStream()
-                    val buffer = ByteArray(16384)
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        require(out.size() + n <= VoiceCloneWav.MAX_BYTES) { "Reference WAV is too large" }
-                        out.write(buffer, 0, n)
-                    }
-                    out.toByteArray()
-                }
-                val decoded = VoiceCloneWav.decode(data)
+                require(parsed.scheme == "file" || parsed.scheme == "content") { "Choose a local audio file" }
+                val sourceSeconds = AudioDecoder.decode(ctx, parsed, converted, { false }) { }
+                require(sourceSeconds >= 3.0) { "Use a recording of at least 3 seconds" }
+                require(sourceSeconds <= MAX_REFERENCE_SOURCE_SECONDS) { "Use a recording shorter than 10 minutes" }
+                // AudioDecoder writes a plain 44-byte WAV header followed by 16-bit mono samples.
+                val bytes = converted.readBytes()
+                val count = (bytes.size - 44) / 2
+                val pcm = java.nio.ByteBuffer.wrap(bytes, 44, count * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                val samples = FloatArray(count) { pcm.short / 32768f }
+                val start = VoiceReferenceCoach.bestWindowStart(samples, AudioDecoder.RATE, VoiceReferenceCoach.REFERENCE_SECONDS)
+                val end = minOf(samples.size, start + VoiceReferenceCoach.REFERENCE_SECONDS * AudioDecoder.RATE)
+                val encoded = VoiceReferenceCoach.encodeWav(VoiceCloneWav.Reference(samples.copyOfRange(start, end), AudioDecoder.RATE))
+                val decoded = VoiceCloneWav.decode(encoded) // rejects silence and heavy clipping with a clear message
                 val id = java.util.UUID.randomUUID().toString()
                 val dest = referenceFile(id)
-                try { dest.writeBytes(data) } catch (e: Throwable) { dest.delete(); throw e }
+                try { dest.writeBytes(encoded) } catch (e: Throwable) { dest.delete(); throw e }
                 promise.resolve(Arguments.createMap().apply {
-                    putString("id", id); putDouble("seconds", decoded.seconds)
+                    putString("id", id); putDouble("seconds", decoded.seconds); putDouble("sourceSeconds", sourceSeconds)
                 })
             } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_IMPORT", e.message ?: e.toString()) }
+            finally { converted.delete() }
         }.start()
     }
 

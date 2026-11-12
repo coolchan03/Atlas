@@ -28,6 +28,44 @@ object VoiceReferenceCoach {
         val advice: List<String>,
     )
 
+    /** How much of a long recording is kept as the reference: the Pocket engine works best on a short, steady sample. */
+    const val REFERENCE_SECONDS = 20
+
+    /**
+     * Where the clearest [windowSeconds] of a long recording start, as a sample index. The window with the most
+     * speech wins; any clipping counts against it. A recording that already fits starts at 0.
+     */
+    fun bestWindowStart(samples: FloatArray, rate: Int, windowSeconds: Int): Int {
+        val window = windowSeconds * rate
+        if (rate <= 0 || samples.size <= window) return 0
+        val seconds = samples.size / rate
+        val level = DoubleArray(seconds)
+        val clipped = IntArray(seconds)
+        var total = 0.0
+        for (s in 0 until seconds) {
+            var energy = 0.0
+            for (i in s * rate until (s + 1) * rate) {
+                val v = samples[i].toDouble()
+                energy += v * v
+                if (abs(v) >= 0.995) clipped[s]++
+            }
+            level[s] = sqrt(energy / rate)
+            total += level[s]
+        }
+        val speaking = max(0.006, total / seconds * 0.5)
+        var best = 0
+        var bestScore = Double.NEGATIVE_INFINITY
+        for (start in 0..(seconds - windowSeconds)) {
+            var score = 0.0
+            for (s in start until start + windowSeconds) {
+                if (level[s] >= speaking) score += 1.0 + level[s]
+                score -= clipped[s].toDouble() / rate * 20.0
+            }
+            if (score > bestScore) { bestScore = score; best = start }
+        }
+        return best * rate
+    }
+
     /** frame size is 20ms and analysis is bounded by the WAV parser's 8MB cap. */
     fun analyze(ref: VoiceCloneWav.Reference): Report {
         val values = ref.samples

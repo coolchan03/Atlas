@@ -1,13 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Linking, NativeModules, Platform, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, Linking, NativeModules, Platform, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
-import { audioRecorderService } from '../services/audioRecorderService';
 import { useAtlasVoiceStore } from './store';
-import { useNeuralVoices, selectVoice, importVoiceFile } from './neural';
-import { useVoiceProfiles } from './profiles';
-import { analyzeCloneReference, improveCloneReference, deleteCloneReference, importCloneReference, useCloneReferences, type VoiceReferenceQuality } from './cloneStore';
-import { isPocketVoiceId, voiceReferenceName } from './cloneRouting';
-import { speak, stop as stopSpeech } from './tts';
+import { useNeuralVoices, importVoiceFile } from './neural';
+import { deleteCloneReference, useCloneReferences, type VoiceReferenceQuality } from './cloneStore';
+import { isPocketVoiceId } from './cloneRouting';
+import { useVoiceSample } from './useVoiceSample';
+import { useVoiceCreation } from './useVoiceCreation';
 
 const STEPS = [2, 3, 5, 8];
 const STEP_LABELS: Record<number, string> = { 2: 'Fast', 3: 'Balanced', 5: 'Quality', 8: 'Best quality' };
@@ -16,13 +15,13 @@ const MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-m
 type Reference = ReturnType<typeof useCloneReferences.getState>['references'][number];
 
 /** The saved voice samples, one tappable row each, with delete. */
-function SampleList({ references, selectedId, onSelect, onDeleted, onError }: {
-  references: Reference[]; selectedId: string; onSelect: (id: string) => void; onDeleted: (id: string) => void; onError: (e: unknown) => void;
+function SampleList({ references, selectedId, onSelect, onError }: {
+  references: Reference[]; selectedId: string; onSelect: (id: string) => void; onError: (e: unknown) => void;
 }) {
   const { colors } = useTheme();
   const confirmDelete = (ref: Reference) => Alert.alert('Delete voice sample?', `${ref.name} — any agent profile using this sample will stop working until a new reference is assigned.`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: () => deleteCloneReference(ref.id).then(() => onDeleted(ref.id)).catch(onError) },
+    { text: 'Delete', style: 'destructive', onPress: () => deleteCloneReference(ref.id).catch(onError) },
   ]);
   return (
     <>
@@ -91,193 +90,154 @@ function ClonedVoiceNote() {
   return <Text style={[styles.note, { color: colors.textSecondary }]}>Currently using a cloned voice. Change it using Voice profiles or the picker above.</Text>;
 }
 
+/** The first thing still missing before a voice can be created, in plain words, or '' when nothing is. */
+function blocker(f: { available: boolean; consent: boolean; model: string; hasSample: boolean; name: string; busy: boolean; recording: boolean }): string {
+  if (!f.available) return 'Cloning needs the Android version of Atlas with the voice engine.';
+  if (!f.consent) return 'Turn on the permission switch above first.';
+  if (!f.model) return 'Install the Pocket TTS model in step 1 first.';
+  if (!f.hasSample) return 'Record or choose a voice sample in step 2 first.';
+  if (f.recording) return 'Stop the recording first.';
+  if (f.busy) return 'Working...';
+  if (!f.name.trim()) return 'Give the voice a name in step 3.';
+  return '';
+}
+
+/** A numbered section of the cloning flow. */
+function Step({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.step}>
+      <Text style={[styles.stepTitle, { color: colors.text }]}>{number}. {title}</Text>
+      {children}
+    </View>
+  );
+}
+
+type Sample = ReturnType<typeof useVoiceSample>;
+
+/** Step 2: record or choose a sample, pick one of the saved samples, and check its quality. */
+function SampleStep({ sample, consent, busy, canTry, onError }: { sample: Sample; consent: boolean; busy: boolean; canTry: boolean; onError: (e: unknown) => void }) {
+  const { colors } = useTheme();
+  const [checkOpen, setCheckOpen] = useState(false);
+  const canChoose = consent && !busy && !sample.recording;
+  return (
+    <Step number={2} title="Add a voice sample">
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Record about 10 seconds of clear speech, or choose any audio file (MP3, M4A, WAV and more). A long file is fine: Atlas picks the clearest 20 seconds.</Text>
+      <View style={styles.row}>
+        <TouchableOpacity style={styles.action} testID="voice-clone-record" disabled={!consent || busy} onPress={sample.recording ? sample.stopRecording : sample.startRecording}>
+          <Text style={{ color: colors.primary }}>{sample.recording ? 'Stop and save' : 'Record'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.action} testID="voice-clone-import-audio" disabled={!canChoose} onPress={sample.chooseFile}>
+          <Text style={{ color: colors.primary }}>Choose audio file</Text>
+        </TouchableOpacity>
+      </View>
+      {sample.recording && <Text style={{ color: colors.textSecondary }}>Recording: {sample.recordSeconds}s. Speak clearly. Press Stop when done.</Text>}
+      <SampleList references={sample.references} selectedId={sample.selected?.id ?? ''} onSelect={sample.choose} onError={onError} />
+      {!!sample.selected && (
+        <TouchableOpacity onPress={() => setCheckOpen((v) => !v)} accessibilityRole="button">
+          <Text style={{ color: colors.primary }}>{checkOpen ? 'Hide sample check' : 'Check sample quality'}</Text>
+        </TouchableOpacity>
+      )}
+      {checkOpen && !!sample.selected && <SampleCheck canRun={canTry} quality={sample.quality} onAnalyze={sample.check} onImprove={sample.improve} />}
+    </Step>
+  );
+}
+
+/** Step 4: the Create voice button, with the reason it cannot be pressed yet. */
+function CreateStep({ why, onCreate }: { why: string; onCreate: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Step number={4} title="Create the voice">
+      <TouchableOpacity style={[styles.primary, { backgroundColor: why ? colors.border : colors.primary }]} testID="voice-clone-create" disabled={!!why} onPress={onCreate} accessibilityRole="button">
+        <Text style={[styles.primaryText, { color: why ? colors.textMuted : colors.background }]}>Create voice</Text>
+      </TouchableOpacity>
+      {!!why && <Text style={[styles.note, { color: colors.textSecondary }]}>{why}</Text>}
+    </Step>
+  );
+}
+
 /** Voice cloning is strictly local, opt-in, and requires a compatible PocketTTS ONNX model. */
 export function VoiceCloneCard() {
   const { colors } = useTheme();
   const installed = useNeuralVoices((s) => s.installed);
-  const models = Object.keys(installed).filter(isPocketVoiceId);
-  const references = useCloneReferences((s) => s.references);
-  const addProfile = useVoiceProfiles((s) => s.addProfile);
+  const model = Object.keys(installed).filter(isPocketVoiceId)[0] ?? '';
   const [consent, setConsent] = useState(false);
-  const steps = useAtlasVoiceStore((s) => s.cloneSteps);
-  const setSteps = useAtlasVoiceStore((s) => s.setCloneSteps);
-  const [name, setName] = useState('My cloned voice');
-  const [referenceId, setReferenceId] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
-  const [benchmark, setBenchmark] = useState('');
-  const [quality, setQuality] = useState<VoiceReferenceQuality | null>(null);
-  const recordStarted = useRef(0);
-  const ownRecording = useRef(false);
-  useEffect(() => () => { if (ownRecording.current && audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording(); }, []);
-  useEffect(() => {
-    if (!recording) return;
-    setRecordSeconds(0);
-    const clock = setInterval(() => setRecordSeconds(Math.floor((Date.now() - recordStarted.current) / 1000)), 500);
-    return () => clearInterval(clock);
-  }, [recording]);
+  const [name, setName] = useState('');
+  const [busyModel, setBusyModel] = useState(false);
   const available = Platform.OS === 'android' && !!NativeModules.AtlasTts?.importVoiceReference;
-  const model = models[0] ?? '';
-  const selectedReference = references.find((r) => r.id === referenceId);
-
-  const canCheck = consent && !!selectedReference && !busy && !recording;
-  const canUse = canCheck && !!model;
   const fail = (e: unknown) => Alert.alert('Voice cloning', String((e as any)?.message || e));
-  const addRecording = async () => {
-    if (!consent) return;
-    if (audioRecorderService.isCurrentlyRecording()) { Alert.alert('Recorder busy', 'Finish the current voice note or call first.'); return; }
-    try {
-      await audioRecorderService.startRecording();
-      ownRecording.current = true;
-      recordStarted.current = Date.now();
-      setRecording(true);
-    } catch (e) { fail(e); }
-  };
-  const stopRecording = async () => {
-    ownRecording.current = false;
-    setRecording(false);
-    setBusy(true);
-    let recordingPath = '';
-    try {
-      const result = await audioRecorderService.stopRecording();
-      recordingPath = result.path.replace(/^file:\/\//, '');
-      const seconds = result.durationSeconds || (Date.now() - recordStarted.current) / 1000;
-      if (seconds < 3 || seconds > 30) throw new Error('Use a 5–15 second clear sample (allowed: 3–30 seconds).');
-      const uri = result.path.startsWith('file:') ? result.path : `file://${result.path}`;
-      const reference = await importCloneReference(uri, name);
-      setReferenceId(reference.id);
-    } catch (e) { fail(e); }
-    finally {
-      // Always erase the temporary Document recording, even if validation/import failed.
-      // Only the explicitly imported private no-backup copy is retained.
-      if (recordingPath) {
-        const RNFS = require('@dr.pogodin/react-native-fs');
-        await RNFS.unlink(recordingPath).catch(() => undefined);
-      }
-      setBusy(false);
-    }
-  };
-  const pickRecording = async () => {
-    if (!consent) return;
-    setBusy(true);
-    try {
-      const { pick } = require('@react-native-documents/picker');
-      const result = await pick({ mode: 'open', allowMultiSelection: false, type: ['audio/wav', 'audio/x-wav', 'audio/wave'] });
-      const file = result?.[0];
-      if (file) {
-        const reference = await importCloneReference(file.uri, name);
-        setReferenceId(reference.id);
-      }
-    } catch (e: any) {
-      if (!/OPERATION_CANCELED/i.test(String(e?.code || ''))) fail(e);
-    } finally { setBusy(false); }
-  };
-  const diagnoseSample = async () => {
-    if (!selectedReference || !consent || busy) return;
-    setBusy(true); setQuality(null);
-    try { setQuality(await analyzeCloneReference(selectedReference.id)); }
-    catch (e) { fail(e); } finally { setBusy(false); }
-  };
-  const improveSample = async () => {
-    if (!selectedReference || !consent || busy) return;
-    setBusy(true);
-    try {
-      const copy = await improveCloneReference(selectedReference.id);
-      setReferenceId(copy.id);
-      setQuality(await analyzeCloneReference(copy.id));
-      Alert.alert('Improved sample saved', 'A separate trimmed, normalized copy was saved. Your original and existing agent voices were not changed. Preview both before choosing.');
-    } catch (e) { fail(e); } finally { setBusy(false); }
-  };
+  const sample = useVoiceSample(name, fail);
+  const make = useVoiceCreation({ model, reference: sample.selected, name, onError: fail });
+  const busy = sample.busy || make.busy || busyModel;
+  const why = blocker({ available, consent, model, hasSample: !!sample.selected, name, busy, recording: sample.recording });
+  const canTry = !!sample.selected && !!model && consent && !busy && !sample.recording;
+
   const importModel = async () => {
-    setBusy(true);
-    try {
-      await importVoiceFile(); // Reuses the existing sherpa-onnx archive importer.
-    } catch (e: any) { if (!/cancel/i.test(String(e?.message || e?.code))) fail(e); }
-    finally { setBusy(false); }
-  };
-  const changeSteps = async (count: number) => {
-    try { await NativeModules.AtlasTts?.setVoiceCloneSteps?.(count); setSteps(count); setBenchmark(''); }
-    catch (e) { fail(e); }
-  };
-  const preview = async () => {
-    if (!consent || !model || !selectedReference) return;
-    setBusy(true);
-    try {
-      stopSpeech();
-      await selectVoice(model, 0, selectedReference.id);
-      speak('Hello. This is a preview of my cloned voice.', 'voice-clone-preview');
-    } catch (e) { fail(e); }
-    finally { setBusy(false); }
-  };
-  const speedTest = async () => {
-    if (!consent || !model || !selectedReference) return;
-    stopSpeech(); setBusy(true); setBenchmark('Measuring generation speed on this device…');
-    try {
-      await selectVoice(model, 0, selectedReference.id);
-      const result: { synthesisSeconds: number; audioSeconds: number; realTimeFactor: number } =
-        await NativeModules.AtlasTts.benchmarkVoiceClone('Hello. I am testing the generation speed of this voice.');
-      setBenchmark(`${result.audioSeconds.toFixed(1)}s of speech generated in ${result.synthesisSeconds.toFixed(1)}s (RTF ${result.realTimeFactor.toFixed(2)}; below 1 is faster than real time).`);
-    } catch (e) { setBenchmark(''); fail(e); } finally { setBusy(false); }
-  };
-  const saveProfile = async () => {
-    if (!consent || !model || !selectedReference) return;
-    const safeName = voiceReferenceName(name);
-    addProfile({ name: safeName, voiceId: model, sid: 0, rate: 1, referenceId: selectedReference.id });
-    Alert.alert('Saved', `${safeName} can now be assigned to an agent in Agents → Edit.`);
+    setBusyModel(true);
+    try { await importVoiceFile(); } catch (e: any) { if (!/cancel/i.test(String(e?.message || e?.code))) fail(e); } finally { setBusyModel(false); }
   };
 
   return (
-    <View testID="voice-clone-card" style={[styles.card, { backgroundColor: colors.surface }] }>
-      <Text style={[styles.heading, { color: colors.text }]}>Clone a voice (Pocket TTS)</Text>
-      <Text style={[styles.note, { color: colors.textSecondary }] }>
-        Use a quiet-room, 5–12 second voice sample. Atlas runs Pocket TTS entirely on the phone after the model is imported; no transcript or upload. Select fast or higher-quality generation, then benchmark on your device.
+    <View testID="voice-clone-card" style={[styles.card, { backgroundColor: colors.surface }]}>
+      <Text style={[styles.heading, { color: colors.text }]}>Clone a voice</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>
+        Make a copy of a voice from a short sample. It runs on this phone with no upload. Then use it for an agent, phone calls or reading aloud.
       </Text>
       <View style={styles.row}>
-        <Switch testID="voice-clone-consent" value={consent} onValueChange={setConsent} disabled={recording} />
-        <Text style={[styles.note, styles.flex, { color: colors.text }]}>I own this voice or have permission to reproduce it. Samples stay on this device.</Text>
+        <Switch testID="voice-clone-consent" value={consent} onValueChange={setConsent} disabled={sample.recording} />
+        <Text style={[styles.note, styles.flex, { color: colors.text }]}>I own this voice or have permission to copy it. Samples stay on this phone.</Text>
       </View>
-      {!available && <Text style={[styles.note, { color: colors.textSecondary }]}>Native Pocket TTS cloning requires an updated Android build.</Text>}
-      {available && !model && <ModelSetup canImport={consent && !busy} onImport={importModel} onError={fail} />}
+      {!available && <Text style={[styles.note, { color: colors.textSecondary }]}>{blocker({ available, consent, model, hasSample: false, name, busy, recording: false })}</Text>}
       {available && (
         <>
-          <TextInput testID="voice-clone-name" value={name} onChangeText={setName} placeholder="Name this voice" placeholderTextColor={colors.textMuted}
-            style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.action} testID="voice-clone-record" disabled={!consent || busy}
-              onPress={recording ? stopRecording : addRecording}>
-              <Text style={{ color: colors.primary }}>{recording ? 'Stop and save recording' : 'Record a sample'}</Text>
+          <Step number={1} title="Install the voice engine (once)">
+            {model ? <Text style={[styles.note, { color: colors.textSecondary }]}>Installed.</Text>
+              : <ModelSetup canImport={consent && !busy} onImport={importModel} onError={fail} />}
+          </Step>
+          <SampleStep sample={sample} consent={consent} busy={busy} canTry={canTry} onError={fail} />
+          <Step number={3} title="Name it and try it">
+            <TextInput testID="voice-clone-name" value={name} onChangeText={setName} placeholder="Voice name, for example Mom" placeholderTextColor={colors.textMuted}
+              style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
+            <TouchableOpacity style={styles.action} testID="voice-clone-preview" disabled={!canTry} onPress={make.tryIt}>
+              <Text style={{ color: canTry ? colors.primary : colors.textMuted }}>Try the voice</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.action} testID="voice-clone-import-wav" disabled={!consent || busy || recording} onPress={pickRecording}>
-              <Text style={{ color: colors.primary }}>Import WAV</Text>
-            </TouchableOpacity>
-          </View>
-          {recording && <Text style={{ color: colors.textSecondary }}>Recording: {recordSeconds}s. Speak clearly for 5–12 seconds; stop before 30 seconds.</Text>}
-          <SampleList references={references} selectedId={referenceId} onSelect={(id) => { setReferenceId(id); setQuality(null); }}
-            onDeleted={(id) => { if (referenceId === id) setReferenceId(''); }} onError={fail} />
-          <SampleCheck canRun={canCheck} quality={quality} onAnalyze={diagnoseSample} onImprove={improveSample} />
-          <Text style={[styles.note, styles.spaced, { color: colors.textSecondary }]}>Speed / voice quality (steps):</Text>
+            {!!make.status && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.note, styles.flex, { color: colors.textSecondary }]}>{make.status}</Text></View>}
+          </Step>
+          <CreateStep why={why} onCreate={make.create} />
+          <Advanced colors={colors} steps={make.steps} onSteps={make.changeSteps} canTest={canTry} onSpeedTest={make.speedTest} result={make.benchmark} />
+          <ClonedVoiceNote />
+        </>
+      )}
+    </View>
+  );
+}
+
+/** Quality setting and the phone-call speed test, kept out of the way until wanted. */
+function Advanced({ colors, steps, onSteps, canTest, onSpeedTest, result }: {
+  colors: { text: string; border: string; primary: string; textSecondary: string };
+  steps: number; onSteps: (n: number) => void; canTest: boolean; onSpeedTest: () => void; result: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.step}>
+      <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="voice-clone-advanced">
+        <Text style={{ color: colors.primary }}>{open ? 'Hide speed and quality' : 'Speed and quality'}</Text>
+      </TouchableOpacity>
+      {open && (
+        <>
+          <Text style={[styles.note, { color: colors.textSecondary }]}>Faster settings sound a little less detailed. Fast is best for phone calls.</Text>
           <View style={styles.row}>
             {STEPS.map((n) => (
-              <TouchableOpacity key={n} onPress={() => changeSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
+              <TouchableOpacity key={n} onPress={() => onSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
                 style={[styles.action, { borderColor: steps === n ? colors.primary : colors.border }]}>
                 <Text style={{ color: colors.text }}>{STEP_LABELS[n]}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.action} testID="voice-clone-preview" disabled={!canUse} onPress={preview}>
-              <Text style={{ color: colors.primary }}>Preview / Use</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!canUse} onPress={speedTest}>
-              <Text style={{ color: colors.primary }}>Speed test</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.action} testID="voice-clone-save" disabled={!canUse} onPress={saveProfile}>
-              <Text style={{ color: colors.primary }}>Save as agent voice</Text>
-            </TouchableOpacity>
-          </View>
-          {!!benchmark && <Text style={[styles.note, { color: colors.textSecondary }]}>{benchmark}</Text>}
-          <ClonedVoiceNote />
+          <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!canTest} onPress={onSpeedTest}>
+            <Text style={{ color: canTest ? colors.primary : colors.textSecondary }}>Test speed for phone calls</Text>
+          </TouchableOpacity>
+          {!!result && <Text style={[styles.note, { color: colors.textSecondary }]}>{result}</Text>}
         </>
       )}
     </View>
@@ -293,9 +253,12 @@ const styles = StyleSheet.create({
   note: { fontSize: 13, lineHeight: 19 },
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 10 },
   action: { borderWidth: 1, borderColor: ACTION_BORDER, borderRadius: 8, padding: 10 },
+  step: { marginTop: 16, gap: 8 },
+  stepTitle: { fontSize: 15, fontWeight: '600' },
+  primary: { borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  primaryText: { fontSize: 16, fontWeight: '600' },
   wizard: { marginTop: 12, padding: 10, borderRadius: 9, borderWidth: 1 },
   strong: { fontWeight: '600' },
-  spaced: { marginTop: 12 },
   input: { borderWidth: 1, borderRadius: 8, padding: 9, marginTop: 12 },
   flex: { flex: 1 },
 });
