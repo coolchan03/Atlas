@@ -54,6 +54,11 @@ export interface RemoteEntry { name: string; path: string; isDir: boolean; size:
 const listCache: Record<string, RemoteEntry[]> = {};
 
 /** Lists one folder of the map server (continents, then countries, then states). */
+/** Free space on the phone in bytes, or null when it cannot be read. */
+export async function freeSpaceBytes(): Promise<number | null> {
+  try { return Number((await RNFS.getFSInfo()).freeSpace); } catch { return null; }
+}
+
 export async function browseMaps(path = ''): Promise<RemoteEntry[]> {
   if (listCache[path]) return listCache[path];
   let lastErr: unknown = null;
@@ -93,7 +98,7 @@ function validateMapRemotePath(remotePath: string): void {
     throw new Error('Invalid map download path.');
   }
 }
-const fileNameFor = (remotePath: string) => remotePath.replace(/\//g, '_');
+export const fileNameFor = (remotePath: string) => remotePath.replace(/\//g, '_');
 
 export async function downloadMap(remotePath: string): Promise<string> {
   validateMapRemotePath(remotePath);

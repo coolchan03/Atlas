@@ -11,8 +11,9 @@ import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import {
   useMaps, useMapDownloads, browseMaps, downloadMap, cancelMapDownload, installedMaps, deleteMap, watchPosition,
-  distanceM, bearingDeg, compassName, fmtDistance, fmtCoord, RemoteEntry, LocalMap, GpsFix,
+  distanceM, bearingDeg, compassName, fmtDistance, fmtCoord, fileNameFor, freeSpaceBytes, RemoteEntry, LocalMap, GpsFix,
 } from '../atlasMaps/maps';
+import { listingBytes, mapState, roomFor, type MapState } from '../atlasMaps/mapUpdates';
 const BACKGROUNDCOLOR_2A0000 = '#2A0000';
 const COLOR_FFF = '#fff';
 const BACKGROUNDCOLOR_1A0000 = '#1a0000';
@@ -342,6 +343,9 @@ export const MapsScreen: React.FC = () => {
   );
 };
 
+const stateLabel = (state: MapState) => (state === 'update' ? ' · Update' : state === 'installed' ? ' · Installed' : '');
+const stateColor = (state: MapState, colors: any, accent: string) => (state === 'update' ? accent : colors.textMuted);
+
 /** Download, switch and delete offline maps. */
 const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any; accent: string }> = ({ visible, onClose, colors, accent }) => {
   const current = useMaps((s) => s.current);
@@ -368,7 +372,14 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
     return () => { alive = false; };
   }, [path]);
 
+  const installedBytes = (e: RemoteEntry) => local.find((m) => m.path.endsWith(`/${fileNameFor(e.path)}`))?.size;
   const get = async (e: RemoteEntry) => {
+    const need = listingBytes(e.size);
+    const free = await freeSpaceBytes();
+    if (need !== null && free !== null && !roomFor(need, free)) {
+      Alert.alert('Not enough space', `${e.name} needs about ${mb(need)} and this phone has ${mb(free)} free. Delete something under Settings, then Storage, or pick a smaller area such as a state or county.`);
+      return;
+    }
     try { const p = await downloadMap(e.path); await refresh(); setCurrent(p); Alert.alert('Map ready', `${e.name} is on your phone and works offline.`); }
     catch (x: any) { if (!/cancel|abort/i.test(String(x?.message))) Alert.alert('Download failed', String(x?.message || x)); }
   };
@@ -443,6 +454,7 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
           <Text style={[{ color: colors.textSecondary }, literalStyles.s71]}>{err}</Text>
         ) : (
           <FlatList
+            ListHeaderComponent={<Text style={[{ color: colors.textMuted }, literalStyles.s69]}>A smaller area uses less storage: pick a state or county instead of a whole country. Sizes are shown before you download. A map marked Update has a newer file.</Text>}
             data={entries}
             keyExtractor={(e) => e.path}
             contentContainerStyle={literalStyles.s59}
@@ -453,7 +465,7 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
                   style={[literalStyles.s7, { backgroundColor: colors.surface }, literalStyles.s72]}>
                   <Icon name={e.isDir ? 'folder' : 'download'} size={18} color={e.isDir ? colors.textSecondary : accent} />
                   <Text style={[{ color: colors.text }, literalStyles.s73]}>{e.name}</Text>
-                  {p !== undefined ? <Text style={{ color: accent }}>{Math.round(p * 100)}%</Text> : <Text style={{ color: colors.textMuted }}>{e.size}</Text>}
+                  {p !== undefined ? <Text style={{ color: accent }}>{Math.round(p * 100)}%</Text> : <Text style={{ color: e.isDir ? colors.textMuted : stateColor(mapState(e.size, installedBytes(e)), colors, accent) }}>{e.isDir ? e.size : `${e.size}${stateLabel(mapState(e.size, installedBytes(e)))}`}</Text>}
                   {e.isDir && <Icon name="chevron-right" size={18} color={colors.textMuted} />}
                 </TouchableOpacity>
               );
