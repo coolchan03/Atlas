@@ -53,6 +53,9 @@ it('records, transcribes and labels who said what, all on the phone', async () =
   const { useRecordings } = require('../../../src/atlasRecorder/store');
   const screen = rtl.render(React.createElement(RecorderScreen));
 
+  // The screen says plainly that only the speaker-label model can tell voices apart, not the chat model.
+  expect(await screen.findByText(/Speaker labels are ready\. Only the speaker-label model can tell voices apart/)).toBeTruthy();
+
   // Consent first: no record button until the user agrees to tell everyone.
   expect(screen.queryByLabelText('Start recording')).toBeNull();
   rtl.fireEvent.press(screen.getByText('I will tell everyone'));

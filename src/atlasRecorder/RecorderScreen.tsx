@@ -147,6 +147,18 @@ export const RecorderScreen: React.FC = () => {
           </Card>
         )}
 
+        <Card title="Who said what" testID="recorder-speaker-note">
+          <Text style={styles.desc}>
+            {!recorderService.speakerLabelsAvailable()
+              ? 'This phone build cannot label speakers, so transcripts have no names.'
+              : labelsReady === null ? ''
+                : labelsReady ? 'Speaker labels are ready.'
+                  : 'Speaker labels are not downloaded yet, so transcripts have no names.'}
+            {' '}Only the speaker-label model can tell voices apart. The chat model you have loaded cannot, and neither can the transcription model.
+            Labels can mix up similar voices, people talking at once and phone-call audio. Check the names and fix any line by tapping it.
+          </Text>
+        </Card>
+
         {recordings.length > 0 && (
           <Card title="Recordings">
             {recordings.map((r) => (
