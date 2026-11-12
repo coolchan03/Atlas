@@ -46,6 +46,8 @@ export interface BankItem {
   /** Judge feedback for a redo. */
   feedback?: string;
   round: number;
+  /** 'resolve' = made from two claims that disagree; everything else is ordinary study. */
+  kind?: 'study' | 'resolve';
 }
 
 export interface ReportSource { n: number; title: string; kind: 'project' | 'library' | 'web'; url?: string; passage?: string; retrievedAt?: string; sourceId?: string; locator?: string; publicationDate?: string; effectiveFrom?: string; effectiveTo?: string; taxYear?: number }
@@ -101,6 +103,8 @@ export interface PerAgent {
   onTrack: boolean | null;
   /** Lessons kept when learning without an agent (an agent keeps its own). */
   lessons: string;
+  /** What the cycle was doing when it last wrote its place. Still set at the next start means it was interrupted. */
+  checkpoint?: { step: string; at: number };
 }
 
 export const blankState = (): PerAgent => ({

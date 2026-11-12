@@ -1,4 +1,4 @@
-import { checkSupport, claimSentences, closestPassage, compareClaim, numbersIn, similarity } from '../../../src/learning/claimText';
+import { checkSupport, claimSentences, closestPassage, compareClaim, numbersIn, rankClaims, recallScore, similarity } from '../../../src/learning/claimText';
 
 describe('comparing claims', () => {
   const known = [
@@ -67,5 +67,21 @@ describe('splitting a report into claims', () => {
     expect(claimSentences('ANSWER: Boil the water for one minute. [1] Let it cool before drinking it. [2][3]')).toEqual([
       'Boil the water for one minute. [1]', 'Let it cool before drinking it. [2][3]',
     ]);
+  });
+});
+
+describe('practice scoring without a model', () => {
+  const stored = ['Boil water for one minute to make it safe.', 'Let boiled water cool before drinking it.'];
+
+  it('scores how much of what was learned an answer contains', () => {
+    expect(recallScore('You should boil the water for one minute to make it safe, then let it cool before drinking.', stored)).toBe(1);
+    expect(recallScore('Boil water for one minute to make it safe.', stored)).toBe(0.5);
+    expect(recallScore('Boil water for ten minutes.', stored)).toBe(0);
+    expect(recallScore('anything', [])).toBe(0);
+  });
+
+  it('retrieves the closest stored claims for a question', () => {
+    const known = [{ id: '1', text: stored[0] }, { id: '2', text: 'Tourniquets stop heavy bleeding.' }];
+    expect(rankClaims('How long to boil water?', known).map((k) => k.id)).toEqual(['1']);
   });
 });

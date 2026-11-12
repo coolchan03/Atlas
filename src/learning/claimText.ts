@@ -125,3 +125,27 @@ export function claimSentences(text: string): string[] {
   }
   return [...new Set(out)].slice(0, 12);
 }
+
+/** The known claims closest to a question, best first. Retrieval for practice and exams: no model involved. */
+export function rankClaims<T extends { text: string }>(question: string, known: T[], limit = 5): T[] {
+  return known
+    .map((k) => ({ k, score: similarity(question, k.text) }))
+    .filter((x) => x.score > 0.15)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.k);
+}
+
+/**
+ * How much of what the stored claims say an answer contains, 0 to 1. A claim counts as recalled when the answer has all of its
+ * numbers and most of its words. Deterministic, so a model never grades its own memory.
+ */
+export function recallScore(answer: string, claims: string[]): number {
+  if (!claims.length) return 0;
+  const recalled = claims.filter((c) => {
+    const claim = c.replace(/\[\d+\]/g, '');
+    const have = new Set(numbersIn(answer));
+    return numbersIn(claim).every((n) => have.has(n)) && similarity(claim, answer) >= 0.5;
+  });
+  return recalled.length / claims.length;
+}

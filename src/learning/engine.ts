@@ -33,7 +33,16 @@ import { assessReport } from './evidenceGate';
 import { plainReason } from './judgeDimensions';
 import { learningKnowledgeDb } from './knowledgeDb';
 import { ingestClaims } from './claimIngest';
-import { mayRewrite } from './cycleRules';
+import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycleRules';
+import { MasteryStore, type DueConcept } from './masteryStore';
+import { MemoryLedger } from './memoryLedger';
+import { rankClaims, recallScore } from './claimText';
+import { stripInjection } from './sourceSafety';
+
+const mastery = new MasteryStore(learningKnowledgeDb);
+const memory = new MemoryLedger(learningKnowledgeDb);
+/** The ledger is optional storage: if it is unavailable the cycle still runs, with what it has. */
+const safely = <T,>(job: () => T, fallback: T): T => { try { return job(); } catch (e) { logger.log(`[Learning] ledger unavailable: ${String(e)}`); return fallback; } };
 
 let running = false;
 let stopRequested = false;
@@ -119,6 +128,9 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
       }
     } catch { /* offline */ }
   }
+  let removed = 0;
+  for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
+  if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
   return {
     text: found.map((f, i) => `[${i + 1}] (${f.title}) ${f.content}`).join('\n\n'),
     list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
@@ -175,6 +187,7 @@ function learnerSystem(agent: Agent, st: PerAgent, cfg: LearnConfig): string {
 
 // ------------------------------------------------------------------ 1. question bank
 async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
+  L().patch(agent.id, { bank: pruneBank(L().get(agent.id).bank) });
   const st = L().get(agent.id);
   const round = st.round + 1;
   const done = st.bank.filter((b) => b.status === 'answered' || b.status === 'uncertain').map((b) => b.q).slice(-60);
@@ -303,6 +316,30 @@ function markReport(agentId: string, itemId: string, patch: Partial<LearnReport>
   L().patch(agentId, { reportLog: log.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
 }
 
+/**
+ * Practice: concepts due for review are answered again from what is stored, and graded by comparing the answer with the
+ * stored claims, never by a model. It measures whether the knowledge can be found and used, and schedules the next review.
+ */
+async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): Promise<void> {
+  let recalled = 0;
+  for (const c of due) {
+    if (stopRequested) return;
+    status(`Practicing from memory: ${c.question.slice(0, 60)}...`);
+    const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
+    const notes = rankClaims(c.question, safely(() => learningKnowledgeDb.knownClaims(c.topic), []), 5).map((k) => k.text);
+    let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
+    if (stored.length) {
+      const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.map((n, i) => `${i + 1}. ${n}`).join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
+      const score = recallScore(answer, stored);
+      outcome = score >= 0.7 ? 'correct' : score >= 0.4 ? 'partial' : 'wrong';
+      if (outcome === 'wrong') safely(() => memory.recordExperience({ topic: cfg.topic, attempt: `Recall: ${c.question}`, outcome: 'wrong', correction: stored.join(' ') }), undefined);
+    }
+    if (outcome === 'correct') recalled += 1;
+    safely(() => mastery.record(agent.id, c, outcome), undefined);
+  }
+  L().log({ agentId: agent.id, kind: 'info', title: `Practice: ${recalled} of ${due.length} recalled`, body: 'Graded by comparing each answer with what was stored, not by the model.' });
+}
+
 async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   const st = L().get(agent.id);
   const reps = st.pendingReports;
@@ -336,6 +373,16 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
       // Neither an absent verdict nor a malformed score can approve knowledge.
       L().updateItem(agent.id, item.id, { status: 'uncertain', reason: 'Judge did not give a clear verdict' });
       continue;
+    }
+    const concept = { question: rep.q, topic: cfg.topic };
+    if (v && (!v.ok || assessment.status === 'disputed')) {
+      safely(() => {
+        memory.recordExperience({ topic: cfg.topic, attempt: rep.q, outcome: v.ok ? 'disputed' : 'failed', correction: plainReason(v.reason) || assessment.reasons[0] });
+        mastery.record(agent.id, concept, 'wrong');
+      }, undefined);
+    } else if (v) {
+      // First exposure starts tracking, due for review tomorrow. A later passing report never overwrites practice results.
+      safely(() => { if (!mastery.isTracked(rep.q)) mastery.record(agent.id, concept, 'partial'); }, undefined);
     }
     if (v.ok) {
       pass++; // Count the judge's opinion only, not factual verification.
@@ -385,9 +432,16 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
   const unresolved = st.bank.filter((b) => b.status === 'uncertain' || b.status === 'failed').slice(-10);
   const recent = L().events.filter((e) => e.agentId === agent.id && (e.kind === 'judge' || e.kind === 'report')).slice(0, 6).reverse();
   const currentLessons = cfg.mode === 'keep' ? agent.lessons || '' : st.sessionLessons;
+  // Measured facts, not impressions: what the ledger and the mastery records actually show.
+  const measured = safely(() => {
+    const counts = learningKnowledgeDb.getReliabilitySnapshot().counts;
+    const m = mastery.summary(agent.id);
+    const repeats = memory.repeatFailures(cfg.topic).map((r) => `${r.attempt} (${r.times} times)`);
+    return `Claims: ${counts.candidate} unreviewed, ${counts.disputed} disputed, ${counts.verified} verified.\nOpen conflicts between claims: ${learningKnowledgeDb.openContradictions(20).length}.\nConcepts tracked: ${m.tracked}, due for review: ${m.due}, mastered: ${m.mastered}.\nMistakes repeated: ${repeats.join('; ') || 'none'}.`;
+  }, 'Not available.');
   const out = await ask(
     'You are the manager. You make sure the learner and the judge stay on the ORIGINAL task. You catch drift, a judge that is too harsh or too lenient, and gaps in the study plan. You never approve unsafe or unsupported lessons. Prefer resolving contradictions, missing foundations, old rules and repeated failures before creating new topics. Do not treat an LLM judge score as proof.',
-    `ORIGINAL TASK: ${cfg.topic}\n\nUnresolved/failed questions (research new evidence before repeating):\n${unresolved.map((b) => `- ${b.q}: ${b.reason || b.status}`).join('\n') || '(none)'}\n\nOpen questions:\n${numbered(open).slice(0, 1500) || '(none)'}\n\nRejected by the judge:\n${st.bank.filter((b) => b.status === 'rejected').slice(-6).map((b) => `- ${b.q} (${b.reason})`).join('\n') || '(none)'}\n\nRecent work:\n${recent.map((e) => `${e.title}\n${e.body.slice(0, 450)}`).join('\n\n').slice(0, 3200)}\n\nJudge findings:\n${st.pendingFindings.join('\n').slice(0, 1500)}\n\nCurrent lessons:\n${currentLessons || '(none)'}\n\nReply with exactly these parts:\nSTATUS: ON TRACK or DRIFTING, and one sentence why\nDIRECTION: one sentence telling the learner what to focus on next\nJUDGE NOTE: one sentence on how the judge should judge (too harsh, too lenient, or fine)\nDROP: number of an open question that is off the task (one line each, or none)\nADD: a missing question that matters for the task (0-3 lines)\nLESSON: the full lesson list, one per line, at most 12, merged and corrected`,
+    `ORIGINAL TASK: ${cfg.topic}\n\nMeasured state of what has been learned:\n${measured}\n\nUnresolved/failed questions (research new evidence before repeating):\n${unresolved.map((b) => `- ${b.q}: ${b.reason || b.status}`).join('\n') || '(none)'}\n\nOpen questions:\n${numbered(open).slice(0, 1500) || '(none)'}\n\nRejected by the judge:\n${st.bank.filter((b) => b.status === 'rejected').slice(-6).map((b) => `- ${b.q} (${b.reason})`).join('\n') || '(none)'}\n\nRecent work:\n${recent.map((e) => `${e.title}\n${e.body.slice(0, 450)}`).join('\n\n').slice(0, 3200)}\n\nJudge findings:\n${st.pendingFindings.join('\n').slice(0, 1500)}\n\nCurrent lessons:\n${currentLessons || '(none)'}\n\nReply with exactly these parts:\nSTATUS: ON TRACK or DRIFTING, and one sentence why\nDIRECTION: one sentence telling the learner what to focus on next\nJUDGE NOTE: one sentence on how the judge should judge (too harsh, too lenient, or fine)\nDROP: number of an open question that is off the task (one line each, or none)\nADD: a missing question that matters for the task (0-3 lines)\nLESSON: the full lesson list, one per line, at most 12, merged and corrected`,
     'manager',
   );
   const statusLine = tagged(out, 'STATUS')[0] || '';
@@ -396,9 +450,12 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
   const judgeNote = tagged(out, 'JUDGE NOTE')[0] || st.judgeNote;
   const drops = tagged(out, 'DROP').map((d) => Number(d.match(/\d+/)?.[0])).filter((n) => n >= 1 && n <= open.length);
   drops.forEach((n) => L().updateItem(agent.id, open[n - 1].id, { status: 'dropped', reason: 'Manager: off the task' }));
-  const adds = tagged(out, 'ADD').filter((a) => a.length > 8 && !/^none/i.test(a)).slice(0, 3);
+  // The Manager steers the cycle but never replaces the question being studied: a new question must stay on the task.
+  const adds = tagged(out, 'ADD').filter((a) => a.length > 8 && !/^none/i.test(a) && onTask(a, cfg.topic, st.bank)).slice(0, 3);
   if (adds.length) L().addItems(agent.id, adds.map((q) => newItem(q, st.round, 'approved')));
   const lessons = tagged(out, 'LESSON').slice(0, 12);
+  // Strategies the Manager suggests are kept as unverified procedural memory, apart from facts.
+  safely(() => lessons.forEach((method) => memory.saveProcedure({ topic: cfg.topic, method, provenance: 'manager suggestion' })), undefined);
   // Model-generated lessons are suggestions, not independently verified facts.
   // Retain them in the audit log but do not silently add them to agent instructions.
   if (lessons.length) L().log({ agentId: agent.id, kind: 'manager', title: 'Unverified lesson suggestions', body: lessons.join('\n') });
@@ -416,7 +473,11 @@ export async function startLearning(agentId: string): Promise<void> {
   running = true;
   stopRequested = false;
   baseModel = useAppStore.getState().activeModelId || '';
-  L().log({ agentId, kind: 'info', title: 'Learning started', body: '' });
+  const interrupted = L().get(agentId).checkpoint;
+  L().log({
+    agentId, kind: 'info', title: interrupted ? 'Learning resumed after an interruption' : 'Learning started',
+    body: interrupted ? `It stopped unexpectedly while doing: ${interrupted.step}. Reports, questions and knowledge saved so far are kept.` : '',
+  });
   // One-way, additive archive. Old judge-passed reports do NOT become verified.
   try { for (const r of L().get(agentId).reportLog ?? []) learningKnowledgeDb.archiveReport(agentId, r); }
   catch (e) { L().log({ agentId, kind: 'error', title: 'Report archive unavailable', body: String(e) }); }
@@ -432,7 +493,21 @@ export async function startLearning(agentId: string): Promise<void> {
       if (!cfg.topic.trim()) throw new Error('Set a task first');
       try {
         const st = L().get(agentId);
-        const next = st.bank.find((b) => b.status === 'approved' && !st.pendingReports.some((p) => p.itemId === b.id));
+        const step = planStep({
+          bank: st.bank, pendingItemIds: st.pendingReports.map((p) => p.itemId),
+          unaskedConflicts: safely(() => learningKnowledgeDb.openContradictions(5, true), []), due: safely(() => mastery.due(agentId), []),
+        });
+        L().patch(agentId, { checkpoint: { step: step.type, at: Date.now() } });
+        if (step.type === 'resolve') {
+          // Two claims disagree: make a study question about it, ahead of everything else.
+          const q = newItem(resolveQuestion(step.conflict), st.round, 'approved');
+          L().patch(agentId, { bank: [{ ...q, kind: 'resolve' as const }, ...st.bank] });
+          safely(() => learningKnowledgeDb.markContradictionAsked(step.conflict.id), undefined);
+          L().log({ agentId, kind: 'info', title: 'Two claims disagree', body: step.conflict.reason });
+          continue;
+        }
+        if (step.type === 'practice') { await practiceDue(agent, cfg, step.concepts); continue; }
+        const next = step.type === 'study' ? step.item : undefined;
         if (!next) {
           if (st.pendingReports.length) { await judgeReports(agent, cfg); continue; }
           const rounds = st.round;
@@ -468,6 +543,7 @@ export async function startLearning(agentId: string): Promise<void> {
   } finally {
     running = false;
     stopRequested = false;
+    L().patch(agentId, { checkpoint: undefined });
     L().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
     // Put back the user's model only if learning itself swapped to a role model.
     const loaded = useAppStore.getState().loadedTextModelId;

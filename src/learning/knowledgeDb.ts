@@ -90,6 +90,8 @@ export interface StoredReport {
   score?: number; why?: string;
 }
 
+export interface OpenContradiction { id: string; reason: string; a: { id: string; text: string }; b: { id: string; text: string } }
+
 export interface CandidateClaim {
   id: string;
   topic: string;
@@ -220,19 +222,30 @@ export class LearningKnowledgeDb {
     this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, claim.status, 'disputed', 'consistency-check', reason, now]);
   }
 
+  /** What was learned for one question: its candidate and verified claims. */
+  claimsForQuestion(question: string): string[] {
+    return (this.sql("SELECT claim_text FROM atlas_claims WHERE question = ? AND status IN ('candidate','verified') ORDER BY created_at", [question]).rows ?? [])
+      .map((r) => String((r as any).claim_text));
+  }
+
   /** Records that two claims conflict. The same pair is recorded once. */
   recordContradiction(a: string, b: string, reason: string): void {
     const [x, y] = [a, b].sort();
     this.sql('INSERT OR IGNORE INTO atlas_contradictions (id,claim_a,claim_b,reason,detected_at) VALUES (?,?,?,?,?)', [`${x}|${y}`, x, y, reason, isoNow()]);
   }
 
-  /** Conflicts nobody has resolved yet, with both claims' text. */
-  openContradictions(limit = 20): Array<{ id: string; reason: string; a: { id: string; text: string }; b: { id: string; text: string } }> {
+  /** Conflicts nobody has resolved yet, with both claims' text. `unasked` leaves out those a study question was already made for. */
+  openContradictions(limit = 20, unasked = false): OpenContradiction[] {
     return (this.sql(`SELECT k.id, k.reason, a.id AS a_id, a.claim_text AS a_text, b.id AS b_id, b.claim_text AS b_text
       FROM atlas_contradictions k JOIN atlas_claims a ON a.id = k.claim_a JOIN atlas_claims b ON b.id = k.claim_b
-      WHERE k.resolved_at IS NULL ORDER BY k.detected_at DESC LIMIT ?`, [limit]).rows ?? []).map((r: any) => ({
+      WHERE k.resolved_at IS NULL ${unasked ? 'AND k.resolution IS NULL' : ''} ORDER BY k.detected_at DESC LIMIT ?`, [limit]).rows ?? []).map((r: any) => ({
       id: String(r.id), reason: String(r.reason), a: { id: String(r.a_id), text: String(r.a_text) }, b: { id: String(r.b_id), text: String(r.b_text) },
     }));
+  }
+
+  /** A study question now exists for this conflict, so it is not turned into another one. It stays open until a person resolves it. */
+  markContradictionAsked(id: string): void {
+    this.sql("UPDATE atlas_contradictions SET resolution = 'study question made' WHERE id = ? AND resolution IS NULL", [id]);
   }
 
   resolveContradiction(id: string, resolution: string): void {
