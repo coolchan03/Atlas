@@ -113,3 +113,49 @@ it('turns two conflicting claims into the first thing to study', async () => {
   expect(db.openContradictions(5)).toHaveLength(1);
   expect(events(store)).toContain('Two claims disagree');
 });
+
+describe('the exam', () => {
+  const expected = { facts: [['one minute', '1 minute'], ['cool']], forbid: ['ten minutes'] };
+  const addQuestions = (exams: any, questions: string[]) => questions.forEach((q) => exams.addItem({ subjectId: AGENT, topic: 'Safe drinking water', question: q, expected }));
+  /** The model alone gets it wrong; with sources it answers from the manual and cites it. */
+  const examModel = (): typeof mockReplies => (system, user) => {
+    if (system.startsWith('You answer exam questions')) {
+      return system.includes('Use only the material') ? 'Boil the water for one minute and let it cool before drinking it. [1]' : 'Boil it for ten minutes.';
+    }
+    return happyModel()(system, user);
+  };
+
+  it('measures the three modes by comparing answers with the expected facts, and reports only what was measured', async () => {
+    mockReplies = examModel();
+    const { engine } = load();
+    const { improvementSummary } = require('../../../src/learning/exams');
+    addQuestions(engine.exams, ['How long to boil water?', 'What to do after boiling?', 'Is ten minutes needed?', 'How is water made safe?', 'When can boiled water be drunk?']);
+
+    const results = await engine.runExamNow(AGENT, () => undefined);
+    expect(results.map((r: any) => r.accuracy)).toEqual([0, 1, 1]);
+    expect(results[0].outdatedAnswers).toBe(5);
+    expect(results[1].unsupportedCitations).toBe(0);
+
+    const history = engine.exams.history();
+    expect(history.map((h: any) => h.mode).sort()).toEqual(['baseline', 'memory', 'sources']);
+    expect(history[0].metrics.claimsStored).toBeDefined();
+    expect(improvementSummary(history)).toContain('100 points better on 5 questions');
+    expect(engine.exams.lastFailures('baseline')).toHaveLength(5);
+  });
+
+  it('refuses to run with no questions', async () => {
+    mockReplies = examModel();
+    const { engine } = load();
+    await expect(engine.runExamNow(AGENT, () => undefined)).rejects.toThrow('Add at least one exam question');
+  });
+
+  it('never studies a question that is on the exam', async () => {
+    mockReplies = happyModel();
+    const { engine, store } = load();
+    addQuestions(engine.exams, ['How long should water be boiled to make it safe?']);
+    await engine.startLearning(AGENT);
+    const studied = store.getState().get(AGENT).bank.map((b: any) => b.q);
+    expect(studied).not.toContain('How long should water be boiled to make it safe?');
+    expect(studied).toContain('What should you do with boiled water before drinking it?');
+  });
+});

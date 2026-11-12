@@ -38,9 +38,11 @@ import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
 import { rankClaims, recallScore } from './claimText';
 import { stripInjection } from './sourceSafety';
+import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
 const memory = new MemoryLedger(learningKnowledgeDb);
+export const exams = new ExamStore(learningKnowledgeDb);
 /** The ledger is optional storage: if it is unavailable the cycle still runs, with what it has. */
 const safely = <T,>(job: () => T, fallback: T): T => { try { return job(); } catch (e) { logger.log(`[Learning] ledger unavailable: ${String(e)}`); return fallback; } };
 
@@ -200,6 +202,8 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
   );
   let qs = tagged(raw, 'Q(?:UESTION)?');
   if (qs.length < 2) qs = raw.split('\n').map((l) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter((l) => l.endsWith('?'));
+  // Exam questions are never studied, so the exam cannot be passed by remembering its own answers.
+  qs = qs.filter((q) => !safely(() => exams.isExamQuestion(q), false));
   qs = [...new Set(qs.map((q) => q.slice(0, 300)))].slice(0, cfg.bankSize + 2);
   if (!qs.length) throw new Error('The learner did not write any questions. Try again or use a bigger model.');
   const items = qs.map((q) => newItem(q, round));
@@ -465,6 +469,46 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
     body: `${statusLine}\nDirection: ${direction || '-'}\nJudge note: ${judgeNote || '-'}${drops.length ? `\nDropped: ${drops.map((n) => open[n - 1]?.q).join('; ')}` : ''}${adds.length ? `\nAdded: ${adds.join('; ')}` : ''}\n\nLessons${cfg.mode === 'session' ? ' (this session)' : ''}:\n${lessons.map((l) => `- ${l}`).join('\n') || '(unchanged)'}`,
   });
   L().patch(agent.id, { judgesSinceManager: 0, pendingFindings: [], direction, judgeNote, onTrack });
+}
+
+// ------------------------------------------------------------------ exams
+const EXAM_SYSTEM = 'You answer exam questions. Be accurate and brief: 2 to 4 plain sentences. If you are not sure, say so.';
+
+/** Answers an exam question in one mode: the model alone, with searched sources, or with sources and the notes stored so far. */
+function examAnswerer(cfg: LearnConfig): Answerer {
+  return async (item, mode) => {
+    if (mode === 'baseline') return { text: await ask(EXAM_SYSTEM, `QUESTION: ${item.question}`, 'learner'), sourceCount: 0 };
+    const { text: sources, list } = await research(cfg, item.question);
+    const known = mode === 'memory' ? safely(() => learningKnowledgeDb.knownClaims(cfg.topic), []).filter((k) => k.status !== 'disputed') : [];
+    const notes = rankClaims(item.question, known, 5).map((k, i) => `${i + 1}. ${k.text}`);
+    const material = [sources && `SOURCES:\n${sources}`, notes.length && `STORED NOTES:\n${notes.join('\n')}`].filter(Boolean).join('\n\n');
+    const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
+    return { text, sourceCount: list.length };
+  };
+}
+
+/** Runs a subject's exam in all three modes, saves each result, and returns them. Not while learning is running. */
+export async function runExamNow(subjectId: string, onStatus: (message: string) => void): Promise<ExamMetrics[]> {
+  if (running) throw new Error('Learning is running. Stop it first, then run the exam.');
+  const items = exams.items(subjectId);
+  if (!items.length) throw new Error('Add at least one exam question first.');
+  const cfg = L().getConfig(subjectId);
+  running = true;
+  stopRequested = false;
+  baseModel = useAppStore.getState().activeModelId || '';
+  roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
+  try {
+    const results: ExamMetrics[] = [];
+    for (const mode of EXAM_MODES) {
+      onStatus(`Exam: ${mode}...`);
+      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg), previousFailures: exams.lastFailures(mode) });
+      const memoryMB = (await require('../services/hardware').hardwareService.getProcessMemory?.().catch(() => null))?.footprintMB;
+      const counts = safely(() => learningKnowledgeDb.getReliabilitySnapshot().counts, null);
+      exams.saveResult(mode, { ...metrics, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });
+      results.push(metrics);
+    }
+    return results;
+  } finally { running = false; status('Idle'); }
 }
 
 // ------------------------------------------------------------------ loop

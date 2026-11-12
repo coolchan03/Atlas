@@ -70,7 +70,7 @@ export const KNOWLEDGE_DDL = [
     last_at TEXT, next_review TEXT NOT NULL, last_outcome TEXT)`,
   `CREATE INDEX IF NOT EXISTS idx_atlas_mastery_due ON atlas_mastery(subject_id, next_review)`,
   `CREATE TABLE IF NOT EXISTS atlas_exam_items (
-    id TEXT PRIMARY KEY, topic TEXT NOT NULL, question TEXT NOT NULL,
+    id TEXT PRIMARY KEY, subject_id TEXT NOT NULL, topic TEXT NOT NULL, question TEXT NOT NULL,
     expected_json TEXT NOT NULL, created_at TEXT NOT NULL)`,
 ];
 
