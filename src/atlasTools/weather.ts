@@ -16,7 +16,7 @@ export interface WeatherData {
   tomorrow?: { tempMaxC: number; tempMinC: number; uvMax: number; description: string };
 }
 
-function wmoDescription(code: number): string {
+export function wmoDescription(code: number): string {
   if (code === 0) return 'clear sky';
   if (code === 1) return 'mainly clear';
   if (code === 2) return 'partly cloudy';
@@ -24,6 +24,7 @@ function wmoDescription(code: number): string {
   if (code <= 48) return 'foggy';
   if (code <= 55) return 'drizzle';
   if (code <= 65) return 'rain';
+  if (code <= 67) return 'freezing rain';
   if (code <= 75) return 'snow';
   if (code <= 77) return 'snow grains';
   if (code <= 82) return 'rain showers';

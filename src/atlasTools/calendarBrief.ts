@@ -29,12 +29,13 @@ const TRAVEL_RE = /\b(hotel|flight|fly|depart|arrival|check[\s-]?in|conference|t
 const FLIGHT_RE = /\b([A-Z]{2})\s*(\d{1,4})\b/g;
 const DEST_RE = /\bto\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i;
 
-function parseFlight(title: string, startDate: string): CalendarFlight | null {
+export function parseFlight(title: string, startDate: string): CalendarFlight | null {
   FLIGHT_RE.lastIndex = 0;
   const m = FLIGHT_RE.exec(title);
   if (!m) return null;
   const [, code, num] = m;
-  if (!(code in AIRLINES) && !/^[A-Z]{2}$/.test(code)) return null;
+  // Two capital letters and a number is also "PR 42" or "AI 2024": count it only for a known airline, or when the title talks about travel.
+  if (!(code in AIRLINES) && !TRAVEL_RE.test(title)) return null;
   const destMatch = title.match(DEST_RE);
   return {
     raw: `${code}${num}`,
