@@ -16,6 +16,6 @@ describe('portable Atlas knowledge interchange', () => {
     expect(() => fromKnowledgeJsonl(line + toKnowledgeJsonl([{ ...claim, status: 'verified' }]))).toThrow(/Conflicting/);
   });
   it('does not automatically promote candidate status', () => {
-    expect(fromKnowledgeJsonl(toKnowledgeJsonl([claim]))[0].status).toBe('candidate');
+    expect((fromKnowledgeJsonl(toKnowledgeJsonl([claim]))[0] as PortableClaim).status).toBe('candidate');
   });
 });
