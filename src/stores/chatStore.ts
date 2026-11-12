@@ -13,7 +13,10 @@ import { registerChatStore } from './storeRefs';
 /** Field ID replies get the code-enforced foraging safety net. */
 function isFieldIdConversation(conv: Conversation | undefined): boolean {
   if (conv?.agentId) return conv.agentId === 'field-id' || conv.agentId === 'atlas';
-  try { return require('./agentStore').useAgentStore.getState().(activeAgentId === 'field-id' || activeAgentId === 'atlas'); } catch { return false; }
+  try {
+    const activeAgentId = require('./agentStore').useAgentStore.getState().activeAgentId;
+    return activeAgentId === 'field-id' || activeAgentId === 'atlas';
+  } catch { return false; }
 }
 
 type PersistedChats = { conversations: Conversation[]; activeConversationId: string | null };
