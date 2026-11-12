@@ -7,6 +7,7 @@ import { deleteCloneReference, useCloneReferences, type VoiceReferenceQuality } 
 import { isPocketVoiceId } from './cloneRouting';
 import { useVoiceSample } from './useVoiceSample';
 import { useVoiceCreation } from './useVoiceCreation';
+import { SPEEDS } from './VoiceProfilesCard';
 
 const STEPS = [2, 3, 5, 8];
 const STEP_LABELS: Record<number, string> = { 2: 'Fast', 3: 'Balanced', 5: 'Quality', 8: 'Best quality' };
@@ -178,7 +179,8 @@ export function VoiceCloneCard() {
   const available = Platform.OS === 'android' && !!NativeModules.AtlasTts?.importVoiceReference;
   const fail = (e: unknown) => Alert.alert('Voice cloning', String((e as any)?.message || e));
   const sample = useVoiceSample(name, fail);
-  const make = useVoiceCreation({ model, reference: sample.selected, name, onError: fail });
+  const [rate, setRate] = useState(1);
+  const make = useVoiceCreation({ model, reference: sample.selected, name, rate, onError: fail });
   const busy = sample.busy || make.busy || busyModel;
   const why = blocker({ available, consent, model, hasSample: !!sample.selected, name, busy, recording: sample.recording });
   const canTry = !!sample.selected && !!model && consent && !busy && !sample.recording;
@@ -218,9 +220,18 @@ export function VoiceCloneCard() {
             <TouchableOpacity style={styles.action} testID="voice-clone-preview" disabled={!canTry} onPress={make.tryIt}>
               <Text style={{ color: canTry ? colors.primary : colors.textMuted }}>Try the voice</Text>
             </TouchableOpacity>
+            <Text style={[styles.note, { color: colors.textSecondary }]}>Speed of this voice (you can change it later in Voice profiles).</Text>
+            <View style={styles.row}>
+              {SPEEDS.map((n) => (
+                <TouchableOpacity key={n} onPress={() => setRate(n)} accessibilityRole="radio" accessibilityState={{ selected: rate === n }} testID={`voice-clone-speed-${n}`}
+                  style={[styles.action, { borderColor: rate === n ? colors.primary : colors.border }]}>
+                  <Text style={{ color: colors.text }}>{n}x</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             {!!make.status && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.note, styles.flex, { color: colors.textSecondary }]}>{make.status}</Text></View>}
           </Step>
-          <CreateStep why={why} onCreate={() => { make.create(); setName(''); }} />
+          <CreateStep why={why} onCreate={() => { make.create().then((made) => { if (made) setName(''); }).catch(fail); }} />
           <Advanced colors={colors} steps={make.steps} onSteps={make.changeSteps} canTest={canTry} onSpeedTest={make.speedTest} result={make.benchmark} />
           <ClonedVoiceNote />
         </>

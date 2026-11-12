@@ -24,6 +24,8 @@ interface VoiceProfilesState {
   addProfile: (p: Omit<VoiceProfile, 'id' | 'createdAt'>) => VoiceProfile;
   renameProfile: (id: string, name: string) => void;
   removeProfile: (id: string) => void;
+  /** How fast this voice speaks (1 is normal). */
+  setRate: (id: string, rate: number) => void;
   /** Adds the ready-made profiles not saved yet (same voice and speaker). Returns how many were added. */
   addPresets: (presets: Omit<VoiceProfile, 'id' | 'createdAt'>[]) => number;
 }
@@ -43,6 +45,7 @@ export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set, get) 
     profiles: s.profiles.map((p) => (p.id === id && name.trim() ? { ...p, name: name.trim() } : p)),
   })),
   removeProfile: (id) => set((s) => ({ profiles: s.profiles.filter((p) => p.id !== id) })),
+  setRate: (id, rate) => set((s) => ({ profiles: s.profiles.map((p) => (p.id === id && Number.isFinite(rate) ? { ...p, rate: Math.min(2, Math.max(0.5, rate)) } : p)) })),
   addPresets: (presets) => {
     const add = missingPresets(get().profiles, presets);
     add.forEach((p) => get().addProfile(p));

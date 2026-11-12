@@ -3,7 +3,7 @@ import { Alert, NativeModules } from 'react-native';
 import { useAtlasVoiceStore } from './store';
 import { loadVoiceForSpeech, restoreSavedVoice, selectVoice } from './neural';
 import { useVoiceProfiles } from './profiles';
-import { useCloneReferences, type VoiceReference } from './cloneStore';
+import { analyzeCloneReference, useCloneReferences, type VoiceReference } from './cloneStore';
 import { voiceReferenceName } from './cloneRouting';
 import { previewProfile } from './VoiceProfilesCard';
 import { stop as stopSpeech } from './tts';
@@ -15,10 +15,10 @@ export function callVerdict(rtf: number): string {
   return 'Too slow for phone calls on this phone. Use a natural voice for calls and keep this one for reading aloud.';
 }
 
-interface Inputs { model: string; reference: VoiceReference | undefined; name: string; onError: (e: unknown) => void }
+interface Inputs { model: string; reference: VoiceReference | undefined; name: string; rate: number; onError: (e: unknown) => void }
 
 /** Trying a cloned voice, saving it under a name, and measuring how fast it speaks. */
-export function useVoiceCreation({ model, reference, name, onError }: Inputs) {
+export function useVoiceCreation({ model, reference, name, rate, onError }: Inputs) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [benchmark, setBenchmark] = useState('');
@@ -36,21 +36,39 @@ export function useVoiceCreation({ model, reference, name, onError }: Inputs) {
     if (!reference) return;
     stopSpeech();
     return working('Loading the voice. The first time can take a minute...', () =>
-      previewProfile({ name: voiceName, voiceId: model, sid: 0, rate: 1, referenceId: reference.id }));
+      previewProfile({ name: voiceName, voiceId: model, sid: 0, rate, referenceId: reference.id }));
   };
 
-  const create = () => {
-    if (!reference) return;
-    const { profiles, addProfile, renameProfile } = useVoiceProfiles.getState();
+  const save = (ref: VoiceReference) => {
+    const { profiles, addProfile, renameProfile, setRate } = useVoiceProfiles.getState();
     // Pressing Create again for the same sample renames its voice instead of adding a copy.
-    const existing = profiles.find((p) => p.referenceId === reference.id);
-    if (existing) renameProfile(existing.id, voiceName);
-    else addProfile({ name: voiceName, voiceId: model, sid: 0, rate: 1, referenceId: reference.id });
-    useCloneReferences.getState().rename(reference.id, voiceName);
+    const existing = profiles.find((p) => p.referenceId === ref.id);
+    if (existing) { renameProfile(existing.id, voiceName); setRate(existing.id, rate); }
+    else addProfile({ name: voiceName, voiceId: model, sid: 0, rate, referenceId: ref.id });
+  };
+
+  const finish = (ref: VoiceReference) => {
+    save(ref);
+    useCloneReferences.getState().rename(ref.id, voiceName);
     Alert.alert('Voice created', `${voiceName} is ready. Give it to an agent in Agents, then Edit, or use it for everything now.`, [
       { text: 'Not now' },
-      { text: 'Use it everywhere', onPress: () => { selectVoice(model, 0, reference.id).catch(onError); } },
+      { text: 'Use it everywhere', onPress: () => { selectVoice(model, 0, ref.id).catch(onError); } },
     ]);
+  };
+
+  /** Creates the voice, first warning if the sample is too noisy, quiet or clipped to clone well. A check that cannot run does not block. */
+  const create = async (): Promise<boolean> => {
+    if (!reference) return false;
+    const quality = await analyzeCloneReference(reference.id).catch(() => null);
+    if (quality?.rating === 'needs-recording') {
+      Alert.alert('This sample may sound poor', `${quality.advice.slice(0, 2).join(' ') || 'It is noisy, quiet or clipped.'} A new recording usually clones much better.`, [
+        { text: 'Record again', style: 'cancel' },
+        { text: 'Create anyway', onPress: () => finish(reference) },
+      ]);
+      return false;
+    }
+    finish(reference);
+    return true;
   };
 
   const changeSteps = async (count: number) => {

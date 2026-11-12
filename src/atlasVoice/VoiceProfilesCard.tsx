@@ -27,11 +27,13 @@ export async function previewProfile(p: Pick<VoiceProfile, 'name' | 'voiceId' | 
   });
 }
 
+export const SPEEDS = [0.8, 1, 1.2, 1.5] as const;
+
 /** Models -> Voice: save the current voice as a named profile and manage saved profiles. */
 export function VoiceProfilesCard() {
   const { colors } = useTheme();
   const profiles = useVoiceProfiles((s) => s.profiles);
-  const { addProfile, removeProfile, addPresets } = useVoiceProfiles.getState();
+  const { addProfile, removeProfile, addPresets, setRate } = useVoiceProfiles.getState();
   const hasKokoroV1 = useNeuralVoices((s) => s.installed['kokoro-v1-en'] !== undefined);
   const presets = hasKokoroV1 ? missingPresets(profiles, KOKORO_V1_PRESETS) : [];
   const voiceId = useAtlasVoiceStore((s) => s.neuralVoice);
@@ -79,6 +81,15 @@ export function VoiceProfilesCard() {
             <Text style={[styles.name, { color: colors.text }]}>{p.name}</Text>
             <Text style={[styles.meta, { color: colors.textMuted }]}>{describeProfile(p)}{p.referenceId ? ` · ${references.find((r) => r.id === p.referenceId)?.name ?? 'Missing reference recording'}` : ''}</Text>
           </View>
+          {p.referenceId && (
+            <View style={styles.speeds}>
+              {SPEEDS.map((n) => (
+                <TouchableOpacity key={n} onPress={() => setRate(p.id, n)} accessibilityRole="radio" accessibilityState={{ selected: p.rate === n }} testID={`profile-speed-${p.id}-${n}`}>
+                  <Text style={{ color: p.rate === n ? colors.primary : colors.textMuted }}>{n}x</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <TouchableOpacity onPress={() => { previewProfile(p).catch(() => undefined); }} style={styles.action}>
             <Text style={{ color: colors.primary }}>Preview</Text>
           </TouchableOpacity>
@@ -112,4 +123,5 @@ const styles = StyleSheet.create({
   profile: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 10 },
   flex: { flex: 1, paddingRight: 8 },
   action: { paddingHorizontal: 8, paddingVertical: 6 },
+  speeds: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },
 });
