@@ -37,7 +37,9 @@ export function parseMusicScore(raw: string): MusicScore {
       const gain = args[4] ? Number(args[4]) : 0.6;
       const role = args[5] || 'melody';
       if (pitch === null || ![beat, length, gain].every(Number.isFinite)) continue;
-      if (beat < 0 || beat > 96 || length < 0.125 || length > 12 || beat + length > 100 || gain < 0.05 || gain > 1) continue;
+      // Reject oversized motifs outright instead of silently dropping a long note.
+      if (beat > 96 || length > 12 || beat + length > 100) throw new Error('Instrumental score exceeded the motif limit.');
+      if (beat < 0 || length < 0.125 || gain < 0.05 || gain > 1) continue;
       if (!['melody', 'pad', 'bass'].includes(role)) continue;
       notes.push({ pitch, beat, length, gain, role: role as MusicRole });
       if (notes.length >= 240) break;
