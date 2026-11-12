@@ -60,7 +60,29 @@ Repository: https://github.com/coolchan03/Atlas
 
 Add new ideas below only when the user proposes or explicitly approves them. Do not populate this section with assistant-generated suggestions.
 
-- (No additional user-approved features yet.)
+Approved by the user on 2026-11-12. Each item needs a check against the current code first, and a phone test before it is checked off.
+
+- [ ] **FF-10 - Store and manage what the app keeps**
+  - Download the voice-cloning model directly, with no download-then-upload step.
+  - One list of everything the app stores or downloads, with easy delete.
+  - Needed recordings stored in the app, and transferable.
+- [ ] **FF-11 - Maps**
+  - Smaller offline map downloads (less detail, less storage) and map updates.
+- [ ] **FF-12 - Compass**
+  - Redesign to match the look and feel of the old iOS Compass app.
+- [ ] **FF-13 - Read aloud glitch**
+  - The first part of the first word is repeated after the speech ends. Cause not found yet; needs a device log.
+- [ ] **FF-14 - Teach the AI as projects**
+  - Projects-style layout, so the knowledge base is hard to change by accident once teaching has started (the Change setup lock is the first step).
+- [ ] **FF-15 - Music**
+  - Decide whether to add a real text-to-music model; it needs a new on-device runtime.
+- [ ] **FF-16 - More voice cloning**
+  - Several samples per voice, per-voice speed or emotion, and a quality check before creating a voice.
+- [ ] **FF-17 - Multi-step workflow engine**
+  - Fixed steps with user approval. First workflow: accountant mode (bank statement to a date/description/amount table, categories, questions to the user, CSV output, then a code-based reconciliation that every transaction is included). GnuCash and QuickBooks formats later.
+- [ ] **FF-18 - Workflows on the engine, ranked**
+  - Meeting recording to summary, action items and calendar entries; bills and warranties with planner reminders; document reader for contracts and leases.
+  - Later: form filler, medical paperwork explainer, voice memo to structured note, language role-play, photo text read aloud, photo identifier (plants, bites; needs a firm disclaimer), trip planner, guided emergency helper, offline translator, journal and memory search, home inventory, flashcards from documents.
 
 ## Instructions for the next Atlas update
 
