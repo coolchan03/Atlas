@@ -727,9 +727,9 @@ describe('backendForcesF16Cache / effectiveCacheType (single source)', () => {
 
 describe('Vulkan cache type', () => {
   it('reports an f16 cache, because the Vulkan engine is never given the cache type setting', () => {
-    const { effectiveCacheType, backendForcesF16Cache } = require('../../../src/services/llmHelpers');
-    expect(backendForcesF16Cache('vulkan')).toBe(true);
-    expect(effectiveCacheType('vulkan', 'q8_0')).toBe('f16');
-    expect(effectiveCacheType('cpu', 'q8_0')).toBe('q8_0');
+    const helpers = require('../../../src/services/llmHelpers');
+    expect(helpers.backendForcesF16Cache('vulkan')).toBe(true);
+    expect(helpers.effectiveCacheType('vulkan', 'q8_0')).toBe('f16');
+    expect(helpers.effectiveCacheType('cpu', 'q8_0')).toBe('q8_0');
   });
 });

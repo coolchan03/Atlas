@@ -9,7 +9,87 @@ import { analyzeCloneReference, improveCloneReference, deleteCloneReference, imp
 import { isPocketVoiceId, voiceReferenceName } from './cloneRouting';
 import { speak, stop as stopSpeech } from './tts';
 
+const STEPS = [2, 3, 5, 8];
+const STEP_LABELS: Record<number, string> = { 2: 'Fast', 3: 'Balanced', 5: 'Quality', 8: 'Best quality' };
 const MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2';
+
+type Reference = ReturnType<typeof useCloneReferences.getState>['references'][number];
+
+/** The saved voice samples, one tappable row each, with delete. */
+function SampleList({ references, selectedId, onSelect, onDeleted, onError }: {
+  references: Reference[]; selectedId: string; onSelect: (id: string) => void; onDeleted: (id: string) => void; onError: (e: unknown) => void;
+}) {
+  const { colors } = useTheme();
+  const confirmDelete = (ref: Reference) => Alert.alert('Delete voice sample?', `${ref.name} — any agent profile using this sample will stop working until a new reference is assigned.`, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: () => deleteCloneReference(ref.id).then(() => onDeleted(ref.id)).catch(onError) },
+  ]);
+  return (
+    <>
+      {references.map((ref) => (
+        <View key={ref.id} style={styles.row}>
+          <TouchableOpacity style={styles.flex} onPress={() => onSelect(ref.id)} testID={`clone-sample-${ref.id}`}>
+            <Text style={{ color: colors.text }}>{selectedId === ref.id ? '◉ ' : '○ '}{ref.name} ({ref.seconds.toFixed(1)}s)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => confirmDelete(ref)}>
+            <Text style={{ color: colors.error }}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+    </>
+  );
+}
+
+/** Analyze the chosen sample locally and optionally save an improved copy. */
+function SampleCheck({ canRun, quality, onAnalyze, onImprove }: {
+  canRun: boolean; quality: VoiceReferenceQuality | null; onAnalyze: () => void; onImprove: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.wizard, { borderColor: colors.border }]} testID="voice-clone-quality-wizard">
+      <Text style={[styles.heading, { color: colors.text }]}>Voice sample check</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Analyze a recording locally. Atlas checks clipping, silence, loudness and likely background noise. Improve creates an optional new copy; it does not rewrite the original.</Text>
+      <View style={styles.row}>
+        <TouchableOpacity style={styles.action} disabled={!canRun} onPress={onAnalyze} testID="voice-clone-analyze">
+          <Text style={{ color: colors.primary }}>Analyze recording</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.action} disabled={!canRun} onPress={onImprove} testID="voice-clone-improve">
+          <Text style={{ color: colors.primary }}>Create improved copy</Text>
+        </TouchableOpacity>
+      </View>
+      {quality && <View testID="voice-clone-quality-results">
+        <Text style={[styles.note, styles.strong, { color: colors.text }]}>Rating: {quality.rating.replace('-', ' ')} · {quality.seconds.toFixed(1)}s</Text>
+        <Text style={[styles.note, { color: colors.textSecondary }]}>Noise estimate {quality.signalNoiseDb.toFixed(1)} dB · clipping {quality.clippedPercent.toFixed(2)}% · quiet {quality.quietPercent.toFixed(0)}%</Text>
+        {quality.advice.map((advice) => <Text key={advice} style={[styles.note, { color: colors.textSecondary }]}>• {advice}</Text>)}
+      </View>}
+    </View>
+  );
+}
+
+/** One-time setup: download the Pocket TTS archive, then import it. */
+function ModelSetup({ canImport, onImport, onError }: { canImport: boolean; onImport: () => void; onError: (e: unknown) => void }) {
+  const { colors } = useTheme();
+  return (
+    <View>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Install the Pocket TTS INT8 sherpa-onnx model once. The standard Piper, Kokoro and KittenTTS voices cannot clone a new voice.</Text>
+      <TouchableOpacity style={styles.action} onPress={() => Linking.openURL(MODEL_URL).catch(onError)}>
+        <Text style={{ color: colors.primary }}>Download the Pocket TTS model archive</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.action} onPress={onImport} disabled={!canImport} testID="voice-clone-import-model">
+        <Text style={{ color: colors.primary }}>Import downloaded model</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/** Tells the person when the active voice is already a cloned one. */
+function ClonedVoiceNote() {
+  const { colors } = useTheme();
+  const voice = useAtlasVoiceStore((s) => s.neuralVoice);
+  const reference = useAtlasVoiceStore((s) => s.neuralReferenceId);
+  if (!reference || !voice || !isPocketVoiceId(voice)) return null;
+  return <Text style={[styles.note, { color: colors.textSecondary }]}>Currently using a cloned voice. Change it using Voice profiles or the picker above.</Text>;
+}
 
 /** Voice cloning is strictly local, opt-in, and requires a compatible PocketTTS ONNX model. */
 export function VoiceCloneCard() {
@@ -40,9 +120,9 @@ export function VoiceCloneCard() {
   const available = Platform.OS === 'android' && !!NativeModules.AtlasTts?.importVoiceReference;
   const model = models[0] ?? '';
   const selectedReference = references.find((r) => r.id === referenceId);
-  const currentVoice = useAtlasVoiceStore((s) => s.neuralVoice);
-  const currentRef = useAtlasVoiceStore((s) => s.neuralReferenceId);
 
+  const canCheck = consent && !!selectedReference && !busy && !recording;
+  const canUse = canCheck && !!model;
   const fail = (e: unknown) => Alert.alert('Voice cloning', String((e as any)?.message || e));
   const addRecording = async () => {
     if (!consent) return;
@@ -158,17 +238,7 @@ export function VoiceCloneCard() {
         <Text style={[styles.note, styles.flex, { color: colors.text }]}>I own this voice or have permission to reproduce it. Samples stay on this device.</Text>
       </View>
       {!available && <Text style={[styles.note, { color: colors.textSecondary }]}>Native Pocket TTS cloning requires an updated Android build.</Text>}
-      {available && !model && (
-        <View>
-          <Text style={[styles.note, { color: colors.textSecondary }]}>Install the Pocket TTS INT8 sherpa-onnx model once. The standard Piper, Kokoro and KittenTTS voices cannot clone a new voice.</Text>
-          <TouchableOpacity style={styles.action} onPress={() => Linking.openURL(MODEL_URL).catch(fail)}>
-            <Text style={{ color: colors.primary }}>Download the Pocket TTS model archive</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.action} onPress={importModel} disabled={!consent || busy} testID="voice-clone-import-model">
-            <Text style={{ color: colors.primary }}>Import downloaded model</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {available && !model && <ModelSetup canImport={consent && !busy} onImport={importModel} onError={fail} />}
       {available && (
         <>
           <TextInput testID="voice-clone-name" value={name} onChangeText={setName} placeholder="Name this voice" placeholderTextColor={colors.textMuted}
@@ -183,60 +253,31 @@ export function VoiceCloneCard() {
             </TouchableOpacity>
           </View>
           {recording && <Text style={{ color: colors.textSecondary }}>Recording: {recordSeconds}s. Speak clearly for 5–12 seconds; stop before 30 seconds.</Text>}
-          {references.map((ref) => (
-            <View key={ref.id} style={styles.row}>
-              <TouchableOpacity style={styles.flex} onPress={() => { setReferenceId(ref.id); setQuality(null); }} testID={`clone-sample-${ref.id}`}>
-                <Text style={{ color: colors.text }}>{referenceId === ref.id ? '◉ ' : '○ '}{ref.name} ({ref.seconds.toFixed(1)}s)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => Alert.alert('Delete voice sample?', `${ref.name} — any agent profile using this sample will stop working until a new reference is assigned.`, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteCloneReference(ref.id).then(() => { if (referenceId === ref.id) setReferenceId(''); }).catch(fail) },
-              ])}>
-                <Text style={{ color: colors.error }}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-          <View style={[styles.wizard, { borderColor: colors.border }]} testID="voice-clone-quality-wizard">
-            <Text style={[styles.heading, { color: colors.text }]}>Voice sample check</Text>
-            <Text style={[styles.note, { color: colors.textSecondary }]}>Analyze a recording locally. Atlas checks clipping, silence, loudness and likely background noise. Improve creates an optional new copy; it does not rewrite the original.</Text>
-            <View style={styles.row}>
-              <TouchableOpacity style={styles.action} disabled={!consent || !selectedReference || busy || recording} onPress={diagnoseSample} testID="voice-clone-analyze">
-                <Text style={{ color: colors.primary }}>Analyze recording</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.action} disabled={!consent || !selectedReference || busy || recording} onPress={improveSample} testID="voice-clone-improve">
-                <Text style={{ color: colors.primary }}>Create improved copy</Text>
-              </TouchableOpacity>
-            </View>
-            {quality && <View testID="voice-clone-quality-results">
-              <Text style={[styles.note, styles.strong, { color: colors.text }]}>Rating: {quality.rating.replace('-', ' ')} · {quality.seconds.toFixed(1)}s</Text>
-              <Text style={[styles.note, { color: colors.textSecondary }]}>Noise estimate {quality.signalNoiseDb.toFixed(1)} dB · clipping {quality.clippedPercent.toFixed(2)}% · quiet {quality.quietPercent.toFixed(0)}%</Text>
-              {quality.advice.map((advice) => <Text key={advice} style={[styles.note, { color: colors.textSecondary }]}>• {advice}</Text>)}
-            </View>}
-          </View>
+          <SampleList references={references} selectedId={referenceId} onSelect={(id) => { setReferenceId(id); setQuality(null); }}
+            onDeleted={(id) => { if (referenceId === id) setReferenceId(''); }} onError={fail} />
+          <SampleCheck canRun={canCheck} quality={quality} onAnalyze={diagnoseSample} onImprove={improveSample} />
           <Text style={[styles.note, styles.spaced, { color: colors.textSecondary }]}>Speed / voice quality (steps):</Text>
           <View style={styles.row}>
-            {[2, 3, 5, 8].map((n) => (
+            {STEPS.map((n) => (
               <TouchableOpacity key={n} onPress={() => changeSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
                 style={[styles.action, { borderColor: steps === n ? colors.primary : colors.border }]}>
-                <Text style={{ color: colors.text }}>{n === 2 ? 'Fast' : n === 3 ? 'Balanced' : n === 5 ? 'Quality' : 'Best quality'}</Text>
+                <Text style={{ color: colors.text }}>{STEP_LABELS[n]}</Text>
               </TouchableOpacity>
             ))}
           </View>
           <View style={styles.row}>
-            <TouchableOpacity style={styles.action} testID="voice-clone-preview" disabled={!consent || !model || !selectedReference || busy || recording} onPress={preview}>
+            <TouchableOpacity style={styles.action} testID="voice-clone-preview" disabled={!canUse} onPress={preview}>
               <Text style={{ color: colors.primary }}>Preview / Use</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!consent || !model || !selectedReference || busy || recording} onPress={speedTest}>
+            <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!canUse} onPress={speedTest}>
               <Text style={{ color: colors.primary }}>Speed test</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.action} testID="voice-clone-save" disabled={!consent || !model || !selectedReference || busy || recording} onPress={saveProfile}>
+            <TouchableOpacity style={styles.action} testID="voice-clone-save" disabled={!canUse} onPress={saveProfile}>
               <Text style={{ color: colors.primary }}>Save as agent voice</Text>
             </TouchableOpacity>
           </View>
           {!!benchmark && <Text style={[styles.note, { color: colors.textSecondary }]}>{benchmark}</Text>}
-          {!!currentRef && !!currentVoice && isPocketVoiceId(currentVoice) && (
-            <Text style={[styles.note, { color: colors.textSecondary }]}>Currently using a cloned voice. Change it using Voice profiles or the picker above.</Text>
-          )}
+          <ClonedVoiceNote />
         </>
       )}
     </View>

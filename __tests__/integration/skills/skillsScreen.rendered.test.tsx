@@ -22,7 +22,7 @@ const SKILL = '---\nname: Trip Planner\ndescription: Plan a trip day by day when
 
 it('pastes a skill, previews it, adds it, switches it off and removes it', async () => {
   installNativeBoundary({ fs: true });
-  const { render, fireEvent, waitFor } = requireRTL();
+  const { render, fireEvent } = requireRTL();
   const React = require('react');
   const { SkillsScreen } = require('../../../src/skills/SkillsScreen');
   const { useSkills } = require('../../../src/skills/skillsStore');

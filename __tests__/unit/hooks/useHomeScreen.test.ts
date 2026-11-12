@@ -12,7 +12,6 @@
  */
 
 import { renderHook, act } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
 // ============================================================================
 // Service mocks

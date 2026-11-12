@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, within } from '@testing-library/react-native';
+import { render, within } from '@testing-library/react-native';
 import { useAppStore } from '../../src/stores/appStore';
 import { useChatStore } from '../../src/stores/chatStore';
 import { resetStores } from '../utils/testHelpers';

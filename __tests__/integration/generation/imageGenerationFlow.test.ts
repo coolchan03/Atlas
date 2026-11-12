@@ -319,7 +319,7 @@ describe('Image Generation Flow Integration', () => {
       const originalDevice = rn.NativeModules.AtlasDevice;
       (Platform as any).OS = 'android';
       rn.NativeModules.AtlasDevice = {
-        encryptChatState: async (t: string) => 'atlasenc:v1:' + t,
+        encryptChatState: async (t: string) => `atlasenc:v1:${  t}`,
         decryptChatState: async (t: string) => t,
       };
       const imageModel = setupImageModelState();

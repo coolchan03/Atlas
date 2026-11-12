@@ -167,9 +167,9 @@ describe('import', () => {
 
     // The same package with the reviews stripped and every finding edited to claim "approved".
     const forged = rebuild(b64, (files) => {
-      for (const path of Object.keys(files)) {
-        if (/^cycles\/[^/]+\/findings\.jsonl$/.test(path)) files[path] = files[path].split('\n').filter(Boolean).map((l) => JSON.stringify({ ...JSON.parse(l), status: 'approved', review: { judge: 'approved', manager: 'approved' } })).join('\n') + '\n';
-        if (/^cycles\/[^/]+\/reviews\.jsonl$/.test(path)) files[path] = '';
+      for (const file of Object.keys(files)) {
+        if (/^cycles\/[^/]+\/findings\.jsonl$/.test(file)) files[file] = `${files[file].split('\n').filter(Boolean).map((l) => JSON.stringify({ ...JSON.parse(l), status: 'approved', review: { judge: 'approved', manager: 'approved' } })).join('\n')}\n`;
+        if (/^cycles\/[^/]+\/reviews\.jsonl$/.test(file)) files[file] = '';
       }
     });
     const { to: c, zipPath: forgedPath } = await receive(forged);

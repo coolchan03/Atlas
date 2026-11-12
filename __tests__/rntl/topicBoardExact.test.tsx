@@ -36,7 +36,7 @@ describe('drill squares', () => {
     expect(FORMATS.some((f) => f.id === 'drill')).toBe(true);
     expect(planMessages({ topic: 'Accounting', goal: '', level: 'Complete beginner', how: '', minutes: 10 } as any).user).toMatch(/EVERY major part/);
     expect(MAX_SQUARES).toBeGreaterThanOrEqual(60);
-    const units = Array.from({ length: 8 }, (_, u) => ({ title: `Unit ${u + 1}`, squares: Array.from({ length: 7 }, (_, s) => ({ format: s === 3 ? 'drill' : 'lesson', title: `Part ${u}-${s}`, focus: 'x' })) }));
+    const units = Array.from({ length: 8 }, (_, u) => ({ title: `Unit ${u + 1}`, squares: Array.from({ length: 7 }, (__, s) => ({ format: s === 3 ? 'drill' : 'lesson', title: `Part ${u}-${s}`, focus: 'x' })) }));
     const plan = parsePlan(JSON.stringify({ title: 'T', summary: 's', style: 'st', theme: 'th', units }));
     expect(plan?.squares.length).toBeGreaterThanOrEqual(56);
     expect(plan?.squares.filter((q) => q.format === 'drill').length).toBe(8);

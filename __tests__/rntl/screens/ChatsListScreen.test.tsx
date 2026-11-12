@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
@@ -347,7 +347,7 @@ describe('ChatsListScreen', () => {
     it('offers regular or private chat before navigating', () => {
       const model = createDownloadedModel();
       useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
-      const spy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+      jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
       const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByText('New'));

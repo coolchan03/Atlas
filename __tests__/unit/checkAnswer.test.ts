@@ -9,7 +9,7 @@ describe('checking an answer', () => {
     expect(figuresNotInContext('You may deduct 13850 on 2 forms.', context)).toEqual([]);
   });
   it('lists each figure once and at most eight', () => {
-    const reply = Array.from({ length: 12 }, (_, i) => `${i + 20}1`).join(' ') + ' 201 201';
+    const reply = `${Array.from({ length: 12 }, (_, i) => `${i + 20}1`).join(' ')  } 201 201`;
     const out = figuresNotInContext(reply, []);
     expect(out).toHaveLength(8);
     expect(new Set(out).size).toBe(8);

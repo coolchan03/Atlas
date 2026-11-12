@@ -3,7 +3,7 @@
  * (accounting statements, maths, science, the periodic table). Those squares need no model, remember where you were, and are exact.
  */
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { SquareView } from '../../src/topics/SquareViews';
 import { parsePlan } from '../../src/topics/formats';
 import { squareContent } from '../../src/topics/service';

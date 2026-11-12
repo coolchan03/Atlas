@@ -35,7 +35,7 @@ describe('grounding model output', () => {
     expect(kept[0].source).toMatchObject({ doc: 'Intro Accounting', page: 12, section: 'The accounting equation' });
   });
   it('drops malformed, unsupported and invented-quote exercises without throwing', () => {
-    const raw = readExercises('Sure! ```json\n[{"kind":"mcq","prompt":"q","choices":["a"],"answer":0},{"kind":"calc","prompt":"q","answer":9,"source":{"quote":"Depreciation is always straight line"}}, null, ' + JSON.stringify(good) + ']```');
+    const raw = readExercises(`Sure! \`\`\`json\n[{"kind":"mcq","prompt":"q","choices":["a"],"answer":0},{"kind":"calc","prompt":"q","answer":9,"source":{"quote":"Depreciation is always straight line"}}, null, ${  JSON.stringify(good)  }]\`\`\``);
     const { kept, dropped } = groundExercises(raw, [chunk]);
     expect(kept).toHaveLength(1); expect(dropped.map((d) => d.why).sort()).toEqual(['malformed', 'malformed', 'not supported by the material']);
     expect(readExercises('no json here')).toEqual([]);

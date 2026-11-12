@@ -16,7 +16,6 @@ jest.mock('../../../src/stores/chatStore', () => ({
     persist: { rehydrate: jest.fn() },
   },
 }));
-const mockSaved: { name: string; data: string }[] = [];
 jest.mock('@react-native-documents/picker', () => ({
   pick: jest.fn(async () => [{ uri: 'file:///picked/backup.atlasbackup', name: 'backup.atlasbackup' }]),
   saveDocuments: jest.fn(async () => [{ name: 'saved.atlasbackup' }]),
@@ -50,23 +49,23 @@ describe('locked chats in encrypted backups', () => {
     fakeState.conversations = [];
     (Platform as any).OS = 'android';
     (NativeModules as any).AtlasDevice = {
-      encryptChatState: jest.fn(async (p: string) => 'atlasenc:v1:' + b64(p)),
+      encryptChatState: jest.fn(async (p: string) => `atlasenc:v1:${  b64(p)}`),
       decryptChatState: jest.fn(async (b: string) => un64(b.slice('atlasenc:v1:'.length))),
-      createChatPinVerifier: jest.fn(async (pin: string) => 'pin:v1:' + pin),
-      verifyChatPin: jest.fn(async (pin: string, v: string) => v === 'pin:v1:' + pin),
+      createChatPinVerifier: jest.fn(async (pin: string) => `pin:v1:${  pin}`),
+      verifyChatPin: jest.fn(async (pin: string, v: string) => v === `pin:v1:${  pin}`),
       encryptProtectedItem: jest.fn(async (_k: string, _i: string, plain: string, pin: string, v: string) => {
-        if (v !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
-        return 'atlasitem:v1:' + b64(plain);
+        if (v !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
+        return `atlasitem:v1:${  b64(plain)}`;
       }),
       decryptProtectedItem: jest.fn(async (_k: string, _i: string, blob: string, pin: string, v: string) => {
-        if (v !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+        if (v !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
         return un64(blob.slice('atlasitem:v1:'.length));
       }),
       removeProtectedItemKey: jest.fn(async () => true),
       // Stand-in cipher: reversible only with the right passphrase, never readable as text.
       encryptPortableBackup: jest.fn(async (plain: string, pass: string) => {
         if (pass === PASSWORD) outerPlain = plain;
-        return 'atlasbackup:v1:' + b64(pass + '\u0000' + plain);
+        return `atlasbackup:v1:${  b64(`${pass  }\u0000${  plain}`)}`;
       }),
       decryptPortableBackup: jest.fn(async (payload: string, pass: string) => {
         const [p, ...rest] = un64(payload.slice('atlasbackup:v1:'.length)).split('\u0000');
@@ -151,7 +150,7 @@ describe('locked chats in encrypted backups', () => {
     evil.messages = [{ id: 'x', role: 'user', content: 'planted', timestamp: 1 }];
     evil.title = 'Planted title';
     data.items[KEY] = JSON.stringify(state);
-    files.set('/picked/backup.atlasbackup', 'atlasbackup:v1:' + b64(PASSWORD + '\u0000' + JSON.stringify(data)));
+    files.set('/picked/backup.atlasbackup', `atlasbackup:v1:${  b64(`${PASSWORD  }\u0000${  JSON.stringify(data)}`)}`);
     await importBackup(PASSWORD);
     const restored = JSON.parse(disk.get(KEY)!);
     const conv = restored.state.conversations.find((c: any) => c.id === 'locked1');
@@ -166,7 +165,7 @@ describe('locked chats in encrypted backups', () => {
     const state = JSON.parse(data.items[KEY]);
     state.state.conversations.find((c: any) => c.id === 'locked1').protectedBlob = 'plain text';
     data.items[KEY] = JSON.stringify(state);
-    files.set('/picked/backup.atlasbackup', 'atlasbackup:v1:' + b64(PASSWORD + '\u0000' + JSON.stringify(data)));
+    files.set('/picked/backup.atlasbackup', `atlasbackup:v1:${  b64(`${PASSWORD  }\u0000${  JSON.stringify(data)}`)}`);
     await importBackup(PASSWORD);
     const restored = JSON.parse(disk.get(KEY)!);
     // The tampered entry is refused; this phone's own sealed copy of that chat is kept, never deleted.

@@ -1358,10 +1358,10 @@ describe('appStore', () => {
 
   describe('resetSettings', () => {
     it('restores model settings but keeps personal choices that have no default', () => {
-      const { useAppStore } = require('../../../src/stores/appStore');
-      useAppStore.getState().updateSettings({ temperature: 1.9, userName: 'Alex', hapticsOff: true, appearance: { font: 'serif' } });
-      useAppStore.getState().resetSettings();
-      const settings = useAppStore.getState().settings;
+      const { useAppStore: store } = require('../../../src/stores/appStore');
+      store.getState().updateSettings({ temperature: 1.9, userName: 'Alex', hapticsOff: true, appearance: { font: 'serif' } });
+      store.getState().resetSettings();
+      const settings = store.getState().settings;
       expect(settings.temperature).not.toBe(1.9);
       expect(settings).toMatchObject({ userName: 'Alex', hapticsOff: true, appearance: { font: 'serif' } });
     });

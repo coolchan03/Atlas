@@ -67,10 +67,10 @@ describe('vibration setting', () => {
 
 describe('items added in an update', () => {
   it('start hidden for someone who already arranged their bar', () => {
-    const { resolveNavBar } = require('../../../src/utils/navBar');
+    const { resolveNavBar: resolveFresh } = require('../../../src/utils/navBar');
     // Saved before the Record shortcut existed: no "recorder" in the order or the hidden list.
     const saved = { order: ['home', 'chats', 'workspace', 'models', 'settings', 'emergency', 'library', 'brief', 'compass', 'phrases', 'survival'], hidden: ['models', 'library', 'compass', 'phrases', 'survival'] };
-    const r = resolveNavBar(saved);
+    const r = resolveFresh(saved);
     expect(r.visible).not.toContain('recorder');
     expect(r.order).toContain('recorder');
   });

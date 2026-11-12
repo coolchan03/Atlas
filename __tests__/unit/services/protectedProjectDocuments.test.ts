@@ -20,16 +20,16 @@ function boot() {
   AsyncStorage.removeItem = jest.fn(async (k: string) => { asyncDisk.delete(k); });
   const { NativeModules, Platform } = require('react-native');
   Platform.OS = 'android';
-  const enc = (t: string) => 'atlasitem:v1:' + Buffer.from(t).toString('base64');
+  const enc = (t: string) => `atlasitem:v1:${  Buffer.from(t).toString('base64')}`;
   const dec = (b: string) => Buffer.from(b.slice('atlasitem:v1:'.length), 'base64').toString();
   NativeModules.AtlasDevice = {
-    createChatPinVerifier: async (pin: string) => 'pin:v1:' + pin,
+    createChatPinVerifier: async (pin: string) => `pin:v1:${  pin}`,
     encryptProtectedItem: async (_k: string, _i: string, plain: string, pin: string, v: string) => {
-      if (v !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+      if (v !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
       return enc(plain);
     },
     decryptProtectedItem: async (_k: string, _i: string, blob: string, pin: string, v: string) => {
-      if (v !== 'pin:v1:' + pin) throw new Error('Wrong PIN');
+      if (v !== `pin:v1:${  pin}`) throw new Error('Wrong PIN');
       return dec(blob);
     },
     removeProtectedItemKey: jest.fn(async () => true),

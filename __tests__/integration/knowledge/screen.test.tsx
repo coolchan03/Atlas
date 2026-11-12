@@ -15,7 +15,7 @@ jest.mock('@react-navigation/native', () => ({
 beforeEach(() => jest.resetModules());
 
 const sentence = (n: number) => `The ledger concept ${n} is explained here with a worked example and a short definition.`;
-const pages = Array.from({ length: 8 }, (_, p) => `${p === 0 ? 'Chapter 1 Accounting Basics\n\n' : ''}${Array.from({ length: 12 }, (_, i) => sentence(p * 12 + i)).join(' ')}`);
+const pages = Array.from({ length: 8 }, (_, p) => `${p === 0 ? 'Chapter 1 Accounting Basics\n\n' : ''}${Array.from({ length: 12 }, (__, i) => sentence(p * 12 + i)).join(' ')}`);
 
 it('adds a PDF, studies it into a cited provisional finding, lets the person approve it, exports it, and routes a chat question to the expert', async () => {
   const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });

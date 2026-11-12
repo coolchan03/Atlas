@@ -37,7 +37,7 @@ describe('shared flexible context window', () => {
   });
 
   it('trims an oversized newest message, retaining its ending', async () => {
-    const last = 'START' + 'x'.repeat(400) + 'FINAL QUESTION';
+    const last = `START${  'x'.repeat(400)  }FINAL QUESTION`;
     const history = [msg('s', 'system', 'Rule'), msg('1', 'user', last)];
     const result = await fit(history);
     expect(result.latestTruncated).toBe(true);
