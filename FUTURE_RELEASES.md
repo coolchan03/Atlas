@@ -88,7 +88,6 @@ Approved by the user on 2026-11-12. Each item needs a check against the current 
   - Repair helper: guided troubleshooting for a household item, using photos.
   - Cooking and pantry: meals from a photo of the fridge, with scaling and substitutions.
   - Writing coach: rewrite or shorten the user's text in their own voice, offline.
-  - Kids' tutor: topic lessons with read-aloud and a simpler-words setting.
   - Explain-how-it-works: a code snippet, config file, formula or unknown data format, or a photo of an appliance. Not real binary reverse engineering, which a phone model cannot do reliably.
   - Not wanted: budget watcher.
 
