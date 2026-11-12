@@ -246,7 +246,7 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
             </View>
           </>
         )}
-        {/* GPU/NPU capability badge — a LiteRT or Q4_0/Q8_0 quant this device can accelerate. */}
+        {/* GPU/NPU capability badge - a LiteRT or Q4_0/Q8_0 quant this device can accelerate. */}
         {supportsAcceleration && (
           <View style={styles.accelBadge} testID="npu-gpu-badge">
             <Text style={styles.accelBadgeText}>NPU/GPU</Text>
@@ -312,7 +312,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
           </Text>
         </View>
       )}
-      {/* Label chip renders for any non-empty quantization string — llama quants
+      {/* Label chip renders for any non-empty quantization string - llama quants
           (Q4_K_M etc.) get the green "recommended" highlight via quantInfo, and
           non-table values (e.g. "LiteRT" for the curated LiteRT entries) still
           render as a plain label instead of disappearing. */}

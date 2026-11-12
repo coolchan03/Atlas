@@ -6,9 +6,9 @@ import { hardwareService } from '../services/hardware';
 import { backendForcesF16Cache } from '../services/llmHelpers';
 
 export const CACHE_TYPE_DESCRIPTIONS: Record<CacheType, string> = {
-  f16: 'Full precision — best quality, highest memory usage',
-  q8_0: '8-bit quantized — good balance of quality and memory',
-  q4_0: '4-bit quantized — lowest memory, may reduce quality',
+  f16: 'Full precision - best quality, highest memory usage',
+  q8_0: '8-bit quantized - good balance of quality and memory',
+  q4_0: '4-bit quantized - lowest memory, may reduce quality',
 };
 
 export const GPU_LAYERS_MAX = 99;

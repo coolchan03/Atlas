@@ -69,14 +69,14 @@ export const MAX_TOOL_RESULT_CHARS = 24000;
 export function toolResultModelContent(result: ToolResult): string {
   if (result.status === 'error') {
     const cat = result.errorCategory ?? 'internal';
-    return `Tool "${result.name}" failed (${cat}): ${result.error ?? 'unknown error'}. It returned no data — do not assume it succeeded.`;
+    return `Tool "${result.name}" failed (${cat}): ${result.error ?? 'unknown error'}. It returned no data - do not assume it succeeded.`;
   }
   if (result.status === 'empty') {
     return `Tool "${result.name}" ran but returned no content.`;
   }
   if (result.content.length > MAX_TOOL_RESULT_CHARS) {
     const kept = result.content.slice(0, MAX_TOOL_RESULT_CHARS);
-    return `${kept}\n\n[Tool "${result.name}" result truncated: showing the first ${MAX_TOOL_RESULT_CHARS} of ${result.content.length} characters. The result was too large to send in full — ask a more specific follow-up if you need more.]`;
+    return `${kept}\n\n[Tool "${result.name}" result truncated: showing the first ${MAX_TOOL_RESULT_CHARS} of ${result.content.length} characters. The result was too large to send in full - ask a more specific follow-up if you need more.]`;
   }
   return result.content;
 }

@@ -54,13 +54,13 @@ const REPOS: RepoEntry[] = [
   {
     repo: 'apple/coreml-stable-diffusion-v1-5-palettized',
     name: 'SD 1.5 Palettized (Low RAM)',
-    description: '6-bit quantized, 512×512, CPU/GPU — fits ≤4 GB devices',
+    description: '6-bit quantized, 512×512, CPU/GPU - fits ≤4 GB devices',
     variant: 'original',
   },
   {
     repo: 'apple/coreml-stable-diffusion-2-1-base-palettized',
     name: 'SD 2.1 Palettized (Low RAM)',
-    description: '6-bit quantized, 512×512, CPU/GPU — fits ≤4 GB devices',
+    description: '6-bit quantized, 512×512, CPU/GPU - fits ≤4 GB devices',
     variant: 'original',
   },
   {

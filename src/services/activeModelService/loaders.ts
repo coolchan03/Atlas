@@ -132,7 +132,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     if (actualBackend !== preferredBackend) {
       if (preferredBackend === 'gpu' && actualBackend === 'cpu' && maxTokens > 8192 && Platform.OS === 'android') {
         ToastAndroid.showWithGravity(
-          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU — reduce context length to use GPU.`,
+          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU - reduce context length to use GPU.`,
           ToastAndroid.LONG,
           ToastAndroid.BOTTOM,
         );

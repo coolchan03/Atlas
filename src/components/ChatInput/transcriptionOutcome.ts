@@ -28,7 +28,7 @@ export function resolveTranscription(
   return {
     dispatch: false,
     message: whisperReady
-      ? "Couldn't hear that — try again"
-      : "Couldn't load the voice model — free some memory and try again",
+      ? "Couldn't hear that - try again"
+      : "Couldn't load the voice model - free some memory and try again",
   };
 }

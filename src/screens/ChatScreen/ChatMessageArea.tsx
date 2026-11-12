@@ -80,7 +80,7 @@ const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles:
     <Animated.View entering={FadeIn.duration(200)}>
       <AnimatedPressable style={styles.pendingSettingsBar} onPress={onPress}>
         <Icon name="cpu" size={16} color={colors.warning} />
-        <Text style={styles.pendingSettingsText}>Model unloaded to free memory — tap to continue</Text>
+        <Text style={styles.pendingSettingsText}>Model unloaded to free memory - tap to continue</Text>
         <Icon name="refresh-cw" size={14} color={colors.warning} />
       </AnimatedPressable>
     </Animated.View>
@@ -247,21 +247,21 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           <AnimatedPressable testID="reload-model-banner" style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
             <Icon name="alert-circle" size={16} color={colors.warning} />
             <Text style={styles.pendingSettingsText}>
-              Settings changed — tap to reload model
+              Settings changed - tap to reload model
             </Text>
             <Icon name="refresh-cw" size={14} color={colors.warning} />
           </AnimatedPressable>
         </Animated.View>
       )}
       {/* Single dismissible surface for every model failure (text/image/tts/stt/
-          embedding). Reads modelFailureStore itself — no props. Rendered ABOVE the
+          embedding). Reads modelFailureStore itself - no props. Rendered ABOVE the
           evicted snackbar so the rounded failure card is never capped by a flat bar. */}
       <ModelFailureCard />
-      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
+      {/* GPU-path (no-NPU) image tips - shown in chat (not buried in settings) so a user
           hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
       <ImageGenAdviceCard />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
-          selected — reload it on demand, even a large model. This flat "tap to continue"
+          selected - reload it on demand, even a large model. This flat "tap to continue"
           snackbar sits directly above the composer, BELOW the rounded failure card. */}
       <ModelEvictedBar
         visible={shouldShowEvictedBar(chat)}

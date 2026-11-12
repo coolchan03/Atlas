@@ -163,7 +163,7 @@ async function validateMultifileComplete(modelDir: string, files: MultifileDownl
     const filePath = `${modelDir}/${file.relativePath}`;
     const stat = await RNFS.stat(filePath).catch(() => null);
     const size = stat ? (typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size) : -1;
-    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
+    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} - tap retry`);
   }
 }
 

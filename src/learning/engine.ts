@@ -277,7 +277,7 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   status('Learner is writing a report...');
   const report = await ask(
     learnerSystem(agent, st, cfg),
-    `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit — do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
+    `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
     'learner',
   );
   L().log({ agentId: agent.id, kind: 'report', title: `Report: ${item.q.slice(0, 70)}`, body: report.slice(0, 2500) });

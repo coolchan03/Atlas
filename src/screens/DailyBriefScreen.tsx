@@ -175,7 +175,7 @@ export const DailyBriefScreen: React.FC = () => {
               )}
               <View style={styles.weatherRow}>
                 <Icon name="sun" size={14} color={colors.textSecondary} />
-                <Text style={styles.meta}>UV {weather.uvMax} — {weather.uvWarning}</Text>
+                <Text style={styles.meta}>UV {weather.uvMax}: {weather.uvWarning}</Text>
               </View>
             </View>
             <Text style={[styles.desc, styles.descGap]}>{uvAdvice(weather.uvMax)}</Text>

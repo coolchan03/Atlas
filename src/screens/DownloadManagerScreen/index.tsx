@@ -98,7 +98,7 @@ export const DownloadManagerScreen: React.FC = () => {
         ListHeaderComponent={renderHeader}
         renderItem={() => (
           <View style={styles.content}>
-            {/* Active Downloads — only show when there are active items */}
+            {/* Active Downloads - only show when there are active items */}
             {filteredActive.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>

@@ -45,7 +45,7 @@ function WeatherBand({ weather }: { weather: WeatherData }) {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <Icon name="sun" size={14} color={colors.textSecondary} />
-        <Text style={{ ...TYPOGRAPHY.meta, color: colors.text }}>UV {weather.uvMax} — {uvAdvice(weather.uvMax)}</Text>
+        <Text style={{ ...TYPOGRAPHY.meta, color: colors.text }}>UV {weather.uvMax}: {uvAdvice(weather.uvMax)}</Text>
       </View>
       {weather.precipProbPct > 10 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>

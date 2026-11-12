@@ -277,7 +277,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
   <View>
-    <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
+    <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM - models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
     {showTitle && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
   </View>
 );

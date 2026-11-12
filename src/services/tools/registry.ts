@@ -296,5 +296,5 @@ export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
   if (enabledTools.length === 0) return '';
 
   const toolList = enabledTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
-  return `\n\nTools available:\n${toolList}\nUse these tools proactively and precisely — call the right tool at the right moment rather than guessing or saying you cannot help.`;
+  return `\n\nTools available:\n${toolList}\nUse these tools proactively and precisely - call the right tool at the right moment rather than guessing or saying you cannot help.`;
 }

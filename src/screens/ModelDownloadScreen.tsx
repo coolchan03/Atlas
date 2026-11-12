@@ -282,7 +282,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       setConnectedServerId(server.id);
       const models = discoveredModels[server.id] || result.models || [];
       if (models.length === 0) {
-        setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Ollama or LM Studio, then reconnect.`));
+        setAlertState(showAlert('Connected - No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Ollama or LM Studio, then reconnect.`));
         return;
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];

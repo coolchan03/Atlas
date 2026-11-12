@@ -137,23 +137,23 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
       {press(`← ${game === 'menu' ? 'Close' : 'All games'}`, () => game === 'menu' ? onClose() : setGame('menu'))}
       {game === 'menu' && <>
         <Text style={[{ color: colors.textSecondary }, literalStyles.s7]}>Playable locally, with no model, connection or account required.</Text>
-        {press('Tic-Tac-Toe — play against Atlas', () => start('tic'))}
-        {press('Number Guess — find the secret number', () => start('guess'))}
-        {press('Math Sprint — multiplication practice', () => start('math'))}
-        {press('Rock Paper Scissors — challenge Atlas', () => start('rps'))}
-        {press('Memory Match — find the matching pairs', () => start('memory'))}
-        {press('2048 — slide and combine tiles', () => start('2048'))}
-        {press('Minesweeper — reveal safe squares', () => start('mines'))}
-        {press('Snake — grow without hitting a wall', () => start('snake'))}
-        {press('Word Guess — uncover the hidden word', () => start('word'))}
-        {press('Trivia — five quick questions', () => start('trivia'))}
-        {press('Sudoku — fill the 9×9 number puzzle', () => start('sudoku'))}
-        {press('Wilderness Survival — make decisions to stay alive', () => start('survival'))}
-        {press('Civilization Tech Tree — research your way to space', () => start('techtree'))}
-        {press('Chess Puzzles — solve mate in one', () => start('chess'))}
+        {press('Tic-Tac-Toe - play against Atlas', () => start('tic'))}
+        {press('Number Guess - find the secret number', () => start('guess'))}
+        {press('Math Sprint - multiplication practice', () => start('math'))}
+        {press('Rock Paper Scissors - challenge Atlas', () => start('rps'))}
+        {press('Memory Match - find the matching pairs', () => start('memory'))}
+        {press('2048 - slide and combine tiles', () => start('2048'))}
+        {press('Minesweeper - reveal safe squares', () => start('mines'))}
+        {press('Snake - grow without hitting a wall', () => start('snake'))}
+        {press('Word Guess - uncover the hidden word', () => start('word'))}
+        {press('Trivia - five quick questions', () => start('trivia'))}
+        {press('Sudoku - fill the 9×9 number puzzle', () => start('sudoku'))}
+        {press('Wilderness Survival - make decisions to stay alive', () => start('survival'))}
+        {press('Civilization Tech Tree - research your way to space', () => start('techtree'))}
+        {press('Chess Puzzles - solve mate in one', () => start('chess'))}
       </>}
       {game === 'tic' && <>
-        <Text style={[{ color: colors.text }, literalStyles.s8]}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn — X'}</Text>
+        <Text style={[{ color: colors.text }, literalStyles.s8]}>{winner(board) === 1 ? 'You win!' : winner(board) === 2 ? 'Atlas wins' : winner(board) === 3 ? 'Draw!' : 'Your turn - X'}</Text>
         {[0,1,2].map(row => <View key={row} style={literalStyles.s9}>
           {[0,1,2].map(col => { const i = row*3+col; return <TouchableOpacity key={i} onPress={() => tic(i)} style={[literalStyles.s10, { backgroundColor: colors.surface }, literalStyles.s11, { borderColor: colors.border }, literalStyles.s12]}><Text style={[{ color: colors.text }, literalStyles.s13]}>{board[i] === 1 ? 'X' : board[i] === 2 ? 'O' : ''}</Text></TouchableOpacity>; })}
         </View>)}
@@ -219,7 +219,7 @@ export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: ()
         {press('New 2048 round', () => start('2048'))}
       </>}
       {game === 'mines' && <>
-        <Text style={[{ color: colors.text }, literalStyles.s8]}>Minesweeper · {mineResult(mines) === 'won' ? 'You cleared the minefield!' : mineResult(mines) === 'lost' ? 'Mine hit — game over' : 'Find the 7 mines without hitting one.'}</Text>
+        <Text style={[{ color: colors.text }, literalStyles.s8]}>Minesweeper · {mineResult(mines) === 'won' ? 'You cleared the minefield!' : mineResult(mines) === 'lost' ? 'Mine hit - game over' : 'Find the 7 mines without hitting one.'}</Text>
         <Text style={[{ color: colors.textSecondary }, literalStyles.s26]}>Flags placed: {mines.filter(c => c.flagged).length} · 7 mines</Text>
         {press(placingFlags ? 'Mode: Place flags (tap to switch)' : 'Mode: Reveal cells (tap to switch)', () => setPlacingFlags(v => !v))}
         <View style={literalStyles.s36}>

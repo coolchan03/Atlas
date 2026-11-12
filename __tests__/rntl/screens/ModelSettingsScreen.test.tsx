@@ -989,7 +989,7 @@ describe('Speech sections — Transcription (STT) + Text to Speech (TTS)', () =>
     fireEvent.press(view.getByTestId('transcription-accordion'));
     // the row appears and shows the "no model yet" state (whisper store empty in a fresh app)
     expect(view.getByTestId('stt-open-picker')).toBeTruthy();
-    expect(view.getByText('None selected — tap to choose')).toBeTruthy();
+    expect(view.getByText('None selected - tap to choose')).toBeTruthy();
   });
 
   it('does NOT show Text to Speech without a TTS slot registered', () => {

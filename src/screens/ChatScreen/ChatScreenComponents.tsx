@@ -191,7 +191,7 @@ export const EmptyChat: React.FC<{
           </Text>
         </View>
         <Text style={styles.projectHintText}>
-          Project: {activeProject?.name || 'Default'} — tap to change
+          Project: {activeProject?.name || 'Default'} - tap to change
         </Text>
       </TouchableOpacity>
     </AnimatedEntry>
@@ -222,7 +222,7 @@ export const ImageProgressIndicator: React.FC<{
         <View style={styles.imageProgressContent}>
           <View style={styles.imageProgressHeader}>
             {/* The placeholder image glyph is only meaningful BEFORE the live preview renders.
-                Once the preview thumbnail is up (Refining Image), drop it — it just overlapped
+                Once the preview thumbnail is up (Refining Image), drop it - it just overlapped
                 the real image (device 2026-07-16). */}
             {!imagePreviewPath && (
               <View style={styles.imageProgressIconContainer} testID="image-progress-placeholder-icon">

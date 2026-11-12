@@ -157,7 +157,7 @@ class ImageGenerationService {
     reportModelFailure('text', reason, {
       severity: 'warning',
       title: 'Prompt enhancement skipped',
-      message: `Generating from your original prompt — ${reason}.`,
+      message: `Generating from your original prompt - ${reason}.`,
     });
   }
 
@@ -417,7 +417,7 @@ class ImageGenerationService {
     logger.error('[ImageGenerationService] Generation error:', error);
     const crashMarkers = ['Pipeline failed', 'unloaded', 'ERR_NO_MODEL', 'TextEncoder'];
     const userMessage = crashMarkers.some(marker => errorMsg.includes(marker))
-      ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
+      ? 'Image generation failed - the model encountered an error and was unloaded. Please try again.'
       : errorMsg;
     this._fail(userMessage);
   }

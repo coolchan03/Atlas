@@ -181,7 +181,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
         )}
 
         <View style={styles.deviceBanner}>
-          <Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — {imageRecommendation}</Text>
+          <Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM - {imageRecommendation}</Text>
           {imageRec?.warning && (
             <Text style={[styles.deviceBannerText, styles.deviceBannerWarning]}>{imageRec.warning}</Text>
           )}

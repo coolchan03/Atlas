@@ -71,7 +71,7 @@ export const ModelsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
-      {/* Collapse header/import/tabs when showing model detail — detail has its own header.
+      {/* Collapse header/import/tabs when showing model detail - detail has its own header.
            Use height:0 + overflow:hidden instead of unmounting so AttachStep components
            stay registered with the SpotlightTourProvider (prevents broken spotlight overlays). */}
       <View style={isShowingDetail ? collapsedStyle.hidden : undefined}>
@@ -128,7 +128,7 @@ export const ModelsScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Tab Bar (horizontally scrollable — four tabs don't fit on a phone) */}
+        {/* Tab Bar (horizontally scrollable - four tabs don't fit on a phone) */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

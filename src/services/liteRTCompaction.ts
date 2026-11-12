@@ -49,7 +49,7 @@ export async function summarizeSession(
       (stopGeneration?.() ?? Promise.resolve()).catch(() => {}).finally(() => finish(null));
     }, 20_000);
     sendMessage(
-      'Briefly summarize our conversation so far — key topics, decisions, and context. 3 to 5 sentences maximum. Do not call any tools, just answer in plain text.',
+      'Briefly summarize our conversation so far - key topics, decisions, and context. 3 to 5 sentences maximum. Do not call any tools, just answer in plain text.',
       {
         onToken: (token) => { summary += token; },
         onReasoning: () => {},

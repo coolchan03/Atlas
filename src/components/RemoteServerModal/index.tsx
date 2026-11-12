@@ -136,7 +136,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         <Text style={styles.helperText}>
           {endpoint.trim()
             ? `Will connect to: ${endpoint.trim().replace(/\/+$/, '')}/v1/models`
-            : 'Enter the base URL — /v1/models will be appended automatically'}
+            : 'Enter the base URL - /v1/models will be appended automatically'}
         </Text>
 
         <Text style={styles.label}>API Key (Optional)</Text>

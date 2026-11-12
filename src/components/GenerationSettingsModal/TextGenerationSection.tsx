@@ -80,7 +80,7 @@ function buildLlamaConfig(modelMaxContext: number | null = null): SettingConfig[
       label: 'Context Length',
       min: 512, max: llmMax, step: 1024,
       format: formatContext,
-      description: 'KV cache size — larger uses more RAM (requires reload)',
+      description: 'KV cache size - larger uses more RAM (requires reload)',
       warning: (v) => v > 8192 ? 'High context uses significant RAM and may crash on some devices' : null,
     },
   ];
@@ -110,8 +110,8 @@ function buildLiteRTConfig(modelMaxContext: number | null = null): SettingConfig
       label: 'Max Tokens',
       min: 512, max: contextMax, step: 1024,
       format: formatContext,
-      description: 'Total token budget — input, history, and output combined (requires reload)',
-      warning: (v) => v > contextWarn ? 'High context uses significant RAM — may slow or crash on some devices' : null,
+      description: 'Total token budget - input, history, and output combined (requires reload)',
+      warning: (v) => v > contextWarn ? 'High context uses significant RAM - may slow or crash on some devices' : null,
       warningColor: '#F59E0B',
     },
   ];

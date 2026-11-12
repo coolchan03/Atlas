@@ -211,7 +211,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
         return;
       }
       if (!ready) {
-        setError("Couldn't load the voice model — free some memory and try again");
+        setError("Couldn't load the voice model - free some memory and try again");
         return;
       }
     }

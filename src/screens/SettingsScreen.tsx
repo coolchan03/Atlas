@@ -120,7 +120,7 @@ export const SettingsScreen: React.FC = () => {
           />
         </View>
 
-        {/* Navigation Items — grouped */}
+        {/* Navigation Items - grouped */}
         <AttachStep index={5} fill>
           <View>
           {([
@@ -213,7 +213,7 @@ export const SettingsScreen: React.FC = () => {
         {/* Sections registered at runtime through the settings section registry */}
         {settingsSections.map((Section, i) => <Section key={Section.displayName ?? String(i)} />)}
 
-        {/* Dev-only tooling — stripped from release builds */}
+        {/* Dev-only tooling - stripped from release builds */}
         {__DEV__ && (
           <AnimatedEntry index={11} staggerMs={40} trigger={focusTrigger}>
             <View style={styles.devButtonGroup}>

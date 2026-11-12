@@ -43,8 +43,8 @@ const LiteRTTextSettings: React.FC = () => {
       <SliderSetting
         testID="litert-max-tokens"
         label="Max Tokens"
-        description="Total token budget — input, history, and output combined (requires reload)"
-        warning={maxTokens > contextWarnThreshold ? 'High context uses significant RAM — may slow or crash on some devices' : null}
+        description="Total token budget - input, history, and output combined (requires reload)"
+        warning={maxTokens > contextWarnThreshold ? 'High context uses significant RAM - may slow or crash on some devices' : null}
         value={maxTokens}
         min={512} max={contextMax} step={1024}
         formatValue={formatContext}
@@ -98,7 +98,7 @@ const LlamaTextSettings: React.FC = () => {
       <SliderSetting
         testID="llama-context-length"
         label="Context Length"
-        description="KV cache size — larger uses more RAM (requires reload)"
+        description="KV cache size - larger uses more RAM (requires reload)"
         warning={contextLength > 8192 ? 'High context uses significant RAM and may crash on some devices' : null}
         value={contextLength}
         min={512} max={llmSliderMax} step={1024}

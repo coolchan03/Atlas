@@ -173,7 +173,7 @@ export async function checkMemoryForModel(
       availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
       requiredMemoryGB, currentlyLoadedMemoryGB, totalRequiredMemoryGB,
       remainingAfterLoadGB: remainingBudgetGB,
-      message: `${modelName} — load override approved for this session.`,
+      message: `${modelName} - load override approved for this session.`,
     };
   }
   const requiredStr = requiredMemoryGB.toFixed(1);

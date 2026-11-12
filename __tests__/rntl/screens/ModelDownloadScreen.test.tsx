@@ -522,7 +522,7 @@ describe('ModelDownloadScreen', () => {
       await mockOnConnectServer(MOCK_SERVER);
     });
 
-    expect(mockShowAlert).toHaveBeenCalledWith('Connected — No Models Found', expect.stringContaining('My Server'));
+    expect(mockShowAlert).toHaveBeenCalledWith('Connected - No Models Found', expect.stringContaining('My Server'));
     expect(mockRsm.setActiveRemoteTextModel).not.toHaveBeenCalled();
   });
 

@@ -202,7 +202,7 @@ export const LearningScreen: React.FC = () => {
           {cfg.useWeb && (
             <TextInput
               style={styles.input}
-              placeholder="Limit to domains (e.g. scholar.google.com, arxiv.org) — leave blank for all"
+              placeholder="Limit to domains (e.g. scholar.google.com, arxiv.org). Leave blank for all"
               placeholderTextColor={colors.textSecondary}
               value={cfg.webDomains || ''}
               onChangeText={(t) => setConfig(agentId, { webDomains: t })}

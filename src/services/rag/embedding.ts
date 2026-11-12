@@ -29,7 +29,7 @@ function withTimeout<T>(promise: Promise<T>, opts: { ms: number; message: string
     promise.then(v => { clearTimeout(timer); return v; }),
     timeout,
   ]).catch(err => {
-    promise.then(onOrphan).catch(() => { /* underlying load failed too — nothing to clean up */ });
+    promise.then(onOrphan).catch(() => { /* underlying load failed too - nothing to clean up */ });
     throw err;
   });
 }

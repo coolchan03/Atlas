@@ -127,15 +127,15 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
   try {
     runningOnEmulator = await isEmulator();
   } catch (err) {
-    log(`isEmulator() threw: ${(err as Error).message} — assuming not emulator`);
+    log(`isEmulator() threw: ${(err as Error).message} - assuming not emulator`);
     runningOnEmulator = false;
   }
   if (runningOnEmulator) {
-    log('Running on emulator — skipping scan (emulator network stack cannot handle concurrent probes)');
+    log('Running on emulator - skipping scan (emulator network stack cannot handle concurrent probes)');
     return [];
   }
 
-  log('Not an emulator — proceeding');
+  log('Not an emulator - proceeding');
 
   let ip: string | null;
   try {
@@ -152,25 +152,25 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
   let subnetsToScan: string[];
 
   if (!ip || ip === '0.0.0.0' || ip === '127.0.0.1') {
-    log(`No usable IP (got: ${ip ?? 'null'}) — skipping scan`);
+    log(`No usable IP (got: ${ip ?? 'null'}) - skipping scan`);
     return [];
   } else if (ipv6) {
-    log(`IPv6 address detected — probing gateways on fallback subnets: ${FALLBACK_SUBNETS.join(', ')}`);
+    log(`IPv6 address detected - probing gateways on fallback subnets: ${FALLBACK_SUBNETS.join(', ')}`);
     const reachableSubnet = await findReachableSubnet(FALLBACK_SUBNETS, log);
     if (reachableSubnet) {
-      log(`Gateway responded on subnet ${reachableSubnet} — scanning that subnet only`);
+      log(`Gateway responded on subnet ${reachableSubnet} - scanning that subnet only`);
       subnetsToScan = [reachableSubnet];
     } else {
-      log('No gateway responded — scanning all fallback subnets anyway (device may still be on WiFi)');
+      log('No gateway responded - scanning all fallback subnets anyway (device may still be on WiFi)');
       subnetsToScan = FALLBACK_SUBNETS;
     }
   } else {
     const base = subnetBase(ip);
     if (!base) {
-      log(`IP ${ip} is not on a private network — skipping scan`);
+      log(`IP ${ip} is not on a private network - skipping scan`);
       return [];
     }
-    log(`IPv4 private address — subnet base: ${base}`);
+    log(`IPv4 private address - subnet base: ${base}`);
     subnetsToScan = [base];
   }
 
@@ -202,7 +202,7 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
       }
     }));
 
-    log(`Scan complete — found ${discovered.length} server(s)`);
+    log(`Scan complete - found ${discovered.length} server(s)`);
     return discovered;
   } catch (error) {
     log(`Scan error: ${error instanceof Error ? error.message : String(error)}`);

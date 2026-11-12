@@ -127,7 +127,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             {getStatusIcon() && (
               <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} accessibilityLabel={getStatusText(item.status)} />
             )}
-            {/* Queued is icon-only (clock) — the word is redundant next to it. Other states
+            {/* Queued is icon-only (clock) - the word is redundant next to it. Other states
                 (failed/retrying/network) keep their explanatory text. */}
             {item.status !== 'pending' && !!getStatusLabel(item) && (
               <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>

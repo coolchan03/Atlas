@@ -148,7 +148,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Collapsed Models summary — tap to open the manager sheet. Both the
+          {/* Collapsed Models summary - tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}
           <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
             <AttachStep index={1} style={stretchStyle}>
@@ -300,7 +300,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
 
-          {/* Model Stats row removed — the per-type counts now live in the Models
+          {/* Model Stats row removed - the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}
         </ScrollView >
       </View >

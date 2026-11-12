@@ -174,7 +174,7 @@ function strandInterruptedEntries(
     stranded.push({
       ...prior,
       status: 'failed',
-      errorMessage: prior.errorMessage ?? 'Interrupted — app closed. Tap retry.',
+      errorMessage: prior.errorMessage ?? 'Interrupted - app closed. Tap retry.',
     });
   }
   return stranded;

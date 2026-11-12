@@ -30,7 +30,7 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
     logger.log(`[LLM] Validating model: ${modelPath}`);
     logger.log(`[LLM] Model file size: ${fileSizeMB}MB (${fileSize} bytes)`);
     if (fileSize < MIN_GGUF_FILE_SIZE) {
-      return { valid: false, reason: `Model file too small (${fileSize} bytes) — likely corrupted or incomplete download` };
+      return { valid: false, reason: `Model file too small (${fileSize} bytes) - likely corrupted or incomplete download` };
     }
     // Read first 4 bytes to check GGUF magic number.
     // RNFS.read() has an iOS bridging bug with NSInteger arguments on
@@ -43,7 +43,7 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
       logger.warn('[LLM] RNFS.read() failed for magic check, skipping header validation:', readErr);
     }
     if (header !== undefined && !header.startsWith(GGUF_MAGIC)) {
-      return { valid: false, reason: `Invalid model file — not a GGUF file (header: ${header})` };
+      return { valid: false, reason: `Invalid model file - not a GGUF file (header: ${header})` };
     }
     if (header !== undefined) {
       logger.log(`[LLM] GGUF magic OK`);

@@ -283,7 +283,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       hardwareAccelerated
     >
       <View style={styles.container}>
-        {/* Backdrop — gated by backdropEnabled ref so the long-press
+        {/* Backdrop - gated by backdropEnabled ref so the long-press
             finger-up can't close the sheet during animate-in */}
         <TouchableWithoutFeedback onPress={handleBackdropPress}>
           <Animated.View
@@ -309,7 +309,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
             },
           ]}
         >
-          {/* Handle — swipe target */}
+          {/* Handle - swipe target */}
           {showHandle && (
             <View {...panResponder.panHandlers} style={styles.handleContainer}>
               <View
@@ -344,7 +344,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           {/* Content */}
           {children}
 
-          {/* Bottom safe area spacer — hidden when keyboard is up (keyboard height includes it) */}
+          {/* Bottom safe area spacer - hidden when keyboard is up (keyboard height includes it) */}
           {bottomInset > 0 && keyboardHeight === 0 && (
             <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
           )}

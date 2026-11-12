@@ -127,7 +127,7 @@ export const ModelSettingsScreen: React.FC = () => {
   );
   const sttBlock = (
     <>
-          {/* Transcription (STT/whisper) — core. Reuses the same picker sheet Home/Chat open, and the same
+          {/* Transcription (STT/whisper) - core. Reuses the same picker sheet Home/Chat open, and the same
               whisper store as its single source, so the active model shown here is always consistent. */}
           <TouchableOpacity
             style={styles.accordionHeader}
@@ -151,7 +151,7 @@ export const ModelSettingsScreen: React.FC = () => {
               >
                 <View style={styles.toggleInfo}>
                   <Text style={styles.toggleLabel}>Transcription model</Text>
-                  <Text style={styles.toggleDesc}>{sttModelName ?? 'None selected — tap to choose'}</Text>
+                  <Text style={styles.toggleDesc}>{sttModelName ?? 'None selected - tap to choose'}</Text>
                 </View>
                 <Icon name="chevron-right" size={18} color={colors.textMuted} />
               </TouchableOpacity>
@@ -161,7 +161,7 @@ export const ModelSettingsScreen: React.FC = () => {
   );
   const ttsBlock = (
     <>
-          {/* Text to Speech — feature via slot; nothing renders when it is absent (no accordion). */}
+          {/* Text to Speech - feature via slot; nothing renders when it is absent (no accordion). */}
           {TtsSection && (
             <>
               <TouchableOpacity
