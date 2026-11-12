@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { speakInAndWait, stop as stopSpeech } from './tts';
+import { useAtlasVoiceStore } from './store';
+import { useVoiceProfiles } from './profiles';
+import { loadVoiceForSpeech, restoreSavedVoice } from './neural';
 
 /** Longest piece spoken at once: short enough to show progress and to pause, long enough to sound natural. */
 const MAX_PART = 600;
@@ -63,20 +66,25 @@ export function readingMinutes(words: number, rate: number): number {
 
 export type ReaderStatus = 'idle' | 'reading' | 'paused';
 interface ReaderState { status: ReaderStatus; title: string; parts: string[]; index: number }
-interface Deps { speak: (text: string) => Promise<boolean>; stopSpeaking: () => void }
+interface Deps {
+  speak: (text: string) => Promise<boolean>;
+  stopSpeaking: () => void;
+  /** Called when reading ends or is stopped, so a borrowed voice can be given back. */
+  release?: () => void;
+}
 
 /**
  * Reads a document aloud one piece at a time, with pause, stop and skip. The voice, speed and engine are the
  * app's saved ones. The reader owns all of its state; screens and widgets only show it and send intents.
  */
-export function createReadAloud({ speak, stopSpeaking }: Deps) {
+export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
   const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0 }));
   let run = 0;
 
   const loop = async (mine: number) => {
     while (mine === run) {
       const { parts, index } = useReader.getState();
-      if (index >= parts.length) { useReader.setState({ status: 'idle', index: 0 }); return; }
+      if (index >= parts.length) { useReader.setState({ status: 'idle', index: 0 }); release?.(); return; }
       let finished = false;
       try { finished = await speak(parts[index]); } catch { finished = false; }
       if (mine !== run) return;
@@ -97,6 +105,7 @@ export function createReadAloud({ speak, stopSpeaking }: Deps) {
     run += 1;
     stopSpeaking();
     useReader.setState({ status: 'idle', index: 0 });
+    release?.();
   };
   const pause = () => {
     if (useReader.getState().status !== 'reading') return;
@@ -122,9 +131,21 @@ export function createReadAloud({ speak, stopSpeaking }: Deps) {
   return { useReader, play, pause, stop, load, jump };
 }
 
-export const readAloud = createReadAloud({
+/** Reads one piece in the voice chosen for Read aloud, borrowing a saved voice profile (even a cloned one) when one is chosen. */
+async function speakInChosenVoice(text: string): Promise<boolean> {
+  const chosen = useAtlasVoiceStore.getState().readVoiceId;
+  const profile = chosen ? useVoiceProfiles.getState().profiles.find((p) => p.id === chosen) : undefined;
+  if (profile) {
+    try { await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId); }
+    catch { await restoreSavedVoice().catch(() => undefined); } // the saved voice is better than silence
+  }
   // An empty language means the phone's own default, the same as the speak button in chat.
-  speak: (text) => speakInAndWait(text, '', { messageId: 'read-aloud' }),
+  return speakInAndWait(text, '', { messageId: 'read-aloud' });
+}
+
+export const readAloud = createReadAloud({
+  speak: speakInChosenVoice,
   stopSpeaking: stopSpeech,
+  release: () => { if (useAtlasVoiceStore.getState().readVoiceId) restoreSavedVoice().catch(() => undefined); },
 });
 export const useReadAloud = readAloud.useReader;

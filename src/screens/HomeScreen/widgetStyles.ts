@@ -8,5 +8,6 @@ export const widgetStyles = StyleSheet.create({
   detail: { ...TYPOGRAPHY.bodySmall, fontSize: 12, marginTop: 4 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 10 },
   link: { marginTop: 10 },
+  input: { ...TYPOGRAPHY.body, minHeight: 72, borderWidth: 1, borderRadius: 8, padding: SPACING.sm, marginTop: SPACING.sm, marginBottom: SPACING.sm },
   pushRight: { marginLeft: 'auto' },
 });

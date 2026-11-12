@@ -24,6 +24,9 @@ interface AtlasVoiceState {
   /** Shared Pocket generation quality; survives app restarts. */
   cloneSteps: number;
   setCloneSteps: (steps: number) => void;
+  /** Voice profile Read aloud reads in ('' = the app's current voice). */
+  readVoiceId: string;
+  setReadVoiceId: (id: string) => void;
   setNeural: (id: string, sid?: number, referenceId?: string) => void;
   /** Voices for podcast and briefing hosts A, B and C (voice names; '' or missing = automatic). */
   podcastVoices: string[];
@@ -49,6 +52,8 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   neuralSid: 0,
   neuralReferenceId: '',
   cloneSteps: 2,
+  readVoiceId: '',
+  setReadVoiceId: (readVoiceId) => set({ readVoiceId }),
   earpiece: false,
   podcastVoices: [],
   setPodcastVoices: (podcastVoices) => set({ podcastVoices }),
@@ -67,5 +72,5 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, earpiece: s.earpiece, podcastVoices: s.podcastVoices }),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, readVoiceId: s.readVoiceId, earpiece: s.earpiece, podcastVoices: s.podcastVoices }),
 }));

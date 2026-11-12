@@ -20,6 +20,7 @@ const destinations: Destination[] = [
   { key: 'models', label: 'Get models', hint: 'Download or import AI models', icon: 'download', tab: 'ModelsTab', tint: '#FFF0D4', tintDark: '#33260F', color: ['#B3620F', '#F2A93B'] },
   { key: 'load', label: 'Load a model', hint: 'Pick the AI that answers in chat', icon: 'zap', action: 'load', tint: '#FFF0D4', tintDark: '#33260F', color: ['#B3620F', '#F2A93B'] },
   { key: 'brief', label: 'Daily briefing', hint: "Today's news, in your voice", icon: 'sun', screen: 'DailyBrief', tint: '#EDE5FF', tintDark: '#241A3D', color: ['#6D28D9', '#A78BFA'] },
+  { key: 'read', label: 'Read aloud', hint: 'Have text or a document read to you, in any voice', icon: 'volume-2', screen: 'ReadAloud', tint: '#E4F2F0', tintDark: '#10302C', color: ['#0F766E', '#2DD4BF'] },
   { key: 'recorder', label: 'Recorder', hint: 'Record a talk, get a transcript with speakers', icon: 'mic', screen: 'Recorder', tint: '#FDE7E2', tintDark: '#3A1A15', color: ['#B91C1C', '#F87171'] },
   { key: 'language', label: 'Learn a language', hint: 'Lessons, games and practice calls', icon: 'book', screen: 'Language', tint: '#E4F2F0', tintDark: '#10302C', color: ['#0F766E', '#2DD4BF'] },
   { key: 'topics', label: 'Learn a topic', hint: 'AI makes lessons, quizzes and exercises — you read and practice them', icon: 'grid', screen: 'Topics', tint: '#E6EEFB', tintDark: '#14243D', color: ['#1D4ED8', '#60A5FA'] },

@@ -1,21 +1,17 @@
-import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { documentService } from '../services/documentService';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
-import { findNeuralVoice } from '../atlasVoice/neural';
+import { ReadVoiceChooser } from '../atlasVoice/ReadVoiceChooser';
+import { useReadAloudSource } from '../atlasVoice/useReadAloudSource';
 import { ttsAvailable } from '../atlasVoice/tts';
 import { readAloud, readingMinutes, useReadAloud } from '../atlasVoice/readAloud';
 
-/** The longest document opened for reading (about seven hours of speech). */
-const MAX_CHARS = 400_000;
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
-const wordCount = (text: string) => (text.trim() ? text.trim().split(/\s+/).length : 0);
 
 /** Progress, the piece being read, and the play, pause, stop and skip buttons. */
 const Player: React.FC<{ canPlay: boolean; onPlay: () => void }> = ({ canPlay, onPlay }) => {
@@ -53,49 +49,14 @@ const Player: React.FC<{ canPlay: boolean; onPlay: () => void }> = ({ canPlay, o
   );
 };
 
-/** Paste text or open a document, and Atlas reads it aloud in the voice chosen in Models > Voice. */
+/** Paste text or open a document, and Atlas reads it aloud in the chosen voice. */
 export const ReadAloudScreen: React.FC = () => {
   const { colors } = useTheme();
   const rate = useAtlasVoiceStore((s) => s.rate);
   const setRate = useAtlasVoiceStore((s) => s.setRate);
-  const voiceId = useAtlasVoiceStore((s) => s.neuralVoice);
-  const [typed, setTyped] = useState('');
-  const [document, setDocument] = useState<{ title: string; text: string } | null>(null);
-  const [opening, setOpening] = useState(false);
-  const loaded = useRef('');
+  const source = useReadAloudSource();
   const available = ttsAvailable();
-  const text = document?.text ?? typed;
-  const words = wordCount(text);
-
-  const openDocument = async () => {
-    if (opening) return;
-    setOpening(true);
-    try {
-      const [file] = await pick({ type: [types.allFiles], allowMultiSelection: false });
-      if (!file) return;
-      const name = file.name || 'document';
-      if (!documentService.isSupported(name)) {
-        Alert.alert('Unsupported file', `"${name}" cannot be read aloud. Try PDF, Word, text, Markdown, EPUB or another document.`);
-        return;
-      }
-      const body = await documentService.textFromPicked(file.uri, name, MAX_CHARS);
-      if (!body.trim()) { Alert.alert('Nothing to read', `"${name}" has no text in it.`); return; }
-      readAloud.stop();
-      setDocument({ title: name, text: body });
-    } catch (e: any) {
-      if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) Alert.alert('Could not open the file', String(e?.message || e));
-    } finally { setOpening(false); }
-  };
-
-  const clear = () => { readAloud.stop(); setDocument(null); setTyped(''); loaded.current = ''; };
-  const play = () => {
-    if (!text.trim()) return;
-    // Start again from the top when the text changed since the last time it was loaded.
-    if (loaded.current !== text || !useReadAloud.getState().parts.length) { readAloud.load(text, document?.title ?? ''); loaded.current = text; }
-    readAloud.play();
-  };
-
-  const voiceName = (voiceId && findNeuralVoice(voiceId)?.name) || 'Phone voice';
+  const { document, words, text } = source;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top']}>
@@ -115,22 +76,26 @@ export const ReadAloudScreen: React.FC = () => {
             </View>
           </View>
         ) : (
-          <TextInput testID="read-aloud-text" value={typed} onChangeText={setTyped} multiline textAlignVertical="top"
+          <TextInput testID="read-aloud-text" value={source.typed} onChangeText={source.setTyped} multiline textAlignVertical="top"
             placeholder="Paste or type text to read aloud" placeholderTextColor={colors.textMuted}
             style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} />
         )}
 
         <View style={styles.row}>
-          <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={openDocument} disabled={opening} testID="read-aloud-open" accessibilityRole="button">
-            {opening ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Open a document</Text>}
+          <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={source.openDocument} disabled={source.opening} testID="read-aloud-open" accessibilityRole="button">
+            {source.opening ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Open a document</Text>}
           </TouchableOpacity>
-          {(!!document || !!typed) && (
-            <TouchableOpacity style={[styles.action, { borderColor: colors.border }]} onPress={clear} testID="read-aloud-clear" accessibilityRole="button">
+          {(!!document || !!source.typed) && (
+            <TouchableOpacity style={[styles.action, { borderColor: colors.border }]} onPress={source.clear} testID="read-aloud-clear" accessibilityRole="button">
               <Text style={{ color: colors.text }}>Clear</Text>
             </TouchableOpacity>
           )}
         </View>
         {words > 0 && <Text style={[styles.meta, { color: colors.textSecondary }]}>{words.toLocaleString()} words, about {readingMinutes(words, rate)} min at {rate}x</Text>}
+
+        <Text style={[styles.label, { color: colors.text }]}>Voice</Text>
+        <ReadVoiceChooser />
+        <Text style={[styles.meta, { color: colors.textSecondary }]}>My voice is the one chosen in Models, Voice. Your saved and cloned voices appear here too.</Text>
 
         <Text style={[styles.label, { color: colors.text }]}>Speed</Text>
         <View style={styles.row}>
@@ -141,9 +106,8 @@ export const ReadAloudScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={[styles.meta, { color: colors.textSecondary }]}>Voice: {voiceName}. Change it in Models, Voice.</Text>
 
-        <Player canPlay={available && !!text.trim()} onPlay={play} />
+        <Player canPlay={available && !!text.trim()} onPlay={source.play} />
       </ScrollView>
     </SafeAreaView>
   );

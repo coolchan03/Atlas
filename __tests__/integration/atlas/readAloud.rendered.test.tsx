@@ -63,3 +63,21 @@ it('the Home widget shows the reading state, controls it, and opens the screen',
   rtl.fireEvent.press(view.getByTestId('widget-read-stop'));
   expect(useReadAloud.getState().status).toBe('idle');
 });
+
+it('the Home widget reads pasted text in the voice chosen on it, and a deleted voice falls back to My voice', async () => {
+  const { rtl, view, useReadAloud } = open('widget');
+  const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+  const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
+  let profileId = '';
+  rtl.act(() => { profileId = useVoiceProfiles.getState().addProfile({ name: 'Mom', voiceId: 'kokoro-en', sid: 0, rate: 1 }).id; });
+  expect(view.getByText('Mom')).toBeTruthy();
+  rtl.fireEvent.press(view.getByText('Mom'));
+  expect(useAtlasVoiceStore.getState().readVoiceId).toBe(profileId);
+  expect(view.getByTestId('widget-read-start').props.accessibilityState?.disabled ?? true).toBeTruthy();
+  rtl.fireEvent.changeText(view.getByTestId('widget-read-text'), 'Boil the water for three minutes before you drink it.');
+  rtl.fireEvent.press(view.getByTestId('widget-read-start'));
+  await rtl.waitFor(() => expect(useReadAloud.getState().parts).toEqual(['Boil the water for three minutes before you drink it.']));
+  await rtl.act(async () => { useVoiceProfiles.getState().removeProfile(profileId); });
+  expect(view.queryByText('Mom')).toBeNull();
+  expect(view.getByText('My voice')).toBeTruthy();
+});
