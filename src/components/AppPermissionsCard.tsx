@@ -8,6 +8,7 @@ export const ASSISTANT_PERMISSIONS = [
   { id: 'camera', name: 'Camera', permission: 'android.permission.CAMERA', hint: 'QR pairing, photography and scanning', minApi: 1 },
   { id: 'location', name: 'Precise location', permission: 'android.permission.ACCESS_FINE_LOCATION', hint: 'Offline maps, GPS and local assistance', minApi: 1 },
   { id: 'approx-location', name: 'Approximate location', permission: 'android.permission.ACCESS_COARSE_LOCATION', hint: 'Location without GPS precision', minApi: 1 },
+  { id: 'calendar-read', name: 'Read calendar', permission: 'android.permission.READ_CALENDAR', hint: 'Your plans and flights, used in the daily briefing', minApi: 1 },
   { id: 'calendar-write', name: 'Create calendar events', permission: 'android.permission.WRITE_CALENDAR', hint: 'Save events with your approval', minApi: 1 },
   { id: 'activity', name: 'Physical activity', permission: 'android.permission.ACTIVITY_RECOGNITION', hint: 'Step counter and movement tools', minApi: 29 },
   { id: 'notifications', name: 'Notifications', permission: 'android.permission.POST_NOTIFICATIONS', hint: 'Download progress, scheduled tasks and alerts', minApi: 33 },
