@@ -306,10 +306,11 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     try {
       const { fetchWeather, weatherSummary } = require('./weather');
       const { useMaps } = require('../atlasMaps/maps');
+      const { currentUnits } = require('./units');
       const fix = useMaps.getState().lastFix;
       if (fix) {
         const w = await fetchWeather(fix.lat, fix.lon);
-        if (w) weatherLine = weatherSummary(w);
+        if (w) weatherLine = weatherSummary(w, undefined, currentUnits());
       }
     } catch { /* weather is optional */ }
   }

@@ -3,6 +3,8 @@
  * https://open-meteo.com/
  */
 
+import { fmtTemp, fmtWind, type Units } from './units';
+
 export interface WeatherData {
   tempMaxC: number;
   tempMinC: number;
@@ -91,15 +93,15 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
   }
 }
 
-/** One-line weather summary for the AI briefing context. */
-export function weatherSummary(w: WeatherData, cityName?: string): string {
+/** One-line weather summary for the AI briefing context, in the person's units. */
+export function weatherSummary(w: WeatherData, cityName?: string, units: Units = { imperial: false, temp: 'c' }): string {
   const loc = cityName ? ` in ${cityName}` : '';
   const parts = [
     `Today${loc}: ${w.description}`,
-    `high ${w.tempMaxC}°C / low ${w.tempMinC}°C`,
+    `high ${fmtTemp(w.tempMaxC, units.temp)} / low ${fmtTemp(w.tempMinC, units.temp)}`,
     `UV max ${w.uvMax} (${w.uvWarning.toLowerCase()})`,
     w.precipProbPct > 10 ? `${w.precipProbPct}% chance of rain` : null,
-    w.windKph > 20 ? `wind up to ${w.windKph} km/h` : null,
+    w.windKph > 20 ? `wind up to ${fmtWind(w.windKph, units.imperial)}` : null,
   ].filter(Boolean).join(', ');
   return `${parts}.`;
 }

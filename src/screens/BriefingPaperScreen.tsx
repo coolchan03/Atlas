@@ -11,6 +11,7 @@ import type { WeatherData } from '../atlasTools/weather';
 import { useMaps } from '../atlasMaps/maps';
 import type { RootStackParamList } from '../navigation/types';
 import { uvAdvice } from '../atlasTools/weather';
+import { fmtTemp, useUnits } from '../atlasTools/units';
 import { TYPOGRAPHY } from '../constants';
 
 type Route = RouteProp<RootStackParamList, 'BriefingPaper'>;
@@ -31,7 +32,7 @@ function extractStories(podcast: { host: string; text: string }[], storyStarts: 
 
 function WeatherBand({ weather }: { weather: WeatherData }) {
   const { colors } = useTheme();
-  const tempF = (c: number) => `${Math.round(c * 9 / 5 + 32)}°F`;
+  const units = useUnits();
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -40,7 +41,7 @@ function WeatherBand({ weather }: { weather: WeatherData }) {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <Icon name="thermometer" size={14} color={colors.textSecondary} />
-        <Text style={{ ...TYPOGRAPHY.meta, color: colors.text }}>{weather.tempMaxC}°C / {weather.tempMinC}°C ({tempF(weather.tempMaxC)} / {tempF(weather.tempMinC)})</Text>
+        <Text style={{ ...TYPOGRAPHY.meta, color: colors.text }}>{fmtTemp(weather.tempMaxC, units.temp)} / {fmtTemp(weather.tempMinC, units.temp)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <Icon name="sun" size={14} color={colors.textSecondary} />

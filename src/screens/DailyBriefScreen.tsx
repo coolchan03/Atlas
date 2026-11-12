@@ -17,6 +17,7 @@ import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 import { ForceLoadModel } from '../components/ForceLoadModel';
 import { useMaps } from '../atlasMaps/maps';
 import { uvAdvice, type WeatherData } from '../atlasTools/weather';
+import { fmtTemp, useUnits } from '../atlasTools/units';
 
 const EMPTY: never[] = [];
 const LENGTHS = [3, 5, 10, 15];
@@ -55,6 +56,7 @@ function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
 
 /** A short spoken news show about your interests, made from real headlines of the day. */
 export const DailyBriefScreen: React.FC = () => {
+  const units = useUnits();
   const navigation = useNavigation<any>();
   // On the bottom bar it is a tab page (no back arrow); from the Atlas hub it is a pushed page.
   const asTab = useRoute().name === 'BriefTab';
@@ -159,7 +161,7 @@ export const DailyBriefScreen: React.FC = () => {
             <View style={styles.chips}>
               <View style={styles.weatherRow}>
                 <Icon name="thermometer" size={14} color={colors.textSecondary} />
-                <Text style={styles.meta}>{weather.tempMaxC}°C / {weather.tempMinC}°C</Text>
+                <Text style={styles.meta}>{fmtTemp(weather.tempMaxC, units.temp)} / {fmtTemp(weather.tempMinC, units.temp)}</Text>
               </View>
               <View style={styles.weatherRow}>
                 <Icon name="cloud" size={14} color={colors.textSecondary} />
@@ -178,7 +180,7 @@ export const DailyBriefScreen: React.FC = () => {
             </View>
             <Text style={[styles.desc, styles.descGap]}>{uvAdvice(weather.uvMax)}</Text>
             {weather.tomorrow && (
-              <Text style={[styles.desc, styles.descGapSmall]}>Tomorrow: {weather.tomorrow.description}, {weather.tomorrow.tempMaxC}°C / {weather.tomorrow.tempMinC}°C, UV {weather.tomorrow.uvMax}</Text>
+              <Text style={[styles.desc, styles.descGapSmall]}>Tomorrow: {weather.tomorrow.description}, {fmtTemp(weather.tomorrow.tempMaxC, units.temp)} / {fmtTemp(weather.tomorrow.tempMinC, units.temp)}, UV {weather.tomorrow.uvMax}</Text>
             )}
           </Card>
         )}

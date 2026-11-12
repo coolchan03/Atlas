@@ -14,6 +14,8 @@ import { parseCustomTheme, ACCENTS, SKINS, CHAT_LAYOUTS, FONT_CHOICES, PALETTES,
 import { NavBarSettings } from '../components/NavBarSettings';
 import { AI_LENGTHS, AI_LEVELS, AI_TONES, type AiStyle } from '../services/aiStyle';
 import { ABOUT_FIELDS, useAboutMe } from '../stores/aboutMeStore';
+import { useUnits } from '../atlasTools/units';
+import { useMaps } from '../atlasMaps/maps';
 const literalStyles = StyleSheet.create({
   s1: { borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 90 },
 });
@@ -91,6 +93,8 @@ export const AppearanceScreen: React.FC = () => {
       setLook({ backgroundImage: { uri: done.localUri, dim: appearance.backgroundImage?.dim ?? 0.45 } });
     } catch (e: any) { if (!isErrorWithCode(e) || e.code !== errorCodes.OPERATION_CANCELED) Alert.alert('Could not use that picture', String(e?.message || e)); }
   };
+  const units = useUnits();
+  const setImperial = useMaps((s) => s.setImperial);
   const setAi = (patch: Partial<AiStyle>) => updateSettings({ aiStyle: { ...ai, ...patch } });
   // Which groups are open. Only the quick look at the top is open to begin with.
   const [openFolds, setOpenFolds] = React.useState<Record<string, boolean>>({});
@@ -142,6 +146,15 @@ export const AppearanceScreen: React.FC = () => {
         {!!themeMsg && <Text testID="theme-msg" style={styles.note}>{themeMsg}</Text>}
         {!!appearance.custom && <Button title={`Remove "${appearance.custom.name}"`} variant="outline" onPress={() => { setLook({ custom: undefined }); setThemeMsg('Removed.'); }} testID="theme-remove" />}
 
+        </>)}
+
+        {fold('units', 'Units: miles or kilometers, Fahrenheit or Celsius', <>
+        <Text style={styles.label}>Distance and speed</Text>
+        <Chips testID="unit-distance" value={units.imperial ? 'imperial' : 'metric'} onPick={(id) => setImperial(id === 'imperial')}
+          options={[{ id: 'metric', name: 'Kilometers, meters' }, { id: 'imperial', name: 'Miles, feet' }]} />
+        <Text style={styles.label}>Temperature</Text>
+        <Chips testID="unit-temperature" value={units.temp} onPick={(temperatureUnit) => updateSettings({ temperatureUnit })}
+          options={[{ id: 'c', name: 'Celsius' }, { id: 'f', name: 'Fahrenheit' }]} />
         </>)}
 
         {fold('colors', 'Colors, font and layout', <>

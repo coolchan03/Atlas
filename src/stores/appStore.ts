@@ -102,6 +102,8 @@ type AppSettings = {
   autoBackendMigrated?: boolean;
   /** What agents call the user (fills {{name}} in agent prompts). */
   userName?: string;
+  /** Temperatures are shown in Celsius unless this is 'f'. Distances follow the Maps miles/kilometers switch. */
+  temperatureUnit?: 'c' | 'f';
   /** Home screen tiles the person hid or reordered. */
   homeTiles?: { order?: string[]; hidden?: string[] };
   /** Look for a newer Atlas release when the app opens. Unset counts as on. */

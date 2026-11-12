@@ -17,16 +17,12 @@ import { useEmergencyColors } from '../atlasTools/offGrid';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { TYPOGRAPHY, SPACING } from '../constants';
+import { fmtDistance, useUnits } from '../atlasTools/units';
 
 const Native: any = NativeModules.AtlasSensor;
 
 const STRIDE_M = 0.762;
 const KCAL_PER_STEP = 0.04;
-
-function fmtDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(2)} km`;
-}
 
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
@@ -44,6 +40,7 @@ const literalStyles = StyleSheet.create({
 });
 
 export const PedometerScreen: React.FC = () => {
+  const units = useUnits();
   const { colors: base } = useTheme();
   const colors = useEmergencyColors(base);
   const [steps, setSteps] = useState(0);
@@ -117,7 +114,7 @@ export const PedometerScreen: React.FC = () => {
         <View style={literalStyles.s8}>
           <View style={[literalStyles.s9, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.label }}>DISTANCE</Text>
-            <Text style={[{ color: colors.text }, literalStyles.s10]}>{fmtDistance(distM)}</Text>
+            <Text style={[{ color: colors.text }, literalStyles.s10]}>{fmtDistance(distM, units.imperial)}</Text>
           </View>
           <View style={[literalStyles.s9, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.label }}>CALORIES</Text>
