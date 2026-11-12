@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, NativeEventEmitter, NativeModules, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, NativeModules, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -7,8 +7,10 @@ import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { useMaps, bearingDeg, distanceM, fmtDistance } from '../atlasMaps/maps';
 import { trueHeading } from '../atlasTools/compassMath';
-import { levelReading, clampLevelMarker } from '../atlasTools/levelMath';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { LevelView } from './compass/LevelView';
+import { SensorCards } from './compass/SensorCards';
+import { useCompassSensors } from './compass/useCompassSensors';
 const BORDERLEFTCOLOR_TRANSPARENT = 'transparent';
 const BORDERRIGHTCOLOR_TRANSPARENT = 'transparent';
 const BORDERBOTTOMCOLOR_16A34A = '#16A34A';
@@ -18,11 +20,13 @@ const HEIGHT_18 = 18;
 const HEIGHT_10 = 10;
 const COLOR_FFF = '#fff';
 const literalStyles = StyleSheet.create({
+  spacer: { flex: 1 },
+  modeButton: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  scrollContent: { alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   s3: { marginRight: 12 },
   s4: { fontSize: 20, fontWeight: '700' },
-  s5: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   s6: { fontSize: 56, fontWeight: '800' },
   s7: { fontSize: 24, marginBottom: 16 },
   s8: { alignItems: 'center', justifyContent: 'center' },
@@ -41,12 +45,6 @@ const literalStyles = StyleSheet.create({
   s21: { marginTop: 12, fontSize: 12, textAlign: 'center', paddingHorizontal: 24 },
   s22: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 8, paddingHorizontal: 12 },
   s23: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, margin: 3 },
-  s24: { marginTop: 16, padding: 12, borderRadius: 10, borderWidth: 1 },
-  s25: { marginTop: 16, paddingHorizontal: 8 },
-  s26: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  s27: { padding: 12, borderRadius: 10, borderWidth: 1, minWidth: 136, alignItems: 'center' },
-  s28: { fontSize: 18, fontWeight: '400', marginTop: 4 },
-  s29: { fontSize: 11, marginTop: 2 },
 });
 
 
@@ -68,19 +66,15 @@ export const CompassScreen: React.FC = () => {
   const colors = useEmergencyColors(base);
   const night = useOffGrid((s) => s.nightRed);
   const { width, height } = useWindowDimensions();
-  const [heading, setHeading] = useState<number | null>(null);
-  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const sensors = useCompassSensors();
+  const { heading, accuracy, orientation } = sensors;
   const size = Math.max(160, Math.min(width * 0.82, height - 440, 520));
   const fix = useMaps((s) => s.lastFix);
   const waypoints = useMaps((s) => s.waypoints);
   const imperial = useMaps((s) => s.imperial);
   const [declination, setDeclination] = useState<number | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
-  const [accel, setAccel] = useState<{ x: number; y: number; z: number; g: number } | null>(null);
-  const [orientation, setOrientation] = useState<{ pitch: number; roll: number } | null>(null);
   const [levelMode, setLevelMode] = useState(false);
-  const [pressure, setPressure] = useState<{ hpa: number; altM: number } | null>(null);
-  const [batteryTemp, setBatteryTemp] = useState<number | null>(null);
   useEffect(() => {
     if (!fix || !Native?.magneticDeclination) { setDeclination(null); return; }
     Native.magneticDeclination(fix.lat, fix.lon, Number.isFinite(fix.altitude) && fix.altitude > -1000 ? fix.altitude : 0)
@@ -89,44 +83,11 @@ export const CompassScreen: React.FC = () => {
   }, [fix?.lat, fix?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   const target = waypoints.find((w) => w.id === targetId) ?? null;
 
-  useEffect(() => {
-    if (!Native) return;
-    const em = new NativeEventEmitter(Native);
-    const a = em.addListener('AtlasCompass', (e: { heading: number }) => {
-      if (Number.isFinite(e.heading)) setHeading(((e.heading % 360) + 360) % 360);
-    });
-    const b = em.addListener('AtlasCompassAccuracy', (e: { accuracy: number }) => {
-      if (Number.isFinite(e.accuracy)) setAccuracy(e.accuracy);
-    });
-    const c = em.addListener('AtlasAccelerometer', (e: { x: number; y: number; z: number; g: number }) => setAccel(e));
-    const d = em.addListener('AtlasOrientation', (e: { pitch: number; roll: number }) => setOrientation(e));
-    Native.startCompass().catch(() => undefined);
-    return () => { a.remove(); b.remove(); c.remove(); d.remove(); Native.stopCompass().catch(() => undefined); };
-  }, []);
-
-  useEffect(() => {
-    if (!Native?.startPressure) return;
-    const em = new NativeEventEmitter(Native);
-    const sub = em.addListener('AtlasPressure', (e: { hpa: number; altM: number }) => setPressure(e));
-    Native.startPressure().catch(() => undefined);
-    return () => { sub.remove(); Native.stopPressure().catch(() => undefined); };
-  }, []);
-
-  useEffect(() => {
-    if (!Native?.getBatteryTemperature) return;
-    const fetchTemp = () => Native.getBatteryTemperature().then((t: number) => setBatteryTemp(t)).catch(() => null);
-    fetchTemp();
-    const id = setInterval(fetchTemp, 30000);
-    return () => clearInterval(id);
-  }, []);
-
   // Rotate to TRUE north when the declination is known; otherwise stay magnetic and say so.
   const h = heading === null ? 0 : trueHeading(heading, declination);
   const targetBearing = target && fix ? bearingDeg(fix, target) : null;
   const name = NAMES[Math.round(h / 45) % 8];
   const accent = night ? '#FF3B3B' : '#DC2626';
-  const level = levelReading(orientation);
-  const dialSize = Math.min(width - 70, 310);
 
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
@@ -134,26 +95,15 @@ export const CompassScreen: React.FC = () => {
       <View style={literalStyles.s2}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
         <Text style={[{ color: colors.text }, literalStyles.s4]}>Compass</Text>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity accessibilityRole="button" onPress={() => setLevelMode((v) => !v)} testID="compass-level-toggle" style={{ borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
+        <View style={literalStyles.spacer} />
+        <TouchableOpacity accessibilityRole="button" onPress={() => setLevelMode((v) => !v)} testID="compass-level-toggle" style={[literalStyles.modeButton, { borderColor: colors.border }]}>
           <Text style={{ color: colors.text }}>{levelMode ? 'Compass' : 'Level'}</Text>
         </TouchableOpacity>
       </View>
       {levelMode ? (
-        <View style={{ flex: 1, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', padding: 22 }} testID="compass-level-view">
-          <Text style={{ color: '#FFFFFF', fontSize: 16, marginBottom: 18 }}>LEVEL</Text>
-          <View style={{ width: dialSize, height: dialSize, borderRadius: dialSize / 2, borderWidth: 2, borderColor: level?.isLevel ? '#FFFFFF' : '#888888', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-            <View style={{ height: 1, width: dialSize, backgroundColor: '#777777', position: 'absolute' }} />
-            <View style={{ width: 1, height: dialSize, backgroundColor: '#777777', position: 'absolute' }} />
-            {level && (
-              <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: level.isLevel ? '#FFFFFF' : '#000000', transform: [{ translateX: clampLevelMarker(level.roll) }, { translateY: clampLevelMarker(level.pitch) }] }} />
-            )}
-          </View>
-          <Text style={{ color: '#FFFFFF', fontSize: 52, fontWeight: '300', marginTop: 24 }}>{level ? `${level.tilt.toFixed(1)}°` : '--'}</Text>
-          <Text style={{ color: '#CCCCCC', fontSize: 14, marginTop: 8 }}>{level ? (level.isLevel ? 'Level' : `Pitch ${level.pitch.toFixed(1)}°  ·  Roll ${level.roll.toFixed(1)}°`) : 'Orientation sensor unavailable'}</Text>
-        </View>
+        <LevelView orientation={orientation} />
       ) : (
-      <ScrollView style={literalStyles.s1} contentContainerStyle={{ alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 }}>
+      <ScrollView style={literalStyles.s1} contentContainerStyle={literalStyles.scrollContent}>
         <Text style={[{ color: colors.text }, literalStyles.s6]}>{heading === null ? '--' : `${Math.round(h)}°`}</Text>
         <Text style={[{ color: colors.textSecondary }, literalStyles.s7]}>{heading === null ? 'Starting...' : name}</Text>
         <View style={[{ width: size, height: size }, literalStyles.s8]}>
@@ -202,39 +152,7 @@ export const CompassScreen: React.FC = () => {
             ))}
           </View>
         )}
-        {(accel !== null || orientation !== null || pressure !== null || batteryTemp !== null) && (
-          <View style={literalStyles.s25}>
-            <View style={literalStyles.s26}>
-              {accel && (
-                <View style={[literalStyles.s27, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>ACCELEROMETER</Text>
-                  <Text style={[literalStyles.s28, { color: colors.text }]}>{accel.g.toFixed(2)} g</Text>
-                  <Text style={[literalStyles.s29, { color: colors.textSecondary }]}>x {accel.x.toFixed(1)}  y {accel.y.toFixed(1)}  z {accel.z.toFixed(1)}</Text>
-                </View>
-              )}
-              {orientation && (
-                <View style={[literalStyles.s27, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>ORIENTATION</Text>
-                  <Text style={[literalStyles.s28, { color: colors.text }]}>Pitch {orientation.pitch.toFixed(1)}°</Text>
-                  <Text style={[literalStyles.s29, { color: colors.textSecondary }]}>Roll {orientation.roll.toFixed(1)}°</Text>
-                </View>
-              )}
-              {pressure && (
-                <View style={[literalStyles.s27, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>PRESSURE / ALT</Text>
-                  <Text style={[literalStyles.s28, { color: colors.text }]}>{pressure.hpa.toFixed(1)} hPa</Text>
-                  <Text style={[literalStyles.s29, { color: colors.textSecondary }]}>{pressure.altM >= 0 ? '+' : ''}{Math.round(pressure.altM)} m est.</Text>
-                </View>
-              )}
-              {batteryTemp !== null && (
-                <View style={[literalStyles.s27, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>BATTERY TEMP</Text>
-                  <Text style={[literalStyles.s28, { color: colors.text }]}>{batteryTemp.toFixed(1)} °C</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
+        <SensorCards colors={colors} sensors={sensors} />
       </ScrollView>
       )}
     </SafeAreaView>
