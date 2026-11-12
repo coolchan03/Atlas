@@ -1,6 +1,6 @@
 # Atlas next version: draft plan
 
-Draft, 2026-11-12. Covers FF-10 to FF-19 in `FUTURE_RELEASES.md`. Nothing here is built unless it says so. The user is still adding ideas, so this is a working plan and the order can change.
+Draft, 2026-11-12. Covers FF-10 to FF-19 in `FUTURE_RELEASES_APPROVED.md`. Nothing here is built unless it says so. The user is still adding ideas, so this is a working plan and the order can change.
 
 Sizes: S is under a day, M is a few days, L is a week or more. "Phone test" means it cannot be called done until it has been tried on a real phone.
 
@@ -113,7 +113,7 @@ Each is a workflow or a prompt template on the engine, not new infrastructure: e
 - UI uses theme tokens, no emojis, Feather icons, weight 400 or lighter, one component for the same kind of thing.
 - Native changes keep Swift and Kotlin contracts aligned, and a TypeScript interface per capability.
 - Anything involving money, health or contracts shows its work and asks before acting.
-- No feature is checked off in `FUTURE_RELEASES.md` until tried on a phone.
+- No feature is checked off in `FUTURE_RELEASES_APPROVED.md` until tried on a phone.
 
 ## Questions for the user
 
