@@ -196,7 +196,7 @@ export function VoiceCloneCard() {
               </TouchableOpacity>
             </View>
           ))}
-          <View style={{ marginTop: 12, padding: 10, borderRadius: 9, borderWidth: 1, borderColor: colors.border }} testID="voice-clone-quality-wizard">
+          <View style={[styles.wizard, { borderColor: colors.border }]} testID="voice-clone-quality-wizard">
             <Text style={[styles.heading, { color: colors.text }]}>Voice sample check</Text>
             <Text style={[styles.note, { color: colors.textSecondary }]}>Analyze a recording locally. Atlas checks clipping, silence, loudness and likely background noise. Improve creates an optional new copy; it does not rewrite the original.</Text>
             <View style={styles.row}>
@@ -208,12 +208,12 @@ export function VoiceCloneCard() {
               </TouchableOpacity>
             </View>
             {quality && <View testID="voice-clone-quality-results">
-              <Text style={[styles.note, { color: colors.text, fontWeight: '600' }]}>Rating: {quality.rating.replace('-', ' ')} · {quality.seconds.toFixed(1)}s</Text>
+              <Text style={[styles.note, styles.strong, { color: colors.text }]}>Rating: {quality.rating.replace('-', ' ')} · {quality.seconds.toFixed(1)}s</Text>
               <Text style={[styles.note, { color: colors.textSecondary }]}>Noise estimate {quality.signalNoiseDb.toFixed(1)} dB · clipping {quality.clippedPercent.toFixed(2)}% · quiet {quality.quietPercent.toFixed(0)}%</Text>
               {quality.advice.map((advice) => <Text key={advice} style={[styles.note, { color: colors.textSecondary }]}>• {advice}</Text>)}
             </View>}
           </View>
-          <Text style={[styles.note, { color: colors.textSecondary, marginTop: 12 }]}>Speed / voice quality (steps):</Text>
+          <Text style={[styles.note, styles.spaced, { color: colors.textSecondary }]}>Speed / voice quality (steps):</Text>
           <View style={styles.row}>
             {[2, 3, 5, 8].map((n) => (
               <TouchableOpacity key={n} onPress={() => changeSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
@@ -243,12 +243,18 @@ export function VoiceCloneCard() {
   );
 }
 
+/** Neutral outline for the action buttons; chosen options override it with the theme colors. */
+const ACTION_BORDER = '#777777';
+
 const styles = StyleSheet.create({
   card: { borderRadius: 10, padding: 14, marginBottom: 12 },
   heading: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
   note: { fontSize: 13, lineHeight: 19 },
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  action: { borderWidth: 1, borderColor: '#777777', borderRadius: 8, padding: 10 },
+  action: { borderWidth: 1, borderColor: ACTION_BORDER, borderRadius: 8, padding: 10 },
+  wizard: { marginTop: 12, padding: 10, borderRadius: 9, borderWidth: 1 },
+  strong: { fontWeight: '600' },
+  spaced: { marginTop: 12 },
   input: { borderWidth: 1, borderRadius: 8, padding: 9, marginTop: 12 },
   flex: { flex: 1 },
 });

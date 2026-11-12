@@ -126,8 +126,8 @@ export const BackgroundSettingsScreen: React.FC = () => {
                   <Text style={styles.sliderValue}>{Math.round((bg.dim ?? 0) * 100)}%</Text>
                 </View>
                 <TouchableOpacity style={styles.clearBtn} onPress={clearBg}>
-                  <Icon name="trash-2" size={16} color="#DC2626" />
-                  <Text style={[styles.clearBtnText, { color: '#DC2626' }]}>Remove background</Text>
+                  <Icon name="trash-2" size={16} color={colors.error} />
+                  <Text style={[styles.clearBtnText, { color: colors.error }]}>Remove background</Text>
                 </TouchableOpacity>
               </>
             ) : null}

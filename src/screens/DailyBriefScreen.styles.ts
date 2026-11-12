@@ -17,6 +17,8 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   date: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
   body: { ...TYPOGRAPHY.body, color: colors.text },
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: SPACING.xs },
+  descGap: { marginTop: 6 },
+  descGapSmall: { marginTop: 4 },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
   sectionLabel: { ...TYPOGRAPHY.label, color: colors.textSecondary, marginTop: SPACING.sm },
   actions: { marginTop: SPACING.md, gap: SPACING.sm },

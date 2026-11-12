@@ -174,9 +174,9 @@ export const DailyBriefScreen: React.FC = () => {
                 <Text style={styles.meta}>UV {weather.uvMax} — {weather.uvWarning}</Text>
               </View>
             </View>
-            <Text style={[styles.desc, { marginTop: 6 }]}>{uvAdvice(weather.uvMax)}</Text>
+            <Text style={[styles.desc, styles.descGap]}>{uvAdvice(weather.uvMax)}</Text>
             {weather.tomorrow && (
-              <Text style={[styles.desc, { marginTop: 4 }]}>Tomorrow: {weather.tomorrow.description}, {weather.tomorrow.tempMaxC}°C / {weather.tomorrow.tempMinC}°C, UV {weather.tomorrow.uvMax}</Text>
+              <Text style={[styles.desc, styles.descGapSmall]}>Tomorrow: {weather.tomorrow.description}, {weather.tomorrow.tempMaxC}°C / {weather.tomorrow.tempMinC}°C, UV {weather.tomorrow.uvMax}</Text>
             )}
           </Card>
         )}

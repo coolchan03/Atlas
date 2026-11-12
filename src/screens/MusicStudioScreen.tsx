@@ -132,11 +132,11 @@ export function MusicStudioScreen() {
         <TextInput value={prompt} onChangeText={setPrompt} multiline maxLength={500}
           placeholder="Describe an original instrumental mood" placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
-        <Text style={{ color: colors.text, fontWeight: '600' }}>Style</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Style</Text>
         {chips(MOODS, mood, setMood)}
-        <Text style={{ color: colors.text, fontWeight: '600' }}>Instrument sound</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Instrument sound</Text>
         {chips(SOUND, sound, setSound)}
-        <Text style={{ color: colors.text, fontWeight: '600' }}>Track duration</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Track duration</Text>
         {chips(DURATIONS.map((n) => ({ id: n, label: `${n} seconds` })), duration, setDuration)}
         <View style={styles.options}>
           <TouchableOpacity onPress={quick} disabled={busy} testID="music-quick" style={[styles.action, { borderColor: colors.primary }]}>
@@ -150,7 +150,7 @@ export function MusicStudioScreen() {
         <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-persistent-player">
           <Text style={[styles.title, { color: colors.text }]}>Now playing</Text>
           <Text style={{ color: colors.textSecondary }}>{playback.current?.title || 'Choose or create an instrumental'}</Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Music continues when you switch Atlas screens. It softens while Atlas speaks, and pauses when the app is backgrounded or a call interrupts audio.</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>Music continues when you switch Atlas screens. It softens while Atlas speaks, and pauses when the app is backgrounded or a call interrupts audio.</Text>
           <View style={styles.options}>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={() => instrumentalPlayer.previous().catch((e) => Alert.alert('Playback', String(e)))} accessibilityLabel="Previous instrumental" testID="music-previous"><Icon name="skip-back" size={18} color={colors.primary} /></TouchableOpacity>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={togglePlayer} disabled={!activeTrack} accessibilityLabel={playing ? 'Pause instrumental' : 'Play instrumental'} testID="music-preview"><Icon name={playing ? 'pause' : 'play'} size={18} color={colors.primary} /></TouchableOpacity>
@@ -159,7 +159,7 @@ export function MusicStudioScreen() {
           </View>
           <View style={styles.options}>
             <TouchableOpacity style={styles.option} onPress={() => changeVolume(-0.1)} accessibilityLabel="Lower music volume" testID="music-volume-down"><Icon name="volume-1" size={18} color={colors.text} /></TouchableOpacity>
-            <Text style={{ color: colors.text, alignSelf: 'center' }}>Volume {Math.round(volume * 100)}%</Text>
+            <Text style={[styles.centered, { color: colors.text }]}>Volume {Math.round(volume * 100)}%</Text>
             <TouchableOpacity style={styles.option} onPress={() => changeVolume(0.1)} accessibilityLabel="Raise music volume" testID="music-volume-up"><Icon name="volume-2" size={18} color={colors.text} /></TouchableOpacity>
             <TouchableOpacity onPress={() => instrumentalPlayer.setLoop(!looping)} accessibilityRole="checkbox" accessibilityState={{ checked: looping }} style={styles.option} testID="music-loop-toggle"><Text style={{ color: colors.text }}>{looping ? 'Loop: on' : 'Loop: off'}</Text></TouchableOpacity>
           </View>
@@ -167,18 +167,18 @@ export function MusicStudioScreen() {
         {!!score && <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.text }]}>{score.title}</Text>
           <Text style={{ color: colors.textSecondary }}>{score.bpm} BPM · {score.notes.length} note events · {duration}s</Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Original WAV and editable score saved locally.</Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: 11 }}>{file}</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>Original WAV and editable score saved locally.</Text>
+          <Text selectable style={[styles.tiny, { color: colors.textMuted }]}>{file}</Text>
         </View>}
         <Text style={[styles.title, { color: colors.text }]}>My instrumentals ({tracks.length})</Text>
         {!tracks.length && <Text style={{ color: colors.textSecondary }}>Create a track to build your offline playlist.</Text>}
         {tracks.map((track) => (
           <View key={track.id} style={[styles.result, { backgroundColor: colors.surface, borderColor: activeTrack?.id === track.id ? colors.primary : colors.border }]}>
             <TouchableOpacity accessibilityRole="button" onPress={() => { setSelected(track.id); play(track); }} testID={`music-track-${track.id}`}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>{track.title}</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{track.mood} · {track.sound} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{track.title}</Text>
+              <Text style={[styles.small, { color: colors.textSecondary }]}>{track.mood} · {track.sound} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
             </TouchableOpacity>
-            <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={{ alignSelf: 'flex-end' }}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
+            <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}
       </ScrollView>
@@ -194,5 +194,10 @@ const styles = StyleSheet.create({
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   option: { borderWidth: 1, borderRadius: 18, padding: 10 },
   action: { borderWidth: 1, borderRadius: 10, padding: 12, alignItems: 'center', marginVertical: 3 },
+  label: { fontWeight: '600' },
+  small: { fontSize: 12 },
+  tiny: { fontSize: 11 },
+  centered: { alignSelf: 'center' },
+  end: { alignSelf: 'flex-end' },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },
 });

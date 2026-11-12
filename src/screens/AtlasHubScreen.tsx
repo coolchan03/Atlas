@@ -18,7 +18,7 @@ const literalStyles = StyleSheet.create({
   s6: { fontSize: 13 },
   s7: { padding: 12, paddingBottom: 40, width: '100%', maxWidth: 1100, alignSelf: 'center' },
   s8: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
-  s9: { borderColor: 'transparent', borderRadius: 16, padding: 16, minHeight: 112, justifyContent: 'space-between' },
+  s9: { borderWidth: 1, borderRadius: 16, padding: 16, minHeight: 112, justifyContent: 'space-between' },
   s10: { fontSize: 18, fontWeight: '700', marginTop: 10 },
   s11: { fontSize: 12, marginTop: 2 },
   s12: { marginTop: 12 },
@@ -78,7 +78,7 @@ export const AtlasHubScreen: React.FC = () => {
           {tiles.map((t) => (
             <View key={t.to} style={[{ width: `${100 / cols}%` }, literalStyles.s3]}>
               <TouchableOpacity onPress={() => navigation.navigate(t.to)} activeOpacity={0.8}
-                style={[{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }, literalStyles.s9]}>
+                style={[{ backgroundColor: colors.surface, borderColor: colors.border }, literalStyles.s9]}>
                 <Icon name={t.icon} size={26} color={t.color} />
                 <View>
                   <Text style={[{ color: colors.text }, literalStyles.s10]}>{t.label}</Text>
