@@ -83,6 +83,14 @@ Approved by the user on 2026-11-12. Each item needs a check against the current 
 - [ ] **FF-18 - Workflows on the engine, ranked**
   - Meeting recording to summary, action items and calendar entries; bills and warranties with planner reminders; document reader for contracts and leases.
   - Later: form filler, medical paperwork explainer, voice memo to structured note, language role-play, photo text read aloud, photo identifier (plants, bites; needs a firm disclaimer), trip planner, guided emergency helper, offline translator, journal and memory search, home inventory, flashcards from documents.
+- [ ] **FF-19 - Everyday helpers**
+  - Explain this to me: photo of a letter, label or error message, with a plain-language explanation and next steps.
+  - Repair helper: guided troubleshooting for a household item, using photos.
+  - Cooking and pantry: meals from a photo of the fridge, with scaling and substitutions.
+  - Writing coach: rewrite or shorten the user's text in their own voice, offline.
+  - Kids' tutor: topic lessons with read-aloud and a simpler-words setting.
+  - Explain-how-it-works: a code snippet, config file, formula or unknown data format, or a photo of an appliance. Not real binary reverse engineering, which a phone model cannot do reliably.
+  - Not wanted: budget watcher.
 
 ## Instructions for the next Atlas update
 
