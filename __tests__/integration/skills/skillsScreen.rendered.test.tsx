@@ -30,6 +30,7 @@ it('pastes a skill, previews it, adds it, switches it off and removes it', async
   const screen = render(React.createElement(SkillsScreen));
   expect(screen.getByTestId('skills-empty')).toBeTruthy();
 
+  fireEvent.press(screen.getByTestId('skill-add-own'));
   fireEvent.changeText(screen.getByTestId('skill-paste'), 'not a skill');
   fireEvent.press(screen.getByTestId('skill-preview-button'));
   expect(await screen.findByTestId('skill-error')).toBeTruthy();
@@ -38,6 +39,7 @@ it('pastes a skill, previews it, adds it, switches it off and removes it', async
   fireEvent.press(screen.getByTestId('skill-preview-button'));
   expect(await screen.findByText('Add /trip-planner?')).toBeTruthy();
   fireEvent.press(screen.getByTestId('skill-add'));
+  fireEvent.press(screen.getByTestId('skill-category-life'));
   expect(screen.getByTestId('skill-trip-planner')).toBeTruthy();
   expect(useSkills.getState().skills[0]).toMatchObject({ name: 'trip-planner', enabled: true });
 
@@ -58,6 +60,7 @@ it('reads a SKILL.md the person picks, and warns about programs it expects', asy
   mockPicked = { uri: `file://${path}`, name: 'SKILL.md' };
 
   const screen = render(React.createElement(SkillsScreen));
+  fireEvent.press(screen.getByTestId('skill-add-own'));
   fireEvent.press(screen.getByTestId('skill-choose'));
   await waitFor(() => expect(screen.getByTestId('skill-preview')).toBeTruthy());
   expect(screen.getByText(/Expects curl, which Atlas cannot run/)).toBeTruthy();
@@ -76,8 +79,34 @@ it('adds a ready-made skill from the library with one tap, and it then fits a ma
   const { pickSkill } = require('../../../src/skills/selectSkills');
   useSkills.setState({ skills: [] });
   const screen = render(React.createElement(SkillsScreen));
+  fireEvent.press(screen.getByTestId('skill-category-explain'));
   fireEvent.press(screen.getByTestId('library-skill-summarize'));
   await waitFor(() => expect(useSkills.getState().skills.map((s: any) => s.name)).toContain('summarize'));
   expect(screen.queryByTestId('library-skill-summarize')).toBeNull();
   expect(pickSkill('Please summarize this long article into the key points', useSkills.getState().skills)?.name).toBe('summarize');
+});
+
+it('groups the skills by what they are for, and only opens a group when asked', () => {
+  installNativeBoundary({ fs: true });
+  const { render, fireEvent } = requireRTL();
+  const React = require('react');
+  const { SkillsScreen } = require('../../../src/skills/SkillsScreen');
+  const { useSkills } = require('../../../src/skills/skillsStore');
+  useSkills.setState({ skills: [] });
+  const screen = render(React.createElement(SkillsScreen));
+  for (const title of ['Explain and teach', 'Make something', 'Rewrite and fix writing', 'Change how it is written', 'Think and decide', 'Plan your life']) {
+    expect(screen.getByText(title)).toBeTruthy();
+  }
+  expect(screen.queryByTestId('library-skill-study-quiz')).toBeNull();
+  fireEvent.press(screen.getByTestId('skill-category-make'));
+  expect(screen.getByTestId('library-skill-study-quiz')).toBeTruthy();
+  expect(screen.getByTestId('library-skill-flashcards')).toBeTruthy();
+  expect(screen.queryByTestId('library-skill-summarize')).toBeNull();
+});
+
+it('puts every ready-made skill in exactly one group', () => {
+  const { SKILL_LIBRARY } = require('../../../src/skills/library');
+  const { SKILL_CATEGORIES } = require('../../../src/skills/skillCategories');
+  const grouped = SKILL_CATEGORIES.flatMap((c: any) => c.names);
+  expect([...grouped].sort()).toEqual(SKILL_LIBRARY.map((l: any) => l.name).sort());
 });
