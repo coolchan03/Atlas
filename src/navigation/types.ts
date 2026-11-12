@@ -12,6 +12,7 @@ export type RootStackParamList = {
   AgentEdit: { agentId?: string; kind?: 'agent' | 'pal' };
   Learning: { agentId?: string } | undefined;
   TeachList: undefined;
+  Workflows: undefined;
   Knowledge: undefined;
   Emergency: undefined;
   OfflineLibrary: undefined;

@@ -15,6 +15,8 @@ export type Step<C> =
   | { kind: 'ask'; id: string; title: string; questions: (ctx: C) => Question[]; apply: (ctx: C, answers: Record<string, string>) => Partial<C> }
   | { kind: 'confirm'; id: string; title: string; summary: (ctx: C) => string };
 export type Ask = (system: string, user: string) => Promise<string>;
+/** What a run needs from outside: the model, and where to save the state after each step. */
+export interface Deps<C> { ask: Ask; save?: (r: Run<C>) => void }
 export interface Workflow<C> { id: string; title: string; summary: string; steps: Step<C>[] }
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'cancelled';
@@ -33,11 +35,13 @@ export interface Run<C> {
   startedAt: number;
 }
 
-export const newRun = <C>(workflow: Workflow<C>, id: string, ctx: C, now = Date.now()): Run<C> =>
-  ({ id, workflowId: workflow.id, ctx, step: 0, status: 'running', log: [], startedAt: now });
+export const newRun = <C>(workflow: Workflow<C>, id: string, ctx: C): Run<C> =>
+  ({ id, workflowId: workflow.id, ctx, step: 0, status: 'running', log: [], startedAt: Date.now() });
 
 /** Runs steps until one needs the person, the job is done, or a step fails. Returns the new state; never throws. */
-export async function advance<C>(workflow: Workflow<C>, run: Run<C>, ask: Ask, save: (r: Run<C>) => void = () => undefined): Promise<Run<C>> {
+export async function advance<C>(workflow: Workflow<C>, run: Run<C>, deps: Deps<C>): Promise<Run<C>> {
+  const { ask } = deps;
+  const save = deps.save ?? (() => undefined);
   let state: Run<C> = { ...run, status: 'running', waiting: undefined, error: undefined };
   while (state.step < workflow.steps.length) {
     const step = workflow.steps[state.step];
@@ -67,18 +71,18 @@ export async function advance<C>(workflow: Workflow<C>, run: Run<C>, ask: Ask, s
 }
 
 /** Gives the person's answers to the waiting `ask` step and carries on. */
-export function answer<C>(workflow: Workflow<C>, run: Run<C>, answers: Record<string, string>, ask: Ask, save?: (r: Run<C>) => void): Promise<Run<C>> {
+export function answer<C>(workflow: Workflow<C>, run: Run<C>, input: { answers: Record<string, string>; deps: Deps<C> }): Promise<Run<C>> {
   const step = workflow.steps[run.step];
   if (run.status !== 'waiting' || step?.kind !== 'ask') return Promise.resolve(run);
-  const patch = step.apply(run.ctx, answers);
-  return advance(workflow, { ...run, ctx: { ...run.ctx, ...patch }, step: run.step + 1, log: [...run.log, `${step.title}: answered`] }, ask, save);
+  const patch = step.apply(run.ctx, input.answers);
+  return advance(workflow, { ...run, ctx: { ...run.ctx, ...patch }, step: run.step + 1, log: [...run.log, `${step.title}: answered`] }, input.deps);
 }
 
 /** Approves the waiting `confirm` step and carries on. */
-export function approve<C>(workflow: Workflow<C>, run: Run<C>, ask: Ask, save?: (r: Run<C>) => void): Promise<Run<C>> {
+export function approve<C>(workflow: Workflow<C>, run: Run<C>, deps: Deps<C>): Promise<Run<C>> {
   const step = workflow.steps[run.step];
   if (run.status !== 'waiting' || step?.kind !== 'confirm') return Promise.resolve(run);
-  return advance(workflow, { ...run, step: run.step + 1, log: [...run.log, `${step.title}: approved`] }, ask, save);
+  return advance(workflow, { ...run, step: run.step + 1, log: [...run.log, `${step.title}: approved`] }, deps);
 }
 
 export const cancel = <C>(run: Run<C>): Run<C> => ({ ...run, status: 'cancelled', waiting: undefined });
@@ -86,7 +90,7 @@ export const cancel = <C>(run: Run<C>): Run<C> => ({ ...run, status: 'cancelled'
 /** The first JSON object or array in a model's reply, or null. Models wrap JSON in prose and code fences. */
 export function extractJson(text: string): unknown {
   const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```(?:json)?/gi, '');
-  const starts = ['{', '['].map((open) => ({ open, at: cleaned.indexOf(open) })).filter((s) => s.at >= 0).sort((x, y) => x.at - y.at);
+  const starts = ['{', '['].map((open) => ({ open, at: cleaned.indexOf(open) })).filter((m) => m.at >= 0).sort((x, y) => x.at - y.at);
   for (const { open, at } of starts) {
     const close = open === '{' ? '}' : ']';
     for (let end = cleaned.lastIndexOf(close); end > at; end = cleaned.lastIndexOf(close, end - 1)) {

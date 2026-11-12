@@ -141,7 +141,7 @@ export const dollars = (cents: number): string => `${cents < 0 ? '-' : ''}${Math
 export function toCsv(rows: Transaction[]): string {
   const header = 'Date,Description,Amount,Type,Category';
   const body = rows.map((r) => [r.date, r.description, dollars(r.cents), r.cents < 0 ? 'Debit' : 'Credit', r.category ?? 'Uncategorized'].map(csvCell).join(','));
-  return [header, ...body].join('\n') + '\n';
+  return `${[header, ...body].join('\n')}\n`;
 }
 
 export interface Reconciliation {

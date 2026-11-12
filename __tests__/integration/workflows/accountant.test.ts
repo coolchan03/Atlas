@@ -19,14 +19,14 @@ const ask = jest.fn(async () => 'Sure. ```json\n[{"n":1,"category":"Income","sur
 
 it('goes from a statement to a CSV that is proven complete, asking only about what the AI was unsure of', async () => {
   const saved: string[] = [];
-  let run = await advance(accountant, newRun(accountant, 'r1', ctx(), 0), ask, (r) => saved.push(r.status));
+  let run = await advance(accountant, newRun(accountant, 'r1', ctx()), { ask, save: (r) => saved.push(r.status) });
   expect(run.status).toBe('waiting');
   expect(run.waiting?.kind).toBe('ask');
   const unsure = run.waiting!.questions!;
   expect(unsure.map((q) => q.id)).toEqual(['2', '3']); // the invented category and the skipped line, not the two it got right
   expect(unsure[0].text).toContain('QWERTY HOLDINGS LLC');
 
-  run = await answer(accountant, run, { '2': 'Fees', '3': 'Shopping' }, ask);
+  run = await answer(accountant, run, { answers: { '2': 'Fees', '3': 'Shopping' }, deps: { ask } });
   expect(run.status).toBe('waiting');
   expect(run.waiting?.kind).toBe('confirm');
   expect(run.waiting?.summary).toMatch(/All 4 transactions are in the file and the balances add up/);
@@ -39,7 +39,7 @@ it('goes from a statement to a CSV that is proven complete, asking only about wh
     '',
   ].join('\n'));
 
-  run = await approve(accountant, run, ask);
+  run = await approve(accountant, run, { ask });
   expect(run.status).toBe('done');
   expect(saved).toEqual(['running', 'running', 'waiting']); // saved after every step, so a closed app can resume
   // What the person decided is remembered for the next statement.
@@ -48,14 +48,14 @@ it('goes from a statement to a CSV that is proven complete, asking only about wh
 
 it('does not let the person approve silently when a transaction is missing: the confirm step says what is wrong', async () => {
   const broken = { ...ctx(), text: STATEMENT.replace('01/05 GROCERY OUTLET #12 -86.40 3,413.60\n', '') };
-  let run = await advance(accountant, newRun(accountant, 'r2', broken, 0), ask);
-  run = await answer(accountant, run, { '1': 'Fees', '2': 'Shopping', '0': 'Income' }, ask);
+  let run = await advance(accountant, newRun(accountant, 'r2', broken), { ask });
+  run = await answer(accountant, run, { answers: { '1': 'Fees', '2': 'Shopping', '0': 'Income' }, deps: { ask } });
   expect(run.waiting?.summary).toMatch(/Not proven complete/);
   expect(run.waiting?.summary).toMatch(/The difference is/);
 });
 
 it('fails with a plain reason when the text has no transactions, and a failed step does not lose the earlier ones', async () => {
-  const run = await advance(accountant, newRun(accountant, 'r3', { ...ctx(), text: 'hello world' }, 0), ask);
+  const run = await advance(accountant, newRun(accountant, 'r3', { ...ctx(), text: 'hello world' }), { ask });
   expect(run.status).toBe('failed');
   expect(run.error).toMatch(/No transactions were found/);
 });

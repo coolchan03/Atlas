@@ -74,6 +74,7 @@ import { MusicStudioScreen } from '../screens/MusicStudioScreen';
 import { ReadAloudScreen } from '../screens/ReadAloudScreen';
 import { LearningReliabilityScreen } from '../screens/LearningReliabilityScreen';
 import { LearningListScreen } from '../screens/LearningListScreen';
+import { WorkflowsScreen } from '../workflows/WorkflowsScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, TAB_LONG_PRESS, resolveNavBar, type NavItemId } from '../utils/navBar';
 import { openAppLink } from './appLinks';
@@ -318,6 +319,7 @@ export const AppNavigator: React.FC = () => {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <RootStack.Screen name="TeachList" component={LearningListScreen} />
+        <RootStack.Screen name="Workflows" component={WorkflowsScreen} />
         <RootStack.Screen name="Learning" component={LearningScreen} />
         <RootStack.Screen name="Knowledge" component={KnowledgeScreen} />
         <RootStack.Screen name="Emergency" component={EmergencyScreen} />

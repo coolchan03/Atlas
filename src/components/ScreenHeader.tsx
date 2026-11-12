@@ -11,16 +11,18 @@ interface Props {
   right?: React.ReactNode;
   /** Pass the night-red palette on the emergency tool screens; defaults to the app theme. */
   colors?: { text: string; border: string };
+  /** What the back arrow does when it is not simply "leave this screen" (a screen with pages of its own). */
+  onBack?: () => void;
 }
 
 /** The back arrow, title and optional action shared by the full-screen tools. */
-export const ScreenHeader: React.FC<Props> = ({ title, right, colors: given }) => {
+export const ScreenHeader: React.FC<Props> = ({ title, right, colors: given, onBack }) => {
   const navigation = useNavigation<any>();
   const { colors: theme } = useTheme();
   const colors = given ?? theme;
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }]}>
-      <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back">
+      <TouchableOpacity style={styles.back} onPress={() => (onBack ? onBack() : navigation.goBack())} accessibilityRole="button" accessibilityLabel="Back">
         <Icon name="arrow-left" size={22} color={colors.text} />
       </TouchableOpacity>
       <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
