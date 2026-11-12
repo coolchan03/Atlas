@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -20,9 +20,18 @@ export const LearningListScreen: React.FC = () => {
   const state = useLearningStore((s) => s.state);
   const config = useLearningStore((s) => s.config);
   const addExpert = useLearningStore((s) => s.addExpert);
+  const removeExpert = useLearningStore((s) => s.removeExpert);
   const [name, setName] = useState('');
   const subjects = [{ id: NO_AGENT, name: 'General' }, ...experts];
   const learning = isLearning();
+
+  const remove = (id: string, label: string) => {
+    if (isLearning()) { Alert.alert('Learning is running', 'Stop it first, then delete the subject.'); return; }
+    Alert.alert(`Delete ${label}?`, 'Its task, reports and lessons are removed. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeExpert(id) },
+    ]);
+  };
 
   const add = () => {
     if (!name.trim()) return;
@@ -53,7 +62,14 @@ export const LearningListScreen: React.FC = () => {
               <Card style={styles.card}>
                 <View style={styles.cardHead}>
                   <Text style={[styles.name, { color: colors.text }]}>{subject.name}</Text>
-                  <Icon name="chevron-right" size={18} color={colors.textMuted} />
+                  <View style={styles.actions}>
+                    {subject.id !== NO_AGENT && (
+                      <TouchableOpacity onPress={() => remove(subject.id, subject.name)} accessibilityRole="button" accessibilityLabel={`Delete ${subject.name}`} testID={`delete-subject-${subject.id}`} hitSlop={10}>
+                        <Icon name="trash-2" size={18} color={colors.error} />
+                      </TouchableOpacity>
+                    )}
+                    <Icon name="chevron-right" size={18} color={colors.textMuted} />
+                  </View>
                 </View>
                 <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={2}>{cfg.topic.trim() || 'No task yet. Open it to describe what to become an expert at.'}</Text>
                 <Text style={[styles.meta, { color: colors.textMuted }]}>Round {st?.round ?? 0} · {reports} {reports === 1 ? 'report' : 'reports'}</Text>
@@ -79,6 +95,7 @@ const styles = StyleSheet.create({
   body: { padding: SPACING.lg, paddingBottom: 80 },
   note: { ...TYPOGRAPHY.bodySmall, marginBottom: SPACING.md },
   card: { marginBottom: SPACING.md },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   name: { ...TYPOGRAPHY.h3 },
   meta: { ...TYPOGRAPHY.bodySmall, marginTop: 4 },

@@ -144,6 +144,9 @@ export const useLearningStore = create<LearningState>()(
       experts: [],
       addExpert: (name) => {
         const base = name.trim().slice(0, 40) || 'Expert';
+        // The same subject twice would split what it learns, so a name that already exists opens that one.
+        const same = getS().experts.find((e) => e.name.trim().toLowerCase() === base.toLowerCase());
+        if (same) return same.id;
         const id = `expert-${base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x'}-${localUniqueId('e').slice(-4)}`;
         set((s) => ({ experts: [...s.experts, { id, name: base }] }));
         return id;

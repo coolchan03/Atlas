@@ -134,3 +134,26 @@ it('folds reports, lessons and activity away, and once teaching has started the 
 });
 
 afterEach(() => { delete (global as any).__learnParams; delete (global as any).__navigate; });
+
+it('does not make a second subject with the same name, and an empty one can be deleted from the list', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { Alert } = require('react-native');
+  const { LearningListScreen } = require('../../../src/screens/LearningListScreen');
+  const { useLearningStore } = require('../../../src/learning/store');
+  useLearningStore.setState({ experts: [{ id: 'expert-taxes-aaaa', name: 'Taxes' }, { id: 'expert-taxes-bbbb', name: 'Taxes' }], state: {}, config: {} });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  const list = rtl.render(React.createElement(LearningListScreen));
+
+  // Typing a name that exists opens that subject instead of adding another.
+  rtl.fireEvent.changeText(list.getByTestId('new-expert-input'), ' taxes ');
+  rtl.fireEvent.press(list.getByTestId('new-expert-add'));
+  expect(useLearningStore.getState().experts).toHaveLength(2);
+
+  // A duplicate made earlier can be deleted, after asking.
+  rtl.fireEvent.press(list.getByTestId('delete-subject-expert-taxes-bbbb'));
+  const buttons = alert.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+  rtl.act(() => { buttons.find((b) => b.text === 'Delete')!.onPress!(); });
+  expect(useLearningStore.getState().experts.map((e: { id: string }) => e.id)).toEqual(['expert-taxes-aaaa']);
+});
