@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert } from 'react-native';
 import { useRecordings } from '../atlasRecorder/store';
 import { documentService } from '../services/documentService';
-import { answerRun, approveRun, cancelRun, startWorkflow, useWorkflowRuns } from './service';
+import { answerRun, approveRun, cancelRun, resumeRun, startWorkflow, useWorkflowRuns } from './service';
 import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
 
 /** Multi-step helpers: pick a job, give it text, answer its questions, approve the result. The logic lives in ./service. */
@@ -35,6 +35,7 @@ export const WorkflowsScreen: React.FC = () => {
       <RunView run={run} busy={busy} answers={answers} setAnswers={setAnswers}
         onContinue={() => work(async () => { const r = await answerRun(run, answers); setAnswers({}); return r; })}
         onApprove={() => work(() => approveRun(run))}
+        onResume={() => work(() => resumeRun(run))}
         onCancel={() => { cancelRun(run); setOpenId(null); }}
         onBack={() => { setOpenId(null); setAnswers({}); }} />
     );

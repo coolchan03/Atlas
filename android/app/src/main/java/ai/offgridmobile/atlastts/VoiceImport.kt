@@ -20,6 +20,9 @@ object VoiceImport {
         return base.ifEmpty { "imported-voice" }.take(80)
     }
 
+    /** The most a voice package may unpack to (the largest real ones are well under 1 GB). */
+    private const val MAX_UNPACKED_BYTES = 3L * 1024 * 1024 * 1024
+
     /** Unpacks a .zip, .tar, .tar.bz2 or .tar.gz stream into `dest`, refusing paths that escape it. */
     fun unpack(raw: InputStream, dest: File) {
         val input = BufferedInputStream(raw, 1 shl 16)
@@ -34,6 +37,7 @@ object VoiceImport {
             else -> TarArchiveInputStream(input)
         }
         val base = dest.canonicalPath + File.separator
+        var unpacked = 0L
         archive.use { a ->
             var e = a.nextEntry
             var count = 0
@@ -42,7 +46,20 @@ object VoiceImport {
                 val out = File(dest, e.name)
                 if (!out.canonicalPath.startsWith(base) && out.canonicalPath != dest.canonicalPath) throw SecurityException("Bad file path in the archive")
                 if (e.isDirectory) out.mkdirs()
-                else if (a.canReadEntryData(e)) { out.parentFile?.mkdirs(); FileOutputStream(out).use { a.copyTo(it, 1 shl 16) } }
+                else if (a.canReadEntryData(e)) {
+                    out.parentFile?.mkdirs()
+                    FileOutputStream(out).use { sink ->
+                        val buffer = ByteArray(1 shl 16)
+                        while (true) {
+                            val n = a.read(buffer)
+                            if (n < 0) break
+                            unpacked += n
+                            // A tiny archive that expands to fill the phone is refused instead of unpacked.
+                            if (unpacked > MAX_UNPACKED_BYTES) throw IllegalArgumentException("This file unpacks to far more than a voice needs")
+                            sink.write(buffer, 0, n)
+                        }
+                    }
+                }
                 e = a.nextEntry
             }
         }

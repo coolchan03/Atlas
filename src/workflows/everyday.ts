@@ -33,7 +33,7 @@ const markdown = (ctx: MeetingCtx): string =>
   `# ${ctx.title}\n\n## Summary\n${ctx.summary}\n\n## Action items\n${(ctx.actions ?? []).map((a) => `- [ ] ${a.text}${a.due ? ` (by ${a.due})` : ''}`).join('\n') || '- None found'}\n`;
 
 /** A reminder at 9:00 local time on a day, as a scheduled task. Used by both jobs. */
-export function scheduleReminder(name: string, prompt: string, day: string): void {
+function scheduleReminder(name: string, prompt: string, day: string): void {
   const { useSchedule } = require('../schedule/store');
   const [y, m, d] = day.split('-').map(Number);
   const at = new Date(y, m - 1, d, 9, 0, 0).getTime();

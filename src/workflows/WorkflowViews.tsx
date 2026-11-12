@@ -12,10 +12,10 @@ import { workflowList } from './service';
 import type { InputField } from './engine';
 
 export type Kind = string;
-export const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
+const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
 const fail = (title: string) => (e: unknown) => Alert.alert(title, String((e as Error)?.message || e));
 
-export const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
+const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
   const { colors } = useTheme();
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
@@ -103,7 +103,7 @@ export const InputView: React.FC<InputProps> = (p) => {
 type AnyRun = { id: string; workflowId: string; status: string; log: string[]; error?: string; ctx: any; waiting?: { kind: string; title: string; summary?: string; questions?: Array<{ id: string; text: string; options?: string[] }> } };
 interface RunProps {
   run: AnyRun; busy: boolean; answers: Record<string, string>; setAnswers: (fn: (a: Record<string, string>) => Record<string, string>) => void;
-  onContinue: () => void; onApprove: () => void; onCancel: () => void; onBack: () => void;
+  onContinue: () => void; onApprove: () => void; onCancel: () => void; onBack: () => void; onResume: () => void;
 }
 
 const Questions: React.FC<RunProps> = ({ run, busy, answers, setAnswers, onContinue }) => {
@@ -152,6 +152,9 @@ export const RunView: React.FC<RunProps> = (p) => {
       {run.log.map((line, i) => <Text key={i} style={[styles.log, { color: colors.textSecondary }]}>{line}</Text>)}
       {p.busy && <ActivityIndicator color={colors.primary} />}
       {run.status === 'failed' && <Text style={[styles.error, { color: colors.error }]} testID="workflow-error">{run.error}</Text>}
+      {(run.status === 'failed' || run.status === 'running') && !p.busy && (
+        <Button title={run.status === 'failed' ? 'Try this step again' : 'Carry on'} variant="outline" testID="workflow-resume" onPress={p.onResume} />
+      )}
       {run.status === 'waiting' && run.waiting?.kind === 'ask' && <Questions {...p} />}
       {run.status === 'waiting' && run.waiting?.kind === 'confirm' && (
         <View testID="workflow-confirm">

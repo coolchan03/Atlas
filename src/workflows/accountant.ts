@@ -6,7 +6,7 @@
 import { extractJson, type Ask, type Question, type Workflow } from './engine';
 import { parseStatement, reconcile, toCsv, type ParsedStatement, type Reconciliation, type Transaction } from './statement';
 
-export const CATEGORIES = ['Income', 'Transfer', 'Groceries', 'Dining', 'Fuel', 'Utilities', 'Rent', 'Insurance', 'Software', 'Shopping', 'Travel', 'Health', 'Fees', 'Taxes', 'Other expense', 'Owner equity'] as const;
+const CATEGORIES = ['Income', 'Transfer', 'Groceries', 'Dining', 'Fuel', 'Utilities', 'Rent', 'Insurance', 'Software', 'Shopping', 'Travel', 'Health', 'Fees', 'Taxes', 'Other expense', 'Owner equity'] as const;
 
 export interface AccountantCtx {
   text: string;

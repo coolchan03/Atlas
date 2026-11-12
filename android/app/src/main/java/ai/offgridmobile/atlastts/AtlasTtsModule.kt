@@ -675,6 +675,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                 }
                 if (conn.responseCode >= 400) throw IllegalStateException("HTTP ${conn.responseCode}")
                 val total = conn.contentLengthLong
+                require(total <= MAX_VOICE_DOWNLOAD_BYTES) { "That download is far larger than a voice" }
                 var read = 0L
                 var last = 0L
                 conn.inputStream.use { input ->
@@ -686,6 +687,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                             if (n < 0) break
                             out.write(buffer, 0, n)
                             read += n
+                            require(read <= MAX_VOICE_DOWNLOAD_BYTES) { "That download is far larger than a voice" }
                             val now = System.currentTimeMillis()
                             if (now - last > 500) { last = now; progress(id, if (total > 0) read.toDouble() / total else -1.0) }
                         }
@@ -698,6 +700,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
             } finally { archive.delete() }
         }.start()
     }
+
+    private val MAX_VOICE_DOWNLOAD_BYTES = 2L * 1024 * 1024 * 1024
 
     /** Unpacks a voice package stream into voices/<id>, checks Atlas can play it, and returns the new id. */
     private fun installVoice(input: java.io.InputStream, name: String): String {
