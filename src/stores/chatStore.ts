@@ -12,8 +12,8 @@ import { registerChatStore } from './storeRefs';
 
 /** Field ID replies get the code-enforced foraging safety net. */
 function isFieldIdConversation(conv: Conversation | undefined): boolean {
-  if (conv?.agentId) return conv.agentId === 'field-id';
-  try { return require('./agentStore').useAgentStore.getState().activeAgentId === 'field-id'; } catch { return false; }
+  if (conv?.agentId) return conv.agentId === 'field-id' || conv.agentId === 'atlas';
+  try { return require('./agentStore').useAgentStore.getState().(activeAgentId === 'field-id' || activeAgentId === 'atlas'); } catch { return false; }
 }
 
 type PersistedChats = { conversations: Conversation[]; activeConversationId: string | null };
@@ -129,6 +129,8 @@ interface ChatState {
   renameConversation: (conversationId: string, title: string) => void;
   setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
   setConversationAgent: (conversationId: string, agentId: string | null) => void;
+  setConversationVoiceProfile: (conversationId: string, voiceProfileId: string | undefined) => void;
+  setConversationTone: (conversationId: string, tone: import('../services/chatTone').ChatTonePreset) => void;
   /** Tools for this chat only; null = back to the agent's or app's defaults. */
   setConversationTools: (conversationId: string, tools: string[] | null) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
@@ -222,6 +224,14 @@ export const useChatStore = create<ChatState>()(
           (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
+      setConversationVoiceProfile: (conversationId, voiceProfileId) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, voiceProfileId, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationTone: (conversationId, tonePreset) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, tonePreset, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
       setConversationTools: (conversationId, tools) => {
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
           (conv) => ({ ...conv, enabledTools: tools ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
@@ -296,6 +306,18 @@ export const useChatStore = create<ChatState>()(
           ),
         }));
 
+        // Only scan user-authored plaintext from ordinary chats after the message is saved.
+        // Never scan PIN-locked or private conversations, and the feature is off by default.
+        if (messageData.role === 'user' && typeof messageData.content === 'string') {
+          const conv = get().conversations.find((x) => x.id === conversationId);
+          if (conv) {
+            const active = require('./agentStore').useAgentStore.getState().activeAgentId;
+            require('./autoMemory').considerUserMemory(messageData.content, {
+              therapy: (conv.agentId || active) === 'counselor',
+              private: !!(conv.isPrivate || conv.pinVerifier || conv.protectedBlob),
+            });
+          }
+        }
         return message;
       },
 

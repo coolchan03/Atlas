@@ -11,6 +11,10 @@ import { selectIsLiteRT } from '../../stores/appStore';
 import { contextCompactionService, llmService } from '../../services';
 import { useChatPrefs } from '../../atlasTools/chatPrefs';
 import { useAgentStore } from '../../stores/agentStore';
+import { useProjectStore } from '../../stores/projectStore';
+import { useVoiceProfiles } from '../../atlasVoice/profiles';
+import { CHAT_TONES, type ChatTonePreset } from '../../services/chatTone';
+import { MemoryReviewCard } from '../MemoryReviewCard';
 
 /** Chat settings: this chat's own instructions, and compressing older messages so long chats keep going. */
 export const ChatContextSection: React.FC = () => {
@@ -24,7 +28,14 @@ export const ChatContextSection: React.FC = () => {
   const [showSummary, setShowSummary] = useState(false);
   const autoCompress = useChatPrefs((s) => s.autoCompress);
   const setPrefs = useChatPrefs((s) => s.set);
-  const agentName = useAgentStore((s) => s.agents.find((a) => a.id === s.activeAgentId)?.name);
+  const agents = useAgentStore((s) => s.agents);
+  const projects = useProjectStore((s) => s.projects);
+  const voices = useVoiceProfiles((s) => s.profiles);
+  const setConversationAgent = useChatStore((s) => s.setConversationAgent);
+  const setConversationProject = useChatStore((s) => s.setConversationProject);
+  const setConversationVoiceProfile = useChatStore((s) => s.setConversationVoiceProfile);
+  const setConversationTone = useChatStore((s) => s.setConversationTone);
+  const agentName = agents.find((a) => a.id === (conv?.agentId || useAgentStore.getState().activeAgentId))?.name;
   const agentCtx = useAgentStore((s) => s.agents.find((a) => a.id === s.activeAgentId)?.contextLength);
   const isLiteRT = useAppStore(selectIsLiteRT);
   const ctxKey = isLiteRT ? 'liteRTMaxTokens' : 'contextLength';
@@ -51,6 +62,22 @@ export const ChatContextSection: React.FC = () => {
   if (!convId || !conv) return null;
 
   const save = (v: string) => setText(v);
+  const chips = (title: string, active: string, options: Array<{ id: string; label: string }>, choose: (id: string) => void) => (
+    <View style={styles.box}>
+      <Text style={styles.title}>{title}</Text>
+      <View style={styles.chipRow}>
+        {options.map((o) => {
+          const selected = active === o.id;
+          return (
+            <TouchableOpacity key={o.id || 'default'} accessibilityRole="radio" accessibilityState={{ selected }}
+              onPress={() => choose(o.id)} style={selected ? styles.chipOn : styles.chip}>
+              <Text style={selected ? styles.chipTextOn : styles.chipText}>{o.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
   const compress = async () => {
     if (!llmService.isModelLoaded()) { Alert.alert('Load a model first', 'Compressing uses the loaded model to write the summary.'); return; }
     if (llmService.isCurrentlyGenerating()) { Alert.alert('Busy', 'Wait for the answer to finish, then try again.'); return; }
@@ -76,6 +103,12 @@ export const ChatContextSection: React.FC = () => {
 
   return (
     <View>
+      {chips('Agent for this chat', conv.agentId || '', [{ id: '', label: 'Default' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))], (id) => setConversationAgent(convId, id || null))}
+      {chips('Project', conv.projectId || '', [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))],
+        (id) => { try { setConversationProject(convId, id || null); } catch (e: any) { Alert.alert('Cannot move chat', String(e?.message || e)); } })}
+      {chips('Voice for this chat', conv.voiceProfileId || '', [{ id: '', label: 'Agent / default voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))], (id) => setConversationVoiceProfile(convId, id || undefined))}
+      {chips('Style preset (agent settings take priority)', conv.tonePreset || 'balanced', CHAT_TONES.map((t) => ({ id: t.id, label: t.name })), (id) => setConversationTone(convId, id as ChatTonePreset))}
+      <MemoryReviewCard />
       <View style={styles.box}>
         <Text style={styles.title}>Memory size (context)</Text>
         <Text style={styles.hint}>

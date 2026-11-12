@@ -1,6 +1,7 @@
 import { NativeEventEmitter, NativeModules } from 'react-native';
 import { create } from 'zustand';
 import { useAtlasVoiceStore } from './store';
+import { isPocketVoiceId, referenceCanSpeak, resolveReferenceId } from './cloneRouting';
 
 /**
  * Natural offline voices: neural text-to-speech models downloaded once (from this app's
@@ -100,6 +101,7 @@ export function importedVoiceName(id: string): string {
   const m = id.match(/^vits-piper-([a-z]{2})_([A-Z]{2})-(.+?)(-(x_low|low|medium|high))?$/);
   const words = (t: string) => t.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
   if (m) return `${words(m[3])} (Piper, ${m[1]} ${m[2]})`;
+  if (isPocketVoiceId(id)) return 'Pocket TTS (voice cloning)';
   return words(id.replace(/^(vits-|sherpa-onnx-)/, ''));
 }
 
@@ -108,7 +110,7 @@ export function voiceCatalog(installed: Record<string, number>): NeuralVoice[] {
   const imported = Object.keys(installed)
     .filter((id) => !NEURAL_VOICES.some((v) => v.id === id))
     .sort()
-    .map((id) => ({ id, name: importedVoiceName(id), desc: 'Imported from a voice file.', size: '', imported: true }));
+    .map((id) => ({ id, name: importedVoiceName(id), desc: isPocketVoiceId(id) ? 'Clones your own/reference voice using an offline WAV sample (Pocket TTS).' : 'Imported from a voice file.', size: '', imported: true }));
   return [...NEURAL_VOICES, ...imported];
 }
 
@@ -182,54 +184,64 @@ export function nativeVoice(id: string, sid: number): { sid: number; style: { ac
   return { sid: speaker?.base ?? sid, style: { accent, depth: speaker?.depth ?? 1 } };
 }
 
-const setNative = (id: string, sid: number): Promise<number> => {
+/** Load engine then set the private reference WAV (never expose reference data to JavaScript). */
+const setNative = async (id: string, sid: number, referenceId: string): Promise<number> => {
+  if (!referenceCanSpeak(id, referenceId)) throw new Error('Pocket TTS needs a 5–15 second recorded voice sample.');
   const n = nativeVoice(id, sid);
+  if (isPocketVoiceId(id)) {
+    if (!Native.activateClonedVoice) throw new Error('Cloning requires an updated Android version of Atlas.');
+    const count: number = await Native.activateClonedVoice(id, n.sid, n.style, referenceId,
+      useAtlasVoiceStore.getState().cloneSteps || 2);
+    if (count === 0) throw new Error('Voice selection was superseded by another choice.');
+    return count;
+  }
   return Native.setNeuralVoice(id, n.sid, n.style);
 };
 
-/** Voice/speaker the native engine currently has loaded (may differ from the saved choice
- *  while an agent's own voice profile is speaking). */
+/** The native voice selection includes the reference id; an agent can have its own clone. */
 let loadedKey = '';
-const keyOf = (id: string, sid: number) => (id ? `${id}#${sid}` : '');
+const keyOf = (id: string, sid: number, referenceId = '') => (id ? `${id}#${sid}#${referenceId}` : '');
 
-/** Switch the reading voice ('' = phone's own voice). Resolves the number of speakers in the model. */
-export async function selectVoice(id: string, sid?: number): Promise<number> {
+/** Switch the saved reading voice, without silently reverting to another voice. */
+export async function selectVoice(id: string, sid?: number, requestedReferenceId?: string): Promise<number> {
   const st = useAtlasVoiceStore.getState();
   const s = sid ?? (id === st.neuralVoice ? st.neuralSid : 0);
-  const n: number = neuralAvailable() ? await setNative(id, s) : 0;
-  loadedKey = keyOf(id, s);
+  const ref = resolveReferenceId(id, requestedReferenceId, id === st.neuralVoice ? st.neuralReferenceId : '');
+  const n: number = neuralAvailable() ? await setNative(id, s, ref) : 0;
+  loadedKey = keyOf(id, s, ref);
   if (id) useNeuralVoices.getState().set({ speakerCount: { ...useNeuralVoices.getState().speakerCount, [id]: n } });
-  st.setNeural(id, s);
+  st.setNeural(id, s, ref);
   return n;
 }
 
-/** Called at start-up: re-load the chosen natural voice (falls back to the phone voice if it is gone). */
+/** Restore the selected model and private clone after restart. */
 export async function restoreVoice(): Promise<void> {
   const st = useAtlasVoiceStore.getState();
   if (!st.neuralVoice || !neuralAvailable()) return;
-  try { await setNative(st.neuralVoice, st.neuralSid); loadedKey = keyOf(st.neuralVoice, st.neuralSid); }
+  const ref = resolveReferenceId(st.neuralVoice, undefined, st.neuralReferenceId);
+  try { await setNative(st.neuralVoice, st.neuralSid, ref); loadedKey = keyOf(st.neuralVoice, st.neuralSid, ref); }
   catch { st.setNeural(''); loadedKey = ''; }
 }
 
-/**
- * Load a voice for the next utterance WITHOUT changing the saved choice (agent voice
- * profiles). Unchanged voices are not reloaded. A missing voice falls back to the saved one.
- */
-export async function loadVoiceForSpeech(id: string, sid: number): Promise<void> {
-  if (!neuralAvailable() || keyOf(id, sid) === loadedKey) return;
+/** Switch to an agent's own cloned voice without changing the app's saved voice. */
+export async function loadVoiceForSpeech(id: string, sid: number, requestedReferenceId?: string): Promise<void> {
+  const st = useAtlasVoiceStore.getState();
+  const ref = resolveReferenceId(id, requestedReferenceId, id === st.neuralVoice ? st.neuralReferenceId : '');
+  if (!referenceCanSpeak(id, ref)) throw new Error('That cloned voice has no reference WAV.');
+  if (!neuralAvailable() || keyOf(id, sid, ref) === loadedKey) return;
   try {
-    await setNative(id, sid);
-    loadedKey = keyOf(id, sid);
-  } catch {
-    const st = useAtlasVoiceStore.getState();
-    if (keyOf(st.neuralVoice, st.neuralSid) !== loadedKey) await restoreVoice();
+    await setNative(id, sid, ref);
+    loadedKey = keyOf(id, sid, ref);
+  } catch (e) {
+    if (keyOf(st.neuralVoice, st.neuralSid, st.neuralReferenceId) !== loadedKey) await restoreVoice();
+    throw e;
   }
 }
 
-/** Put the saved voice back after an agent's own voice has spoken. */
+/** Put the saved voice back after an agent has spoken. */
 export async function restoreSavedVoice(): Promise<void> {
   const st = useAtlasVoiceStore.getState();
-  await loadVoiceForSpeech(st.neuralVoice, st.neuralSid);
+  await loadVoiceForSpeech(st.neuralVoice, st.neuralSid, st.neuralReferenceId);
 }
 
 /** Voices for podcast hosts: distinct-sounding speakers when the model has many. */

@@ -270,6 +270,10 @@ export interface Conversation {
   protectedBlob?: string;
   /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
   instructions?: string;
+  /** Basic per-chat style. Explicit agent style rules have precedence. */
+  tonePreset?: import('../services/chatTone').ChatTonePreset;
+  /** Override the per-agent voice on this specific chat. */
+  voiceProfileId?: string;
   /** Atlas: tools chosen for this chat only; unset = the agent's (or app's) default tools. */
   enabledTools?: string[];
 }

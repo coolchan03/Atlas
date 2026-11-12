@@ -38,9 +38,9 @@ export const MergeChatsSheet: React.FC<{ visible: boolean; onClose: () => void }
         {groups.map((g) => {
           const key = g[0].id;
           const choice = choices[key] ?? {};
-          const longest = [...g].sort((a, b) => b.messages.length - a.messages.length)[0];
-          const baseId = choice.baseId ?? longest.id;
-          const base = g.find((c) => c.id === baseId) ?? longest;
+          const newest = [...g].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0) || b.messages.length - a.messages.length)[0];
+          const baseId = choice.baseId ?? newest.id;
+          const base = g.find((c) => c.id === baseId) ?? newest;
           const agentId = choice.agentId === undefined ? (base.agentId ?? null) : choice.agentId;
           const total = mergedMessageCount(g, choice);
           return (
@@ -50,7 +50,7 @@ export const MergeChatsSheet: React.FC<{ visible: boolean; onClose: () => void }
                 {g.length} chats become one with {total} messages, in time order. Repeated messages are kept once.
               </Text>
 
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Keep the settings of (agent, project, instructions)</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Keep settings from (latest conversation selected by default)</Text>
               {g.map((c) => {
                 const sum = summarizeChat(c, names);
                 const on = c.id === baseId;

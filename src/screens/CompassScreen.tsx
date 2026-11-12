@@ -7,6 +7,7 @@ import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { useMaps, bearingDeg, distanceM, fmtDistance } from '../atlasMaps/maps';
 import { trueHeading } from '../atlasTools/compassMath';
+import { levelReading, clampLevelMarker } from '../atlasTools/levelMath';
 import { ScreenBackground } from '../components/ScreenBackground';
 const BORDERLEFTCOLOR_TRANSPARENT = 'transparent';
 const BORDERRIGHTCOLOR_TRANSPARENT = 'transparent';
@@ -77,6 +78,7 @@ export const CompassScreen: React.FC = () => {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [accel, setAccel] = useState<{ x: number; y: number; z: number; g: number } | null>(null);
   const [orientation, setOrientation] = useState<{ pitch: number; roll: number } | null>(null);
+  const [levelMode, setLevelMode] = useState(false);
   const [pressure, setPressure] = useState<{ hpa: number; altM: number } | null>(null);
   const [batteryTemp, setBatteryTemp] = useState<number | null>(null);
   useEffect(() => {
@@ -123,6 +125,8 @@ export const CompassScreen: React.FC = () => {
   const targetBearing = target && fix ? bearingDeg(fix, target) : null;
   const name = NAMES[Math.round(h / 45) % 8];
   const accent = night ? '#FF3B3B' : '#DC2626';
+  const level = levelReading(orientation);
+  const dialSize = Math.min(width - 70, 310);
 
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
@@ -130,7 +134,25 @@ export const CompassScreen: React.FC = () => {
       <View style={literalStyles.s2}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
         <Text style={[{ color: colors.text }, literalStyles.s4]}>Compass</Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity accessibilityRole="button" onPress={() => setLevelMode((v) => !v)} testID="compass-level-toggle" style={{ borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
+          <Text style={{ color: colors.text }}>{levelMode ? 'Compass' : 'Level'}</Text>
+        </TouchableOpacity>
       </View>
+      {levelMode ? (
+        <View style={{ flex: 1, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', padding: 22 }} testID="compass-level-view">
+          <Text style={{ color: '#FFFFFF', fontSize: 16, marginBottom: 18 }}>LEVEL</Text>
+          <View style={{ width: dialSize, height: dialSize, borderRadius: dialSize / 2, borderWidth: 2, borderColor: level?.isLevel ? '#FFFFFF' : '#888888', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+            <View style={{ height: 1, width: dialSize, backgroundColor: '#777777', position: 'absolute' }} />
+            <View style={{ width: 1, height: dialSize, backgroundColor: '#777777', position: 'absolute' }} />
+            {level && (
+              <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: level.isLevel ? '#FFFFFF' : '#000000', transform: [{ translateX: clampLevelMarker(level.roll) }, { translateY: clampLevelMarker(level.pitch) }] }} />
+            )}
+          </View>
+          <Text style={{ color: '#FFFFFF', fontSize: 52, fontWeight: '300', marginTop: 24 }}>{level ? `${level.tilt.toFixed(1)}°` : '--'}</Text>
+          <Text style={{ color: '#CCCCCC', fontSize: 14, marginTop: 8 }}>{level ? (level.isLevel ? 'Level' : `Pitch ${level.pitch.toFixed(1)}°  ·  Roll ${level.roll.toFixed(1)}°`) : 'Orientation sensor unavailable'}</Text>
+        </View>
+      ) : (
       <ScrollView style={literalStyles.s1} contentContainerStyle={{ alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 }}>
         <Text style={[{ color: colors.text }, literalStyles.s6]}>{heading === null ? '--' : `${Math.round(h)}°`}</Text>
         <Text style={[{ color: colors.textSecondary }, literalStyles.s7]}>{heading === null ? 'Starting...' : name}</Text>
@@ -213,10 +235,8 @@ export const CompassScreen: React.FC = () => {
             </View>
           </View>
         )}
-        <TouchableOpacity onPress={() => navigation.navigate('SurvivalManual', { chapterId: 'DirectionFinding' })} style={[literalStyles.s24, { borderColor: colors.border }]}>
-          <Text style={{ color: colors.text }}>Find direction without a compass (sun, stars, shadows)</Text>
-        </TouchableOpacity>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 };

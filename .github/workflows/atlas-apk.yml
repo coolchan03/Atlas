@@ -4,7 +4,7 @@ name: Build Atlas APK
 # and publishes it on the Releases page so it can be downloaded on the phone.
 on:
   push:
-    branches: [atlas-voice]
+    branches: [atlas-voice, claude/atlas-voice-music-home-widgets]
   workflow_dispatch:
     inputs:
       publish:
@@ -249,7 +249,7 @@ jobs:
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
           retention-days: 1
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: github.ref == 'refs/heads/atlas-voice' || inputs.publish == true
+        if: github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

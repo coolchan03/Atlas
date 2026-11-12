@@ -23,6 +23,15 @@ describe('merging chats that share a title', () => {
     expect(merged.isPinned).toBe(true);
     expect(merged.updatedAt).toBe('2026-01-05T00:00:00.000Z');
   });
+  it('defaults to the most recently updated chat for settings even if another is longer', () => {
+    const longOld = chat('long-old', 'Shared', [msg('user', 'one', 1), msg('assistant', 'two', 2), msg('user', 'three', 3)], { updatedAt: '2026-01-02T00:00:00.000Z', agentId: 'old-agent', projectId: 'old-project' });
+    const shortNew = chat('short-new', 'Shared', [msg('user', 'new', 4)], { updatedAt: '2026-11-11T00:00:00.000Z', agentId: 'new-agent', projectId: 'new-project' });
+    const merged = mergeGroup([longOld, shortNew]);
+    expect(merged.id).toBe('short-new');
+    expect(merged.agentId).toBe('new-agent');
+    expect(merged.projectId).toBe('new-project');
+    expect(merged.messages).toHaveLength(4);
+  });
   it('replaces each set with one chat and leaves the others, counting what went away', () => {
     const other = chat('z', 'Recipes', [msg('user', 'hi', 1)]);
     const result = mergeAllDuplicates([a, b, c, other]);

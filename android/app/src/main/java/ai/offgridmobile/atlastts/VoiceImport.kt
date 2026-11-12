@@ -52,6 +52,11 @@ object VoiceImport {
     fun problem(dir: File): String? {
         val names = dir.listFiles()?.map { it.name } ?: emptyList()
         if (names.none { it.endsWith(".onnx") }) return "This file has no voice model (.onnx). Atlas plays sherpa-onnx Piper, Kokoro and KittenTTS voices."
+        // Pocket TTS zero-shot models have no tokens.txt. Verify every required component.
+        if (names.any { it.startsWith("lm_flow") || it.startsWith("lm_main") }) {
+            if (NeuralTts.isPocket(dir)) return null
+            return "Incomplete Pocket TTS model. Import the complete official sherpa-onnx-pocket-tts-int8 archive."
+        }
         if ("tokens.txt" !in names) {
             return if (names.any { it.endsWith(".onnx.json") })
                 "This Piper voice has not been converted for sherpa-onnx. Download the vits-piper-... version from the sherpa-onnx tts-models release instead."

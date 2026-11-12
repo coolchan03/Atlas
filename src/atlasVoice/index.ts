@@ -33,9 +33,12 @@ function speakAsAgent(text: string, messageId: string, profile: VoiceProfile | n
     restoreSavedVoice().catch(() => undefined).finally(() => speak(text, messageId));
     return;
   }
-  loadVoiceForSpeech(profile.voiceId, profile.sid).catch(() => undefined).finally(() => {
-    speak(text, messageId, profile.rate);
-  });
+  loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId)
+    .then(() => speak(text, messageId, profile.rate))
+    .catch((error) => {
+      logger.warn(`[AtlasVoice] agent voice unavailable; using saved voice: ${String(error)}`);
+      restoreSavedVoice().catch(() => undefined).finally(() => speak(text, messageId));
+    });
 }
 
 /**
@@ -65,7 +68,12 @@ export function registerAtlasVoice(): void {
   });
   registerHook(HOOKS.audioStop, () => stop());
   // Call mode: speak the reply sentence by sentence while it is still being written.
-  registerHook(HOOKS.audioOnStreamingToken, (answerSoFar: string) => onStreamToken(answerSoFar));
+  registerHook(HOOKS.audioOnStreamingToken, (answerSoFar: string) => {
+    // A custom agent voice must be loaded first, so avoid streaming the global voice.
+    const id = useChatStore.getState().activeConversationId;
+    if (profileForConversation(id)) return;
+    onStreamToken(answerSoFar);
+  });
   registerHook(HOOKS.audioOnStreamingEnd, (conversationId: string) => {
     const voiceMode = useUiModeStore.getState().interfaceMode === 'audio';
     if (voiceMode) {

@@ -4,29 +4,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
-import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
+
 import { OffGridCard } from '../components/OffGridCard';
 import { deviceHasCompass } from './CompassScreen';
 import { useAgentStore } from '../stores/agentStore';
 import { installAtlasStarter } from '../learning/starter';
-const BACKGROUNDCOLOR_1E0202 = '#1E0202';
-const BORDERWIDTH_1 = 1;
-const BORDERWIDTH_0 = 0;
-const BORDERCOLOR_5A0E0E = '#5A0E0E';
-const COLOR_FF6B6B = '#FF6B6B';
-const COLOR_FFF = '#fff';
-const COLOR_C04040 = '#C04040';
-const COLOR_RGBA_255_255_255_0_85 = 'rgba(255,255,255,0.85)';
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   s3: { padding: 6 },
   s4: { marginLeft: 8, flex: 1 },
-  s5: { fontSize: 24, fontWeight: '700', fontFamily: 'serif' },
+  s5: { fontSize: 24, fontWeight: '700' },
   s6: { fontSize: 13 },
   s7: { padding: 12, paddingBottom: 40, width: '100%', maxWidth: 1100, alignSelf: 'center' },
   s8: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
-  s9: { borderColor: BORDERCOLOR_5A0E0E, borderRadius: 16, padding: 16, minHeight: 112, justifyContent: 'space-between' },
+  s9: { borderColor: 'transparent', borderRadius: 16, padding: 16, minHeight: 112, justifyContent: 'space-between' },
   s10: { fontSize: 18, fontWeight: '700', marginTop: 10 },
   s11: { fontSize: 12, marginTop: 2 },
   s12: { marginTop: 12 },
@@ -41,9 +33,8 @@ const literalStyles = StyleSheet.create({
 /** Atlas: everything for emergencies, travel and life off the grid, in one place. */
 export const AtlasHubScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { colors: base } = useTheme();
-  const colors = useEmergencyColors(base);
-  const night = useOffGrid((s) => s.nightRed);
+  const { colors } = useTheme();
+
   const { width } = useWindowDimensions();
   const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
   const [hasCompass, setHasCompass] = useState(false);
@@ -60,7 +51,6 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Phrases', sub: 'Show or speak in 10+ languages', icon: 'globe', color: '#1D4ED8', to: 'Phrases' },
     ...(hasCompass ? [{ label: 'Compass', sub: 'Works with no signal', icon: 'compass', color: '#6D28D9', to: 'Compass' }] : []),
     { label: 'Offline Library', sub: 'Atlas packs, WikiMed, Wikipedia', icon: 'database', color: '#92400E', to: 'OfflineLibrary' },
-    { label: 'Daily briefing', sub: 'Your news, read aloud, with fun facts', icon: 'radio', color: '#BE185D', to: 'DailyBrief' },
     { label: 'Noise Meter', sub: 'Live decibel level', icon: 'volume-2', color: '#0369A1', to: 'NoiseMeter' },
     { label: 'Metal Detector', sub: 'Magnetometer field strength', icon: 'radio', color: '#7C3AED', to: 'MetalDetector' },
     { label: 'Step Counter', sub: 'Pedometer and distance', icon: 'activity', color: '#065F46', to: 'Pedometer' },
@@ -88,11 +78,11 @@ export const AtlasHubScreen: React.FC = () => {
           {tiles.map((t) => (
             <View key={t.to} style={[{ width: `${100 / cols}%` }, literalStyles.s3]}>
               <TouchableOpacity onPress={() => navigation.navigate(t.to)} activeOpacity={0.8}
-                style={[{ backgroundColor: night ? BACKGROUNDCOLOR_1E0202 : t.color, borderWidth: night ? BORDERWIDTH_1 : BORDERWIDTH_0 }, literalStyles.s9]}>
-                <Icon name={t.icon} size={26} color={night ? '#FF3B3B' : '#fff'} />
+                style={[{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }, literalStyles.s9]}>
+                <Icon name={t.icon} size={26} color={t.color} />
                 <View>
-                  <Text style={[{ color: night ? COLOR_FF6B6B : COLOR_FFF }, literalStyles.s10]}>{t.label}</Text>
-                  <Text style={[{ color: night ? COLOR_C04040 : COLOR_RGBA_255_255_255_0_85 }, literalStyles.s11]} numberOfLines={2}>{t.sub}</Text>
+                  <Text style={[{ color: colors.text }, literalStyles.s10]}>{t.label}</Text>
+                  <Text style={[{ color: colors.textSecondary }, literalStyles.s11]} numberOfLines={2}>{t.sub}</Text>
                 </View>
               </TouchableOpacity>
             </View>

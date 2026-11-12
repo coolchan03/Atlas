@@ -20,7 +20,7 @@ export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fals
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
   const byName = (a: Agent, b: Agent) => a.name.localeCompare(b.name);
   const sections = [
-    { title: 'Agents', hint: 'Get work done', data: agents.filter((a) => !isPal(a)).sort(byName) },
+    { title: 'Agents', hint: 'Get work done', data: agents.filter((a) => !isPal(a) && a.id !== 'field-id' && a.id !== 'talk').sort(byName) },
     { title: 'Pals', hint: 'Characters to talk or role-play with', data: agents.filter(isPal).sort(byName) },
   ];
 
@@ -60,14 +60,6 @@ export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fals
         An agent gets work done (its system prompt says how). A pal is a character to talk or role-play with.
         Projects hold your chats and documents. Tap the circle to choose who answers in every chat. Tap again for none.
       </Text>
-      <TouchableOpacity style={styles.starter} onPress={() => navigation.navigate('AtlasHub')}>
-        <Icon name="compass" size={20} color={colors.primary} />
-        <View style={styles.cardText}>
-          <Text style={styles.name}>Atlas: emergency & travel</Text>
-          <Text style={styles.desc}>Emergency cards, Survival Manual, offline maps, phrases, offline library and off-grid mode.</Text>
-        </View>
-        <Icon name="chevron-right" size={18} color={colors.textMuted} />
-      </TouchableOpacity>
       <SectionList sections={sections} keyExtractor={(a) => a.id} renderItem={renderItem} stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHead}>
@@ -86,7 +78,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   header: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
   title: { ...TYPOGRAPHY.h1, color: colors.text },
   headerButtons: { flexDirection: 'row' as const },
-  starter: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.primary },
   addButton: { flexDirection: 'row' as const, alignItems: 'center' as const, padding: SPACING.sm },
   addText: { ...TYPOGRAPHY.body, color: colors.primary, marginLeft: 4 },
   help: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, paddingHorizontal: SPACING.lg, marginTop: SPACING.sm, lineHeight: 18 },

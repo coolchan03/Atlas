@@ -1,6 +1,7 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
+import { markSpeechStarted, markSpeechFinished, clearSpeechActivity } from '../music/speechActivity';
 
 /**
  * Thin wrapper over the AtlasTts native module (Android's built-in text-to-speech).
@@ -18,8 +19,9 @@ export const ttsAvailable = (): boolean => Platform.OS === 'android' && !!Native
 function ensureListeners(): void {
   if (emitter || !ttsAvailable()) return;
   emitter = new NativeEventEmitter(Native);
-  emitter.addListener('AtlasTtsStart', () => undefined);
+  emitter.addListener('AtlasTtsStart', (e: { utteranceId: string }) => markSpeechStarted(e?.utteranceId || 'tts'));
   emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
+    markSpeechFinished(e.utteranceId);
     const w = waiters.get(e.utteranceId);
     if (w) { waiters.delete(e.utteranceId); w(true); return; } // podcast / video lines: not a chat reply
     const s = useAtlasVoiceStore.getState();
@@ -32,6 +34,7 @@ function ensureListeners(): void {
     noLangHandler?.(e.utteranceId);
   });
   emitter.addListener('AtlasTtsStopped', (e: { utteranceId: string }) => {
+    markSpeechFinished(e.utteranceId);
     const w = waiters.get(e.utteranceId);
     if (w) { waiters.delete(e.utteranceId); w(false); }
     const s = useAtlasVoiceStore.getState();
@@ -92,6 +95,7 @@ export function endSpeechStream(): void {
 }
 
 export function stop(): void {
+  clearSpeechActivity(); // Always restore music level on hard stop.
   if (!ttsAvailable()) return;
   useAtlasVoiceStore.getState().setSpeaking(null);
   Native.stop().catch(() => undefined);

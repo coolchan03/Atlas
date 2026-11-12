@@ -19,7 +19,12 @@ interface AtlasVoiceState {
   neuralVoice: string;
   /** Speaker inside a multi-voice model (Kokoro). */
   neuralSid: number;
-  setNeural: (id: string, sid?: number) => void;
+  /** Pocket TTS recording id (empty for all other voices). */
+  neuralReferenceId: string;
+  /** Shared Pocket generation quality; survives app restarts. */
+  cloneSteps: number;
+  setCloneSteps: (steps: number) => void;
+  setNeural: (id: string, sid?: number, referenceId?: string) => void;
   /** Voices for podcast and briefing hosts A, B and C (voice names; '' or missing = automatic). */
   podcastVoices: string[];
   setPodcastVoices: (v: string[]) => void;
@@ -42,11 +47,17 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   autoSpeakInChat: false,
   neuralVoice: '',
   neuralSid: 0,
+  neuralReferenceId: '',
+  cloneSteps: 2,
   earpiece: false,
   podcastVoices: [],
   setPodcastVoices: (podcastVoices) => set({ podcastVoices }),
   setEarpiece: (earpiece) => set({ earpiece }),
-  setNeural: (neuralVoice, sid) => set((s) => ({ neuralVoice, neuralSid: sid ?? s.neuralSid })),
+  setCloneSteps: (steps) => set({ cloneSteps: [2, 3, 5, 8].includes(steps) ? steps : 2 }),
+  setNeural: (neuralVoice, sid, referenceId) => set((s) => ({
+    neuralVoice, neuralSid: sid ?? s.neuralSid,
+    neuralReferenceId: referenceId ?? (neuralVoice === s.neuralVoice ? s.neuralReferenceId : ''),
+  })),
   setSpeaking: (key, messageId) =>
     set(key === null ? { speakingKey: null, speakingMessageId: null } : { speakingKey: key, ...(messageId !== undefined ? { speakingMessageId: messageId } : {}) }),
   markDone: () => set((s) => ({ doneTick: s.doneTick + 1 })),
@@ -56,5 +67,5 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, earpiece: s.earpiece, podcastVoices: s.podcastVoices }),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, earpiece: s.earpiece, podcastVoices: s.podcastVoices }),
 }));

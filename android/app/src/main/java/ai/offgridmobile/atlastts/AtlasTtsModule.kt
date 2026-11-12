@@ -351,6 +351,172 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun isSpeaking(promise: Promise) { promise.resolve(tts?.isSpeaking ?: false) }
 
+    // Cloned reference recordings are separate from model files. No external upload is performed.
+    private val referenceRoot: java.io.File by lazy { java.io.File(ctx.noBackupFilesDir, "voice-references").apply { mkdirs() } }
+    @Volatile private var activeReferenceId: String = ""
+    private fun referenceFile(id: String): java.io.File {
+        require(id.matches(Regex("[a-f0-9-]{36}"))) { "Invalid voice reference id" }
+        return java.io.File(referenceRoot, "$id.wav")
+    }
+
+    @ReactMethod
+    fun importVoiceReference(uri: String, name: String, promise: Promise) {
+        Thread {
+            try {
+                val parsed = android.net.Uri.parse(uri)
+                require(parsed.scheme == "file" || parsed.scheme == "content") { "Choose a local WAV file" }
+                val source = ctx.contentResolver.openInputStream(parsed)
+                    ?: throw IllegalArgumentException("Could not read recording")
+                val data = source.use { input ->
+                    val out = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(16384)
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        require(out.size() + n <= VoiceCloneWav.MAX_BYTES) { "Reference WAV is too large" }
+                        out.write(buffer, 0, n)
+                    }
+                    out.toByteArray()
+                }
+                val decoded = VoiceCloneWav.decode(data)
+                val id = java.util.UUID.randomUUID().toString()
+                val dest = referenceFile(id)
+                try { dest.writeBytes(data) } catch (e: Throwable) { dest.delete(); throw e }
+                promise.resolve(Arguments.createMap().apply {
+                    putString("id", id); putDouble("seconds", decoded.seconds)
+                })
+            } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_IMPORT", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    /** Atomically load Pocket TTS with its consented reference and generation setting. */
+    @ReactMethod
+    fun activateClonedVoice(id: String, sid: Int, style: ReadableMap?, referenceId: String,
+                            steps: Int, promise: Promise) {
+        val dir = findVoice(id)
+        if (dir == null || !NeuralTts.isPocket(dir)) {
+            promise.reject("NO_POCKET_MODEL", "Import the complete Pocket TTS model first"); return
+        }
+        if (steps !in listOf(2, 3, 5, 8)) { promise.reject("BAD_STEPS", "Invalid quality setting"); return }
+        val g = ++voiceGen
+        Thread {
+            try {
+                val source = referenceFile(referenceId)
+                if (!source.isFile) throw IllegalArgumentException("The reference recording was deleted")
+                val audio = VoiceCloneWav.decode(source.readBytes())
+                val accent = if (style?.hasKey("accent") == true) style.getString("accent") ?: "" else ""
+                neural.load(dir.path, accent)
+                if (g == voiceGen) {
+                    neuralSid = sid
+                    neural.depth = 1f
+                    neural.setCloneSteps(steps)
+                    neural.setReference(audio)
+                    activeReferenceId = referenceId
+                    neuralDir = dir.path
+                    promise.resolve(neural.numSpeakers())
+                } else promise.resolve(0) // newer voice choice won
+            } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_CLONE_LOAD", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun setVoiceReference(id: String, promise: Promise) {
+        Thread {
+            try {
+                val sample = if (id.isBlank()) null else {
+                    val file = referenceFile(id)
+                    if (!file.exists()) throw IllegalArgumentException("Voice recording missing; import it again")
+                    VoiceCloneWav.decode(file.readBytes())
+                }
+                neural.setReference(sample)
+                activeReferenceId = id
+                promise.resolve(true)
+            } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_LOAD", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun setVoiceCloneSteps(steps: Int, promise: Promise) {
+        try { neural.setCloneSteps(steps); promise.resolve(true) }
+        catch (e: Throwable) { promise.reject("VOICE_CLONE_STEPS", e.message ?: e.toString()) }
+    }
+
+    /** Measures real synthesis on this device. It does not play, transmit or retain audio. */
+    @ReactMethod
+    fun benchmarkVoiceClone(text: String, promise: Promise) {
+        Thread {
+            try {
+                require(neuralDir.isNotBlank() && neural.ready) { "Load the Pocket voice first" }
+                require(text.length in 1..250) { "Invalid benchmark text" }
+                val began = System.nanoTime()
+                val output = neural.synthesize(chunks(text, 380), neuralSid, rate) { false }
+                    ?: throw IllegalStateException("Voice generation unavailable")
+                val generated = (System.nanoTime() - began) / 1_000_000_000.0
+                val audio = output.first.size.toDouble() / output.second
+                promise.resolve(Arguments.createMap().apply {
+                    putDouble("synthesisSeconds", generated)
+                    putDouble("audioSeconds", audio)
+                    putDouble("realTimeFactor", if (audio > 0.0) generated / audio else 0.0)
+                })
+            } catch (e: Throwable) { promise.reject("VOICE_BENCHMARK", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun deleteVoiceReference(id: String, promise: Promise) {
+        try {
+            val file = referenceFile(id)
+            if (!file.exists() || !file.delete()) throw IllegalStateException("Voice recording not found or could not be deleted")
+            if (activeReferenceId == id) { neural.setReference(null); activeReferenceId = "" }
+            promise.resolve(true)
+        } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_DELETE", e.message ?: e.toString()) }
+    }
+
+    @ReactMethod
+    fun analyzeVoiceReference(id: String, promise: Promise) {
+        Thread {
+            try {
+                val file = referenceFile(id)
+                val report = VoiceReferenceCoach.analyze(VoiceCloneWav.decode(file.readBytes()))
+                promise.resolve(Arguments.createMap().apply {
+                    putString("rating", report.rating)
+                    putDouble("seconds", report.seconds)
+                    putDouble("peak", report.peak)
+                    putDouble("rmsDb", report.rmsDb)
+                    putDouble("noiseFloorDb", report.noiseFloorDb)
+                    putDouble("signalNoiseDb", report.signalNoiseDb)
+                    putDouble("clippedPercent", report.clippedPercent)
+                    putDouble("quietPercent", report.quietPercent)
+                    putDouble("trimStartSeconds", report.trimStartSeconds)
+                    putDouble("trimEndSeconds", report.trimEndSeconds)
+                    val notes = Arguments.createArray()
+                    for (advice in report.advice) notes.pushString(advice)
+                    putArray("advice", notes)
+                })
+            } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_ANALYZE", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    @ReactMethod
+    fun improveVoiceReference(id: String, promise: Promise) {
+        Thread {
+            try {
+                val input = VoiceCloneWav.decode(referenceFile(id).readBytes())
+                val improved = VoiceReferenceCoach.improve(input)
+                val encoded = VoiceReferenceCoach.encodeWav(improved)
+                require(encoded.size <= VoiceCloneWav.MAX_BYTES) { "Improved recording is too large" }
+                VoiceCloneWav.decode(encoded) // reject accidental invalid WAV output before saving
+                val newId = java.util.UUID.randomUUID().toString()
+                val target = referenceFile(newId)
+                try { target.writeBytes(encoded) } catch (e: Throwable) { target.delete(); throw e }
+                promise.resolve(Arguments.createMap().apply {
+                    putString("id", newId)
+                    putDouble("seconds", improved.samples.size.toDouble() / improved.sampleRate)
+                })
+            } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_IMPROVE", e.message ?: e.toString()) }
+        }.start()
+    }
+
     /**
      * Use a downloaded natural voice (folder name under voices/), or "" for the phone's voice.
      * `style` may hold `accent` ("gb"/"us": pronunciation dictionary of multi-accent Kokoro) and

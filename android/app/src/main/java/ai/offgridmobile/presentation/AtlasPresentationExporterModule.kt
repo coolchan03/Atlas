@@ -82,7 +82,11 @@ class AtlasPresentationExporterModule(private val context: ReactApplicationConte
     val brush = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       color = tint
       textSize = size
-      typeface = Typeface.create(if (font == "Georgia") "serif" else "sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+      typeface = Typeface.create(when {
+          font.contains("Courier", true) || font.contains("Consolas", true) -> "monospace"
+          listOf("Georgia", "Garamond", "Palatino Linotype", "Book Antiqua", "Cambria").any { font.contains(it, true) } -> "serif"
+          else -> "sans-serif"
+        }, if (bold) Typeface.BOLD else Typeface.NORMAL)
     }
     var y = start
     var lines = 0

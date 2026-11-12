@@ -7,6 +7,7 @@ import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { BackupReminderCard } from '../../components/BackupReminderCard';
 import { ContinueCard } from './components/ContinueCard';
+import { HomeShortcutsCard } from './HomeShortcutsCard';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
@@ -224,7 +225,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
           <ContinueCard navigation={navigation} />
 
+          <HomeShortcutsCard navigation={navigation} />
+
           <BackupReminderCard onOpenSettings={() => navigation.navigate('SettingsTab')} />
+
+          <AnimatedPressable style={styles.galleryCard} onPress={() => navigation.navigate('MusicStudio')}
+            hapticType="selection" testID="home-music-studio">
+            <Icon name="music" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Music Studio</Text>
+              <Text style={styles.galleryCardMeta}>Compose original instrumental audio with the local AI</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
 
           {/* Recorder: record a conversation, get a transcript with speakers */}
           <AnimatedPressable

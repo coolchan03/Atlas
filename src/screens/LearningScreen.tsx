@@ -77,7 +77,7 @@ export const LearningScreen: React.FC = () => {
   const addItems = useLearningStore((s) => s.addItems);
   const bank = st?.bank || [];
   const count = (k: BankStatus) => bank.filter((b) => b.status === k).length;
-  const STATUS_COLOR: Record<string, string> = { pending: colors.textMuted, approved: colors.primary, answered: '#4D7C0F', rejected: colors.error, failed: '#B45309', dropped: colors.textMuted };
+  const STATUS_COLOR: Record<string, string> = { pending: colors.textMuted, approved: colors.primary, answered: '#4D7C0F', uncertain: '#B45309', rejected: colors.error, failed: '#B45309', dropped: colors.textMuted };
   // A tap on a question only opens it; approving, rejecting and removing are separate, labelled buttons.
   const [openQ, setOpenQ] = useState<string | null>(null);
   const decide = (id: string, status: 'approved' | 'rejected' | 'dropped') => {
@@ -210,14 +210,14 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.statusBox}>
         <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
         <Text style={styles.counts}>
-          Round {st?.round ?? 0} · {count('answered')} learned · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
+          Round {st?.round ?? 0} · {count('answered')} legacy judge approvals (unverified) · {count('uncertain')} awaiting verification · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
         </Text>
         <Text style={styles.counts}>
           Until judge: {Math.max(0, cfg.reportsPerJudge - (st?.reportsSinceJudge ?? 0))} reports · until manager: {Math.max(0, cfg.judgesPerManager - (st?.judgesSinceManager ?? 0))} judge turns{st?.onTrack === false ? ' · manager says: drifting' : st?.onTrack ? ' · manager says: on track' : ''}
         </Text>
         {!!st?.scores?.length && (
           <View style={styles.scoreRow}>
-            <Text style={styles.counts}>Judge scores (last {Math.min(12, st.scores.length)}): </Text>
+            <Text style={styles.counts}>LLM judge opinions, not verified accuracy (last {Math.min(12, st.scores.length)}): </Text>
             {st.scores.slice(-12).map((v, i) => (
               <View key={i} style={[styles.bar, { height: 4 + v * 2.6, backgroundColor: v >= 7 ? colors.primary : v >= 5 ? '#D97706' : colors.error }]} />
             ))}
@@ -258,7 +258,7 @@ export const LearningScreen: React.FC = () => {
             <View style={styles.grow}>
               <Text style={styles.chipText}>{r.q}</Text>
               <Text style={[styles.counts, { color }]}>
-                {r.status === 'pass' ? 'Judge passed' : r.status === 'fail' ? 'Judge failed' : 'Pending'}{r.score !== undefined ? ` · ${r.score}/10` : ''} · {new Date(r.at).toLocaleString()}
+                {r.verificationStatus === 'disputed' ? 'Disputed - needs review' : r.verificationStatus === 'candidate' ? 'Judge reviewed - unverified' : r.status === 'pass' ? 'Legacy judge pass - unverified' : r.status === 'fail' ? 'Judge failed' : 'Pending'}{r.score !== undefined ? ` · ${r.score}/10` : ''} · {new Date(r.at).toLocaleString()}
               </Text>
               {!isOpen && !!r.sourceList?.length && <Text style={styles.counts}>{r.sourceList.length} sources</Text>}
               {isOpen && <Text style={styles.eventBody} selectable>{markSources(r.text, r.sourceList?.length ?? 0)}</Text>}
@@ -271,6 +271,7 @@ export const LearningScreen: React.FC = () => {
                 </View>
               )}
               {isOpen && !!r.why && <Text style={styles.direction}>Judge: {r.why}</Text>}
+              {isOpen && !!r.verificationReasons?.length && <Text style={styles.direction}>Independent checks: {r.verificationReasons.join('; ')}</Text>}
               {isOpen && !!r.sources && <Text style={styles.counts} selectable>Sources it had:{'\n'}{r.sources}</Text>}
             </View>
             <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
@@ -411,13 +412,14 @@ export const LearningScreen: React.FC = () => {
       <Text style={styles.label}>Activity</Text>
       {events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
       {events.map((e: LearnEvent) => (
-        <TouchableOpacity key={e.id} onPress={() => setOpen(open === e.id ? null : e.id)} style={styles.event}>
+        <TouchableOpacity key={e.id} onPress={() => setOpen(open === e.id ? null : e.id)} style={styles.event} accessibilityRole="button" accessibilityState={{ expanded: open === e.id }} testID={`learning-activity-${e.id}`}>
           <View style={styles.eventHead}>
             <Icon name={KIND_ICON[e.kind] || 'circle'} size={14} color={e.kind === 'error' ? colors.error : e.kind === 'manager' ? colors.primary : colors.textSecondary} />
             <Text style={styles.eventTitle}>{e.title}</Text>
             <Text style={styles.eventTime}>{new Date(e.at).toLocaleTimeString()}</Text>
+            <Icon name={open === e.id ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
           </View>
-          {!!e.body && <Text style={styles.eventBody} numberOfLines={open === e.id ? undefined : 3}>{e.body}</Text>}
+          {open === e.id && !!e.body && <Text style={styles.eventBody} selectable>{e.body}</Text>}
         </TouchableOpacity>
       ))}
     </View>
@@ -428,6 +430,10 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
         <Text style={styles.title}>Teach the AI</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} style={styles.back}
+          accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
+          <Icon name="check-square" size={20} color={colors.text} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('Knowledge')} style={styles.back} accessibilityLabel="Knowledge: documents, experts, library, import and export" testID="open-knowledge">
           <Icon name="book-open" size={20} color={colors.text} />
         </TouchableOpacity>

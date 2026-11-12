@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { AssistantAccessCard } from '../components/AssistantAccessCard';
+import { AppPermissionsCard } from '../components/AppPermissionsCard';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
@@ -19,11 +20,12 @@ export const AssistantAccessScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Assistant access</Text>
+        <Text style={styles.headerTitle}>Assistant permissions</Text>
         <View style={styles.backButton} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <AssistantAccessCard />
+        <AppPermissionsCard />
       </ScrollView>
     </SafeAreaView>
   );

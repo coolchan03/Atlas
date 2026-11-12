@@ -3,6 +3,7 @@ import { NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { zip } from 'react-native-zip-archive';
 import { basicLayouts, cleanPresentationSlides, type PresentationSlide, type PresentationTemplate } from './presentationTemplates';
+import { titleGeometry } from './presentationLayout';
 
 export type PresentationFormat = 'pptx' | 'pdf';
 export interface ExportedPresentation { uri: string; mime: string; name: string }
@@ -91,10 +92,11 @@ function slideXml(slide: PresentationSlide, t: PresentationTemplate): string {
   const hf = t.headingFont ?? t.font;
   let shapes = extraLayoutShapes(slide, t) ?? '';
   if (shapes) { /* drawn by extraLayoutShapes */ } else if (slide.layout === 'title') {
-    shapes += shape(2, 'Accent bar', 720000, 1240000, 10600000, 130000, t.accent, []);
-    shapes += shape(3, 'Presentation title', 780000, 1840000, 10600000, 1700000, null,
+    const geo = titleGeometry(t.id);
+    shapes += shape(2, 'Accent bar', geo.accentX, geo.accentY, geo.accentW, geo.accentH, t.accent, []);
+    shapes += shape(3, 'Presentation title', geo.titleX, geo.titleY, 10200000, 1700000, null,
       [paragraph(slide.title, t.foreground, hf, 4900, true)]);
-    shapes += shape(4, 'Subtitle', 800000, 3800000, 10200000, 1000000, null,
+    shapes += shape(4, 'Subtitle', geo.titleX + 20000, geo.subtitleY, 10200000, 1000000, null,
       [paragraph(slide.subtitle, t.secondary, t.font, 2400, false)]);
   } else if (slide.layout === 'closing') {
     shapes += shape(2, 'Accent panel', 760000, 1920000, 9500000, 220000, t.accent, []);

@@ -52,7 +52,7 @@ export const DEFAULT_AGENTS: Agent[] = [
   {
     id: 'atlas',
     name: 'Atlas',
-    description: 'Offline emergency, medical and survival helper',
+    description: 'Offline emergency, survival and visual field identification helper',
     systemPrompt: `You are ATLAS, an offline emergency and survival helper.
 Rules:
 1. Use the knowledge-base excerpts you are given. If they do not answer the question and you have the search_knowledge_base tool, search with a few short words (for example "severe bleeding" or "snakebite").
@@ -61,6 +61,8 @@ Rules:
 4. Copy numbers exactly as written in the source, and name the card or book you used.
 5. If nothing in the knowledge base answers it, say: "Atlas does not cover that." Then give only general safety advice and say it is not from Atlas.
 6. Keep answers short. Do not think out loud at length.
+7. You also handle photo identification formerly handled by Field Identifier. Describe only what is visible; list possible identities, hazards and uncertainty.
+8. NEVER determine that a plant, mushroom, berry or wild animal is safe to eat or handle solely from a photo. Distinguish educational identification from an assurance of safety. For rashes and wounds, flag urgent danger signs without claiming to diagnose.
 
 BUILT-IN BASICS (use only when no search result is available):
 - Severe bleeding: apply firm direct pressure with cloth. Tourniquet for uncontrolled limb wounds: 2-3 inches above wound, tighten until bleeding stops, note the time.
@@ -71,7 +73,9 @@ BUILT-IN BASICS (use only when no search result is available):
 - Fracture: immobilize above and below break, do not straighten, seek care.
 - Allergic reaction / anaphylaxis: use epinephrine auto-injector if available, call emergency services immediately.
 - Water safety: boil 1 minute (3 min above 6500 ft) or use purification tablets.
-- Survival priorities: shelter from weather first, then water (3 days max without), then fire for warmth/signaling, then food (3 weeks).`,
+- Survival priorities: shelter from weather first, then water (3 days max without), then fire for warmth/signaling, then food (3 weeks).
+- Field identification: a photo alone cannot establish edibility or toxicity. Confirm with a qualified local expert; if exposed to an unknown toxic plant or fungus, contact poison control or emergency services.
+- Common dangerous examples: death cap and destroying angel mushrooms, poison hemlock, copperhead and cottonmouth snakes, black widow and brown recluse spiders. Lookalikes exist and a photo is not a definitive identification.`,
     createdAt: now(),
     updatedAt: now(),
   },
@@ -283,6 +287,11 @@ export const useAgentStore = create<AgentState>()(
               a.systemPrompt.includes('EDIBLE, POISONOUS, or NOT SURE'))) a.systemPrompt = fid.systemPrompt;
           // Add built-in identification basics to Field ID prompts that don't have them yet.
           if (a.id === 'field-id' && !a.systemPrompt.includes('BUILT-IN IDENTIFICATION BASICS')) a.systemPrompt = fid.systemPrompt;
+          // Extend only Atlas's original shipped prompt. Never overwrite a custom agent.
+          if (a.id === 'atlas' && promptHash(a.systemPrompt) === 1238314950 &&
+              !a.systemPrompt.includes('You also handle photo identification')) {
+            a.systemPrompt = DEFAULT_AGENTS.find((d) => d.id === 'atlas')!.systemPrompt;
+          }
           // Add built-in emergency basics to Atlas prompts that don't have them yet.
           const atlasDefault = DEFAULT_AGENTS.find((d) => d.id === 'atlas')!;
           if (a.id === 'atlas' && !a.systemPrompt.includes('BUILT-IN BASICS') && a.systemPrompt.startsWith('You are ATLAS')) a.systemPrompt = atlasDefault.systemPrompt;

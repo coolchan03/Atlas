@@ -14,6 +14,8 @@ export interface VoiceProfile {
   voiceId: string;
   sid: number;
   rate: number;
+  /** Pocket TTS reference audio id, stored privately by the native engine. */
+  referenceId?: string;
   createdAt: string;
 }
 
@@ -58,9 +60,11 @@ export function profileForConversation(conversationId: string | null | undefined
   const { useChatStore } = require('../stores/chatStore');
   const { useAgentStore } = require('../stores/agentStore');
   const conv = useChatStore.getState().conversations.find((c: any) => c.id === conversationId);
-  const agent = conv?.agentId ? useAgentStore.getState().getAgent(conv.agentId) : null;
-  if (!agent?.voiceProfileId) return null;
-  return useVoiceProfiles.getState().profiles.find((p) => p.id === agent.voiceProfileId) ?? null;
+  const agentId = conv?.agentId || useAgentStore.getState().activeAgentId;
+  const agent = agentId ? useAgentStore.getState().getAgent(agentId) : null;
+  const voiceProfileId = conv?.voiceProfileId || agent?.voiceProfileId;
+  if (!voiceProfileId) return null;
+  return useVoiceProfiles.getState().profiles.find((p) => p.id === voiceProfileId) ?? null;
 }
 
 /** Same as profileForConversation, starting from a message id. */

@@ -32,7 +32,7 @@ export interface LearnConfig {
   managerModelId?: string;
 }
 
-export type BankStatus = 'pending' | 'approved' | 'rejected' | 'answered' | 'failed' | 'dropped';
+export type BankStatus = 'pending' | 'approved' | 'rejected' | 'answered' | 'uncertain' | 'failed' | 'dropped';
 export interface BankItem {
   id: string;
   q: string;
@@ -48,7 +48,7 @@ export interface BankItem {
   round: number;
 }
 
-export interface ReportSource { n: number; title: string; kind: 'project' | 'library' | 'web'; url?: string }
+export interface ReportSource { n: number; title: string; kind: 'project' | 'library' | 'web'; url?: string; passage?: string; retrievedAt?: string; sourceId?: string; locator?: string; publicationDate?: string; effectiveFrom?: string; effectiveTo?: string; taxYear?: number }
 
 /** A report the learner wrote, kept in full with what the judge said about it, so it can be read. */
 export interface LearnReport {
@@ -65,6 +65,9 @@ export interface LearnReport {
   score?: number;
   /** The judge's reason (why it failed, or why it passed). */
   why?: string;
+  /** Judge scoring and independent verification are intentionally separate. */
+  verificationStatus?: 'candidate' | 'disputed' | 'rejected' | 'verified' | 'superseded';
+  verificationReasons?: string[];
 }
 
 export interface PendingReport { itemId: string; q: string; report: string; sources: string }

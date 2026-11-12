@@ -13,14 +13,15 @@ function lowPowerNote(): string {
 /** The system prompt for a chat: the active agent's, plus project notes underneath. */
 export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: string): string {
   const { activeAgentId, agents } = useAgentStore.getState();
-  const agent = agents.find((a) => a.id === activeAgentId);
+  const chatState = require('../stores/chatStore').useChatStore.getState();
+  const currentChat = chatState.conversations.find((c: any) => c.id === chatState.activeConversationId);
+  // A chat can select its own agent instead of inheriting whichever agent was most recently active globally.
+  const agent = agents.find((a) => a.id === (currentChat?.agentId || activeAgentId));
   const lp = lowPowerNote();
   const phoneMode = require('../stores/uiModeStore').useUiModeStore.getState().interfaceMode === 'audio';
   const phoneNote = phoneMode ? '\n\nPHONE CALL MODE: Speak like a natural telephone conversation. Answer in one or two short spoken sentences, usually under 35 words. No lists, markdown, headings, long introductions, or extended explanations unless urgently required for safety or explicitly requested. Ask one brief question if appropriate.' : '';
   // Respect per-project creative preferences, including imported/older projects
   // where missing flags default to off. Explicit user requests take precedence.
-  const chatState = require('../stores/chatStore').useChatStore.getState();
-  const currentChat = chatState.conversations.find((c: any) => c.id === chatState.activeConversationId);
   const currentProject = currentChat?.projectId ? require('../stores/projectStore').useProjectStore.getState().getProject(currentChat.projectId) : undefined;
   const learningEnabled = currentProject?.allowLearningActivities !== false;
   const projectPreferences = currentProject && !learningEnabled
@@ -40,7 +41,9 @@ export function resolveAgentPrompt(projectPrompt: string | undefined, fallback: 
   const projectFiles = currentProject
     ? '\n\nPROJECT FILES: this chat belongs to a project whose documents every chat in it shares. Update the project documents without being asked:\n- After completing a task or subtask: append a brief note to "Current Progress" (mode "append").\n- After making a decision: record it in "Decisions" (mode "append").\n- After learning something the next chat will need: add it to the relevant document (mode "append" or "replace").\nDo this at the end of each substantive response. Tell the user in one short line what you saved. Read search_knowledge_base before answering questions about the project.'
     : '';
-  if (!agent || !agent.systemPrompt.trim()) return (projectPrompt?.trim() || fallback) + lp + about + style + phoneNote + projectGuard + projectFiles;
-  return agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + about + style + phoneNote + projectGuard + projectFiles;
+  // This is a lower-priority hint only, not a replacement for an agent's persona or sampling settings.
+  const tone = require('./chatTone').chatToneNote(currentChat?.tonePreset, agent?.temperature !== undefined);
+  if (!agent || !agent.systemPrompt.trim()) return tone + (projectPrompt?.trim() || fallback) + lp + about + style + phoneNote + projectGuard + projectFiles;
+  return tone + agentPromptWithLessons(agent) + (projectPrompt?.trim() ? `\n\nProject notes:\n${projectPrompt.trim()}` : '') + lp + about + style + phoneNote + projectGuard + projectFiles;
 }
 

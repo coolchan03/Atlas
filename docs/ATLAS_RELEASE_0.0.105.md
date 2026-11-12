@@ -732,3 +732,7 @@ See the end of this file (filled in after the final CI run).
   explicit request ("Do 2-6", then "build those"); it stays unchecked there until device-verified.
 - The permanent signing key: the release workflow still requires and verifies the existing keystore; no new
   key was generated. No secrets, private chats or device data were committed.
+
+## Atlas 0.0.157 — Voice cloning, music studio, home widgets, learning reliability
+
+- 0.0.157: Adds offline, opt-in voice cloning with a quality wizard and private, named voice profiles; an original instrumental music composer and persistent in-app player; customizable in-app home widgets (agent call, safe chat resume, music, learning, and tools); an inspectable evidence ledger and manual review for learning claims; plus chat, presentation, memory, and permissions improvements. Updated Android native voice processing and added regression tests. This build is generated from the v0.0.157 feature branch. Voice quality, device stability, and UI behavior still require physical phone/tablet testing; autonomous online fact verification is not implemented.

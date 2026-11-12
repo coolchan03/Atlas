@@ -156,7 +156,7 @@ export const SettingsScreen: React.FC = () => {
                 { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
                 { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
                 { icon: 'save', title: 'Backup & sync', desc: 'Back up and restore; sync with nearby devices', screen: 'Backup' as const },
-                { icon: 'users', title: 'Assistant access', desc: 'Control which apps and keyboards can reach the AI', screen: 'AssistantAccess' as const },
+                { icon: 'users', title: 'Assistant permissions', desc: 'Review all requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },
                 { icon: 'image', title: 'Background images', desc: 'Set a background photo for any screen', screen: 'BackgroundSettings' as const },
               ],
             },

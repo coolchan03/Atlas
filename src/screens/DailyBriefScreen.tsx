@@ -313,7 +313,7 @@ export const DailyBriefScreen: React.FC = () => {
             ))}
           </View>
           <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Fun fact from your offline library</Text>
+            <Text style={styles.switchLabel}>Fun facts (offline library or online Wikipedia)</Text>
             <Switch value={prefs.funFacts} onValueChange={(v) => prefs.set({ funFacts: v })} />
           </View>
           <View style={styles.switchRow}>

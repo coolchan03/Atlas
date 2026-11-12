@@ -22,7 +22,7 @@ export function duplicateGroups(chats: Conversation[]): Conversation[][] {
 }
 
 export interface MergeChoice {
-  /** The chat whose settings (agent, project, instructions, tools) the merged chat keeps. Default: the longest chat. */
+  /** The chat whose settings (agent, project, instructions, tools) the merged chat keeps. Default: the latest updated chat. */
   baseId?: string;
   /** Agent for the merged chat: an id, null for no agent, or undefined to keep the base chat's. */
   agentId?: string | null;
@@ -30,17 +30,18 @@ export interface MergeChoice {
 
 /** One chat made from a set of twins. */
 export function mergeGroup(group: Conversation[], choice: MergeChoice = {}): Conversation {
-  const longest = [...group].sort((a, b) => b.messages.length - a.messages.length || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-  const base = group.find((c) => c.id === choice.baseId) ?? longest[0];
+  // Keep the latest chat's agent, project and settings by default, even if a stale twin is longer.
+  const newest = [...group].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0) || b.messages.length - a.messages.length);
+  const base = group.find((c) => c.id === choice.baseId) ?? newest[0];
   const messages = [...base.messages];
-  for (const other of longest) if (other.id !== base.id) for (const m of other.messages) if (!messages.some((x) => sameMessage(x, m))) messages.push(m);
+  for (const other of newest) if (other.id !== base.id) for (const m of other.messages) if (!messages.some((x) => sameMessage(x, m))) messages.push(m);
   messages.sort((a, b) => a.timestamp - b.timestamp);
-  const newest = Math.max(...group.map((c) => Date.parse(c.updatedAt) || 0));
+  const newestTimestamp = Math.max(...group.map((c) => Date.parse(c.updatedAt) || 0));
   const merged: Conversation = {
     ...base, title: baseTitle(base.title), messages,
     isPinned: group.some((c) => c.isPinned) || undefined,
     createdAt: group.map((c) => c.createdAt).sort()[0] ?? base.createdAt,
-    updatedAt: new Date(newest || Date.now()).toISOString(),
+    updatedAt: new Date(newestTimestamp || Date.now()).toISOString(),
   };
   if (choice.agentId !== undefined) merged.agentId = choice.agentId ?? undefined;
   return merged;

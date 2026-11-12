@@ -4,6 +4,7 @@ import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
 import { speak } from './tts';
 import { VoiceProfilesCard } from './VoiceProfilesCard';
+import { VoiceCloneCard } from './VoiceCloneCard';
 import { voiceCatalog, useNeuralVoices, refreshInstalled, downloadVoice, cancelVoiceDownload, deleteVoice, selectVoice, neuralAvailable, importVoiceFile } from './neural';
 
 const RATES = [0.75, 1, 1.25, 1.5];
@@ -117,7 +118,7 @@ export function AtlasVoicePanel() {
           <Text style={[styles.h, { color: colors.text }]}>Import a voice</Text>
           <Text style={[styles.p, { color: colors.textSecondary }]}>
             Add a voice you downloaded yourself. Atlas plays sherpa-onnx voices: Piper (files named vits-piper-...),
-            Kokoro and KittenTTS, as the .tar.bz2 or .zip from the sherpa-onnx "tts-models" release on GitHub.
+            Kokoro, KittenTTS and Pocket TTS (voice cloning), as the .tar.bz2 or .zip from the sherpa-onnx "tts-models" release on GitHub.
             Listen to Piper voices first at rhasspy.github.io/piper-samples.
           </Text>
           <TouchableOpacity testID="voice-import" style={[styles.btn, { borderColor: colors.primary }]} onPress={importFile}>
@@ -125,6 +126,7 @@ export function AtlasVoicePanel() {
           </TouchableOpacity>
         </View>
       )}
+      <VoiceCloneCard />
       <VoiceProfilesCard />
       <View style={card}>
         <Text style={[styles.h, { color: colors.text }]}>Phone voice settings</Text>

@@ -5,17 +5,20 @@ import { useAtlasVoiceStore } from './store';
 import { missingPresets, useVoiceProfiles, type VoiceProfile } from './profiles';
 import { KOKORO_V1_PRESETS, findNeuralVoice, loadVoiceForSpeech, restoreSavedVoice, useNeuralVoices } from './neural';
 import { speak } from './tts';
+import { isPocketVoiceId } from './cloneRouting';
+import { useCloneReferences } from './cloneStore';
 
 /** Human label for a profile's voice, e.g. "KittenTTS Nano · Kitten 3 · 1.25x". */
 export function describeProfile(p: Pick<VoiceProfile, 'voiceId' | 'sid' | 'rate'>): string {
   const voice = findNeuralVoice(p.voiceId);
+  const clone = p.referenceId ? `Cloned voice` : undefined;
   const speaker = voice?.speakers?.find((k) => k.sid === p.sid)?.name ?? (voice?.imported && p.sid > 0 ? `Speaker ${p.sid + 1}` : undefined);
-  return [voice?.name ?? 'Phone voice', speaker, `${p.rate}x`].filter(Boolean).join(' · ');
+  return [voice?.name ?? 'Phone voice', clone, speaker, `${p.rate}x`].filter(Boolean).join(' · ');
 }
 
 /** Plays a short sample in a profile's voice, then returns to the saved voice. */
 export async function previewProfile(p: VoiceProfile): Promise<void> {
-  await loadVoiceForSpeech(p.voiceId, p.sid);
+  await loadVoiceForSpeech(p.voiceId, p.sid, p.referenceId);
   speak(`Hi, I'm ${p.name}. This is how I sound.`, 'voice-test', p.rate);
   const unsub = useAtlasVoiceStore.subscribe((s) => {
     if (s.speakingKey) return;
@@ -34,10 +37,12 @@ export function VoiceProfilesCard() {
   const voiceId = useAtlasVoiceStore((s) => s.neuralVoice);
   const sid = useAtlasVoiceStore((s) => s.neuralSid);
   const rate = useAtlasVoiceStore((s) => s.rate);
+  const referenceId = useAtlasVoiceStore((s) => s.neuralReferenceId);
+  const references = useCloneReferences((s) => s.references);
   const [name, setName] = useState('');
   const save = () => {
     if (!name.trim()) return;
-    addProfile({ name, voiceId, sid, rate });
+    addProfile({ name, voiceId, sid, rate, ...(isPocketVoiceId(voiceId) ? { referenceId } : {}) });
     setName('');
   };
   return (
@@ -70,7 +75,7 @@ export function VoiceProfilesCard() {
         <View key={p.id} style={[styles.profile, { borderColor: colors.border }]}>
           <View style={styles.flex}>
             <Text style={[styles.name, { color: colors.text }]}>{p.name}</Text>
-            <Text style={[styles.meta, { color: colors.textMuted }]}>{describeProfile(p)}</Text>
+            <Text style={[styles.meta, { color: colors.textMuted }]}>{describeProfile(p)}{p.referenceId ? ` · ${references.find((r) => r.id === p.referenceId)?.name ?? 'Missing reference recording'}` : ''}</Text>
           </View>
           <TouchableOpacity onPress={() => { previewProfile(p).catch(() => undefined); }} style={styles.action}>
             <Text style={{ color: colors.primary }}>Preview</Text>

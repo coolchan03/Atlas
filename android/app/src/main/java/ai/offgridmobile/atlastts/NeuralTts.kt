@@ -9,6 +9,9 @@ import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsPocketModelConfig
+import com.k2fsa.sherpa.onnx.GenerationConfig
+import com.k2fsa.sherpa.onnx.GeneratedAudio
 import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -38,6 +41,27 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     @Volatile var earpiece = false
     @Volatile private var track: AudioTrack? = null
     @Volatile private var speakers = 0
+    @Volatile private var pocketLoaded = false
+    @Volatile private var cloneReference: VoiceCloneWav.Reference? = null
+    @Volatile private var cloneSteps: Int = 2
+
+    fun setCloneSteps(steps: Int) { require(steps in listOf(2, 3, 5, 8)); cloneSteps = steps }
+
+    /** A new reference applies to the next utterance, never to the currently generating sentence. */
+    fun setReference(reference: VoiceCloneWav.Reference?) {
+        cloneReference = reference
+    }
+
+    private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
+                              reference: VoiceCloneWav.Reference?, steps: Int): GeneratedAudio {
+        if (!pocketLoaded) return engine.generate(text, sid, speed)
+        val ref = reference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
+        return engine.generateWithConfig(text, GenerationConfig(
+            sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
+            numSteps = steps,
+            extra = mapOf("max_reference_audio_len" to "12")
+        ))
+    }
 
     val ready: Boolean get() = tts != null
 
@@ -59,8 +83,20 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             mc.numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
             mc.debug = false
             mc.provider = "cpu"
-            // KittenTTS and Kokoro both ship voices.bin; Atlas names KittenTTS folders "kitten-*".
-            if (isKitten(f)) {
+            // Pocket TTS has multiple ONNX files and no tokens.txt: it must not fall through to VITS.
+            val pocket = isPocket(f)
+            if (pocket) {
+                val k = OfflineTtsPocketModelConfig()
+                k.lmFlow = File(f, "lm_flow.int8.onnx").path
+                k.lmMain = File(f, "lm_main.int8.onnx").path
+                k.encoder = File(f, "encoder.onnx").path
+                k.decoder = File(f, "decoder.int8.onnx").path
+                k.textConditioner = File(f, "text_conditioner.onnx").path
+                k.vocabJson = File(f, "vocab.json").path
+                k.tokenScoresJson = File(f, "token_scores.json").path
+                k.voiceEmbeddingCacheCapacity = 10
+                mc.pocket = k
+            } else if (isKitten(f)) {
                 val k = OfflineTtsKittenModelConfig()
                 k.model = onnx.path; k.voices = File(f, "voices.bin").path; k.tokens = tokens; k.dataDir = espeak
                 k.lengthScale = 1.0f
@@ -82,8 +118,10 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             c.model = mc
             c.maxNumSentences = 1
             val e = OfflineTts(config = c)
-            speakers = try { e.numSpeakers() } catch (_: Throwable) { 1 }
+            speakers = try { e.numSpeakers().coerceAtLeast(1) } catch (_: Throwable) { 1 }
             tts = e
+            pocketLoaded = pocket
+            if (!pocket) cloneReference = null // do not retain old cloned audio when changing models
             loadedDir = dir
             loadedAccent = accent
         }).get()
@@ -92,6 +130,11 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     fun numSpeakers(): Int = if (tts != null) speakers else 0
 
     companion object {
+        /** A valid Pocket model is all seven required files, not merely an ONNX named like a Pocket model. */
+        fun isPocket(dir: File): Boolean =
+            listOf("lm_flow.int8.onnx", "lm_main.int8.onnx", "encoder.onnx", "decoder.int8.onnx",
+                "text_conditioner.onnx", "vocab.json", "token_scores.json").all { File(dir, it).isFile }
+
         /** KittenTTS voice folder: the downloaded id starts with "kitten" and holds voices.bin. */
         fun isKitten(dir: File): Boolean =
             dir.name.startsWith("kitten", ignoreCase = true) && File(dir, "voices.bin").exists()
@@ -120,6 +163,8 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         try { tts?.release() } catch (_: Throwable) {}
         tts = null
         speakers = 0
+        pocketLoaded = false
+        cloneReference = null // release sensitive reference samples with the engine
         loadedDir = ""
         loadedAccent = ""
     }
@@ -149,13 +194,14 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     fun synthesize(parts: List<String>, sid: Int, speed: Float, cancelled: () -> Boolean): Pair<ShortArray, Int>? {
         return genExec.submit(Callable<Pair<ShortArray, Int>?> {
             val engine = tts ?: return@Callable null
+            val reference = cloneReference; val steps = cloneSteps
             val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
             val out = java.io.ByteArrayOutputStream()
             val gap = ShortArray(rate / 8)
             fun put(a: ShortArray) { val b = java.nio.ByteBuffer.allocate(a.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN); b.asShortBuffer().put(a); out.write(b.array()) }
             for (p in parts) {
                 if (cancelled()) return@Callable null
-                val f = engine.generate(p, sid, genSpeed).samples
+                val f = generateAudio(engine, p, sid, genSpeed, reference, steps).samples
                 put(ShortArray(f.size) { (f[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() })
                 put(gap)
             }
@@ -213,6 +259,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     private fun run(nextPart: () -> String?, id: String, sid: Int, speed: Float, my: Int) {
         val engine = tts
         if (engine == null || token != my) { emit(if (token == my) "AtlasTtsDone" else "AtlasTtsStopped", id); return }
+        val reference = cloneReference; val steps = cloneSteps
         val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
         val queue = LinkedBlockingQueue<FloatArray>()
         val end = FloatArray(0)
@@ -221,7 +268,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         try {
             while (token == my) {
                 val p = nextPart() ?: break
-                val audio = engine.generate(p, sid, genSpeed)
+                val audio = generateAudio(engine, p, sid, genSpeed, reference, steps)
                 if (token != my) break
                 queue.put(audio.samples)
                 queue.put(FloatArray(rate / 8)) // short pause between sentences
