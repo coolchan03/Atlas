@@ -45,7 +45,7 @@ const SCREEN_FOR_ACTION: Partial<Record<HomeWidgetAction, string>> = {
   'music-studio': 'MusicStudio',
   'music-player': 'MusicStudio',
   'learning-status': 'LearningReliability',
-  learning: 'Learning',
+  learning: 'TeachList',
   'daily-brief': 'DailyBrief',
   recorder: 'Recorder',
   compass: 'Compass',

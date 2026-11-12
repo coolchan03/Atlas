@@ -6,8 +6,8 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
-  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
-  useRoute: () => ({ params: {} }),
+  useNavigation: () => ({ navigate: (global as any).__navigate ?? jest.fn(), goBack: jest.fn() }),
+  useRoute: () => ({ params: (global as any).__learnParams ?? {} }),
 }));
 
 it('keeps lessons with the learning history (learning is for the default chat), and does not touch any agent', () => {
@@ -60,11 +60,20 @@ it('each expert learns on its own: adding Taxes does not touch General, and only
   useAgentStore.setState({ activeAgentId: null });
   useLearningStore.setState({ experts: [], state: { [NO_AGENT]: { ...blankState(), lessons: '- General rule' } }, config: {} });
 
-  const view = rtl.render(React.createElement(LearningScreen));
-  rtl.fireEvent.changeText(view.getByTestId('new-expert-input'), 'Taxes');
-  rtl.fireEvent.press(view.getByTestId('new-expert-add'));
+  // Subjects are a list, like Projects: adding one opens its own page.
+  const { LearningListScreen } = require('../../../src/screens/LearningListScreen');
+  const navigate = jest.fn();
+  (global as any).__navigate = navigate;
+  const list = rtl.render(React.createElement(LearningListScreen));
+  rtl.fireEvent.changeText(list.getByTestId('new-expert-input'), 'Taxes');
+  rtl.fireEvent.press(list.getByTestId('new-expert-add'));
   const taxes = useLearningStore.getState().experts[0];
   expect(taxes.name).toBe('Taxes');
+  expect(navigate).toHaveBeenCalledWith('Learning', { agentId: taxes.id });
+  list.unmount();
+  (global as any).__learnParams = { agentId: taxes.id };
+  const view = rtl.render(React.createElement(LearningScreen));
+  expect(view.getByTestId('subject-name').props.children).toBe('Taxes');
   rtl.fireEvent.changeText(view.getByPlaceholderText(/None yet/), '- Check the filing deadline');
   rtl.fireEvent.changeText(view.getByPlaceholderText(/Treat wound infections/), 'Personal income tax filing and deductions');
 
@@ -123,3 +132,5 @@ it('folds reports, lessons and activity away, and once teaching has started the 
   rtl.fireEvent.press(view.getByTestId('fold-reports'));
   expect(view.getByText('How long to boil water?')).toBeTruthy();
 });
+
+afterEach(() => { delete (global as any).__learnParams; delete (global as any).__navigate; });

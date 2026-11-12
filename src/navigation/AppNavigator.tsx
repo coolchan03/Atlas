@@ -73,6 +73,7 @@ import { PresentationScreen } from '../screens/PresentationScreen';
 import { MusicStudioScreen } from '../screens/MusicStudioScreen';
 import { ReadAloudScreen } from '../screens/ReadAloudScreen';
 import { LearningReliabilityScreen } from '../screens/LearningReliabilityScreen';
+import { LearningListScreen } from '../screens/LearningListScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, TAB_LONG_PRESS, resolveNavBar, type NavItemId } from '../utils/navBar';
 import { openAppLink } from './appLinks';
@@ -316,6 +317,7 @@ export const AppNavigator: React.FC = () => {
           component={AgentEditScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <RootStack.Screen name="TeachList" component={LearningListScreen} />
         <RootStack.Screen name="Learning" component={LearningScreen} />
         <RootStack.Screen name="Knowledge" component={KnowledgeScreen} />
         <RootStack.Screen name="Emergency" component={EmergencyScreen} />

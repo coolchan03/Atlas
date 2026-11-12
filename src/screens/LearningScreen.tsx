@@ -52,11 +52,8 @@ export const LearningScreen: React.FC = () => {
 
   const agents = useAgentStore((s) => s.agents);
   // Each subject (an expert) learns on its own. General is always there; others are added below.
-  const experts = useLearningStore((s) => s.experts);
-  const addExpert = useLearningStore((s) => s.addExpert);
   const removeExpert = useLearningStore((s) => s.removeExpert);
-  const [agentId, setAgentId] = useState<string>(route.params?.agentId || NO_AGENT);
-  const [newExpert, setNewExpert] = useState('');
+  const agentId: string = route.params?.agentId || NO_AGENT;
   const agent = agents.find((a) => a.id === agentId);
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
@@ -147,24 +144,7 @@ export const LearningScreen: React.FC = () => {
         <Icon name="chevron-right" size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
-      <Text style={styles.label}>Expert</Text>
-      <Text style={styles.note}>Each subject learns on its own, so one expert never blurs into another. A chat uses the lessons of the expert whose subject it is about.</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.expertRow}>
-        {[{ id: NO_AGENT, name: 'General' }, ...experts].map((e) => (
-          <TouchableOpacity key={e.id} disabled={running} onPress={() => setAgentId(e.id)} testID={`expert-${e.id}`} accessibilityRole="button"
-            accessibilityState={{ selected: e.id === agentId }} style={[styles.chip, e.id === agentId && styles.chipOn]}>
-            <Text style={[styles.chipText, e.id === agentId && styles.chipTextOn]}>{e.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      {experts.length === 0 && <Text style={styles.counts} testID="no-experts-hint">No experts yet. Type a subject below (Taxes, Law, Psychology) and press Add expert, so the AI learns one field at a time.</Text>}
-      <View style={styles.row}>
-        <TextInput style={[styles.input, styles.grow]} value={newExpert} onChangeText={setNewExpert} placeholder="New expert, e.g. Taxes, Law, Psychology" placeholderTextColor={colors.textMuted} editable={!running} testID="new-expert-input" />
-        <TouchableOpacity disabled={running || !newExpert.trim()} onPress={() => { setAgentId(addExpert(newExpert)); setNewExpert(''); }} style={styles.smallBtn} testID="new-expert-add" accessibilityRole="button">
-          <Text style={styles.smallBtnText}>Add expert</Text>
-        </TouchableOpacity>
-      </View>
-
+      <Text style={styles.subject} testID="subject-name">{expertName(agentId)}</Text>
       <Text style={styles.note}>{agentId === NO_AGENT ? 'General is for anything that is not one field.' : `${expertName(agentId)}: `}Describe something to get good at. The AI researches it, writes reports, a judge checks them, and what it learns is kept as lessons for this subject.</Text>
       {locked ? (
         <View style={styles.lockCard} testID="setup-locked">
@@ -431,7 +411,7 @@ export const LearningScreen: React.FC = () => {
             <Text style={styles.resetText}>Reset lessons and history</Text>
           </TouchableOpacity>
           {agentId !== NO_AGENT && isNoAgent(agentId) && (
-            <TouchableOpacity disabled={running} onPress={() => Alert.alert(`Delete the ${expertName(agentId)} expert?`, 'Its topic, reports and lessons are removed. This cannot be undone.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { removeExpert(agentId); setAgentId(NO_AGENT); } }])} style={styles.resetBtn} testID="delete-expert">
+            <TouchableOpacity disabled={running} onPress={() => Alert.alert(`Delete the ${expertName(agentId)} expert?`, 'Its topic, reports and lessons are removed. This cannot be undone.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { removeExpert(agentId); navigation.goBack(); } }])} style={styles.resetBtn} testID="delete-expert">
               <Text style={styles.resetText}>Delete this expert</Text>
             </TouchableOpacity>
           )}
@@ -523,6 +503,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   grow: { flex: 1 },
   dim: { opacity: 0.5 },
   lockCard: { marginTop: 12, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 4, alignItems: 'flex-start' as const },
+  subject: { ...TYPOGRAPHY.h2, color: colors.text, marginTop: SPACING.lg },
   foldHead: { flexDirection: 'row' as const, alignItems: 'center' as const },
   reportsHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
   expertRow: { marginTop: 4 },
