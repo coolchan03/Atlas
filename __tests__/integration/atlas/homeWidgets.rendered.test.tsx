@@ -32,6 +32,13 @@ it('opens the screen a widget is set to open', () => {
   expect(mockNavigate).toHaveBeenLastCalledWith('MusicStudio', undefined);
 });
 
+it('shows the Read aloud widget and opens the Read aloud screen from its title', () => {
+  const { rtl, view, ids } = setup([{ title: 'Reader', action: 'read-aloud' }]);
+  expect(view.getByTestId('home-read-aloud-widget')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[0]}`));
+  expect(mockNavigate).toHaveBeenLastCalledWith('ReadAloud', undefined);
+});
+
 it('says so when a resume widget has no chat to resume', async () => {
   const { rtl, view, ids, alert } = setup([{ title: 'Resume', action: 'resume-last' }]);
   rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[0]}`));

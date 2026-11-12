@@ -147,6 +147,20 @@ class DocumentService {
     return this.readContent(path, isPdf, { maxChars, forceMarkdown: true });
   }
 
+  /** Only the text of a picked file, up to [maxChars]. Nothing is kept: any temporary copy is removed (used by read aloud). */
+  async textFromPicked(filePath: string, fileName: string, maxChars: number): Promise<string> {
+    const name = fileName.replaceAll(/[\\/]/g, '_');
+    const extension = `.${name.split('.').pop()?.toLowerCase()}`;
+    const isPdf = extension === PDF_EXTENSION;
+    this.validateFileType(extension, isPdf);
+    const resolvedPath = await this.resolveContentUri(filePath, name);
+    try {
+      return await this.readContent(resolvedPath, isPdf, { maxChars });
+    } finally {
+      if (resolvedPath !== filePath) RNFS.unlink(resolvedPath).catch(() => undefined);
+    }
+  }
+
   private async savePersistentCopy(resolvedPath: string, originalPath: string, name: string): Promise<{ id: string; uri: string }> {
     await this.ensureAttachmentsDir();
     const id = Date.now().toString();

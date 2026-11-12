@@ -49,6 +49,7 @@ Pick a project and get a study guide, flashcards, a quiz, a mind map, an answer 
 
 ### Voice
 - Read answers aloud, talk by voice, and **hands-free mode** for a back-and-forth like a phone call (speech-to-text with Whisper).
+- **Read aloud** – paste text or open a document and have it read to you in any installed voice (add the Read text aloud widget to Home for quick access). Play, pause, skip by part and change the speed.
 - **Natural voices** – human-sounding neural voices (Kokoro with 11 voices, and Piper voices) that run on the device.
 
 ### Also

@@ -71,6 +71,7 @@ import { WorkspaceScreen } from '../screens/WorkspaceScreen';
 import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
 import { PresentationScreen } from '../screens/PresentationScreen';
 import { MusicStudioScreen } from '../screens/MusicStudioScreen';
+import { ReadAloudScreen } from '../screens/ReadAloudScreen';
 import { LearningReliabilityScreen } from '../screens/LearningReliabilityScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, TAB_LONG_PRESS, resolveNavBar, type NavItemId } from '../utils/navBar';
@@ -363,6 +364,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="BriefingPaper" component={BriefingPaperScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Presentations" component={PresentationScreen} />
         <RootStack.Screen name="MusicStudio" component={MusicStudioScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="ReadAloud" component={ReadAloudScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="LearningReliability" component={LearningReliabilityScreen} options={{ headerShown: false }} />
         <RootStack.Screen
           name="About"

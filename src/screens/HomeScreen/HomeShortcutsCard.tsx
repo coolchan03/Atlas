@@ -16,6 +16,7 @@ import { useVoiceProfiles } from '../../atlasVoice/profiles';
 import { CHAT_TONES, type ChatTonePreset } from '../../services/chatTone';
 import { MusicPlayerWidget } from './MusicPlayerWidget';
 import { LearningReliabilityWidget } from './LearningReliabilityWidget';
+import { ReadAloudWidget } from './ReadAloudWidget';
 import { selectResumeConversation, shortcutDestination, useHomeShortcuts, type HomeShortcut, type HomeWidgetAction } from './homeShortcutStore';
 
 type Choice = { id: string; label: string };
@@ -34,6 +35,7 @@ const WIDGET_ACTIONS: Array<{ id: HomeWidgetAction; label: string }> = [
   { id: 'daily-brief', label: 'Daily briefing' },
   { id: 'recorder', label: 'Voice recorder' },
   { id: 'compass', label: 'Compass / Level' },
+  { id: 'read-aloud', label: 'Read text aloud' },
 ];
 const actionLabel = (action: HomeWidgetAction | undefined) => WIDGET_ACTIONS.find((a) => a.id === (action || 'chat'))?.label || 'Open chat';
 const inChat = (action?: HomeWidgetAction) => action === 'call' || action === 'chat' || !action;
@@ -47,6 +49,7 @@ const SCREEN_FOR_ACTION: Partial<Record<HomeWidgetAction, string>> = {
   'daily-brief': 'DailyBrief',
   recorder: 'Recorder',
   compass: 'Compass',
+  'read-aloud': 'ReadAloud',
 };
 
 /** Title and message for the first reason a chat widget cannot start, or null when it can. */
@@ -178,6 +181,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
         const voice = voices.find((v) => v.id === widget.voiceProfileId)?.name;
         const isMusicPlayer = widget.action === 'music-player';
         const isLearning = widget.action === 'learning-status';
+        const isReader = widget.action === 'read-aloud';
         return (
           <View key={widget.id} style={[styles.savedRow, { borderTopColor: colors.border }]}>
             <View style={styles.flex}>
@@ -189,6 +193,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
               </TouchableOpacity>
               {isMusicPlayer && <MusicPlayerWidget openStudio={() => openScreen('MusicStudio')}/>}
               {isLearning && <LearningReliabilityWidget openLearning={() => openScreen('LearningReliability')}/>}
+              {isReader && <ReadAloudWidget openReader={() => openScreen('ReadAloud')}/>}
             </View>
             <TouchableOpacity onPress={() => Alert.alert('Remove widget?', widget.title, [
               { text: 'Cancel' }, { text: 'Remove', style: 'destructive', onPress: () => removeShortcut(widget.id) },

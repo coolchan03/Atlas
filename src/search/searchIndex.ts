@@ -27,6 +27,8 @@ export const DESTINATIONS: Destination[] = [
   { title: 'Image gallery', route: 'Gallery', icon: 'image', keywords: 'pictures generated images photos' },
   { title: 'Presentations', route: 'Presentations', icon: 'monitor', keywords: 'slides powerpoint pptx pdf deck' },
   { title: 'Maps', route: 'Maps', icon: 'map', keywords: 'offline map places navigation' },
+  { title: 'Read aloud', route: 'ReadAloud', icon: 'volume-2', keywords: 'text to speech tts read document pdf speak voice listen' },
+  { title: 'Music studio', route: 'MusicStudio', icon: 'music', keywords: 'compose instrumental background music tune' },
   { title: 'Compass', route: 'Compass', icon: 'compass', keywords: 'direction north sensor' },
   { title: 'Emergency mode', route: 'Emergency', icon: 'alert-triangle', keywords: 'sos survival first aid help flashlight' },
   { title: 'Offline library', route: 'OfflineLibrary', icon: 'book-open', keywords: 'wikipedia books packs offline reference' },
