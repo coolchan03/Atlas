@@ -9,6 +9,7 @@ import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
 import { arg, requireString, EMPTY_WRITE } from './toolArgs';
+import { forceHttps, isBlockedUrl } from './urlSafety';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -391,14 +392,6 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
 }
 
 /** Block SSRF: reject private/loopback/link-local/cloud-metadata URLs. */
-function isPrivateUrl(url: string): boolean {
-  const m = url.match(/^https?:\/\/([^/:]+)/i);
-  if (!m) return false;
-  const h = m[1].toLowerCase();
-  return h === 'localhost' || h === '[::1]' || h === 'metadata.google.internal'
-    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
-}
-
 function nodeToText(node: any): string {
   if (node.nodeType === 3) return node.text ?? '';
   const tag = (node.tagName ?? '').toLowerCase();
@@ -446,7 +439,8 @@ async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000): Promise<string> 
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
   while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
-  if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  if (isBlockedUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  url = forceHttps(url);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -459,6 +453,8 @@ async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000): Promise<string> 
         'Accept': 'text/html, text/plain, */*',
       },
     });
+    // A public page can redirect to a private address: refuse what came from there.
+    if (response.url && isBlockedUrl(response.url)) throw new Error('Blocked: the page redirected to a private or local network address');
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     const html = await response.text();
     const text = htmlToMarkdown(html);
