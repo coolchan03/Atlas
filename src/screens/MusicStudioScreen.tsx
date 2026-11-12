@@ -9,7 +9,7 @@ import { llmService } from '../services';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
-import { STYLES } from '../music/styles';
+import { STYLES, type StyleGroup, type StyleMood } from '../music/styles';
 import { composeInstrumental, parseMusicScore, renderMusic, type MusicMood, type MusicScore, type SoundPreset } from '../music/composition';
 
 const makeMessage = (role: 'system' | 'user', content: string) => ({ id: `${role}-${Date.now()}`, role, content, timestamp: Date.now() });
@@ -17,12 +17,18 @@ const SOUND: Array<{ id: SoundPreset; label: string }> = [
   { id: 'keys', label: 'Soft keys' }, { id: 'ambient', label: 'Warm pads' },
   { id: 'bell', label: 'Bells' }, { id: 'synth', label: 'Synth' },
 ];
-const MOODS: Array<{ id: MusicMood; label: string }> = [
+const BASIC_MOODS: Array<{ id: MusicMood; label: string }> = [
   { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
   { id: 'cinematic', label: 'Cinematic' }, { id: 'electronic', label: 'Electronic' },
-  ...(['jazz', 'vaporwave', 'eerie', 'spring', 'summer', 'fall', 'winter', 'thanksgiving', 'halloween', 'christmas', 'newyear', 'valentines'] as const)
-    .map((id) => ({ id: id as MusicMood, label: STYLES[id].label })),
 ];
+const STYLE_GROUPS: Array<{ title: StyleGroup; items: Array<{ id: MusicMood; label: string }> }> = (['Moods and genres', 'Seasons and holidays', 'Places and settings'] as const)
+  .map((title) => ({
+    title,
+    items: [
+      ...(title === 'Moods and genres' ? BASIC_MOODS : []),
+      ...(Object.keys(STYLES) as StyleMood[]).filter((id) => STYLES[id].group === title).map((id) => ({ id: id as MusicMood, label: STYLES[id].label })),
+    ],
+  }));
 const DURATIONS = [30, 60, 90] as const;
 
 /** Music Studio makes original instrumental background music, not singing, audio samples or covers. */
@@ -132,7 +138,12 @@ export function MusicStudioScreen() {
           placeholder="Describe an original instrumental mood" placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
         <Text style={[styles.label, { color: colors.text }]}>Style</Text>
-        {chips(MOODS, mood, (id: MusicMood) => { setMood(id); if (id in STYLES) setSound(STYLES[id as keyof typeof STYLES].sound); })}
+        {STYLE_GROUPS.map((group) => (
+          <View key={group.title}>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>{group.title}</Text>
+            {chips(group.items, mood, (id: MusicMood) => { setMood(id); if (id in STYLES) setSound(STYLES[id as StyleMood].sound); })}
+          </View>
+        ))}
         <Text style={[styles.label, { color: colors.text }]}>Instrument sound</Text>
         {chips(SOUND, sound, setSound)}
         <Text style={[styles.label, { color: colors.text }]}>Track duration</Text>
