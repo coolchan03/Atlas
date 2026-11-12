@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert } from 'react-native';
 import { useRecordings } from '../atlasRecorder/store';
 import { documentService } from '../services/documentService';
-import { answerRun, approveRun, cancelRun, startAccountant, startBill, startMeeting, useWorkflowRuns } from './service';
+import { answerRun, approveRun, cancelRun, startWorkflow, useWorkflowRuns } from './service';
 import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
 
 /** Multi-step helpers: pick a job, give it text, answer its questions, approve the result. The logic lives in ./service. */
@@ -10,8 +10,7 @@ export const WorkflowsScreen: React.FC = () => {
   const runs = useWorkflowRuns((s) => s.runs);
   const [kind, setKind] = useState<Kind | null>(null);
   const [text, setText] = useState('');
-  const [title, setTitle] = useState('');
-  const [days, setDays] = useState(3);
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -29,10 +28,7 @@ export const WorkflowsScreen: React.FC = () => {
       if (file) setText(await documentService.textFromPicked(file.uri, file.name ?? 'file.txt', 60000));
     } catch (e: any) { if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) throw e; }
   });
-  const start = () => work(() => {
-    if (kind === 'accountant') return startAccountant(text);
-    return kind === 'meeting' ? startMeeting(text, title) : startBill(text, days);
-  });
+  const start = () => work(() => startWorkflow(kind!, text, fields));
 
   if (run) {
     return (
@@ -44,8 +40,8 @@ export const WorkflowsScreen: React.FC = () => {
     );
   }
   if (kind) {
-    return <InputView kind={kind} text={text} setText={setText} title={title} setTitle={setTitle} days={days} setDays={setDays}
-      recordings={recordings} busy={busy} onFile={pickFile} onStart={start} onBack={() => setKind(null)} />;
+    return <InputView kind={kind} text={text} setText={setText} fields={fields} setField={(id, v) => setFields((f) => ({ ...f, [id]: v }))}
+      recordings={recordings} busy={busy} onFile={pickFile} onStart={start} onBack={() => { setKind(null); setText(''); setFields({}); }} />;
   }
   return <JobList runs={runs} onPick={setKind} onOpen={setOpenId} />;
 };

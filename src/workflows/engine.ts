@@ -17,7 +17,20 @@ export type Step<C> =
 export type Ask = (system: string, user: string) => Promise<string>;
 /** What a run needs from outside: the model, and where to save the state after each step. */
 export interface Deps<C> { ask: Ask; save?: (r: Run<C>) => void }
-export interface Workflow<C> { id: string; title: string; summary: string; steps: Step<C>[] }
+/** One extra thing a job asks for before it starts: a few choices, or a line of text. */
+export interface InputField { id: string; label: string; options?: string[]; placeholder?: string }
+/** What a job asks the person for, and how that becomes the starting state of a run. */
+export interface WorkflowInput<C> {
+  help: string;
+  placeholder?: string;
+  /** Shortest text worth starting with. */
+  minChars: number;
+  fields?: InputField[];
+  /** Offer the person's finished recordings as the source of the text. */
+  fromRecording?: boolean;
+  make: (text: string, fields: Record<string, string>) => C;
+}
+export interface Workflow<C> { id: string; title: string; summary: string; input: WorkflowInput<C>; steps: Step<C>[] }
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'cancelled';
 export interface Waiting { kind: 'ask' | 'confirm'; stepId: string; title: string; questions?: Question[]; summary?: string }

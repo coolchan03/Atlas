@@ -9,13 +9,9 @@ import { Button, Card } from '../components';
 import { recorderService } from '../atlasRecorder/recorderService';
 import { saveMarkdown, saveText } from '../study/exportFiles';
 import { workflowList } from './service';
+import type { InputField } from './engine';
 
-export type Kind = 'accountant' | 'meeting' | 'bill';
-export const INPUT_HELP: Record<Kind, string> = {
-  accountant: 'Paste the text of a bank statement, or choose a file. Include the opening and closing balance so the total can be checked.',
-  meeting: 'Paste a transcript, or choose one of your recordings.',
-  bill: 'Paste the text of a bill or warranty, or choose a file.',
-};
+export type Kind = string;
 export const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
 const fail = (title: string) => (e: unknown) => Alert.alert(title, String((e as Error)?.message || e));
 
@@ -38,7 +34,7 @@ export const JobList: React.FC<{ runs: Array<{ id: string; workflowId: string; s
     <Shell title="Multi-step helpers" onBack={undefined}>
       <Text style={[styles.note, { color: colors.textSecondary }]}>Each helper works through fixed steps, shows you the result and waits for your approval before it saves or schedules anything. The AI reads and suggests; plain code checks the numbers and dates.</Text>
       {workflowList().map((w) => (
-        <TouchableOpacity key={w.id} onPress={() => onPick(w.id as Kind)} testID={`workflow-${w.id}`} accessibilityRole="button">
+        <TouchableOpacity key={w.id} onPress={() => onPick(w.id)} testID={`workflow-${w.id}`} accessibilityRole="button">
           <Card style={styles.card}>
             <Text style={[styles.h, { color: colors.text }]}>{w.title}</Text>
             <Text style={{ color: colors.textSecondary }}>{w.summary}</Text>
@@ -56,35 +52,48 @@ export const JobList: React.FC<{ runs: Array<{ id: string; workflowId: string; s
 };
 
 interface InputProps {
-  kind: Kind; text: string; setText: (t: string) => void; title: string; setTitle: (t: string) => void; days: number; setDays: (n: number) => void;
+  kind: Kind; text: string; setText: (t: string) => void; fields: Record<string, string>; setField: (id: string, value: string) => void;
   recordings: Array<{ id: string; title: string }>; busy: boolean; onFile: () => void; onStart: () => void; onBack: () => void;
 }
-/** Where the text for a job comes from, and the start button. */
+
+const FieldRow: React.FC<{ field: InputField; value: string; onChange: (v: string) => void }> = ({ field, value, onChange }) => {
+  const { colors } = useTheme();
+  if (!field.options) {
+    return <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border }]} value={value} onChangeText={onChange} placeholder={field.placeholder ?? field.label} placeholderTextColor={colors.textMuted} testID={`workflow-field-${field.id}`} />;
+  }
+  return (
+    <View>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>{field.label}</Text>
+      <View style={styles.chips}>
+        {field.options.map((o) => (
+          <TouchableOpacity key={o} onPress={() => onChange(o)} accessibilityRole="radio" accessibilityState={{ selected: value === o }} testID={`workflow-field-${field.id}-${o}`}
+            style={[styles.chip, { borderColor: value === o ? colors.primary : colors.border }]}>
+            <Text style={{ color: colors.text }}>{o}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+/** Where the text for a job comes from, any extra choices it asks for, and the start button. */
 export const InputView: React.FC<InputProps> = (p) => {
   const { colors } = useTheme();
-  const box = { color: colors.text, borderColor: colors.border };
+  const input = workflowList().find((w) => w.id === p.kind)!.input;
   return (
     <Shell title={titleOf(p.kind)} onBack={p.onBack}>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>{INPUT_HELP[p.kind]}</Text>
-      {p.kind === 'meeting' && <TextInput style={[styles.input, box]} value={p.title} onChangeText={p.setTitle} placeholder="Meeting name" placeholderTextColor={colors.textMuted} testID="workflow-title" />}
-      <TextInput style={[styles.input, styles.big, box]} value={p.text} onChangeText={p.setText} multiline textAlignVertical="top" placeholder="Paste text here" placeholderTextColor={colors.textMuted} testID="workflow-text" />
-      {p.kind === 'meeting' && p.recordings.map((r) => (
-        <TouchableOpacity key={r.id} onPress={() => { p.setText(recorderService.transcript(r.id)); p.setTitle(r.title); }} style={styles.row} testID={`workflow-rec-${r.id}`}>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>{input.help}</Text>
+      {(input.fields ?? []).map((f) => <FieldRow key={f.id} field={f} value={p.fields[f.id] ?? ''} onChange={(v) => p.setField(f.id, v)} />)}
+      <TextInput style={[styles.input, styles.big, { color: colors.text, borderColor: colors.border }]} value={p.text} onChangeText={p.setText} multiline textAlignVertical="top"
+        placeholder={input.placeholder ?? 'Paste text here'} placeholderTextColor={colors.textMuted} testID="workflow-text" />
+      {input.fromRecording && p.recordings.map((r) => (
+        <TouchableOpacity key={r.id} onPress={() => { p.setText(recorderService.transcript(r.id)); p.setField('title', r.title); }} style={styles.row} testID={`workflow-rec-${r.id}`}>
           <Text style={{ color: colors.primary }}>Use recording: {r.title}</Text>
         </TouchableOpacity>
       ))}
-      {p.kind === 'bill' && (
-        <View style={styles.chips}>
-          {[1, 3, 7].map((n) => (
-            <TouchableOpacity key={n} onPress={() => p.setDays(n)} accessibilityRole="radio" accessibilityState={{ selected: p.days === n }} style={[styles.chip, { borderColor: p.days === n ? colors.primary : colors.border }]}>
-              <Text style={{ color: colors.text }}>Remind me {n} day{n === 1 ? '' : 's'} before</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
       <View style={styles.chips}>
         <Button title="Choose a file" variant="outline" onPress={p.onFile} disabled={p.busy} />
-        <Button title="Start" onPress={p.onStart} disabled={p.busy || p.text.trim().length < 20} testID="workflow-start" />
+        <Button title="Start" onPress={p.onStart} disabled={p.busy || p.text.trim().length < input.minChars} testID="workflow-start" />
       </View>
       {p.busy && <ActivityIndicator color={colors.primary} />}
     </Shell>
@@ -127,7 +136,7 @@ const Done: React.FC<{ run: AnyRun }> = ({ run }) => {
   return (
     <>
       {!!csv && <Button title="Save the CSV" testID="workflow-save-csv" onPress={() => { saveText('bank-statement.csv', csv).catch(fail('Could not save')); }} />}
-      {!!note && <Button title="Save the note" testID="workflow-save-note" onPress={() => { saveMarkdown('meeting-notes.md', note).catch(fail('Could not save')); }} />}
+      {!!note && <Button title="Save the note" testID="workflow-save-note" onPress={() => { saveMarkdown(`${run.workflowId}-note.md`, note).catch(fail('Could not save')); }} />}
       {!!reminded && <Text style={{ color: colors.text }}>The reminder is set. You can see it under Scheduled tasks.</Text>}
       {!!reminders && <Text style={{ color: colors.text }}>{reminders} reminder{reminders === 1 ? '' : 's'} set under Scheduled tasks.</Text>}
     </>

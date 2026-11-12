@@ -44,6 +44,9 @@ export const meeting: Workflow<MeetingCtx> = {
   id: 'meeting',
   title: 'Meeting to follow-ups',
   summary: 'Turns a meeting transcript into a summary and action items, and reminds you of the ones with a date.',
+  input: { help: 'Paste a transcript, or choose one of your recordings.', minChars: 80, fromRecording: true,
+    fields: [{ id: 'title', label: 'Meeting name', placeholder: 'Meeting name' }],
+    make: (text, fields) => ({ transcript: text, title: (fields.title ?? '').trim() || 'Meeting' }) },
   steps: [
     { kind: 'code', id: 'check', title: 'Check the transcript', run: (ctx) => {
       if (ctx.transcript.trim().length < 80) throw new Error('The transcript is too short to summarise.');
@@ -79,6 +82,9 @@ export const bill: Workflow<BillCtx> = {
   id: 'bill',
   title: 'Bill or warranty reminder',
   summary: 'Reads a bill or warranty, shows who, how much and when, and sets a reminder before it is due.',
+  input: { help: 'Paste the text of a bill or warranty, or choose a file.', minChars: 20,
+    fields: [{ id: 'days', label: 'Remind me', options: ['1 day before', '3 days before', '7 days before'] }],
+    make: (text, fields) => ({ text, reminderDays: Number.parseInt(fields.days ?? '3', 10) || 3 }) },
   steps: [
     { kind: 'model', id: 'extract', title: 'Read the bill', run: async (ctx, ask) => readBill(await ask(
       'You read bills and warranty papers. Reply with JSON only: {"vendor":"company","amount":123.45,"due":"YYYY-MM-DD","kind":"bill" or "warranty"}. For a warranty, "due" is the expiry date. Use only what the text says.',

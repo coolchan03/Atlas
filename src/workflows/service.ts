@@ -6,12 +6,13 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { advance, answer, approve, cancel, newRun, type Ask, type Run, type Workflow } from './engine';
-import { accountant, type AccountantCtx } from './accountant';
-import { bill, meeting, type BillCtx, type MeetingCtx } from './everyday';
+import { accountant } from './accountant';
+import { bill, meeting } from './everyday';
+import { contract, cook, explain, howItWorks, repair, writing } from './helperJobs';
 import { localUniqueId } from '../utils/uniqueId';
 
 type AnyRun = Run<any>;
-const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill };
+const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract };
 export const workflowList = (): Array<Workflow<any>> => Object.values(WORKFLOWS);
 
 interface RunsState { runs: AnyRun[]; rules: Record<string, string>; put: (r: AnyRun) => void; remove: (id: string) => void; setRules: (rules: Record<string, string>) => void }
@@ -38,17 +39,14 @@ const workflowFor = (run: AnyRun): Workflow<any> => {
   return wf;
 };
 
-export function startAccountant(text: string): Promise<AnyRun> {
-  const ctx: AccountantCtx = { text, year: new Date().getFullYear(), rules: useWorkflowRuns.getState().rules };
-  return advance(accountant, newRun(accountant, localUniqueId('wf'), ctx), deps);
-}
-export function startMeeting(transcript: string, title: string): Promise<AnyRun> {
-  const ctx: MeetingCtx = { transcript, title: title.trim() || 'Meeting' };
-  return advance(meeting, newRun(meeting, localUniqueId('wf'), ctx), deps);
-}
-export function startBill(text: string, reminderDays: number): Promise<AnyRun> {
-  const ctx: BillCtx = { text, reminderDays };
-  return advance(bill, newRun(bill, localUniqueId('wf'), ctx), deps);
+/** Starts a job from the text and extra choices its input asks for. */
+export function startWorkflow(id: string, text: string, fields: Record<string, string> = {}): Promise<AnyRun> {
+  const wf = WORKFLOWS[id];
+  if (!wf) return Promise.reject(new Error('This job is not available any more.'));
+  const ctx = wf.input.make(text, fields);
+  // Category choices the person made on earlier statements carry over.
+  if (id === 'accountant') ctx.rules = useWorkflowRuns.getState().rules;
+  return advance(wf, newRun(wf, localUniqueId('wf'), ctx), deps);
 }
 
 export const answerRun = (run: AnyRun, answers: Record<string, string>): Promise<AnyRun> => answer(workflowFor(run), run, { answers, deps });

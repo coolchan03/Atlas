@@ -87,11 +87,11 @@ Approved by the user on 2026-11-12. Each item needs a check against the current 
   - **Status 2026-11-12 (built, not yet verified on a phone):** cloned voices get a speed, and a poor sample is flagged before Create. Several samples per voice is not built.
 - [ ] **FF-17 - Multi-step workflow engine**
   - Fixed steps with user approval. First workflow: accountant mode (bank statement to a date/description/amount table, categories, questions to the user, CSV output, then a code-based reconciliation that every transaction is included). GnuCash and QuickBooks formats later.
-  - **Status 2026-11-12 (built, not yet verified on a phone):** workflow engine and accountant mode (CSV only; GnuCash and QuickBooks not built).
+  - **Status 2026-11-12 (built, not yet verified on a phone):** workflow engine and accountant mode (CSV only; GnuCash and QuickBooks dropped by the user on 2026-11-12, CSV is enough).
 - [ ] **FF-18 - Workflows on the engine, ranked**
   - Meeting recording to summary, action items and calendar entries; bills and warranties with planner reminders; document reader for contracts and leases.
   - Later: form filler, medical paperwork explainer, voice memo to structured note, language role-play, photo text read aloud, photo identifier (plants, bites; needs a firm disclaimer), trip planner, guided emergency helper, offline translator, journal and memory search, home inventory, flashcards from documents.
-  - **Status 2026-11-12 (built, not yet verified on a phone):** meeting follow-ups and bill reminders. The document reader for contracts and leases is not built.
+  - **Status 2026-11-12 (built, not yet verified on a phone):** meeting follow-ups and bill reminders. The contract and lease reader was added later with the everyday helpers.
 - [ ] **FF-19 - Everyday helpers**
   - Explain this to me: photo of a letter, label or error message, with a plain-language explanation and next steps.
   - Repair helper: guided troubleshooting for a household item, using photos.
@@ -99,7 +99,7 @@ Approved by the user on 2026-11-12. Each item needs a check against the current 
   - Writing coach: rewrite or shorten the user's text in their own voice, offline.
   - Explain-how-it-works: a code snippet, config file, formula or unknown data format, or a photo of an appliance. Not real binary reverse engineering, which a phone model cannot do reliably.
   - Not wanted: budget watcher.
-  - **Status 2026-11-12:** not built.
+  - **Status 2026-11-12 (built, not yet verified on a phone):** repair helper, dinner from what you have, explain this to me, writing coach, explain how it works, and the contract reader are in Multi-step helpers. Photo input is not built (paste text). Budget watcher and kids' tutor are not wanted.
 
 ## Instructions for the next Atlas update
 

@@ -70,6 +70,8 @@ export const accountant: Workflow<AccountantCtx> = {
   id: 'accountant',
   title: 'Bank statement to CSV',
   summary: 'Reads a statement, suggests a category for each transaction, asks you about the unsure ones, writes a CSV, and proves nothing is missing.',
+  input: { help: 'Paste the text of a bank statement, or choose a file. Include the opening and closing balance so the total can be checked.', minChars: 40,
+    make: (text) => ({ text, year: new Date().getFullYear(), rules: {} }) },
   steps: [
     { kind: 'code', id: 'read', title: 'Read the statement', run: (ctx) => {
       const parsed = parseStatement(ctx.text, ctx.year);
