@@ -24,7 +24,7 @@ describe('Original instrumental music (no singing/lyrics)', () => {
     expect(a.notes.some((n) => n.role === 'melody')).toBe(true);
   });
   it('renders non-silent 30-second audio with no clipped samples and clean fade', () => {
-    const pcm = renderMusic(composeInstrumental('Focus', 'study'), 'ambient', 16000, 30);
+    const pcm = renderMusic(composeInstrumental('Focus', 'study'), { preset: 'ambient', seconds: 30 });
     expect(pcm.length).toBe(480000);
     expect(pcm.some((sample) => sample !== 0)).toBe(true);
     expect(pcm[0]).toBe(0);
@@ -34,6 +34,6 @@ describe('Original instrumental music (no singing/lyrics)', () => {
     expect(peak).toBeLessThan(32767);
   });
   it('caps runtime output and refuses extreme duration', () => {
-    expect(() => renderMusic(parseMusicScore(source), 'keys', 16000, 200)).toThrow(/duration/);
+    expect(() => renderMusic(parseMusicScore(source), { seconds: 200 })).toThrow(/duration/);
   });
 });

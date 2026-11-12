@@ -45,7 +45,7 @@ export function MusicStudioScreen() {
     catch (error: any) { Alert.alert('Playback failed', String(error?.message || error)); }
   };
   const saveScore = async (next: MusicScore): Promise<void> => {
-    const pcm = renderMusic(next, sound, 16000, duration);
+    const pcm = renderMusic(next, { preset: sound, seconds: duration });
     const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
     await RNFS.mkdir(dir);
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

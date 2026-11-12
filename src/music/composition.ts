@@ -17,6 +17,22 @@ export function pitchNumber(name: string): number | null {
   return result >= 36 && result <= 91 ? result : null;
 }
 
+/** One "NOTE pitch beat length [gain] [role]" line; null when it is malformed or out of range. */
+function parseNoteLine(line: string): MusicNote | null {
+  const args = line.split(/\s+/);
+  if (args.length < 4 || args.length > 6) return null;
+  const pitch = pitchNumber(args[1]);
+  const beat = Number(args[2]), length = Number(args[3]);
+  const gain = args[4] ? Number(args[4]) : 0.6;
+  const role = args[5] || 'melody';
+  if (pitch === null || ![beat, length, gain].every(Number.isFinite)) return null;
+  // Reject oversized motifs outright instead of silently dropping a long note.
+  if (beat > 96 || length > 12 || beat + length > 100) throw new Error('Instrumental score exceeded the motif limit.');
+  if (beat < 0 || length < 0.125 || gain < 0.05 || gain > 1) return null;
+  if (!['melody', 'pad', 'bass'].includes(role)) return null;
+  return { pitch, beat, length, gain, role: role as MusicRole };
+}
+
 /** Reject malformed output, excessive note counts and scores that cannot play reliably on a phone. */
 export function parseMusicScore(raw: string): MusicScore {
   const lines = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```[^\n]*\n?/g, '').split(/\r?\n/);
@@ -30,18 +46,8 @@ export function parseMusicScore(raw: string): MusicScore {
       const n = Number(line.slice(4).trim());
       if (Number.isInteger(n) && n >= 60 && n <= 165) bpm = n;
     } else if (/^NOTE\s+/i.test(line)) {
-      const args = line.split(/\s+/);
-      if (args.length < 4 || args.length > 6) continue;
-      const pitch = pitchNumber(args[1]);
-      const beat = Number(args[2]), length = Number(args[3]);
-      const gain = args[4] ? Number(args[4]) : 0.6;
-      const role = args[5] || 'melody';
-      if (pitch === null || ![beat, length, gain].every(Number.isFinite)) continue;
-      // Reject oversized motifs outright instead of silently dropping a long note.
-      if (beat > 96 || length > 12 || beat + length > 100) throw new Error('Instrumental score exceeded the motif limit.');
-      if (beat < 0 || length < 0.125 || gain < 0.05 || gain > 1) continue;
-      if (!['melody', 'pad', 'bass'].includes(role)) continue;
-      notes.push({ pitch, beat, length, gain, role: role as MusicRole });
+      const note = parseNoteLine(line);
+      if (note) notes.push(note);
       if (notes.length >= 240) break;
     }
     // Lyrics and vocal requests are deliberately ignored: this tool is instrumental-only.
@@ -95,52 +101,69 @@ function tone(theta: number, preset: SoundPreset, role: MusicRole): number {
   return s + 0.17 * h2 + 0.07 * Math.sin(theta * 3);
 }
 
+export interface RenderOptions { preset?: SoundPreset; rate?: number; seconds?: number }
+
+/** Length of one pass through the score, after checking the score and sample rate are usable. */
+function loopSeconds(score: MusicScore, rate: number): number {
+  if (!Number.isInteger(rate) || rate < 8000 || rate > 48000 || !score.notes.length) throw new Error('Invalid audio renderer settings');
+  if (!Number.isFinite(score.bpm) || score.bpm < 60 || score.bpm > 165) throw new Error('Invalid BPM');
+  return Math.max(...score.notes.map((note) => (note.beat + note.length) * 60 / score.bpm));
+}
+
+interface MixContext { bpm: number; preset: SoundPreset; rate: number; loopFrames: number }
+
+/** Adds one note to the mix, repeating it every loop until the buffer is full. */
+function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loopFrames }: MixContext): void {
+  if (!Number.isFinite(note.pitch) || !Number.isFinite(note.beat) || !Number.isFinite(note.length) || !Number.isFinite(note.gain)) throw new Error('Invalid score note');
+  const frames = buffer.length;
+  const startInLoop = Math.round(note.beat * 60 / bpm * rate);
+  const samples = Math.ceil(note.length * 60 / bpm * rate);
+  if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
+  const hz = 440 * 2 ** ((note.pitch - 69) / 12);
+  const role = note.role ?? 'melody';
+  for (let start = startInLoop; start < frames; start += loopFrames) {
+    for (let i = 0; i < samples && start + i < frames; i++) {
+      const t = i / rate;
+      const attack = Math.min(1, t / (role === 'pad' ? 0.24 : 0.014));
+      const release = Math.min(1, (samples - i) / (rate * (role === 'pad' ? 0.33 : 0.07)));
+      const shape = preset === 'bell' ? Math.exp(-2.4 * i / samples) : (role === 'bass' ? 0.66 : 0.82);
+      buffer[start + i] += tone(2 * Math.PI * hz * t, preset, role) * attack * release * shape * note.gain;
+    }
+  }
+}
+
+/** Gentle damped room echo followed by a low-pass smoothing stage, in place. Returns the loudest sample. */
+function echoAndSmooth(buffer: Float32Array, preset: SoundPreset, rate: number): number {
+  const ambient = preset === 'ambient';
+  const delay = Math.round(rate * (ambient ? 0.23 : 0.12));
+  const echoGain = ambient ? 0.16 : 0.08;
+  const smoothing = ambient ? 0.15 : 0.42;
+  let filtered = 0;
+  let peak = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    const raw = buffer[i] + (i >= delay ? buffer[i - delay] * echoGain : 0);
+    filtered = smoothing * raw + (1 - smoothing) * filtered;
+    buffer[i] = filtered;
+    peak = Math.max(peak, Math.abs(filtered));
+  }
+  return peak;
+}
+
 /**
  * Produces a mono PCM16 WAV-ready waveform, with steady instrumental loops up to 120s.
  * Each note has a bounded attack/release, a soft echo and a final fade to prevent clicks.
  * Work and storage are capped; this does not run a generative audio diffusion model.
  */
-export function renderMusic(score: MusicScore, preset: SoundPreset = 'keys', rate = 16000, seconds?: number): Int16Array {
-  if (!Number.isInteger(rate) || rate < 8000 || rate > 48000 || !score.notes.length) throw new Error('Invalid audio renderer settings');
-  if (!Number.isFinite(score.bpm) || score.bpm < 60 || score.bpm > 165) throw new Error('Invalid BPM');
-  const baseSeconds = Math.max(...score.notes.map((note) => (note.beat + note.length) * 60 / score.bpm));
+export function renderMusic(score: MusicScore, { preset = 'keys', rate = 16000, seconds }: RenderOptions = {}): Int16Array {
+  const baseSeconds = loopSeconds(score, rate);
   const requestedSeconds = seconds === undefined ? baseSeconds + 0.5 : seconds;
   if (!Number.isFinite(requestedSeconds) || requestedSeconds < 3 || requestedSeconds > 120) throw new Error('Instrumental duration must be 3–120 seconds');
   const frames = Math.ceil(requestedSeconds * rate);
   const buffer = new Float32Array(frames);
   const loopFrames = Math.max(1, Math.round(baseSeconds * rate));
-  const loops = Math.ceil(frames / loopFrames);
-  for (const note of score.notes) {
-    if (!Number.isFinite(note.pitch) || !Number.isFinite(note.beat) || !Number.isFinite(note.length) || !Number.isFinite(note.gain)) throw new Error('Invalid score note');
-    const startInLoop = Math.round(note.beat * 60 / score.bpm * rate);
-    const samples = Math.ceil(note.length * 60 / score.bpm * rate);
-    if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
-    const hz = 440 * 2 ** ((note.pitch - 69) / 12);
-    const role = note.role ?? 'melody';
-    for (let loop = 0; loop < loops; loop++) {
-      const start = loop * loopFrames + startInLoop;
-      if (start >= frames) break;
-      for (let i = 0; i < samples && start + i < frames; i++) {
-        const t = i / rate;
-        const attack = Math.min(1, t / (role === 'pad' ? 0.24 : 0.014));
-        const release = Math.min(1, (samples - i) / (rate * (role === 'pad' ? 0.33 : 0.07)));
-        const shape = preset === 'bell' ? Math.exp(-2.4 * i / samples) : (role === 'bass' ? 0.66 : 0.82);
-        const angle = 2 * Math.PI * hz * t;
-        buffer[start + i] += tone(angle, preset, role) * attack * release * shape * note.gain;
-      }
-    }
-  }
-  // Gentle damped room echo, followed by a low-pass smoothing stage; no new native module.
-  const delay = Math.round(rate * (preset === 'ambient' ? 0.23 : 0.12));
-  let filtered = 0;
-  let peak = 0;
-  for (let i = 0; i < frames; i++) {
-    const echo = i >= delay ? buffer[i - delay] * (preset === 'ambient' ? 0.16 : 0.08) : 0;
-    const raw = buffer[i] + echo;
-    filtered = (preset === 'ambient' ? 0.15 : 0.42) * raw + (preset === 'ambient' ? 0.85 : 0.58) * filtered;
-    buffer[i] = filtered;
-    peak = Math.max(peak, Math.abs(filtered));
-  }
+  const context = { bpm: score.bpm, preset, rate, loopFrames };
+  for (const note of score.notes) mixNote(buffer, note, context);
+  const peak = echoAndSmooth(buffer, preset, rate);
   const scale = peak > 0 ? 0.72 / peak : 0;
   const fadeIn = Math.max(1, Math.floor(rate * 0.08));
   const fadeOut = Math.max(1, Math.floor(rate * 0.8));
