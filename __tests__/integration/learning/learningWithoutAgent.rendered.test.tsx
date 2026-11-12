@@ -41,7 +41,7 @@ it('shows each report in full with the judge\'s verdict, and chats without an ag
     reportLog: [{ id: 'a:1', itemId: 'a', q: 'How long to boil water?', text: long, sources: 'WHO note', at: 1, status: 'pass', score: 8, why: 'Matches the source' }] } } });
   const view = rtl.render(React.createElement(LearningScreen));
   expect(view.getByText('How long to boil water?')).toBeTruthy();
-  expect(view.getByText(/Judge passed · 8\/10/)).toBeTruthy();
+  expect(view.getByText(/Legacy judge pass - unverified · 8\/10/)).toBeTruthy();
   rtl.fireEvent.press(view.getByTestId('learn-report-a:1'));
   expect(view.getByText(/Judge: Matches the source/)).toBeTruthy();
   expect(view.getByText(/Sources it had/)).toBeTruthy();
