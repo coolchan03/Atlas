@@ -15,7 +15,9 @@ const SCREENS = [
   { key: 'Settings', label: 'Settings' },
   { key: 'Learning', label: 'Learning' },
   { key: 'DailyBrief', label: 'Daily briefing' },
-  { key: 'Maps', label: 'Maps' },
+  { key: 'MetalDetector', label: 'Metal detector' },
+  { key: 'NoiseMeter', label: 'Noise meter' },
+  { key: 'Pedometer', label: 'Step counter' },
 ];
 
 export const BackgroundSettingsScreen: React.FC = () => {
