@@ -3,9 +3,12 @@
  * deterministic built-in composer can create one without any model/download.
  * Output is original synthesised note audio, not singing or a licensed recording.
  */
-export type MusicMood = 'study' | 'ambient' | 'cinematic' | 'electronic';
+import { composeStyled, isStyleMood, type StyleMood } from './styles';
+
+export type MusicMood = 'study' | 'ambient' | 'cinematic' | 'electronic' | StyleMood;
 export type SoundPreset = 'keys' | 'bell' | 'synth' | 'ambient';
-export type MusicRole = 'melody' | 'pad' | 'bass';
+/** `perc` (a kick or a noise tick) is made by the built-in composer only; a model's score cannot ask for it. */
+export type MusicRole = 'melody' | 'pad' | 'bass' | 'perc';
 export interface MusicNote { pitch: number; beat: number; length: number; gain: number; role?: MusicRole }
 export interface MusicScore { title: string; bpm: number; notes: MusicNote[] }
 
@@ -65,10 +68,11 @@ function hash(s: string): number {
 }
 /** A coherent, seeded 8-bar instrumental: tonic chords, pulse bass and a diatonic melody. */
 export function composeInstrumental(prompt: string, mood: MusicMood = 'study'): MusicScore {
+  if (isStyleMood(mood)) return composeStyled(prompt, mood);
   const seed = hash(`${mood}:${prompt.toLowerCase().trim()}`);
   const minor = mood === 'cinematic' || mood === 'ambient';
   const scale = minor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
-  const bpm = { study: 92, ambient: 72, cinematic: 80, electronic: 118 }[mood];
+  const bpm = ({ study: 92, ambient: 72, cinematic: 80, electronic: 118 } as Record<string, number>)[mood];
   const tonic = 48 + (seed % 5); // C3 to E3; the bass stays in an efficient range.
   const progression = minor ? [0, 5, 3, 4, 0, 3, 5, 4] : [0, 4, 5, 3, 0, 5, 3, 4];
   const notes: MusicNote[] = [];
@@ -90,6 +94,17 @@ export function composeInstrumental(prompt: string, mood: MusicMood = 'study'): 
   }
   const label = prompt.trim().replace(/[\r\n]+/g, ' ').slice(0, 56) || 'Background';
   return { title: `${label} (${mood})`, bpm, notes };
+}
+
+/** Same noise every time, so a rendered tune never changes between plays. */
+const noise = (i: number) => (((Math.imul(i, 1103515245) + 12345) >>> 16) & 0x7fff) / 16384 - 1;
+
+/** One percussion hit: a low pitch is a soft kick, a high pitch is a short tick. */
+function percSample(note: MusicNote, i: number, rate: number): number {
+  const t = i / rate;
+  const hz = 440 * 2 ** ((note.pitch - 69) / 12);
+  if (note.pitch < 60) return Math.sin(2 * Math.PI * hz * 1.6 * t * Math.exp(-t * 14)) * Math.exp(-t * 16);
+  return noise(i) * Math.exp(-t * (note.pitch > 85 ? 60 : 24));
 }
 
 function tone(theta: number, preset: SoundPreset, role: MusicRole): number {
@@ -121,6 +136,12 @@ function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loo
   if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
   const hz = 440 * 2 ** ((note.pitch - 69) / 12);
   const role = note.role ?? 'melody';
+  if (role === 'perc') {
+    for (let start = startInLoop; start < frames; start += loopFrames) {
+      for (let i = 0; i < samples && start + i < frames; i++) buffer[start + i] += percSample(note, i, rate) * note.gain;
+    }
+    return;
+  }
   for (let start = startInLoop; start < frames; start += loopFrames) {
     for (let i = 0; i < samples && start + i < frames; i++) {
       const t = i / rate;

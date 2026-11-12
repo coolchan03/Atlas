@@ -9,6 +9,7 @@ import { llmService } from '../services';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
+import { STYLES } from '../music/styles';
 import { composeInstrumental, parseMusicScore, renderMusic, type MusicMood, type MusicScore, type SoundPreset } from '../music/composition';
 
 const makeMessage = (role: 'system' | 'user', content: string) => ({ id: `${role}-${Date.now()}`, role, content, timestamp: Date.now() });
@@ -19,6 +20,8 @@ const SOUND: Array<{ id: SoundPreset; label: string }> = [
 const MOODS: Array<{ id: MusicMood; label: string }> = [
   { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
   { id: 'cinematic', label: 'Cinematic' }, { id: 'electronic', label: 'Electronic' },
+  ...(['jazz', 'vaporwave', 'eerie', 'spring', 'summer', 'fall', 'winter', 'thanksgiving', 'halloween', 'christmas', 'newyear', 'valentines'] as const)
+    .map((id) => ({ id: id as MusicMood, label: STYLES[id].label })),
 ];
 const DURATIONS = [30, 60, 90] as const;
 
@@ -129,7 +132,7 @@ export function MusicStudioScreen() {
           placeholder="Describe an original instrumental mood" placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
         <Text style={[styles.label, { color: colors.text }]}>Style</Text>
-        {chips(MOODS, mood, setMood)}
+        {chips(MOODS, mood, (id: MusicMood) => { setMood(id); if (id in STYLES) setSound(STYLES[id as keyof typeof STYLES].sound); })}
         <Text style={[styles.label, { color: colors.text }]}>Instrument sound</Text>
         {chips(SOUND, sound, setSound)}
         <Text style={[styles.label, { color: colors.text }]}>Track duration</Text>
