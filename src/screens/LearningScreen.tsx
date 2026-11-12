@@ -15,7 +15,6 @@ import { useProjectStore, useAppStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
 import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
-import { keepScreenOn } from '../atlasVoice/tts';
 import { ModelChips } from '../components/ModelChips';
 const literalStyles = StyleSheet.create({
   s1: { marginTop: 0 },
@@ -74,6 +73,21 @@ export const LearningScreen: React.FC = () => {
   const showLessons = useAppStore((s) => s.settings.showLessonsUsed !== false);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const [openReport, setOpenReport] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState(false);
+  const [lockedFor, setLockedFor] = useState(agentId);
+  if (lockedFor !== agentId) { setLockedFor(agentId); setUnlocked(false); }
+  const locked = ((st?.round ?? 0) > 0 || (st?.totalReports ?? 0) > 0) && !unlocked;
+  const unlockSetup = () => Alert.alert('Change the setup?', 'The task and knowledge base are what this expert has been learning from. Changing them part way through can mix sources. Change them only if you mean to.', [
+    { text: 'Keep it', style: 'cancel' }, { text: 'Change setup', onPress: () => setUnlocked(true) },
+  ]);
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
+  const fold = (key: string) => setFolded((f) => ({ ...f, [key]: !f[key] }));
+  const foldHead = (key: string, text: string) => (
+    <TouchableOpacity onPress={() => fold(key)} style={styles.foldHead} accessibilityRole="button" accessibilityState={{ expanded: !folded[key] }} testID={`fold-${key}`}>
+      <Text style={[styles.label, styles.grow]}>{text}</Text>
+      <Icon name={folded[key] ? 'chevron-down' : 'chevron-up'} size={16} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
   const updateItem = useLearningStore((s) => s.updateItem);
   const addItems = useLearningStore((s) => s.addItems);
   const bank = st?.bank || [];
@@ -112,7 +126,6 @@ export const LearningScreen: React.FC = () => {
     const t = setInterval(() => setRunning(isLearning()), 1000);
     return () => { onLearningStatus(null); clearInterval(t); };
   }, []);
-  useEffect(() => { keepScreenOn(running); return () => keepScreenOn(false); }, [running]);
 
   const shareReports = async () => {
     const reports = st?.reportLog ?? [];
@@ -153,59 +166,73 @@ export const LearningScreen: React.FC = () => {
       </View>
 
       <Text style={styles.note}>{agentId === NO_AGENT ? 'General is for anything that is not one field.' : `${expertName(agentId)}: `}Describe something to get good at. The AI researches it, writes reports, a judge checks them, and what it learns is kept as lessons for this subject.</Text>
-      <Text style={styles.label}>Task to become an expert at</Text>
-      <TextInput
-        style={styles.input}
-        value={cfg.topic}
-        editable={!running}
-        onChangeText={(t) => setConfig(agentId, { topic: t })}
-        placeholder={'e.g. Treat wound infections without a hospital, and know when antibiotics are needed'}
-        placeholderTextColor={colors.textMuted}
-        multiline
-      />
-
-      <Text style={styles.label}>Knowledge base (project)</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {[{ id: '', name: 'None' }, ...projects].map((p) => (
-          <TouchableOpacity key={p.id || 'none'} disabled={running} onPress={() => setConfig(agentId, { projectId: p.id })} style={[styles.chip, cfg.projectId === p.id && styles.chipOn]}>
-            <Text style={[styles.chipText, cfg.projectId === p.id && styles.chipTextOn]}>{p.name}</Text>
+      {locked ? (
+        <View style={styles.lockCard} testID="setup-locked">
+          <Text style={styles.label}>Setup</Text>
+          <Text style={styles.counts}>Task: {cfg.topic || 'none'}</Text>
+          <Text style={styles.counts}>Knowledge base: {projects.find((p) => p.id === cfg.projectId)?.name ?? 'None'}</Text>
+          <Text style={styles.counts}>Offline library: {cfg.useLibrary ? 'on' : 'off'} · Web: {cfg.useWeb ? 'on' : 'off'}</Text>
+          <TouchableOpacity onPress={unlockSetup} style={styles.smallBtn} testID="unlock-setup" accessibilityRole="button">
+            <Text style={styles.smallBtnText}>Change setup</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <Text style={styles.note}>The learner reads these documents first and cites them. Add your own: pick individual files, pick an entire folder (e.g. your tax documents), or put files in the Atlas folder and add the whole Atlas folder. They are added to the chosen project (one named after this subject is made if you chose none).</Text>
-      <View style={styles.row}>
-        <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('files')} style={styles.smallBtn} testID="learn-add-files" accessibilityRole="button">
-          <Text style={styles.smallBtnText}>Add files</Text>
-        </TouchableOpacity>
-        <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('pick-folder')} style={styles.smallBtn} testID="learn-add-pick-folder" accessibilityRole="button">
-          <Text style={styles.smallBtnText}>Add a folder</Text>
-        </TouchableOpacity>
-        <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('folder')} style={styles.smallBtn} testID="learn-add-folder" accessibilityRole="button">
-          <Text style={styles.smallBtnText}>Add the Atlas folder</Text>
-        </TouchableOpacity>
-      </View>
-      {!!docStatus && <Text style={styles.counts} testID="learn-doc-status">{docStatus}</Text>}
+        </View>
+      ) : (
+        <>
+          <Text style={styles.label}>Task to become an expert at</Text>
+          <TextInput
+            style={styles.input}
+            value={cfg.topic}
+            editable={!running}
+            onChangeText={(t) => setConfig(agentId, { topic: t })}
+            placeholder={'e.g. Treat wound infections without a hospital, and know when antibiotics are needed'}
+            placeholderTextColor={colors.textMuted}
+            multiline
+          />
 
-      <View style={styles.switchRow}>
-        <Text style={styles.switchText}>Also research in the offline library (WikiMed, Wikipedia...)</Text>
-        <Switch value={cfg.useLibrary} onValueChange={(v) => setConfig(agentId, { useLibrary: v })} disabled={running} />
-      </View>
-      <View style={styles.switchRow}>
-        <Text style={styles.switchText}>Also research on the web (when online, not in off-grid mode)</Text>
-        <Switch value={cfg.useWeb} onValueChange={(v) => setConfig(agentId, { useWeb: v })} disabled={running} />
-      </View>
-      {cfg.useWeb && (
-        <TextInput
-          style={styles.input}
-          placeholder="Limit to domains (e.g. scholar.google.com, arxiv.org) — leave blank for all"
-          placeholderTextColor={colors.textSecondary}
-          value={cfg.webDomains || ''}
-          onChangeText={(t) => setConfig(agentId, { webDomains: t })}
-          editable={!running}
-          autoCapitalize="none"
-          autoCorrect={false}
-          testID="web-domains-input"
-        />
+          <Text style={styles.label}>Knowledge base (project)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[{ id: '', name: 'None' }, ...projects].map((p) => (
+              <TouchableOpacity key={p.id || 'none'} disabled={running} onPress={() => setConfig(agentId, { projectId: p.id })} style={[styles.chip, cfg.projectId === p.id && styles.chipOn]}>
+                <Text style={[styles.chipText, cfg.projectId === p.id && styles.chipTextOn]}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <Text style={styles.note}>The learner reads these documents first and cites them. Add your own: pick individual files, pick an entire folder (e.g. your tax documents), or put files in the Atlas folder and add the whole Atlas folder. They are added to the chosen project (one named after this subject is made if you chose none).</Text>
+          <View style={styles.row}>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('files')} style={styles.smallBtn} testID="learn-add-files" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add files</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('pick-folder')} style={styles.smallBtn} testID="learn-add-pick-folder" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add a folder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('folder')} style={styles.smallBtn} testID="learn-add-folder" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add the Atlas folder</Text>
+            </TouchableOpacity>
+          </View>
+          {!!docStatus && <Text style={styles.counts} testID="learn-doc-status">{docStatus}</Text>}
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchText}>Also research in the offline library (WikiMed, Wikipedia...)</Text>
+            <Switch value={cfg.useLibrary} onValueChange={(v) => setConfig(agentId, { useLibrary: v })} disabled={running} />
+          </View>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchText}>Also research on the web (when online, not in off-grid mode)</Text>
+            <Switch value={cfg.useWeb} onValueChange={(v) => setConfig(agentId, { useWeb: v })} disabled={running} />
+          </View>
+          {cfg.useWeb && (
+            <TextInput
+              style={styles.input}
+              placeholder="Limit to domains (e.g. scholar.google.com, arxiv.org) — leave blank for all"
+              placeholderTextColor={colors.textSecondary}
+              value={cfg.webDomains || ''}
+              onChangeText={(t) => setConfig(agentId, { webDomains: t })}
+              editable={!running}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="web-domains-input"
+            />
+          )}
+        </>
       )}
 
       <View style={styles.statusBox}>
@@ -241,16 +268,16 @@ export const LearningScreen: React.FC = () => {
 
 
       <View style={styles.reportsHead}>
-        <Text style={[styles.label, styles.grow]}>Reports it wrote</Text>
-        {(st?.reportLog ?? []).length > 0 && (
+        <View style={styles.grow}>{foldHead('reports', 'Reports it wrote')}</View>
+        {!folded.reports && (st?.reportLog ?? []).length > 0 && (
           <TouchableOpacity onPress={shareReports} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
             <Text style={styles.smallBtnText}>Share reports</Text>
           </TouchableOpacity>
         )}
       </View>
-      <Text style={styles.note}>Every report the AI writes while it learns, in full, with what the judge said. Tap one to read it.</Text>
-      {(st?.reportLog ?? []).length === 0 && <Text style={styles.counts}>No reports yet. Describe a task above and press Start: each report it writes appears here, with its numbered sources.</Text>}
-      {(st?.reportLog ?? []).slice(0, 30).map((r) => {
+      {!folded.reports && <Text style={styles.note}>Every report the AI writes while it learns, in full, with what the judge said. Tap one to read it.</Text>}
+      {!folded.reports && (st?.reportLog ?? []).length === 0 && <Text style={styles.counts}>No reports yet. Describe a task above and press Start: each report it writes appears here, with its numbered sources.</Text>}
+      {!folded.reports && (st?.reportLog ?? []).slice(0, 30).map((r) => {
         const isOpen = openReport === r.id;
         const color = r.status === 'pass' ? '#4D7C0F' : r.status === 'fail' ? colors.error : colors.textMuted;
         return (
@@ -281,22 +308,26 @@ export const LearningScreen: React.FC = () => {
         );
       })}
 
-      <Text style={styles.label}>{isNoAgent(agentId) ? `${expertName(agentId)} lessons (used in chats about this subject, and saved as a file)` : 'Lessons this agent uses in every chat'}</Text>
-      <TextInput
-        style={[styles.input, styles.lessons]}
-        value={(isNoAgent(agentId) ? st?.lessons : agent?.lessons) || ''}
-        editable={!running}
-        onChangeText={(t) => setLessons(agentId, t)}
-        placeholder="None yet. The manager writes these after auditing the judge. You can edit them."
-        placeholderTextColor={colors.textMuted}
-        multiline
-        textAlignVertical="top"
-      />
-      <Text style={styles.note}>
-        Keep the app open while it learns (the screen stays on). Plugging in is a good idea. The model itself does not
-        change: the agent keeps its lessons (added to its instructions) and, in Keep mode with a project chosen, the
-        judge-checked answers are saved to that project's documents so chats can use them.
-      </Text>
+      {foldHead('lessons', isNoAgent(agentId) ? `${expertName(agentId)} lessons (used in chats about this subject, and saved as a file)` : 'Lessons this agent uses in every chat')}
+      {!folded.lessons && (
+        <>
+          <TextInput
+            style={[styles.input, styles.lessons]}
+            value={(isNoAgent(agentId) ? st?.lessons : agent?.lessons) || ''}
+            editable={!running}
+            onChangeText={(t) => setLessons(agentId, t)}
+            placeholder="None yet. The manager writes these after auditing the judge. You can edit them."
+            placeholderTextColor={colors.textMuted}
+            multiline
+            textAlignVertical="top"
+          />
+          <Text style={styles.note}>
+            Keep the app open while it learns (the screen stays on). Plugging in is a good idea. The model itself does not
+            change: the agent keeps its lessons (added to its instructions) and, in Keep mode with a project chosen, the
+            judge-checked answers are saved to that project's documents so chats can use them.
+          </Text>
+        </>
+      )}
 
       <TouchableOpacity onPress={() => setAdvanced((v) => !v)} style={styles.advToggle} accessibilityRole="button" testID="learning-advanced">
         <Text style={styles.label}>More options</Text>
@@ -411,9 +442,9 @@ export const LearningScreen: React.FC = () => {
 
   const feed = (
     <View>
-      <Text style={styles.label}>Activity</Text>
-      {events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
-      {events.map((e: LearnEvent) => (
+      {foldHead('activity', 'Activity')}
+      {!folded.activity && events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
+      {!folded.activity && events.map((e: LearnEvent) => (
         <TouchableOpacity key={e.id} onPress={() => setOpen(open === e.id ? null : e.id)} style={styles.event} accessibilityRole="button" accessibilityState={{ expanded: open === e.id }} testID={`learning-activity-${e.id}`}>
           <View style={styles.eventHead}>
             <Icon name={KIND_ICON[e.kind] || 'circle'} size={14} color={e.kind === 'error' ? colors.error : e.kind === 'manager' ? colors.primary : colors.textSecondary} />
@@ -491,6 +522,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   textbookCard: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, borderWidth: 1, borderColor: colors.primary, borderRadius: 10, padding: SPACING.md, marginTop: SPACING.sm },
   grow: { flex: 1 },
   dim: { opacity: 0.5 },
+  lockCard: { marginTop: 12, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 4, alignItems: 'flex-start' as const },
+  foldHead: { flexDirection: 'row' as const, alignItems: 'center' as const },
   reportsHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
   expertRow: { marginTop: 4 },
   advToggle: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },

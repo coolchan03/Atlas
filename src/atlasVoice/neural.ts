@@ -157,14 +157,26 @@ export async function downloadVoice(id: string): Promise<void> {
  * Pick a voice file (a sherpa-onnx Piper, Kokoro or KittenTTS .tar.bz2 or .zip) and add it.
  * Resolves the new voice id, or null when nothing was picked.
  */
+/** True for a voice package: a tar archive, or a zip named like a sherpa-onnx voice (vits-piper..., kokoro..., pocket-tts...). */
+export function isVoiceArchive(name: string): boolean {
+  const n = name.toLowerCase();
+  if (/\.(tar\.bz2|tar\.gz|tgz|tar)$/.test(n)) return true;
+  return n.endsWith('.zip') && /(vits|piper|kokoro|kitten|pocket|sherpa|tts)/.test(n);
+}
+
+/** Installs a voice package that is already on the phone. Returns the new voice id. */
+export async function importVoiceAt(uri: string, name: string): Promise<string> {
+  const id: string = await Native.importNeuralVoice(uri, name || 'imported-voice');
+  await refreshInstalled();
+  return id;
+}
+
 export async function importVoiceFile(): Promise<string | null> {
   const { pick } = require('@react-native-documents/picker');
   const files = await pick({ mode: 'open', allowMultiSelection: false });
   const f = files?.[0];
   if (!f?.uri) return null;
-  const id: string = await Native.importNeuralVoice(f.uri, f.name || 'imported-voice');
-  await refreshInstalled();
-  return id;
+  return importVoiceAt(f.uri, f.name || 'imported-voice');
 }
 
 export const cancelVoiceDownload = (id: string) => Native?.cancelNeuralDownload?.(id);

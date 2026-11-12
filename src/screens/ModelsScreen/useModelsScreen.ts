@@ -20,6 +20,7 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
+import { importVoiceAt, isVoiceArchive, selectVoice } from '../../atlasVoice/neural';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 type ZipImportDeps = {
@@ -184,6 +185,14 @@ export function useModelsScreen() {
         ...f,
         name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
       }));
+
+      if (resolvedFiles.length === 1 && isVoiceArchive(resolvedFiles[0].name)) {
+        setImportProgress({ fraction: 0, fileName: resolvedFiles[0].name });
+        const voiceId = await importVoiceAt(resolvedFiles[0].uri, resolvedFiles[0].name);
+        await selectVoice(voiceId, 0).catch(() => undefined);
+        setAlertState(showAlert('Voice added', 'Atlas now speaks with it. Change it under Settings, then Voice.'));
+        return;
+      }
 
       const validationError = validateImportFiles(resolvedFiles);
       if (validationError === 'litert_unsupported') {

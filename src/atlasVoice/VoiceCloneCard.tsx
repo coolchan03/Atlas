@@ -212,34 +212,27 @@ export function VoiceCloneCard() {
   );
 }
 
-/** Quality setting and the phone-call speed test, kept out of the way until wanted. */
+/** Quality setting and the phone-call speed test. */
 function Advanced({ colors, steps, onSteps, canTest, onSpeedTest, result }: {
   colors: { text: string; border: string; primary: string; textSecondary: string };
   steps: number; onSteps: (n: number) => void; canTest: boolean; onSpeedTest: () => void; result: string;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <View style={styles.step}>
-      <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="voice-clone-advanced">
-        <Text style={{ color: colors.primary }}>{open ? 'Hide speed and quality' : 'Speed and quality'}</Text>
-      </TouchableOpacity>
-      {open && (
-        <>
-          <Text style={[styles.note, { color: colors.textSecondary }]}>Faster settings sound a little less detailed. Fast is best for phone calls.</Text>
-          <View style={styles.row}>
-            {STEPS.map((n) => (
-              <TouchableOpacity key={n} onPress={() => onSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
-                style={[styles.action, { borderColor: steps === n ? colors.primary : colors.border }]}>
-                <Text style={{ color: colors.text }}>{STEP_LABELS[n]}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!canTest} onPress={onSpeedTest}>
-            <Text style={{ color: canTest ? colors.primary : colors.textSecondary }}>Test speed for phone calls</Text>
+      <Text style={[styles.stepTitle, { color: colors.text }]}>Speed or quality</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Faster settings sound a little less detailed. Fast is best for phone calls.</Text>
+      <View style={styles.row}>
+        {STEPS.map((n) => (
+          <TouchableOpacity key={n} onPress={() => onSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}
+            style={[styles.action, { borderColor: steps === n ? colors.primary : colors.border }]}>
+            <Text style={{ color: colors.text }}>{STEP_LABELS[n]}</Text>
           </TouchableOpacity>
-          {!!result && <Text style={[styles.note, { color: colors.textSecondary }]}>{result}</Text>}
-        </>
-      )}
+        ))}
+      </View>
+      <TouchableOpacity style={styles.action} testID="voice-clone-benchmark" disabled={!canTest} onPress={onSpeedTest}>
+        <Text style={{ color: canTest ? colors.primary : colors.textSecondary }}>Test speed for phone calls</Text>
+      </TouchableOpacity>
+      {!!result && <Text style={[styles.note, { color: colors.textSecondary }]}>{result}</Text>}
     </View>
   );
 }

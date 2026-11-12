@@ -101,3 +101,25 @@ it('numbers the sources a report used: small raised numbers in the text and a li
   expect(view.getByText(/² Tax guide \(project\)/)).toBeTruthy();
   expect(view.getByText(/³ Penalties \(library\)/)).toBeTruthy();
 });
+
+it('folds reports, lessons and activity away, and once teaching has started the task and knowledge base sit behind Change setup', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const { useLearningStore, blankState } = require('../../../src/learning/store');
+  const { NO_AGENT } = require('../../../src/learning/agents');
+  const { useAgentStore } = require('../../../src/stores/agentStore');
+  useAgentStore.setState({ activeAgentId: null });
+  useLearningStore.setState({ state: { [NO_AGENT]: { ...blankState(), round: 2, lessons: '- keep',
+    reportLog: [{ id: 'a:1', itemId: 'a', q: 'How long to boil water?', text: 'ANSWER: three minutes', sources: '', at: 1, status: 'pass', score: 8, why: 'ok' }] } } });
+  const view = rtl.render(React.createElement(LearningScreen));
+  expect(view.getByTestId('setup-locked')).toBeTruthy();
+  expect(view.queryByTestId('learn-add-files')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('fold-reports'));
+  expect(view.queryByText('How long to boil water?')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('fold-lessons'));
+  expect(view.queryByPlaceholderText(/None yet/)).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('fold-reports'));
+  expect(view.getByText('How long to boil water?')).toBeTruthy();
+});

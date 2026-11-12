@@ -5,7 +5,7 @@ import { useAtlasVoiceStore } from './store';
 import { speak } from './tts';
 import { VoiceProfilesCard } from './VoiceProfilesCard';
 import { VoiceCloneCard } from './VoiceCloneCard';
-import { voiceCatalog, useNeuralVoices, refreshInstalled, downloadVoice, cancelVoiceDownload, deleteVoice, selectVoice, neuralAvailable, importVoiceFile } from './neural';
+import { voiceCatalog, useNeuralVoices, refreshInstalled, downloadVoice, cancelVoiceDownload, deleteVoice, selectVoice, neuralAvailable } from './neural';
 
 const RATES = [0.75, 1, 1.25, 1.5];
 
@@ -38,14 +38,6 @@ export function AtlasVoicePanel() {
     try { await downloadVoice(id); await choose(id, 0); }
     catch (e: any) { if (!/cancel/i.test(String(e?.message))) Alert.alert('Download failed', `${String(e?.message || e)}\n\nYou need internet for the download. After that the voice works offline.`); }
   };
-  const importFile = async () => {
-    try {
-      const id = await importVoiceFile();
-      if (id) await choose(id, 0);
-    } catch (e: any) {
-      if (!/cancel/i.test(String(e?.code || e?.message))) Alert.alert('Could not import this voice', String(e?.message || e));
-    }
-  };
   const mb = (b: number) => `${Math.round(b / 1e6)} MB`;
   return (
     <ScrollView contentContainerStyle={styles.wrap}>
@@ -54,7 +46,7 @@ export function AtlasVoicePanel() {
           <Text style={[styles.h, { color: colors.text }]}>Natural voices (recommended)</Text>
           <Text style={[styles.p, { color: colors.textSecondary }]}>
             Human-sounding voices that run on this device with no internet. Download once (Wi-Fi recommended), then tap to use.
-            Other languages (phrase cards) still use the phone voice.
+            Other languages (phrase cards) still use the phone voice. To add a voice you downloaded yourself (a sherpa-onnx .tar.bz2 such as Piper or Kokoro), use Import Local File on the Models tab.
           </Text>
           <TouchableOpacity onPress={() => choose('')} style={[styles.voiceRow, { borderColor: !current ? colors.primary : colors.border }]}>
             <View style={styles.flex}>
@@ -111,19 +103,6 @@ export function AtlasVoicePanel() {
               </View>
             );
           })}
-        </View>
-      )}
-      {neuralAvailable() && (
-        <View style={card}>
-          <Text style={[styles.h, { color: colors.text }]}>Import a voice</Text>
-          <Text style={[styles.p, { color: colors.textSecondary }]}>
-            Add a voice you downloaded yourself. Atlas plays sherpa-onnx voices: Piper (files named vits-piper-...),
-            Kokoro, KittenTTS and Pocket TTS (voice cloning), as the .tar.bz2 or .zip from the sherpa-onnx "tts-models" release on GitHub.
-            Listen to Piper voices first at rhasspy.github.io/piper-samples.
-          </Text>
-          <TouchableOpacity testID="voice-import" style={[styles.btn, { borderColor: colors.primary }]} onPress={importFile}>
-            <Text style={{ color: colors.primary }}>Import voice file</Text>
-          </TouchableOpacity>
         </View>
       )}
       <VoiceCloneCard />

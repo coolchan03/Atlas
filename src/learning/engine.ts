@@ -37,6 +37,7 @@ import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycl
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
 import { rankClaims, recallScore } from './claimText';
+import { keepScreenOn } from '../atlasVoice/tts';
 import { stripInjection } from './sourceSafety';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
@@ -515,6 +516,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
 export async function startLearning(agentId: string): Promise<void> {
   if (running) return;
   running = true;
+  keepScreenOn(true); // the phone must not sleep while it learns, even after leaving this screen
   stopRequested = false;
   baseModel = useAppStore.getState().activeModelId || '';
   const interrupted = L().get(agentId).checkpoint;
@@ -586,6 +588,7 @@ export async function startLearning(agentId: string): Promise<void> {
     }
   } finally {
     running = false;
+    keepScreenOn(false);
     stopRequested = false;
     L().patch(agentId, { checkpoint: undefined });
     L().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });
