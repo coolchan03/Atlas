@@ -93,9 +93,10 @@ module.exports = {
         dependencyTypes: ['unknown', 'undetermined', 'npm-no-pkg', 'npm-unknown'],
         // Known non-resolvable-by-cruiser but LEGITIMATE: whisper.rn IS declared (^0.5.5) but the
         // `.rn` name defeats cruiser's resolver, so exclude rather than baseline.
+        // react-native-calendar-events is declared (^2.2.0); its "main" is the bare directory "src", which cruiser cannot resolve.
         // react-native has no public export for TextAncestorContext; theme/globalText needs it to tell nested Text
         // from top-level Text, and react-native is a declared dependency.
-        pathNot: '^(whisper\\.rn|react-native/Libraries/Text/TextAncestorContext)(/|$)',
+        pathNot: '^(whisper\\.rn|react-native-calendar-events|react-native/Libraries/Text/TextAncestorContext)(/|$)',
       },
     },
     {

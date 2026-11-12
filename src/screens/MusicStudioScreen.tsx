@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
-import { llmService } from '../services/llm';
+import { llmService } from '../services';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
