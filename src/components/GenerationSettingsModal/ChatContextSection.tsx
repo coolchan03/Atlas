@@ -62,7 +62,7 @@ export const ChatContextSection: React.FC = () => {
   if (!convId || !conv) return null;
 
   const save = (v: string) => setText(v);
-  const chips = (title: string, active: string, options: Array<{ id: string; label: string }>, choose: (id: string) => void) => (
+  const chips = ({ title, active, options, choose }: { title: string; active: string; options: Array<{ id: string; label: string }>; choose: (id: string) => void }) => (
     <View style={styles.box}>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.chipRow}>
@@ -103,11 +103,18 @@ export const ChatContextSection: React.FC = () => {
 
   return (
     <View>
-      {chips('Agent for this chat', conv.agentId || '', [{ id: '', label: 'Default' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))], (id) => setConversationAgent(convId, id || null))}
-      {chips('Project', conv.projectId || '', [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))],
-        (id) => { try { setConversationProject(convId, id || null); } catch (e: any) { Alert.alert('Cannot move chat', String(e?.message || e)); } })}
-      {chips('Voice for this chat', conv.voiceProfileId || '', [{ id: '', label: 'Agent / default voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))], (id) => setConversationVoiceProfile(convId, id || undefined))}
-      {chips('Style preset (agent settings take priority)', conv.tonePreset || 'balanced', CHAT_TONES.map((t) => ({ id: t.id, label: t.name })), (id) => setConversationTone(convId, id as ChatTonePreset))}
+      {chips({ title: 'Agent for this chat', active: conv.agentId || '',
+        options: [{ id: '', label: 'Default' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))],
+        choose: (id) => setConversationAgent(convId, id || null) })}
+      {chips({ title: 'Project', active: conv.projectId || '',
+        options: [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))],
+        choose: (id) => { try { setConversationProject(convId, id || null); } catch (e: any) { Alert.alert('Cannot move chat', String(e?.message || e)); } } })}
+      {chips({ title: 'Voice for this chat', active: conv.voiceProfileId || '',
+        options: [{ id: '', label: 'Agent / default voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))],
+        choose: (id) => setConversationVoiceProfile(convId, id || undefined) })}
+      {chips({ title: 'Style preset (agent settings take priority)', active: conv.tonePreset || 'balanced',
+        options: CHAT_TONES.map((t) => ({ id: t.id, label: t.name })),
+        choose: (id) => setConversationTone(convId, id as ChatTonePreset) })}
       <MemoryReviewCard />
       <View style={styles.box}>
         <Text style={styles.title}>Memory size (context)</Text>

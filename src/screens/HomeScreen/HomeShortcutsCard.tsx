@@ -65,7 +65,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     } else useUiModeStore.getState().setInterfaceMode('chat');
     openScreen('Chat', { conversationId: id });
   };
-  const select = (caption: string, value: string | undefined, setter: (id: string | undefined) => void, choices: Choice[]) => (
+  const select = ({ caption, value, setter, choices }: { caption: string; value: string | undefined; setter: (id: string | undefined) => void; choices: Choice[] }) => (
     <View style={styles.selector}>
       <Text style={[styles.caption, { color: colors.textSecondary }]}>{caption}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -179,15 +179,18 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
         <View testID="home-shortcut-editor">
           <TextInput value={draft.title} onChangeText={(title) => update({ title })} placeholder="Widget name" placeholderTextColor={colors.textMuted}
             style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
-          {select('Widget type', draft.action || 'call', (action) => update({ action: (action || 'call') as HomeWidgetAction, conversationId: undefined }), WIDGET_ACTIONS)}
+          {select({ caption: 'Widget type', value: draft.action || 'call', choices: WIDGET_ACTIONS,
+            setter: (action) => update({ action: (action || 'call') as HomeWidgetAction, conversationId: undefined }) })}
           {inChat(draft.action) && <>
-            {draft.action === 'chat' && select('Chat to open', draft.conversationId, (conversationId) => update({ conversationId }), [{ id: '', label: 'New chat' }, ...summaries])}
+            {draft.action === 'chat' && select({ caption: 'Chat to open', value: draft.conversationId, setter: (conversationId) => update({ conversationId }), choices: [{ id: '', label: 'New chat' }, ...summaries] })}
             {draft.action === 'call' && <Text style={[styles.small, { color: colors.textSecondary }]}>Starts a new hands-free Atlas call. The chosen agent, text model and voice are saved with that chat. You can hang up and return to the conversation later.</Text>}
-            {select('Agent', draft.agentId, (agentId) => update({ agentId }), [{ id: '', label: 'Default agent' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))])}
-            {select('Project', draft.projectId, (projectId) => update({ projectId }), [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))])}
-            {select('Text model', draft.modelId, (modelId) => update({ modelId }), [{ id: '', label: `Current model${activeModelId ? '' : ' (none loaded)'}` }, ...localModels.map((m) => ({ id: m.id, label: m.name }))])}
-            {select('Voice', draft.voiceProfileId, (voiceProfileId) => update({ voiceProfileId }), [{ id: '', label: 'Default/agent voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))])}
-            {select('Conversation style', draft.tone, (tone) => update({ tone: (tone || 'balanced') as ChatTonePreset }), CHAT_TONES.map((t) => ({ id: t.id, label: t.name })))}
+            {select({ caption: 'Agent', value: draft.agentId, setter: (agentId) => update({ agentId }),
+              choices: [{ id: '', label: 'Default agent' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))] })}
+            {select({ caption: 'Project', value: draft.projectId, setter: (projectId) => update({ projectId }), choices: [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))] })}
+            {select({ caption: 'Text model', value: draft.modelId, setter: (modelId) => update({ modelId }),
+              choices: [{ id: '', label: `Current model${activeModelId ? '' : ' (none loaded)'}` }, ...localModels.map((m) => ({ id: m.id, label: m.name }))] })}
+            {select({ caption: 'Voice', value: draft.voiceProfileId, setter: (voiceProfileId) => update({ voiceProfileId }), choices: [{ id: '', label: 'Default/agent voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))] })}
+            {select({ caption: 'Conversation style', value: draft.tone, setter: (tone) => update({ tone: (tone || 'balanced') as ChatTonePreset }), choices: CHAT_TONES.map((t) => ({ id: t.id, label: t.name })) })}
           </>}
           {draft.action === 'resume-most' && <Text style={[styles.small, { color: colors.textSecondary }]}>Uses the number of your sent messages to find your most-used unlocked chat. No message content is inspected.</Text>}
           {draft.action === 'resume-last' && <Text style={[styles.small, { color: colors.textSecondary }]}>Opens your last active unlocked chat, or the most recently updated one.</Text>}

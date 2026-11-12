@@ -180,7 +180,7 @@ export class LearningKnowledgeDb {
   }
 
   /** Status changes require a distinct, auditable decision. Models never call this automatically. */
-  reviewClaim(id: string, status: ClaimStatus, actor: string, reason: string): void {
+  reviewClaim({ id, status, actor, reason }: { id: string; status: ClaimStatus; actor: string; reason: string }): void {
     const claim = this.getClaim(id);
     if (!claim) throw new Error('Claim not found');
     nonblank(actor, 'reviewer');

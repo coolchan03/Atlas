@@ -31,7 +31,7 @@ export function LearningReliabilityScreen() {
     if (!reason.trim()) { Alert.alert('Review reason required', 'Explain what you verified, disputed or corrected.'); return; }
     try {
       // Only the user's explicit action can approve a status. This is not an autonomous proof.
-      learningKnowledgeDb.reviewClaim(claim.id, status, 'device-owner-review', reason);
+      learningKnowledgeDb.reviewClaim({ id: claim.id, status, actor: 'device-owner-review', reason });
       setSelected(null); setReason(''); setSources([]); refresh();
     } catch (e: any) { Alert.alert('Review not saved', String(e?.message || e)); }
   };
