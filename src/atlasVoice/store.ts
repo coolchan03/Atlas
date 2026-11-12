@@ -31,6 +31,9 @@ interface AtlasVoiceState {
   /** Voices for podcast and briefing hosts A, B and C (voice names; '' or missing = automatic). */
   podcastVoices: string[];
   setPodcastVoices: (v: string[]) => void;
+  /** Voices the person added to the briefing and podcast voice picker, beyond the three it starts with. */
+  podcastExtraVoices: string[];
+  setPodcastExtraVoices: (v: string[]) => void;
   /** Voice mode plays through the earpiece (hold the phone to your ear) instead of the loudspeaker. */
   earpiece: boolean;
   setEarpiece: (v: boolean) => void;
@@ -57,6 +60,8 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   earpiece: false,
   podcastVoices: [],
   setPodcastVoices: (podcastVoices) => set({ podcastVoices }),
+  podcastExtraVoices: [],
+  setPodcastExtraVoices: (podcastExtraVoices) => set({ podcastExtraVoices }),
   setEarpiece: (earpiece) => set({ earpiece }),
   setCloneSteps: (steps) => set({ cloneSteps: [2, 3, 5, 8].includes(steps) ? steps : 2 }),
   setNeural: (neuralVoice, sid, referenceId) => set((s) => ({
@@ -72,5 +77,5 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, readVoiceId: s.readVoiceId, earpiece: s.earpiece, podcastVoices: s.podcastVoices }),
+  partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, readVoiceId: s.readVoiceId, earpiece: s.earpiece, podcastVoices: s.podcastVoices, podcastExtraVoices: s.podcastExtraVoices }),
 }));

@@ -9,7 +9,9 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { canPreRender, speakAndWait, synthesizeLineToFile } from './tts';
-import { hostVoices } from './neural';
+import { hostVoices, loadVoiceForSpeech, restoreSavedVoice } from './neural';
+import { useVoiceProfiles } from './profiles';
+import { profileCacheKey, profileForKey } from './hostVoiceKeys';
 import { makeJingle, wavBytes, toBase64, jingleSeconds, JINGLE_PEAK, type JingleKind, type JingleVolume } from './jingles';
 import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
@@ -23,8 +25,10 @@ const root = () => `${RNFS.CachesDirectoryPath}/podcast-audio`;
 const dir = (key: string) => `${root()}/${key.replace(/[^\w-]/g, '_')}`;
 const pathFor = (key: string, i: number, line: CastLine) => {
   const { neuralVoice, rate } = useAtlasVoiceStore.getState();
-  // A different downloaded TTS model can use identical speaker names with different audio.
-  return `${dir(key)}/${i}-${sha256(`${neuralVoice || 'system'}|${line.voice ?? ''}|${line.voice ? 1 : line.pitch}|${rate}|${line.text}`).slice(0, 12)}.wav`;
+  const profile = profileForKey(line.voice, useVoiceProfiles.getState().profiles);
+  // A different downloaded TTS model can use identical speaker names with different audio, and a changed or re-recorded profile must not reuse an old file.
+  const voice = profile ? profileCacheKey(profile) : `${neuralVoice || 'system'}|${line.voice ?? ''}`;
+  return `${dir(key)}/${i}-${sha256(`${voice}|${line.voice ? 1 : line.pitch}|${rate}|${line.text}`).slice(0, 12)}.wav`;
 };
 
 /** The voice and pitch for each host: chosen or automatic voices, or pitch alone with one voice. */
@@ -43,6 +47,8 @@ const queued: RenderJob[] = [];
 const pending = new Map<string, Promise<string | null>>();
 let rendering = false;
 let pumpScheduled = false;
+/** A saved voice profile is loaded into the engine for its lines; the normal voice is put back when the queue runs dry. */
+let borrowedVoice = false;
 /** Starts the queue on the next tick, so lines asked for together are all queued, in order, before the first one starts. */
 function schedulePump(): void {
   if (pumpScheduled) return;
@@ -53,7 +59,10 @@ function schedulePump(): void {
 function pump(): void {
   if (rendering) return;
   const next = queued.shift();
-  if (!next) return;
+  if (!next) {
+    if (borrowedVoice) { borrowedVoice = false; restoreSavedVoice().catch(() => undefined); }
+    return;
+  }
   rendering = true;
   void next.run().then(next.resolve, () => next.resolve(null)).finally(() => {
     pending.delete(next.path);
@@ -87,7 +96,16 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
         if (await RNFS.exists(path)) { logger.log(`[POD] line ${i}: already rendered (no wait)`); return path; }
         await RNFS.mkdir(dir(key));
         const t0 = Date.now();
-        const out = await synthesizeLineToFile(items[i].text, { voice: items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch });
+        const profile = profileForKey(items[i].voice, useVoiceProfiles.getState().profiles);
+        if (profile) {
+          borrowedVoice = true;
+          await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
+        } else if (borrowedVoice) {
+          // A line in an ordinary voice must not be made by the engine a profile left loaded.
+          borrowedVoice = false;
+          await restoreSavedVoice();
+        }
+        const out = await synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch });
         logger.log(`[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")`);
         return out;
       } catch (e: any) {

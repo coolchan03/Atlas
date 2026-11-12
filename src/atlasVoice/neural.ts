@@ -2,6 +2,8 @@ import { NativeEventEmitter, NativeModules } from 'react-native';
 import { create } from 'zustand';
 import { useAtlasVoiceStore } from './store';
 import { isPocketVoiceId, referenceCanSpeak, resolveReferenceId } from './cloneRouting';
+import { useVoiceProfiles } from './profiles';
+import { isProfileKey, profileForKey } from './hostVoiceKeys';
 
 /**
  * Natural offline voices: neural text-to-speech models downloaded once (from this app's
@@ -248,10 +250,15 @@ export async function restoreSavedVoice(): Promise<void> {
 export function hostVoices(available: { name: string }[]): string[] {
   const st = useAtlasVoiceStore.getState();
   const auto = automaticHostVoices(available);
-  // The person's own choice per host, where that voice is still on the phone.
+  // The person's own choice per host, where that voice is still there: on the phone, or a saved voice profile that still exists.
   const names = new Set(available.map((v) => v.name));
-  return auto.map((v, i) => (st.podcastVoices?.[i] && names.has(st.podcastVoices[i]) ? st.podcastVoices[i] : v));
+  const profiles = useVoiceProfiles.getState().profiles;
+  const usable = (v: string | undefined): v is string => !!v && (isProfileKey(v) ? !!profileForKey(v, profiles) : names.has(v));
+  return auto.map((v, i) => (usable(st.podcastVoices?.[i]) ? st.podcastVoices[i] : v));
 }
+
+/** The three voices the hosts start with, before the person picks or adds any. */
+export const defaultHostVoices = (available: { name: string }[]): string[] => automaticHostVoices(available);
 
 function automaticHostVoices(available: { name: string }[]): string[] {
   const st = useAtlasVoiceStore.getState();

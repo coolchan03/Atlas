@@ -135,10 +135,11 @@ export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
 async function speakInChosenVoice(text: string): Promise<boolean> {
   const chosen = useAtlasVoiceStore.getState().readVoiceId;
   const profile = chosen ? useVoiceProfiles.getState().profiles.find((p) => p.id === chosen) : undefined;
-  if (profile) {
-    try { await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId); }
-    catch { await restoreSavedVoice().catch(() => undefined); } // the saved voice is better than silence
-  }
+  try {
+    // Without a chosen profile this puts the saved voice back, in case a briefing left a borrowed one loaded. It costs nothing when it is already loaded.
+    if (profile) await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
+    else await restoreSavedVoice();
+  } catch { await restoreSavedVoice().catch(() => undefined); } // the saved voice is better than silence
   // An empty language means the phone's own default, the same as the speak button in chat.
   return speakInAndWait(text, '', { messageId: 'read-aloud' });
 }
