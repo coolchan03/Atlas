@@ -38,6 +38,30 @@ const WIDGET_ACTIONS: Array<{ id: HomeWidgetAction; label: string }> = [
 const actionLabel = (action: HomeWidgetAction | undefined) => WIDGET_ACTIONS.find((a) => a.id === (action || 'chat'))?.label || 'Open chat';
 const inChat = (action?: HomeWidgetAction) => action === 'call' || action === 'chat' || !action;
 
+/** Widgets that simply open one screen. */
+const SCREEN_FOR_ACTION: Partial<Record<HomeWidgetAction, string>> = {
+  'music-studio': 'MusicStudio',
+  'music-player': 'MusicStudio',
+  'learning-status': 'LearningReliability',
+  learning: 'Learning',
+  'daily-brief': 'DailyBrief',
+  recorder: 'Recorder',
+  compass: 'Compass',
+};
+
+/** Title and message for the first reason a chat widget cannot start, or null when it can. */
+function launchProblem(
+  shortcut: HomeShortcut,
+  destination: ReturnType<typeof shortcutDestination>,
+  app: { activeModelId: string | null; downloadedModels: Array<{ id: string }> },
+): [string, string] | null {
+  if (destination === 'locked') return ['Unlock first', 'Open the PIN-locked chat normally before using a widget.'];
+  if (shortcut.conversationId && destination !== 'existing') return ['Chat not available', 'This widget points to a removed or private chat. Edit it to choose another.'];
+  if (!(shortcut.modelId || app.activeModelId) && destination !== 'existing') return ['Select a model', 'Load a text model first in the Models tab.'];
+  if (shortcut.modelId && !app.downloadedModels.some((m) => m.id === shortcut.modelId)) return ['Model missing', 'The selected model is not installed. Edit this widget or reinstall the model.'];
+  return null;
+}
+
 /** Home widgets are configured within Atlas; never create Android launcher tiles or shortcuts. */
 export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const { colors } = useTheme();
@@ -81,52 +105,49 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
       </ScrollView>
     </View>
   );
+  const openChatWidget = async (shortcut: HomeShortcut) => {
+    const chats = useChatStore.getState();
+    const app = useAppStore.getState();
+    const startCall = shortcut.action === 'call';
+    if (startCall && !ttsAvailable()) { Alert.alert('Voice unavailable', 'The Android speech engine is not available in this build.'); return; }
+    const destination = shortcutDestination(shortcut.conversationId, chats.conversations, false);
+    const problem = launchProblem(shortcut, destination, app);
+    if (problem) { Alert.alert(problem[0], problem[1]); return; }
+    const modelId = shortcut.modelId || app.activeModelId || '';
+    const existing = destination === 'existing';
+    if (startCall && !existing) {
+      setLaunchingId(shortcut.id);
+      // One tap means the chosen model is actually loaded before opening the call.
+      await activeModelService.loadTextModel(modelId);
+      // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
+      if (shortcut.modelId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+    }
+    const id = existing && shortcut.conversationId
+      ? shortcut.conversationId
+      : chats.createConversation(modelId, shortcut.title || 'New conversation', shortcut.projectId);
+    // Preserve a resumed chat's own model unless a new chat is being created.
+    if (shortcut.modelId && !existing) app.setActiveModelId(shortcut.modelId);
+    if (shortcut.agentId !== undefined) chats.setConversationAgent(id, shortcut.agentId);
+    if (shortcut.projectId && existing) chats.setConversationProject(id, shortcut.projectId);
+    if (shortcut.voiceProfileId !== undefined) chats.setConversationVoiceProfile(id, shortcut.voiceProfileId);
+    if (shortcut.tone) chats.setConversationTone(id, shortcut.tone);
+    goToChat(id, startCall);
+  };
   const launch = async (shortcut: HomeShortcut) => {
     if (launchingId) return;
     try {
       const action = shortcut.action || 'chat';
-      if (action === 'music-studio' || action === 'music-player') { openScreen('MusicStudio'); return; }
-      if (action === 'learning-status') { openScreen('LearningReliability'); return; }
-      if (action === 'learning') { openScreen('Learning'); return; }
-      if (action === 'daily-brief') { openScreen('DailyBrief'); return; }
-      if (action === 'recorder') { openScreen('Recorder'); return; }
-      if (action === 'compass') { openScreen('Compass'); return; }
+      const screen = SCREEN_FOR_ACTION[action];
+      if (screen) { openScreen(screen); return; }
       if (action === 'model-picker') { navigation.navigate('ModelsTab', { initialTab: 'text' }); return; }
-      const chats = useChatStore.getState();
       if (action === 'resume-last' || action === 'resume-most') {
+        const chats = useChatStore.getState();
         const chat = selectResumeConversation(chats.conversations, action, chats.activeConversationId);
-        if (!chat) { Alert.alert('No available chat', 'Start an unlocked, non-private chat first.'); return; }
-        goToChat(chat.id, false);
+        if (chat) goToChat(chat.id, false);
+        else Alert.alert('No available chat', 'Start an unlocked, non-private chat first.');
         return;
       }
-      const startCall = action === 'call';
-      if (startCall && !ttsAvailable()) { Alert.alert('Voice unavailable', 'The Android speech engine is not available in this build.'); return; }
-      const app = useAppStore.getState();
-      const modelId = shortcut.modelId || app.activeModelId || '';
-      const destination = shortcutDestination(shortcut.conversationId, chats.conversations, false);
-      if (destination === 'locked') { Alert.alert('Unlock first', 'Open the PIN-locked chat normally before using a widget.'); return; }
-      if (shortcut.conversationId && destination !== 'existing') { Alert.alert('Chat not available', 'This widget points to a removed or private chat. Edit it to choose another.'); return; }
-      if (!modelId && destination !== 'existing') { Alert.alert('Select a model', 'Load a text model first in the Models tab.'); return; }
-      if (shortcut.modelId && !app.downloadedModels.some((m) => m.id === shortcut.modelId)) {
-        Alert.alert('Model missing', 'The selected model is not installed. Edit this widget or reinstall the model.'); return;
-      }
-      if (startCall && destination !== 'existing') {
-        setLaunchingId(shortcut.id);
-        // One tap means the chosen model is actually loaded before opening the call.
-        await activeModelService.loadTextModel(modelId);
-        // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
-        if (shortcut.modelId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
-      }
-      const id = shortcut.conversationId && destination === 'existing'
-        ? shortcut.conversationId
-        : chats.createConversation(modelId, shortcut.title || 'New conversation', shortcut.projectId);
-      // Preserve a resumed chat's own model unless a new chat is being created.
-      if (shortcut.modelId && destination !== 'existing') app.setActiveModelId(shortcut.modelId);
-      if (shortcut.agentId !== undefined) chats.setConversationAgent(id, shortcut.agentId);
-      if (shortcut.projectId && destination === 'existing') chats.setConversationProject(id, shortcut.projectId);
-      if (shortcut.voiceProfileId !== undefined) chats.setConversationVoiceProfile(id, shortcut.voiceProfileId);
-      if (shortcut.tone) chats.setConversationTone(id, shortcut.tone);
-      goToChat(id, startCall);
+      await openChatWidget(shortcut);
     } catch (error: any) { Alert.alert('Could not open widget', String(error?.message || error)); }
     finally { setLaunchingId(''); }
   };
