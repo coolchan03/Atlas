@@ -157,6 +157,26 @@ export async function downloadVoice(id: string): Promise<void> {
  * Pick a voice file (a sherpa-onnx Piper, Kokoro or KittenTTS .tar.bz2 or .zip) and add it.
  * Resolves the new voice id, or null when nothing was picked.
  */
+/** The id a downloaded or imported voice package gets: its file name without the archive ending. */
+export const voiceIdForName = (name: string): string =>
+  name.split('/').pop()!.replace(/\.(tar\.bz2|tar\.gz|tgz|tbz2?|tar|zip)$/i, '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/^[._]+|[._]+$/g, '').slice(0, 80) || 'imported-voice';
+
+/** Downloads a voice package from a web address and installs it. Progress shows in `useNeuralVoices` under the voice's id. */
+export async function downloadVoicePackage(url: string, fileName: string): Promise<string> {
+  listen();
+  const id = voiceIdForName(fileName);
+  const s = useNeuralVoices.getState();
+  s.set({ progress: { ...s.progress, [id]: 0 } });
+  try {
+    const installedId: string = await Native.downloadAndImportNeuralVoice(url, fileName);
+    await refreshInstalled();
+    return installedId;
+  } finally {
+    const p = { ...useNeuralVoices.getState().progress }; delete p[id];
+    useNeuralVoices.getState().set({ progress: p });
+  }
+}
+
 /** True for a voice package: a tar archive, or a zip named like a sherpa-onnx voice (vits-piper..., kokoro..., pocket-tts...). */
 export function isVoiceArchive(name: string): boolean {
   const n = name.toLowerCase();

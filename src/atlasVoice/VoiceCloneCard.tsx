@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, NativeModules, Platform, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, NativeModules, Platform, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { useAtlasVoiceStore } from './store';
-import { useNeuralVoices, importVoiceFile } from './neural';
+import { useNeuralVoices, importVoiceFile, downloadVoicePackage, cancelVoiceDownload, voiceIdForName } from './neural';
 import { deleteCloneReference, useCloneReferences, type VoiceReferenceQuality } from './cloneStore';
 import { isPocketVoiceId } from './cloneRouting';
 import { useVoiceSample } from './useVoiceSample';
@@ -65,17 +65,28 @@ function SampleCheck({ canRun, quality, onAnalyze, onImprove }: {
   );
 }
 
-/** One-time setup: download the Pocket TTS archive, then import it. */
-function ModelSetup({ canImport, onImport, onError }: { canImport: boolean; onImport: () => void; onError: (e: unknown) => void }) {
+/** One-time setup: download the voice engine here, or import a file that is already on the phone. */
+function ModelSetup({ canStart, progress, onDownload, onCancel, onImport }: {
+  canStart: boolean; progress: number | undefined; onDownload: () => void; onCancel: () => void; onImport: () => void;
+}) {
   const { colors } = useTheme();
+  const downloading = progress !== undefined;
   return (
     <View>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>Install the Pocket TTS INT8 sherpa-onnx model once. The standard Piper, Kokoro and KittenTTS voices cannot clone a new voice.</Text>
-      <TouchableOpacity style={styles.action} onPress={() => Linking.openURL(MODEL_URL).catch(onError)}>
-        <Text style={{ color: colors.primary }}>Download the Pocket TTS model archive</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.action} onPress={onImport} disabled={!canImport} testID="voice-clone-import-model">
-        <Text style={{ color: colors.primary }}>Import downloaded model</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Cloning needs the Pocket TTS voice engine, a large one-time download (Wi-Fi recommended). The standard Piper, Kokoro and KittenTTS voices cannot clone a new voice.</Text>
+      {downloading ? (
+        <View style={styles.row}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.note, styles.flex, { color: colors.textSecondary }]}>{progress >= 0 ? `Downloading ${Math.round(progress * 100)}%` : 'Downloading...'}</Text>
+          <TouchableOpacity style={styles.action} onPress={onCancel} testID="voice-clone-cancel-download"><Text style={{ color: colors.primary }}>Cancel</Text></TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.action} onPress={onDownload} disabled={!canStart} testID="voice-clone-download-model">
+          <Text style={{ color: canStart ? colors.primary : colors.textMuted }}>Download the voice engine</Text>
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity style={styles.action} onPress={onImport} disabled={!canStart || downloading} testID="voice-clone-import-model">
+        <Text style={{ color: canStart && !downloading ? colors.primary : colors.textMuted }}>I already have the file: import it</Text>
       </TouchableOpacity>
     </View>
   );
@@ -172,6 +183,12 @@ export function VoiceCloneCard() {
   const why = blocker({ available, consent, model, hasSample: !!sample.selected, name, busy, recording: sample.recording });
   const canTry = !!sample.selected && !!model && consent && !busy && !sample.recording;
 
+  const modelId = voiceIdForName(MODEL_URL);
+  const modelProgress = useNeuralVoices((st) => st.progress[modelId]);
+  const downloadModel = async () => {
+    try { await downloadVoicePackage(MODEL_URL, MODEL_URL.split('/').pop()!); }
+    catch (e: any) { if (!/cancel/i.test(String(e?.message || e?.code))) fail(e); }
+  };
   const importModel = async () => {
     setBusyModel(true);
     try { await importVoiceFile(); } catch (e: any) { if (!/cancel/i.test(String(e?.message || e?.code))) fail(e); } finally { setBusyModel(false); }
@@ -185,14 +202,14 @@ export function VoiceCloneCard() {
       </Text>
       <View style={styles.row}>
         <Switch testID="voice-clone-consent" value={consent} onValueChange={setConsent} disabled={sample.recording} />
-        <Text style={[styles.note, styles.flex, { color: colors.text }]}>I own this voice or have permission to copy it. Samples stay on this phone.</Text>
+        <Text style={[styles.note, styles.flex, { color: colors.text }]}>I own this voice or have permission to copy it. Samples stay on your phones; nothing is uploaded.</Text>
       </View>
       {!available && <Text style={[styles.note, { color: colors.textSecondary }]}>{blocker({ available, consent, model, hasSample: false, name, busy, recording: false })}</Text>}
       {available && (
         <>
           <Step number={1} title="Install the voice engine (once)">
             {model ? <Text style={[styles.note, { color: colors.textSecondary }]}>Installed.</Text>
-              : <ModelSetup canImport={consent && !busy} onImport={importModel} onError={fail} />}
+              : <ModelSetup canStart={consent && !busy} progress={modelProgress} onDownload={downloadModel} onCancel={() => cancelVoiceDownload(modelId)} onImport={importModel} />}
           </Step>
           <SampleStep sample={sample} consent={consent} busy={busy} canTry={canTry} onError={fail} />
           <Step number={3} title="Name it and try it">

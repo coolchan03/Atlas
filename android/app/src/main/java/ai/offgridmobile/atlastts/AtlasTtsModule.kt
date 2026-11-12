@@ -642,28 +642,80 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun importNeuralVoice(uri: String, name: String, promise: Promise) {
         Thread {
-            val id = VoiceImport.idFor(name)
-            val root = voicesRoot()
-            val tmp = java.io.File(root, "$id.part")
             try {
-                tmp.deleteRecursively(); tmp.mkdirs()
                 val input = ctx.contentResolver.openInputStream(android.net.Uri.parse(uri))
                     ?: throw IllegalStateException("Could not open the file")
-                input.use { VoiceImport.unpack(it, tmp) }
-                val kids = tmp.listFiles() ?: emptyArray()
-                val src = if (kids.size == 1 && kids[0].isDirectory) kids[0] else tmp
-                VoiceImport.problem(src)?.let { throw IllegalArgumentException(it) }
-                val dest = java.io.File(root, id)
-                if (dest.path == neuralDir || dest.path == neural.loadedDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
-                dest.deleteRecursively()
-                if (!src.renameTo(dest)) throw IllegalStateException("Could not move voice files")
-                tmp.deleteRecursively()
-                promise.resolve(id)
-            } catch (e: Throwable) {
-                tmp.deleteRecursively()
-                promise.reject("VOICE_IMPORT", e.message ?: e.toString())
-            }
+                promise.resolve(input.use { installVoice(it, name) })
+            } catch (e: Throwable) { promise.reject("VOICE_IMPORT", e.message ?: e.toString()) }
         }.start()
+    }
+
+    /**
+     * Downloads a voice package (a sherpa-onnx .tar.bz2 or .zip) from a web address and installs it the same way as an
+     * imported file. Emits AtlasVoiceDownload {id, progress} with the id the voice will have. Resolves that id.
+     */
+    @ReactMethod
+    fun downloadAndImportNeuralVoice(url: String, name: String, promise: Promise) {
+        val id = VoiceImport.idFor(name)
+        cancelled.remove(id)
+        Thread {
+            val archive = java.io.File(ctx.cacheDir, "voice-download-$id.archive")
+            try {
+                require(url.startsWith("https://")) { "Voice downloads must use https" }
+                var conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.setRequestProperty("User-Agent", "Atlas")
+                var hops = 0
+                while (conn.responseCode in 300..399 && hops++ < 5) {
+                    val loc = conn.getHeaderField("Location") ?: break
+                    val next = java.net.URL(conn.url, loc)
+                    conn.disconnect()
+                    require(next.protocol == "https") { "Voice downloads must use https" }
+                    conn = next.openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 30000; conn.readTimeout = 60000; conn.setRequestProperty("User-Agent", "Atlas")
+                }
+                if (conn.responseCode >= 400) throw IllegalStateException("HTTP ${conn.responseCode}")
+                val total = conn.contentLengthLong
+                var read = 0L
+                var last = 0L
+                conn.inputStream.use { input ->
+                    archive.outputStream().use { out ->
+                        val buffer = ByteArray(1 shl 16)
+                        while (true) {
+                            if (cancelled.contains(id)) throw java.io.InterruptedIOException("cancelled")
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            out.write(buffer, 0, n)
+                            read += n
+                            val now = System.currentTimeMillis()
+                            if (now - last > 500) { last = now; progress(id, if (total > 0) read.toDouble() / total else -1.0) }
+                        }
+                    }
+                }
+                progress(id, 1.0)
+                promise.resolve(archive.inputStream().use { installVoice(it, name) })
+            } catch (e: Throwable) {
+                promise.reject("VOICE_DOWNLOAD", if (cancelled.contains(id)) "cancelled" else (e.message ?: e.toString()))
+            } finally { archive.delete() }
+        }.start()
+    }
+
+    /** Unpacks a voice package stream into voices/<id>, checks Atlas can play it, and returns the new id. */
+    private fun installVoice(input: java.io.InputStream, name: String): String {
+        val id = VoiceImport.idFor(name)
+        val root = voicesRoot()
+        val tmp = java.io.File(root, "$id.part")
+        try {
+            tmp.deleteRecursively(); tmp.mkdirs()
+            VoiceImport.unpack(input, tmp)
+            val kids = tmp.listFiles() ?: emptyArray()
+            val src = if (kids.size == 1 && kids[0].isDirectory) kids[0] else tmp
+            VoiceImport.problem(src)?.let { throw IllegalArgumentException(it) }
+            val dest = java.io.File(root, id)
+            if (dest.path == neuralDir || dest.path == neural.loadedDir) { neuralDir = ""; try { neural.release() } catch (_: Throwable) {} }
+            dest.deleteRecursively()
+            if (!src.renameTo(dest)) throw IllegalStateException("Could not move voice files")
+            return id
+        } finally { tmp.deleteRecursively() }
     }
 
     private fun progress(id: String, p: Double) {

@@ -14,13 +14,13 @@ jest.mock('@react-native-documents/picker', () => ({
 
 const MODEL = 'sherpa-onnx-pocket-tts-int8';
 
-function open(opts: { model?: boolean; sample?: boolean }) {
+function open(opts: { model?: boolean; sample?: boolean; native?: Record<string, unknown> }) {
   installNativeBoundary({ fs: true });
   const rtl = requireRTL();
   const React = require('react');
   const { NativeModules, Platform, Alert } = require('react-native');
   Platform.OS = 'android';
-  NativeModules.AtlasTts = { importVoiceReference: jest.fn() };
+  NativeModules.AtlasTts = { importVoiceReference: jest.fn(), ...opts.native };
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   const { useNeuralVoices } = require('../../../src/atlasVoice/neural');
   const { useCloneReferences } = require('../../../src/atlasVoice/cloneStore');
@@ -58,4 +58,20 @@ it('asks for a sample, then a name, then creates a named voice from the one name
   rtl.fireEvent.changeText(view.getByTestId('voice-clone-name'), 'Mum');
   rtl.fireEvent.press(view.getByTestId('voice-clone-create'));
   expect(useVoiceProfiles.getState().profiles).toMatchObject([{ name: 'Mum' }]);
+});
+
+it('downloads the voice engine inside the app, with no separate download-then-import step', async () => {
+  const installed: Array<{ id: string; bytes: number }> = [];
+  const download = jest.fn(async (_url: string, name: string) => {
+    const id = name.replace(/\.tar\.bz2$/, '');
+    installed.push({ id, bytes: 200e6 });
+    return id;
+  });
+  const { rtl, view } = open({ model: false, sample: false, native: {
+    downloadAndImportNeuralVoice: download, setNeuralVoice: jest.fn(), installedNeuralVoices: jest.fn(async () => installed), addListener: jest.fn(), removeListeners: jest.fn(),
+  } });
+  rtl.fireEvent(view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-clone-download-model')); });
+  expect(download).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/.*pocket-tts.*\.tar\.bz2$/), expect.stringMatching(/pocket-tts.*\.tar\.bz2$/));
+  await rtl.waitFor(() => expect(view.getByText('Installed.')).toBeTruthy());
 });
