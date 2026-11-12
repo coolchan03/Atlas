@@ -19,7 +19,7 @@ function SampleList({ references, selectedId, onSelect, onError }: {
   references: Reference[]; selectedId: string; onSelect: (id: string) => void; onError: (e: unknown) => void;
 }) {
   const { colors } = useTheme();
-  const confirmDelete = (ref: Reference) => Alert.alert('Delete voice sample?', `${ref.name} — any agent profile using this sample will stop working until a new reference is assigned.`, [
+  const confirmDelete = (ref: Reference) => Alert.alert('Delete voice sample?', `This removes the sample for "${ref.name}", and that voice stops working. Your other cloned voices are not affected. You do not need to delete a voice to make another one.`, [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: () => deleteCloneReference(ref.id).catch(onError) },
   ]);
@@ -122,7 +122,7 @@ function SampleStep({ sample, consent, busy, canTry, onError }: { sample: Sample
   const canChoose = consent && !busy && !sample.recording;
   return (
     <Step number={2} title="Add a voice sample">
-      <Text style={[styles.note, { color: colors.textSecondary }]}>Record about 10 seconds of clear speech, or choose any audio file (MP3, M4A, WAV and more). A long file is fine: Atlas picks the clearest 20 seconds.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Record about 10 seconds of clear speech, or choose any audio file (MP3, M4A, WAV and more). A long file is fine: Atlas picks the clearest 20 seconds. To make another voice, add a new sample here, give it a new name in step 3 and press Create voice. Your earlier voices stay.</Text>
       <View style={styles.row}>
         <TouchableOpacity style={styles.action} testID="voice-clone-record" disabled={!consent || busy} onPress={sample.recording ? sample.stopRecording : sample.startRecording}>
           <Text style={{ color: colors.primary }}>{sample.recording ? 'Stop and save' : 'Record'}</Text>
@@ -203,7 +203,7 @@ export function VoiceCloneCard() {
             </TouchableOpacity>
             {!!make.status && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.note, styles.flex, { color: colors.textSecondary }]}>{make.status}</Text></View>}
           </Step>
-          <CreateStep why={why} onCreate={make.create} />
+          <CreateStep why={why} onCreate={() => { make.create(); setName(''); }} />
           <Advanced colors={colors} steps={make.steps} onSteps={make.changeSteps} canTest={canTry} onSpeedTest={make.speedTest} result={make.benchmark} />
           <ClonedVoiceNote />
         </>
