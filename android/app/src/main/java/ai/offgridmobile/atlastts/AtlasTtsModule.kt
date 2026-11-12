@@ -466,7 +466,8 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     fun deleteVoiceReference(id: String, promise: Promise) {
         try {
             val file = referenceFile(id)
-            if (!file.exists() || !file.delete()) throw IllegalStateException("Voice recording not found or could not be deleted")
+            // A recording that is already gone counts as deleted, so a stale entry can still be removed from the list.
+            if (file.exists() && !file.delete()) throw IllegalStateException("Voice recording could not be deleted")
             if (activeReferenceId == id) { neural.setReference(null); activeReferenceId = "" }
             promise.resolve(true)
         } catch (e: Throwable) { promise.reject("VOICE_REFERENCE_DELETE", e.message ?: e.toString()) }

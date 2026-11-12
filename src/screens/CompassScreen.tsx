@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, NativeModules, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { useMaps, bearingDeg, distanceM, fmtDistance } from '../atlasMaps/maps';
 import { trueHeading } from '../atlasTools/compassMath';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { LevelView } from './compass/LevelView';
 import { SensorCards } from './compass/SensorCards';
 import { useCompassSensors } from './compass/useCompassSensors';
@@ -20,13 +19,9 @@ const HEIGHT_18 = 18;
 const HEIGHT_10 = 10;
 const COLOR_FFF = '#fff';
 const literalStyles = StyleSheet.create({
-  spacer: { flex: 1 },
   modeButton: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   scrollContent: { alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
   s1: { flex: 1 },
-  s2: { flexDirection: 'row', alignItems: 'center', padding: 14 },
-  s3: { marginRight: 12 },
-  s4: { fontSize: 20, fontWeight: '700' },
   s6: { fontSize: 56, fontWeight: '800' },
   s7: { fontSize: 24, marginBottom: 16 },
   s8: { alignItems: 'center', justifyContent: 'center' },
@@ -61,7 +56,6 @@ export async function deviceHasCompass(): Promise<boolean> {
  * last GPS fix) so it agrees with the map and with directions to saved places.
  */
 export const CompassScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
   const { colors: base } = useTheme();
   const colors = useEmergencyColors(base);
   const night = useOffGrid((s) => s.nightRed);
@@ -92,14 +86,11 @@ export const CompassScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
       <ScreenBackground screenKey="Compass" />
-      <View style={literalStyles.s2}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
-        <Text style={[{ color: colors.text }, literalStyles.s4]}>Compass</Text>
-        <View style={literalStyles.spacer} />
+      <ScreenHeader title="Compass" colors={colors} right={
         <TouchableOpacity accessibilityRole="button" onPress={() => setLevelMode((v) => !v)} testID="compass-level-toggle" style={[literalStyles.modeButton, { borderColor: colors.border }]}>
           <Text style={{ color: colors.text }}>{levelMode ? 'Compass' : 'Level'}</Text>
         </TouchableOpacity>
-      </View>
+      } />
       {levelMode ? (
         <LevelView orientation={orientation} />
       ) : (

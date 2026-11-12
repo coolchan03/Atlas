@@ -11,11 +11,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useEmergencyColors } from '../atlasTools/offGrid';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { TYPOGRAPHY, SPACING } from '../constants';
 
 const Native: any = NativeModules.AtlasSensor;
@@ -30,9 +30,6 @@ function fmtDistance(m: number): string {
 
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
-  s2: { flexDirection: 'row', alignItems: 'center', padding: 14 },
-  s3: { marginRight: 12 },
-  s4: { fontSize: 20 },
   s5: { flex: 1, alignItems: 'center', paddingVertical: 32, paddingHorizontal: 16 },
   s6: { fontSize: 80 },
   s7: { marginTop: 4 },
@@ -47,7 +44,6 @@ const literalStyles = StyleSheet.create({
 });
 
 export const PedometerScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
   const { colors: base } = useTheme();
   const colors = useEmergencyColors(base);
   const [steps, setSteps] = useState(0);
@@ -94,12 +90,7 @@ export const PedometerScreen: React.FC = () => {
   if (available === false) {
     return (
       <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
-        <View style={literalStyles.s2}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}>
-            <Icon name="arrow-left" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[{ color: colors.text }, literalStyles.s4]}>Step Counter</Text>
-        </View>
+      <ScreenHeader title="Step Counter" colors={colors} />
         <View style={[literalStyles.s5, literalStyles.centerContent]}>
           <Text style={[{ color: colors.textSecondary, ...TYPOGRAPHY.body }, literalStyles.centerText]}>
             Step counting is not available on this device.
@@ -115,12 +106,7 @@ export const PedometerScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
       <ScreenBackground screenKey="Pedometer" />
-      <View style={literalStyles.s2}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}>
-          <Icon name="arrow-left" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[{ color: colors.text }, literalStyles.s4]}>Step Counter</Text>
-      </View>
+      <ScreenHeader title="Step Counter" colors={colors} />
       <ScrollView contentContainerStyle={literalStyles.s5}>
         <Text style={[{ color: colors.text, ...TYPOGRAPHY.body }, literalStyles.s6]}>
           {steps.toLocaleString()}

@@ -10,13 +10,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AudioRecorder } from 'react-native-audio-api';
 import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { ScreenBackground } from '../components/ScreenBackground';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { TYPOGRAPHY, SPACING } from '../constants';
 
 const DB_MIN = 0;
@@ -36,9 +36,6 @@ const ON_ACCENT = '#FFFFFF';
 
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
-  s2: { flexDirection: 'row', alignItems: 'center', padding: 14 },
-  s3: { marginRight: 12 },
-  s4: { fontSize: 20 },
   s5: { flex: 1, alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
   s6: { width: 32, height: 240, borderRadius: 6, overflow: 'hidden', marginBottom: 20 },
   s7: { position: 'absolute', bottom: 0, left: 0, right: 0 },
@@ -54,7 +51,6 @@ const literalStyles = StyleSheet.create({
 });
 
 export const NoiseMeterScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
   const { colors: base } = useTheme();
   const colors = useEmergencyColors(base);
   const night = useOffGrid((s) => s.nightRed);
@@ -125,12 +121,7 @@ export const NoiseMeterScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
       <ScreenBackground screenKey="NoiseMeter" />
-      <View style={literalStyles.s2}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}>
-          <Icon name="arrow-left" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[{ color: colors.text }, literalStyles.s4]}>Noise Meter</Text>
-      </View>
+      <ScreenHeader title="Noise Meter" colors={colors} />
       <ScrollView contentContainerStyle={literalStyles.s5}>
         <View style={[literalStyles.s6, literalStyles.outlined, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Animated.View style={[literalStyles.s7, { height: barHeight, backgroundColor: barColor }]} />

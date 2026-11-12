@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useTheme } from '../theme';
 import { useAgentStore } from '../stores/agentStore';
 import { learningKnowledgeDb, type ReliabilityClaim, type ReliabilitySnapshot } from '../learning/knowledgeDb';
@@ -10,7 +11,6 @@ import type { ClaimStatus } from '../learning/evidenceGate';
 
 /** Human-facing evidence ledger, deliberately not a self-certifying learning loop. */
 export function LearningReliabilityScreen() {
-  const navigation = useNavigation<any>();
   const { colors } = useTheme();
   const agents = useAgentStore((s) => s.agents);
   const [snapshot, setSnapshot] = useState<ReliabilitySnapshot | null>(null);
@@ -43,11 +43,9 @@ export function LearningReliabilityScreen() {
   );
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Learning reliability</Text>
+      <ScreenHeader title="Learning reliability" right={
         <TouchableOpacity onPress={refresh} accessibilityLabel="Refresh evidence"><Icon name="refresh-cw" size={18} color={colors.primary} /></TouchableOpacity>
-      </View>
+      } />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.intro, { color: colors.textSecondary }]}>This shows candidate claims and supporting source records. An AI judge saying PASS does not make a claim verified. The label “verified” means a person explicitly reviewed a source passage; it is not a guarantee of truth.</Text>
         {Boolean(error) && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
@@ -89,8 +87,6 @@ export function LearningReliabilityScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  headerTitle: { fontSize: 20, fontWeight: '700', flex: 1 },
   body: { padding: 15, paddingBottom: 60 },
   intro: { lineHeight: 19 },
   error: { marginTop: 12 },

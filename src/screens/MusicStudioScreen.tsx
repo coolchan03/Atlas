@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useTheme } from '../theme';
 import { llmService } from '../services';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
@@ -24,7 +24,6 @@ const DURATIONS = [30, 60, 90] as const;
 
 /** Music Studio makes original instrumental background music, not singing, audio samples or covers. */
 export function MusicStudioScreen() {
-  const navigation = useNavigation<any>();
   const { colors } = useTheme();
   const [prompt, setPrompt] = useState('Peaceful, unobtrusive background music for reading');
   const [sound, setSound] = useState<SoundPreset>('ambient');
@@ -123,10 +122,7 @@ export function MusicStudioScreen() {
   );
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Instrumental Music Studio</Text>
-      </View>
+      <ScreenHeader title="Instrumental Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={{ color: colors.textSecondary }}>Compose instrumental/background music, entirely offline. Atlas synthesizes its own notes and instruments; it does not create vocals or reproduce recordings. The AI option uses your loaded text model, while Create instantly works without one.</Text>
         <TextInput value={prompt} onChangeText={setPrompt} multiline maxLength={500}
@@ -187,7 +183,6 @@ export function MusicStudioScreen() {
 }
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 18, gap: 12 },
   title: { fontSize: 18, fontWeight: '700' },
   body: { padding: 16, gap: 12, paddingBottom: 48 },
   input: { minHeight: 95, borderWidth: 1, borderRadius: 10, padding: 10, textAlignVertical: 'top' },
