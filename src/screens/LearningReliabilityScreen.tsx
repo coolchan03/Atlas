@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -36,45 +36,45 @@ export function LearningReliabilityScreen() {
     } catch (e: any) { Alert.alert('Review not saved', String(e?.message || e)); }
   };
   const stat = (status: keyof ReliabilitySnapshot['counts'], label: string) => (
-    <View style={{ minWidth: 98, padding: 11, borderWidth: 1, borderColor: colors.border, borderRadius: 10, margin: 3 }}>
-      <Text style={{ color: colors.text, fontSize: 21, fontWeight: '700' }}>{snapshot?.counts[status] ?? 0}</Text>
-      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{label}</Text>
+    <View style={[styles.stat, { borderColor: colors.border }]}>
+      <Text style={[styles.statValue, { color: colors.text }]}>{snapshot?.counts[status] ?? 0}</Text>
+      <Text style={[styles.small, { color: colors.textSecondary }]}>{label}</Text>
     </View>
   );
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 }}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
-        <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', flex: 1 }}>Learning reliability</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Learning reliability</Text>
         <TouchableOpacity onPress={refresh} accessibilityLabel="Refresh evidence"><Icon name="refresh-cw" size={18} color={colors.primary} /></TouchableOpacity>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 60 }}>
-        <Text style={{ color: colors.textSecondary, lineHeight: 19 }}>This shows candidate claims and supporting source records. An AI judge saying PASS does not make a claim verified. The label “verified” means a person explicitly reviewed a source passage; it is not a guarantee of truth.</Text>
-        {Boolean(error) && <Text style={{ color: colors.error, marginTop: 12 }}>{error}</Text>}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 14 }}>
+      <ScrollView contentContainerStyle={styles.body}>
+        <Text style={[styles.intro, { color: colors.textSecondary }]}>This shows candidate claims and supporting source records. An AI judge saying PASS does not make a claim verified. The label “verified” means a person explicitly reviewed a source passage; it is not a guarantee of truth.</Text>
+        {Boolean(error) && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
+        <View style={styles.stats}>
           {stat('candidate', 'Pending review')}{stat('disputed', 'Disputed')}{stat('verified', 'Manual review')}{stat('rejected', 'Rejected')}{stat('superseded', 'Superseded')}
         </View>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 10 }}>Recent learning claims</Text>
+        <Text style={[styles.section, { color: colors.text }]}>Recent learning claims</Text>
         {!snapshot?.recent.length && <Text style={{ color: colors.textSecondary }}>No claim records yet. As Atlas learns, candidates and their sources appear here.</Text>}
         {snapshot?.recent.map((c) => (
-          <View key={c.id} style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 10 }}>
-            <Text style={{ color: colors.text, fontWeight: '600' }}>{c.claim}</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 5 }}>
+          <View key={c.id} style={[styles.claim, { borderColor: colors.border }]}>
+            <Text style={[styles.strong, { color: colors.text }]}>{c.claim}</Text>
+            <Text style={[styles.small, styles.meta, { color: colors.textSecondary }]}>
               {agents.find((a) => a.id === c.agentId)?.name || c.agentId || 'Agent not recorded'} · {c.topic} · {c.status} · {c.citations} citations · {c.sourcePassages} source passages
             </Text>
-            <TouchableOpacity onPress={() => showSources(c.id)} style={{ marginTop: 8 }} accessibilityLabel={`Review evidence for ${c.topic}`}>
+            <TouchableOpacity onPress={() => showSources(c.id)} style={styles.showEvidence} accessibilityLabel={`Review evidence for ${c.topic}`}>
               <Text style={{ color: colors.primary }}>{selected === c.id ? 'Evidence shown below' : 'Show evidence & review'}</Text>
             </TouchableOpacity>
-            {selected === c.id && <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 10, paddingTop: 10 }}>
+            {selected === c.id && <View style={[styles.evidence, { borderTopColor: colors.border }]}>
               {!sources.length && <Text style={{ color: colors.textSecondary }}>No source passages were attached. This claim cannot be marked verified.</Text>}
-              {sources.map((src, i) => <View key={i} style={{ paddingVertical: 7 }}>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{src.title}</Text>
-                <Text selectable style={{ color: colors.textSecondary, fontSize: 12 }}>{src.locator || src.url || 'No locator supplied'}</Text>
-                <Text selectable style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>{src.passage || 'No source passage available'}</Text>
+              {sources.map((src, i) => <View key={i} style={styles.source}>
+                <Text style={[styles.strong, { color: colors.text }]}>{src.title}</Text>
+                <Text selectable style={[styles.small, { color: colors.textSecondary }]}>{src.locator || src.url || 'No locator supplied'}</Text>
+                <Text selectable style={[styles.small, styles.passage, { color: colors.textSecondary }]}>{src.passage || 'No source passage available'}</Text>
               </View>)}
               <TextInput value={reason} onChangeText={setReason} maxLength={500} multiline placeholder="Why does this evidence support or contradict the claim?" placeholderTextColor={colors.textMuted}
-                style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, marginVertical: 9 }}/>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 9 }}>
+                style={[styles.reason, { color: colors.text, borderColor: colors.border }]}/>
+              <View style={styles.actions}>
                 <TouchableOpacity onPress={() => review(c, 'verified')} disabled={!sources.some((s) => s.passage.trim())}><Text style={{ color: sources.some((s) => s.passage.trim()) ? colors.primary : colors.textMuted }}>Mark reviewed</Text></TouchableOpacity>
                 <TouchableOpacity onPress={() => review(c, 'disputed')}><Text style={{ color: colors.primary }}>Dispute</Text></TouchableOpacity>
                 <TouchableOpacity onPress={() => review(c, 'rejected')}><Text style={{ color: colors.error }}>Reject</Text></TouchableOpacity>
@@ -86,3 +86,26 @@ export function LearningReliabilityScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
+  headerTitle: { fontSize: 20, fontWeight: '700', flex: 1 },
+  body: { padding: 15, paddingBottom: 60 },
+  intro: { lineHeight: 19 },
+  error: { marginTop: 12 },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 14 },
+  stat: { minWidth: 98, padding: 11, borderWidth: 1, borderRadius: 10, margin: 3 },
+  statValue: { fontSize: 21, fontWeight: '700' },
+  section: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
+  claim: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  strong: { fontWeight: '600' },
+  small: { fontSize: 12 },
+  meta: { marginTop: 5 },
+  showEvidence: { marginTop: 8 },
+  evidence: { borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+  source: { paddingVertical: 7 },
+  passage: { marginTop: 4 },
+  reason: { borderWidth: 1, borderRadius: 8, padding: 10, marginVertical: 9 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+});

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAboutMe } from './aboutMeStore';
+import type { Conversation } from '../types';
 
 export interface MemoryCandidate { id: string; fact: string; source: 'therapy' | 'preferences'; createdAt: number }
 interface AutoMemoryState {
@@ -67,4 +68,19 @@ export const useAutoMemory = create<AutoMemoryState>()(persist((set, get) => ({
 export function considerUserMemory(text: string, context: { therapy: boolean; private: boolean }): void {
   if (context.private) return;
   useAutoMemory.getState().propose(text, context.therapy);
+}
+
+/** True when the chat itself, or the project it is filed under, is private or PIN-protected. */
+function isProtectedConversation(conv: Conversation): boolean {
+  if (conv.isPrivate || conv.pinVerifier || conv.protectedBlob) return true;
+  if (!conv.projectId) return false;
+  try {
+    return !!require('./storeRefs').projectStoreRef().getState().getProject?.(conv.projectId)?.pinVerifier;
+  } catch { return false; }
+}
+
+/** Entry point for the chat store: scans one saved user message unless its chat or project is protected. */
+export function considerConversationMemory(conv: Conversation, text: string): void {
+  const active = require('./agentStore').useAgentStore.getState().activeAgentId;
+  considerUserMemory(text, { therapy: (conv.agentId || active) === 'counselor', private: isProtectedConversation(conv) });
 }

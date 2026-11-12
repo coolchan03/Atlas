@@ -313,13 +313,7 @@ export const useChatStore = create<ChatState>()(
         // Never scan PIN-locked or private conversations, and the feature is off by default.
         if (messageData.role === 'user' && typeof messageData.content === 'string') {
           const conv = get().conversations.find((x) => x.id === conversationId);
-          if (conv) {
-            const active = require('./agentStore').useAgentStore.getState().activeAgentId;
-            require('./autoMemory').considerUserMemory(messageData.content, {
-              therapy: (conv.agentId || active) === 'counselor',
-              private: !!(conv.isPrivate || conv.pinVerifier || conv.protectedBlob),
-            });
-          }
+          if (conv) require('./autoMemory').considerConversationMemory(conv, messageData.content);
         }
         return message;
       },
