@@ -4,6 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { ProgressSection } from './learningReliability/ProgressSection';
+import { ExamSection } from './learningReliability/ExamSection';
+import { ExportSection } from './learningReliability/ExportSection';
 import { useTheme } from '../theme';
 import { useAgentStore } from '../stores/agentStore';
 import { learningKnowledgeDb, type ReliabilityClaim, type ReliabilitySnapshot } from '../learning/knowledgeDb';
@@ -17,9 +20,10 @@ export function LearningReliabilityScreen() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState('');
-  const [sources, setSources] = useState<Array<{ title: string; locator: string; passage: string; url: string }>>([]);
+  const [sources, setSources] = useState<Array<{ title: string; locator: string; passage: string; url: string; stance: string }>>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const refresh = useCallback(() => {
-    try { setSnapshot(learningKnowledgeDb.getReliabilitySnapshot()); setError(''); }
+    try { setSnapshot(learningKnowledgeDb.getReliabilitySnapshot()); setError(''); setRefreshKey((k) => k + 1); }
     catch (e: any) { setError(String(e?.message || e)); }
   }, []);
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
@@ -52,6 +56,7 @@ export function LearningReliabilityScreen() {
         <View style={styles.stats}>
           {stat('candidate', 'Pending review')}{stat('disputed', 'Disputed')}{stat('verified', 'Manual review')}{stat('rejected', 'Rejected')}{stat('superseded', 'Superseded')}
         </View>
+        <ProgressSection refreshKey={refreshKey} onChanged={refresh} />
         <Text style={[styles.section, { color: colors.text }]}>Recent learning claims</Text>
         {!snapshot?.recent.length && <Text style={{ color: colors.textSecondary }}>No claim records yet. As Atlas learns, candidates and their sources appear here.</Text>}
         {snapshot?.recent.map((c) => (
@@ -66,7 +71,7 @@ export function LearningReliabilityScreen() {
             {selected === c.id && <View style={[styles.evidence, { borderTopColor: colors.border }]}>
               {!sources.length && <Text style={{ color: colors.textSecondary }}>No source passages were attached. This claim cannot be marked verified.</Text>}
               {sources.map((src, i) => <View key={i} style={styles.source}>
-                <Text style={[styles.strong, { color: colors.text }]}>{src.title}</Text>
+                <Text style={[styles.strong, { color: colors.text }]}>{src.title}{src.stance === 'context' ? ' (context only: the claim does not cite it)' : src.stance === 'supporting' ? ' (a second source)' : ''}</Text>
                 <Text selectable style={[styles.small, { color: colors.textSecondary }]}>{src.locator || src.url || 'No locator supplied'}</Text>
                 <Text selectable style={[styles.small, styles.passage, { color: colors.textSecondary }]}>{src.passage || 'No source passage available'}</Text>
               </View>)}
@@ -80,6 +85,8 @@ export function LearningReliabilityScreen() {
             </View>}
           </View>
         ))}
+        <ExamSection onChanged={refresh} />
+        <ExportSection />
       </ScrollView>
     </SafeAreaView>
   );

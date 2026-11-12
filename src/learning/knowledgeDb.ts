@@ -222,6 +222,17 @@ export class LearningKnowledgeDb {
     this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, claim.status, 'disputed', 'consistency-check', reason, now]);
   }
 
+  /**
+   * How much a person has verified and how fast: claims verified on this device, over the time since the first claim was stored.
+   * Only reviews by a person count; nothing the model says does.
+   */
+  verificationRate(now = new Date()): { verified: number; hours: number; perHour: number } {
+    const verified = Number(((this.sql("SELECT COUNT(DISTINCT claim_id) AS n FROM atlas_claim_history WHERE new_status = 'verified' AND actor = 'device-owner-review'").rows ?? [])[0] as any)?.n) || 0;
+    const first = ((this.sql('SELECT MIN(created_at) AS at FROM atlas_claims').rows ?? [])[0] as any)?.at;
+    const hours = first ? Math.max(0, (now.getTime() - Date.parse(String(first))) / 3_600_000) : 0;
+    return { verified, hours, perHour: hours >= 1 ? verified / hours : 0 };
+  }
+
   /** What was learned for one question: its candidate and verified claims. */
   claimsForQuestion(question: string): string[] {
     return (this.sql("SELECT claim_text FROM atlas_claims WHERE question = ? AND status IN ('candidate','verified') ORDER BY created_at", [question]).rows ?? [])
@@ -301,13 +312,13 @@ export class LearningKnowledgeDb {
     })) };
   }
 
-  getClaimSources(id: string): Array<{ title: string; locator: string; passage: string; url: string }> {
-    return (this.sql(`SELECT s.title, e.locator, e.passage, s.url FROM atlas_evidence e
+  getClaimSources(id: string): Array<{ title: string; locator: string; passage: string; url: string; stance: string }> {
+    return (this.sql(`SELECT s.title, e.locator, e.passage, s.url, e.stance FROM atlas_evidence e
       JOIN atlas_sources s ON s.id = e.source_id WHERE e.claim_id = ?
       ORDER BY e.citation_number ASC LIMIT 20`, [id]).rows ?? []).map((row) => {
       const r = row as Record<string, any>;
       return { title: String(r.title || ''), locator: String(r.locator || ''),
-        passage: String(r.passage || ''), url: String(r.url || '') };
+        passage: String(r.passage || ''), url: String(r.url || ''), stance: String(r.stance || 'cited') };
     });
   }
 

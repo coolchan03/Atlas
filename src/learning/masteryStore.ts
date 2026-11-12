@@ -61,10 +61,11 @@ export class MasteryStore {
       [subjectId, now.toISOString(), limit]).rows ?? []).map((r: any) => ({ id: String(r.concept_id), question: String(r.question), topic: String(r.topic), strength: Number(r.strength) }));
   }
 
-  summary(subjectId: string, now = new Date()): MasterySummary {
+  /** Progress for one subject, or for all of them when `subjectId` is null. */
+  summary(subjectId: string | null, now = new Date()): MasterySummary {
     const r = (this.db.sql(`SELECT COUNT(*) AS tracked, COALESCE(AVG(strength), 0) AS avg,
       SUM(CASE WHEN next_review <= ? THEN 1 ELSE 0 END) AS due, SUM(CASE WHEN streak >= ? THEN 1 ELSE 0 END) AS mastered
-      FROM atlas_mastery WHERE subject_id = ?`, [now.toISOString(), MASTERED_STREAK, subjectId]).rows ?? [])[0] as any;
+      FROM atlas_mastery WHERE (? IS NULL OR subject_id = ?)`, [now.toISOString(), MASTERED_STREAK, subjectId, subjectId]).rows ?? [])[0] as any;
     return { tracked: Number(r?.tracked) || 0, due: Number(r?.due) || 0, mastered: Number(r?.mastered) || 0, averageStrength: Math.round((Number(r?.avg) || 0) * 100) / 100 };
   }
 }

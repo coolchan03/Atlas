@@ -5,17 +5,19 @@ Checked against the code on 2026-11-12 (build 0.0.157 plus the fixes made that d
 
 ## Learning architecture (phases 1 to 9)
 
+Updated for build 0.0.158. The tax code and other legal sources were left out on purpose. See `ATLAS_LEARNING_ARCHITECTURE.md`.
+
 | Phase | Status | What exists | What is missing |
 |---|---|---|---|
-| 1. Inspect the code | Cannot verify | The pieces named in the prompt exist (`src/learning/engine.ts`, `evidenceGate.ts`, `knowledgeDb.ts`) | No written diagnosis was saved in the repo |
-| 2. Evidence-grounded storage | Partly | SQLite database with sources, claims, evidence, correction history, report archive. Claims carry status, dates, locators and schema version. Old reports are archived unchanged and never auto-verified | The experience, procedural-memory and exam-result tables are created but nothing writes to them |
-| 3. Better Learner | Partly | Claims are pulled out of each report and saved as `candidate` with their sources | It does not search primary sources, pull passages per claim, compare with existing knowledge, or skip repeat research when nothing changed. Claim extraction is a sentence split, not a model step |
-| 4. Stronger Judge | Partly | Score parsing (`8/5` style errors are invalid), citation de-duplication, alarms for the listed tax mistakes, and a gate where a high score never makes a claim `verified` | The six dimensions are not scored separately, and there are no deterministic checks for statutes, dates or calculations beyond those alarms |
-| 5. Source versioning and legal knowledge | Not done | Fields for effective dates and tax year exist | No Internal Revenue Code XML ingestion, no regulations, no section index, no amendment tracking, no source-authority ranking, no incremental updates |
-| 6. Better Manager | Partly | The Manager reviews drift and its prompt favors contradictions and missing basics | No mastery tracking, no scheduled practice or review, no checkpoint and resume, no bounded queue or cache cleanup |
-| 7. Exams and measurement | Not done | A results table exists | No benchmark runner, no comparison of the three approaches, no progress history. The reliability screen only shows counts |
-| 8. Training export | Not done | Nothing | No training dataset export, no adapter workflow |
-| 9. Integration exports | Partly | JSONL claim export and import with validation, de-duplication and round-trip tests. A separate ZIP format exists in `src/knowledge` | Two formats exist. The JSONL one covers claims only, not exam results, procedures or learning history. The Street Advisory side is unverified (see `ATLAS_LEARNING_INTERCHANGE.md`) |
+| 1. Inspect the code | Done | The existing engine, store and ledger were read and reused; `ATLAS_LEARNING_ARCHITECTURE.md` explains the result | |
+| 2. Evidence-grounded storage | Done | Claims with evidence, history, contradictions, mastery, experience, procedures and exam results, in a database that upgrades by adding tables. Old reports are archived unchanged and never auto-verified | Semantic embeddings (nothing showed they would help) |
+| 3. Better Learner | Done | Claims are checked against their passage, compared with known knowledge (new, repeat, conflict), and stored with evidence. No rewrite without new evidence. Injection text is removed from sources | Primary-source search is whatever the project, library and web search return |
+| 4. Stronger Judge | Done | Six separate scores; facts and citations are independent gates; the cited passage is checked by text; score and verdict must agree | No model checks that a passage entails a claim |
+| 5. Source versioning and legal knowledge | Left out on purpose | Fields for dates exist | Tax code and legal ingestion |
+| 6. Better Manager | Done | Conflicts, then due reviews, then study; measured input; on-task guard; spaced review; checkpoint; bounded question list | |
+| 7. Exams and measurement | Done | Exam in three modes, scored without a model, history, and an improvement claimed only when measured | Processor use is not measured |
+| 8. Training export | Partly, by design | Verified-only dataset with splits, provenance, exam questions removed, and a manifest | Training itself, evaluation of an adapter and deployment |
+| 9. Integration exports | Done | One portable JSONL for all record types, with validation, duplicate handling, import safety and round-trip tests | Not tested against Street Advisory's own format |
 
 ## The 17 numbered requests
 

@@ -76,6 +76,16 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
   };
 }
 
+/**
+ * Turns what a person typed into expected facts: one fact per line, alternative wordings separated by "|",
+ * and wordings that must not appear separated by commas or new lines.
+ */
+export function parseExpected(factsText: string, forbidText = ''): Expected {
+  const facts = factsText.split('\n').map((line) => line.split('|').map((w) => w.trim()).filter(Boolean)).filter((alts) => alts.length);
+  const forbid = forbidText.split(/[\n,]/).map((w) => w.trim()).filter(Boolean);
+  return forbid.length ? { facts, forbid } : { facts };
+}
+
 const isoNow = () => new Date().toISOString();
 const SAME_QUESTION = 0.8;
 /** Fewer questions than this cannot support a claim of improvement. */
@@ -100,9 +110,14 @@ export class ExamStore {
     }));
   }
 
+  /** Every exam question, whatever the subject: what training data and study questions must stay clear of. */
+  allQuestions(): string[] {
+    return (this.db.sql('SELECT question FROM atlas_exam_items').rows ?? []).map((r: any) => String(r.question));
+  }
+
   /** True when a question is (nearly) one of the exam's. Study questions and training data must not contain these. */
   isExamQuestion(question: string): boolean {
-    return (this.db.sql('SELECT question FROM atlas_exam_items').rows ?? []).some((r: any) => similarity(question, String(r.question)) >= SAME_QUESTION);
+    return this.allQuestions().some((q) => similarity(question, q) >= SAME_QUESTION);
   }
 
   saveResult(mode: ExamMode, metrics: ExamMetrics): void {

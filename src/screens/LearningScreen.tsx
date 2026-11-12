@@ -271,6 +271,7 @@ export const LearningScreen: React.FC = () => {
                   ))}
                 </View>
               )}
+              {isOpen && !!r.gates && <Text style={styles.direction} testID={`report-gates-${r.id}`}>Facts: {r.gates.facts}. Citations: {r.gates.citations}.{r.dimensions ? ` Scores: ${Object.entries(r.dimensions).map(([k, v]) => `${k} ${v}`).join(', ')}.` : ''}</Text>}
               {isOpen && !!r.why && <Text style={styles.direction}>Judge: {r.why}</Text>}
               {isOpen && !!r.verificationReasons?.length && <Text style={styles.direction}>Independent checks: {r.verificationReasons.join('; ')}</Text>}
               {isOpen && !!r.sources && <Text style={styles.counts} selectable>Sources it had:{'\n'}{r.sources}</Text>}
