@@ -112,7 +112,7 @@ class InstrumentalBackgroundPlayer {
       this.currentPath = track.path;
       this.startedAt = now - resumeOffset;
       this.pauseOffset = 0;
-      next.onended = () => {
+      next.onEnded = () => {
         if (this.source !== next) return;
         this.source = null;
         this.gain = null;

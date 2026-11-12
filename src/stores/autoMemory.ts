@@ -45,7 +45,7 @@ export const useAutoMemory = create<AutoMemoryState>()(persist((set, get) => ({
     const fact = extracted.fact;
     if (useAboutMe.getState().memories.some((m) => m.toLowerCase() === fact.toLowerCase())) return;
     if (st.pending.some((p) => p.fact.toLowerCase() === fact.toLowerCase())) return;
-    const source = isTherapy || extracted.category === 'therapy' ? 'therapy' : 'preferences';
+    const source: MemoryCandidate['source'] = isTherapy || extracted.category === 'therapy' ? 'therapy' : 'preferences';
     if (source === 'preferences' && st.autoSavePreferences) { useAboutMe.getState().addMemory(fact); return; }
     // Never automatically store therapy facts; the person explicitly approves each one.
     set((s) => ({ pending: [...s.pending, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, fact, source, createdAt: Date.now() }].slice(-20) }));

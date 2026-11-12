@@ -9,7 +9,7 @@ import { isPocketVoiceId } from './cloneRouting';
 import { useCloneReferences } from './cloneStore';
 
 /** Human label for a profile's voice, e.g. "KittenTTS Nano · Kitten 3 · 1.25x". */
-export function describeProfile(p: Pick<VoiceProfile, 'voiceId' | 'sid' | 'rate'>): string {
+export function describeProfile(p: Pick<VoiceProfile, 'voiceId' | 'sid' | 'rate' | 'referenceId'>): string {
   const voice = findNeuralVoice(p.voiceId);
   const clone = p.referenceId ? `Cloned voice` : undefined;
   const speaker = voice?.speakers?.find((k) => k.sid === p.sid)?.name ?? (voice?.imported && p.sid > 0 ? `Speaker ${p.sid + 1}` : undefined);
