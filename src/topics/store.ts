@@ -22,6 +22,8 @@ export interface Course {
   sources: CourseSource[];
   /** The project this course belongs to: its shared documents are material for the squares, and its chats are where the tutor talks. */
   projectId?: string;
+  /** Per square: the passages from the learner's own books and sources it was written from, so they can check it. */
+  cited?: Record<string, { source: string; text: string }[]>;
 }
 
 export interface SharedCourse {
@@ -44,6 +46,7 @@ interface TopicsState {
   setProject: (id: string, projectId: string | undefined) => void;
   /** Adds one lesson square for each item (before the final quiz when the board ends with one). */
   addLessons: (id: string, items: { title: string; focus: string; unit: string }[]) => void;
+  setCited: (id: string, key: string, passages: { source: string; text: string }[]) => void;
   clearContent: (id: string, key: string) => void;
   /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
   addRemedial: (id: string, afterKey: string) => boolean;
@@ -86,6 +89,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     const squares = last?.checkpoint && last.format === 'quiz' ? [...c.squares.slice(0, -1), ...added, last] : [...c.squares, ...added];
     return { ...c, squares: squares.slice(0, 80) };
   }) })),
+  setCited: (id, key, passages) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, cited: { ...(c.cited ?? {}), [key]: passages.slice(0, 6) } } : c)) })),
   clearContent: (id, key) => set((s) => ({ courses: s.courses.map((c) => {
     if (c.id !== id) return c;
     const { [key]: _gone, ...rest } = c.content;

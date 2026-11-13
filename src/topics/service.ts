@@ -63,13 +63,15 @@ export async function squareContent(course: Course, key: string): Promise<Square
     return made;
   }
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
+  const excerpts = [...await projectExcerpts(course.projectId, `${square.title} ${square.focus}`), ...relevantExcerpts(course.sources ?? [], `${square.title} ${square.focus}`)].slice(0, 5);
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes,
     bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn(await projectQuestionBank(course.projectId), `${square.title} ${square.focus}`)) : '',
-    excerpts: [...await projectExcerpts(course.projectId, `${square.title} ${square.focus}`), ...relevantExcerpts(course.sources ?? [], `${square.title} ${square.focus}`)].slice(0, 5),
+    excerpts,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   useTopics.getState().setContent(course.id, key, content);
+  if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   return content;
 }
 

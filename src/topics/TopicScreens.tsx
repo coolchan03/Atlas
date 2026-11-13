@@ -287,6 +287,26 @@ export const TopicBoardScreen: React.FC = () => {
   );
 };
 
+/** The passages of the learner's own books a square was written from, folded away until asked for. */
+function CitedFold({ passages }: { passages: { source: string; text: string }[] }) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+  if (!passages.length) return null;
+  return (
+    <View testID="square-cited">
+      <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="square-cited-toggle">
+        <Text style={{ color: colors.primary }}>{open ? 'Hide' : 'Show'} where this came from ({passages.length} passage{passages.length === 1 ? '' : 's'} from your sources)</Text>
+      </TouchableOpacity>
+      {open && passages.map((p, i) => (
+        <View key={i} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <Text style={[styles.meta, { color: colors.textMuted }]}>{p.source}</Text>
+          <Text style={{ color: colors.textSecondary }}>{p.text}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** One square: written when first opened, then played. */
 export const TopicSquareScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -355,6 +375,7 @@ export const TopicSquareScreen: React.FC = () => {
               </TouchableOpacity>
             )}
             <SquareView content={content} onDone={finish} />
+            <CitedFold passages={course.cited?.[key] ?? []} />
           </>
         ) : error ? (
           <View style={styles.gap}>

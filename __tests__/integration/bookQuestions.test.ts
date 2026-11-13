@@ -43,6 +43,8 @@ it('writes a quiz square starting from the textbook questions when the course pr
   expect(asked[0]).toContain("QUESTIONS FROM THE LEARNER'S OWN TEXTBOOK");
   expect(asked[0]).toContain('which two items does a lessee record');
   expect(asked[0]).toContain("book's answer: a and b");
+  // The passages the square was written from are kept so the learner can check them.
+  expect(useTopics.getState().courses[0].cited?.s1?.[0].source).toBe('Tax book.pdf');
   // A lesson square is not made of questions: no textbook questions are added.
   asked.length = 0;
   useTopics.setState({ courses: [{ ...useTopics.getState().courses[0], squares: [{ ...squares[0], format: 'lesson', key: 's2' }] }] });
