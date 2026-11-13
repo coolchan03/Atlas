@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
@@ -193,6 +193,7 @@ export function MusicStudioScreen() {
               <Text style={[styles.label, { color: colors.text }]}>{track.title}</Text>
               <Text style={[styles.small, { color: colors.textSecondary }]}>{track.mood} · {track.sound} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
             </TouchableOpacity>
+            <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { Share.share({ title: track.title, url: `file://${track.path}` }).catch(() => undefined); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}
@@ -212,6 +213,6 @@ const styles = StyleSheet.create({
   small: { fontSize: 12 },
   tiny: { fontSize: 11 },
   centered: { alignSelf: 'center' },
-  end: { alignSelf: 'flex-end' },
+  end: { alignSelf: 'flex-end', marginTop: 6 },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },
 });

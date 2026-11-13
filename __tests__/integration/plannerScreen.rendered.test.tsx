@@ -40,3 +40,22 @@ it('saves exams in order, shows today\'s target, ticks topics, and explains a ba
   rtl.fireEvent.press(r.getByTestId('plan-save'));
   expect(r.getByTestId('plan-msg').props.children).toMatch(/Not enough days/);
 });
+
+it('adds an exam from plain fields and removes one', async () => {
+  const rtl = requireRTL();
+  const React = require('react');
+  const { PlannerScreen } = require('../../src/screens/PlannerScreen');
+  const { usePlanStore } = require('../../src/study/planStore');
+  usePlanStore.setState({ exams: [], done: [] });
+  const r = rtl.render(React.createElement(PlannerScreen));
+  await rtl.act(async () => { await Promise.resolve(); });
+  rtl.fireEvent.changeText(r.getByTestId('plan-name'), 'FAR');
+  rtl.fireEvent.press(r.getByTestId('plan-add'));
+  expect(r.getByTestId('plan-msg').props.children).toMatch(/name and a date/);
+  rtl.fireEvent.changeText(r.getByTestId('plan-date'), inDays(60));
+  rtl.fireEvent.changeText(r.getByTestId('plan-topics'), 'Leases, Bonds');
+  rtl.fireEvent.press(r.getByTestId('plan-add'));
+  expect(usePlanStore.getState().exams).toEqual([{ name: 'FAR', date: inDays(60), topics: ['Leases', 'Bonds'] }]);
+  rtl.fireEvent.press(r.getByTestId('exam-remove-FAR'));
+  expect(usePlanStore.getState().exams).toEqual([]);
+});
