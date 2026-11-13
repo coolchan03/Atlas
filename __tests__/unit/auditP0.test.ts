@@ -76,3 +76,33 @@ describe('T11 execution-time tool authorization', () => {
     expect(`${r.content}${r.error ?? ''}`).toMatch(/not in a project/); // no project: nothing is written
   });
 });
+
+describe('T17 timeouts really stop the work', () => {
+  it('aborts the signal on timeout and refuses a late write', async () => {
+    jest.useFakeTimers();
+    const { withTimeout } = require('../../src/utils/withTimeout');
+    const controller = new AbortController();
+    const pending = withTimeout(new Promise(() => undefined), 1000, { what: 'slow tool', onTimeout: () => controller.abort() });
+    const caught = pending.catch((e: Error) => e);
+    jest.advanceTimersByTime(1001);
+    expect((await caught).name).toBe('TimeoutError');
+    expect(controller.signal.aborted).toBe(true);
+    jest.useRealTimers();
+    const { executeToolCall } = require('../../src/services/tools/handlers');
+    const r = await executeToolCall({ id: '1', name: 'update_project_document', arguments: { name: 'a', content: 'b' }, context: { projectId: 'p' }, signal: controller.signal });
+    expect(r.error).toMatch(/cancelled/);
+  });
+});
+
+describe('study saves are flushed, ordered and retried', () => {
+  it('flushPendingExerciseSaves writes the waiting value at once (app going to background)', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const { debouncedStorage, flushPendingExerciseSaves } = require('../../src/study/exercises');
+    const store = debouncedStorage(60_000);
+    await store.setItem('t-key', { state: { n: 1 }, version: 0 });
+    await store.setItem('t-key', { state: { n: 2 }, version: 0 });
+    await flushPendingExerciseSaves();
+    const saved = JSON.parse(await (AsyncStorage.default ?? AsyncStorage).getItem('t-key'));
+    expect(saved.state.n).toBe(2);
+  });
+});

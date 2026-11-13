@@ -7,12 +7,14 @@ export class TimeoutError extends Error {
 }
 
 /**
- * Settles with `promise`, or rejects with a TimeoutError after `ms`. The work itself cannot be cancelled from here
- * (a tool that never answers keeps running in the background); this only stops the caller waiting for it forever.
+ * Settles with `promise`, or rejects with a TimeoutError after `ms`. A promise itself cannot be cancelled from here, so pass
+ * `{ what, onTimeout }` (for example `() => controller.abort()`) to tell the work to stop; work that honours an AbortSignal then really ends,
+ * and anything that still finishes late must check the signal before it writes.
  */
-export function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string | { what: string; onTimeout?: () => void }): Promise<T> {
+  const { what, onTimeout } = typeof label === 'string' ? { what: label, onTimeout: undefined } : label;
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new TimeoutError(what, ms)), ms);
+    const timer = setTimeout(() => { try { onTimeout?.(); } finally { reject(new TimeoutError(what, ms)); } }, ms);
     promise.then(
       (v) => { clearTimeout(timer); resolve(v); },
       (e) => { clearTimeout(timer); reject(e); },

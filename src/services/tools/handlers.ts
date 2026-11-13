@@ -29,6 +29,7 @@ export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
 async function dispatchTool(call: ToolCall): Promise<string> {
   // Off-grid mode is enforced here, where tools actually run, not only when a
   // chat builds its tool list (remote providers, learning and other callers too).
+  if (call.signal?.aborted) throw new Error(`The "${call.name}" tool was cancelled before it ran.`);
   if (NETWORK_TOOLS.includes(call.name) && offGridOn()) {
     return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
   }
@@ -58,7 +59,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const name = requireString(call, 'name');
       const content = requireString(call, 'content');
       if (!name || !content) throw new Error('Missing required parameter: name and content');
-      return handleUpdateProjectDocument({ name, content, mode: call.arguments?.mode, projectId: call.context?.projectId });
+      return handleUpdateProjectDocument({ name, content, mode: call.arguments?.mode, projectId: call.context?.projectId, signal: call.signal });
     }
     case 'search_offline_library': {
       const q = requireString(call, 'query');
@@ -135,7 +136,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
         const ok = await DT.confirm('Open this web page?', `The assistant read a file on your phone and now wants to open:\n\n${url.slice(0, 300)}\n\nOnly allow this if you expected it (a web page could try to trick the assistant into sending your file's contents).`, 'Open');
         if (!ok) return 'The user declined to open this page.';
       }
-      return handleReadUrl(url);
+      return handleReadUrl(url, 4000, call.signal);
     }
     default:
       throw new Error(`Unknown tool: ${call.name}`);
@@ -433,7 +434,7 @@ function htmlToMarkdown(html: string): string {
 /** Read a web page as plain text (used by the daily briefing too). */
 export async function readPage(rawUrl: string, maxChars = 4000): Promise<string> { return handleReadUrl(rawUrl, maxChars); }
 
-async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000): Promise<string> {
+async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000, signal?: AbortSignal): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
   let url = rawUrl.trim();
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
@@ -444,6 +445,7 @@ async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000): Promise<string> 
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
+  signal?.addEventListener?.('abort', () => controller.abort());
   try {
     // On-device fetch + parse (privacy-preserving — no third-party proxy)
     const response = await fetch(url, {
@@ -478,10 +480,11 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
     .join('\n\n---\n\n');
 }
 
-async function handleUpdateProjectDocument(p: { name: string; content: string; mode?: string; projectId?: string }): Promise<string> {
+async function handleUpdateProjectDocument(p: { name: string; content: string; mode?: string; projectId?: string; signal?: AbortSignal }): Promise<string> {
   if (!p.projectId) return 'This chat is not in a project, so there is no shared document to update.';
   const mode = p.mode === 'replace' ? 'replace' : 'append';
   const { ragService } = require('../rag'); // NOSONAR
+  if (p.signal?.aborted) throw new Error('The update was cancelled, so nothing was written.'); // no writes after a timeout or cancel
   await ragService.saveProjectNote({ projectId: p.projectId, name: p.name, text: p.content, mode });
   return `${mode === 'replace' ? 'Rewrote' : 'Added to'} the project document "${p.name}". Every chat in this project can now use it.`;
 }

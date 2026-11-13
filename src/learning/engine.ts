@@ -485,7 +485,7 @@ function examAnswerer(cfg: LearnConfig): Answerer {
   return async (item, mode) => {
     if (mode === 'baseline') return { text: await ask(EXAM_SYSTEM, `QUESTION: ${item.question}`, 'learner'), sourceCount: 0 };
     const { text: sources, list } = await research(cfg, item.question);
-    const known = mode === 'memory' ? safely(() => learningKnowledgeDb.knownClaims(cfg.topic), []).filter((k) => k.status !== 'disputed') : [];
+    const known = mode === 'memory' ? safely(() => learningKnowledgeDb.knownClaims(cfg.topic), []).filter((k) => k.status === 'verified') : []; // only notes the person reviewed and verified count as evidence; unreviewed candidates do not
     const notes = rankClaims(item.question, known, 5).map((k, i) => `${i + 1}. ${k.text}`);
     const material = [sources && `SOURCES:\n${sources}`, notes.length && `STORED NOTES:\n${notes.join('\n')}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');

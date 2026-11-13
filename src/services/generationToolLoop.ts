@@ -299,7 +299,9 @@ async function executeToolCallSafely(tc: ToolCall, enabledToolIds?: string[]): P
     return toolErrorResult(tc, new Error(`The "${tc.name}" tool is not enabled for this chat, so it was not run.`), start);
   }
   try {
-    const raw = await withTimeout(Promise.resolve(ext ? ext.execute(tc) : executeToolCall(tc)), toolTimeoutFor(tc.name), `The "${tc.name}" tool`);
+    const controller = new AbortController();
+    tc.signal = controller.signal;
+    const raw = await withTimeout(Promise.resolve(ext ? ext.execute(tc) : executeToolCall(tc)), toolTimeoutFor(tc.name), { what: `The "${tc.name}" tool`, onTimeout: () => controller.abort() });
     return normalizeToolResult(tc, raw);
   } catch (err) {
     logger.error(`[ToolLoop] tool "${tc.name}" threw — surfacing as a typed error result`, err);

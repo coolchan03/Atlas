@@ -20,6 +20,8 @@ export interface ToolCall {
   name: string;
   arguments: Record<string, any>;
   context?: { projectId?: string };
+  /** Aborted when the call times out or the turn is cancelled. Tools that do I/O stop on it, and nothing is written after it aborts. */
+  signal?: AbortSignal;
 }
 
 /** How a tool call resolved. The loop sets this for EVERY call so the model and UI

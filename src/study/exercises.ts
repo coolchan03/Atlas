@@ -7,6 +7,8 @@ import type { Difficulty } from './difficulty';
 import { create } from 'zustand';
 import { persist, createJSONStorage, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
+import logger from '../utils/logger';
 import { localUniqueId } from '../utils/uniqueId';
 
 export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
@@ -127,15 +129,43 @@ const DAYS = [0, 1, 2, 4, 8, 16];
  * Saves at most once every `ms` after the last change. Typing in a drill answer changes the store on every key, and each save writes
  * every saved question; without this, one answer meant dozens of full writes. The latest value always gets written.
  */
+const pendingFlushes = new Set<() => Promise<void>>();
+let lifecycleHooked = false;
+/** Writes every waiting save now. Called when the app goes to the background and can be awaited before a restart. */
+export async function flushPendingExerciseSaves(): Promise<void> { await Promise.all([...pendingFlushes].map((f) => f())); }
+
 export function debouncedStorage<S>(ms: number): PersistStorage<S> {
   const base = createJSONStorage<S>(() => AsyncStorage) as PersistStorage<S>;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let waiting: { name: string; value: StorageValue<S> } | undefined;
-  const flush = () => { timer = undefined; const w = waiting; waiting = undefined; if (w) void base.setItem(w.name, w.value); };
+  // One write at a time, in order, and a failed write is retried once and then reported (it used to be dropped without a trace).
+  let chain: Promise<void> = Promise.resolve();
+  let inFlight = 0;
+  const attempt = async (w: { name: string; value: StorageValue<S> }) => {
+    try { await base.setItem(w.name, w.value); }
+    catch { try { await new Promise((r) => setTimeout(r, 1000)); await base.setItem(w.name, w.value); } catch (e) { logger.error('[Exercises] could not save practice progress', e); } }
+  };
+  const write = (w: { name: string; value: StorageValue<S> }) => {
+    // The first write starts at once; later ones queue behind it so saves never overlap or land out of order.
+    const run = inFlight === 0 ? attempt(w) : chain.then(() => attempt(w));
+    inFlight++;
+    chain = run.finally(() => { inFlight--; });
+    return chain;
+  };
+  const flush = async () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined; const w = waiting; waiting = undefined;
+    if (w) await write(w); else await chain;
+  };
+  pendingFlushes.add(flush);
+  if (!lifecycleHooked) {
+    lifecycleHooked = true;
+    AppState.addEventListener('change', (state) => { if (state !== 'active') void flushPendingExerciseSaves(); });
+  }
   return {
     getItem: (name) => base.getItem(name),
     removeItem: (name) => { waiting = undefined; return base.removeItem(name); },
-    setItem: (name, value) => { waiting = { name, value }; if (timer) clearTimeout(timer); timer = setTimeout(flush, ms); },
+    setItem: (name, value) => { waiting = { name, value }; if (timer) clearTimeout(timer); timer = setTimeout(() => { void flush(); }, ms); },
   };
 }
 
