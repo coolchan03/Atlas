@@ -19,6 +19,7 @@ import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { keepMissed } from './review';
+import { useOffGrid } from '../atlasTools/offGrid';
 import { UndoRow, useUndo } from '../components/UndoRow';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
@@ -69,6 +70,7 @@ export const TopicsScreen: React.FC = () => {
   const [level, setLevel] = useState(LEVELS[0]);
   const [minutes, setMinutes] = useState(10);
   const [online, setOnline] = useState(false);
+  const offGrid = useOffGrid((st) => st.on);
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [step, setStep] = useState('Designing your board...');
   const [busy, setBusy] = useState(false);
@@ -153,7 +155,7 @@ export const TopicsScreen: React.FC = () => {
             <Chip label="Add files" on={false} onPress={chooseFiles} testID="course-add-files" />
             <TouchableOpacity style={styles.row} onPress={() => setOnline(!online)} testID="course-online" accessibilityRole="switch" accessibilityState={{ checked: online }}>
               <Icon name={online ? 'check-square' : 'square'} size={18} color={online ? colors.primary : colors.textMuted} />
-              <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]}>Look for good sources online first and build the course from them (uses the internet)</Text>
+              <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]}>Look for good sources online first and build the course from them (uses the internet){offGrid ? '. Off-grid mode is on, so this will not work until you turn it off.' : ''}</Text>
             </TouchableOpacity>
             {busy && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-step">{step}</Text></View>}
             {!!error && <Text style={{ color: colors.error }} testID="course-error">{error}</Text>}
