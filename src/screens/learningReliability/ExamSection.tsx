@@ -6,6 +6,7 @@ import { GENERAL_NAME, NO_AGENT } from '../../learning/agents';
 import { exams, runExamNow } from '../../learning/engine';
 import { EXAM_MODE_LABEL, parseExpected, type ExamResult } from '../../learning/exams';
 import { sectionStyles as s } from './sectionStyles';
+import { QuestionImport } from './QuestionImport';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -84,6 +85,7 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
         </TouchableOpacity>
       </View>
       {!!status && <Text style={[s.small, { color: colors.textSecondary }]}>{status}</Text>}
+      <QuestionImport subjectId={subject} onAdded={() => { setVersion((v) => v + 1); onChanged(); }} />
       <History history={history} />
     </View>
   );
