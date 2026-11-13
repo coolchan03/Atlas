@@ -10,12 +10,14 @@ import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
 import { STYLES, type StyleGroup, type StyleMood } from '../music/styles';
-import { composeInstrumental, parseMusicScore, renderMusic, type MusicMood, type MusicScore, type SoundPreset } from '../music/composition';
+import { MUSIC_RATE, composeInstrumental, parseMusicScore, renderMusic, type MusicMood, type MusicScore, type SoundPreset } from '../music/composition';
 
 const makeMessage = (role: 'system' | 'user', content: string) => ({ id: `${role}-${Date.now()}`, role, content, timestamp: Date.now() });
 const SOUND: Array<{ id: SoundPreset; label: string }> = [
   { id: 'keys', label: 'Soft keys' }, { id: 'ambient', label: 'Warm pads' },
   { id: 'bell', label: 'Bells' }, { id: 'synth', label: 'Synth' },
+  { id: 'epiano', label: 'Electric piano' }, { id: 'guitar', label: 'Guitar' },
+  { id: 'overdrive', label: 'Rock guitar' }, { id: 'organ', label: 'Organ' },
 ];
 const BASIC_MOODS: Array<{ id: MusicMood; label: string }> = [
   { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
@@ -60,7 +62,7 @@ export function MusicStudioScreen() {
     const path = `${dir}/instrumental-${id}.wav`;
     const scorePath = `${dir}/instrumental-${id}.json`;
     try {
-      await RNFS.writeFile(path, toBase64(wavBytes(pcm, 16000)), 'base64');
+      await RNFS.writeFile(path, toBase64(wavBytes(pcm, MUSIC_RATE)), 'base64');
       await RNFS.writeFile(scorePath, JSON.stringify({ ...next, mood, sound, duration }, null, 2), 'utf8');
     } catch (error) {
       await RNFS.unlink(path).catch(() => undefined);

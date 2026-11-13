@@ -18,5 +18,5 @@ it('shows holidays and places as their own groups and sets a fitting sound when 
   const selected = view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected);
   expect(selected.some((r: any) => rtl.within(r).queryByText('Bells'))).toBe(true);
   rtl.fireEvent.press(view.getByText('Jazz'));
-  expect(view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected).some((r: any) => rtl.within(r).queryByText('Soft keys'))).toBe(true);
+  expect(view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected).some((r: any) => rtl.within(r).queryByText('Electric piano'))).toBe(true);
 });

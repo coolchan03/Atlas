@@ -4,11 +4,14 @@
  * Output is original synthesised note audio, not singing or a licensed recording.
  */
 import { composeStyled, isStyleMood, type StyleMood } from './styles';
-import type { MusicNote, MusicRole, MusicScore } from './types';
+import type { MusicNote, MusicRole, MusicScore, SoundPreset } from './types';
+import { noteWave } from './instruments';
+
+/** Sample rate of every rendered tune. 24 kHz keeps the top end that makes a piano or a cymbal sound like one. */
+export const MUSIC_RATE = 24000;
 
 export type MusicMood = 'study' | 'ambient' | 'cinematic' | 'electronic' | StyleMood;
-export type SoundPreset = 'keys' | 'bell' | 'synth' | 'ambient';
-export type { MusicRole, MusicNote, MusicScore } from './types';
+export type { MusicRole, MusicNote, MusicScore, SoundPreset } from './types';
 
 const SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export function pitchNumber(name: string): number | null {
@@ -94,26 +97,6 @@ export function composeInstrumental(prompt: string, mood: MusicMood = 'study'): 
   return { title: `${label} (${mood})`, bpm, notes };
 }
 
-/** Same noise every time, so a rendered tune never changes between plays. */
-const noise = (i: number) => (((Math.imul(i, 1103515245) + 12345) >>> 16) & 0x7fff) / 16384 - 1;
-
-/** One percussion hit: a low pitch is a soft kick, a high pitch is a short tick. */
-function percSample(note: MusicNote, i: number, rate: number): number {
-  const t = i / rate;
-  const hz = 440 * 2 ** ((note.pitch - 69) / 12);
-  if (note.pitch < 60) return Math.sin(2 * Math.PI * hz * 1.6 * t * Math.exp(-t * 14)) * Math.exp(-t * 16);
-  return noise(i) * Math.exp(-t * (note.pitch > 85 ? 60 : 24));
-}
-
-function tone(theta: number, preset: SoundPreset, role: MusicRole): number {
-  const s = Math.sin(theta), h2 = Math.sin(theta * 2);
-  if (role === 'bass') return 0.8 * s + 0.12 * h2;
-  if (preset === 'bell') return s + 0.22 * Math.sin(theta * 2.7);
-  if (preset === 'synth') return s + 0.28 * h2 + 0.1 * Math.sin(theta * 3);
-  if (preset === 'ambient' || role === 'pad') return s + 0.16 * Math.sin(theta * 2.005);
-  return s + 0.17 * h2 + 0.07 * Math.sin(theta * 3);
-}
-
 export interface RenderOptions { preset?: SoundPreset; rate?: number; seconds?: number }
 
 /** Length of one pass through the score, after checking the score and sample rate are usable. */
@@ -125,38 +108,26 @@ function loopSeconds(score: MusicScore, rate: number): number {
 
 interface MixContext { bpm: number; preset: SoundPreset; rate: number; loopFrames: number }
 
-/** Adds one note to the mix, repeating it every loop until the buffer is full. */
+/** Adds one note to the mix, repeating it every loop until the buffer is full. The note is made once and copied. */
 function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loopFrames }: MixContext): void {
   if (!Number.isFinite(note.pitch) || !Number.isFinite(note.beat) || !Number.isFinite(note.length) || !Number.isFinite(note.gain)) throw new Error('Invalid score note');
   const frames = buffer.length;
   const startInLoop = Math.round(note.beat * 60 / bpm * rate);
   const samples = Math.ceil(note.length * 60 / bpm * rate);
   if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
-  const hz = 440 * 2 ** ((note.pitch - 69) / 12);
-  const role = note.role ?? 'melody';
-  if (role === 'perc') {
-    for (let start = startInLoop; start < frames; start += loopFrames) {
-      for (let i = 0; i < samples && start + i < frames; i++) buffer[start + i] += percSample(note, i, rate) * note.gain;
-    }
-    return;
-  }
+  const wave = noteWave(note, { samples, rate, preset });
   for (let start = startInLoop; start < frames; start += loopFrames) {
-    for (let i = 0; i < samples && start + i < frames; i++) {
-      const t = i / rate;
-      const attack = Math.min(1, t / (role === 'pad' ? 0.24 : 0.014));
-      const release = Math.min(1, (samples - i) / (rate * (role === 'pad' ? 0.33 : 0.07)));
-      const shape = preset === 'bell' ? Math.exp(-2.4 * i / samples) : (role === 'bass' ? 0.66 : 0.82);
-      buffer[start + i] += tone(2 * Math.PI * hz * t, preset, role) * attack * release * shape * note.gain;
-    }
+    const end = Math.min(samples, frames - start);
+    for (let i = 0; i < end; i++) buffer[start + i] += wave[i];
   }
 }
 
-/** Gentle damped room echo followed by a low-pass smoothing stage, in place. Returns the loudest sample. */
+/** A soft room echo and a light low-pass to take the edge off, in place. Pads get a longer echo. Returns the loudest sample. */
 function echoAndSmooth(buffer: Float32Array, preset: SoundPreset, rate: number): number {
   const ambient = preset === 'ambient';
-  const delay = Math.round(rate * (ambient ? 0.23 : 0.12));
-  const echoGain = ambient ? 0.16 : 0.08;
-  const smoothing = ambient ? 0.15 : 0.42;
+  const delay = Math.round(rate * (ambient ? 0.21 : 0.11));
+  const echoGain = ambient ? 0.28 : 0.1;
+  const smoothing = ambient ? 0.55 : 0.88;
   let filtered = 0;
   let peak = 0;
   for (let i = 0; i < buffer.length; i++) {
@@ -173,7 +144,7 @@ function echoAndSmooth(buffer: Float32Array, preset: SoundPreset, rate: number):
  * Each note has a bounded attack/release, a soft echo and a final fade to prevent clicks.
  * Work and storage are capped; this does not run a generative audio diffusion model.
  */
-export function renderMusic(score: MusicScore, { preset = 'keys', rate = 16000, seconds }: RenderOptions = {}): Int16Array {
+export function renderMusic(score: MusicScore, { preset = 'keys', rate = MUSIC_RATE, seconds }: RenderOptions = {}): Int16Array {
   const baseSeconds = loopSeconds(score, rate);
   const requestedSeconds = seconds === undefined ? baseSeconds + 0.5 : seconds;
   if (!Number.isFinite(requestedSeconds) || requestedSeconds < 3 || requestedSeconds > 120) throw new Error('Instrumental duration must be 3–120 seconds');
