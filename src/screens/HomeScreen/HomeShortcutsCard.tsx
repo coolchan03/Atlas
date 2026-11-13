@@ -7,6 +7,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useTopics } from '../../topics/store';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { activeModelService } from '../../services/activeModelService';
 import { instrumentalPlayer } from '../../music/backgroundPlayer';
@@ -36,6 +37,9 @@ const WIDGET_ACTIONS: Array<{ id: HomeWidgetAction; label: string }> = [
   { id: 'recorder', label: 'Voice recorder' },
   { id: 'compass', label: 'Compass / Level' },
   { id: 'read-aloud', label: 'Read text aloud' },
+  { id: 'course', label: 'Open a course board' },
+  { id: 'project', label: 'Open a project' },
+  { id: 'practice', label: 'Practice a project' },
 ];
 const actionLabel = (action: HomeWidgetAction | undefined) => WIDGET_ACTIONS.find((a) => a.id === (action || 'chat'))?.label || 'Open chat';
 const inChat = (action?: HomeWidgetAction) => action === 'call' || action === 'chat' || !action;
@@ -84,6 +88,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const localModels = useAppStore((s) => s.downloadedModels);
   const activeModelId = useAppStore((s) => s.activeModelId);
   const conversations = useChatStore((s) => s.conversations);
+  const courses = useTopics((s) => s.courses);
   const [open, setOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState('');
   const [draft, setDraft] = useState<Details>(initial);
@@ -148,6 +153,9 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
       const action = shortcut.action || 'chat';
       const screen = SCREEN_FOR_ACTION[action];
       if (screen) { openScreen(screen); return; }
+      if (action === 'course' && shortcut.courseId) { openScreen('TopicBoard', { courseId: shortcut.courseId }); return; }
+      if (action === 'project' && shortcut.projectId) { openScreen('ProjectDetail', { projectId: shortcut.projectId }); return; }
+      if (action === 'practice') { openScreen('Practice', shortcut.projectId ? { projectId: shortcut.projectId } : undefined); return; }
       if (action === 'model-picker') { navigation.navigate('ModelsTab', { initialTab: 'text' }); return; }
       if (action === 'resume-last' || action === 'resume-most') {
         const chats = useChatStore.getState();
@@ -170,6 +178,8 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     if (draft.action === 'call' && !draft.conversationId && !draft.modelId && !activeModelId) {
       Alert.alert('Choose a model', 'Pick a downloaded model, or load the current model first.'); return;
     }
+    if (draft.action === 'course' && !draft.courseId) { Alert.alert('Choose a course', 'Pick the course this widget opens.'); return; }
+    if (draft.action === 'project' && !draft.projectId) { Alert.alert('Choose a project', 'Pick the project this widget opens.'); return; }
     if (editingId) updateShortcut(editingId, draft); else addShortcut(draft);
     closeEditor();
   };
@@ -202,13 +212,14 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
                 <Text style={[styles.small, { color: colors.textSecondary }]}>{inChat(widget.action)
                   ? [widget.action === 'call' ? 'Call' : 'Chat', agent, localModels.find((m) => m.id === widget.modelId)?.name, projects.find((p) => p.id === widget.projectId)?.name,
                     widget.conversationId ? (conversations.find((c) => c.id === widget.conversationId)?.title.slice(0, 22) ?? 'chat removed') : undefined, voice].filter(Boolean).join(' · ')
-                  : actionLabel(widget.action)}</Text>
+                  : [actionLabel(widget.action), widget.action === 'course' ? courses.find((c) => c.id === widget.courseId)?.title : undefined,
+                    widget.action === 'project' || widget.action === 'practice' ? projects.find((p) => p.id === widget.projectId)?.name : undefined].filter(Boolean).join(' · ')}</Text>
               </TouchableOpacity>
               {isMusicPlayer && <MusicPlayerWidget openStudio={() => openScreen('MusicStudio')}/>}
               {isLearning && <LearningReliabilityWidget openLearning={() => openScreen('LearningReliability')}/>}
               {isReader && <ReadAloudWidget openReader={() => openScreen('ReadAloud')}/>}
             </View>
-            {inChat(widget.action) && <TouchableOpacity onPress={() => startEdit(widget)} accessibilityLabel={`Edit ${widget.title}`} testID={`edit-shortcut-${widget.id}`}><Icon name="edit-2" size={18} color={colors.textMuted} /></TouchableOpacity>}
+            {(inChat(widget.action) || ['course', 'project', 'practice'].includes(widget.action ?? '')) && <TouchableOpacity onPress={() => startEdit(widget)} accessibilityLabel={`Edit ${widget.title}`} testID={`edit-shortcut-${widget.id}`}><Icon name="edit-2" size={18} color={colors.textMuted} /></TouchableOpacity>}
             <TouchableOpacity onPress={() => Alert.alert('Remove widget?', widget.title, [
               { text: 'Cancel' }, { text: 'Remove', style: 'destructive', onPress: () => removeShortcut(widget.id) },
             ])} accessibilityLabel={`Remove ${widget.title}`}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
@@ -232,6 +243,9 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
             {select({ caption: 'Voice', value: draft.voiceProfileId, setter: (voiceProfileId) => update({ voiceProfileId }), choices: [{ id: '', label: 'Default/agent voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))] })}
             {select({ caption: 'Conversation style', value: draft.tone, setter: (tone) => update({ tone: (tone || 'balanced') as ChatTonePreset }), choices: CHAT_TONES.map((t) => ({ id: t.id, label: t.name })) })}
           </>}
+          {draft.action === 'course' && select({ caption: 'Course', value: draft.courseId, setter: (courseId) => update({ courseId }), choices: courses.map((c) => ({ id: c.id, label: c.title.slice(0, 26) })) })}
+          {(draft.action === 'project' || draft.action === 'practice') && select({ caption: 'Project', value: draft.projectId, setter: (projectId) => update({ projectId }),
+            choices: [...(draft.action === 'practice' ? [{ id: '', label: 'All projects' }] : []), ...projects.map((p) => ({ id: p.id, label: p.name }))] })}
           {draft.action === 'resume-most' && <Text style={[styles.small, { color: colors.textSecondary }]}>Uses the number of your sent messages to find your most-used unlocked chat. No message content is inspected.</Text>}
           {draft.action === 'resume-last' && <Text style={[styles.small, { color: colors.textSecondary }]}>Opens your last active unlocked chat, or the most recently updated one.</Text>}
           <TouchableOpacity accessibilityRole="button" style={[styles.save, { borderColor: colors.primary }]} onPress={add} testID="home-save-shortcut">

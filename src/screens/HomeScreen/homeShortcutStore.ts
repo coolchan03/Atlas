@@ -8,7 +8,8 @@ import type { ChatTonePreset } from '../../services/chatTone';
 export type HomeWidgetAction =
   'chat' | 'call' | 'resume-last' | 'resume-most' |
   'model-picker' | 'music-studio' | 'music-player' | 'learning' |
-  'learning-status' | 'daily-brief' | 'recorder' | 'compass' | 'read-aloud';
+  'learning-status' | 'daily-brief' | 'recorder' | 'compass' | 'read-aloud' |
+  'course' | 'project' | 'practice';
 export interface HomeShortcut {
   id: string;
   title: string;
@@ -16,6 +17,8 @@ export interface HomeShortcut {
   agentId?: string;
   projectId?: string;
   conversationId?: string;
+  /** For a course widget: the board it opens. */
+  courseId?: string;
   modelId?: string;
   voiceProfileId?: string;
   tone?: ChatTonePreset;

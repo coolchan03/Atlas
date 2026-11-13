@@ -154,3 +154,24 @@ it('home can hold several call buttons, each with its own agent, model, project 
   expect(useHomeShortcuts.getState().shortcuts).toHaveLength(2);
   expect(useHomeShortcuts.getState().shortcuts[0]).toMatchObject({ id: ids[0], modelId: 'm1', agentId: therapist.id });
 });
+
+it('a widget can open one course board, one project, or practice for a project', async () => {
+  const { rtl, view } = setup([]);
+  const { useTopics } = require('../../../src/topics/store');
+  const { useProjectStore } = require('../../../src/stores/projectStore');
+  const { useHomeShortcuts } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  const project = useProjectStore.getState().createProject({ name: 'REG books', description: '', systemPrompt: '', icon: '#10B981' });
+  useTopics.setState({ courses: [{ id: 'c9', topic: 'REG', title: 'REG board', summary: '', style: '', theme: '', request: { topic: 'REG', goal: '', level: '', how: '', minutes: 10 }, squares: [], content: {}, progress: {}, createdAt: 1, sources: [] }] });
+  let ids: string[] = [];
+  rtl.act(() => {
+    const add = useHomeShortcuts.getState().addShortcut;
+    ids = [add({ title: 'REG board', action: 'course', courseId: 'c9' }).id, add({ title: 'REG books', action: 'project', projectId: project.id }).id, add({ title: 'REG practice', action: 'practice', projectId: project.id }).id];
+  });
+  expect(view.getByText(/Open a course board · REG board/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[0]}`));
+  expect(mockNavigate).toHaveBeenLastCalledWith('TopicBoard', { courseId: 'c9' });
+  rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[1]}`));
+  expect(mockNavigate).toHaveBeenLastCalledWith('ProjectDetail', { projectId: project.id });
+  rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[2]}`));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Practice', { projectId: project.id });
+});
