@@ -10,6 +10,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { LevelView } from './compass/LevelView';
 import { CompassDial, DIAL_INK } from './compass/CompassDial';
 import { PageDots, Readout } from './compass/Readout';
+import { PressureCard } from './compass/PressureCard';
 import { useUnits } from '../atlasTools/units';
 import { SensorCards } from './compass/SensorCards';
 import { useCompassSensors } from './compass/useCompassSensors';
@@ -112,6 +113,7 @@ export const CompassScreen: React.FC = () => {
             ))}
           </View>
         )}
+        <PressureCard pressure={sensors.pressure} gps={fix ? { altitude: fix.altitude, accuracy: fix.accuracy } : null} units={units} ink={ink} />
         <SensorCards colors={colors} sensors={sensors} />
       </ScrollView>
       )}

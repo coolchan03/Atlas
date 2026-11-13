@@ -5,16 +5,15 @@ import { fmtTemp, useUnits } from '../../atlasTools/units';
 
 interface Card { label: string; value: string; detail?: string }
 
-/** Small read-outs for the motion, pressure and battery-temperature sensors that report. */
+/** Small read-outs for the motion and battery-temperature sensors that report (pressure has its own card, with GPS height beside it). */
 export const SensorCards: React.FC<{
   colors: { surface: string; border: string; text: string; textSecondary: string };
-  sensors: Pick<CompassSensors, 'accel' | 'orientation' | 'pressure' | 'batteryTemp'>;
-}> = ({ colors, sensors: { accel, orientation, pressure, batteryTemp } }) => {
+  sensors: Pick<CompassSensors, 'accel' | 'orientation' | 'batteryTemp'>;
+}> = ({ colors, sensors: { accel, orientation, batteryTemp } }) => {
   const units = useUnits();
   const cards: Card[] = [];
   if (accel) cards.push({ label: 'ACCELEROMETER', value: `${accel.g.toFixed(2)} g`, detail: `x ${accel.x.toFixed(1)}  y ${accel.y.toFixed(1)}  z ${accel.z.toFixed(1)}` });
   if (orientation) cards.push({ label: 'ORIENTATION', value: `Pitch ${orientation.pitch.toFixed(1)}°`, detail: `Roll ${orientation.roll.toFixed(1)}°` });
-  if (pressure) cards.push({ label: 'PRESSURE / ALT', value: `${pressure.hpa.toFixed(1)} hPa`, detail: `${pressure.altM >= 0 ? '+' : ''}${Math.round(pressure.altM)} m est.` });
   if (batteryTemp !== null) cards.push({ label: 'BATTERY TEMP', value: fmtTemp(batteryTemp, units.temp) });
   if (!cards.length) return null;
   return (
