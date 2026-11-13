@@ -124,7 +124,7 @@ export const TopicsScreen: React.FC = () => {
   const chooseFiles = async () => {
     try {
       const picked = await pickFiles();
-      if (picked) setFiles((current) => [...current, ...picked.filter((p) => !current.some((a) => a.name === p.name))]);
+      if (picked) setFiles((current) => [...current, ...picked.filter((p) => !current.some((a) => a.path === p.path))]);
     } catch (e: any) { setError(String(e?.message || e)); }
   };
   const openFile = async () => {
