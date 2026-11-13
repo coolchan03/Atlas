@@ -10,18 +10,20 @@ import { useCpa } from '../../cpa/store';
 import { examLabel } from '../../cpa/blueprints';
 import { useChatStore, useProjectStore } from '../../stores';
 import { addDailyReminder } from '../../atlasTools/deviceTools';
-import { continueTarget, nextExamLine, searchHome, type HomeHit, type HomeSearchSources } from './homeStudy';
+import { weakestTopic, continueTarget, nextExamLine, searchHome, type HomeHit, type HomeSearchSources } from './homeStudy';
 
 /** Pick up studying in one tap: the next square of the course you played last, what is due for review, and how the nearest exam is going. */
 export function HomeStudyCard({ navigation }: { navigation: any }) {
   const { colors } = useTheme();
   const courses = useTopics((s) => s.courses);
   const examState = useCpa((s) => s.exams);
-  useExerciseStore((s) => s.progress); // redraw when answers change
   const target = useMemo(() => continueTarget(courses), [courses]);
   const due = dueCount();
+  const exercises = useExerciseStore((st) => st.exercises);
+  const progress = useExerciseStore((st) => st.progress);
+  const weak = useMemo(() => weakestTopic(Object.values(exercises), progress), [exercises, progress]);
   const exam = useMemo(() => nextExamLine(Object.entries(examState).map(([code, e]) => ({ label: examLabel(code as any), examDate: e?.examDate, remaining: (e?.topics ?? []).filter((t) => !t.covered).length })).filter((e) => e.examDate)), [examState]);
-  if (!target && !due && !exam) return null;
+  if (!target && !due && !exam && !weak) return null;
   const remind = () => { const until = Object.values(examState).map((e) => e?.examDate).filter(Boolean).sort()[0]; addDailyReminder('Study with Atlas', { until, description: 'Open Atlas and carry on with your course.' }).then((m) => Alert.alert('Reminder', m)).catch((e) => Alert.alert('Could not open the calendar', String(e?.message || e))); };
   const go = (screen: string, params?: object) => navigation.getParent()?.navigate(screen, params);
   return (
@@ -39,6 +41,12 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
         <TouchableOpacity style={styles.row} onPress={() => go('Practice')} testID="home-review" accessibilityRole="button">
           <Icon name="repeat" size={18} color={colors.primary} />
           <Text style={[styles.title, styles.grow, { color: colors.text }]}>{due} question{due === 1 ? '' : 's'} to review</Text>
+        </TouchableOpacity>
+      )}
+      {weak && (
+        <TouchableOpacity style={styles.row} onPress={() => go('Practice', { ...(weak.projectId ? { projectId: weak.projectId } : {}), topic: weak.topic })} testID="home-weak" accessibilityRole="button">
+          <Icon name="target" size={18} color={colors.primary} />
+          <Text style={[styles.title, styles.grow, { color: colors.text }]}>Weakest topic: {weak.topic} ({weak.percent}% right)</Text>
         </TouchableOpacity>
       )}
       {!!exam && <Text style={[styles.small, { color: colors.textSecondary }]} testID="home-exam-line">{exam}</Text>}

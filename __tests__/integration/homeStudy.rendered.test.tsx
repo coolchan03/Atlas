@@ -19,11 +19,14 @@ it('offers the next square of the course played last, what is due, and finds thi
   const { useExerciseStore } = require('../../src/study/exercises');
   const { useProjectStore } = require('../../src/stores/projectStore');
   useTopics.setState({ courses: [course()] });
-  useExerciseStore.setState({ exercises: { e1: { id: 'e1', kind: 'truefalse', prompt: 'q', answer: true } }, progress: { e1: { box: 0, due: 0, attempts: 1, correct: 0, last: false } } });
+  useExerciseStore.setState({ exercises: { e1: { id: 'e1', kind: 'truefalse', prompt: 'q', answer: true, topic: 'Leases', projectId: 'p1' }, e2: { id: 'e2', kind: 'truefalse', prompt: 'q2', answer: true, topic: 'Basis' } }, progress: { e1: { box: 0, due: 0, attempts: 4, correct: 1, last: false }, e2: { box: 3, due: 9e12, attempts: 5, correct: 5, last: true } } });
   useProjectStore.getState().createProject({ name: 'Therapy notes', description: '', systemPrompt: '', icon: '#10B981' });
   const study = rtl.render(React.createElement(HomeStudyCard, { navigation }));
   expect(study.getByText('Continue: Equations quiz')).toBeTruthy();
   expect(study.getByText('1 question to review')).toBeTruthy();
+  expect(study.getByText('Weakest topic: Leases (25% right)')).toBeTruthy();
+  rtl.fireEvent.press(study.getByTestId('home-weak'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Practice', { projectId: 'p1', topic: 'Leases' });
   rtl.fireEvent.press(study.getByTestId('home-continue'));
   expect(mockNavigate).toHaveBeenCalledWith('TopicSquare', { courseId: 'c1', key: 's2' });
   rtl.fireEvent.press(study.getByTestId('home-review'));

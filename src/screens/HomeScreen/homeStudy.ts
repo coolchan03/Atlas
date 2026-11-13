@@ -1,6 +1,7 @@
 /** What to offer on Home to carry on studying, and what Home search finds. Pure, so it is tested without a device. */
 import { describePace, pace } from '../../cpa/schedule';
 import type { Course } from '../../topics/store';
+import type { Exercise, Progress } from '../../study/exercises';
 
 export interface ContinueTarget { courseId: string; key: string; title: string; squareTitle: string; done: number; total: number }
 
@@ -40,4 +41,18 @@ export function searchHome(query: string, src: HomeSearchSources, limit = 12): H
     ...src.chats.filter((c) => !c.isPrivate && !c.pinVerifier && !c.protectedBlob && all(c.title)).map((c) => ({ kind: 'chat' as const, id: c.id, label: c.title, hint: 'Chat' })),
   ];
   return hits.slice(0, limit);
+}
+
+export interface WeakTopic { topic: string; percent: number; attempts: number; projectId?: string }
+
+/** The topic you get wrong most (at least three answers given and under 80% right), so today's session starts where it helps most. */
+export function weakestTopic(exercises: Exercise[], progress: Record<string, Progress>): WeakTopic | null {
+  const by = new Map<string, { a: number; c: number; projectId?: string }>();
+  for (const e of exercises) {
+    const p = progress[e.id]; if (!p?.attempts || !e.topic) continue;
+    const cur = by.get(e.topic) ?? { a: 0, c: 0, projectId: e.projectId };
+    by.set(e.topic, { a: cur.a + p.attempts, c: cur.c + p.correct, projectId: cur.projectId ?? e.projectId });
+  }
+  const rows = [...by].map(([topic, v]) => ({ topic, percent: Math.round((v.c / v.a) * 100), attempts: v.a, projectId: v.projectId })).filter((r) => r.attempts >= 3 && r.percent < 80);
+  return rows.sort((a, b) => a.percent - b.percent || b.attempts - a.attempts)[0] ?? null;
 }
