@@ -4,8 +4,9 @@
  * project chats, an open chat): rename, pin, share, set/remove PIN, archive, delete. Lists call `open(chat)` and
  * render `element` once; the dialogs live here so every list offers the same options.
  */
+import { shareItem } from '../utils/shareItem';
 import React, { useRef, useState } from 'react';
-import { Alert, Modal, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
@@ -105,7 +106,7 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
                 .catch((e) => Alert.alert('Could not save', String(e?.message || e)));
             }))}
             {hasShareableTurns(menuTarget) && menuAction('share-2', 'Share to an app', () => finishMenu(() => {
-              Share.share({ title: menuTarget.title, message: conversationToText(menuTarget) }).catch(() => undefined);
+              void shareItem({ title: menuTarget.title, text: conversationToText(menuTarget) });
             }))}
             {menuAction(menuTarget.pinVerifier ? 'unlock' : 'lock',
               menuTarget.pinVerifier ? 'Remove chat PIN' : 'Set chat PIN', () => finishMenu(() => {

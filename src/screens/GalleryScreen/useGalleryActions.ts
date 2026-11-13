@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Platform, PermissionsAndroid, Share } from 'react-native';
+import { shareItem } from '../../utils/shareItem';
+import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import { showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore, useChatStore } from '../../stores';
@@ -158,7 +159,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
       if (Platform.OS === 'ios') {
-        await Share.share({ url: `file://${image.imagePath}` });
+        await shareItem({ title: 'Image', file: image.imagePath });
         return;
       }
       await PermissionsAndroid.request(

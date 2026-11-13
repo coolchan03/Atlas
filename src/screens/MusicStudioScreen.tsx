@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
@@ -8,6 +8,7 @@ import { useTheme } from '../theme';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
+import { shareItem } from '../utils/shareItem';
 import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } from '../music/styles';
 import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
 import { MUSIC_RATE, renderMusic, type MusicScore } from '../music/composition';
@@ -170,7 +171,7 @@ export function MusicStudioScreen() {
               <Text style={[styles.label, { color: colors.text }]}>{track.title}</Text>
               <Text style={[styles.small, { color: colors.textSecondary }]}>{STYLES[track.mood as StyleMood]?.label ?? track.mood} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
             </TouchableOpacity>
-            <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { Share.share({ title: track.title, url: `file://${track.path}` }).catch(() => undefined); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
+            <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { void shareItem({ title: track.title, file: track.path }); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}

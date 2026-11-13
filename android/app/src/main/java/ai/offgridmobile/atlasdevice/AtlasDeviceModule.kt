@@ -351,6 +351,23 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.reject("OPEN", e.message ?: "Could not open the file", e) }
     }
 
+    /** Share a file (a track, an image, an export) with another app through Android's share sheet. */
+    @ReactMethod
+    fun shareFile(path: String, title: String, promise: Promise) {
+        try {
+            val f = File(path.removePrefix("file://"))
+            if (!f.exists()) { promise.reject("SHARE", "That file is no longer on this phone."); return }
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.atlasfiles", f)
+            val ext = f.extension.lowercase()
+            val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val send = Intent(Intent.ACTION_SEND).setType(mime)
+                .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, title)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            ctx.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("SHARE", e.message ?: "Could not share the file", e) }
+    }
+
     /**
      * Starts Android's installer for an APK the app downloaded (an update). Android asks the person to allow installs from
      * Atlas once; until then this opens that setting and resolves "needs-permission" so the app can say what to do.

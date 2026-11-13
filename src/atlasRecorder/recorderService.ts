@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { shareItem } from '../utils/shareItem';
 import { NativeEventEmitter, NativeModules } from 'react-native';
 import { audioRecorderService } from '../services/audioRecorderService';
 import { whisperService } from '../services/whisperService';
@@ -243,8 +244,7 @@ export const recorderService = {
 
   /** Opens the phone's share sheet with the transcript (to a messaging app, email, notes...). */
   async shareTranscript(id: string): Promise<void> {
-    const { Share } = require('react-native');
-    await Share.share({ title: find(id)?.title, message: recorderService.transcript(id) });
+    await shareItem({ title: find(id)?.title, text: recorderService.transcript(id) });
   },
 
   /** Saves the transcript as a text file where the user chooses. Resolves the name, or null if cancelled. */

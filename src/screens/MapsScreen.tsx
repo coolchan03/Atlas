@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { shareItem } from '../utils/shareItem';
 import {
-  StyleSheet, ActivityIndicator, Alert, Clipboard, FlatList, Linking, Share, Modal, NativeEventEmitter, NativeModules, ScrollView, Switch, Text, TextInput,
+  StyleSheet, ActivityIndicator, Alert, Clipboard, FlatList, Linking, Modal, NativeEventEmitter, NativeModules, ScrollView, Switch, Text, TextInput,
   TouchableOpacity, UIManager, View, requireNativeComponent, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -207,7 +208,7 @@ export const MapsScreen: React.FC = () => {
               style={[literalStyles.s12, { borderColor: accent }, literalStyles.s13]}>
               <Icon name="message-square" size={15} color={accent} /><Text style={[{ color: accent }, literalStyles.s14]}>Text my location</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => Share.share({ message: locationText(here, imperial) }).catch(() => undefined)}
+            <TouchableOpacity onPress={() => shareItem({ text: locationText(here, imperial) })}
               style={[literalStyles.s15, { borderColor: colors.border }, literalStyles.s16]}>
               <Icon name="share-2" size={15} color={colors.textSecondary} /><Text style={[{ color: colors.textSecondary }, literalStyles.s17]}>Share</Text>
             </TouchableOpacity>

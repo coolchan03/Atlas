@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Alert, Share, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { shareItem } from '../utils/shareItem';
+import { StyleSheet, Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -129,7 +130,7 @@ export const LearningScreen: React.FC = () => {
     const reports = st?.reportLog ?? [];
     const name = expertName(agentId);
     const path = await writeReportsFile(name, reports);
-    try { await Share.share({ title: `Reports on ${name}`, message: reportsMarkdown(name, reports) }); } catch { /* closed */ }
+    await shareItem({ title: `Reports on ${name}`, text: reportsMarkdown(name, reports) });
     if (path) Alert.alert('Saved as a file too', path);
   };
   const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).catch((e) => setStatusText(String(e?.message || e))).finally(() => setRunning(false)); };

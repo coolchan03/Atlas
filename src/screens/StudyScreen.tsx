@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { StyleSheet, ActivityIndicator, Alert, BackHandler, Linking, Platform, ScrollView, Share, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
+import { shareItem } from '../utils/shareItem';
+import { StyleSheet, ActivityIndicator, Alert, BackHandler, Linking, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -374,7 +375,7 @@ export const StudyScreen: React.FC = () => {
   const stageText = (p: VideoProgress) => (p.stage === 'voice' ? 'Recording the voice' : p.stage === 'audio' ? 'Encoding the sound' : 'Drawing the slides');
   const textHeading = (r: StudyResult) => r.title || `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`;
   const shareText = async (r: StudyResult) => {
-    try { await Share.share({ title: textHeading(r), message: studyMarkdown(r, textHeading(r)) }); } catch { /* closed */ }
+    await shareItem({ title: textHeading(r), text: studyMarkdown(r, textHeading(r)) });
   };
   const saveText = async (r: StudyResult) => {
     try {
