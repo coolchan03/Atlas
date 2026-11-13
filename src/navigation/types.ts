@@ -15,6 +15,8 @@ export type RootStackParamList = {
   Workflows: undefined;
   Sensors: undefined;
   CallSetup: undefined;
+  CpaPrep: undefined;
+  CpaExam: { code: 'REG' | 'TCP' | 'FAR' | 'AUD' };
   Knowledge: undefined;
   Emergency: undefined;
   OfflineLibrary: undefined;

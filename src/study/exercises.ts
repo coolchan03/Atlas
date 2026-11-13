@@ -124,7 +124,7 @@ export function debouncedStorage<S>(ms: number): PersistStorage<S> {
   };
 }
 
-const MAX_BANK = 600;
+const MAX_BANK = 3000;
 /**
  * Keeps the saved questions from growing without limit (every drill press adds some, and they are all saved on the phone).
  * Over the limit, the oldest questions you already know (last answer right, no note) go first, then the oldest of the rest.

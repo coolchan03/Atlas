@@ -15,7 +15,8 @@ const TARGETS: Array<{ id: ImportTarget; label: string; note: string }> = [
 const keyFor = (q: NormalizedQuestion) => q.question;
 
 /** Paste or choose a test; the AI reads it into questions with answers; check them, then add them to this subject. */
-export const QuestionImport: React.FC<{ subjectId: string; onAdded: () => void }> = ({ subjectId, onAdded }) => {
+/** `onConfirm` sends the questions somewhere else (an exam's practice bank) and returns what to tell the person; `topics` lets the AI file each question under one. */
+export const QuestionImport: React.FC<{ subjectId?: string; onAdded: () => void; topics?: string[]; onConfirm?: (items: NormalizedQuestion[]) => string }> = ({ subjectId = '', onAdded, topics, onConfirm }) => {
   const { colors } = useTheme();
   const [source, setSource] = useState('');
   const [found, setFound] = useState<NormalizedQuestion[] | null>(null);
@@ -26,7 +27,7 @@ export const QuestionImport: React.FC<{ subjectId: string; onAdded: () => void }
     setBusy(true);
     try {
       const ask = (system: string, user: string) => require('../../study/engine').askModel(system, user);
-      const items = await normalizeQuestions(source, ask);
+      const items = await normalizeQuestions(source, ask, topics);
       if (!items.length) Alert.alert('No questions found', 'The AI could not find questions with answers in that text. Each question needs its answer written next to it.');
       setFound(items.length ? items : null);
     } catch (e: any) { Alert.alert('Could not read the questions', String(e?.message || e)); } finally { setBusy(false); }
@@ -42,6 +43,7 @@ export const QuestionImport: React.FC<{ subjectId: string; onAdded: () => void }
   };
   const add = () => {
     if (!found) return;
+    if (onConfirm) { Alert.alert('Added', onConfirm(found)); setFound(null); setSource(''); onAdded(); return; }
     const outcome = addImportedQuestions(subjectId, found, target);
     Alert.alert('Added', `${outcome.study} to study, ${outcome.exam} to the exam${outcome.repeats ? `, ${outcome.repeats} skipped because they were already there` : ''}.`);
     setFound(null); setSource(''); onAdded();
@@ -50,7 +52,7 @@ export const QuestionImport: React.FC<{ subjectId: string; onAdded: () => void }
 
   return (
     <View style={[s.card, { borderColor: colors.border }]} testID="question-import">
-      <Text style={[s.title, { color: colors.text }]}>Add your own questions</Text>
+      <Text style={[s.title, { color: colors.text }]}>{onConfirm ? 'Add a question bank or quiz' : 'Add your own questions'}</Text>
       <Text style={[s.note, { color: colors.textSecondary }]}>Paste a test, quiz or exam paper in any layout, or choose a file. The AI puts it in one standard form. You check the questions and answers before anything is added.</Text>
       <TextInput testID="import-source" value={source} onChangeText={setSource} multiline placeholder={'1. What is the boiling point of water at sea level?\nAnswer: 100 C\n\n2. Which is a noble gas? a) Oxygen b) Neon c) Iron\nAnswer: b'} placeholderTextColor={colors.textMuted}
         style={[s.input, s.multiline, { color: colors.text, borderColor: colors.border }]} />
@@ -72,16 +74,16 @@ export const QuestionImport: React.FC<{ subjectId: string; onAdded: () => void }
               <TouchableOpacity onPress={() => setFound((f) => (f ? f.filter((x) => x !== q) : f))} accessibilityLabel={`Remove ${q.question}`}><Text style={{ color: colors.error }}>Remove</Text></TouchableOpacity>
             </View>
           ))}
-          <View style={s.row}>
+          {!onConfirm && <View style={s.row}>
             {TARGETS.map((t) => (
               <TouchableOpacity key={t.id} onPress={() => setTarget(t.id)} accessibilityRole="radio" accessibilityState={{ selected: target === t.id }} testID={`import-target-${t.id}`}
                 style={[s.chip, { borderColor: target === t.id ? colors.primary : colors.border, backgroundColor: target === t.id ? colors.primary : colors.surface }]}>
                 <Text style={{ color: target === t.id ? colors.background : colors.text }}>{t.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-          <Text style={[s.small, { color: colors.textSecondary }]}>{TARGETS.find((t) => t.id === target)!.note} {split ? `${split.study.length} to study, ${split.exam.length} to the exam.` : ''}</Text>
-          <TouchableOpacity onPress={add} disabled={!found.length} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="import-add"><Text style={{ color: colors.primary }}>Add to this subject</Text></TouchableOpacity>
+          </View>}
+          {!onConfirm && <Text style={[s.small, { color: colors.textSecondary }]}>{TARGETS.find((t) => t.id === target)!.note} {split ? `${split.study.length} to study, ${split.exam.length} to the exam.` : ''}</Text>}
+          <TouchableOpacity onPress={add} disabled={!found.length} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="import-add"><Text style={{ color: colors.primary }}>{onConfirm ? 'Add to practice' : 'Add to this subject'}</Text></TouchableOpacity>
         </View>
       )}
     </View>

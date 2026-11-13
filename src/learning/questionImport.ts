@@ -16,6 +16,8 @@ export interface NormalizedQuestion {
   /** Choices for a multiple-choice question, in order; the answer is one of them. */
   options?: string[];
   topic?: string;
+  /** The explanation given with the question, if the text has one. */
+  explain?: string;
 }
 
 const SAME = 0.8;
@@ -41,7 +43,7 @@ export function readNormalized(reply: string): NormalizedQuestion[] {
     }
     if (!question || question.length < 6 || !answer) continue;
     const alternatives = Array.isArray(raw?.alternatives) ? (raw.alternatives as unknown[]).map((a) => text(a, 160)).filter(Boolean).slice(0, 6) : [];
-    out.push({ question, answer, alternatives, options: options && options.length >= 2 ? options : undefined, topic: text(raw?.topic, 60) || undefined });
+    out.push({ question, answer, alternatives, options: options && options.length >= 2 ? options : undefined, topic: text(raw?.topic, 100) || undefined, explain: text(raw?.explanation, 600) || undefined });
   }
   return out;
 }
@@ -73,7 +75,7 @@ export function divide(items: NormalizedQuestion[], target: ImportTarget): { exa
   return { exam: items.filter((_, i) => i % 4 === 3), study: items.filter((_, i) => i % 4 !== 3) };
 }
 
-const SYSTEM = `You tidy test questions. The person pastes quiz or exam text in any layout (numbered lists, Q and A pairs, multiple choice with letters, tables, CSV). Reply with JSON only: {"questions":[{"question":"","answer":"","alternatives":["other ways to say the answer"],"options":["only for multiple choice, in order"],"topic":""}]}. Rules: keep every question's wording exactly as written, only fixing numbering and layout. Use the answer the text gives; if the text gives no answer for a question, leave that question out. For multiple choice, "answer" is the right option's letter or text. Never write an answer yourself. Never invent questions.`;
+const SYSTEM = `You tidy test questions. The person pastes quiz or exam text in any layout (numbered lists, Q and A pairs, multiple choice with letters, tables, CSV). Reply with JSON only: {"questions":[{"question":"","answer":"","alternatives":["other ways to say the answer"],"options":["only for multiple choice, in order"],"topic":"","explanation":"only if the text gives one"}]}. Rules: keep every question's wording exactly as written, only fixing numbering and layout. Use the answer the text gives; if the text gives no answer for a question, leave that question out. For multiple choice, "answer" is the right option's letter or text. Never write an answer yourself. Never invent questions.`;
 
 /** Splits long text at line breaks into pieces a small model can handle. */
 export function chunks(source: string, size = CHUNK): string[] {
@@ -88,11 +90,13 @@ export function chunks(source: string, size = CHUNK): string[] {
 }
 
 /** Reads pasted questions into the standard form with the AI, a piece at a time. Returns what it found; the person reviews it. */
-export async function normalizeQuestions(source: string, ask: Ask): Promise<NormalizedQuestion[]> {
+export async function normalizeQuestions(source: string, ask: Ask, topics: string[] = []): Promise<NormalizedQuestion[]> {
   const found: NormalizedQuestion[] = [];
+  // With a list of topics (an exam outline) the AI files each question under one of them.
+  const system = topics.length ? `${SYSTEM} Set "topic" to the one of these that fits best, exactly as written, or leave it out: ${topics.slice(0, 60).join('; ')}.` : SYSTEM;
   for (const piece of chunks(source)) {
     if (found.length >= MAX_QUESTIONS) break;
-    found.push(...readNormalized(await ask(SYSTEM, piece)));
+    found.push(...readNormalized(await ask(system, piece)));
   }
   return found.slice(0, MAX_QUESTIONS);
 }
