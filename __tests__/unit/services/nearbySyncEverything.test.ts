@@ -308,3 +308,19 @@ it('restores the previous recording when the final file move fails', async () =>
     move.mockImplementation(implementation);
   }
 });
+
+it('keeps this phone\'s version of a store the other phone\'s newer copy replaces, and puts it back on request', async () => {
+  const { listConflictCopies, restoreConflictCopy } = require('../../../src/services/nearbySync/conflictCopies');
+  const KEY = 'atlas-about-me';
+  await phone({ [KEY]: store({ note: 'My edit on the phone' }) });
+  const theirs = store({ note: 'Edited on the tablet' });
+  const changed = await applyStores({ [KEY]: { value: theirs, changedAt: Date.now() + 60_000 } });
+  expect(changed).toContain(KEY);
+  expect(await AsyncStorage.getItem(KEY)).toBe(theirs);
+  const kept = await listConflictCopies();
+  expect(kept).toHaveLength(1);
+  expect(JSON.parse(kept[0].value).state.note).toBe('My edit on the phone');
+  expect(await restoreConflictCopy(kept[0].id)).toBe(true);
+  expect(JSON.parse((await AsyncStorage.getItem(KEY))!).state.note).toBe('My edit on the phone');
+  expect((await listConflictCopies())[0].key).toBe(KEY); // the tablet's version is kept in turn
+});

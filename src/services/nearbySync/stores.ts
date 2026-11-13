@@ -11,6 +11,7 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue } from '../../atlasTools/backupKeys';
 import { rehydrateStores } from '../../atlasTools/storeRegistry';
+import { keepConflictCopy } from './conflictCopies';
 import { DEVICE_SETTING, keepThisDevice } from '../../atlasTools/deviceSettings';
 import { mergeExercises } from './exerciseMerge';
 import { LIST_STORES, listIds, mergeListStore, type Baseline } from './listMerge';
@@ -200,6 +201,13 @@ async function removeDeletedAudio(deleted: Record<string, number>): Promise<void
   }
 }
 
+/** A store simply replaced by the other phone's newer copy: keep this phone's copy so an edit made here is not lost. */
+async function keepIfReplaced(key: string, next: string, incoming: string): Promise<void> {
+  if (next !== incoming || ALWAYS_MERGE.has(key) || key === APP_STORE) return;
+  const before = await AsyncStorage.getItem(key);
+  if (before && before !== next) await keepConflictCopy(key, before);
+}
+
 /** Applies one of the other phone's stores here. True when this phone's copy changed. */
 async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; stamps: Stamps; deletedRecordings: Record<string, number> }): Promise<boolean> {
   const { mine, stamps } = o;
@@ -217,6 +225,7 @@ async function applyOne(key: string, entry: StoreEntry, o: { mine?: StoreEntry; 
     baseline: LIST_STORES.has(key) ? await readBaseline() : undefined,
   });
   if (next == null) return false;
+  await keepIfReplaced(key, next, value);
   await AsyncStorage.setItem(key, next);
   await saveBaseline(key, next);
   if (key === RECORDINGS) await removeDeletedAudio(o.deletedRecordings);
