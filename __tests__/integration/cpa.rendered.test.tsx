@@ -188,7 +188,8 @@ it('the bar exam and other professional exams set up on a tap, each its own proj
   const { rtl, React, screens, stores } = open();
   stores.cpa.setState({ exams: {} });
   const view = rtl.render(React.createElement(screens.CpaPrepScreen));
-  expect(view.getByText('Other professional exams')).toBeTruthy();
+  expect(view.getByText('More exams and tests')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('exam-field-Law and medicine-toggle'));
   rtl.fireEvent.press(view.getByTestId('cpa-card-BAR'));
   const bar = stores.cpa.getState().exams.BAR;
   expect(bar.topics.length).toBeGreaterThan(20);
@@ -201,4 +202,18 @@ it('the bar exam and other professional exams set up on a tap, each its own proj
   expect(useTopics.getState().courses.find((c: { id: string }) => c.id === id)).toMatchObject({ title: expect.stringContaining('Bar exam'), projectId: bar.projectId });
   rtl.fireEvent.press(view.getByTestId('cpa-setup'));
   expect(stores.cpa.getState().exams.REG).toBeTruthy();
+});
+
+it('lists the other exams and tests in sections (accounting, law and medicine, admissions, project and IT) and sets one up on a tap', () => {
+  const { rtl, React, screens, stores } = open();
+  stores.cpa.setState({ exams: {} });
+  const view = rtl.render(React.createElement(screens.CpaPrepScreen));
+  expect(view.getByText(/College and graduate admissions \(SAT, ACT, GRE, GMAT\)/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('exam-field-College and graduate admissions-toggle'));
+  rtl.fireEvent.press(view.getByTestId('cpa-card-GRE'));
+  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).toContain('GRE');
+  expect(stores.cpa.getState().exams.GRE.topics.map((t: { area: string }) => t.area)).toContain('Quantitative reasoning');
+  rtl.fireEvent.press(view.getByTestId('exam-field-Accounting, tax and finance-toggle'));
+  rtl.fireEvent.press(view.getByTestId('cpa-card-CMA1'));
+  expect(stores.cpa.getState().exams.CMA1).toBeTruthy();
 });

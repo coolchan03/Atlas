@@ -20,7 +20,8 @@ describe('the four exams', () => {
 describe('the other professional exams', () => {
   it('each has areas and unique topics', () => {
     const { OTHER_EXAMS } = require('../../../src/cpa/blueprints');
-    expect(OTHER_EXAMS.map((e: { code: string }) => e.code).sort()).toEqual(['BAR', 'CFA1', 'CISSP', 'NCLEX', 'PMP', 'SERIES7', 'USMLE1']);
+    expect(OTHER_EXAMS.map((e: { code: string }) => e.code).sort()).toEqual(['ACT', 'BAR', 'CFA1', 'CFA2', 'CISSP', 'CMA1', 'CMA2', 'EA', 'GMAT', 'GRE', 'LSAT', 'MCAT', 'NCLEX', 'PMP', 'SAT', 'SERIES7', 'USMLE1']);
+    for (const e of OTHER_EXAMS) expect(e.field).toBeTruthy();
     for (const e of OTHER_EXAMS) {
       const names = e.areas.flatMap((a: { topics: string[] }) => a.topics);
       expect(names.length).toBeGreaterThan(8);

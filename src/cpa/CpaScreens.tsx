@@ -11,7 +11,8 @@ import { ragService } from '../services/rag';
 import { useExerciseStore } from '../study/exercises';
 import { pickAndAddFiles, pickAndAddFolder, summarize } from '../learning/documents';
 import { QuestionImport } from '../screens/learningReliability/QuestionImport';
-import { CPA_EXAMS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
+import { Fold } from '../components/Fold';
+import { CPA_EXAMS, EXAM_FIELDS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
 import { addToPractice } from './importQuestions';
 import { outlineFromText, outlineToText, parseOutline } from './outline';
 import { describeEvidence, topicEvidence } from './progress';
@@ -49,9 +50,13 @@ export const CpaPrepScreen: React.FC = () => {
         <Text style={[styles.note, { color: colors.textSecondary }]}>One project for each exam, so your REG, TCP, FAR and AUD textbooks, question banks and practice never mix. Each has a checklist of topics that shows whether you actually understand them, from how you answer questions, not just from ticking a box.</Text>
         {!ready && <Button title="Set up REG, TCP, FAR and AUD" onPress={() => { setupAllCpaExams(); }} testID="cpa-setup" />}
         {CPA_EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => navigation.navigate('CpaExam', { code: e.code })} />)}
-        <Text style={[styles.title, { color: colors.text }]}>Other professional exams</Text>
-        <Text style={[styles.note, { color: colors.textSecondary }]}>The bar exam, CFA Level I, USMLE Step 1, NCLEX-RN, PMP, CISSP and Series 7 work the same way: set one up and it gets its own project, checklist, practice questions and board.</Text>
-        {OTHER_EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => { setupCpaExam(e.code); navigation.navigate('CpaExam', { code: e.code }); }} />)}
+        <Text style={[styles.title, { color: colors.text }]}>More exams and tests</Text>
+        <Text style={[styles.note, { color: colors.textSecondary }]}>Every one works the same way: tap it and it gets its own project for your books, a checklist of topics, practice questions and a board.</Text>
+        {EXAM_FIELDS.map((field) => (
+          <Fold key={field} title={`${field} (${OTHER_EXAMS.filter((e) => e.field === field).map((e) => e.short).join(', ')})`} testID={`exam-field-${field}`}>
+            {OTHER_EXAMS.filter((e) => e.field === field).map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => { setupCpaExam(e.code); navigation.navigate('CpaExam', { code: e.code }); }} />)}
+          </Fold>
+        ))}
         <Text style={[styles.note, { color: colors.textMuted }]}>The topic lists are starting outlines written from general knowledge, not the official blueprints. Compare them with the current blueprint for your exam date and edit them on each exam's page.</Text>
       </ScrollView>
     </SafeAreaView>
