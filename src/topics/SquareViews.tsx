@@ -12,7 +12,7 @@ import { PeriodicView } from './PeriodicView';
 import { check, useExerciseStore, type Verdict } from '../study/exercises';
 
 type Of<K extends SquareContent['kind']> = Extract<SquareContent, { kind: K }>;
-interface ViewProps<K extends SquareContent['kind']> { content: Of<K>; onDone: (stars: 1 | 2 | 3) => void }
+interface ViewProps<K extends SquareContent['kind']> { content: Of<K>; onDone: (stars: 1 | 2 | 3, missed?: number[]) => void }
 
 function useText() {
   const { colors } = useTheme();
@@ -59,9 +59,10 @@ export function QuizView({ content, onDone }: ViewProps<'quiz'>) {
   const [i, setI] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [right, setRight] = useState(0);
+  const [missed, setMissed] = useState<number[]>([]);
   const q = content.questions[i];
   const last = i === content.questions.length - 1;
-  const pick = (n: number) => { if (picked !== null) return; setPicked(n); if (n === q.answer) setRight((r) => r + 1); };
+  const pick = (n: number) => { if (picked !== null) return; setPicked(n); if (n === q.answer) setRight((r) => r + 1); else setMissed((m) => [...m, i]); };
   return (
     <View style={styles.gap} testID="square-quiz">
       {!!content.passage && <View style={[styles.box, t.card]} testID="quiz-passage"><MarkdownText>{content.passage}</MarkdownText></View>}
@@ -75,7 +76,7 @@ export function QuizView({ content, onDone }: ViewProps<'quiz'>) {
         <>
           {!!q.why && <Text style={t.meta} testID="quiz-why">{q.why}</Text>}
           <Button title={last ? 'Finish' : 'Next'} testID="quiz-next"
-            onPress={() => { if (last) onDone(starsForShare(right / content.questions.length)); else { setI(i + 1); setPicked(null); } }} />
+            onPress={() => { if (last) onDone(starsForShare(right / content.questions.length), missed); else { setI(i + 1); setPicked(null); } }} />
         </>
       )}
     </View>

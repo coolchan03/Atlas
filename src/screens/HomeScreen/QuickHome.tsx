@@ -10,6 +10,7 @@ import { LoadModelSheet } from '../../components/LoadModelSheet';
 import { arrangeTiles, moveTile, toggleTile } from './homeTiles';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { HomeShortcutsCard } from './HomeShortcutsCard';
+import { HomeSearch, HomeStudyCard } from './HomeStudyCard';
 
 type Props = { navigation: any; mode: LayoutMode };
 type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load'; optional?: boolean; tint: string; tintDark: string; color: [string, string] };
@@ -81,6 +82,8 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
         <Text style={{ color: colors.textSecondary, fontSize: simple ? 18 : 14, marginTop: 6, marginBottom: compact ? 10 : 20 }}>
           {focus ? 'What do you want to do?' : simple ? 'What would you like to do?' : compact ? 'Quick access' : 'Choose something to explore'}
         </Text>
+        <HomeSearch navigation={navigation} tiles={destinations.map((d) => ({ key: d.key, label: d.label, hint: d.hint }))} onTile={(k) => go(byKey(k))} />
+        <HomeStudyCard navigation={navigation} />
         <HomeShortcutsCard navigation={navigation} />
         <View style={{ flexDirection: tiles ? 'row' : 'column', flexWrap: 'wrap', gap: tiles ? 8 : 12 }}>
           {items.map(item => {

@@ -18,6 +18,7 @@ import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summa
 import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
+import { keepMissed } from './review';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
 const BOARD_KIND: Record<SquareFormat, SpaceKind> = {
@@ -307,8 +308,9 @@ export const TopicSquareScreen: React.FC = () => {
 
   if (!course || !square) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Square" onBack={() => navigation.goBack()} /></SafeAreaView>;
   // A square that went badly gets a lesson right after it that explains the same thing another way.
-  const finish = (n: 1 | 2 | 3) => {
+  const finish = (n: 1 | 2 | 3, missed: number[] = []) => {
     useTopics.getState().complete(courseId, key, n);
+    if (content && missed.length) keepMissed(course, square, content, missed);
     if (n === 1 && square.format !== 'lesson') setAddedRemedial(useTopics.getState().addRemedial(courseId, key));
     setStars(n);
   };
