@@ -65,6 +65,14 @@ function launchProblem(
   return null;
 }
 
+/** One tap means the model this call uses is loaded before the call opens (a resumed chat keeps its own model). */
+async function loadCallModel(shortcut: HomeShortcut, resumedModel: string | undefined, fallback: string) {
+  const loadId = shortcut.modelId || resumedModel || fallback;
+  if (loadId) await activeModelService.loadTextModel(loadId);
+  // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
+  if (shortcut.modelId && !shortcut.conversationId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+}
+
 /** Home widgets are configured within Atlas; never create Android launcher tiles or shortcuts. */
 export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const { colors } = useTheme();
@@ -121,12 +129,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     const existing = destination === 'existing';
     if (startCall) {
       setLaunchingId(shortcut.id);
-      // One tap means the model this call uses is actually loaded before opening it (a resumed chat keeps its own model).
-      const resumedModel = existing ? chats.conversations.find((c) => c.id === shortcut.conversationId)?.modelId : undefined;
-      const loadId = shortcut.modelId || resumedModel || modelId;
-      if (loadId) await activeModelService.loadTextModel(loadId);
-      // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
-      if (shortcut.modelId && !existing) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+      await loadCallModel(shortcut, existing ? chats.conversations.find((c) => c.id === shortcut.conversationId)?.modelId : undefined, modelId);
     }
     const id = existing && shortcut.conversationId
       ? shortcut.conversationId
