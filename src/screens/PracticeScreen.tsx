@@ -22,10 +22,10 @@ const todayKey = () => new Date().toISOString().slice(0, 10);
 
 export const PracticeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { projectId, topic: startTopic } = useRoute<any>().params as { projectId: string; topic?: string };
+  const { projectId, topic: startTopic } = (useRoute<any>().params ?? {}) as { projectId: string; topic?: string };
   const { colors } = useTheme();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const { exercises, progress, daily, goal, addSet, record, saveDraft, freshen, setNote: saveNote, setGoal, clearAll } = useExerciseStore();
+  const { exercises, progress, daily, goal, addSet, record, saveDraft, freshen, setNote: saveNote, setGoal, clearProject } = useExerciseStore();
   const [topic, setTopic] = useState('');
   const [busy, setBusy] = useState(false);
   const [queue, setQueue] = useState<Exercise[]>([]);
@@ -91,8 +91,8 @@ export const PracticeScreen: React.FC = () => {
   }, [exam, record]);
   const reviewMisses = () => { if (result) { queueUp(result.wrong.map((id) => exercises[id]).filter(Boolean)); setResult(null); } };
   const startCards = () => { const missed = missedExercises(all, progress); if (missed.length) setCards(missed); else setNote('Nothing missed yet, so no flashcards.'); };
-  const confirmClear = () => Alert.alert('Clear practice history?', 'This deletes the saved practice questions, your scores and notes. Drills can always be made again.', [
-    { text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { clearAll(); setNote('Practice history cleared.'); } },
+  const confirmClear = () => Alert.alert('Clear practice history?', 'This deletes the saved practice questions, scores and notes for this project only. Other projects are not touched.', [
+    { text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { clearProject(projectId); setNote('Practice history cleared.'); } },
   ]);
 
   const done = daily[today] ?? 0;

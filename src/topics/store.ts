@@ -69,7 +69,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
       id, topic: request.topic, title: plan.title, summary: plan.summary, style: plan.style, theme: plan.theme, request,
       squares: plan.squares, content: {}, progress: {}, createdAt: Date.now(), sources, projectId, difficulty: difficultyFromLevel(request.level),
     };
-    set((s) => ({ courses: [course, ...s.courses].slice(0, 20) }));
+    set((s) => ({ courses: [course, ...s.courses] }));
     return id;
   },
   remove: (id) => set((s) => ({ courses: s.courses.filter((c) => c.id !== id) })),
@@ -80,7 +80,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
       squares: shared.squares, content: shared.content, progress: {}, createdAt: Date.now(), projectId,
       sources: shared.sources.filter((x) => x.text).map((x, i) => ({ id: `shared-${Date.now()}-${i}`, title: x.title, kind: x.kind, url: x.url, text: x.text, addedAt: Date.now() })),
     };
-    set((s) => ({ courses: [course, ...s.courses].slice(0, 20) }));
+    set((s) => ({ courses: [course, ...s.courses] }));
     return id;
   },
   addSources: (id, sources) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, sources: [...(c.sources ?? []), ...sources].slice(-MAX_SOURCES) } : c)) })),

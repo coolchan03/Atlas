@@ -392,17 +392,22 @@ class GenerationService {
 
   private processNextInQueue(): void {
     if (this.state.queuedMessages.length === 0 || !this.queueProcessor) return;
-    const all = this.state.queuedMessages;
-    this.state = { ...this.state, queuedMessages: [] };
+    // Only the first run of messages for the SAME conversation (and the same image mode) is merged. Messages for other chats,
+    // or with a different forced mode, stay queued and run as their own turns afterwards, so text and attachments never cross chats.
+    const queued = this.state.queuedMessages;
+    const head = queued[0];
+    const sameTurn = (m: QueuedMessage) => m.conversationId === head.conversationId && (m.imageMode === 'force') === (head.imageMode === 'force');
+    let n = 0;
+    while (n < queued.length && sameTurn(queued[n])) n++;
+    const all = queued.slice(0, n);
+    this.state = { ...this.state, queuedMessages: queued.slice(n) };
     this.notifyListeners();
     const combined: QueuedMessage = all.length === 1 ? all[0] : {
       id: all[0].id, conversationId: all[0].conversationId,
       text: all.map(m => m.text).join('\n\n'),
       attachments: all.flatMap(m => m.attachments || []),
       messageText: all.map(m => m.messageText).join('\n\n'),
-      // If ANY coalesced send forced image mode, the combined dispatch must force image too — the
-      // user's explicit force must never be dropped by the merge (mirror of the single-message carry).
-      imageMode: all.some(m => m.imageMode === 'force') ? 'force' : all[0].imageMode,
+      imageMode: all[0].imageMode,
     };
     this.queueProcessor(combined).catch(e => { logger.error('[GenerationService] Queue processor error:', e); });
   }

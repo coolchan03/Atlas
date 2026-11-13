@@ -40,7 +40,7 @@ export const useSchedule = create<ScheduleState>()(persist((set) => ({
   tasks: [],
   add: (t) => {
     const id = localUniqueId('task');
-    set((s) => ({ tasks: [...s.tasks, { ...t, id, enabled: true, createdAt: Date.now() }].slice(-30) }));
+    set((s) => ({ tasks: [...s.tasks, { ...t, id, enabled: true, createdAt: Date.now() }] }));
     return id;
   },
   update: (id, patch) => set((s) => ({ tasks: s.tasks.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),

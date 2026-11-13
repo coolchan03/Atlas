@@ -79,7 +79,7 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     expect(view.queryAllByText(new RegExp(QUEUED_TEXT_LEAK)).length).toBe(1);
   });
 
-  it('COALESCE (M16): two sends queue together and one forced image — the merged dispatch draws an image', async () => {
+  it('M16: a queued text send and a queued forced-image send run as separate turns and the forced one draws an image', async () => {
     // Exercises the multi-message branch (all.length > 1) where imageMode = all.some(force) ? force : all[0].
     // My single-message test above only hits the all[0] shortcut; this pins the coalesce force-merge so a
     // regression to `all[0].imageMode` (dropping the .some) is caught.
@@ -103,8 +103,10 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     await h.settle(50);
     expect(h.boundary.diffusion.calls.generateImage.length).toBe(0); // nothing drawn while #1 holds
 
-    // Drain: the 2 queued messages coalesce; because one was force, the merged dispatch must draw.
+    // Drain: the text send and the forced-image send are separate turns (a forced image is never merged into text and vice versa);
+    // the forced one must still draw. The harness keeps the hold flag on the scripted completion, so script a plain one for turn #2.
     h.boundary.llama!.releaseStream();
+    h.boundary.llama!.scriptCompletion({ text: 'ok' });
     await h.settle(400);
     await rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 4000 });
     expect(view.queryByTestId('generated-image')).not.toBeNull();

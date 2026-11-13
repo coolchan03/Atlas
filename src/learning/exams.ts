@@ -38,12 +38,26 @@ export interface ExamMetrics {
 }
 export interface ExamResult { id: string; version: string; mode: ExamMode; metrics: ExamMetrics; at: string }
 
-const has = (answer: string, wording: string) => answer.toLowerCase().includes(wording.toLowerCase().trim());
+/** True when the wording appears as whole words/numbers and is not negated right before ("not 20", "isn't 20"), so "120" never matches "20". */
+const has = (answer: string, wording: string) => {
+  const w = wording.toLowerCase().trim();
+  if (!w) return false;
+  const a = answer.toLowerCase();
+  const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^|[^a-z0-9.])${esc}(?![a-z0-9]|\\.\\d)`, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(a))) {
+    const before = a.slice(0, m.index + m[1].length).trimEnd();
+    if (!/(?:\bnot|\bno|\bnever|n't|\bnor|\bneither)$/.test(before)) return true;
+  }
+  return false;
+};
 
 /** Facts found, the share of them, and whether the answer used a forbidden wording. No model involved. */
 export function scoreAnswer(answer: string, expected: Expected): { score: number; correct: boolean; outdated: boolean } {
   const text = answer.replace(/\[\d+\]/g, ' ');
-  const spelled = `${text} ${numbersIn(text).join(' ')}`;
+  const unnegated = text.replace(/\b(?:not|no|never|nor|neither|\w+n't)\s+[$]?[\d.,]+/gi, ' '); // a negated figure is not an answer
+  const spelled = `${text} ${numbersIn(unnegated).join(' ')}`;
   const found = expected.facts.filter((alts) => alts.some((w) => has(spelled, w))).length;
   const outdated = (expected.forbid ?? []).some((w) => w.trim() && has(text, w));
   const score = expected.facts.length ? found / expected.facts.length : 0;

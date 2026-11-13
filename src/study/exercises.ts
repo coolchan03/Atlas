@@ -27,13 +27,25 @@ export interface Verdict { correct: boolean; parts?: boolean[]; note?: string }
 
 const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9.%$ -]+/g, ' ').replace(/\s+/g, ' ').trim();
 const toNum = (v: unknown): number | null => { const n = Number(String(v ?? '').replace(/[$,%\s]/g, '').replace(/^\((.*)\)$/, '-$1')); return Number.isFinite(n) && String(v ?? '').trim() !== '' ? n : null; };
+/** A choice index: a whole number or a digit string. Blank, null, booleans and other text are not an answer (they must never count as choice 0). */
+const asIndex = (v: unknown): number | null => {
+  if (typeof v === 'number') return Number.isInteger(v) && v >= 0 ? v : null;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) return Number(v.trim());
+  return null;
+};
+/** Only real booleans or the exact words true/false count; any other text is "no answer", not false. */
+const asBool = (v: unknown): boolean | null => {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') { const t = v.trim().toLowerCase(); if (t === 'true') return true; if (t === 'false') return false; }
+  return null;
+};
 const same = (a: number, b: number, tol = 0) => Math.abs(a - b) <= Math.max(tol, 0.005);
 
 /** Checks a response against the key. Never calls a model. */
 export function check(ex: Exercise, res: Response): Verdict {
   switch (ex.kind) {
-    case 'mcq': return { correct: Number(res) === ex.answer };
-    case 'truefalse': return { correct: res === ex.answer || (typeof res === 'string' && (res === 'true') === ex.answer) };
+    case 'mcq': { const i = asIndex(res); return { correct: i !== null && i === ex.answer }; }
+    case 'truefalse': { const b = asBool(res); return { correct: b !== null && b === ex.answer }; }
     case 'fill': return { correct: ex.answers.some((a) => norm(a) === norm(res) || (toNum(a) !== null && toNum(a) === toNum(res))) };
     case 'calc': { const n = toNum(res); return { correct: n !== null && same(n, ex.answer, ex.tolerance ?? 0) }; }
     case 'order': { const r = Array.isArray(res) ? res : []; const parts = ex.items.map((it, i) => r[i] === it); return { correct: r.length === ex.items.length && parts.every(Boolean), parts }; }
@@ -125,22 +137,12 @@ export function debouncedStorage<S>(ms: number): PersistStorage<S> {
   };
 }
 
-const MAX_BANK = 3000;
 /**
- * Keeps the saved questions from growing without limit (every drill press adds some, and they are all saved on the phone).
- * Over the limit, the oldest questions you already know (last answer right, no note) go first, then the oldest of the rest.
- * The questions just added are never dropped.
+ * Saved questions are never dropped silently. (It used to cut the bank at 3,000, deleting questions the person had saved.)
+ * Kept as a pass-through so callers and the storage shape stay the same; removing questions is only done by the person.
  */
-export function pruneBank(bank: Record<string, Exercise>, progress: Record<string, Progress>, keep: string[]): { exercises: Record<string, Exercise>; progress?: Record<string, Progress> } {
-  const ids = Object.keys(bank);
-  if (ids.length <= MAX_BANK) return { exercises: bank };
-  const protectedIds = new Set(keep);
-  const known = (id: string) => progress[id]?.last === true && !progress[id]?.note;
-  const order = ids.filter((id) => !protectedIds.has(id)).sort((a, b) => Number(known(b)) - Number(known(a))); // stable: known first, then insertion order
-  const drop = new Set(order.slice(0, ids.length - MAX_BANK));
-  const exercises = Object.fromEntries(ids.filter((id) => !drop.has(id)).map((id) => [id, bank[id]]));
-  const kept = Object.fromEntries(Object.entries(progress).filter(([id]) => !drop.has(id)));
-  return { exercises, progress: kept };
+export function pruneBank(bank: Record<string, Exercise>, _progress?: Record<string, Progress>, _keep?: string[]): { exercises: Record<string, Exercise>; progress?: Record<string, Progress> } {
+  return { exercises: bank };
 }
 
 interface ExerciseState {
@@ -154,6 +156,8 @@ interface ExerciseState {
   freshen: (ids: string[]) => void;
   /** Deletes every saved question, score, note and the daily counts (the goal setting stays). */
   clearAll: () => void;
+  /** Deletes only the questions (and their scores, notes and drafts) of one project; other projects and unassigned questions stay. */
+  clearProject: (projectId: string) => void;
   exercises: Record<string, Exercise>;
   addSet: (set: Exercise[]) => void;
   record: (id: string, correct: boolean, now?: number) => void;
@@ -165,6 +169,11 @@ export const useExerciseStore = create<ExerciseState>()(persist((set) => ({
   progress: {}, exercises: {}, daily: {}, goal: { on: false, perDay: 10 },
   freshen: (ids) => set((st) => ({ progress: Object.fromEntries(Object.entries(st.progress).map(([id, p]) => [id, ids.includes(id) ? { ...p, saved: undefined, answered: false } : p])) })),
   clearAll: () => set({ exercises: {}, progress: {}, daily: {} }),
+  clearProject: (projectId) => set((st) => {
+    const exercises = { ...st.exercises }; const progress = { ...st.progress };
+    for (const e of Object.values(st.exercises)) if (e.projectId === projectId) { delete exercises[e.id]; delete progress[e.id]; }
+    return { exercises, progress };
+  }),
   setGoal: (g) => set((st) => ({ goal: { ...st.goal, ...g } })),
   setNote: (id, note) => set((st) => ({ progress: { ...st.progress, [id]: { ...(st.progress[id] ?? { box: 0, due: 0, attempts: 0, correct: 0 }), note: note.slice(0, 400) } } })),
   addSet: (s) => set((st) => pruneBank({ ...st.exercises, ...Object.fromEntries(s.map((e) => [e.id, e])) }, st.progress, s.map((e) => e.id))),
