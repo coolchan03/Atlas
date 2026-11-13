@@ -183,3 +183,22 @@ it('each exam is its own board-game course, one lesson per topic, from its own p
   expect(useTopics.getState().courses).toHaveLength(1);
   expect(stores.cpa.getState().exams.FAR.courseId).not.toBe(course.id);
 });
+
+it('the bar exam and other professional exams set up on a tap, each its own project and board, apart from the CPA exams', () => {
+  const { rtl, React, screens, stores } = open();
+  stores.cpa.setState({ exams: {} });
+  const view = rtl.render(React.createElement(screens.CpaPrepScreen));
+  expect(view.getByText('Other professional exams')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('cpa-card-BAR'));
+  const bar = stores.cpa.getState().exams.BAR;
+  expect(bar.topics.length).toBeGreaterThan(20);
+  expect(mockNavigate).toHaveBeenCalledWith('CpaExam', { code: 'BAR' });
+  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).toContain('Bar exam');
+  expect(stores.cpa.getState().exams.REG).toBeUndefined();
+  const { ensureExamCourse } = require('../../src/cpa/course');
+  const { useTopics } = require('../../src/topics/store');
+  const id = ensureExamCourse('BAR');
+  expect(useTopics.getState().courses.find((c: { id: string }) => c.id === id)).toMatchObject({ title: expect.stringContaining('Bar exam'), projectId: bar.projectId });
+  rtl.fireEvent.press(view.getByTestId('cpa-setup'));
+  expect(stores.cpa.getState().exams.REG).toBeTruthy();
+});

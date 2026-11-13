@@ -11,12 +11,12 @@ import { ragService } from '../services/rag';
 import { useExerciseStore } from '../study/exercises';
 import { pickAndAddFiles, pickAndAddFolder, summarize } from '../learning/documents';
 import { QuestionImport } from '../screens/learningReliability/QuestionImport';
-import { EXAMS, examInfo, type ExamCode } from './blueprints';
+import { CPA_EXAMS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
 import { addToPractice } from './importQuestions';
 import { parseOutline } from './outline';
 import { describeEvidence, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
-import { setupAllCpaExams } from './setup';
+import { setupAllCpaExams, setupCpaExam } from './setup';
 import { useCpa, type CpaTopic } from './store';
 import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
@@ -41,15 +41,18 @@ export const CpaPrepScreen: React.FC = () => {
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
   const exams = useCpa((s) => s.exams);
-  const ready = EXAMS.every((e) => exams[e.code]);
+  const ready = CPA_EXAMS.every((e) => exams[e.code]);
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScreenHeader title="CPA exam prep" />
+      <ScreenHeader title="Professional exam prep" />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.note, { color: colors.textSecondary }]}>One project for each exam, so your REG, TCP, FAR and AUD textbooks, question banks and practice never mix. Each has a checklist of topics that shows whether you actually understand them, from how you answer questions, not just from ticking a box.</Text>
         {!ready && <Button title="Set up REG, TCP, FAR and AUD" onPress={() => { setupAllCpaExams(); }} testID="cpa-setup" />}
-        {EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => navigation.navigate('CpaExam', { code: e.code })} />)}
-        <Text style={[styles.note, { color: colors.textMuted }]}>The topic lists are starting outlines written from general knowledge, not the official AICPA blueprint. Compare them with the current blueprint for your exam date and edit them on each exam's page.</Text>
+        {CPA_EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => navigation.navigate('CpaExam', { code: e.code })} />)}
+        <Text style={[styles.title, { color: colors.text }]}>Other professional exams</Text>
+        <Text style={[styles.note, { color: colors.textSecondary }]}>The bar exam, CFA Level I, USMLE Step 1, NCLEX-RN, PMP, CISSP and Series 7 work the same way: set one up and it gets its own project, checklist, practice questions and board.</Text>
+        {OTHER_EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => { setupCpaExam(e.code); navigation.navigate('CpaExam', { code: e.code }); }} />)}
+        <Text style={[styles.note, { color: colors.textMuted }]}>The topic lists are starting outlines written from general knowledge, not the official blueprints. Compare them with the current blueprint for your exam date and edit them on each exam's page.</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -60,11 +63,11 @@ const ExamCard: React.FC<{ code: ExamCode; onOpen: () => void }> = ({ code, onOp
   const status = useExamStatus(code);
   const info = examInfo(code);
   return (
-    <TouchableOpacity onPress={onOpen} disabled={!status.exam} testID={`cpa-card-${code}`} accessibilityRole="button">
+    <TouchableOpacity onPress={onOpen} testID={`cpa-card-${code}`} accessibilityRole="button">
       <Card style={styles.card}>
-        <Text style={[styles.title, { color: colors.text }]}>{info.code}: {info.name}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{info.group === 'cpa' ? `${info.code}: ` : ''}{info.name}</Text>
         <Text style={{ color: colors.textSecondary }}>
-          {status.exam ? `${status.board ? `Board ${courseProgress(status.board).done} of ${courseProgress(status.board).total} · ` : ''}${status.understood} of ${status.rows.length} topics understood · ${status.covered} ticked · ${status.questions} practice questions` : 'Not set up yet'}
+          {status.exam ? `${status.board ? `Board ${courseProgress(status.board).done} of ${courseProgress(status.board).total} · ` : ''}${status.understood} of ${status.rows.length} topics understood · ${status.covered} ticked · ${status.questions} practice questions` : info.group === 'cpa' ? 'Not set up yet' : 'Tap to set up'}
         </Text>
       </Card>
     </TouchableOpacity>
@@ -111,7 +114,7 @@ export const CpaExamScreen: React.FC = () => {
   const projectId = status.exam?.projectId;
   useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsByProject(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
   if (!status.exam || !projectId) return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={`CPA ${code}`} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>
+    <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={examLabel(code)} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>
   );
   const topics = status.exam.topics.map((t) => t.name);
   const areas = [...new Set(status.exam.topics.map((t) => t.area))];
@@ -123,7 +126,7 @@ export const CpaExamScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScreenHeader title={`CPA ${code}`} />
+      <ScreenHeader title={examLabel(code)} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>{info.name}</Text>
         <Text style={{ color: colors.textSecondary }} testID="cpa-summary">{status.understood} of {status.rows.length} topics understood · {status.covered} ticked · {status.questions} practice questions</Text>
@@ -192,7 +195,7 @@ export const CpaExamScreen: React.FC = () => {
         <TouchableOpacity onPress={() => setEditing((v) => !v)} accessibilityRole="button" testID="cpa-edit-outline"><Text style={{ color: colors.primary }}>{editing ? 'Hide outline editor' : 'Replace the outline with the official blueprint'}</Text></TouchableOpacity>
         {editing && (
           <View>
-            <Text style={[styles.small, { color: colors.textSecondary }]}>Paste the current AICPA blueprint's content areas and topics. A line ending in a colon starts an area; each line after it is a topic. Topics you ticked that keep their name stay ticked.</Text>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>Paste the exam's current official content outline and topics. A line ending in a colon starts an area; each line after it is a topic. Topics you ticked that keep their name stay ticked.</Text>
             <TextInput value={outline} onChangeText={setOutline} multiline placeholder={'Area I: Taxes\nBasis\nCapital gains\nArea II: Entities:\nS corporations'} placeholderTextColor={colors.textMuted}
               style={[styles.input, styles.tall, { color: colors.text, borderColor: colors.border }]} testID="cpa-outline-text" />
             <Button title="Use this outline" onPress={() => { const areasIn = parseOutline(outline); if (!areasIn.length) { Alert.alert('No topics found', 'Write each area on a line ending with a colon, then its topics underneath.'); return; } replaceOutline(code, areasIn); setEditing(false); setOutline(''); }} testID="cpa-outline-apply" />
