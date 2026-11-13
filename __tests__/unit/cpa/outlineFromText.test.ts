@@ -2,7 +2,7 @@ import { outlineFromText, outlineToText } from '../../../src/cpa/outline';
 
 it('reads a well-shaped outline in code without asking the AI', async () => {
   const ask = jest.fn();
-  const text = 'Area I: Taxes\nBasis\nGains\nLeases\nArea II: Entities\nS corporations\nPartnerships\nTrusts';
+  const text = 'Area I: Taxes:\nBasis\nGains\nLeases\nArea II: Entities:\nS corporations\nPartnerships\nTrusts';
   const areas = await outlineFromText(text, ask);
   expect(areas).toHaveLength(2);
   expect(ask).not.toHaveBeenCalled();

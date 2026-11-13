@@ -197,7 +197,7 @@ export const CpaExamScreen: React.FC = () => {
         {editing && (
           <View>
             <Text style={[styles.small, { color: colors.textSecondary }]}>Paste the exam's current official content outline and topics. A line ending in a colon starts an area; each line after it is a topic. Topics you ticked that keep their name stay ticked.</Text>
-            <TextInput value={outline} onChangeText={setOutline} multiline placeholder={'Area I: Taxes\nBasis\nCapital gains\nArea II: Entities:\nS corporations'} placeholderTextColor={colors.textMuted}
+            <TextInput value={outline} onChangeText={setOutline} multiline placeholder={'Area I: Taxes:\nBasis\nCapital gains\nArea II: Entities:\nS corporations'} placeholderTextColor={colors.textMuted}
               style={[styles.input, styles.tall, { color: colors.text, borderColor: colors.border }]} testID="cpa-outline-text" />
             <Button title={outlineBusy ? 'Reading the file...' : 'Read an outline from a file (PDF or text)'} variant="outline" disabled={outlineBusy} testID="cpa-outline-file"
               onPress={async () => {
