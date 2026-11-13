@@ -28,8 +28,11 @@ object VoiceReferenceCoach {
         val advice: List<String>,
     )
 
-    /** How much of a long recording is kept as the reference: the Pocket engine works best on a short, steady sample. */
-    const val REFERENCE_SECONDS = 20
+    /**
+     * How much of a long recording is kept as the reference. The Pocket engine reads at most this much of a sample
+     * (NeuralTts passes it as max_reference_audio_len), so a longer sample adds nothing: it is a prompt, not training.
+     */
+    const val REFERENCE_SECONDS = 12
 
     /**
      * Where the clearest [windowSeconds] of a long recording start, as a sample index. The window with the most

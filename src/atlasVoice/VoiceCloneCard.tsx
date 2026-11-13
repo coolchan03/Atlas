@@ -10,7 +10,7 @@ import { useVoiceCreation } from './useVoiceCreation';
 import { SPEEDS } from './VoiceProfilesCard';
 
 const STEPS = [2, 3, 5, 8];
-const STEP_LABELS: Record<number, string> = { 2: 'Fast', 3: 'Balanced', 5: 'Quality', 8: 'Best quality' };
+const STEP_LABELS: Record<number, string> = { 2: 'Fastest (2)', 3: 'Balanced (3)', 5: 'Smoother (5)', 8: 'Slowest (8)' };
 const MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2';
 
 type Reference = ReturnType<typeof useCloneReferences.getState>['references'][number];
@@ -134,7 +134,7 @@ function SampleStep({ sample, consent, busy, canTry, onError }: { sample: Sample
   const canChoose = consent && !busy && !sample.recording;
   return (
     <Step number={2} title="Add a voice sample">
-      <Text style={[styles.note, { color: colors.textSecondary }]}>Record about 10 seconds of clear speech, or choose any audio file (MP3, M4A, WAV and more). A long file is fine: Atlas picks the clearest 20 seconds. To make another voice, add a new sample here, give it a new name in step 3 and press Create voice. Your earlier voices stay.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Record about 10 seconds of clear speech, or choose any audio file (MP3, M4A, WAV and more). A long file is fine: Atlas picks the clearest 12 seconds, which is all this voice engine uses, so more audio will not make the clone better. One clean, steady, expressive sample beats a long noisy one. To make another voice, add a new sample here, give it a new name in step 3 and press Create voice. Your earlier voices stay.</Text>
       <View style={styles.row}>
         <TouchableOpacity style={styles.action} testID="voice-clone-record" disabled={!consent || busy} onPress={sample.recording ? sample.stopRecording : sample.startRecording}>
           <Text style={{ color: colors.primary }}>{sample.recording ? 'Stop and save' : 'Record'}</Text>
@@ -248,7 +248,7 @@ function Advanced({ colors, steps, onSteps, canTest, onSpeedTest, result }: {
   return (
     <View style={styles.step}>
       <Text style={[styles.stepTitle, { color: colors.text }]}>Speed or quality</Text>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>Faster settings sound a little less detailed. Fast is best for phone calls.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>More steps is slower and not always better. This voice engine is built to work in only a few steps, so a very low or very high setting can sound robotic. If a setting sounds off, go back to Balanced. The fastest setting is best for phone calls only if it still sounds right to you.</Text>
       <View style={styles.row}>
         {STEPS.map((n) => (
           <TouchableOpacity key={n} onPress={() => onSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}

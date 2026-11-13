@@ -11,7 +11,7 @@ import { stop as stopSpeech } from './tts';
 /** What a speed result means for a hands-free call, in plain words. `rtf` is seconds of work per second of speech. */
 export function callVerdict(rtf: number): string {
   if (rtf < 0.8) return 'Fast enough for phone calls.';
-  if (rtf < 1.1) return 'Borderline for phone calls: expect short pauses. Try the Fast quality setting.';
+  if (rtf < 1.1) return 'Borderline for phone calls: expect short pauses. Try a lower step setting.';
   return 'Too slow for phone calls on this phone. Use a natural voice for calls and keep this one for reading aloud.';
 }
 

@@ -220,7 +220,7 @@ export function nativeVoice(id: string, sid: number): { sid: number; style: { ac
 
 /** Load engine then set the private reference WAV (never expose reference data to JavaScript). */
 const setNative = async (id: string, sid: number, referenceId: string): Promise<number> => {
-  if (!referenceCanSpeak(id, referenceId)) throw new Error('Pocket TTS needs a 5–15 second recorded voice sample.');
+  if (!referenceCanSpeak(id, referenceId)) throw new Error('Pocket TTS needs a recorded voice sample of about 5 to 12 seconds.');
   const n = nativeVoice(id, sid);
   if (isPocketVoiceId(id)) {
     if (!Native.activateClonedVoice) throw new Error('Cloning requires an updated Android version of Atlas.');

@@ -6,7 +6,7 @@ import {
   analyzeCloneReference, improveCloneReference, importCloneReference, useCloneReferences, type VoiceReference, type VoiceReferenceQuality,
 } from './cloneStore';
 
-/** Recordings made in the app may run up to three minutes; the clearest 20 seconds are kept. */
+/** Recordings made in the app may run up to three minutes; the clearest 12 seconds are kept. */
 const MAX_RECORDING_SECONDS = 180;
 const MIN_SECONDS = 3;
 

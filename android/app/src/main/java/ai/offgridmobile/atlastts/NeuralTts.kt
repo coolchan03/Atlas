@@ -59,7 +59,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         return engine.generateWithConfig(text, GenerationConfig(
             sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
             numSteps = steps,
-            extra = mapOf("max_reference_audio_len" to "12")
+            extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
         ))
     }
 

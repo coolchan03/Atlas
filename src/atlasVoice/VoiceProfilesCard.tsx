@@ -27,7 +27,8 @@ export async function previewProfile(p: Pick<VoiceProfile, 'name' | 'voiceId' | 
   });
 }
 
-export const SPEEDS = [0.8, 1, 1.2, 1.5] as const;
+/** Speeds kept to a range where a cloned voice still sounds natural; much faster or slower is stretched and turns robotic. */
+export const SPEEDS = [0.9, 1, 1.1, 1.2] as const;
 
 /** Models -> Voice: save the current voice as a named profile and manage saved profiles. */
 export function VoiceProfilesCard() {
