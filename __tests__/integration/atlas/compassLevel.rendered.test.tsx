@@ -73,7 +73,7 @@ it('shows height from GPS and from air pressure side by side, and warns when pre
   const { PressureCard } = require('../../../src/screens/compass/PressureCard');
   const { usePressureLog } = require('../../../src/atlasTools/pressureLog');
   const hour = 3_600_000;
-  const now = 50 * hour;
+  const now = Date.now();
   // Four readings across three hours: down 4 hPa at the same GPS height of 120 m.
   usePressureLog.setState({ samples: [0, 1, 2, 3].map((i) => ({ at: now - (3 - i) * hour, hpa: 1013 - i * 1.33, gpsM: 120 })) });
   const units = { imperial: false, temp: 'c' };
