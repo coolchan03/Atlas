@@ -319,7 +319,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const pillIconsExpandedWidth = computePillIconsWidth();
 
   const actionButton = canSend ? (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityLabel="Send"
       testID="send-button"
       style={styles.circleButton}
       onPress={handleSend}
@@ -327,7 +327,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <Icon name="send" size={18} color={colors.background} />
     </TouchableOpacity>
   ) : isGenerating && onStop ? (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityLabel="Stop"
       testID="stop-button"
       style={[styles.circleButton, styles.circleButtonStop]}
       onPress={handleStop}

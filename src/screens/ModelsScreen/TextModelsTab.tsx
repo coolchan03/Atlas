@@ -206,7 +206,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
   return (
     <View testID="model-detail-screen" style={styles.flex1}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} testID="model-detail-back" style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Back" onPress={onBack} testID="model-detail-back" style={styles.backButton}>
           <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, styles.flex1]} numberOfLines={1}>{selectedModel.name}</Text>

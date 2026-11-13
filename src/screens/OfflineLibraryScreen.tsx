@@ -144,7 +144,7 @@ export const OfflineLibraryScreen: React.FC = () => {
                   placeholder="e.g. tetanus, solar charge controller" placeholderTextColor={colors.textMuted}
                   style={[literalStyles.s1, { backgroundColor: colors.background, color: colors.text }, literalStyles.s21]}
                 />
-                <TouchableOpacity onPress={doSearch} style={[literalStyles.s22, { backgroundColor: colors.primary }, literalStyles.s23]}>
+                <TouchableOpacity accessibilityLabel="Search" onPress={doSearch} style={[literalStyles.s22, { backgroundColor: colors.primary }, literalStyles.s23]}>
                   <Icon name="search" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>

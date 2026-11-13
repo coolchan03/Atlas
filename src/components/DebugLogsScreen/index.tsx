@@ -93,7 +93,7 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
             <Text style={styles.title}>Debug Logs</Text>
             <Text style={styles.subtitle}>{logs.length} entries</Text>
           </View>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+          <TouchableOpacity accessibilityLabel="Close" onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Icon name="x" size={24} color={theme.colors.text} />
           </TouchableOpacity>
         </View>

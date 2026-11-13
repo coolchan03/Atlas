@@ -401,7 +401,7 @@ export const StudyScreen: React.FC = () => {
 
   const header = (title: string, back: () => void) => (
     <View style={[literalStyles.s4, { borderBottomColor: colors.border }]}>
-      <TouchableOpacity onPress={back} style={literalStyles.s5}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
+      <TouchableOpacity accessibilityLabel="Back" onPress={back} style={literalStyles.s5}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
       <Text style={[{ color: colors.text }, literalStyles.s6]} numberOfLines={1}>{title}</Text>
       {busy && <ActivityIndicator color={colors.primary} />}
     </View>

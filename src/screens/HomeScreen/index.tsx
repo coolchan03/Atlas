@@ -234,7 +234,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Icon name="music" size={18} color={colors.primary} />
             <View style={styles.galleryCardInfo}>
               <Text style={styles.galleryCardTitle}>Music Studio</Text>
-              <Text style={styles.galleryCardMeta}>Compose original instrumental audio with the local AI</Text>
+              <Text style={styles.galleryCardMeta}>Pick a style and a small band plays an original tune</Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>

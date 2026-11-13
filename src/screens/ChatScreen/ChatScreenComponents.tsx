@@ -242,7 +242,7 @@ export const ImageProgressIndicator: React.FC<{
                 {imageGenerationProgress.step}/{imageGenerationProgress.totalSteps}
               </Text>
             )}
-            <TouchableOpacity style={styles.imageStopButton} onPress={onStop}>
+            <TouchableOpacity accessibilityLabel="Stop making the image" style={styles.imageStopButton} onPress={onStop}>
               <Icon name="x" size={16} color={colors.error} />
             </TouchableOpacity>
           </View>

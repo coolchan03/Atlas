@@ -24,7 +24,7 @@ export const QueueRow: React.FC<QueueRowProps> = ({ queueCount, queuedTexts, onC
           </Text>
         ) : null}
       </View>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Clear the queued messages"
         testID="clear-queue-button"
         style={styles.queueClearButton}
         onPress={onClearQueue}

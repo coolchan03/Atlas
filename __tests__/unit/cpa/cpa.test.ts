@@ -1,4 +1,4 @@
-import { EXAMS } from '../../../src/cpa/blueprints';
+import { CPA_EXAMS as EXAMS } from '../../../src/cpa/blueprints';
 import { toExercise, topicFor } from '../../../src/cpa/importQuestions';
 import { parseOutline } from '../../../src/cpa/outline';
 import { describeEvidence, topicEvidence } from '../../../src/cpa/progress';
@@ -12,6 +12,18 @@ describe('the four exams', () => {
     for (const e of EXAMS) {
       const names = e.areas.flatMap((a) => a.topics);
       expect(names.length).toBeGreaterThan(15);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
+});
+
+describe('the other professional exams', () => {
+  it('each has areas and unique topics', () => {
+    const { OTHER_EXAMS } = require('../../../src/cpa/blueprints');
+    expect(OTHER_EXAMS.map((e: { code: string }) => e.code).sort()).toEqual(['BAR', 'CFA1', 'CISSP', 'NCLEX', 'PMP', 'SERIES7', 'USMLE1']);
+    for (const e of OTHER_EXAMS) {
+      const names = e.areas.flatMap((a: { topics: string[] }) => a.topics);
+      expect(names.length).toBeGreaterThan(8);
       expect(new Set(names).size).toBe(names.length);
     }
   });

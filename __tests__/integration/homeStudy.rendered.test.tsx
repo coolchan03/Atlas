@@ -48,7 +48,7 @@ it('quiz answers got wrong are kept for spaced review in Practice', () => {
   useExerciseStore.setState({ exercises: {}, progress: {} });
   const c = course({ projectId: 'p1' });
   const content = { kind: 'quiz', questions: [{ q: 'A?', options: ['1', '2'], answer: 0, why: 'w' }, { q: 'B?', options: ['1', '2'], answer: 1, why: '' }] };
-  expect(keepMissed(c, c.squares[1], content, [1])).toBe(1);
+  expect(keepMissed({ course: c, square: c.squares[1], content, missed: [1] })).toBe(1);
   const [kept] = Object.values(useExerciseStore.getState().exercises) as any[];
   expect(kept).toMatchObject({ kind: 'mcq', prompt: 'B?', topic: 'Equations quiz', projectId: 'p1', answer: 1 });
   expect(dueCount()).toBe(1);

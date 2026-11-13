@@ -174,7 +174,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
               <>
                 <View style={localStyles.actionRow}>
                   {(activeModelId || activeRemoteTextModelId) ? (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityLabel="Unload the model"
                       testID="unload-text-model-button"
                       style={[styles.unloadButton, localStyles.actionRowButton, localStyles.iconOnlyButton]}
                       onPress={activeRemoteTextModelId ? onUnloadRemoteTextModel : onUnloadTextModel}

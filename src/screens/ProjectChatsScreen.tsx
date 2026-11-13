@@ -249,7 +249,7 @@ export const ProjectChatsScreen: React.FC = () => {
             {project?.name || 'Chats'}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleNewChat} style={styles.addButton} disabled={!hasModels}>
+        <TouchableOpacity accessibilityLabel="New chat" onPress={handleNewChat} style={styles.addButton} disabled={!hasModels}>
           <Icon name="plus" size={20} color={hasModels ? colors.primary : colors.textMuted} />
         </TouchableOpacity>
       </View>

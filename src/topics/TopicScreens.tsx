@@ -333,7 +333,7 @@ export const TopicSquareScreen: React.FC = () => {
   // A square that went badly gets a lesson right after it that explains the same thing another way.
   const finish = (n: 1 | 2 | 3, missed: number[] = []) => {
     useTopics.getState().complete(courseId, key, n);
-    if (content && missed.length) keepMissed(course, square, content, missed);
+    if (content && missed.length) keepMissed({ course, square, content, missed });
     if (n === 1 && square.format !== 'lesson') setAddedRemedial(useTopics.getState().addRemedial(courseId, key));
     setStars(n);
   };

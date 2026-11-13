@@ -28,7 +28,7 @@ export const ComposerIconsRow: React.FC<ComposerIconsRowProps> = ({
   const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.pillIcons, { width: pillIconsExpandedWidth }]}>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Attach"
         ref={attachTriggerRef}
         testID="attach-button"
         style={styles.pillIconButton}

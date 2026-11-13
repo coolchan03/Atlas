@@ -46,20 +46,25 @@ export function parseQuestionTable(text: string): NormalizedQuestion[] | null {
   const why = find(header, /^(explanation|explain|rationale|why|reason)$/);
   const choiceCols = header.map((h, i) => (/^(option|choice)\s*[a-e1-5]$|^[a-e]$/.test(h) ? i : -1)).filter((i) => i >= 0);
   const combined = find(header, /^(options|choices)$/);
-  const out: NormalizedQuestion[] = [];
-  for (const row of all.slice(1)) {
-    const question = row[q]?.trim(); let answer = row[a]?.trim();
-    if (!question || !answer) continue;
-    let options = choiceCols.map((i) => row[i]?.trim()).filter(Boolean) as string[];
-    if (!options.length && combined >= 0 && row[combined]) options = row[combined].split(/\s*(?:\||;|\n)\s*/).map((o) => o.trim()).filter(Boolean);
-    // An answer that is a letter (A to E) or a number (1 to 5) names a choice.
-    if (options.length >= 2) {
-      const letter = /^([A-Ea-e])[.)]?$/.exec(answer); const number = /^([1-5])$/.exec(answer);
-      const index = letter ? letter[1].toLowerCase().charCodeAt(0) - 97 : number ? Number(number[1]) - 1 : -1;
-      if (index >= 0 && index < options.length) answer = options[index];
-    }
-    out.push({ question, answer, alternatives: [], ...(options.length >= 2 ? { options } : {}),
-      ...(topic >= 0 && row[topic] ? { topic: row[topic].trim() } : {}), ...(why >= 0 && row[why] ? { explain: row[why].trim() } : {}) });
-  }
+  const cols = { q, a, topic, why, choiceCols, combined };
+  const out = all.slice(1).map((row) => rowToQuestion(row, cols)).filter((x): x is NormalizedQuestion => !!x);
   return out.length ? out : null;
+}
+
+interface Columns { q: number; a: number; topic: number; why: number; choiceCols: number[]; combined: number }
+
+/** One table row as a question, or null when it has no question or no answer. */
+function rowToQuestion(row: string[], c: Columns): NormalizedQuestion | null {
+  const question = row[c.q]?.trim(); let answer = row[c.a]?.trim();
+  if (!question || !answer) return null;
+  let options = c.choiceCols.map((i) => row[i]?.trim()).filter(Boolean) as string[];
+  if (!options.length && c.combined >= 0 && row[c.combined]) options = row[c.combined].split(/\s*(?:\||;|\n)\s*/).map((o) => o.trim()).filter(Boolean);
+  // An answer that is a letter (A to E) or a number (1 to 5) names a choice.
+  if (options.length >= 2) {
+    const letter = /^([A-Ea-e])[.)]?$/.exec(answer); const number = /^([1-5])$/.exec(answer);
+    const index = letter ? letter[1].toLowerCase().charCodeAt(0) - 97 : number ? Number(number[1]) - 1 : -1;
+    if (index >= 0 && index < options.length) answer = options[index];
+  }
+  return { question, answer, alternatives: [], ...(options.length >= 2 ? { options } : {}),
+    ...(c.topic >= 0 && row[c.topic] ? { topic: row[c.topic].trim() } : {}), ...(c.why >= 0 && row[c.why] ? { explain: row[c.why].trim() } : {}) };
 }

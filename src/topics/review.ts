@@ -7,7 +7,7 @@ import type { Course } from './store';
 import type { PlannedSquare, SquareContent } from './formats';
 
 /** Adds the missed questions of a quiz square to Practice and marks them due now. Returns how many were kept. */
-export function keepMissed(course: Course, square: PlannedSquare, content: SquareContent, missed: number[]): number {
+export function keepMissed({ course, square, content, missed }: { course: Course; square: PlannedSquare; content: SquareContent; missed: number[] }): number {
   if (content.kind !== 'quiz') return 0;
   const set: Exercise[] = missed.map((i) => ({ q: content.questions[i], i })).filter((x) => !!x.q).map(({ q, i }) => ({
     id: `sq-${course.id}-${square.key}-${i}`, kind: 'mcq' as const, topic: square.title, projectId: course.projectId,
