@@ -26,8 +26,10 @@ export const DrillPicker: React.FC<{ kinds: DrillKind[]; onPick: (k: DrillKind) 
 );
 
 /** The exam: one question at a time, no feedback, a clock that ends it. */
-export const ExamRunner: React.FC<{ exam: Exam; questions: Exercise[]; answers: Record<string, unknown>; onAnswer: (id: string, v: unknown) => void; onFinish: () => void; colors: Colors }> = ({ exam, questions, answers, onAnswer, onFinish, colors }) => {
+export const ExamRunner: React.FC<{ exam: Exam; questions: Exercise[]; answers: Record<string, unknown>; onAnswer: (id: string, v: unknown) => void; onFinish: () => void; onSpent?: (id: string, seconds: number) => void; colors: Colors }> = ({ exam, questions, answers, onAnswer, onFinish, onSpent, colors }) => {
   const [index, setIndex] = useState(0);
+  const shownAt = React.useRef(Date.now());
+  const leave = (to?: number) => { const q0 = questions[index]; if (q0) onSpent?.(q0.id, (Date.now() - shownAt.current) / 1000); shownAt.current = Date.now(); if (to !== undefined) setIndex(to); };
   const [left, setLeft] = useState(secondsLeft(exam, Date.now()));
   useEffect(() => {
     const t = setInterval(() => { const l = secondsLeft(exam, Date.now()); setLeft(l); if (l <= 0) { clearInterval(t); onFinish(); } }, 1000);
@@ -42,8 +44,8 @@ export const ExamRunner: React.FC<{ exam: Exam; questions: Exercise[]; answers: 
       <Text testID="exam-prompt" style={[st.prompt, { color: colors.text }]}>{q.kind === 'testlet' ? 'Answer all parts' : q.prompt}</Text>
       <Answer ex={q} value={answers[q.id]} onChange={(v) => onAnswer(q.id, v)} colors={colors} />
       <View style={st.wrap}>
-        {index > 0 && <Button title="Back" variant="ghost" onPress={() => setIndex(index - 1)} testID="exam-back" style={st.top14} />}
-        <Button title={last ? 'Finish exam' : 'Next'} onPress={last ? onFinish : () => setIndex(index + 1)} testID={last ? 'exam-finish' : 'exam-next'} style={st.top14} />
+        {index > 0 && <Button title="Back" variant="ghost" onPress={() => leave(index - 1)} testID="exam-back" style={st.top14} />}
+        <Button title={last ? 'Finish exam' : 'Next'} onPress={last ? () => { leave(); onFinish(); } : () => leave(index + 1)} testID={last ? 'exam-finish' : 'exam-next'} style={st.top14} />
       </View>
     </View>
   );
@@ -52,6 +54,7 @@ export const ExamRunner: React.FC<{ exam: Exam; questions: Exercise[]; answers: 
 export const ExamResultView: React.FC<{ result: ExamResult; onReview: () => void; onDone: () => void; colors: Colors }> = ({ result, onReview, onDone, colors }) => (
   <View>
     <Text testID="exam-score" style={[st.prompt, { color: result.percent >= 70 ? good : colors.error }]}>{result.correct} of {result.total} correct ({result.percent}%)</Text>
+    {!!result.pace && <Text testID="exam-pace" style={{ color: colors.textSecondary }}>About {result.pace.averageSeconds} seconds a question. Slowest topics: {result.pace.slowest.map((s) => `${s.topic} (${s.seconds}s)`).join(', ')}.</Text>}
     {result.unanswered > 0 && <Text style={{ color: colors.textSecondary }}>{result.unanswered} left blank (counted as wrong).</Text>}
     <Text style={[st.semi, st.top14, { color: colors.text }]}>By topic (weakest first)</Text>
     {result.byTopic.map((t) => <Text key={t.topic} style={{ color: colors.textSecondary }}>{t.topic}: {t.correct} of {t.total}</Text>)}
@@ -92,7 +95,7 @@ export interface HomeProps {
   topic: string; setTopic: (t: string) => void; busy: boolean; note: string; pickDrill: boolean; setPickDrill: (b: boolean) => void;
   goalOn: boolean; goalLine: string | null; perDay: number; setGoalOn: (on: boolean) => void;
   scores: Array<{ topic: string; attempts: number; percent: number }>;
-  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onExam: () => void; onCards: () => void; onClear: () => void;
+  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onExam: () => void; onMock: (count: number) => void; onCards: () => void; onClear: () => void;
   colors: Colors;
 }
 
@@ -107,6 +110,10 @@ export const PracticeHome: React.FC<HomeProps> = (p) => (
     <Button title={p.pickDrill ? 'Hide drill types' : 'Pick one drill type'} variant="ghost" onPress={() => p.setPickDrill(!p.pickDrill)} testID="practice-pick-drill" style={st.top6} />
     {p.pickDrill && <DrillPicker kinds={[...ACCOUNTING_DRILLS, ...STATS_DRILLS]} onPick={(k) => p.onDrills([k])} colors={p.colors} />}
     <Button title="Practise what I have (missed and due first)" variant="outline" onPress={() => p.onStart(p.topic.trim() || undefined)} testID="practice-start" style={st.top8} />
+    <Text style={[st.small12, st.top10, { color: p.colors.textMuted }]}>Mock exam: questions spread evenly over every topic, 90 seconds each, with your pace by topic at the end.</Text>
+    <View style={st.wrap}>
+      {[10, 25, 50].map((n) => <Button key={n} title={`${n} questions`} variant="outline" onPress={() => p.onMock(n)} testID={`practice-mock-${n}`} style={st.top8} />)}
+    </View>
     <Button title="Timed exam (20 questions, 30 minutes)" variant="outline" onPress={p.onExam} testID="practice-exam" style={st.top8} />
     <Button title="Flashcards from my misses" variant="outline" onPress={p.onCards} testID="practice-cards" style={st.top8} />
     {!!p.note && <Text testID="practice-note" style={[st.top10, { color: p.colors.textSecondary }]}>{p.note}</Text>}
