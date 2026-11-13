@@ -69,7 +69,7 @@ function launchProblem(
 export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const { colors } = useTheme();
   const shortcuts = useHomeShortcuts((s) => s.shortcuts);
-  const { addShortcut, removeShortcut } = useHomeShortcuts.getState();
+  const { addShortcut, removeShortcut, updateShortcut } = useHomeShortcuts.getState();
   const agents = useAgentStore((s) => s.agents);
   const projects = useProjectStore((s) => s.projects);
   const voices = useVoiceProfiles((s) => s.profiles);
@@ -79,6 +79,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const [open, setOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState('');
   const [draft, setDraft] = useState<Details>(initial);
+  const [editingId, setEditingId] = useState('');
   const update = (change: Partial<Details>) => setDraft((d) => ({ ...d, ...change }));
   const openScreen = (screen: string, params?: Record<string, string>) => navigation.getParent()?.navigate(screen, params);
   const goToChat = (id: string, call: boolean) => {
@@ -118,12 +119,14 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     if (problem) { Alert.alert(problem[0], problem[1]); return; }
     const modelId = shortcut.modelId || app.activeModelId || '';
     const existing = destination === 'existing';
-    if (startCall && !existing) {
+    if (startCall) {
       setLaunchingId(shortcut.id);
-      // One tap means the chosen model is actually loaded before opening the call.
-      await activeModelService.loadTextModel(modelId);
+      // One tap means the model this call uses is actually loaded before opening it (a resumed chat keeps its own model).
+      const resumedModel = existing ? chats.conversations.find((c) => c.id === shortcut.conversationId)?.modelId : undefined;
+      const loadId = shortcut.modelId || resumedModel || modelId;
+      if (loadId) await activeModelService.loadTextModel(loadId);
       // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
-      if (shortcut.modelId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+      if (shortcut.modelId && !existing) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
     }
     const id = existing && shortcut.conversationId
       ? shortcut.conversationId
@@ -154,12 +157,18 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     } catch (error: any) { Alert.alert('Could not open widget', String(error?.message || error)); }
     finally { setLaunchingId(''); }
   };
+  const startEdit = (widget: HomeShortcut) => {
+    const { id, ...rest } = widget;
+    setDraft(rest); setEditingId(id); setOpen(true);
+  };
+  const closeEditor = () => { setDraft(initial()); setEditingId(''); setOpen(false); };
   const add = () => {
     if (!draft.title?.trim()) { Alert.alert('Name the widget', 'Choose a short name such as Call my assistant.'); return; }
     if (draft.action === 'call' && !draft.conversationId && !draft.modelId && !activeModelId) {
       Alert.alert('Choose a model', 'Pick a downloaded model, or load the current model first.'); return;
     }
-    addShortcut(draft); setDraft(initial()); setOpen(false);
+    if (editingId) updateShortcut(editingId, draft); else addShortcut(draft);
+    closeEditor();
   };
   const summaries: Choice[] = conversations.filter((c) => !c.isPrivate && !c.pinVerifier && !c.protectedBlob && !c.isArchived)
     .slice().sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0))
@@ -169,12 +178,12 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
       <View style={styles.top}>
         <Icon name="sliders" size={18} color={colors.primary} />
         <Text style={[styles.heading, { color: colors.text }]}>My home widgets</Text>
-        <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="home-add-shortcut">
+        <TouchableOpacity onPress={() => (open ? closeEditor() : setOpen(true))} accessibilityRole="button" testID="home-add-shortcut">
           <Text style={{ color: colors.primary }}>{open ? 'Cancel' : '+ Add widget'}</Text>
         </TouchableOpacity>
       </View>
       {!shortcuts.length && !open && (
-        <Text style={[styles.small, { color: colors.textSecondary }]}>Add a one-tap agent call with your chosen model and voice, resume a chat, or control instrumental music. Everything stays within Atlas.</Text>
+        <Text style={[styles.small, { color: colors.textSecondary }]}>Add as many call buttons as you like, each with its own agent, model, project and chat. Or resume a chat, or control instrumental music . Everything stays within Atlas.</Text>
       )}
       {shortcuts.map((widget) => {
         const agent = agents.find((a) => a.id === widget.agentId)?.name || 'Default assistant';
@@ -188,13 +197,15 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
               <TouchableOpacity accessibilityRole="button" onPress={() => launch(widget)} testID={`launch-shortcut-${widget.id}`}>
                 <Text style={[styles.widgetTitle, { color: colors.text }]}>{widget.title}{launchingId === widget.id ? ' · Loading model…' : ''}</Text>
                 <Text style={[styles.small, { color: colors.textSecondary }]}>{inChat(widget.action)
-                  ? `${widget.action === 'call' ? 'Call' : 'Chat'} · ${agent}${voice ? ` · ${voice}` : ''}${widget.modelId ? ' · selected model' : ''}`
+                  ? [widget.action === 'call' ? 'Call' : 'Chat', agent, localModels.find((m) => m.id === widget.modelId)?.name, projects.find((p) => p.id === widget.projectId)?.name,
+                    widget.conversationId ? (conversations.find((c) => c.id === widget.conversationId)?.title.slice(0, 22) ?? 'chat removed') : undefined, voice].filter(Boolean).join(' · ')
                   : actionLabel(widget.action)}</Text>
               </TouchableOpacity>
               {isMusicPlayer && <MusicPlayerWidget openStudio={() => openScreen('MusicStudio')}/>}
               {isLearning && <LearningReliabilityWidget openLearning={() => openScreen('LearningReliability')}/>}
               {isReader && <ReadAloudWidget openReader={() => openScreen('ReadAloud')}/>}
             </View>
+            {inChat(widget.action) && <TouchableOpacity onPress={() => startEdit(widget)} accessibilityLabel={`Edit ${widget.title}`} testID={`edit-shortcut-${widget.id}`}><Icon name="edit-2" size={18} color={colors.textMuted} /></TouchableOpacity>}
             <TouchableOpacity onPress={() => Alert.alert('Remove widget?', widget.title, [
               { text: 'Cancel' }, { text: 'Remove', style: 'destructive', onPress: () => removeShortcut(widget.id) },
             ])} accessibilityLabel={`Remove ${widget.title}`}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
@@ -208,8 +219,8 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
           {select({ caption: 'Widget type', value: draft.action || 'call', choices: WIDGET_ACTIONS,
             setter: (action) => update({ action: (action || 'call') as HomeWidgetAction, conversationId: undefined }) })}
           {inChat(draft.action) && <>
-            {draft.action === 'chat' && select({ caption: 'Chat to open', value: draft.conversationId, setter: (conversationId) => update({ conversationId }), choices: [{ id: '', label: 'New chat' }, ...summaries] })}
-            {draft.action === 'call' && <Text style={[styles.small, { color: colors.textSecondary }]}>Starts a new hands-free Atlas call. The chosen agent, text model and voice are saved with that chat. You can hang up and return to the conversation later.</Text>}
+            {inChat(draft.action) && select({ caption: draft.action === 'call' ? 'Chat to call in' : 'Chat to open', value: draft.conversationId, setter: (conversationId) => update({ conversationId }), choices: [{ id: '', label: draft.action === 'call' ? 'New chat each time' : 'New chat' }, ...summaries] })}
+            {draft.action === 'call' && <Text style={[styles.small, { color: colors.textSecondary }]}>Starts a hands-free call with this agent, model, project and chat. Make as many call buttons as you want. You can hang up and return to the conversation later.</Text>}
             {select({ caption: 'Agent', value: draft.agentId, setter: (agentId) => update({ agentId }),
               choices: [{ id: '', label: 'Default agent' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))] })}
             {select({ caption: 'Project', value: draft.projectId, setter: (projectId) => update({ projectId }), choices: [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))] })}
@@ -221,7 +232,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
           {draft.action === 'resume-most' && <Text style={[styles.small, { color: colors.textSecondary }]}>Uses the number of your sent messages to find your most-used unlocked chat. No message content is inspected.</Text>}
           {draft.action === 'resume-last' && <Text style={[styles.small, { color: colors.textSecondary }]}>Opens your last active unlocked chat, or the most recently updated one.</Text>}
           <TouchableOpacity accessibilityRole="button" style={[styles.save, { borderColor: colors.primary }]} onPress={add} testID="home-save-shortcut">
-            <Text style={[styles.centered, { color: colors.primary }]}>Add to Atlas home</Text>
+            <Text style={[styles.centered, { color: colors.primary }]}>{editingId ? 'Save changes' : 'Add to Atlas home'}</Text>
           </TouchableOpacity>
         </View>
       )}

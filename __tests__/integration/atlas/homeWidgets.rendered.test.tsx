@@ -9,8 +9,13 @@ const mockNavigate = jest.fn();
 const navigation = { navigate: jest.fn(), getParent: () => ({ navigate: mockNavigate }) };
 jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }) }));
 
-function setup(shortcuts: Array<Record<string, unknown>>) {
+function setup(shortcuts: Array<Record<string, unknown>>, android = false) {
   installNativeBoundary({ fs: true });
+  if (android) {
+    const { NativeModules, Platform } = require('react-native');
+    Platform.OS = 'android';
+    NativeModules.AtlasTts = { addListener: jest.fn(), removeListeners: jest.fn() };
+  }
   const rtl = requireRTL();
   const React = require('react');
   const { Alert } = require('react-native');
@@ -108,4 +113,44 @@ it('the Call tile lets you call a chosen agent, with a chosen model and project 
   rtl.fireEvent.press(view.getByTestId('call-project-none'));
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('call-start')); });
   await rtl.waitFor(() => expect(useChatStore.getState().conversations.some((c: { agentId?: string }) => c.agentId === jake.id)).toBe(true));
+});
+
+it('home can hold several call buttons, each with its own agent, model, project and chat, and one can be edited', async () => {
+  const { rtl, view } = setup([], true);
+  const { useAppStore } = require('../../../src/stores/appStore');
+  const { useProjectStore } = require('../../../src/stores/projectStore');
+  const { useAgentStore } = require('../../../src/stores/agentStore');
+  const { useChatStore } = require('../../../src/stores/chatStore');
+  const { activeModelService } = require('../../../src/services/activeModelService');
+  const loadTextModel = jest.spyOn(activeModelService, 'loadTextModel').mockResolvedValue(undefined);
+  const project = useProjectStore.getState().createProject({ name: 'Therapy', description: '', systemPrompt: '', icon: '#10B981' });
+  useAppStore.setState({ activeModelId: 'm1', downloadedModels: [{ id: 'm1', name: 'Small model' }, { id: 'm2', name: 'Big model' }] });
+  const therapist = useAgentStore.getState().agents.find((a: { name: string }) => a.name === 'Therapist');
+  const jake = useAgentStore.getState().agents.find((a: { name: string }) => a.name.startsWith('Jake'));
+  const past = useChatStore.getState().createConversation('m1', 'Monday session', project.id);
+  const { useHomeShortcuts: shortcutsStore } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  let ids: string[] = [];
+  rtl.act(() => {
+    ids = [
+      shortcutsStore.getState().addShortcut({ title: 'Call Therapist', action: 'call', agentId: therapist.id, modelId: 'm2', projectId: project.id }).id,
+      shortcutsStore.getState().addShortcut({ title: 'Call Jake', action: 'call', agentId: jake.id, conversationId: past }).id,
+    ];
+  });
+  expect(view.getByText(/Call · Therapist · Big model · Therapy/)).toBeTruthy();
+  expect(view.getByText(/Call · .*Monday session/)).toBeTruthy();
+
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[0]}`)); });
+  await rtl.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: expect.any(String) }));
+  expect(loadTextModel).toHaveBeenLastCalledWith('m2');
+  mockNavigate.mockClear();
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[1]}`)); });
+  await rtl.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: past }));
+
+  // Change the first button to the small model.
+  rtl.fireEvent.press(view.getByTestId(`edit-shortcut-${ids[0]}`));
+  rtl.fireEvent.press(view.getByText('Small model'));
+  rtl.fireEvent.press(view.getByText('Save changes'));
+  const { useHomeShortcuts } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  expect(useHomeShortcuts.getState().shortcuts).toHaveLength(2);
+  expect(useHomeShortcuts.getState().shortcuts[0]).toMatchObject({ id: ids[0], modelId: 'm1', agentId: therapist.id });
 });
