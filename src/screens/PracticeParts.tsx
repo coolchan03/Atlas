@@ -75,6 +75,8 @@ export const Flashcards: React.FC<{ cards: Exercise[]; onGotIt: (id: string) => 
       <TouchableOpacity testID="card" onPress={() => setFlipped(!flipped)} style={[st.choice, { borderColor: colors.border }]}>
         <Text style={{ color: colors.text }}>{card.kind === 'testlet' ? card.stem : card.prompt}</Text>
         {flipped && <Text testID="card-answer" style={[st.top10, { color: good }]}>{answerText(card)}</Text>}
+        {flipped && !!card.explain && <Text testID="card-explain" style={[st.top6, { color: colors.textSecondary }]}>{card.explain}</Text>}
+        {flipped && !!card.source?.quote && <Text testID="card-source" style={[st.small12, st.top6, { color: colors.textMuted }]}>From {card.source.doc}{card.source.page ? `, p. ${card.source.page}` : ''}: "{card.source.quote}"</Text>}
         {!flipped && <Text style={[st.small12, st.top10, { color: colors.textMuted }]}>Tap to see the answer</Text>}
       </TouchableOpacity>
       {flipped && <View style={st.wrap}>

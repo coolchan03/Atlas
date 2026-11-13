@@ -92,3 +92,22 @@ it('clears the practice history after asking, and keeps the daily-goal setting',
   expect(r.getByTestId('practice-note').props.children).toBe('Practice history cleared.');
   ask.mockRestore();
 });
+
+it('a flashcard shows the book\'s explanation and the passage with its page when turned over', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 42), explain: 'Because basis is cost.', source: { doc: 'Tax book.pdf', page: 212, quote: 'Basis is the cost of the asset' } }]); store.getState().record('a', false); });
+  rtl.fireEvent.press(r.getByTestId('practice-cards'));
+  rtl.fireEvent.press(r.getByTestId('card'));
+  expect(r.getByTestId('card-explain').props.children).toBe('Because basis is cost.');
+  expect(r.getByTestId('card-source').props.children.join('')).toContain('From Tax book.pdf, p. 212: "Basis is the cost of the asset"');
+});
+
+it('a timed mock exam of 10 questions shows the pace by topic at the end', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet(Array.from({ length: 6 }, (_, i) => calc(`q${i}`, i % 2 ? 'Tax' : 'Leases', i))); });
+  rtl.fireEvent.press(r.getByTestId('practice-mock-10'));
+  expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 6/);
+  for (let i = 0; i < 5; i++) rtl.fireEvent.press(r.getByTestId('exam-next'));
+  rtl.fireEvent.press(r.getByTestId('exam-finish'));
+  expect(r.getByTestId('exam-pace').props.children.join('')).toMatch(/seconds a question/);
+});
