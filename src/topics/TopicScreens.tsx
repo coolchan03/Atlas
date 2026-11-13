@@ -19,6 +19,7 @@ import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { keepMissed } from './review';
+import { UndoRow, useUndo } from '../components/UndoRow';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
 const BOARD_KIND: Record<SquareFormat, SpaceKind> = {
@@ -53,6 +54,7 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
 
 /** Your courses, and a form to make a new one on any subject. */
 export const TopicsScreen: React.FC = () => {
+  const undo = useUndo();
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
   const given = (useRoute<any>().params ?? {}) as { projectId?: string; topic?: string };
@@ -103,9 +105,7 @@ export const TopicsScreen: React.FC = () => {
       if (id) navigation.navigate('TopicBoard', { courseId: id });
     } catch (e: any) { Alert.alert('Could not open that course', String(e?.message || e)); }
   };
-  const confirmDelete = (c: Course) => Alert.alert('Delete this course?', c.title, [
-    { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => remove(c.id) },
-  ]);
+  const confirmDelete = (c: Course) => undo.remove(c.title, () => remove(c.id), () => useTopics.setState((s) => ({ courses: [c, ...s.courses].slice(0, 20) })));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -114,6 +114,7 @@ export const TopicsScreen: React.FC = () => {
         <Text style={[styles.meta, { color: colors.textMuted }]}>
           {projectName ? `A course in this project: the project's shared documents are used as material, and the tutor chats live in the project. ` : ''}Name anything: accounting, Python, the French Revolution, guitar chords. The AI on your phone designs a board for it, choosing lessons, quizzes, flashcards, matching, ordering and practice problems to suit the subject and how you like to learn, and writes each square when you reach it.
         </Text>
+        <UndoRow pending={undo.pending} undo={undo.undo} />
         {courses.map((c) => {
           const p = courseProgress(c);
           return (

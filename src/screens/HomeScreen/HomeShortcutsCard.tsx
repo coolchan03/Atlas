@@ -7,6 +7,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { UndoRow, useUndo } from '../../components/UndoRow';
 import { useTopics } from '../../topics/store';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { activeModelService } from '../../services/activeModelService';
@@ -89,6 +90,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const activeModelId = useAppStore((s) => s.activeModelId);
   const conversations = useChatStore((s) => s.conversations);
   const courses = useTopics((s) => s.courses);
+  const undo = useUndo();
   const [open, setOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState('');
   const [draft, setDraft] = useState<Details>(initial);
@@ -220,12 +222,14 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
               {isReader && <ReadAloudWidget openReader={() => openScreen('ReadAloud')}/>}
             </View>
             {(inChat(widget.action) || ['course', 'project', 'practice'].includes(widget.action ?? '')) && <TouchableOpacity onPress={() => startEdit(widget)} accessibilityLabel={`Edit ${widget.title}`} testID={`edit-shortcut-${widget.id}`}><Icon name="edit-2" size={18} color={colors.textMuted} /></TouchableOpacity>}
-            <TouchableOpacity onPress={() => Alert.alert('Remove widget?', widget.title, [
-              { text: 'Cancel' }, { text: 'Remove', style: 'destructive', onPress: () => removeShortcut(widget.id) },
-            ])} accessibilityLabel={`Remove ${widget.title}`}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              const index = shortcuts.findIndex((x) => x.id === widget.id);
+              undo.remove(widget.title, () => removeShortcut(widget.id), () => useHomeShortcuts.setState((s) => ({ shortcuts: [...s.shortcuts.slice(0, index), widget, ...s.shortcuts.slice(index)] })));
+            }} accessibilityLabel={`Remove ${widget.title}`}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
           </View>
         );
       })}
+      <UndoRow pending={undo.pending} undo={undo.undo} />
       {open && (
         <View testID="home-shortcut-editor">
           <TextInput value={draft.title} onChangeText={(title) => update({ title })} placeholder="Widget name" placeholderTextColor={colors.textMuted}

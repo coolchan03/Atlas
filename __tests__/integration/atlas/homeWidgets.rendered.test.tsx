@@ -175,3 +175,14 @@ it('a widget can open one course board, one project, or practice for a project',
   rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${ids[2]}`));
   expect(mockNavigate).toHaveBeenLastCalledWith('Practice', { projectId: project.id });
 });
+
+it('removing a widget needs no confirmation and can be undone, back in the same place', () => {
+  const { rtl, view } = setup([{ title: 'One', action: 'compass' }, { title: 'Two', action: 'recorder' }, { title: 'Three', action: 'music-studio' }]);
+  const { useHomeShortcuts } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  rtl.fireEvent.press(view.getByLabelText('Remove Two'));
+  expect(useHomeShortcuts.getState().shortcuts.map((w: { title: string }) => w.title)).toEqual(['One', 'Three']);
+  expect(view.getByText('Removed Two')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('undo-button'));
+  expect(useHomeShortcuts.getState().shortcuts.map((w: { title: string }) => w.title)).toEqual(['One', 'Two', 'Three']);
+  expect(view.queryByTestId('undo-row')).toBeNull();
+});
