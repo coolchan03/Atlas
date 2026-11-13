@@ -13,7 +13,7 @@ import { pickAndAddFiles, pickAndAddFolder, summarize } from '../learning/docume
 import { QuestionImport } from '../screens/learningReliability/QuestionImport';
 import { CPA_EXAMS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
 import { addToPractice } from './importQuestions';
-import { parseOutline } from './outline';
+import { outlineFromText, outlineToText, parseOutline } from './outline';
 import { describeEvidence, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
 import { setupAllCpaExams, setupCpaExam } from './setup';
@@ -111,6 +111,7 @@ export const CpaExamScreen: React.FC = () => {
   const [newTopic, setNewTopic] = useState('');
   const [outline, setOutline] = useState('');
   const [editing, setEditing] = useState(false);
+  const [outlineBusy, setOutlineBusy] = useState(false);
   const projectId = status.exam?.projectId;
   useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsByProject(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
   if (!status.exam || !projectId) return (
@@ -198,6 +199,20 @@ export const CpaExamScreen: React.FC = () => {
             <Text style={[styles.small, { color: colors.textSecondary }]}>Paste the exam's current official content outline and topics. A line ending in a colon starts an area; each line after it is a topic. Topics you ticked that keep their name stay ticked.</Text>
             <TextInput value={outline} onChangeText={setOutline} multiline placeholder={'Area I: Taxes\nBasis\nCapital gains\nArea II: Entities:\nS corporations'} placeholderTextColor={colors.textMuted}
               style={[styles.input, styles.tall, { color: colors.text, borderColor: colors.border }]} testID="cpa-outline-text" />
+            <Button title={outlineBusy ? 'Reading the file...' : 'Read an outline from a file (PDF or text)'} variant="outline" disabled={outlineBusy} testID="cpa-outline-file"
+              onPress={async () => {
+                setOutlineBusy(true);
+                try {
+                  const { pick, types } = require('@react-native-documents/picker');
+                  const [file] = await pick({ type: [types.allFiles], mode: 'import', allowMultiSelection: false });
+                  if (!file) return;
+                  const text: string = await require('../services/documentService').documentService.textFromPicked(file.uri, file.name ?? 'outline.txt', 200000);
+                  const areasFound = await outlineFromText(text, (s, u) => require('../study/engine').askModel(s, u));
+                  if (!areasFound.length) { Alert.alert('No topics found', 'Could not find areas and topics in that file.'); return; }
+                  setOutline(outlineToText(areasFound)); // shown for you to check before it is used
+                } catch (e: any) { if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Could not read that file', String(e?.message || e)); }
+                finally { setOutlineBusy(false); }
+              }} />
             <Button title="Use this outline" onPress={() => { const areasIn = parseOutline(outline); if (!areasIn.length) { Alert.alert('No topics found', 'Write each area on a line ending with a colon, then its topics underneath.'); return; } replaceOutline(code, areasIn); setEditing(false); setOutline(''); }} testID="cpa-outline-apply" />
           </View>
         )}
