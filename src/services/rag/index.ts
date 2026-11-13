@@ -66,7 +66,8 @@ class RagService {
 
     onProgress?.({ stage: 'extracting', message: `Extracting text from ${fileName}...` });
     // Extract full document text for RAG — don't truncate based on context window
-    const RAG_MAX_CHARS = 500_000;
+    // A whole textbook is about 1.5 to 3 million characters; the old 500,000 cut most of one off.
+    const RAG_MAX_CHARS = 3_000_000;
     const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
     if (!attachment?.textContent) {
       // A PDF that extracts to zero text is a scanned / image-only PDF (no text layer);

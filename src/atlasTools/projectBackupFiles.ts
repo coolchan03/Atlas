@@ -47,7 +47,12 @@ async function readablePath(path: string, name: string): Promise<string> {
   }
   throw new Error(`Project document "${name}" is missing; reattach it before backing up.`);
 }
-export async function collectProjectFiles(projectIds: string[]): Promise<ProjectBackupFile[]> {
+/**
+ * With `inlineBytes` (nearby sync), a document over that size, or one that would push the total past it, is left out instead of
+ * failing the whole snapshot: bigger documents travel separately in pieces (nearbySync/projectDocs.ts).
+ */
+export async function collectProjectFiles(projectIds: string[], opts: { inlineBytes?: number } = {}): Promise<ProjectBackupFile[]> {
+  const { inlineBytes } = opts;
   const result: ProjectBackupFile[] = [];
   let totalBytes = 0;
   for (const projectId of projectIds) {
@@ -58,6 +63,7 @@ export async function collectProjectFiles(projectIds: string[]): Promise<Project
       const path = await readablePath(doc.path, doc.name);
       const stat = await RNFS.stat(path);
       const size = Number(stat.size);
+      if (inlineBytes !== undefined && (size > inlineBytes / 2 || totalBytes + size > inlineBytes)) continue;
       if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_FILE_BYTES)
         throw new Error(`Document "${doc.name}" is too large for this backup (25 MB per file maximum).`);
       totalBytes += size;

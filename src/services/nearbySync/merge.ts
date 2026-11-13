@@ -19,6 +19,8 @@ export interface SyncSnapshot {
   audio?: string[];
   /** Ids of the cloned-voice samples this phone holds. */
   voiceRefs?: string[];
+  /** Keys of the project documents this phone has (projectDocs.ts), so the other phone sends only the missing ones, of any size. */
+  docs?: string[];
   /** API keys (remote AI servers, web search), from the keychain (secrets.ts). */
   secrets?: Record<string, { key: string; changedAt: number }>;
   // Transport encrypts the whole message between paired devices; no model weights or lock PINs.

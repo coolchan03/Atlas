@@ -211,7 +211,7 @@ class DocumentService {
       const stat = await RNFS.stat(resolvedPath);
       console.log(`[DocumentService] File size: ${stat.size} bytes`);
       // Text files are read whole; PDFs and office files are mostly pictures/zip, so allow bigger ones.
-      const limit = isPdf || OFFICE_EXTENSIONS.includes(extension) ? 60 * 1024 * 1024 : MAX_FILE_SIZE;
+      const limit = isPdf || OFFICE_EXTENSIONS.includes(extension) ? 250 * 1024 * 1024 : MAX_FILE_SIZE;
       if (stat.size > limit) {
         throw new Error(`File is too large. Maximum size is ${limit / (1024 * 1024)}MB`);
       }

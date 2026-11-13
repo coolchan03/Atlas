@@ -13,6 +13,7 @@ import { applyStores, localStores } from './stores';
 import { applySecrets, localSecrets } from './secrets';
 import { audioOnPhone, receiveAudio, sendMissingAudio, type AudioChunk } from './audio';
 import { receiveVoiceRef, sendMissingVoiceRefs, voiceRefsOnPhone, type VoiceRefChunk } from './voiceReferences';
+import { docsOnPhone, receiveDocFile, receiveDocText, sendMissingDocs, INLINE_BYTES, type DocFileChunk, type DocTextBatch } from './projectDocs';
 import { useRecordings } from '../../atlasRecorder/store';
 
 const PREF = 'atlas-sync-enabled-v1';
@@ -53,6 +54,11 @@ const audioChunk = (payload: string): (AudioChunk & { sourceId: string }) | null
 const voiceRefChunk = (payload: string): (VoiceRefChunk & { sourceId: string }) | null => {
   if (!payload.startsWith('{"kind":"voiceref"')) return null;
   try { return JSON.parse(payload); } catch { return null; }
+};
+/** A project document's text batch or file piece (not a full sync message), or null. */
+const docPiece = (payload: string): ((DocTextBatch | DocFileChunk) & { sourceId: string }) | null => {
+  if (!payload.startsWith('{"kind":"doc')) return null;
+  try { const v = JSON.parse(payload); return v?.kind === 'doctext' || v?.kind === 'docfile' ? v : null; } catch { return null; }
 };
 export const nearbyAvailable = Platform.OS === 'android' && Boolean(NativeModules.AtlasNearbySync);
 const native = (): NativeNearby => {
@@ -170,7 +176,7 @@ class NearbySyncService {
     // recordings from syncing: send everything else and say the files were skipped.
     let files: Awaited<ReturnType<typeof collectProjectFiles>> = [];
     this.fileNote = undefined;
-    try { files = await collectProjectFiles(projects.map(p => p.id)); } catch (e) {
+    try { files = await collectProjectFiles(projects.map(p => p.id), { inlineBytes: INLINE_BYTES * 2 }); } catch (e) {
       this.fileNote = `Project files were not synced: ${e instanceof Error ? e.message : String(e)}`;
       this.publish({ lastError: this.fileNote });
     }
@@ -186,6 +192,7 @@ class NearbySyncService {
       conversations: [...conversations, ...lockedChats], agents, files, deleted: this.deleted,
       stores: await localStores(), audio: await audioOnPhone(recordings.map(r => r.id)),
       voiceRefs: await voiceRefsOnPhone().catch(() => []),
+      docs: await docsOnPhone(projects.map(p => p.id)).catch(() => []),
       // Credentials never leave this device without an explicit opt-in.
       ...(this.shareSecrets ? { secrets: await localSecrets() } : {}),
     };
@@ -196,6 +203,14 @@ class NearbySyncService {
       const reply = await native().sync(peerId, JSON.stringify({ ...chunk, sourceId: this.deviceId }));
       if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
     }).catch(error => this.publish({ lastError: `Recording audio: ${String(error?.message ?? error)}` }));
+  }
+  /** After an exchange, send the other phone the project documents it does not have yet, textbooks included. */
+  private async sendDocs(peerId: string, remote: SyncSnapshot) {
+    const ids = useProjectStore.getState().projects.filter(p => !p.pinVerifier && !p.protectedBlob).map(p => p.id);
+    await sendMissingDocs(ids, remote.docs, async (piece) => {
+      const reply = await native().sync(peerId, JSON.stringify({ ...piece, sourceId: this.deviceId }));
+      if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
+    }).catch(error => this.publish({ lastError: `Documents: ${String(error?.message ?? error)}` }));
   }
   /** After an exchange, send the other phone the cloned-voice samples it does not have yet. */
   private async sendVoiceRefs(peerId: string, remote: SyncSnapshot) {
@@ -261,6 +276,13 @@ class NearbySyncService {
       if (audio) {
         if (audio.sourceId !== message.peerId) throw new Error('Wrong device identity in recording audio');
         await receiveAudio(audio);
+        await native().respond(message.requestId, '{"ok":true}');
+        return;
+      }
+      const doc = docPiece(message.payload);
+      if (doc) {
+        if (doc.sourceId !== message.peerId) throw new Error('Wrong device identity in project document');
+        if (doc.kind === 'doctext') receiveDocText(doc); else await receiveDocFile(doc);
         await native().respond(message.requestId, '{"ok":true}');
         return;
       }
@@ -358,6 +380,7 @@ class NearbySyncService {
       const theirs = JSON.parse(response.payload);
       await this.sendAudio(response.peerId, theirs);
       await this.sendVoiceRefs(response.peerId, theirs);
+      await this.sendDocs(response.peerId, theirs);
       await this.refreshPeers();
     } finally { this.busy = false; this.publish({ syncing: false }); }
   }
@@ -371,6 +394,7 @@ class NearbySyncService {
       const theirs = JSON.parse(response.payload);
       await this.sendAudio(response.peerId, theirs);
       await this.sendVoiceRefs(response.peerId, theirs);
+      await this.sendDocs(response.peerId, theirs);
     } catch (e) {
       this.publish({ lastError: String(e) });
       throw e;
