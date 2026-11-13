@@ -36,9 +36,9 @@ export function parseDimensions(line: string): Dimensions {
 }
 
 /** Facts and citations as two independent gates. A missing score is "unknown", not a pass. */
-export function gateFromScore(score: number | undefined): GateState {
+export function gateFromScore(score: number | undefined, min: number = GATE_MIN): GateState {
   if (score === undefined) return 'unknown';
-  return score >= GATE_MIN ? 'pass' : 'fail';
+  return score >= min ? 'pass' : 'fail';
 }
 
 /** A PASS with a low score, or a FAIL with a high one, is contradictory and needs a person to look. */

@@ -31,6 +31,7 @@ import logger from '../utils/logger';
 import { ensureTextModel } from '../atlasTools/models';
 import { assessReport } from './evidenceGate';
 import { plainReason } from './judgeDimensions';
+import { DEFAULT_STRICTNESS, questionRubric, rejectionStands, reportRubric } from './strictness';
 import { learningKnowledgeDb } from './knowledgeDb';
 import { ingestClaims } from './claimIngest';
 import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycleRules';
@@ -216,14 +217,18 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
   status('Judge is reviewing the question bank...');
   const verdict = await ask(
     `You are the judge. You check that study questions stay on the task, are specific, safe and not duplicates.${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}`,
-    `TASK: ${cfg.topic}\n${done.length ? `\nAlready answered (do not repeat any of these):\n${done.join('\n')}\n` : ''}\nQUESTIONS:\n${numbered(items)}\n\nFor EVERY question write one line: "<number>: APPROVE" or "<number>: REJECT - <short reason>". Reject only questions that are off the task, too vague, unsafe, duplicates, or already answered.`,
+    `TASK: ${cfg.topic}\n${done.length ? `\nAlready answered (do not repeat any of these):\n${done.join('\n')}\n` : ''}\nQUESTIONS:\n${numbered(items)}\n\nFor EVERY question write one line: "<number>: APPROVE" or "<number>: REJECT - <short reason>". ${questionRubric(cfg.judgeStrictness)}`,
     'judge',
   );
   const r = rulings(verdict, items.length);
   const rejected: BankItem[] = [];
+  let vague = 0;
   items.forEach((it, i) => {
     const v = r.get(i + 1);
-    if (!v || v.ok) L().updateItem(agent.id, it.id, { status: 'approved' });
+    // A rejection only for being too broad is kept only as far as the judge's strictness allows (lenient: never).
+    const stands = !!v && !v.ok && rejectionStands(cfg.judgeStrictness, v.reason, vague, items.length);
+    if (stands && v && /vague|specific|broad|general/i.test(v.reason)) vague += 1;
+    if (!v || v.ok || !stands) L().updateItem(agent.id, it.id, { status: 'approved' });
     else { L().updateItem(agent.id, it.id, { status: 'rejected', reason: v.reason || 'rejected' }); rejected.push({ ...it, reason: v.reason }); }
   });
   L().log({ agentId: agent.id, kind: 'judge', title: `Judge: ${items.length - rejected.length} approved, ${rejected.length} rejected`, body: verdict.slice(0, 2500) });
@@ -351,8 +356,8 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   if (!reps.length) return;
   status('Judge is checking the reports...');
   const verdict = await ask(
-    `You are a strict but fair judge. Check each report: does it answer the question, does the reasoning make logical sense, does it follow from its sources, is anything unsafe or invented?${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
-    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\nFor each report write one line: "<number>: PASS <score>/10 | FACTS <n> | CITES <n> | COMPLETE <n> | RELEVANT <n> | LOGIC <n> | CLEAR <n> - <why>" or the same with FAIL and what is wrong and how to fix it. Every <n> is 0 to 10. FACTS: is every statement true? Be strict about numbers, dates, limits and names. CITES: does each [n] source really say what the sentence says? Good writing, completeness or clarity never make up for a wrong fact: if a material fact is wrong, FACTS must be below 6 and the verdict FAIL. Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
+    `${reportRubric(cfg.judgeStrictness)}${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
+    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\n${(cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === 'strict' ? `For each report write one line: "<number>: PASS <score>/10 | FACTS <n> | CITES <n> | COMPLETE <n> | RELEVANT <n> | LOGIC <n> | CLEAR <n> - <why>" or the same with FAIL and what is wrong and how to fix it. Every <n> is 0 to 10. FACTS: is every statement true? Be strict about numbers, dates, limits and names. CITES: does each [n] source really say what the sentence says? Good writing, completeness or clarity never make up for a wrong fact: if a material fact is wrong, FACTS must be below 6 and the verdict FAIL. ` : `For each report write one line: "<number>: PASS <score>/10 - <why>" or "<number>: FAIL <score>/10 - what is wrong and how to fix it". The score is 0 to 10. You may add FACTS <n> and CITES <n> (0 to 10) if you can judge them. `}Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
     'judge',
   );
   const r = rulings(verdict, reps.length);
@@ -366,7 +371,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
     if (!item) continue;
     const original = (L().get(agent.id).reportLog ?? []).find((x) => x.itemId === rep.itemId);
     const full = original?.text ?? rep.report;
-    const assessment = assessReport({ text: full, sources: original?.sourceList, judgeLine: line, judgePass: v?.ok ?? null });
+    const assessment = assessReport({ text: full, sources: original?.sourceList, judgeLine: line, judgePass: v?.ok ?? null, strictness: cfg.judgeStrictness ?? DEFAULT_STRICTNESS });
     if (assessment.judgeScore !== undefined) scores.push(assessment.judgeScore);
     markReport(agent.id, rep.itemId, {
       status: v ? (v.ok && assessment.status !== 'disputed' ? 'pass' : 'fail') : 'waiting',

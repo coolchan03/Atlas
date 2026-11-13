@@ -29,6 +29,8 @@ export interface LearnConfig {
   continuous: boolean;
   /** Keep the screen on while it learns (on unless turned off): when the screen sleeps Android pauses the app and the learning stops. */
   keepAwake?: boolean;
+  /** How demanding the judge is (default lenient, for small on-device models). */
+  judgeStrictness?: 'lenient' | 'balanced' | 'strict';
   learnerModelId?: string;
   judgeModelId?: string;
   managerModelId?: string;

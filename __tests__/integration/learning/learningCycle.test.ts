@@ -27,7 +27,7 @@ const reportCount = (user: string) => (user.match(/^REPORT \d+/gm) ?? []).length
 const happyModel = (judgeDims = 'FACTS 9 | CITES 9 | COMPLETE 7 | RELEVANT 9 | LOGIC 8 | CLEAR 8'): typeof mockReplies => (system, user) => {
   if (system.startsWith('You plan how to become an expert')) return 'Q: How long should water be boiled to make it safe?\nQ: What should you do with boiled water before drinking it?';
   if (system.startsWith('You are the judge. You check that study questions')) return '1: APPROVE\n2: APPROVE';
-  if (system.includes('You are a strict but fair judge')) {
+  if (/You are (a strict but fair|a fair) judge/.test(system)) {
     return `${Array.from({ length: reportCount(user) }, (_, i) => `${i + 1}: PASS 8/10 | ${judgeDims} - matches the manual`).join('\n')}\nLESSON: Check every number against the cited passage.`;
   }
   if (system.startsWith('You answer only from the notes')) return 'Boil the water for one minute to make it safe, then let it cool before drinking it.';

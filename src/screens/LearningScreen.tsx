@@ -16,6 +16,7 @@ import { useProjectStore, useAppStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
 import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
 import { refineTask } from '../learning/refineTask';
+import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
@@ -257,6 +258,16 @@ export const LearningScreen: React.FC = () => {
         {!!st?.direction && <Text style={styles.direction}>Direction: {st.direction}</Text>}
       </View>
 
+      <Text style={styles.label}>How demanding the judge is</Text>
+      <View style={styles.chipRow} testID="learning-strictness">
+        {STRICTNESS_OPTIONS.map((o) => (
+          <TouchableOpacity key={o.id} disabled={running} onPress={() => setConfig(agentId, { judgeStrictness: o.id })} accessibilityRole="radio" accessibilityState={{ selected: (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id }} testID={`learning-strictness-${o.id}`}
+            style={[styles.chip, (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id && styles.chipOn]}>
+            <Text style={[styles.chipText, (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id && styles.chipTextOn]}>{o.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.counts}>{STRICTNESS_OPTIONS.find((o) => o.id === (cfg.judgeStrictness ?? DEFAULT_STRICTNESS))?.hint}</Text>
       <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
         onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
         <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />
@@ -496,6 +507,7 @@ export const LearningScreen: React.FC = () => {
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   suggestionText: { flex: 1 },
+  chipRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginTop: 6 },
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { marginRight: SPACING.md },

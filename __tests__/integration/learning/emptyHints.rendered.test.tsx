@@ -61,3 +61,17 @@ it('Refine with AI suggests a clearer task, which can be used or ignored', async
   rtl.fireEvent.press(view.getByTestId('learning-suggestion-use'));
   expect(Object.values(useLearningStore.getState().config).some((c: any) => /^Become an expert in small business income tax/.test(c.topic))).toBe(true);
 });
+
+it('the judge is Lenient by default, and the Teach screen can make it Balanced or Strict', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const { useLearningStore } = require('../../../src/learning/store');
+  const view = rtl.render(React.createElement(LearningScreen));
+  expect(view.getByTestId('learning-strictness-lenient').props.accessibilityState.selected).toBe(true);
+  expect(view.getByText(/Best for small on-device models/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('learning-strictness-strict'));
+  expect(view.getByTestId('learning-strictness-strict').props.accessibilityState.selected).toBe(true);
+  expect(Object.values(useLearningStore.getState().config).some((c: any) => c.judgeStrictness === 'strict')).toBe(true);
+});

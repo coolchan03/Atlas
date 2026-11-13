@@ -6,6 +6,7 @@
  */
 import { gateFromScore, parseDimensions, verdictMatchesScore, type Dimensions, type GateState } from './judgeDimensions';
 import { checkSupport, claimSentences } from './claimText';
+import { thresholdsFor, type Strictness, type Thresholds } from './strictness';
 
 export type ClaimStatus = 'candidate' | 'verified' | 'disputed' | 'superseded' | 'rejected';
 
@@ -107,17 +108,21 @@ function unsupportedSentences(text: string, sources: EvidenceSource[]): { checke
 }
 
 /** The citation gate: mapped numbers, the passage text itself, and the judge's own mark. Any failure fails the gate. */
-function citationGate(input: { invalid: number[]; support: { checked: number; failed: string[] }; mark: number | undefined; reasons: string[] }): GateState {
-  const markState = gateFromScore(input.mark);
+function citationGate(input: { invalid: number[]; cited: number; support: { checked: number; failed: string[] }; mark: number | undefined; reasons: string[]; limits: Thresholds }): GateState {
+  const { limits } = input;
+  const markState = gateFromScore(input.mark, limits.gateMin);
   input.support.failed.forEach((why) => input.reasons.push(`A cited sentence ${why}`));
   if (markState === 'fail') input.reasons.push(`Judge rated citations ${input.mark}/10`);
-  if (input.invalid.length || input.support.failed.length || markState === 'fail') return 'fail';
+  // Strict: any one problem fails. Looser levels fail only when more than a share of the citations or cited sentences are wrong.
+  const invalidFails = input.invalid.length > 0 && input.invalid.length / Math.max(1, input.cited + input.invalid.length) > limits.invalidShare;
+  const unsupportedFails = input.support.failed.length > 0 && input.support.failed.length / Math.max(1, input.support.checked) > limits.unsupportedShare;
+  if (invalidFails || unsupportedFails || markState === 'fail') return 'fail';
   return input.support.checked > 0 || markState === 'pass' ? 'pass' : 'unknown';
 }
 
 /** The facts gate: a known-error alarm or a low factual mark fails it. A pass means "no material error found", not "verified". */
-function factsGate(input: { alarms: string[]; mark: number | undefined; reasons: string[] }): GateState {
-  const markState = gateFromScore(input.mark);
+function factsGate(input: { alarms: string[]; mark: number | undefined; reasons: string[]; limits: Thresholds }): GateState {
+  const markState = gateFromScore(input.mark, input.limits.gateMin);
   if (markState === 'fail') input.reasons.push(`Judge rated factual correctness ${input.mark}/10`);
   return input.alarms.length ? 'fail' : markState;
 }
@@ -127,7 +132,10 @@ export function assessReport(input: {
   sources?: EvidenceSource[];
   judgeLine: string;
   judgePass: boolean | null;
+  /** How demanding to be (default: lenient, for small on-device models). */
+  strictness?: Strictness;
 }): GateResult {
+  const limits = thresholdsFor(input.strictness ?? 'strict'); // called without a level it stays strict; the engine always passes the chosen one
   const reasons: string[] = [];
   const score = parseJudgeScore(input.judgeLine);
   if (!score.valid && score.reason) reasons.push(score.reason);
@@ -144,10 +152,11 @@ export function assessReport(input: {
   reasons.push(...alarms);
 
   const gates = {
-    citations: citationGate({ invalid, support: unsupportedSentences(input.text, sources), mark: dimensions.cites, reasons }),
-    facts: factsGate({ alarms, mark: dimensions.facts, reasons }),
+    citations: citationGate({ invalid, cited: cited.length, support: unsupportedSentences(input.text, sources), mark: dimensions.cites, reasons, limits }),
+    facts: factsGate({ alarms, mark: dimensions.facts, reasons, limits }),
   };
-  const consistent = verdictMatchesScore(score.value, input.judgePass);
+  // A looser judge trusts its own verdict over a score that disagrees with it (small models often mismatch the two).
+  const consistent = limits.trustVerdict || verdictMatchesScore(score.value, input.judgePass);
   if (!consistent) reasons.push(`Judge verdict and score disagree (${input.judgePass ? 'PASS' : 'FAIL'} with ${score.value}/10)`);
   let status: GateResult['status'] = 'candidate';
   if (input.judgePass === false) status = 'rejected';
