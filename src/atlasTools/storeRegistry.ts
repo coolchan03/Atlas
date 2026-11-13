@@ -32,6 +32,13 @@ const STORES: Record<string, () => any> = {
   'atlas-schedule': () => require('../schedule/store').useSchedule,
   'atlas-topics': () => require('../topics/store').useTopics,
   'atlas-pins': () => require('../pins/store').usePins,
+  'atlas-exercises': () => require('../study/exercises').useExerciseStore,
+  'atlas-cpa-prep': () => require('../cpa/store').useCpa,
+  'atlas-study-plan': () => require('../study/planStore').usePlanStore,
+  'atlas-custom-home-shortcuts-v1': () => require('../screens/HomeScreen/homeShortcutStore').useHomeShortcuts,
+  'atlas-call-prefs': () => require('../screens/HomeScreen/callPrefs').useCallPrefs,
+  'atlas-pressure-log': () => require('./pressureLog').usePressureLog,
+  'atlas-memory-choice-v1': () => require('../stores/autoMemory').useAutoMemory,
 };
 
 /** Loads the given stores from storage again (unknown keys and missing stores are skipped). */

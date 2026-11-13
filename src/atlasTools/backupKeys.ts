@@ -11,7 +11,28 @@ export const RESTORABLE_STORE_KEYS = new Set([
   'atlas-study-progress', 'atlas-checklists', 'atlas-skills', 'atlas-schedule', 'atlas-topics', 'atlas-pins',
   // Language course: levels, stars, streak, written lessons, saved words and review schedule.
   'atlas-language',
+  // Practice questions and review dates (textbook question banks), exam prep, study plan, About me, Home widgets, call choices.
+  'atlas-exercises', 'atlas-cpa-prep', 'atlas-study-plan', 'atlas-about-me', 'atlas-custom-home-shortcuts-v1', 'atlas-call-prefs',
+  'atlas-pressure-log', 'atlas-memory-choice-v1',
 ]);
+
+/**
+ * Persisted stores that are deliberately NOT in a backup or sync, with the reason. A guard test requires every persisted store to be
+ * in RESTORABLE_STORE_KEYS, handled by sync itself (recordings, voices), or listed here, so a new store cannot be forgotten.
+ */
+export const NOT_BACKED_UP: Record<string, string> = {
+  'atlas-backup-reminder': 'when this phone last reminded about a backup',
+  'atlas-model-speed': 'measured speed of this phone\'s models',
+  'atlas-slow-hint': 'a hint shown once on this phone',
+  'atlas-storage-prefs': 'this phone\'s storage choices',
+  'atlas-tuned-models': 'settings tuned for this phone\'s hardware',
+  'atlas-instrumental-library-v1': 'points at audio files that exist only on this phone',
+  'atlas-workflows': 'finished runs can hold bank statements and other private papers',
+  'atlas-search-settings': 'holds a search API key',
+  'atlas-recordings': 'synced record by record with its audio',
+  'atlas-voice-profiles': 'synced with the voice samples',
+  'atlas-voice-reference-metadata-v1': 'synced with the voice samples',
+};
 // Never export or restore credentials, vault contents, or authentication state.
 export const EXCLUDED_BACKUP_KEYS = /auth|passphrase|lock|vault|keychain|credential|secret|token|api.?key|atlas-search-settings/i;
 const SENSITIVE_FIELDS = /api.?key|secret|token|password|passphrase|credential/i;
