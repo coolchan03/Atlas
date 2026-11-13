@@ -21,8 +21,8 @@ const Circles: React.FC<{ pose: LevelPose | null; width: number }> = ({ pose, wi
     const slide = (v: number) => clamp(v * 6, width * 0.3);
     return (
       <>
-        <View style={[styles.disc, { width: disc, height: disc, borderRadius: disc / 2, left: width / 2 - disc / 2, top: '50%', marginTop: -disc / 2 }]} testID="level-fixed-circle" />
-        <View style={[styles.ring, { width: disc, height: disc, borderRadius: disc / 2, left: width / 2 - disc / 2 + slide(pose.x), top: '50%', marginTop: -disc / 2 + slide(-pose.y) }]} testID="level-moving-circle" />
+        <View style={[styles.disc, styles.middle, { width: disc, height: disc, borderRadius: disc / 2, left: width / 2 - disc / 2, marginTop: -disc / 2 }]} testID="level-fixed-circle" />
+        <View style={[styles.ring, styles.middle, { width: disc, height: disc, borderRadius: disc / 2, left: width / 2 - disc / 2 + slide(pose.x), marginTop: -disc / 2 + slide(-pose.y) }]} testID="level-moving-circle" />
       </>
     );
   }
@@ -55,6 +55,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BACKDROP, alignItems: 'center', justifyContent: 'center', padding: 22, overflow: 'hidden' },
   levelScreen: { backgroundColor: LEVEL_BACKDROP },
   disc: { position: 'absolute', backgroundColor: INK },
+  middle: { top: '50%' },
   ring: { position: 'absolute', borderWidth: 3, borderColor: RING },
   tilt: { color: INK, fontSize: 96, fontWeight: '200' },
   caption: { color: INK_DIM, fontSize: 14, marginTop: 8 },
