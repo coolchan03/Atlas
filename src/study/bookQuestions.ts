@@ -10,7 +10,11 @@ const OPTION = /^\s*\(?[A-Ea-e][.)]\s+\S/;
 const ANSWER = /^\s*(?:correct\s+)?(?:answer|ans|solution)\s*[:.-]\s*(.+)$/i;
 
 /** Question-shaped passages in one text: numbered or labelled starters, and sentences that end in a question mark, with options and a printed answer. */
-export function extractQuestions(text: string, source: string): BookQuestion[] {
+export function extractQuestions(rawText: string, rawSource: string): BookQuestion[] {
+  // A chunk from a PDF read by page starts with its page, "(p. 12) ": drop it from the text and keep it in the source.
+  const page = /^\(p\. (\d+)\)\s*/.exec(rawText);
+  const text = page ? rawText.slice(page[0].length) : rawText;
+  const source = page ? `${rawSource} p. ${page[1]}` : rawSource;
   const out: BookQuestion[] = [];
   const lines = text.replace(/\r/g, '').split('\n');
   for (let i = 0; i < lines.length; i++) {

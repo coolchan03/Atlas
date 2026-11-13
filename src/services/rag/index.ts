@@ -1,4 +1,5 @@
 import { ragDatabase } from './database';
+import { pagedChunks } from './pageChunks';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
@@ -81,7 +82,9 @@ class RagService {
     }
 
     onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
-    const chunks = chunkDocument(attachment.textContent);
+    // A PDF is chunked page by page so every chunk knows its page; anything else (or a PDF the phone cannot read by page) is chunked from the whole text.
+    const paged = fileName.toLowerCase().endsWith('.pdf') ? await pagedChunks(attachment.uri || filePath) : null;
+    const chunks = paged ?? chunkDocument(attachment.textContent);
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }

@@ -51,3 +51,9 @@ it('writes a quiz square starting from the textbook questions when the course pr
   try { await squareContent(useTopics.getState().courses[0], 's2'); } catch { /* the stub reply is a quiz, not a lesson */ }
   expect(asked[0] ?? '').not.toContain("QUESTIONS FROM THE LEARNER'S OWN TEXTBOOK");
 });
+
+it('finds a question at the start of a page-numbered chunk and keeps the page in its source', () => {
+  const { extractQuestions } = require('../../src/study/bookQuestions');
+  const [q] = extractQuestions('(p. 212) 4. Which method values inventory using the oldest costs first?\nAnswer: FIFO', 'Tax book.pdf');
+  expect(q).toMatchObject({ answer: 'FIFO', source: 'Tax book.pdf p. 212' });
+});
