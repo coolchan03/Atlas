@@ -67,6 +67,7 @@ export const PlannerScreen: React.FC = () => {
         <TextInput testID="plan-text" value={text} onChangeText={setText} multiline autoCapitalize="none" autoCorrect={false} placeholder={'REG | 2026-12-20 | Basis, Gains, Entities, Ethics'} placeholderTextColor={colors.textMuted} style={[st.input, st.top8, { borderColor: colors.border, color: colors.text }]} />
         <Button title="Save plan" onPress={save} testID="plan-save" style={st.top8} />
         {!!msg && <Text testID="plan-msg" style={[st.top8, { color: colors.textSecondary }]}>{msg}</Text>}
+        {!exams.length && <Text testID="plan-empty" style={[st.top14, { color: colors.textSecondary }]}>No exams yet. Add one above with its date and the topics it covers, and this page makes a day-by-day schedule and shows what is behind.</Text>}
         {plan.length > 0 && (
           <View style={st.top14}>
             <Text testID="plan-today" style={[st.semi, { color: colors.text }]}>Today</Text>
