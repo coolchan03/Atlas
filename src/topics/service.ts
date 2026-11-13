@@ -7,9 +7,12 @@ import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
+import { bookQuestionsPrompt, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { makeSource, parsePicks, pickPrompt, relevantExcerpts, type Candidate, type CourseSource } from './sources';
 
 const MAX_TRIES = 2;
+/** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
+const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];
 
 async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, what: string): Promise<T> {
   const { system, user } = prompt;
@@ -63,6 +66,7 @@ export async function squareContent(course: Course, key: string): Promise<Square
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes,
+    bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn(await projectQuestionBank(course.projectId), `${square.title} ${square.focus}`)) : '',
     excerpts: [...await projectExcerpts(course.projectId, `${square.title} ${square.focus}`), ...relevantExcerpts(course.sources ?? [], `${square.title} ${square.focus}`)].slice(0, 5),
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   useTopics.getState().setContent(course.id, key, content);

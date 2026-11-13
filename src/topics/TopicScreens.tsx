@@ -17,6 +17,7 @@ import { MAX_SOURCES, makeSource, outlineSources, type CourseSource } from './so
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
 import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
+import { ExamMatchCard } from './ExamMatchCard';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
 const BOARD_KIND: Record<SquareFormat, SpaceKind> = {
@@ -275,6 +276,7 @@ export const TopicBoardScreen: React.FC = () => {
         {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
         <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-progress">{p.done} of {p.total} squares · {stars} stars</Text>
         <SourcesCard course={course} />
+        <ExamMatchCard course={course} />
         <Button title="Send this course to another phone" variant="outline" testID="course-share"
           onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}

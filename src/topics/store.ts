@@ -42,6 +42,8 @@ interface TopicsState {
   removeSource: (id: string, sourceId: string) => void;
   /** Connects the course to a project (its documents are searched for each square), or disconnects it. */
   setProject: (id: string, projectId: string | undefined) => void;
+  /** Adds one lesson square for each item (before the final quiz when the board ends with one). */
+  addLessons: (id: string, items: { title: string; focus: string; unit: string }[]) => void;
   clearContent: (id: string, key: string) => void;
   /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
   addRemedial: (id: string, afterKey: string) => boolean;
@@ -76,6 +78,14 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
   addSources: (id, sources) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, sources: [...(c.sources ?? []), ...sources].slice(-MAX_SOURCES) } : c)) })),
   setProject: (id, projectId) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, projectId } : c)) })),
   removeSource: (id, sourceId) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, sources: (c.sources ?? []).filter((x) => x.id !== sourceId) } : c)) })),
+  addLessons: (id, items) => set((s) => ({ courses: s.courses.map((c) => {
+    if (c.id !== id || !items.length) return c;
+    let n = c.squares.reduce((m, q) => Math.max(m, Number(q.key.replace(/\D/g, '')) || 0), 0);
+    const added = items.map((it) => ({ key: `s${++n}`, format: 'lesson' as const, title: it.title.slice(0, 60), focus: it.focus, unit: it.unit }));
+    const last = c.squares[c.squares.length - 1];
+    const squares = last?.checkpoint && last.format === 'quiz' ? [...c.squares.slice(0, -1), ...added, last] : [...c.squares, ...added];
+    return { ...c, squares: squares.slice(0, 80) };
+  }) })),
   clearContent: (id, key) => set((s) => ({ courses: s.courses.map((c) => {
     if (c.id !== id) return c;
     const { [key]: _gone, ...rest } = c.content;
