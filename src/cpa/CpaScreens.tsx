@@ -1,3 +1,4 @@
+import { showError } from '../utils/showError';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -128,7 +129,7 @@ export const CpaExamScreen: React.FC = () => {
   const areas = [...new Set(status.exam.topics.map((t) => t.area))];
 
   const addDocs = async (fn: () => Promise<any>) => {
-    try { const r = await fn(); if (r) setMessage(summarize(r.result ?? r)); } catch (e: any) { Alert.alert('Could not add those', String(e?.message || e)); }
+    try { const r = await fn(); if (r) setMessage(summarize(r.result ?? r)); } catch (e: any) { showError('Could not add those', e); }
   };
   const evidenceOf = (id: string) => status.rows.find((r) => r.topic.id === id)!.evidence;
 

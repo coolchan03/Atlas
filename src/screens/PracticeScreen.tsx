@@ -1,3 +1,4 @@
+import { showError } from '../utils/showError';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -123,7 +124,7 @@ export const PracticeScreen: React.FC = () => {
             {adding && (
               <View>
                 <QuestionImport topics={checklistTopics} onAdded={() => undefined} onConfirm={(items) => { const r = addToPractice(items, { projectId, examCode }, checklistTopics); return `${r.added} questions added${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`; }} />
-                {!!projectId && (                <TouchableOpacity onPress={() => { pickAndAddFiles(projectId, setNote).then((r) => { if (r) setNote(summarize(r)); }).catch((e: any) => Alert.alert('Could not add those', String(e?.message || e))); }} accessibilityRole="button" testID="practice-add-files">
+                {!!projectId && (                <TouchableOpacity onPress={() => { pickAndAddFiles(projectId, setNote).then((r) => { if (r) setNote(summarize(r)); }).catch((e: any) => showError('Could not add those', e)); }} accessibilityRole="button" testID="practice-add-files">
                   <Text style={{ color: colors.primary }}>Add files to this project (textbooks, notes)</Text>
                 </TouchableOpacity>)}
               </View>
