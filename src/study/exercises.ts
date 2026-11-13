@@ -183,6 +183,9 @@ interface ExerciseState {
   progress: Record<string, Progress>;
   /** Questions answered per day (YYYY-MM-DD), for the optional streak and daily goal. */
   daily: Record<string, number>;
+  /** Per-phone counts behind `daily` (and the count before tracking began), so two phones' answers on the same day add up when they sync. */
+  dailyBy?: Record<string, Record<string, number>>;
+  dailyBase?: Record<string, number>;
   goal: { on: boolean; perDay: number };
   setGoal: (g: Partial<{ on: boolean; perDay: number }>) => void;
   setNote: (id: string, note: string) => void;
@@ -226,7 +229,7 @@ export const useExerciseStore = create<ExerciseState>()(persist((set) => ({
     const base = p.base ?? p.attempts; const baseC = p.baseC ?? p.correct;
     const box = correct ? Math.min(DAYS.length - 1, p.box + 1) : 0;
     const day = new Date(now).toISOString().slice(0, 10);
-    return { progress: { ...st.progress, [id]: { ...p, box, due: now + DAYS[box] * 86400000, attempts: p.attempts + 1, correct: p.correct + (correct ? 1 : 0), last: correct, answered: true, dev, base, baseC } }, daily: { ...st.daily, [day]: (st.daily[day] ?? 0) + 1 }, deviceId: me };
+    return { progress: { ...st.progress, [id]: { ...p, box, due: now + DAYS[box] * 86400000, attempts: p.attempts + 1, correct: p.correct + (correct ? 1 : 0), last: correct, answered: true, dev, base, baseC } }, daily: { ...st.daily, [day]: (st.daily[day] ?? 0) + 1 }, dailyBy: { ...st.dailyBy, [day]: { ...(st.dailyBy?.[day] ?? {}), [me]: (st.dailyBy?.[day]?.[me] ?? 0) + 1 } }, dailyBase: { ...st.dailyBase, [day]: st.dailyBase?.[day] ?? (st.daily[day] ?? 0) }, deviceId: me };
   }),
   saveDraft: (id, draft) => set((st) => ({ progress: { ...st.progress, [id]: { ...(st.progress[id] ?? { box: 0, due: 0, attempts: 0, correct: 0 }), saved: draft } } })),
   clearSet: (topic) => set((st) => {

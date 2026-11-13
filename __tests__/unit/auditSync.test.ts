@@ -28,3 +28,18 @@ describe('T18 same name and length, different bytes', () => {
     expect(docKey(a)).toBe(docKey({ ...a }));
   });
 });
+
+describe('questions answered per day add up across two phones', () => {
+  const day = '2026-11-13';
+  const side = (n: number, deviceId: string) => JSON.stringify({ state: { exercises: {}, progress: {}, daily: { [day]: 4 + n }, dailyBy: { [day]: { [deviceId]: n } }, dailyBase: { [day]: 4 }, deviceId }, version: 1 });
+  it('6 on the phone and 9 on the tablet from the same start make 19, and syncing again changes nothing', () => {
+    const once = mergeExercises(side(6, 'P'), side(9, 'T'));
+    expect(JSON.parse(once).state.daily[day]).toBe(4 + 6 + 9);
+    expect(JSON.parse(mergeExercises(once, side(9, 'T'))).state.daily[day]).toBe(19);
+    expect(JSON.parse(mergeExercises(side(9, 'T'), side(6, 'P'))).state.daily[day]).toBe(19);
+  });
+  it('older data without per-phone counts still takes the larger count', () => {
+    const old = (n: number) => JSON.stringify({ state: { exercises: {}, progress: {}, daily: { [day]: n } }, version: 1 });
+    expect(JSON.parse(mergeExercises(old(3), old(8))).state.daily[day]).toBe(8);
+  });
+});

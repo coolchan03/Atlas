@@ -36,6 +36,21 @@ function mergeDaily(mine: Obj = {}, theirs: Obj = {}): Obj {
   return out;
 }
 
+/** Per-day, per-phone counts: each phone's highest count once, on top of the shared base, so answers on two phones the same day add up. */
+function mergeDailyCounts(x: Obj, y: Obj): { daily: Obj; dailyBy: Obj; dailyBase: Obj } {
+  const daily = mergeDaily(x.daily, y.daily);
+  const dailyBy: Obj = {}; const dailyBase: Obj = {};
+  const days = new Set([...Object.keys(x.dailyBy ?? {}), ...Object.keys(y.dailyBy ?? {})]);
+  for (const day of days) {
+    const by: Record<string, number> = {};
+    for (const src of [x.dailyBy?.[day] ?? {}, y.dailyBy?.[day] ?? {}]) for (const [d, n] of Object.entries<number>(src)) by[d] = Math.max(by[d] ?? 0, n);
+    const base = Math.max(x.dailyBase?.[day] ?? 0, y.dailyBase?.[day] ?? 0);
+    dailyBy[day] = by; dailyBase[day] = base;
+    daily[day] = Math.max(daily[day] ?? 0, base + Object.values(by).reduce((a, b) => a + b, 0));
+  }
+  return { daily, dailyBy, dailyBase };
+}
+
 export function mergeExercises(localRaw: string, remoteRaw: string, remoteNewer = true): string {
   const a = JSON.parse(localRaw); const b = JSON.parse(remoteRaw);
   const x: Obj = a.state ?? {}; const y: Obj = b.state ?? {};
@@ -43,7 +58,7 @@ export function mergeExercises(localRaw: string, remoteRaw: string, remoteNewer 
     ...(remoteNewer ? { ...x, ...y } : { ...y, ...x }),
     exercises: { ...(y.exercises ?? {}), ...(x.exercises ?? {}) },
     progress: mergeProgress(x.progress, y.progress),
-    daily: mergeDaily(x.daily, y.daily),
+    ...mergeDailyCounts(x, y),
     deviceId: x.deviceId, // each phone keeps its own id
   };
   return JSON.stringify({ ...(remoteNewer ? { ...a, ...b } : { ...b, ...a }), state, version: Math.max(a.version ?? 0, b.version ?? 0) });
