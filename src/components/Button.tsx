@@ -66,6 +66,9 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled || loading}
       activeOpacity={0.7}
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading, selected: active || undefined }}
     >
       {loading ? (
         <ActivityIndicator
@@ -117,10 +120,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderColor: colors.primary,
   },
   button_small: {
+    minHeight: 44, // touch target
     paddingVertical: 10,
     paddingHorizontal: SPACING.md,
   },
   button_medium: {
+    minHeight: 48,
     paddingVertical: 14,
     paddingHorizontal: SPACING.lg,
   },

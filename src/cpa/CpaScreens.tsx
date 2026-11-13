@@ -11,6 +11,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { ragService } from '../services/rag';
 import { useExerciseStore } from '../study/exercises';
 import { pickAndAddFiles, pickAndAddFolder, summarize } from '../learning/documents';
+import { pickAndAddZip } from '../learning/zipImport';
 import { QuestionImport } from '../screens/learningReliability/QuestionImport';
 import { Fold } from '../components/Fold';
 import { CPA_EXAMS, EXAM_FIELDS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
@@ -156,6 +157,7 @@ export const CpaExamScreen: React.FC = () => {
             {projectId ? (<>
               <Button title="Add files" variant="outline" onPress={() => addDocs(() => pickAndAddFiles(projectId, setMessage))} testID="cpa-add-files" />
               <Button title="Add a folder" variant="outline" onPress={() => addDocs(() => pickAndAddFolder(projectId, setMessage))} testID="cpa-add-folder" />
+              <Button title="Add a zip" variant="outline" onPress={() => addDocs(() => pickAndAddZip(projectId, setMessage))} testID="cpa-add-zip" />
               <Button title="Open the project" variant="ghost" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />
             </>) : (
               <Button title="Organize CPA study in one project" variant="outline" testID="cpa-organize"
