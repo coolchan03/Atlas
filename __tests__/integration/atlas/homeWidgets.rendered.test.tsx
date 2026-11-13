@@ -52,3 +52,22 @@ it('explains why a chat widget with a missing model does not start', async () =>
   await rtl.waitFor(() => expect(alert).toHaveBeenCalledWith('Model missing', expect.any(String)));
   expect(mockNavigate).not.toHaveBeenCalled();
 });
+
+it('the Call Atlas tile starts a hands-free call with the loaded model in one tap', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { NativeModules, Platform } = require('react-native');
+  Platform.OS = 'android';
+  NativeModules.AtlasTts = { addListener: jest.fn(), removeListeners: jest.fn() };
+  const { QuickHomeScreen } = require('../../../src/screens/HomeScreen/QuickHome');
+  const { useAppStore } = require('../../../src/stores/appStore');
+  const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
+  const { useChatStore } = require('../../../src/stores/chatStore');
+  useAppStore.setState({ activeModelId: 'm1', downloadedModels: [{ id: 'm1', name: 'Model' }] });
+  const view = rtl.render(React.createElement(QuickHomeScreen, { navigation: { navigate: jest.fn(), getParent: () => ({ navigate: mockNavigate }) }, mode: 'standard' }));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('quick-home-call')); });
+  await rtl.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: expect.any(String) }));
+  expect(useAtlasVoiceStore.getState().handsFree).toBe(true);
+  expect(useChatStore.getState().conversations.some((c: { title: string }) => c.title === 'Call')).toBe(true);
+});

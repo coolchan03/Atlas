@@ -46,3 +46,25 @@ TypeScript, ESLint (0 errors across source and tests), the dependency-rule check
 - **A zip bomb** (a small Office file that expands enormously) is not limited when unzipped.
 - **Low coverage where it matters**: the emergency screens (12 to 18%), maps (17%), the music player (10%), and the Office reader (5%).
 - `src/learning/engine.ts` (640 lines) is on the project's size allowlist. Its model-calling helpers should move to their own file.
+
+## Second pass (2026-11-13), after the multi-step helpers, music styles, voice sync and storage work
+
+Gates run: `tsc --noEmit` clean, eslint 0 errors, dependency-cruiser clean, release contract passes, full jest passes.
+
+Found and fixed
+- **Release guard would have failed the build.** The roadmap check in `scripts/release/check-reconciled-release.cjs` counts exactly nine `FF-NN` items in `FUTURE_RELEASES.md`. Ten approved ideas had been appended there. They now live in `FUTURE_RELEASES_APPROVED.md` and the original list is back as written.
+- **Zip bomb in voice packages.** `VoiceImport.unpack` had no limit on how much an archive may expand to. It now refuses more than 3 GB. The in-app voice download is capped at 2 GB. (Kotlin, not compiled locally; the release build compiles it.)
+- **Interrupted workflow runs had no way back.** A run left running, or failed at a step, could not be resumed. The run screen now has "Carry on" and "Try this step again".
+- **Duplicate Teach the AI subjects.** A second subject with the same name could be made and an empty one could not be deleted from the list. Same names now open the existing subject; each card has a delete.
+- **Em dashes in on-screen text** (brand rule): 88 strings changed to a hyphen or a colon.
+- **Unused exports** made private in `src/workflows`.
+
+Checked and left alone
+- Scheduled reminders made by the helpers run through `askModel`, which has no tools, so text from a pasted letter or transcript cannot make the app act. The person also sees every reminder before approving.
+- Voice-sample sync accepts only lowercase 36-character ids, a 4.5 MB base64 cap, a checksum, and the engine's own voice-sample validation. It never overwrites a sample the phone already has.
+
+Still open (unchanged or new)
+- Deleting a cloned voice on one phone removes it from the other phone's list, but that phone keeps the sample file as an unused file.
+- App-wide cleartext HTTP, 53 npm advisories, four unused native packages, and low coverage in a few screens (see the first pass above).
+- The repeated first word after read aloud ends still has no cause; it needs a device log.
+- None of the 2026-11-13 work has been run on a phone. The Android code for voice sync and downloads has not been compiled locally.
