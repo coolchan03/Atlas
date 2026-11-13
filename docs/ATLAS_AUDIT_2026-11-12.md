@@ -68,3 +68,22 @@ Still open (unchanged or new)
 - App-wide cleartext HTTP, 53 npm advisories, four unused native packages, and low coverage in a few screens (see the first pass above).
 - The repeated first word after read aloud ends still has no cause; it needs a device log.
 - None of the 2026-11-13 work has been run on a phone. The Android code for voice sync and downloads has not been compiled locally.
+
+## Third pass (2026-11-14), before 0.0.160
+
+Gates: `tsc --noEmit` clean, eslint 0 errors, dependency-cruiser clean, release contract passes, knip finds no unused files, full jest passes (720 suites, 8,242 tests).
+
+Found and fixed while building
+- **A screen that never finished drawing.** A selector in Practice returned a new array on every render, which makes the screen redraw forever. The test written for the new "Add your own questions" panel caught it before it shipped; the selector now picks the stored value and builds the list once.
+- **A question bank would have been cut off.** Practice kept at most 600 questions, dropping known ones first. A real CPA bank is thousands, so the limit is 3,000.
+- **Practice mixed projects.** Every project's questions were drawn together. Questions now carry their project, so REG, TCP, FAR and AUD stay apart; older questions with no project still show everywhere.
+- **Music tunes were one loop of a chord and a wandering melody on one instrument.** They are now 16 bars in two sections with a band of several instruments, motifs, bass lines and drum fills. This was checked by tests on structure (a melody agrees with its chord, shapes repeat, drums fill the end of a section), not by ear.
+
+Checked and left alone
+- Selectors that return numbers or stored objects, not fresh arrays, in the new screens.
+- Documents added from the course form, the board, Practice and CPA pages go through the same indexing as every other project document.
+
+Still open
+- The repeated first word after read aloud ends has no cause yet.
+- None of the 2026-11-13 and 2026-11-14 work has run on a phone, and I cannot hear the music.
+- App-wide cleartext HTTP, 53 npm advisories, four unused native packages, and thin coverage in a few screens (first pass).
