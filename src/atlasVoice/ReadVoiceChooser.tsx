@@ -5,21 +5,23 @@ import { SPACING } from '../constants';
 import { useAtlasVoiceStore } from './store';
 import { useVoiceProfiles } from './profiles';
 
-/** Pick the voice Read aloud uses: the app's current voice, or any saved voice profile (cloned voices included). */
+/** Pick the voice Read aloud uses from the saved voices (natural and cloned ones). With none saved it says how to make one. */
 export const ReadVoiceChooser: React.FC = () => {
   const { colors } = useTheme();
   const profiles = useVoiceProfiles((s) => s.profiles);
   const chosen = useAtlasVoiceStore((s) => s.readVoiceId);
   const setChosen = useAtlasVoiceStore((s) => s.setReadVoiceId);
-  // A profile that was deleted falls back to the app voice.
-  const active = profiles.some((p) => p.id === chosen) ? chosen : '';
-  const options = [{ id: '', name: 'My voice' }, ...profiles.map((p) => ({ id: p.id, name: p.name }))];
+  // A voice that was deleted, or none chosen yet, means the first saved voice.
+  const active = profiles.some((p) => p.id === chosen) ? chosen : profiles[0]?.id;
+  if (!profiles.length) {
+    return <Text style={{ color: colors.textSecondary }} testID="read-voice-none">No saved voices yet. Add a natural voice or clone one under Models, Voice, and it will be listed here.</Text>;
+  }
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} testID="read-voice-chooser">
-      {options.map((o) => (
-        <TouchableOpacity key={o.id || 'app'} onPress={() => setChosen(o.id)} accessibilityRole="radio" accessibilityState={{ selected: active === o.id }}
-          style={[styles.chip, { borderColor: active === o.id ? colors.primary : colors.border, backgroundColor: active === o.id ? colors.primary : colors.surface }]}>
-          <Text style={{ color: active === o.id ? colors.background : colors.text }}>{o.name}</Text>
+      {profiles.map((p) => (
+        <TouchableOpacity key={p.id} onPress={() => setChosen(p.id)} accessibilityRole="radio" accessibilityState={{ selected: active === p.id }}
+          style={[styles.chip, { borderColor: active === p.id ? colors.primary : colors.border, backgroundColor: active === p.id ? colors.primary : colors.surface }]}>
+          <Text style={{ color: active === p.id ? colors.background : colors.text }}>{p.name}</Text>
         </TouchableOpacity>
       ))}
     </ScrollView>

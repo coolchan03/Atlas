@@ -81,7 +81,7 @@ export const CompassScreen: React.FC = () => {
       } />
       {levelMode ? (
         <>
-          <LevelView orientation={orientation} />
+          <LevelView orientation={orientation} accel={sensors.accel} />
           <View style={styles.content}>{dots}</View>
         </>
       ) : (

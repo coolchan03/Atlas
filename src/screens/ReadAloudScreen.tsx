@@ -95,8 +95,7 @@ export const ReadAloudScreen: React.FC = () => {
 
         <Text style={[styles.label, { color: colors.text }]}>Voice</Text>
         <ReadVoiceChooser />
-        <Text style={[styles.meta, { color: colors.textSecondary }]}>My voice is the one chosen in Models, Voice. Your saved and cloned voices appear here too.</Text>
-
+        
         <Text style={[styles.label, { color: colors.text }]}>Speed</Text>
         <View style={styles.row}>
           {SPEEDS.map((s) => (

@@ -32,17 +32,23 @@ export const skillBudgetChars = (contextTokens: number) => (contextTokens <= 409
 /** Needs a clear match: a name word, or three description words. */
 const MIN_SCORE = 3;
 
-export function pickSkill(message: string, skills: Skill[]): Skill | undefined {
+/** Extra weight for the skills an agent specialises in, so its own job wins over a loosely matching general skill. */
+const SPECIALIST_BOOST = 4;
+
+export function pickSkill(message: string, skills: Skill[], specialist: string[] = []): Skill | undefined {
   const on = skills.filter((s) => s.enabled);
   const named = calledSkill(message, on);
   if (named) return named;
-  const best = on.map((s) => ({ s, score: relevance(message, s) })).sort((a, b) => b.score - a.score)[0];
-  return best && best.score >= MIN_SCORE ? best.s : undefined;
+  const ranked = on.map((s) => ({ s, score: relevance(message, s) + (specialist.includes(s.name) ? SPECIALIST_BOOST : 0) })).sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  if (best && best.score >= MIN_SCORE) return best.s;
+  // An agent with exactly one specialty always works that way, even when the message is short ("here it is").
+  return specialist.length === 1 ? on.find((s) => s.name === specialist[0]) : undefined;
 }
 
 /** The note added under the chat's instructions, or '' when no skill applies. */
-export function skillsNote(message: string, skills: Skill[], contextTokens: number): string {
-  const skill = pickSkill(message, skills);
+export function skillsNote(message: string, skills: Skill[], contextTokens: number, specialist: string[] = []): string {
+  const skill = pickSkill(message, skills, specialist);
   if (!skill) return '';
   const room = skillBudgetChars(contextTokens);
   const body = skill.body.length > room ? `${skill.body.slice(0, room).trimEnd()}\n[... the rest of this skill was left out to fit the model's memory]` : skill.body;

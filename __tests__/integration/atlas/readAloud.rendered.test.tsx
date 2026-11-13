@@ -64,7 +64,7 @@ it('the Home widget shows the reading state, controls it, and opens the screen',
   expect(useReadAloud.getState().status).toBe('idle');
 });
 
-it('the Home widget reads pasted text in the voice chosen on it, and a deleted voice falls back to My voice', async () => {
+it('the Home widget reads pasted text in the voice chosen on it, and a deleted voice falls back to the next saved voice, with no My voice choice', async () => {
   const { rtl, view, useReadAloud } = open('widget');
   const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
   const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
@@ -79,5 +79,6 @@ it('the Home widget reads pasted text in the voice chosen on it, and a deleted v
   await rtl.waitFor(() => expect(useReadAloud.getState().parts).toEqual(['Boil the water for three minutes before you drink it.']));
   await rtl.act(async () => { useVoiceProfiles.getState().removeProfile(profileId); });
   expect(view.queryByText('Mom')).toBeNull();
-  expect(view.getByText('My voice')).toBeTruthy();
+  expect(view.queryByText('My voice')).toBeNull();
+  expect(view.getByTestId('read-voice-none')).toBeTruthy();
 });

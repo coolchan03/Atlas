@@ -1,6 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
-import { useSkills } from '../../skills/skillsStore';
+import { agentSkillNames, skillsFor } from '../../skills/agentSkills';
 import { relevantTools } from '../../services/tools/relevantTools';
 import { locationNote } from '../../atlasMaps/locationNote';
 import { expertKnowledgeNote } from '../../knowledge/chatHook';
@@ -415,7 +415,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, messageT
     + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '')
     + locationNote()
     + learnedNote(messageText)
-    + skillsNote(messageText, useSkills.getState().skills, llmService.getPerformanceSettings?.()?.contextLength || 4096)
+    + skillsNote(messageText, skillsFor(conversation?.agentId), llmService.getPerformanceSettings?.()?.contextLength || 4096, agentSkillNames(conversation?.agentId))
     + (llmService.isThinkingEnabled?.() ? thinkingNote(deps.settings as any) : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }

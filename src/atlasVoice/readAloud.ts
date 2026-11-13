@@ -131,10 +131,16 @@ export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
   return { useReader, play, pause, stop, load, jump };
 }
 
+/** The voice profile Read aloud uses: the one chosen if it still exists, otherwise the first saved voice, otherwise none. */
+export function readVoiceProfile(): { id: string; voiceId: string; sid: number; referenceId?: string } | undefined {
+  const { profiles } = useVoiceProfiles.getState();
+  const chosen = useAtlasVoiceStore.getState().readVoiceId;
+  return profiles.find((p) => p.id === chosen) ?? profiles[0];
+}
+
 /** Reads one piece in the voice chosen for Read aloud, borrowing a saved voice profile (even a cloned one) when one is chosen. */
 async function speakInChosenVoice(text: string): Promise<boolean> {
-  const chosen = useAtlasVoiceStore.getState().readVoiceId;
-  const profile = chosen ? useVoiceProfiles.getState().profiles.find((p) => p.id === chosen) : undefined;
+  const profile = readVoiceProfile();
   try {
     // Without a chosen profile this puts the saved voice back, in case a briefing left a borrowed one loaded. It costs nothing when it is already loaded.
     if (profile) await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
@@ -147,6 +153,6 @@ async function speakInChosenVoice(text: string): Promise<boolean> {
 export const readAloud = createReadAloud({
   speak: speakInChosenVoice,
   stopSpeaking: stopSpeech,
-  release: () => { if (useAtlasVoiceStore.getState().readVoiceId) restoreSavedVoice().catch(() => undefined); },
+  release: () => { if (readVoiceProfile()) restoreSavedVoice().catch(() => undefined); },
 });
 export const useReadAloud = readAloud.useReader;

@@ -15,6 +15,8 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
     names: ['math-steps', 'decision-helper', 'fact-check-careful', 'grounded-answers', 'first-principles', 'steelman-redteam', 'morphological-analysis'] },
   { id: 'life', title: 'Plan your life', hint: 'Trips, meals and your day',
     names: ['trip-planner', 'recipe-from-ingredients', 'daily-planner'] },
+  { id: 'jobs', title: 'Multi-step jobs', hint: 'Work through a job step by step: statements, repairs, dinner, letters, contracts and more',
+    names: ['bank-statement-to-csv', 'repair-helper', 'dinner-from-what-i-have', 'explain-this-letter', 'writing-coach', 'how-does-this-work', 'contract-reader', 'meeting-followups', 'bill-and-warranty-reminders'] },
 ];
 
 /** Skills the person added themselves, which belong to no ready-made group. */
