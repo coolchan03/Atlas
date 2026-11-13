@@ -1,5 +1,5 @@
 /**
- * CPA exam prep: one tap sets up REG, TCP, FAR and AUD as separate projects; a question bank is read into practice questions
+ * CPA exam prep: one tap sets up FAR, AUD and REG (no project needed); a question bank is read into practice questions
  * filed by topic; a topic is shown as understood only from how different questions were answered. The AI and storage are
  * the device boundary; everything else is real.
  */
@@ -41,24 +41,23 @@ function open() {
   return { rtl, React, screens: require('../../src/cpa/CpaScreens'), stores: { cpa: require('../../src/cpa/store').useCpa, exercises: require('../../src/study/exercises').useExerciseStore, projects: require('../../src/stores/projectStore').useProjectStore } };
 }
 
-it('sets up the four exams as separate projects, each with its own checklist', () => {
+it('sets up FAR, AUD and REG with their own checklists and creates no project', () => {
   const { rtl, React, screens, stores } = open();
   stores.cpa.setState({ exams: {} });
   const view = rtl.render(React.createElement(screens.CpaPrepScreen));
   expect(view.getAllByText('Not set up yet')).toHaveLength(4);
   rtl.fireEvent.press(view.getByTestId('cpa-setup'));
-  const names = stores.projects.getState().projects.map((p: { name: string }) => p.name);
-  for (const code of ['REG', 'TCP', 'FAR', 'AUD']) expect(names).toContain(`CPA ${code}`);
-  const ids = ['REG', 'TCP', 'FAR', 'AUD'].map((c) => stores.cpa.getState().exams[c].projectId);
-  expect(new Set(ids).size).toBe(4);
+  expect(stores.projects.getState().projects.filter((p: { name: string }) => /^CPA /.test(p.name))).toHaveLength(0); // no project is forced
+  for (const code of ['REG', 'FAR', 'AUD']) expect(stores.cpa.getState().exams[code].topics.length).toBeGreaterThan(0);
+  expect(stores.cpa.getState().exams.TCP).toBeUndefined(); // the discipline is the person's own choice
   expect(view.queryByTestId('cpa-setup')).toBeNull();
-  expect(view.getAllByText(/0 of \d+ topics understood/).length).toBe(4);
+  expect(view.getAllByText(/0 of \d+ topics understood/).length).toBe(3);
   rtl.fireEvent.press(view.getByTestId('cpa-card-FAR'));
   expect(mockNavigate).toHaveBeenCalledWith('CpaExam', { code: 'FAR' });
   // Setting up again changes nothing.
   stores.cpa.getState().setExam('FAR', { ...stores.cpa.getState().exams.FAR, topics: stores.cpa.getState().exams.FAR.topics.slice(0, 3) });
   require('../../src/cpa/setup').setupAllCpaExams();
-  expect(stores.projects.getState().projects.filter((p: { name: string }) => p.name === 'CPA FAR')).toHaveLength(1);
+  expect(stores.projects.getState().projects.filter((p: { name: string }) => /^CPA /.test(p.name))).toHaveLength(0);
   expect(stores.cpa.getState().exams.FAR.topics).toHaveLength(3);
 });
 
@@ -78,7 +77,7 @@ it('reads a question bank into FAR practice, files each question by topic, and s
   rtl.fireEvent.press(view.getByTestId('import-add'));
   const bank = Object.values(stores.exercises.getState().exercises) as any[];
   expect(bank).toHaveLength(3);
-  expect(bank.every((e) => e.projectId === far.projectId)).toBe(true);
+  expect(bank.every((e) => e.examCode === 'FAR')).toBe(true);
   expect(bank.map((e) => e.topic).sort()).toEqual(['Inventory', 'Leases', 'Long-term debt']);
   expect(bank.find((e) => e.topic === 'Inventory').kind).toBe('mcq');
   expect(await view.findByText(/3 practice questions/)).toBeTruthy();
@@ -86,14 +85,14 @@ it('reads a question bank into FAR practice, files each question by topic, and s
   // Check opens a quiz on that topic in this exam's project.
   const leases = far.topics.find((t: { name: string }) => t.name === 'Leases');
   rtl.fireEvent.press(view.getByTestId(`cpa-check-${leases.id}`));
-  expect(mockNavigate).toHaveBeenCalledWith('Practice', { projectId: far.projectId, topic: 'Leases' });
+  expect(mockNavigate).toHaveBeenCalledWith('Practice', { projectId: far.projectId, examCode: 'FAR', topic: 'Leases' });
 
   // One right answer is not understanding; five different right ones are.
   expect(view.getByTestId(`cpa-status-${leases.id}`).props.children).toMatch(/Not checked yet/);
   const lease = bank.find((e) => e.topic === 'Leases');
   await rtl.act(async () => { stores.exercises.getState().record(lease.id, true); });
   expect(view.getByTestId(`cpa-status-${leases.id}`).props.children).toMatch(/1 of 1 right: try at least 5 different questions/);
-  const extra = Array.from({ length: 4 }, (_, i) => ({ id: `x${i}`, topic: 'Leases', projectId: far.projectId, kind: 'truefalse', prompt: `Extra leases statement ${i}`, answer: true }));
+  const extra = Array.from({ length: 4 }, (_, i) => ({ id: `x${i}`, topic: 'Leases', examCode: 'FAR', kind: 'truefalse', prompt: `Extra leases statement ${i}`, answer: true }));
   await rtl.act(async () => { stores.exercises.getState().addSet(extra as any); extra.forEach((e) => stores.exercises.getState().record(e.id, true)); });
   expect(view.getByTestId(`cpa-status-${leases.id}`).props.children).toMatch(/Understood: 5 of 5 right/);
   expect(view.getByTestId('cpa-summary').props.children.join('')).toMatch(/1 of \d+ topics understood/);
@@ -184,7 +183,7 @@ it('each exam is its own board-game course, one lesson per topic, from its own p
   expect(stores.cpa.getState().exams.FAR.courseId).not.toBe(course.id);
 });
 
-it('the bar exam and other professional exams set up on a tap, each its own project and board, apart from the CPA exams', () => {
+it('the bar exam and other professional exams set up on a tap, each its own checklist and board, apart from the CPA exams', () => {
   const { rtl, React, screens, stores } = open();
   stores.cpa.setState({ exams: {} });
   const view = rtl.render(React.createElement(screens.CpaPrepScreen));
@@ -194,12 +193,12 @@ it('the bar exam and other professional exams set up on a tap, each its own proj
   const bar = stores.cpa.getState().exams.BAR;
   expect(bar.topics.length).toBeGreaterThan(20);
   expect(mockNavigate).toHaveBeenCalledWith('CpaExam', { code: 'BAR' });
-  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).toContain('Bar exam');
+  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).not.toContain('Bar exam'); // no project is forced
   expect(stores.cpa.getState().exams.REG).toBeUndefined();
   const { ensureExamCourse } = require('../../src/cpa/course');
   const { useTopics } = require('../../src/topics/store');
   const id = ensureExamCourse('BAR');
-  expect(useTopics.getState().courses.find((c: { id: string }) => c.id === id)).toMatchObject({ title: expect.stringContaining('Bar exam'), projectId: bar.projectId });
+  expect(useTopics.getState().courses.find((c: { id: string }) => c.id === id)).toMatchObject({ title: expect.stringContaining('Bar exam') });
   rtl.fireEvent.press(view.getByTestId('cpa-setup'));
   expect(stores.cpa.getState().exams.REG).toBeTruthy();
 });
@@ -211,7 +210,7 @@ it('lists the other exams and tests in sections (accounting, law and medicine, a
   expect(view.getByText(/College and graduate admissions \(SAT, ACT, GRE, GMAT\)/)).toBeTruthy();
   rtl.fireEvent.press(view.getByTestId('exam-field-College and graduate admissions-toggle'));
   rtl.fireEvent.press(view.getByTestId('cpa-card-GRE'));
-  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).toContain('GRE');
+  expect(stores.projects.getState().projects.map((p: { name: string }) => p.name)).not.toContain('GRE');
   expect(stores.cpa.getState().exams.GRE.topics.map((t: { area: string }) => t.area)).toContain('Quantitative reasoning');
   rtl.fireEvent.press(view.getByTestId('exam-field-Accounting, tax and finance-toggle'));
   rtl.fireEvent.press(view.getByTestId('cpa-card-CMA1'));

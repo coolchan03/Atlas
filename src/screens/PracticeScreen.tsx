@@ -22,10 +22,10 @@ const todayKey = () => new Date().toISOString().slice(0, 10);
 
 export const PracticeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { projectId, topic: startTopic } = (useRoute<any>().params ?? {}) as { projectId: string; topic?: string };
+  const { projectId, examCode, topic: startTopic } = (useRoute<any>().params ?? {}) as { projectId?: string; examCode?: string; topic?: string };
   const { colors } = useTheme();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const { exercises, progress, daily, goal, addSet, record, saveDraft, freshen, setNote: saveNote, setGoal, clearProject } = useExerciseStore();
+  const { exercises, progress, daily, goal, addSet, record, saveDraft, freshen, setNote: saveNote, setGoal, clearProject, clearExam } = useExerciseStore();
   const [topic, setTopic] = useState('');
   const [busy, setBusy] = useState(false);
   const [queue, setQueue] = useState<Exercise[]>([]);
@@ -38,14 +38,16 @@ export const PracticeScreen: React.FC = () => {
   const [adding, setAdding] = useState(false);
   // An exam's checklist topics, when this project is one, so imported questions are filed under them.
   const cpaExams = useCpa((s) => s.exams);
-  const checklistTopics = useMemo(() => Object.values(cpaExams).find((e) => e?.projectId === projectId)?.topics.map((t) => t.name) ?? [], [cpaExams, projectId]);
+  const checklistTopics = useMemo(() => Object.values(cpaExams).find((e) => (examCode ? e === cpaExams[examCode as keyof typeof cpaExams] : e?.projectId === projectId))?.topics.map((t) => t.name) ?? [], [cpaExams, projectId, examCode]);
   const [pickDrill, setPickDrill] = useState(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
   // Only this project's questions (and older ones that belong to no project), so one CPA exam never mixes with another.
   const [level, setLevel] = useState<Difficulty | null>(null);
   // With a level chosen, only the questions written at that level: practice, mock exams and flashcards all follow it.
-  const all = useMemo(() => Object.values(exercises).filter((e) => (!e.projectId || e.projectId === projectId) && (!level || e.level === level)), [exercises, projectId, level]);
+  // With an exam code, strictly that exam's questions: FAR can never mix with AUD, even in one shared project or with no project.
+  const inScope = useCallback((e: Exercise) => (examCode ? e.examCode === examCode : !e.projectId || e.projectId === projectId), [examCode, projectId]);
+  const all = useMemo(() => Object.values(exercises).filter((e) => inScope(e) && (!level || e.level === level)), [exercises, inScope, level]);
   const current = queue[0];
   const today = todayKey();
 
@@ -56,10 +58,11 @@ export const PracticeScreen: React.FC = () => {
   const makeFor = async (forTopic: string) => {
     setBusy(true); setNote('');
     try {
-      const r = await generatePractice(projectId, forTopic, { level: level ?? undefined });
+      if (!projectId) throw new Error('Questions are made from the documents in a project. Organize your study in a project first, or import your own question bank.');
+      const r = await generatePractice(projectId, forTopic, { level: level ?? undefined, examCode });
       setNote(`${r.added} questions added${r.dropped ? `, ${r.dropped} skipped (${r.reasons.join(', ')})` : ''}.`);
       const fresh = useExerciseStore.getState();
-      queueUp(practiceSet(Object.values(fresh.exercises).filter((e) => (!e.projectId || e.projectId === projectId) && (!level || e.level === level)), fresh.progress, { topic: forTopic.trim() || undefined }));
+      queueUp(practiceSet(Object.values(fresh.exercises).filter((e) => inScope(e) && (!level || e.level === level)), fresh.progress, { topic: forTopic.trim() || undefined }));
     } catch (e: any) { Alert.alert('Could not make questions', String(e?.message || e)); } finally { setBusy(false); }
   };
   const make = () => makeFor(topic);
@@ -68,7 +71,7 @@ export const PracticeScreen: React.FC = () => {
     if (!startTopic) return;
     setTopic(startTopic);
     const fresh = useExerciseStore.getState();
-    const have = practiceSet(Object.values(fresh.exercises).filter((e) => !e.projectId || e.projectId === projectId), fresh.progress, { topic: startTopic, count: 5 });
+    const have = practiceSet(Object.values(fresh.exercises).filter(inScope), fresh.progress, { topic: startTopic, count: 5 });
     if (have.length >= 5) queueUp(have); else void makeFor(startTopic);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const drills = (kinds: DrillKind[]) => { const set = makeDrillSet(8, Date.now() % 100000, kinds); addSet(set); setNote(''); setPickDrill(false); queueUp(set); };
@@ -91,8 +94,8 @@ export const PracticeScreen: React.FC = () => {
   }, [exam, record]);
   const reviewMisses = () => { if (result) { queueUp(result.wrong.map((id) => exercises[id]).filter(Boolean)); setResult(null); } };
   const startCards = () => { const missed = missedExercises(all, progress); if (missed.length) setCards(missed); else setNote('Nothing missed yet, so no flashcards.'); };
-  const confirmClear = () => Alert.alert('Clear practice history?', 'This deletes the saved practice questions, scores and notes for this project only. Other projects are not touched.', [
-    { text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { clearProject(projectId); setNote('Practice history cleared.'); } },
+  const confirmClear = () => Alert.alert('Clear practice history?', `This deletes the saved practice questions, scores and notes for ${examCode ? `${examCode} only` : 'this project only'}. Nothing else is touched.`, [
+    { text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { if (examCode) clearExam(examCode); else if (projectId) clearProject(projectId); setNote('Practice history cleared.'); } },
   ]);
 
   const done = daily[today] ?? 0;
@@ -102,7 +105,7 @@ export const PracticeScreen: React.FC = () => {
     <SafeAreaView style={[st.flex, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={st.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
-        <Text style={[st.title, { color: colors.text }]}>Practice: {project?.name || ''}</Text>
+        <Text style={[st.title, { color: colors.text }]}>Practice: {examCode ?? project?.name ?? ''}</Text>
       </View>
       <ScrollView contentContainerStyle={st.content} keyboardShouldPersistTaps="handled">
         {exam && <ExamRunner exam={exam} questions={exam.ids.map((id) => exercises[id]).filter(Boolean)} answers={answers} onAnswer={(id, v) => setAnswers((a) => ({ ...a, [id]: v }))} onFinish={finishExam} onSpent={(id, s) => { timesRef.current[id] = (timesRef.current[id] ?? 0) + s; }} colors={colors} />}
@@ -117,10 +120,10 @@ export const PracticeScreen: React.FC = () => {
             <TouchableOpacity onPress={() => setAdding((v) => !v)} accessibilityRole="button" testID="practice-add"><Text style={{ color: colors.primary }}>{adding ? 'Hide' : 'Add your own questions or files'}</Text></TouchableOpacity>
             {adding && (
               <View>
-                <QuestionImport topics={checklistTopics} onAdded={() => undefined} onConfirm={(items) => { const r = addToPractice(items, projectId, checklistTopics); return `${r.added} questions added${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`; }} />
-                <TouchableOpacity onPress={() => { pickAndAddFiles(projectId, setNote).then((r) => { if (r) setNote(summarize(r)); }).catch((e: any) => Alert.alert('Could not add those', String(e?.message || e))); }} accessibilityRole="button" testID="practice-add-files">
+                <QuestionImport topics={checklistTopics} onAdded={() => undefined} onConfirm={(items) => { const r = addToPractice(items, { projectId, examCode }, checklistTopics); return `${r.added} questions added${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`; }} />
+                {!!projectId && (                <TouchableOpacity onPress={() => { pickAndAddFiles(projectId, setNote).then((r) => { if (r) setNote(summarize(r)); }).catch((e: any) => Alert.alert('Could not add those', String(e?.message || e))); }} accessibilityRole="button" testID="practice-add-files">
                   <Text style={{ color: colors.primary }}>Add files to this project (textbooks, notes)</Text>
-                </TouchableOpacity>
+                </TouchableOpacity>)}
               </View>
             )}
           </View>

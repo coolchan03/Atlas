@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 
 export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
-interface Base { id: string; topic?: string; /** How hard it is (beginner, moderate or hard), when it was written or kept at a chosen level. */ level?: Difficulty; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; prompt: string; explain?: string; source?: ExerciseSource }
+interface Base { id: string; topic?: string; /** How hard it is (beginner, moderate or hard), when it was written or kept at a chosen level. */ level?: Difficulty; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; /** The exam (for example FAR or AUD) the question belongs to. Exams are kept apart by this code, even when they share one project or have none. */ examCode?: string; prompt: string; explain?: string; source?: ExerciseSource }
 export type TableRow = { label: string; options?: string[]; account?: string; amount?: number; group?: string };
 export type Exercise = Base & (
   | { kind: 'mcq'; choices: string[]; answer: number }
@@ -162,6 +162,8 @@ interface ExerciseState {
   clearAll: () => void;
   /** Deletes only the questions (and their scores, notes and drafts) of one project; other projects and unassigned questions stay. */
   clearProject: (projectId: string) => void;
+  /** Deletes only one exam's questions (and their scores, notes and drafts). */
+  clearExam: (examCode: string) => void;
   exercises: Record<string, Exercise>;
   addSet: (set: Exercise[]) => void;
   record: (id: string, correct: boolean, now?: number) => void;
@@ -173,6 +175,11 @@ export const useExerciseStore = create<ExerciseState>()(persist((set) => ({
   progress: {}, exercises: {}, daily: {}, goal: { on: false, perDay: 10 },
   freshen: (ids) => set((st) => ({ progress: Object.fromEntries(Object.entries(st.progress).map(([id, p]) => [id, ids.includes(id) ? { ...p, saved: undefined, answered: false } : p])) })),
   clearAll: () => set({ exercises: {}, progress: {}, daily: {} }),
+  clearExam: (examCode) => set((st) => {
+    const exercises = { ...st.exercises }; const progress = { ...st.progress };
+    for (const e of Object.values(st.exercises)) if (e.examCode === examCode) { delete exercises[e.id]; delete progress[e.id]; }
+    return { exercises, progress };
+  }),
   clearProject: (projectId) => set((st) => {
     const exercises = { ...st.exercises }; const progress = { ...st.progress };
     for (const e of Object.values(st.exercises)) if (e.projectId === projectId) { delete exercises[e.id]; delete progress[e.id]; }

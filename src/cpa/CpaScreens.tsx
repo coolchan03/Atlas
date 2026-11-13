@@ -17,7 +17,7 @@ import { addToPractice } from './importQuestions';
 import { outlineFromText, outlineToText, parseOutline } from './outline';
 import { describeEvidence, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
-import { setupAllCpaExams, setupCpaExam } from './setup';
+import { CORE_CPA_CODES, organizeCpaInOneProject, setupAllCpaExams, setupCpaExam, stampExamScope } from './setup';
 import { useCpa, type CpaTopic } from './store';
 import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
@@ -31,9 +31,9 @@ function useExamStatus(code: ExamCode) {
   return useMemo(() => {
     const board = courses.find((c) => c.id === exam?.courseId);
     const list = Object.values(exercises);
-    const rows = (exam?.topics ?? []).map((t) => ({ topic: t, evidence: topicEvidence(list, progress, { topic: t.name, projectId: exam?.projectId }) }));
+    const rows = (exam?.topics ?? []).map((t) => ({ topic: t, evidence: topicEvidence(list, progress, { topic: t.name, projectId: exam?.projectId, examCode: code }) }));
     return { exam, rows, understood: rows.filter((r) => r.evidence.status === 'understood').length, covered: rows.filter((r) => r.topic.covered || boardCovers(board, r.topic.name)).length, board,
-      questions: list.filter((e) => e.projectId === exam?.projectId).length };
+      questions: list.filter((e) => e.examCode === code || (!e.examCode && !!exam?.projectId && e.projectId === exam.projectId)).length };
   }, [exam, exercises, progress, courses]);
 }
 
@@ -42,16 +42,17 @@ export const CpaPrepScreen: React.FC = () => {
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
   const exams = useCpa((s) => s.exams);
-  const ready = CPA_EXAMS.every((e) => exams[e.code]);
+  const ready = CORE_CPA_CODES.every((c) => exams[c]);
+  useEffect(() => { stampExamScope(); }, []); // older questions get their exam code (additive, nothing moves)
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Professional exam prep" />
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={[styles.note, { color: colors.textSecondary }]}>One project for each exam, so your REG, TCP, FAR and AUD textbooks, question banks and practice never mix. Each has a checklist of topics that shows whether you actually understand them, from how you answer questions, not just from ticking a box.</Text>
-        {!ready && <Button title="Set up REG, TCP, FAR and AUD" onPress={() => { setupAllCpaExams(); }} testID="cpa-setup" />}
+        <Text style={[styles.note, { color: colors.textSecondary }]}>Your FAR, AUD and REG textbooks, question banks and practice never mix: every exam keeps its own questions and scores, with no project needed. Each has a checklist of topics that shows whether you actually understand them, from how you answer questions, not just from ticking a box.</Text>
+        {!ready && <Button title="Set up FAR, AUD and REG" onPress={() => { setupAllCpaExams(); }} testID="cpa-setup" />}
         {CPA_EXAMS.map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => navigation.navigate('CpaExam', { code: e.code })} />)}
         <Text style={[styles.title, { color: colors.text }]}>More exams and tests</Text>
-        <Text style={[styles.note, { color: colors.textSecondary }]}>Every one works the same way: tap it and it gets its own project for your books, a checklist of topics, practice questions and a board.</Text>
+        <Text style={[styles.note, { color: colors.textSecondary }]}>Every one works the same way: tap it and it gets a checklist of topics, practice questions and a board.</Text>
         {EXAM_FIELDS.map((field) => (
           <Fold key={field} title={`${field} (${OTHER_EXAMS.filter((e) => e.field === field).map((e) => e.short).join(', ')})`} testID={`exam-field-${field}`}>
             {OTHER_EXAMS.filter((e) => e.field === field).map((e) => <ExamCard key={e.code} code={e.code} onOpen={() => { setupCpaExam(e.code); navigation.navigate('CpaExam', { code: e.code }); }} />)}
@@ -118,8 +119,9 @@ export const CpaExamScreen: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [outlineBusy, setOutlineBusy] = useState(false);
   const projectId = status.exam?.projectId;
+  const groupProject = useCpa((s) => s.groupProjectId);
   useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsByProject(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
-  if (!status.exam || !projectId) return (
+  if (!status.exam) return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={examLabel(code)} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>
   );
   const topics = status.exam.topics.map((t) => t.name);
@@ -148,11 +150,16 @@ export const CpaExamScreen: React.FC = () => {
 
         <Card style={styles.card}>
           <Text style={[styles.title, { color: colors.text }]}>Your materials</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>{docs === null ? 'Textbooks, notes, projects and study guides for this exam.' : `${docs} document${docs === 1 ? '' : 's'} in this exam's project. The tutor answers from them.`}</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>{!projectId ? 'Practice and the checklist work without a project. To keep textbooks and notes together for the tutor, organize your CPA study in one project (optional).' : docs === null ? 'Textbooks, notes, projects and study guides for this exam.' : `${docs} document${docs === 1 ? '' : 's'} in this project. The tutor answers from them.`}</Text>
           <View style={styles.row}>
-            <Button title="Add files" variant="outline" onPress={() => addDocs(() => pickAndAddFiles(projectId, setMessage))} testID="cpa-add-files" />
-            <Button title="Add a folder" variant="outline" onPress={() => addDocs(() => pickAndAddFolder(projectId, setMessage))} testID="cpa-add-folder" />
-            <Button title="Open the project" variant="ghost" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />
+            {projectId ? (<>
+              <Button title="Add files" variant="outline" onPress={() => addDocs(() => pickAndAddFiles(projectId, setMessage))} testID="cpa-add-files" />
+              <Button title="Add a folder" variant="outline" onPress={() => addDocs(() => pickAndAddFolder(projectId, setMessage))} testID="cpa-add-folder" />
+              <Button title="Open the project" variant="ghost" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />
+            </>) : (
+              <Button title="Organize CPA study in one project" variant="outline" testID="cpa-organize"
+                onPress={() => Alert.alert('Organize CPA study in one project?', 'This makes ONE project called "CPA Exam Preparation" for all your CPA exams. Each exam still keeps its own questions and scores. Nothing is moved or deleted.', [{ text: 'Cancel' }, { text: 'Create it', onPress: () => organizeCpaInOneProject(groupProject) }])} />
+            )}
           </View>
           {!!message && <Text style={[styles.small, { color: colors.textSecondary }]}>{message}</Text>}
         </Card>
@@ -170,13 +177,13 @@ export const CpaExamScreen: React.FC = () => {
         </Card>
 
         <QuestionImport topics={topics} onAdded={() => setMessage('')} onConfirm={(items) => {
-          const r = addToPractice(items, projectId, topics);
+          const r = addToPractice(items, { projectId, examCode: code }, topics);
           return `${r.added} questions added to ${code} practice${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`;
         }} />
 
         <View style={styles.row}>
-          <Button title="Practice questions" onPress={() => navigation.navigate('Practice', { projectId })} testID="cpa-practice" />
-          <Button title="Chat with the tutor" variant="outline" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />
+          <Button title="Practice questions" onPress={() => navigation.navigate('Practice', { projectId, examCode: code })} testID="cpa-practice" />
+          {!!projectId && <Button title="Chat with the tutor" variant="outline" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />}
         </View>
 
         <Text style={[styles.title, { color: colors.text }]}>Checklist</Text>
@@ -189,7 +196,7 @@ export const CpaExamScreen: React.FC = () => {
               <Text style={[styles.area, { color: colors.text }]}>{area} ({done} of {inArea.length})</Text>
               {inArea.map((t) => (
                 <TopicRow key={t.id} topic={t} ticked={t.covered || boardCovers(status.board, t.name)} label={describeEvidence(evidenceOf(t.id))} onTick={() => toggle(code, t.id)}
-                  onCheck={() => navigation.navigate('Practice', { projectId, topic: t.name })} onRemove={() => removeTopic(code, t.id)} />
+                  onCheck={() => navigation.navigate('Practice', { projectId, examCode: code, topic: t.name })} onRemove={() => removeTopic(code, t.id)} />
               ))}
             </View>
           );

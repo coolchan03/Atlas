@@ -26,8 +26,14 @@ const asNumber = (answer: string): number | null => {
   return answer.trim().startsWith('(') || m[1] ? -value : value;
 };
 
-export function toExercise(item: NormalizedQuestion, projectId: string, topic: string): Exercise {
-  const base = { id: `own:${projectId}:${Math.abs(hash(item.question))}`, topic, projectId, prompt: item.question, explain: item.explain };
+/** Where a question belongs: a project, an exam code, or both. A plain string is a project id. */
+export type QuestionScope = string | { projectId?: string; examCode?: string } | undefined;
+const scopeOf = (scope: QuestionScope): { projectId?: string; examCode?: string } => (typeof scope === 'string' ? { projectId: scope } : scope ?? {});
+
+export function toExercise(item: NormalizedQuestion, scopeIn: QuestionScope, topic: string): Exercise {
+  const { projectId, examCode } = scopeOf(scopeIn);
+  // The exam code is part of the identity: the same question text in FAR and AUD is two questions, never one overwriting the other.
+  const base = { id: `own:${examCode ?? projectId ?? 'bank'}:${Math.abs(hash(item.question))}`, topic, ...(projectId ? { projectId } : {}), ...(examCode ? { examCode } : {}), prompt: item.question, explain: item.explain };
   if (item.options && item.options.length >= 2) {
     const index = item.options.findIndex((o) => similarity(o, item.answer) >= 0.9);
     return { ...base, kind: 'mcq', choices: item.options, answer: Math.max(0, index) };
@@ -49,9 +55,10 @@ function hash(s: string): number {
 export interface ImportSummary { added: number; repeats: number; byTopic: Record<string, number> }
 
 /** Adds the questions to the practice bank of one exam. Questions already there (the same or nearly the same) are skipped. */
-export function addToPractice(items: NormalizedQuestion[], projectId: string, topics: string[]): ImportSummary {
+export function addToPractice(items: NormalizedQuestion[], scope: QuestionScope, topics: string[]): ImportSummary {
+  const { projectId, examCode } = scopeOf(scope);
   const store = useExerciseStore.getState();
-  const existing = Object.values(store.exercises).filter((e) => e.projectId === projectId).map((e) => e.prompt);
+  const existing = Object.values(store.exercises).filter((e) => (examCode ? e.examCode === examCode : e.projectId === projectId)).map((e) => e.prompt);
   const fresh: Exercise[] = [];
   const byTopic: Record<string, number> = {};
   let repeats = 0;
@@ -59,7 +66,7 @@ export function addToPractice(items: NormalizedQuestion[], projectId: string, to
     if (existing.some((q) => similarity(q, item.question) >= SAME_QUESTION)) { repeats++; continue; }
     existing.push(item.question);
     const topic = topicFor(item, topics);
-    fresh.push(toExercise(item, projectId, topic));
+    fresh.push(toExercise(item, { projectId, examCode }, topic));
     byTopic[topic] = (byTopic[topic] ?? 0) + 1;
   }
   if (fresh.length) store.addSet(fresh);
