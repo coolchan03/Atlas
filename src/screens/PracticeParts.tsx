@@ -7,6 +7,7 @@ import { CitationChips } from '../components/CitationChips';
 import { ACCOUNTING_DRILLS, DRILL_LABELS, STATS_DRILLS, type DrillKind } from '../study/drills';
 import { answerText, type Exercise, type Verdict } from '../study/exercises';
 import { secondsLeft, type Exam, type ExamResult } from '../study/exam';
+import { SESSION_MINUTES } from '../study/session';
 import { Answer } from '../components/ExerciseAnswer';
 import { good, st, type Colors } from '../components/practiceStyles';
 const literalStyles = StyleSheet.create({
@@ -100,7 +101,7 @@ export interface HomeProps {
   topic: string; setTopic: (t: string) => void; busy: boolean; note: string; pickDrill: boolean; setPickDrill: (b: boolean) => void;
   goalOn: boolean; goalLine: string | null; perDay: number; setGoalOn: (on: boolean) => void;
   scores: Array<{ topic: string; attempts: number; percent: number }>;
-  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onMock: (count: number) => void; onCards: () => void; onClear: () => void;
+  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onMock: (count: number) => void; onSession: (minutes: number) => void; onCards: () => void; onClear: () => void;
   colors: Colors;
 }
 
@@ -115,6 +116,10 @@ export const PracticeHome: React.FC<HomeProps> = (p) => (
     </View>
     <TextInput testID="practice-topic" value={p.topic} onChangeText={p.setTopic} placeholder="Topic or chapter (optional)" placeholderTextColor={p.colors.textMuted} style={[st.input, st.top8, { borderColor: p.colors.border, color: p.colors.text }]} />
     <Button title={p.busy ? 'Writing questions...' : 'Make questions from my documents'} onPress={p.onMake} loading={p.busy} disabled={p.busy} testID="practice-make" style={st.top10} />
+    <Text style={[st.small12, st.top10, { color: p.colors.textMuted }]}>Quick session: questions that fit the time, missed and due ones first.</Text>
+    <View style={st.wrap}>
+      {SESSION_MINUTES.map((m) => <Button key={m} title={`${m} min`} variant="outline" onPress={() => p.onSession(m)} testID={`practice-session-${m}`} style={st.top8} />)}
+    </View>
     <Button title="Practise what I have (missed and due first)" variant="outline" onPress={() => p.onStart(p.topic.trim() || undefined)} testID="practice-start" style={st.top8} />
     <Text style={[st.small12, st.top10, { color: p.colors.textMuted }]}>Mock exam: questions spread evenly over every topic, 90 seconds each, with your pace by topic at the end.</Text>
     <View style={st.wrap}>
@@ -170,3 +175,6 @@ export const PracticeRun: React.FC<RunProps> = (p) => (
     <Button title="Stop" variant="ghost" onPress={p.onStop} style={st.top6} />
   </View>
 );
+
+/** The line above a running set, such as how many questions a quick session has and about how long it takes. */
+export const RunNote: React.FC<{ note: string; colors: Colors }> = ({ note, colors }) => (note ? <Text testID="practice-session-note" style={{ color: colors.textSecondary }}>{note}</Text> : null);

@@ -5,10 +5,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { st } from '../components/practiceStyles';
-import { ExamResultView, ExamRunner, Flashcards, PracticeHome, PracticeRun } from './PracticeParts';
+import { ExamResultView, ExamRunner, Flashcards, PracticeHome, PracticeRun, RunNote } from './PracticeParts';
 import { useProjectStore } from '../stores';
 import { keepScreenOn } from '../atlasVoice/tts';
 import { check, missedExercises, practiceSet, streak, topicScores, useExerciseStore, type Exercise, type Verdict } from '../study/exercises';
+import { planSession } from '../study/session';
 import { generatePractice } from '../study/practice';
 import type { Difficulty } from '../study/difficulty';
 import { makeDrillSet, type DrillKind } from '../study/drills';
@@ -93,6 +94,7 @@ export const PracticeScreen: React.FC = () => {
     setResult(graded); setExam(null);
   }, [exam, record]);
   const reviewMisses = () => { if (result) { queueUp(result.wrong.map((id) => exercises[id]).filter(Boolean)); setResult(null); } };
+  const startSession = (minutes: number) => { const plan = planSession(all, progress, minutes); if (plan.set.length) queueUp(plan.set); setNote(plan.note); };
   const startCards = () => { const missed = missedExercises(all, progress); if (missed.length) setCards(missed); else setNote('Nothing missed yet, so no flashcards.'); };
   const confirmClear = () => Alert.alert('Clear practice history?', `This deletes the saved practice questions, scores and notes for ${examCode ? `${examCode} only` : 'this project only'}. Nothing else is touched.`, [
     { text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => { if (examCode) clearExam(examCode); else if (projectId) clearProject(projectId); setNote('Practice history cleared.'); } },
@@ -132,8 +134,9 @@ export const PracticeScreen: React.FC = () => {
           <PracticeHome level={level} setLevel={setLevel} topic={topic} setTopic={setTopic} busy={busy} note={note} pickDrill={pickDrill} setPickDrill={setPickDrill}
             goalOn={goal.on} perDay={goal.perDay} setGoalOn={(on) => setGoal({ on })}
             goalLine={goal.on ? `Today: ${done} of ${goal.perDay} questions. Streak: ${days} day${days === 1 ? '' : 's'}.` : null}
-            scores={topicScores(all, progress)} onMake={make} onDrills={drills} onStart={start} onMock={startMock} onCards={startCards} onClear={confirmClear} colors={colors} />
+            scores={topicScores(all, progress)} onMake={make} onDrills={drills} onStart={start} onMock={startMock} onSession={startSession} onCards={startCards} onClear={confirmClear} colors={colors} />
         )}
+        {current && <RunNote note={note} colors={colors} />}
         {current && (
           <PracticeRun current={current} left={queue.length} value={progress[current.id]?.saved} earlierNote={progress[current.id]?.note} verdict={verdict} note={progress[current.id]?.note}
             onDraft={(v) => saveDraft(current.id, v)} onCheck={submit} onNext={next} onStop={() => { setQueue([]); setVerdict(undefined); }}

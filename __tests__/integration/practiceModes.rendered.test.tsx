@@ -128,3 +128,14 @@ it('practice, mock exams and flashcards follow the level chosen: only questions 
   rtl.fireEvent.press(r.getByTestId('practice-start'));
   expect(r.getByText(/What is easy1\?/)).toBeTruthy();
 });
+
+it('a 5-minute session asks missed questions first and says how long it will take; with no questions it does not invent a quiz', () => {
+  const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-session-5'));
+  expect(r.getByTestId('practice-note').props.children).toMatch(/nothing to score/);
+  expect(r.queryByTestId('practice-input')).toBeNull();
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 42), projectId: 'p1' }, { ...calc('b', 'Tax', 7), projectId: 'p1' }]); store.getState().record('b', false); });
+  rtl.fireEvent.press(r.getByTestId('practice-session-5'));
+  expect(r.getByTestId('practice-session-note').props.children).toMatch(/2 questions, about \d+ min/);
+  expect(r.getByTestId('practice-input')).toBeTruthy();
+});
