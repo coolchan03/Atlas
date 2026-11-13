@@ -10,7 +10,7 @@ it('shows the transfer and stops sending when cancelled', () => {
   const { nearbySync } = require('../../../src/services/nearbySync');
   const screen = render(<NearbySyncSettings />);
   expect(screen.queryByTestId('sync-transfer')).toBeNull();
-  act(() => { (nearbySync as any).publish({ transfer: { label: 'Textbook.pdf', doc: 2, docs: 3, percent: 40 } }); });
+  act(() => { (nearbySync as any).publish({ enabled: true, transfer: { label: 'Textbook.pdf', doc: 2, docs: 3, percent: 40 } }); });
   expect(screen.getByText('Sending Textbook.pdf (2 of 3): 40%')).toBeTruthy();
   fireEvent.press(screen.getByTestId('sync-transfer-cancel'));
   expect((nearbySync as any).cancelTransfer).toBe(true);
