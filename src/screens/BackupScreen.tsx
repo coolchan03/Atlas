@@ -3,7 +3,7 @@ import { Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
-import { lockedChatsNotOpen, exportBackup, importBackup } from '../atlasTools/backup';
+import { lockedChatsNotOpen, exportBackup, importBackup, checkBackup } from '../atlasTools/backup';
 import { lastBackupText, useBackupReminder } from '../atlasTools/backupReminder';
 import { NearbySyncSettings } from '../components/settings/NearbySyncSettings';
 import { useTheme, useThemedStyles } from '../theme';
@@ -15,7 +15,7 @@ export const BackupScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const lastBackupAt = useBackupReminder((s) => s.lastBackupAt);
-  const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | null>(null);
+  const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | 'check' | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
 
@@ -23,6 +23,12 @@ export const BackupScreen: React.FC = () => {
     if (backupPassword.length < 12) { Alert.alert('Password too short', 'Use at least 12 characters. A forgotten password cannot be recovered.'); return; }
     setBackupBusy(true);
     try {
+      if (backupPasswordAction === 'check') {
+        const report = await checkBackup(backupPassword);
+        if (report) Alert.alert('Backup checked', report);
+        setBackupPassword(''); setBackupPasswordAction(null);
+        return;
+      }
       const result = backupPasswordAction === 'export'
         ? await exportBackup(backupPassword) : await importBackup(backupPassword);
       const skipped = backupPasswordAction === 'export' ? lockedChatsNotOpen() : 0;
@@ -87,6 +93,24 @@ export const BackupScreen: React.FC = () => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.navItem} testID="backup-check" onPress={() => {
+            Alert.alert('Check a backup file', 'Say what is inside a backup without restoring it, so you know it works before you need it.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Encrypted file', onPress: () => { setBackupPassword(''); setBackupPasswordAction('check'); } },
+              { text: 'Plain file', onPress: async () => {
+                try { const report = await checkBackup(); if (report) Alert.alert('Backup checked', report); }
+                catch (e: any) { if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Could not check it', String(e?.message || e)); }
+              } },
+            ]);
+          }}>
+            <View style={styles.navItemIcon}><Icon name="check-circle" size={16} color={colors.textSecondary} /></View>
+            <View style={styles.navItemContent}>
+              <Text style={styles.navItemTitle}>Check a backup file</Text>
+              <Text style={styles.navItemDesc}>See what is inside, without restoring anything</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => {
             Alert.alert('Restore backup?', 'This replaces your current agents, projects, chats and settings with the ones in the backup file.', [
               { text: 'Cancel', style: 'cancel' },
@@ -115,7 +139,7 @@ export const BackupScreen: React.FC = () => {
       <Modal visible={backupPasswordAction !== null} transparent animationType="fade" onRequestClose={() => { if (!backupBusy) { setBackupPasswordAction(null); setBackupPassword(''); } }}>
         <View style={styles.backupBackdrop}>
           <View style={styles.backupSheet}>
-            <Text style={styles.backupTitle}>{backupPasswordAction === 'export' ? 'Protect your backup' : 'Unlock encrypted backup'}</Text>
+            <Text style={styles.backupTitle}>{backupPasswordAction === 'export' ? 'Protect your backup' : backupPasswordAction === 'check' ? 'Password to check the backup' : 'Unlock encrypted backup'}</Text>
             <Text style={{ color: colors.textSecondary }}>Use a password of at least 12 characters and keep it safe. Encrypted backups include chats (PIN-locked chats stay locked), project knowledge-base files and searchable text (up to 25 MB of project files), agents and settings. Protected projects are included only if they are unlocked when you back up: they stay sealed with their own PIN and open on a new phone with that PIN. Locked protected projects and downloaded models are not included. Restoring never deletes a protected project or locked chat that is only on this phone.</Text>
             <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={styles.backupInput} />
             <View style={styles.backupActions}>

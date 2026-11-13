@@ -180,6 +180,14 @@ export async function keepDeviceProtected(key: string, restored: string): Promis
   } catch { return restored; }
 }
 
+/** Opens a backup file and says what is in it. Changes nothing on this phone. */
+export async function checkBackup(password?: string): Promise<string | null> {
+  const source = await readPortableBackup(password);
+  if (!source) return null;
+  const { describeBackup, formatBackupReport } = require('./backupSummary');
+  return formatBackupReport(describeBackup(source.data));
+}
+
 /** Returns the number of restored entries. The app must be closed and reopened afterwards. */
 export async function importBackup(password?: string): Promise<number | null> {
   const source = await readPortableBackup(password);
