@@ -1,5 +1,5 @@
+import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { pick, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { parseSkill, SkillFormatError, type ParsedSkill } from './parseSkill';
@@ -32,7 +32,7 @@ export async function readSkillFile(uri: string, name: string): Promise<ParsedSk
   if (!/\.zip$/i.test(name)) return parseSkill(await readText(local));
   const dir = `${RNFS.CachesDirectoryPath}/skill-import-${Date.now()}`;
   try {
-    await unzip(local, dir);
+    await safeUnzip(local, dir);
     const found = await findSkillFile(dir);
     if (!found) throw new SkillFormatError('There is no SKILL.md in that zip.');
     return parseSkill(await readText(found));

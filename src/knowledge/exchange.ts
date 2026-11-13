@@ -20,8 +20,9 @@
  * A finding's status is never taken on trust from the package: it is recomputed from the reviews, whose evidence hashes must match
  * the evidence as it arrives.
  */
+import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
-import { unzip, zip } from 'react-native-zip-archive';
+import { zip } from 'react-native-zip-archive';
 import {
   SCHEMA_VERSION, SOURCE_APP, isSafeArchivePath, validateAgentProfile, validateChunk, validateCycleReport, validateFinding,
   validateManifest, validateReview, validateRevision, validateSourceDocument, validateTombstone,
@@ -200,7 +201,7 @@ interface Package { dir: string; manifest: ExportManifest }
 async function openPackage(zipPath: string): Promise<{ pkg?: Package; refused: string[]; exportId: string }> {
   const dir = `${P.importsDir()}/staging-${uuid().slice(0, 8)}`;
   await removeTree(dir); await ensureDir(dir);
-  await unzip(zipPath, dir);
+  try { await safeUnzip(zipPath, dir); } catch (e) { return { refused: [String((e as Error).message)], exportId: 'unknown' }; }
   const refuse = async (why: string[], exportId = 'unknown') => { await removeTree(dir); return { refused: why, exportId }; };
   if (!(await RNFS.exists(`${dir}/manifest.json`))) return refuse(['manifest.json is missing: this is not an Atlas learning export.']);
   let manifest: ExportManifest;

@@ -2,8 +2,8 @@
  * Atlas: read Word, PowerPoint, Excel, OpenDocument, EPUB and RTF files as plain text, offline.
  * The Office/OpenDocument/EPUB formats are zip files full of XML, so we unzip and pull out the text.
  */
+import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { docxToMarkdown, htmlToMarkdown, sheetMarkdown, slideMarkdown } from './markdownConvert';
 
 export const OFFICE_EXTENSIONS = ['.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.rtf'];
@@ -177,7 +177,7 @@ export async function extractOffice(path: string, ext: string, maxChars: number)
   if (ext === '.rtf') return rtf(await RNFS.readFile(path, 'utf8')).slice(0, maxChars);
   const dir = `${RNFS.CachesDirectoryPath}/office_${Date.now()}`;
   try {
-    await unzip(path, dir);
+    await safeUnzip(path, dir);
     let text = '';
     if (ext === '.docx') text = await docx(dir);
     else if (ext === '.pptx') text = await pptx(dir);
@@ -196,7 +196,7 @@ export async function extractOfficeMarkdown(path: string, ext: string, maxChars:
   if (ext === '.rtf' || ext === '.odt' || ext === '.ods' || ext === '.odp') return extractOffice(path, ext, maxChars);
   const dir = `${RNFS.CachesDirectoryPath}/office_${Date.now()}`;
   try {
-    await unzip(path, dir);
+    await safeUnzip(path, dir);
     let text = '';
     if (ext === '.docx') text = docxToMarkdown(await read(`${dir}/word/document.xml`));
     else if (ext === '.pptx') text = await pptxMarkdown(dir);

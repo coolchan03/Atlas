@@ -1,5 +1,5 @@
+import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { pdfExtractPages, pdfPageCount } from '../services/pdfExtractor';
 import { htmlToText, opfPath, paginateText, resolveHref, spineHrefs, type BookKind } from './textPages';
 
@@ -10,7 +10,7 @@ async function epubText(path: string): Promise<string> {
   const tmp = `${RNFS.CachesDirectoryPath}/epub-${Date.now()}`;
   await RNFS.mkdir(tmp);
   try {
-    await unzip(path, tmp);
+    await safeUnzip(path, tmp);
     const container = await RNFS.readFile(`${tmp}/META-INF/container.xml`, 'utf8');
     const opf = opfPath(container);
     if (!opf) throw new Error('This EPUB has no package file.');

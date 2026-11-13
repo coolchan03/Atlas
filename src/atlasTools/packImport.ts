@@ -1,5 +1,5 @@
+import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { pick, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { ragService } from '../services/rag';
@@ -57,7 +57,7 @@ export async function importZipFromPath(projectId: string, file: { path: string;
   const target = `${RNFS.DocumentDirectoryPath}/atlas_packs/${name.replace(/\.zip$/i, '').replace(/[^A-Za-z0-9._-]/g, '_')}`;
   await RNFS.mkdir(target);
   onProgress('Unpacking...');
-  try { await unzip(local.replace(/^file:\/\//, ''), target); } catch (e: any) {
+  try { await safeUnzip(local.replace(/^file:\/\//, ''), target); } catch (e: any) {
     throw new Error(`${name} could not be unpacked. The file may be incomplete (a copy that was cut off). Copy it again from the original. (${String(e?.message || e).slice(0, 80)})`);
   }
   const { items, zips } = await walk(target);

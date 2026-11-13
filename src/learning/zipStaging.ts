@@ -32,11 +32,10 @@ export function classifyEntry(name: string, size: number): { kind: EntryKind; re
 
 const emptyCounts = (): Record<EntryKind, number> => ({ document: 0, questions: 0, archive: 0, unsupported: 0, unsafe: 0 });
 
-async function walk(root: string, dir: string, out: Array<{ name: string; path: string; size: number; link: boolean }>): Promise<void> {
+async function walk(dir: string, prefix: string, out: Array<{ name: string; path: string; size: number; link: boolean }>): Promise<void> {
   for (const it of await RNFS.readDir(dir)) {
-    const name = it.path.slice(root.length + 1);
-    if (it.isDirectory()) await walk(root, it.path, out);
-    else out.push({ name, path: it.path, size: Number(it.size) || 0, link: false });
+    if (it.isDirectory()) await walk(it.path, `${prefix}${it.name}/`, out);
+    else out.push({ name: `${prefix}${it.name}`, path: it.path, size: Number(it.size) || 0, link: false });
     if (out.length > MAX_ENTRIES + 1) return;
   }
 }
@@ -60,7 +59,7 @@ export async function stageZip(zipPath: string, scratchRoot = RNFS.CachesDirecto
   try {
     await unzip(zipPath, dir);
     const files: Array<{ name: string; path: string; size: number; link: boolean }> = [];
-    await walk(dir, dir, files);
+    await walk(dir, '', files);
     const problems = boundsProblems(zipBytes, files);
     if (problems.length) throw new Error(`This zip was not opened. ${problems.join(' ')}`);
     const entries: StagedEntry[] = files.map((f) => ({ name: f.name, path: f.path, size: f.size, ...classifyEntry(f.name, f.size) }));
