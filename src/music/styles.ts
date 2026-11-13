@@ -10,7 +10,7 @@ import type { MusicNote } from './types';
 export type { StyleGroup, StyleSpec };
 
 export type StyleMood =
-  | 'jazz' | 'vaporwave' | 'eerie' | 'bossa' | 'lofi' | 'noir' | 'space' | 'rain' | 'spa' | 'campfire' | 'chiptune' | 'western'
+  | 'focus' | 'film' | 'electro' | 'jazz' | 'vaporwave' | 'eerie' | 'bossa' | 'lofi' | 'noir' | 'space' | 'rain' | 'spa' | 'campfire' | 'chiptune' | 'western'
   | 'spring' | 'summer' | 'fall' | 'winter'
   | 'thanksgiving' | 'halloween' | 'christmas' | 'newyear' | 'valentines' | 'easter' | 'july4' | 'stpatricks' | 'lunarnewyear' | 'cincodemayo'
   | 'italian' | 'frenchcafe' | 'tiki' | 'tavern' | 'shanty' | 'carnival'
@@ -33,6 +33,9 @@ const SEVENTH = [0, 2, 4, 6];
 const NINTH = [0, 2, 4, 6, 8];
 
 export const STYLES: Record<StyleMood, StyleSpec> = {
+  focus: { label: 'Focus', group: 'Moods and genres', sound: 'band', bpm: 84, beatsPerBar: 4, scale: MAJOR, progression: [0, 4, 5, 3, 0, 5, 3, 4], chord: TRIAD, tune: 'sparse', density: 2, swing: 0, bass: 'root', perc: 'none', padGain: 0.14 },
+  film: { label: 'Cinematic', group: 'Moods and genres', sound: 'band', bpm: 76, beatsPerBar: 4, scale: MINOR, progression: [0, 5, 3, 4, 0, 3, 5, 4], chord: TRIAD, tune: 'sparse', density: 2, swing: 0, bass: 'drone', perc: 'soft', padGain: 0.2 },
+  electro: { label: 'Electronic', group: 'Moods and genres', sound: 'band', bpm: 118, beatsPerBar: 4, scale: DORIAN, progression: [0, 5, 3, 4, 0, 5, 6, 4], chord: SEVENTH, tune: 'arp', density: 8, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.12 },
   jazz: { label: 'Jazz', group: 'Moods and genres', sound: 'epiano', bpm: 120, beatsPerBar: 4, scale: DORIAN, progression: [1, 4, 0, 5, 1, 4, 0, 0], chord: SEVENTH, tune: 'walk', density: 6, swing: 0.34, bass: 'walk', perc: 'swing', padGain: 0.13 },
   vaporwave: { label: 'Vaporwave', group: 'Moods and genres', sound: 'ambient', bpm: 64, beatsPerBar: 4, scale: MAJOR, progression: [0, 5, 3, 4, 0, 5, 1, 4], chord: NINTH, tune: 'sparse', density: 3, swing: 0, bass: 'root', perc: 'soft', padGain: 0.2 },
   eerie: { label: 'Eerie fog', group: 'Moods and genres', sound: 'ambient', bpm: 62, beatsPerBar: 4, scale: PHRYGIAN, progression: [0, 1, 0, 5, 0, 1, 4, 1], chord: [0, 1, 3], tune: 'sparse', density: 2, swing: 0, bass: 'drone', perc: 'industrial', padGain: 0.17 },
@@ -88,14 +91,16 @@ export const isStyleMood = (mood: string): mood is StyleMood => mood in STYLES;
 
 /** How each style plays its chords, where it differs from the bar length. */
 const COMP: Partial<Record<StyleMood, StyleSpec['comp']>> = {
-  jazz: 'swingcomp', lofi: 'swingcomp', noir: 'swingcomp', blues: 'swingcomp', bossa: 'bossa', funk: 'stabs', disco: 'stabs', edm: 'stabs', reggae: 'offbeat',
+  focus: 'sustain', film: 'sustain', electro: 'stabs', jazz: 'swingcomp', lofi: 'swingcomp', noir: 'swingcomp', blues: 'swingcomp', bossa: 'bossa', funk: 'stabs', disco: 'stabs', edm: 'stabs', reggae: 'offbeat',
   rock: 'eighths', surf: 'eighths', summer: 'eighths', pop: 'arp', retro80s: 'arp', chiptune: 'arp', spring: 'arp', newyear: 'arp', classical: 'alberti',
   country: 'strum', campfire: 'strum', western: 'strum', thanksgiving: 'strum', frenchcafe: 'oompah', march: 'oompah', fifties: 'strum', tiki: 'offbeat', cincodemayo: 'jig',
 };
 
 /** The instrument for each part where the style is not simply one instrument for everything. */
 const BAND: Partial<Record<StyleMood, StyleSpec['band']>> = {
-  jazz: { melody: 'bell', pad: 'epiano', bass: 'bass' }, lofi: { melody: 'epiano', pad: 'epiano', bass: 'bass' }, noir: { melody: 'epiano', pad: 'pad', bass: 'bass' },
+  focus: { melody: 'piano', pad: 'pad', bass: 'bass' }, film: { melody: 'piano', pad: 'pad', bass: 'bass' }, electro: { melody: 'saw', pad: 'saw', bass: 'bass' },
+  // Piano plays the chords and the tune, over a walking upright bass and swung drums: the sound of a jazz trio.
+  jazz: { melody: 'piano', pad: 'piano', bass: 'bass' }, lofi: { melody: 'epiano', pad: 'epiano', bass: 'bass' }, noir: { melody: 'epiano', pad: 'pad', bass: 'bass' },
   bossa: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, funk: { melody: 'saw', pad: 'epiano', bass: 'bass' }, disco: { melody: 'saw', pad: 'epiano', bass: 'bass' },
   rock: { melody: 'driven', pad: 'driven', bass: 'bass' }, surf: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, country: { melody: 'pluck', pad: 'pluck', bass: 'bass' },
   blues: { melody: 'pluck', pad: 'epiano', bass: 'bass' }, reggae: { melody: 'pluck', pad: 'organ', bass: 'bass' }, retro80s: { melody: 'saw', pad: 'pad', bass: 'bass' },
@@ -110,8 +115,17 @@ const BAND: Partial<Record<StyleMood, StyleSpec['band']>> = {
 export const specFor = (mood: StyleMood): StyleSpec => ({ ...STYLES[mood], comp: STYLES[mood].comp ?? COMP[mood], band: STYLES[mood].band ?? BAND[mood] });
 
 /** A seeded 16-bar tune in one of the styles above, with the band it was written for. The same prompt always makes the same tune. */
-export function composeStyled(prompt: string, mood: StyleMood): { title: string; bpm: number; notes: MusicNote[]; band?: StyleSpec['band'] } {
-  const spec = specFor(mood);
+export type Energy = 'calm' | 'medium' | 'lively';
+const ENERGY: Record<Energy, { tempo: number; density: number }> = { calm: { tempo: 0.86, density: -1 }, medium: { tempo: 1, density: 0 }, lively: { tempo: 1.14, density: 1 } };
+
+/**
+ * A seeded 16-bar tune in one of the styles above, with the band it was written for. The same prompt always makes the same tune;
+ * a different `variant` makes another tune in the same style, and `energy` slows or speeds the tempo and thins or fills the melody.
+ */
+export function composeStyled(prompt: string, mood: StyleMood, opts: { variant?: number; energy?: Energy } = {}): { title: string; bpm: number; notes: MusicNote[]; band?: StyleSpec['band'] } {
+  const { variant = 0, energy = 'medium' } = opts;
+  const base = specFor(mood);
+  const spec = { ...base, bpm: Math.max(60, Math.min(165, Math.round(base.bpm * ENERGY[energy].tempo))), density: Math.max(1, base.density + ENERGY[energy].density) };
   const label = prompt.trim().replace(/[\r\n]+/g, ' ').slice(0, 56) || spec.label;
-  return { title: `${label} (${spec.label})`, bpm: spec.bpm, notes: composeFromSpec(spec, seedFor(prompt, mood)), band: spec.band };
+  return { title: `${label} (${spec.label})`, bpm: spec.bpm, notes: composeFromSpec(spec, seedFor(variant ? `${prompt}#${variant}` : prompt, mood)), band: spec.band };
 }

@@ -17,7 +17,7 @@ type Destination = { key: string; label: string; hint: string; icon: string; tab
 const destinations: Destination[] = [
   { key: 'chat', label: 'Chat', hint: 'Talk with your local AI', icon: 'message-circle', tab: 'ChatsTab', tint: '#DBF0FF', tintDark: '#12283A', color: ['#1D4ED8', '#60A5FA'] },
   { key: 'call', label: 'Call', hint: 'Talk hands-free with an agent you choose, using a model and project folder you choose', icon: 'phone', screen: 'CallSetup', tint: '#DBF0FF', tintDark: '#12283A', color: ['#1D4ED8', '#60A5FA'] },
-  { key: 'music', label: 'Music Studio', hint: 'Original tunes composed by your local AI', icon: 'music', screen: 'MusicStudio', optional: true, tint: '#FFE4EF', tintDark: '#321422', color: ['#9D174D', '#F472B6'] },
+  { key: 'music', label: 'Music Studio', hint: 'Pick a style and a small band plays an original tune', icon: 'music', screen: 'MusicStudio', optional: true, tint: '#FFE4EF', tintDark: '#321422', color: ['#9D174D', '#F472B6'] },
   { key: 'projects', label: 'Projects', hint: 'Your organized work', icon: 'folder', tab: 'ProjectsTab', tint: '#E1F6E8', tintDark: '#12291C', color: ['#047857', '#34D399'] },
   { key: 'models', label: 'Get models', hint: 'Download or import AI models', icon: 'download', tab: 'ModelsTab', tint: '#FFF0D4', tintDark: '#33260F', color: ['#B3620F', '#F2A93B'] },
   { key: 'load', label: 'Load a model', hint: 'Pick the AI that answers in chat', icon: 'zap', action: 'load', tint: '#FFF0D4', tintDark: '#33260F', color: ['#B3620F', '#F2A93B'] },

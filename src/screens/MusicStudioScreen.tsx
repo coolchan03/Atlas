@@ -5,47 +5,29 @@ import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useTheme } from '../theme';
-import { llmService } from '../services';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
-import { STYLES, type StyleGroup, type StyleMood } from '../music/styles';
-import { MUSIC_RATE, composeInstrumental, parseMusicScore, renderMusic, type MusicMood, type MusicScore, type SoundPreset } from '../music/composition';
+import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } from '../music/styles';
+import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
+import { MUSIC_RATE, renderMusic, type MusicScore } from '../music/composition';
 
-const makeMessage = (role: 'system' | 'user', content: string) => ({ id: `${role}-${Date.now()}`, role, content, timestamp: Date.now() });
-const SOUND: Array<{ id: SoundPreset; label: string }> = [
-  { id: 'band', label: 'Style band' },
-  { id: 'keys', label: 'Soft keys' }, { id: 'ambient', label: 'Warm pads' },
-  { id: 'bell', label: 'Bells' }, { id: 'synth', label: 'Synth' },
-  { id: 'epiano', label: 'Electric piano' }, { id: 'guitar', label: 'Guitar' },
-  { id: 'overdrive', label: 'Rock guitar' }, { id: 'organ', label: 'Organ' },
-];
-/** The instrument for the four plain moods, which have no band of their own. */
-const PLAIN_SOUND: Record<string, SoundPreset> = { study: 'keys', ambient: 'ambient', cinematic: 'synth', electronic: 'synth' };
-const BASIC_MOODS: Array<{ id: MusicMood; label: string }> = [
-  { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
-  { id: 'cinematic', label: 'Cinematic' }, { id: 'electronic', label: 'Electronic' },
-];
-const STYLE_GROUPS: Array<{ title: StyleGroup; items: Array<{ id: MusicMood; label: string }> }> = (['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'] as const)
-  .map((title) => ({
-    title,
-    items: [
-      ...(title === 'Moods and genres' ? BASIC_MOODS : []),
-      ...(Object.keys(STYLES) as StyleMood[]).filter((id) => STYLES[id].group === title).map((id) => ({ id: id as MusicMood, label: STYLES[id].label })),
-    ],
-  }));
+const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
+const GROUPS: StyleGroup[] = ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'];
+const ALL_STYLES = Object.keys(STYLES) as StyleMood[];
 const DURATIONS = [30, 60, 90] as const;
 
-/** Music Studio makes original instrumental background music, not singing, audio samples or covers. */
+/** Music Studio makes original instrumental music in a chosen style, played by a small band, entirely on the phone. */
 export function MusicStudioScreen() {
   const { colors } = useTheme();
-  const [prompt, setPrompt] = useState('Peaceful, unobtrusive background music for reading');
-  const [sound, setSound] = useState<SoundPreset>('keys');
-  const [mood, setMood] = useState<MusicMood>('study');
+  const [prompt, setPrompt] = useState('');
+  const [mood, setMood] = useState<StyleMood>('focus');
+  const [energy, setEnergy] = useState<Energy>('medium');
   const [duration, setDuration] = useState<number>(60);
+  const [variant, setVariant] = useState(0);
+  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [score, setScore] = useState<MusicScore | null>(null);
-  const [file, setFile] = useState('');
   const [selected, setSelected] = useState('');
   const tracks = useMusicLibrary((s) => s.tracks);
   const looping = useMusicLibrary((s) => s.loop);
@@ -58,7 +40,7 @@ export function MusicStudioScreen() {
     catch (error: any) { Alert.alert('Playback failed', String(error?.message || error)); }
   };
   const saveScore = async (next: MusicScore): Promise<void> => {
-    const pcm = renderMusic(next, { preset: sound, seconds: duration });
+    const pcm = renderMusic(next, { preset: 'band', seconds: duration });
     const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
     await RNFS.mkdir(dir);
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -66,43 +48,36 @@ export function MusicStudioScreen() {
     const scorePath = `${dir}/instrumental-${id}.json`;
     try {
       await RNFS.writeFile(path, toBase64(wavBytes(pcm, MUSIC_RATE)), 'base64');
-      await RNFS.writeFile(scorePath, JSON.stringify({ ...next, mood, sound, duration }, null, 2), 'utf8');
+      await RNFS.writeFile(scorePath, JSON.stringify({ ...next, mood, sound: 'band', duration }, null, 2), 'utf8');
     } catch (error) {
       await RNFS.unlink(path).catch(() => undefined);
       await RNFS.unlink(scorePath).catch(() => undefined);
       throw error;
     }
-    const track: InstrumentalTrack = { id, title: next.title, path, scorePath, mood, sound, seconds: duration, createdAt: new Date().toISOString() };
+    const track: InstrumentalTrack = { id, title: next.title, path, scorePath, mood, sound: 'band', seconds: duration, createdAt: new Date().toISOString() };
     useMusicLibrary.getState().addTrack(track);
     setSelected(id);
     setScore(next);
-    setFile(path);
     await play(track); // Crossfades if another track is playing; navigation does not stop it.
   };
-  const quick = async () => {
-    if (!prompt.trim() || busy) return;
+  /** Makes a track: the tune for this style, energy and variant, played by the style's band. */
+  const make = async (next: { mood?: StyleMood; variant?: number } = {}) => {
+    if (busy) return;
+    const useMood = next.mood ?? mood; const useVariant = next.variant ?? variant;
     setBusy(true);
-    try { await saveScore(composeInstrumental(prompt, mood)); }
-    catch (error: any) { Alert.alert('Could not compose', String(error?.message || error)); }
+    try { await saveScore(composeStyled(prompt, useMood, { variant: useVariant, energy })); }
+    catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
     finally { setBusy(false); }
   };
-  const composeWithAI = async () => {
-    if (!prompt.trim() || busy) return;
-    if (!llmService.isModelLoaded()) {
-      Alert.alert('Load a text model', 'Choose a local text model in Atlas to compose a custom arrangement, or tap Create instantly for a model-free track.');
-      return;
-    }
-    if (llmService.isCurrentlyGenerating()) {
-      Alert.alert('Model is busy', 'Finish the current generation before composing.'); return;
-    }
-    setBusy(true);
-    try {
-      const rules = `Compose ORIGINAL INSTRUMENTAL BACKGROUND MUSIC only; no singing, vocals, lyrics, existing songs, or artist imitations. Use ${mood} mood. Return only this exact score grammar, one item per line:\nTITLE: brief title\nBPM: integer 60-150\nNOTE C4 0 1 0.35 pad\nNOTE E4 1 1 0.7 melody\nNOTE C3 0 4 0.25 bass\nWrite 35-100 NOTE lines. Starts are absolute beats 0-32; duration 0.25-4 beats, gain 0.1-1. Roles are pad, bass and melody. Use layered chords plus an interesting but restrained melody. Keep the whole motif within 36 beats, to be repeated seamlessly. No markdown and no other text.`;
-      const output = await llmService.generateResponse([makeMessage('system', rules), makeMessage('user', prompt)], { disableThinking: true });
-      await saveScore(parseMusicScore(output));
-    } catch (error: any) {
-      Alert.alert('AI arrangement was not playable', `${String(error?.message || error)}\n\nUse Create instantly to generate a reliable instrumental track without the model.`);
-    } finally { setBusy(false); }
+  const another = () => { setVariant(variant + 1); return make({ variant: variant + 1 }); };
+  const surprise = () => {
+    const pick = POPULAR[Math.floor(Math.random() * POPULAR.length)];
+    setMood(pick); setVariant(0); return make({ mood: pick, variant: 0 });
+  };
+  const describe = (text: string) => {
+    setPrompt(text);
+    const found = styleFromText(text);
+    if (found) { setMood(found); setVariant(0); }
   };
 
   const togglePlayer = async () => {
@@ -136,29 +111,32 @@ export function MusicStudioScreen() {
   );
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScreenHeader title="Instrumental Music Studio" />
+      <ScreenHeader title="Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={{ color: colors.textSecondary }}>Compose instrumental/background music, entirely offline. Atlas synthesizes its own notes and instruments; it does not create vocals or reproduce recordings. The AI option uses your loaded text model, while Create instantly works without one.</Text>
-        <TextInput value={prompt} onChangeText={setPrompt} multiline maxLength={500}
-          placeholder="Describe an original instrumental mood" placeholderTextColor={colors.textMuted}
+        <Text style={{ color: colors.textSecondary }}>Say what you want, pick a style, and a small band plays an original tune. Nothing is sent anywhere.</Text>
+        <TextInput value={prompt} onChangeText={describe} multiline maxLength={200} testID="music-prompt"
+          placeholder="Optional: a rainy day jazz cafe" placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
         <Text style={[styles.label, { color: colors.text }]}>Style</Text>
-        {STYLE_GROUPS.map((group) => (
-          <View key={group.title}>
-            <Text style={[styles.small, { color: colors.textSecondary }]}>{group.title}</Text>
-            {chips(group.items, mood, (id: MusicMood) => { setMood(id); setSound(id in STYLES ? 'band' : PLAIN_SOUND[id as string] ?? 'keys'); })}
+        {chips(POPULAR.map((id) => ({ id, label: STYLES[id].label })), mood, (id: StyleMood) => { setMood(id); setVariant(0); })}
+        <TouchableOpacity onPress={() => setMore((v) => !v)} accessibilityRole="button" testID="music-more-styles"><Text style={{ color: colors.primary }}>{more ? 'Fewer styles' : `More styles (${ALL_STYLES.length - POPULAR.length})`}</Text></TouchableOpacity>
+        {more && GROUPS.map((group) => (
+          <View key={group}>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>{group}</Text>
+            {chips(ALL_STYLES.filter((id) => STYLES[id].group === group && !POPULAR.includes(id)).map((id) => ({ id, label: STYLES[id].label })), mood, (id: StyleMood) => { setMood(id); setVariant(0); })}
           </View>
         ))}
-        <Text style={[styles.label, { color: colors.text }]}>Instrument sound</Text>
-        {chips(SOUND, sound, setSound)}
-        <Text style={[styles.label, { color: colors.text }]}>Track duration</Text>
+        <Text style={[styles.small, { color: colors.textSecondary }]} testID="music-plays">{STYLES[mood].label} plays: {instrumentsOf(mood)}.</Text>
+        <Text style={[styles.label, { color: colors.text }]}>How lively</Text>
+        {chips(ENERGIES, energy, setEnergy)}
+        <Text style={[styles.label, { color: colors.text }]}>Length</Text>
         {chips(DURATIONS.map((n) => ({ id: n, label: `${n} seconds` })), duration, setDuration)}
         <View style={styles.options}>
-          <TouchableOpacity onPress={quick} disabled={busy} testID="music-quick" style={[styles.action, { borderColor: colors.primary }]}>
-            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Create instantly</Text>}
+          <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, styles.grow, { borderColor: colors.primary }]}>
+            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Make music</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={composeWithAI} disabled={busy} testID="music-compose" style={[styles.action, { borderColor: colors.primary }]}>
-            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compose with local AI</Text>}
+          <TouchableOpacity onPress={surprise} disabled={busy} testID="music-surprise" style={[styles.action, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.text }}>Surprise me</Text>
           </TouchableOpacity>
         </View>
         {!!playback.error && <Text style={{ color: colors.error }} testID="music-playback-error">{playback.error}</Text>}
@@ -179,11 +157,10 @@ export function MusicStudioScreen() {
             <TouchableOpacity onPress={() => instrumentalPlayer.setLoop(!looping)} accessibilityRole="checkbox" accessibilityState={{ checked: looping }} style={styles.option} testID="music-loop-toggle"><Text style={{ color: colors.text }}>{looping ? 'Loop: on' : 'Loop: off'}</Text></TouchableOpacity>
           </View>
         </View>
-        {!!score && <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {!!score && <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-result">
           <Text style={[styles.title, { color: colors.text }]}>{score.title}</Text>
-          <Text style={{ color: colors.textSecondary }}>{score.bpm} BPM · {score.notes.length} note events · {duration}s</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>Original WAV and editable score saved locally.</Text>
-          <Text selectable style={[styles.tiny, { color: colors.textMuted }]}>{file}</Text>
+          <Text style={{ color: colors.textSecondary }}>{score.bpm} BPM · {duration} seconds · saved on this phone</Text>
+          <TouchableOpacity onPress={another} disabled={busy} testID="music-another" style={[styles.action, { borderColor: colors.primary }]}><Text style={{ color: colors.primary }}>Make another version</Text></TouchableOpacity>
         </View>}
         <Text style={[styles.title, { color: colors.text }]}>My instrumentals ({tracks.length})</Text>
         {!tracks.length && <Text style={{ color: colors.textSecondary }}>Create a track to build your offline playlist.</Text>}
@@ -191,7 +168,7 @@ export function MusicStudioScreen() {
           <View key={track.id} style={[styles.result, { backgroundColor: colors.surface, borderColor: activeTrack?.id === track.id ? colors.primary : colors.border }]}>
             <TouchableOpacity accessibilityRole="button" onPress={() => { setSelected(track.id); play(track); }} testID={`music-track-${track.id}`}>
               <Text style={[styles.label, { color: colors.text }]}>{track.title}</Text>
-              <Text style={[styles.small, { color: colors.textSecondary }]}>{track.mood} · {track.sound} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
+              <Text style={[styles.small, { color: colors.textSecondary }]}>{STYLES[track.mood as StyleMood]?.label ?? track.mood} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
             </TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { Share.share({ title: track.title, url: `file://${track.path}` }).catch(() => undefined); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
@@ -208,10 +185,10 @@ const styles = StyleSheet.create({
   input: { minHeight: 95, borderWidth: 1, borderRadius: 10, padding: 10, textAlignVertical: 'top' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   option: { borderWidth: 1, borderRadius: 18, padding: 10 },
+  grow: { flexGrow: 1 },
   action: { borderWidth: 1, borderRadius: 10, padding: 12, alignItems: 'center', marginVertical: 3 },
   label: { fontWeight: '600' },
   small: { fontSize: 12 },
-  tiny: { fontSize: 11 },
   centered: { alignSelf: 'center' },
   end: { alignSelf: 'flex-end', marginTop: 6 },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },
