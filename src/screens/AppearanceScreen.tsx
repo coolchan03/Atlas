@@ -126,9 +126,9 @@ export const AppearanceScreen: React.FC = () => {
 
         {fold('shape', 'Shape, background picture and themes', <>
         <Text style={styles.label}>Corner roundness</Text>
-        <Chips testID="corner-radius" value={String(appearance.cornerRadius ?? appearance.custom?.cornerRadius ?? 'skin')}
-          onPick={id => setLook({ cornerRadius: id === 'skin' ? undefined : Number(id) })}
-          options={[{ id: 'skin', name: 'As styled' }, { id: '0', name: 'Square' }, { id: '0.5', name: 'Slight' }, { id: '1', name: 'Standard' }, { id: '1.5', name: 'Round' }, { id: '2', name: 'Very round' }]} />
+        <Chips testID="corner-radius" value={appearance.shapePreset === 'extra-rounded' && appearance.cornerRadius === undefined ? 'pills' : String(appearance.cornerRadius ?? appearance.custom?.cornerRadius ?? 'skin')}
+          onPick={id => setLook(id === 'pills' ? { cornerRadius: undefined, shapePreset: 'extra-rounded' } : { cornerRadius: id === 'skin' ? undefined : Number(id), shapePreset: undefined })}
+          options={[{ id: 'skin', name: 'As styled' }, { id: '0', name: 'Square' }, { id: '0.5', name: 'Slight' }, { id: '1', name: 'Standard' }, { id: '1.5', name: 'Round' }, { id: '2', name: 'Very round' }, { id: 'pills', name: 'Extra rounded (pills and circles)' }]} />
 
         <Text style={styles.label}>Background picture</Text>
         <Button title={appearance.backgroundImage ? 'Choose a different picture' : 'Choose a picture'} variant="outline" testID="bg-pick" onPress={pickBackground} />

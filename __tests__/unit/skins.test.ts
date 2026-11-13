@@ -31,3 +31,21 @@ describe('skins', () => {
     expect(SKINS.map((s) => s.id)).toEqual(expect.arrayContaining(['aero', 'retro', 'ios', 'terminal', 'xp', 'mac']));
   });
 });
+
+describe('extra rounded preset (UX-04)', () => {
+  const { reshapeStyle, pillRadius } = require('../../src/theme/useThemedStyles');
+  const shape = { radius: 2, minBorder: 0, shadow: 'none', pill: true } as const;
+  it('makes padded controls pills, square icon buttons circles, and keeps cards content-safe', () => {
+    expect(reshapeStyle({ borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fff' }, shape, '#0f0').borderRadius).toBe(999);
+    expect(reshapeStyle({ borderRadius: 8, width: 44, height: 44 }, shape, '#0f0').borderRadius).toBe(22);
+    expect(reshapeStyle({ borderRadius: 16, padding: 16, backgroundColor: '#fff' }, shape, '#0f0').borderRadius).toBe(32);
+    expect(reshapeStyle({ borderRadius: 8, width: 120, height: 80 }, shape, '#0f0').borderRadius).toBe(16); // a thumbnail is not cropped into a pill
+    expect(pillRadius({ padding: 12, height: 200 }, 8, 2)).toBe(16); // tall boxes stay boxes
+  });
+  it('does nothing without the preset, and an explicit numeric radius still wins', () => {
+    expect(reshapeStyle({ borderRadius: 8, padding: 8 }, { radius: 1, minBorder: 0, shadow: 'none' }, '#0f0').borderRadius).toBe(8);
+    const { getTheme } = require('../../src/theme/useTheme');
+    expect(getTheme('light', { shapePreset: 'extra-rounded' }).shape).toMatchObject({ radius: 2, pill: true });
+    expect(getTheme('light', { shapePreset: 'extra-rounded', cornerRadius: 0.5 }).shape.pill).toBeUndefined();
+  });
+});

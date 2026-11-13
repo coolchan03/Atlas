@@ -31,7 +31,7 @@ export const LAYOUT_MODES: Array<{ id: LayoutMode; name: string; hint: string }>
 ];
 
 /** Shape of the interface: how round the corners are, how heavy the borders, and whether boxes cast a shadow. */
-export interface SkinShape { radius: number; minBorder: number; shadow: 'none' | 'soft' | 'glow' }
+export interface SkinShape { radius: number; minBorder: number; shadow: 'none' | 'soft' | 'glow'; /** Extra rounded: buttons, chips and inputs are pills and square icon controls are circles; cards and panels keep large, content-safe corners. */ pill?: boolean }
 export type SkinId = 'aero' | 'retro' | 'terminal' | 'mac' | 'xp' | 'ios' | 'material' | 'neon';
 export interface Skin { id: SkinId; name: string; hint: string; look: Partial<Appearance>; shape: SkinShape }
 export const SKIN_DEFAULT_SHAPE: SkinShape = { radius: 1, minBorder: 0, shadow: 'none' };
@@ -48,6 +48,8 @@ export interface Appearance {
   chatLayout?: ChatLayout;
   /** Corner roundness on top of the skin: 0 = square, 1 = as designed, 2 = very round. */
   cornerRadius?: number;
+  /** 'extra-rounded' turns controls into pills and icon buttons into circles. A numeric cornerRadius chosen by the person overrides it. */
+  shapePreset?: 'extra-rounded';
   /** A picture behind every screen; screens become see-through and the picture is dimmed (0 to 0.9) so text stays readable. */
   backgroundImage?: { uri: string; dim: number };
   /** A theme the person imported (see parseCustomTheme); overrides the chosen palette and accent. */

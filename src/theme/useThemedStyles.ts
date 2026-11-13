@@ -5,6 +5,20 @@ import type { ThemeColors, ThemeShadows } from './palettes';
 import type { SkinShape } from './appearance';
 
 /**
+ * Extra rounded: a square icon control (width equals height, at most 96) becomes a circle, and a control (it has padding and is at most
+ * 64 tall, with a corner of 12 or less) becomes a pill. Everything else (cards, sheets, images, bars) keeps a large corner that
+ * cannot crop its content.
+ */
+export function pillRadius(style: Record<string, unknown>, radius: number, scale: number): number {
+  const { width, height } = style;
+  if (typeof width === 'number' && width === height && width <= 96) return width / 2;
+  const padded = ['padding', 'paddingHorizontal', 'paddingVertical'].some((k) => typeof style[k] === 'number');
+  const small = typeof height !== 'number' || height <= 64;
+  if (radius <= 12 && padded && small) return 999;
+  return Math.round(radius * scale);
+}
+
+/**
  * Applies a skin's shape to one style: corner radius scaled, borders at least as heavy as the skin wants, and a shadow on
  * boxes (a background with rounded corners). Pure, so it is tested without a device.
  */
@@ -12,6 +26,7 @@ export function reshapeStyle(style: Record<string, unknown>, shape: SkinShape, g
   const out: Record<string, unknown> = { ...style };
   const radius = style.borderRadius;
   if (typeof radius === 'number' && radius > 0 && shape.radius !== 1) out.borderRadius = Math.round(radius * shape.radius);
+  if (shape.pill && typeof radius === 'number' && radius > 0) out.borderRadius = pillRadius(style, radius, shape.radius);
   if (shape.minBorder > 0 && typeof style.borderWidth === 'number' && style.borderWidth > 0 && style.borderWidth < shape.minBorder) out.borderWidth = shape.minBorder;
   const isBox = typeof radius === 'number' && radius >= 6 && radius < 100 && style.backgroundColor !== undefined && style.shadowOpacity === undefined;
   if (isBox && shape.shadow === 'soft') Object.assign(out, { shadowColor: '#000000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 });
@@ -35,7 +50,7 @@ export function useThemedStyles<T extends StyleSheet.NamedStyles<T>>(
   return useMemo(
     () => {
       const made = factory(colors, shadows);
-      const plainShape = shape.radius === 1 && shape.minBorder === 0 && shape.shadow === 'none';
+      const plainShape = shape.radius === 1 && shape.minBorder === 0 && shape.shadow === 'none' && !shape.pill;
       const original = plainShape ? made : (Object.fromEntries(Object.entries(made).map(([name, value]) => [
         name, value && typeof value === 'object' && !Array.isArray(value) ? reshapeStyle(value as Record<string, unknown>, shape, colors.primary) : value,
       ])) as T);

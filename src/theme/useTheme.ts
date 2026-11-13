@@ -36,6 +36,7 @@ export interface Theme {
 function shapeWith(appearance?: Appearance): SkinShape {
   const base = shapeOf(appearance?.skin);
   const r = appearance?.cornerRadius ?? appearance?.custom?.cornerRadius;
+  if (r === undefined && appearance?.shapePreset === 'extra-rounded') return { ...base, radius: 2, pill: true };
   return r === undefined ? base : { ...base, radius: r };
 }
 
