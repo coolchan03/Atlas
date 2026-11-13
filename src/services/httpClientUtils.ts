@@ -79,7 +79,7 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // Private IP ranges
     // 10.0.0.0 - 10.255.255.255
-    if (hostname.startsWith('10.') || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
       return true;
     }
 

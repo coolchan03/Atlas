@@ -117,6 +117,11 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
 
   const handleSave = useCallback(async () => {
     if (!validateForm()) return;
+    // Plain http to a server outside your own network would send the API key and every message readable by anyone on the way.
+    if (endpoint && /^http:\/\//i.test(endpoint.trim()) && !isPrivateNetworkEndpoint(endpoint.trim())) {
+      setAlertState(showAlert('Use https', 'This server is not on your own network, so Atlas only connects with https://. Change the address to start with https://, or use a server on your home network.'));
+      return;
+    }
     // Warn if connecting to public internet
     if (endpoint && !isPrivateNetworkEndpoint(endpoint)) {
       setAlertState(showAlert(

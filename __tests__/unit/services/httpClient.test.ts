@@ -249,6 +249,10 @@ describe('httpClient', () => {
       expect(isPrivateNetworkEndpoint('http://192.168.0.1:1234')).toBe(true);
     });
 
+    it('does not treat a public host name that starts with 10. as private', () => {
+      expect(isPrivateNetworkEndpoint('http://10.example.com:11434')).toBe(false);
+    });
+
     it('should detect 10.x.x.x as private', () => {
       expect(isPrivateNetworkEndpoint('http://10.0.0.1:11434')).toBe(true);
       expect(isPrivateNetworkEndpoint('http://10.255.255.255:8080')).toBe(true);
