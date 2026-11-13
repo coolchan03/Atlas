@@ -119,3 +119,24 @@ describe('question bank size', () => {
     expect(pruneBank({ a: bank.q0 }, {}, []).exercises).toEqual({ a: bank.q0 });
   });
 });
+
+describe('variantOf (UX-07)', () => {
+  const { variantOf, makeDrill } = require('../../src/study/drills');
+  it('gives a drill a new question of the same kind with new numbers and a computed answer', () => {
+    const original = makeDrill('percent-of', 123);
+    const v = variantOf(original);
+    expect(v).not.toBeNull();
+    expect(v.id).toMatch(/^drill-percent-of-/); expect(v.id).not.toBe(original.id);
+    expect(v.prompt).not.toBe(original.prompt);
+    expect(v.kind).toBe(original.kind);
+    expect(variantOf(original).prompt).toBe(v.prompt); // deterministic
+  });
+  it('keeps the exam and project scope', () => {
+    const v = variantOf({ ...makeDrill('speed', 5), examCode: 'FAR', projectId: 'p', topic: 'Physics' });
+    expect(v).toMatchObject({ examCode: 'FAR', projectId: 'p', topic: 'Physics' });
+  });
+  it('does not invent a variant for questions that are not drills', () => {
+    expect(variantOf({ id: 'own:FAR:123', kind: 'calc', prompt: 'x', answer: 1 })).toBeNull();
+    expect(variantOf({ id: 'drill-nonexistent-1', kind: 'calc', prompt: 'x', answer: 1 })).toBeNull();
+  });
+});

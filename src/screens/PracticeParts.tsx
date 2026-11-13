@@ -8,6 +8,7 @@ import { ACCOUNTING_DRILLS, DRILL_LABELS, STATS_DRILLS, type DrillKind } from '.
 import { answerText, type Exercise, type Verdict } from '../study/exercises';
 import { secondsLeft, type Exam, type ExamResult } from '../study/exam';
 import { SESSION_MINUTES } from '../study/session';
+import { variantOf } from '../study/drills';
 import { Answer } from '../components/ExerciseAnswer';
 import { good, st, type Colors } from '../components/practiceStyles';
 const literalStyles = StyleSheet.create({
@@ -153,7 +154,7 @@ export const PracticeHome: React.FC<HomeProps> = (p) => (
 
 export interface RunProps {
   current: Exercise; left: number; value: unknown; earlierNote?: string; verdict?: Verdict; note?: string;
-  onDraft: (v: unknown) => void; onCheck: () => void; onNext: () => void; onStop: () => void; onNote: (t: string) => void; colors: Colors;
+  onDraft: (v: unknown) => void; onCheck: () => void; onNext: () => void; onStop: () => void; onNote: (t: string) => void; onSimilar: () => void; colors: Colors;
 }
 
 /** One question: the answer widget, the verdict with its source, and a note box after a miss. */
@@ -171,6 +172,7 @@ export const PracticeRun: React.FC<RunProps> = (p) => (
         {!p.verdict.correct && <WhyWrong value={p.note} onChange={p.onNote} colors={p.colors} />}
       </View>
     )}
+    {!!p.verdict && !p.verdict.correct && !!variantOf(p.current) && <Button title="Try a similar one (new numbers)" variant="outline" onPress={p.onSimilar} testID="practice-similar" style={st.top8} />}
     <Button title={p.verdict ? 'Next' : 'Check'} onPress={p.verdict ? p.onNext : p.onCheck} testID={p.verdict ? 'practice-next' : 'practice-check'} style={st.top14} />
     <Button title="Stop" variant="ghost" onPress={p.onStop} style={st.top6} />
   </View>

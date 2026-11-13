@@ -13,7 +13,7 @@ import { check, missedExercises, practiceSet, streak, topicScores, useExerciseSt
 import { planSession } from '../study/session';
 import { generatePractice } from '../study/practice';
 import type { Difficulty } from '../study/difficulty';
-import { makeDrillSet, type DrillKind } from '../study/drills';
+import { makeDrillSet, variantOf, type DrillKind } from '../study/drills';
 import { buildMockExam, gradeExam, paceOf, type Exam, type ExamResult } from '../study/exam';
 import { QuestionImport } from './learningReliability/QuestionImport';
 import { addToPractice } from '../cpa/importQuestions';
@@ -80,6 +80,8 @@ export const PracticeScreen: React.FC = () => {
   const start = (t?: string) => { queueUp(practiceSet(all, progress, { topic: t })); if (!all.length) setNote('No questions yet. Make some from your documents.'); };
   const submit = () => { if (!current) return; const v = check(current, progress[current.id]?.saved); setVerdict(v); record(current.id, v.correct); };
   const next = () => { setVerdict(undefined); setQueue((q) => q.slice(1)); };
+  // After a miss on a drill: a new question of the same kind, with new numbers, worked out by code. It replaces this one in the queue.
+  const similar = () => { const v = current ? variantOf(current) : null; if (!v) return; addSet([v]); setVerdict(undefined); setQueue((q) => [v, ...q.slice(1)]); };
 
   const timesRef = useRef<Record<string, number>>({});
   const startMock = (count: number) => {
@@ -140,7 +142,7 @@ export const PracticeScreen: React.FC = () => {
         {current && <RunNote note={note} colors={colors} />}
         {current && (
           <PracticeRun current={current} left={queue.length} value={progress[current.id]?.saved} earlierNote={progress[current.id]?.note} verdict={verdict} note={progress[current.id]?.note}
-            onDraft={(v) => saveDraft(current.id, v)} onCheck={submit} onNext={next} onStop={() => { setQueue([]); setVerdict(undefined); }}
+            onDraft={(v) => saveDraft(current.id, v)} onCheck={submit} onNext={next} onSimilar={similar} onStop={() => { setQueue([]); setVerdict(undefined); }}
             onNote={(t) => saveNote(current.id, t)} colors={colors} />
         )}
       </ScrollView>

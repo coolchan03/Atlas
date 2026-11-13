@@ -541,3 +541,15 @@ export function drillFor(text: string): DrillKind | undefined {
   if (hits.length) return hits.sort((a, b) => (t.match(b[1])?.[0].length ?? 0) - (t.match(a[1])?.[0].length ?? 0))[0][0];
   return DRILL_KINDS.find((k) => t.includes(DRILL_LABELS[k].toLowerCase()));
 }
+
+/**
+ * A fresh question of the same kind as a drill, with new numbers and an answer the code works out (so it is always right). Only drills
+ * have this: an imported or model-written question has no formula to vary, so it returns null rather than inventing a variant.
+ */
+export function variantOf(ex: Exercise): Exercise | null {
+  const m = /^drill-(.+)-(\d+)$/.exec(ex.id);
+  if (!m || !DRILL_KINDS.includes(m[1] as DrillKind)) return null;
+  const seed = (Number(m[2]) + 7919) % 100000;
+  const v = makeDrill(m[1] as DrillKind, seed);
+  return { ...v, ...(ex.topic ? { topic: ex.topic } : {}), ...(ex.projectId ? { projectId: ex.projectId } : {}), ...(ex.examCode ? { examCode: ex.examCode } : {}), ...(ex.level ? { level: ex.level } : {}) };
+}

@@ -139,3 +139,18 @@ it('a 5-minute session asks missed questions first and says how long it will tak
   expect(r.getByTestId('practice-session-note').props.children).toMatch(/2 questions, about \d+ min/);
   expect(r.getByTestId('practice-input')).toBeTruthy();
 });
+
+it('after a miss on a drill, offers a similar question with new numbers; not for other questions', () => {
+  const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
+  rtl.fireEvent.press(r.getByTestId('practice-pick-drill'));
+  rtl.fireEvent.press(r.getByTestId('drill-bond-price'));
+  const first = r.getByTestId('practice-input');
+  rtl.fireEvent.changeText(first, '-1');
+  rtl.fireEvent.press(r.getByTestId('practice-check'));
+  const before = Object.keys(store.getState().exercises).length;
+  rtl.fireEvent.press(r.getByTestId('practice-similar'));
+  expect(Object.keys(store.getState().exercises).length).toBe(before + 1);
+  expect(r.queryByTestId('practice-result')).toBeNull(); // a fresh, unanswered question
+  expect(r.getByTestId('practice-input')).toBeTruthy();
+});
