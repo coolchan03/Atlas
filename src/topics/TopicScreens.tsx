@@ -132,7 +132,7 @@ export const TopicsScreen: React.FC = () => {
       if (id) navigation.navigate('TopicBoard', { courseId: id });
     } catch (e: any) { Alert.alert('Could not open that course', String(e?.message || e)); }
   };
-  const confirmDelete = (c: Course) => undo.remove(c.title, () => remove(c.id), () => useTopics.setState((s) => ({ courses: [c, ...s.courses].slice(0, 20) })));
+  const confirmDelete = (c: Course) => undo.remove(c.title, () => remove(c.id), () => useTopics.setState((s) => ({ courses: [c, ...s.courses] })));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -142,6 +142,12 @@ export const TopicsScreen: React.FC = () => {
           {projectName ? `A course in this project: the project's shared documents are used as material, and the tutor chats live in the project. ` : ''}Name anything: accounting, Python, the French Revolution, guitar chords. The AI on your phone designs a board for it, choosing lessons, quizzes, flashcards, matching, ordering and practice problems to suit the subject and how you like to learn, and writes each square when you reach it.
         </Text>
         <UndoRow pending={undo.pending} undo={undo.undo} />
+        {!given.projectId && (
+          <TouchableOpacity style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={() => navigation.navigate('CpaPrep')} accessibilityRole="button" testID="topics-exam-prep">
+            <Text style={[styles.name, { color: colors.text }]}>Professional exam prep</Text>
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>CPA (FAR, AUD, REG), CMA, CFA, the bar, MCAT and more. Each exam keeps its own questions and checklist, and no project is needed.</Text>
+          </TouchableOpacity>
+        )}
         {courses.map((c) => {
           const p = courseProgress(c);
           return (
