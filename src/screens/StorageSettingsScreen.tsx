@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
 import { StorageItemsSection } from './storage/StorageItemsSection';
 import { CacheCleanupSection } from './storage/CacheCleanupSection';
+import { RecentlyDeletedSection } from './storage/RecentlyDeletedSection';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
@@ -150,6 +151,7 @@ export const StorageSettingsScreen: React.FC = () => {
         </Card>
 
         <CacheCleanupSection onChanged={loadStorageInfo} />
+        <RecentlyDeletedSection />
         <StorageItemsSection />
 
         {staleDownloads.length > 0 && (

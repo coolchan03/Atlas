@@ -7,6 +7,7 @@ import { useChatStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
 import { nearbySync } from '../services/nearbySync';
 import type { Conversation } from '../types';
+import { chatRecoverable, useTrash } from '../trash/trash';
 
 export const UNDO_MS = 8000;
 
@@ -43,6 +44,8 @@ export function deleteChatWithUndo(conversationId: string): void {
     return;
   }
   finish();
+  // Kept durably too, so it can still be restored after the toast is gone or the app restarts.
+  if (chatRecoverable(conversation)) useTrash.getState().add({ kind: 'chat', originalId: conversation.id, title: conversation.title || 'Chat', payload: conversation });
   useChatStore.getState().deleteConversation(conversationId);
   pending = { conversation, timer: setTimeout(finish, UNDO_MS) };
   emit();
@@ -54,6 +57,7 @@ export function undoDeleteChat(): void {
   const { conversation } = pending;
   pending = null;
   useChatStore.getState().restoreConversation(conversation);
+  useTrash.getState().discard(useTrash.getState().items.find((i) => i.kind === 'chat' && i.originalId === conversation.id)?.id ?? '');
   nearbySync.forgetDeletion('conversations', conversation.id);
   emit();
 }

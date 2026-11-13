@@ -1,3 +1,4 @@
+import { courseRecoverable, useTrash } from '../trash/trash';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -132,7 +133,7 @@ export const TopicsScreen: React.FC = () => {
       if (id) navigation.navigate('TopicBoard', { courseId: id });
     } catch (e: any) { Alert.alert('Could not open that course', String(e?.message || e)); }
   };
-  const confirmDelete = (c: Course) => undo.remove(c.title, () => remove(c.id), () => useTopics.setState((s) => ({ courses: [c, ...s.courses] })));
+  const confirmDelete = (c: Course) => undo.remove(c.title, () => { if (courseRecoverable(c)) useTrash.getState().add({ kind: 'course', originalId: c.id, title: c.title, payload: c }); remove(c.id); }, () => { useTopics.setState((s) => ({ courses: [c, ...s.courses] })); useTrash.getState().discard(useTrash.getState().items.find((i) => i.kind === 'course' && i.originalId === c.id)?.id ?? ''); });
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
