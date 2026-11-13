@@ -19,6 +19,7 @@ import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { keepMissed } from './review';
+import { useLayoutClass } from '../hooks/useLayoutClass';
 import { useOffGrid } from '../atlasTools/offGrid';
 import { UndoRow, useUndo } from '../components/UndoRow';
 
@@ -263,6 +264,8 @@ export const TopicBoardScreen: React.FC = () => {
   const { colors } = useTheme();
   const { courseId } = useRoute<any>().params as { courseId: string };
   const course = useTopics((s) => s.courses.find((c) => c.id === courseId));
+  const { twoPane } = useLayoutClass();
+  const [picked, setPicked] = useState<string | null>(null);
   if (!course) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Course" onBack={() => navigation.goBack()} /></SafeAreaView>;
 
   const done = (key: string) => !!course.progress[key];
@@ -274,7 +277,8 @@ export const TopicBoardScreen: React.FC = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <Header title={course.theme || course.title} onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.body}>
+      <View style={twoPane ? styles.panes : styles.fill}>
+      <ScrollView style={twoPane ? styles.paneLeft : undefined} contentContainerStyle={styles.body}>
         <Text style={[styles.name, { color: colors.text }]}>{course.title}</Text>
         {!!course.summary && <Text style={[styles.meta, { color: colors.textSecondary }]}>{course.summary}</Text>}
         {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
@@ -284,11 +288,25 @@ export const TopicBoardScreen: React.FC = () => {
         <Button title="Send this course to another phone" variant="outline" testID="course-share"
           onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}
-          onPress={(s) => navigation.navigate('TopicSquare', { courseId, key: s.key })} />
+          onPress={(s) => (twoPane ? setPicked(s.key) : navigation.navigate('TopicSquare', { courseId, key: s.key }))} />
       </ScrollView>
+      {twoPane && (
+        <View style={[styles.paneRight, { borderLeftColor: colors.border }]} testID="board-detail-pane">
+          {picked
+            ? <TopicSquareScreen key={picked} courseId={courseId} squareKey={picked} embedded onNext={setPicked} />
+            : <Text style={[styles.meta, styles.body, { color: colors.textSecondary }]}>Pick a square on the board to play it here.</Text>}
+        </View>
+      )}
+      </View>
     </SafeAreaView>
   );
 };
+
+/** The square's title: a header with a back button on a phone, plain text inside the tablet's right-hand pane. */
+function SquareHeader({ title, embedded, onBack }: { title: string; embedded: boolean; onBack: () => void }) {
+  const { colors } = useTheme();
+  return embedded ? <Text style={[styles.name, styles.body, { color: colors.text }]}>{title}</Text> : <Header title={title} onBack={onBack} />;
+}
 
 /** The passages of the learner's own books a square was written from, folded away until asked for. */
 function CitedFold({ passages }: { passages: { source: string; text: string }[] }) {
@@ -311,10 +329,12 @@ function CitedFold({ passages }: { passages: { source: string; text: string }[] 
 }
 
 /** One square: written when first opened, then played. */
-export const TopicSquareScreen: React.FC = () => {
+export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string; embedded?: boolean; onNext?: (key: string) => void }> = (props) => {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
-  const { courseId, key } = useRoute<any>().params as { courseId: string; key: string };
+  const params = useRoute<any>().params as { courseId: string; key: string } | undefined;
+  const courseId = props.courseId ?? params!.courseId;
+  const key = props.squareKey ?? params!.key;
   const course = useTopics((s) => s.courses.find((c) => c.id === courseId));
   const square = course?.squares.find((s) => s.key === key);
   const [content, setContent] = useState<SquareContent | null>(course?.content[key] ?? null);
@@ -355,7 +375,7 @@ export const TopicSquareScreen: React.FC = () => {
   const cruising = square.format === 'lesson' && results.length === 2 && results.every((n) => n === 3);
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <Header title={square.title} onBack={() => navigation.goBack()} />
+      <SquareHeader title={square.title} embedded={!!props.embedded} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text style={[styles.meta, { color: colors.textMuted }]}>{FORMATS.find((f) => f.id === square.format)?.label} · {square.unit}</Text>
         {stars !== null ? (
@@ -364,8 +384,8 @@ export const TopicSquareScreen: React.FC = () => {
             <Text style={[styles.meta, { color: colors.textSecondary }]}>{next ? `Next: ${next.title}` : 'You finished the course.'}</Text>
             {addedRemedial && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-remedial">That was a hard one, so a lesson that explains it another way comes next.</Text>}
             {square.format !== 'lesson' && <Button title="Try new questions" variant="ghost" onPress={again} testID="square-again" />}
-            {next && <Button title="Next square" onPress={() => navigation.replace('TopicSquare', { courseId, key: next.key })} testID="square-next" />}
-            <Button title="Back to the board" variant="outline" onPress={() => navigation.goBack()} testID="square-board" />
+            {next && <Button title="Next square" onPress={() => (props.onNext ? props.onNext(next.key) : navigation.replace('TopicSquare', { courseId, key: next.key }))} testID="square-next" />}
+            {!props.embedded && <Button title="Back to the board" variant="outline" onPress={() => navigation.goBack()} testID="square-board" />}
           </View>
         ) : content ? (
           <>
@@ -396,6 +416,10 @@ export const TopicSquareScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  fill: { flex: 1 },
+  panes: { flex: 1, flexDirection: 'row' },
+  paneLeft: { flex: 1 },
+  paneRight: { flex: 1, borderLeftWidth: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   title: { fontSize: 22, fontWeight: '400', flex: 1 },
   body: { padding: 16, gap: 12, paddingBottom: 60 },
