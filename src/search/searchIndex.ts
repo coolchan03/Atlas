@@ -60,6 +60,15 @@ const snippet = (text: string, q: string) => {
   return `${from > 0 ? '...' : ''}${text.slice(from, from + 90).replace(/\s+/g, ' ').trim()}`;
 };
 
+/** A project hit. A protected project can be found by its name only: its description and contents are never matched or shown. */
+function projectHit(p: SearchData['projects'][number], q: string, words: string[]): SearchHit | null {
+  if (p.course === 'language') return null;
+  const locked = !!(p.pinVerifier || p.protectedBlob);
+  const score = locked ? rank(p.name, q, words) * 3 : Math.max(rank(p.name, q, words) * 3, rank(p.description, q, words));
+  if (!score) return null;
+  return { kind: 'project', id: p.id, title: p.name, detail: locked ? undefined : p.description || undefined, route: 'ProjectDetail', params: { projectId: p.id }, icon: 'folder', score };
+}
+
 export function searchEverything(query: string, data: SearchData, limit = 6): SearchHit[] {
   const q = norm(query.trim());
   if (q.length < 2) return [];
@@ -78,13 +87,7 @@ export function searchEverything(query: string, data: SearchData, limit = 6): Se
       hits.push({ kind: 'chat', id: c.id, title: c.title || 'Chat', detail: byTitle ? undefined : snippet(said!.content, q), route: 'Chat', params: { conversationId: c.id }, icon: 'message-circle', score: byTitle ? byTitle * 3 : 1 });
     }
   }
-  for (const p of data.projects) {
-    if (p.course === 'language') continue;
-    // A protected project can be found by its name only: its description and contents are never matched or shown.
-    const locked = !!(p.pinVerifier || p.protectedBlob);
-    const score = locked ? rank(p.name, q, words) * 3 : Math.max(rank(p.name, q, words) * 3, rank(p.description, q, words));
-    if (score) hits.push({ kind: 'project', id: p.id, title: p.name, detail: locked ? undefined : p.description || undefined, route: 'ProjectDetail', params: { projectId: p.id }, icon: 'folder', score });
-  }
+  for (const p of data.projects) { const hit = projectHit(p, q, words); if (hit) hits.push(hit); }
   for (const m of data.models) {
     const score = rank(m.name, q, words) * 3;
     if (score) hits.push({ kind: 'model', id: m.id, title: m.name, route: 'ModelTest', params: { modelId: m.id }, icon: 'cpu', score });
