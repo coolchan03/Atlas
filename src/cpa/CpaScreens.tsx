@@ -18,18 +18,22 @@ import { describeEvidence, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
 import { setupAllCpaExams } from './setup';
 import { useCpa, type CpaTopic } from './store';
+import { useTopics, courseProgress } from '../topics/store';
+import { boardCovers, ensureExamCourse } from './course';
 
 /** How many of an exam's topics are understood, from the practice results. */
 function useExamStatus(code: ExamCode) {
   const exam = useCpa((s) => s.exams[code]);
   const exercises = useExerciseStore((s) => s.exercises);
   const progress = useExerciseStore((s) => s.progress);
+  const courses = useTopics((s) => s.courses);
   return useMemo(() => {
+    const board = courses.find((c) => c.id === exam?.courseId);
     const list = Object.values(exercises);
     const rows = (exam?.topics ?? []).map((t) => ({ topic: t, evidence: topicEvidence(list, progress, { topic: t.name, projectId: exam?.projectId }) }));
-    return { exam, rows, understood: rows.filter((r) => r.evidence.status === 'understood').length, covered: rows.filter((r) => r.topic.covered).length,
+    return { exam, rows, understood: rows.filter((r) => r.evidence.status === 'understood').length, covered: rows.filter((r) => r.topic.covered || boardCovers(board, r.topic.name)).length, board,
       questions: list.filter((e) => e.projectId === exam?.projectId).length };
-  }, [exam, exercises, progress]);
+  }, [exam, exercises, progress, courses]);
 }
 
 /** The four exams, set up with one tap, each with its own documents, questions and checklist. */
@@ -60,19 +64,19 @@ const ExamCard: React.FC<{ code: ExamCode; onOpen: () => void }> = ({ code, onOp
       <Card style={styles.card}>
         <Text style={[styles.title, { color: colors.text }]}>{info.code}: {info.name}</Text>
         <Text style={{ color: colors.textSecondary }}>
-          {status.exam ? `${status.understood} of ${status.rows.length} topics understood · ${status.covered} ticked · ${status.questions} practice questions` : 'Not set up yet'}
+          {status.exam ? `${status.board ? `Board ${courseProgress(status.board).done} of ${courseProgress(status.board).total} · ` : ''}${status.understood} of ${status.rows.length} topics understood · ${status.covered} ticked · ${status.questions} practice questions` : 'Not set up yet'}
         </Text>
       </Card>
     </TouchableOpacity>
   );
 };
 
-const TopicRow: React.FC<{ topic: CpaTopic; label: string; onTick: () => void; onCheck: () => void; onRemove: () => void }> = ({ topic, label, onTick, onCheck, onRemove }) => {
+const TopicRow: React.FC<{ topic: CpaTopic; ticked: boolean; label: string; onTick: () => void; onCheck: () => void; onRemove: () => void }> = ({ topic, ticked, label, onTick, onCheck, onRemove }) => {
   const { colors } = useTheme();
   return (
     <View style={styles.topic} testID={`cpa-topic-${topic.id}`}>
-      <TouchableOpacity onPress={onTick} accessibilityRole="checkbox" accessibilityState={{ checked: topic.covered }} accessibilityLabel={`I have covered ${topic.name}`} testID={`cpa-tick-${topic.id}`} hitSlop={8}>
-        <Icon name={topic.covered ? 'check-square' : 'square'} size={20} color={topic.covered ? colors.primary : colors.textMuted} />
+      <TouchableOpacity onPress={onTick} accessibilityRole="checkbox" accessibilityState={{ checked: ticked }} accessibilityLabel={`I have covered ${topic.name}`} testID={`cpa-tick-${topic.id}`} hitSlop={8}>
+        <Icon name={ticked ? 'check-square' : 'square'} size={20} color={ticked ? colors.primary : colors.textMuted} />
       </TouchableOpacity>
       <View style={styles.grow}>
         <Text style={{ color: colors.text }}>{topic.name}</Text>
@@ -144,6 +148,18 @@ export const CpaExamScreen: React.FC = () => {
           {!!message && <Text style={[styles.small, { color: colors.textSecondary }]}>{message}</Text>}
         </Card>
 
+        <Card style={styles.card} testID="cpa-board">
+          <Text style={[styles.title, { color: colors.text }]}>Learn it on a board</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>
+            {status.board ? `${courseProgress(status.board).done} of ${courseProgress(status.board).total} squares played. ` : ''}A board game for {code} like the other courses: a lesson square for each topic, written from the files you added above, and a quiz after each area. Playing a topic's square ticks it on the checklist.
+          </Text>
+          <View style={styles.row}>
+            <Button title={status.board ? `Open the ${code} board` : `Start the ${code} board`} onPress={() => { const id = ensureExamCourse(code); if (id) navigation.navigate('TopicBoard', { courseId: id }); }} testID="cpa-board-open" />
+            {!!status.board && <Button title="Rebuild from the checklist" variant="outline" testID="cpa-board-rebuild"
+              onPress={() => Alert.alert('Rebuild the board?', 'The board is made again from the checklist. Squares you already played start over.', [{ text: 'Cancel' }, { text: 'Rebuild', onPress: () => { const id = ensureExamCourse(code, true); if (id) navigation.navigate('TopicBoard', { courseId: id }); } }])} />}
+          </View>
+        </Card>
+
         <QuestionImport topics={topics} onAdded={() => setMessage('')} onConfirm={(items) => {
           const r = addToPractice(items, projectId, topics);
           return `${r.added} questions added to ${code} practice${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`;
@@ -163,7 +179,7 @@ export const CpaExamScreen: React.FC = () => {
             <View key={area} testID={`cpa-area-${area}`}>
               <Text style={[styles.area, { color: colors.text }]}>{area} ({done} of {inArea.length})</Text>
               {inArea.map((t) => (
-                <TopicRow key={t.id} topic={t} label={describeEvidence(evidenceOf(t.id))} onTick={() => toggle(code, t.id)}
+                <TopicRow key={t.id} topic={t} ticked={t.covered || boardCovers(status.board, t.name)} label={describeEvidence(evidenceOf(t.id))} onTick={() => toggle(code, t.id)}
                   onCheck={() => navigation.navigate('Practice', { projectId, topic: t.name })} onRemove={() => removeTopic(code, t.id)} />
               ))}
             </View>

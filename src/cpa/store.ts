@@ -5,12 +5,13 @@ import { EXAMS, type ExamCode } from './blueprints';
 import type { OutlineArea } from './outline';
 
 export interface CpaTopic { id: string; area: string; name: string; /** The person's own tick: "I have covered this". Understanding is shown separately, from quiz results. */ covered: boolean }
-export interface CpaExam { projectId: string; topics: CpaTopic[]; /** The day of the exam, YYYY-MM-DD, set by the person. */ examDate?: string }
+export interface CpaExam { projectId: string; topics: CpaTopic[]; /** The day of the exam, YYYY-MM-DD, set by the person. */ examDate?: string; /** The board-game course that teaches this exam, one square per topic. */ courseId?: string }
 
 interface State {
   exams: Partial<Record<ExamCode, CpaExam>>;
   setExam: (code: ExamCode, exam: CpaExam) => void;
   setExamDate: (code: ExamCode, date: string | undefined) => void;
+  setCourse: (code: ExamCode, courseId: string | undefined) => void;
   toggleCovered: (code: ExamCode, topicId: string) => void;
   addTopic: (code: ExamCode, area: string, name: string) => void;
   removeTopic: (code: ExamCode, topicId: string) => void;
@@ -28,6 +29,7 @@ export const useCpa = create<State>()(persist((set) => {
     exams: {},
     setExam: (code, exam) => set((s) => ({ exams: { ...s.exams, [code]: exam } })),
     setExamDate: (code, examDate) => change(code, (e) => ({ ...e, examDate })),
+    setCourse: (code, courseId) => change(code, (e) => ({ ...e, courseId })),
     toggleCovered: (code, topicId) => change(code, (e) => ({ ...e, topics: e.topics.map((t) => (t.id === topicId ? { ...t, covered: !t.covered } : t)) })),
     addTopic: (code, area, name) => change(code, (e) => (name.trim() && !e.topics.some((t) => t.id === idFor(area, name.trim())) ? { ...e, topics: [...e.topics, { id: idFor(area, name.trim()), area, name: name.trim(), covered: false }] } : e)),
     removeTopic: (code, topicId) => change(code, (e) => ({ ...e, topics: e.topics.filter((t) => t.id !== topicId) })),

@@ -150,3 +150,36 @@ it('shows how many days are left and how many topics a week that means once an e
   rtl.fireEvent.press(view.getByTestId('cpa-date-set'));
   expect(view.getByTestId('cpa-pace').props.children).toMatch(/^70 days to go, \d+ topics still to understand: about [\d.]+ a week\.$/);
 });
+
+it('each exam is its own board-game course, one lesson per topic, from its own project, and playing a square ticks the topic', () => {
+  const { rtl, React, screens, stores } = open();
+  stores.cpa.setState({ exams: {} });
+  require('../../src/cpa/setup').setupAllCpaExams();
+  const { useTopics } = require('../../src/topics/store');
+  useTopics.setState({ courses: [] });
+  mockParams = { code: 'FAR' };
+  const view = rtl.render(React.createElement(screens.CpaExamScreen));
+  rtl.fireEvent.press(view.getByTestId('cpa-board-open'));
+  const exam = stores.cpa.getState().exams.FAR;
+  const course = useTopics.getState().courses.find((c: { id: string }) => c.id === exam.courseId);
+  expect(mockNavigate).toHaveBeenCalledWith('TopicBoard', { courseId: course.id });
+  expect(course.projectId).toBe(exam.projectId);
+  const lessons = course.squares.filter((s: { format: string }) => s.format === 'lesson');
+  expect(lessons.map((s: { title: string }) => s.title)).toEqual(exam.topics.map((t: { name: string }) => t.name.slice(0, 60)));
+  expect(course.squares[course.squares.length - 1]).toMatchObject({ format: 'quiz', checkpoint: true });
+  // A second tap opens the same board; it is not made twice.
+  rtl.fireEvent.press(view.getByTestId('cpa-board-open'));
+  expect(useTopics.getState().courses).toHaveLength(1);
+  // Playing the first lesson ticks its topic.
+  const first = exam.topics[0];
+  expect(view.getByTestId(`cpa-tick-${first.id}`).props.accessibilityState.checked).toBe(false);
+  rtl.act(() => { useTopics.getState().complete(course.id, lessons[0].key, 3); });
+  expect(view.getByTestId(`cpa-tick-${first.id}`).props.accessibilityState.checked).toBe(true);
+  // Rebuilding starts a fresh board.
+  rtl.fireEvent.press(view.getByTestId('cpa-board-rebuild'));
+  const { Alert } = require('react-native');
+  const buttons = (Alert.alert as jest.Mock).mock.calls.pop()[2];
+  rtl.act(() => { buttons[1].onPress(); });
+  expect(useTopics.getState().courses).toHaveLength(1);
+  expect(stores.cpa.getState().exams.FAR.courseId).not.toBe(course.id);
+});
