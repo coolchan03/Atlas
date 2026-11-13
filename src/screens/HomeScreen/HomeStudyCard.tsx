@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
@@ -9,6 +9,7 @@ import { useExerciseStore } from '../../study/exercises';
 import { useCpa } from '../../cpa/store';
 import { examLabel } from '../../cpa/blueprints';
 import { useChatStore, useProjectStore } from '../../stores';
+import { addDailyReminder } from '../../atlasTools/deviceTools';
 import { continueTarget, nextExamLine, searchHome, type HomeHit, type HomeSearchSources } from './homeStudy';
 
 /** Pick up studying in one tap: the next square of the course you played last, what is due for review, and how the nearest exam is going. */
@@ -21,6 +22,7 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
   const due = dueCount();
   const exam = useMemo(() => nextExamLine(Object.entries(examState).map(([code, e]) => ({ label: examLabel(code as any), examDate: e?.examDate, remaining: (e?.topics ?? []).filter((t) => !t.covered).length })).filter((e) => e.examDate)), [examState]);
   if (!target && !due && !exam) return null;
+  const remind = () => { const until = Object.values(examState).map((e) => e?.examDate).filter(Boolean).sort()[0]; addDailyReminder('Study with Atlas', { until, description: 'Open Atlas and carry on with your course.' }).then((m) => Alert.alert('Reminder', m)).catch((e) => Alert.alert('Could not open the calendar', String(e?.message || e))); };
   const go = (screen: string, params?: object) => navigation.getParent()?.navigate(screen, params);
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="home-study">
@@ -40,6 +42,10 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       )}
       {!!exam && <Text style={[styles.small, { color: colors.textSecondary }]} testID="home-exam-line">{exam}</Text>}
+      <TouchableOpacity style={styles.row} onPress={remind} testID="home-remind" accessibilityRole="button">
+        <Icon name="bell" size={18} color={colors.primary} />
+        <Text style={[styles.small, styles.grow, { color: colors.primary }]}>Remind me to study every day (opens your calendar)</Text>
+      </TouchableOpacity>
     </View>
   );
 }

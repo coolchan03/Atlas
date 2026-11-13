@@ -608,4 +608,20 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
             promise.resolve(true)
         } catch (e: Exception) { promise.reject("CAL_ADD", e.message ?: "Could not open the calendar", e) }
     }
+
+    /** Opens the calendar app with a repeating event filled in (for example a daily study reminder) - you confirm and save it there. */
+    @ReactMethod
+    fun addRepeatingCalendarEvent(title: String, startMs: Double, endMs: Double, rule: String, description: String, promise: Promise) {
+        try {
+            val i = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.Events.TITLE, title)
+                .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs.toLong())
+                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs.toLong())
+                .putExtra(CalendarContract.Events.RRULE, rule)
+                .putExtra(CalendarContract.Events.DESCRIPTION, description)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(i)
+            promise.resolve(true)
+        } catch (e: Exception) { promise.reject("CAL_ADD", e.message ?: "Could not open the calendar", e) }
+    }
 }

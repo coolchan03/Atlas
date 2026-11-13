@@ -157,6 +157,22 @@ export async function addCalendarEvent(title: string, start: string, more: { end
   return 'Opened the calendar with the event filled in. The user confirms and saves it there.';
 }
 
+/** Pure: the repeat rule for a daily event, ending on a day (YYYY-MM-DD) when one is given. */
+export const dailyRule = (until?: string): string => `FREQ=DAILY${until && /^\d{4}-\d{2}-\d{2}$/.test(until) ? `;UNTIL=${until.replace(/-/g, '')}T235959Z` : ''}`;
+
+/**
+ * Opens the calendar app with a daily study reminder filled in (19:00 by default, repeating until the exam day when there is one).
+ * The person saves it there, and the calendar's own notification does the reminding, so Atlas needs no background alarm.
+ */
+export async function addDailyReminder(title: string, more: { hour?: number; until?: string; description?: string } = {}): Promise<string> {
+  const { hour = 19, until, description = '' } = more;
+  const start = new Date(); start.setHours(hour, 0, 0, 0);
+  if (start.getTime() < Date.now()) start.setDate(start.getDate() + 1);
+  if (!Native.addRepeatingCalendarEvent) return 'This build cannot open the calendar for a repeating event.';
+  await Native.addRepeatingCalendarEvent(title, start.getTime(), start.getTime() + 30 * 60000, dailyRule(until), description);
+  return 'Opened the calendar with a daily reminder filled in. Save it there.';
+}
+
 /** The link that opens the phone's Messages or Email app with a draft filled in (nothing is sent from here). */
 export function messageUrl(kind: 'text' | 'email' | 'call', body: string, who: { to?: string; subject?: string } = {}): string {
   const { to = '', subject = '' } = who;
