@@ -16,6 +16,7 @@ import { activeModelService } from '../../services/activeModelService';
 import { instrumentalPlayer } from '../../music/backgroundPlayer';
 import { useAtlasVoiceStore } from '../../atlasVoice/store';
 import { ttsAvailable } from '../../atlasVoice/tts';
+import { VoicePicker } from '../../atlasVoice/VoicePicker';
 import { useVoiceProfiles } from '../../atlasVoice/profiles';
 import { CHAT_TONES, type ChatTonePreset } from '../../services/chatTone';
 import { MusicPlayerWidget } from './MusicPlayerWidget';
@@ -250,7 +251,10 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
             {select({ caption: 'Project', value: draft.projectId, setter: (projectId) => update({ projectId }), choices: [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))] })}
             {select({ caption: 'Text model', value: draft.modelId, setter: (modelId) => update({ modelId }),
               choices: [{ id: '', label: `Current model${activeModelId ? '' : ' (none loaded)'}` }, ...localModels.map((m) => ({ id: m.id, label: m.name }))] })}
-            {select({ caption: 'Voice', value: draft.voiceProfileId, setter: (voiceProfileId) => update({ voiceProfileId }), choices: [{ id: '', label: 'Default/agent voice' }, ...voices.map((v) => ({ id: v.id, label: v.name }))] })}
+            <View style={styles.selector}>
+              <Text style={[styles.caption, { color: colors.textSecondary }]}>Voice (any voice, including your cloned ones)</Text>
+              <VoicePicker testID="widget-voice" value={draft.voiceProfileId} onPick={(voiceProfileId) => update({ voiceProfileId })} defaultLabel="Default/agent voice" />
+            </View>
             {select({ caption: 'Conversation style', value: draft.tone, setter: (tone) => update({ tone: (tone || 'balanced') as ChatTonePreset }), choices: CHAT_TONES.map((t) => ({ id: t.id, label: t.name })) })}
           </>}
           {draft.action === 'course' && select({ caption: 'Course', value: draft.courseId, setter: (courseId) => update({ courseId }), choices: courses.map((c) => ({ id: c.id, label: c.title.slice(0, 26) })) })}

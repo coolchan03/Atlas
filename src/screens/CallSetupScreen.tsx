@@ -9,7 +9,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { useAppStore } from '../stores/appStore';
 import { useAgentStore } from '../stores/agentStore';
 import { useProjectStore } from '../stores/projectStore';
-import { useVoiceProfiles } from '../atlasVoice/profiles';
+import { VoicePicker } from '../atlasVoice/VoicePicker';
 import { useHomeShortcuts } from './HomeScreen/homeShortcutStore';
 import { useCallPrefs } from './HomeScreen/callPrefs';
 import { callTitle, startCall, type CallChoice } from './HomeScreen/quickCall';
@@ -41,7 +41,6 @@ export const CallSetupScreen: React.FC = () => {
   const agents = useAgentStore((s) => s.agents);
   const projects = useProjectStore((s) => s.projects);
   const models = useAppStore((s) => s.downloadedModels);
-  const profiles = useVoiceProfiles((s) => s.profiles);
   const last = useCallPrefs((s) => s.last);
   const remember = useCallPrefs((s) => s.remember);
   const addShortcut = useHomeShortcuts((s) => s.addShortcut);
@@ -72,9 +71,11 @@ export const CallSetupScreen: React.FC = () => {
         <Choices testID="call-agent" title="Who to call" options={[{ id: '', label: 'No agent' }, ...agents.map((a) => ({ id: a.id, label: a.name }))]} value={choice.agentId ?? ''} onPick={(id) => set({ agentId: id || undefined })} />
         <Choices testID="call-model" title="Model" hint="Loaded now means whatever is ready. Choosing another loads it first." options={[{ id: '', label: 'Loaded now' }, ...models.map((m) => ({ id: m.id, label: m.name }))]} value={choice.modelId ?? ''} onPick={(id) => set({ modelId: id || undefined })} />
         <Choices testID="call-project" title="Project folder" hint="The agent can use that project's documents, such as your therapy folder." options={[{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))]} value={choice.projectId ?? ''} onPick={(id) => set({ projectId: id || undefined })} />
-        {profiles.length > 0 && (
-          <Choices testID="call-voice" title="Voice" hint="The agent's own voice is used when you leave this." options={[{ id: '', label: "Agent's voice" }, ...profiles.map((p) => ({ id: p.id, label: p.name }))]} value={choice.voiceProfileId ?? ''} onPick={(id) => set({ voiceProfileId: id || undefined })} />
-        )}
+        <View testID="call-voice">
+          <Text style={[styles.label, { color: colors.text }]}>Voice</Text>
+          <Text style={[styles.hint, { color: colors.textSecondary }]}>The agent's own voice is used when you leave this. Any voice works, including your cloned ones.</Text>
+          <VoicePicker testID="call-voice-pick" value={choice.voiceProfileId} onPick={(id) => set({ voiceProfileId: id })} defaultLabel="Agent's voice" />
+        </View>
         <Button title={agentName ? `Call ${agentName}` : 'Call'} onPress={call} disabled={busy} testID="call-start" />
         <Button title="Save as a one-tap Home button" variant="outline" onPress={save} testID="call-save" />
       </ScrollView>

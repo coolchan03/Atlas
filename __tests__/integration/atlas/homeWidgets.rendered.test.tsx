@@ -199,3 +199,31 @@ it('a review widget shows how many questions are due and opens Practice', () => 
   rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${id}`));
   expect(mockNavigate).toHaveBeenLastCalledWith('Practice', undefined);
 });
+
+it('a widget can use any voice: a cloned voice never saved as a profile, or one speaker of an installed voice, is saved when picked', () => {
+  const { rtl, view } = setup([]);
+  const { useCloneReferences } = require('../../../src/atlasVoice/cloneStore');
+  const { useNeuralVoices } = require('../../../src/atlasVoice/neural');
+  const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+  const { useHomeShortcuts } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  const { useAppStore } = require('../../../src/stores/appStore');
+  useAppStore.setState({ activeModelId: 'm1', downloadedModels: [{ id: 'm1', name: 'Small' }] });
+  useVoiceProfiles.setState({ profiles: [] });
+  useCloneReferences.setState({ references: [{ id: 'ref1', name: 'My mum', seconds: 12, createdAt: '2026-01-01' }] });
+  rtl.act(() => { useNeuralVoices.setState({ installed: { 'sherpa-onnx-pocket-tts-int8': 1, 'kokoro-v1-en': 1 } }); });
+  rtl.fireEvent.press(view.getByTestId('home-add-shortcut'));
+  rtl.fireEvent.changeText(view.getByPlaceholderText('Widget name'), 'Call mum');
+  rtl.fireEvent.press(view.getByTestId('widget-voice-clone:ref1'));
+  rtl.fireEvent.press(view.getByTestId('home-save-shortcut'));
+  const saved = useHomeShortcuts.getState().shortcuts.find((s: { title: string }) => s.title === 'Call mum');
+  const profile = useVoiceProfiles.getState().profiles.find((p: { id: string }) => p.id === saved.voiceProfileId);
+  expect(profile).toMatchObject({ name: 'My mum', referenceId: 'ref1', voiceId: 'sherpa-onnx-pocket-tts-int8' });
+  // Another widget: one speaker of the installed voice, under More voices.
+  rtl.fireEvent.press(view.getByTestId('home-add-shortcut'));
+  rtl.fireEvent.changeText(view.getByPlaceholderText('Widget name'), 'Call Echo');
+  rtl.fireEvent.press(view.getByTestId('widget-voice-more-toggle'));
+  rtl.fireEvent.press(view.getByTestId('widget-voice-engine:kokoro-v1-en:12'));
+  rtl.fireEvent.press(view.getByTestId('home-save-shortcut'));
+  const echo = useHomeShortcuts.getState().shortcuts.find((s: { title: string }) => s.title === 'Call Echo');
+  expect(useVoiceProfiles.getState().profiles.find((p: { id: string }) => p.id === echo.voiceProfileId)).toMatchObject({ voiceId: 'kokoro-v1-en', sid: 12 });
+});
