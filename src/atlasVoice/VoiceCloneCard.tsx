@@ -10,7 +10,7 @@ import { useVoiceCreation } from './useVoiceCreation';
 import { SPEEDS } from './VoiceProfilesCard';
 
 const STEPS = [2, 3, 5, 8];
-const STEP_LABELS: Record<number, string> = { 2: 'Fastest (2)', 3: 'Balanced (3)', 5: 'Smoother (5)', 8: 'Slowest (8)' };
+const STEP_LABELS: Record<number, string> = { 2: 'Fastest (2): phone calls', 3: 'Balanced (3): recommended', 5: 'Smoother (5): clearer, slower', 8: 'Best quality (8): slowest' };
 const MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2';
 
 type Reference = ReturnType<typeof useCloneReferences.getState>['references'][number];

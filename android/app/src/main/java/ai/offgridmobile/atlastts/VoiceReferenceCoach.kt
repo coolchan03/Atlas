@@ -35,38 +35,96 @@ object VoiceReferenceCoach {
     const val REFERENCE_SECONDS = 12
 
     /**
-     * Where the clearest [windowSeconds] of a long recording start, as a sample index. The window with the most
-     * speech wins; any clipping counts against it. A recording that already fits starts at 0.
+     * Where the best [windowSeconds] of a long recording start, as a sample index. A recording that already fits starts at 0.
+     *
+     * Every 20 ms frame is classed as speech or not from an adaptive threshold (the recording's own noise floor, not a fixed level),
+     * then every possible window is scored on: how much of it is speech (a clone needs speech, but a little pause is natural),
+     * how far the speech stands above the background noise heard inside that same window (a window with music, a fan or a TV in
+     * it scores lower than a clean one), how steady the speech level is, and how much of it is clipped. The window start is then
+     * nudged (by at most half a second, and only where the score barely changes) so the clip begins and ends in a pause rather than
+     * in the middle of a word.
      */
     fun bestWindowStart(samples: FloatArray, rate: Int, windowSeconds: Int): Int {
         val window = windowSeconds * rate
-        if (rate <= 0 || samples.size <= window) return 0
-        val seconds = samples.size / rate
-        val level = DoubleArray(seconds)
-        val clipped = IntArray(seconds)
-        var total = 0.0
-        for (s in 0 until seconds) {
+        if (rate <= 0 || windowSeconds <= 0 || samples.size <= window) return 0
+        val frame = max(1, rate / 50)
+        val frames = samples.size / frame
+        val windowFrames = max(1, window / frame)
+        if (frames <= windowFrames) return 0
+
+        val level = DoubleArray(frames)
+        val clippedAt = IntArray(frames)
+        for (f in 0 until frames) {
             var energy = 0.0
-            for (i in s * rate until (s + 1) * rate) {
+            for (i in f * frame until (f + 1) * frame) {
                 val v = samples[i].toDouble()
                 energy += v * v
-                if (abs(v) >= 0.995) clipped[s]++
+                if (abs(v) >= 0.995) clippedAt[f]++
             }
-            level[s] = sqrt(energy / rate)
-            total += level[s]
+            level[f] = sqrt(energy / frame)
         }
-        val speaking = max(0.006, total / seconds * 0.5)
-        var best = 0
-        var bestScore = Double.NEGATIVE_INFINITY
-        for (start in 0..(seconds - windowSeconds)) {
-            var score = 0.0
-            for (s in start until start + windowSeconds) {
-                if (level[s] >= speaking) score += 1.0 + level[s]
-                score -= clipped[s].toDouble() / rate * 20.0
+        val clipSum = IntArray(frames + 1)
+        for (f in 0 until frames) clipSum[f + 1] = clipSum[f] + clippedAt[f]
+        val lastStart = frames - windowFrames
+        val context = 50 // frames of 20 ms: one second either side, so a window of unbroken speech still has a noise reference
+
+        fun score(start: Int): Double {
+            val end = start + windowFrames
+            // Background noise heard around this window: the mean of its quietest 15% of frames.
+            val around = level.copyOfRange(max(0, start - context), min(frames, end + context))
+            around.sort()
+            val lowest = max(1, (around.size * 0.15).toInt())
+            var noise = 0.0
+            for (i in 0 until lowest) noise += around[i]
+            noise = max(1e-5, noise / lowest)
+            // Speech is clearly above the noise; when there is no pause to measure noise in (unbroken speech), half the window's peak.
+            val peak = around[(around.size * 0.95).toInt().coerceIn(0, around.size - 1)]
+            val threshold = max(0.006, min(noise * 3.0, peak * 0.5))
+            var speech = 0
+            var sum = 0.0
+            var sq = 0.0
+            for (f in start until end) {
+                if (level[f] >= threshold) { speech++; sum += level[f]; sq += level[f] * level[f] }
             }
-            if (score > bestScore) { bestScore = score; best = start }
+            if (speech == 0) return -1.0
+            val meanSpeech = sum / speech
+            val variance = max(0.0, sq / speech - meanSpeech * meanSpeech)
+            val snr = (20 * log10(max(meanSpeech, 1e-6) / noise)).coerceIn(0.0, 40.0) / 40.0
+            val ratio = min(speech.toDouble() / windowFrames, 0.95) / 0.95
+            val steady = 1.0 - min(1.0, sqrt(variance) / meanSpeech)
+            val clipFraction = (clipSum[end] - clipSum[start]).toDouble() / (windowFrames * frame)
+            return 0.5 * ratio + 0.4 * snr + 0.1 * steady - clipFraction * 10.0
         }
-        return best * rate
+
+        // Coarse pass every 100 ms (cheap even for a ten-minute recording), then every frame near the winner.
+        val hop = 5
+        var coarse = 0
+        var coarseScore = Double.NEGATIVE_INFINITY
+        var start = 0
+        while (start <= lastStart) {
+            val sc = score(start)
+            if (sc > coarseScore + 1e-9) { coarseScore = sc; coarse = start }
+            start += hop
+        }
+        val reach = 25 // frames of 20 ms = 0.5 s
+        val from = max(0, coarse - hop)
+        val to = min(lastStart, coarse + hop)
+        var best = coarse
+        var bestScore = coarseScore
+        for (candidate in from..to) {
+            val sc = score(candidate)
+            if (sc > bestScore + 1e-9) { bestScore = sc; best = candidate }
+        }
+
+        // Begin and end in a pause when that costs almost nothing.
+        var chosen = best
+        var cleanest = level[best] + level[best + windowFrames - 1]
+        for (candidate in max(0, best - reach)..min(lastStart, best + reach)) {
+            if (score(candidate) < bestScore - 0.02) continue
+            val edges = level[candidate] + level[candidate + windowFrames - 1]
+            if (edges < cleanest - 1e-9) { cleanest = edges; chosen = candidate }
+        }
+        return min(chosen * frame, samples.size - window)
     }
 
     /** frame size is 20ms and analysis is bounded by the WAV parser's 8MB cap. */
