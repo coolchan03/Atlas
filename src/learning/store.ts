@@ -27,6 +27,8 @@ export interface LearnConfig {
   webDomains?: string;
   /** Keep making new question rounds after the bank is done (keep mode). */
   continuous: boolean;
+  /** Keep the screen on while it learns (on unless turned off): when the screen sleeps Android pauses the app and the learning stops. */
+  keepAwake?: boolean;
   learnerModelId?: string;
   judgeModelId?: string;
   managerModelId?: string;

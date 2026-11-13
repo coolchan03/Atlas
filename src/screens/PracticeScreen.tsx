@@ -47,7 +47,7 @@ export const PracticeScreen: React.FC = () => {
   const today = todayKey();
 
   // A timed exam keeps the screen on, and lets it sleep again afterwards or when leaving.
-  useEffect(() => { keepScreenOn(!!exam); return () => keepScreenOn(false); }, [exam]);
+  useEffect(() => { keepScreenOn(!!exam, 'practice'); return () => keepScreenOn(false, 'practice'); }, [exam]);
 
   const queueUp = (list: Exercise[]) => { freshen(list.map((e) => e.id)); setVerdict(undefined); setQueue(list); };
   const makeFor = async (forTopic: string) => {

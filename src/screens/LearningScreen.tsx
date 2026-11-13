@@ -236,6 +236,11 @@ export const LearningScreen: React.FC = () => {
         {!!st?.direction && <Text style={styles.direction}>Direction: {st.direction}</Text>}
       </View>
 
+      <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
+        onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
+        <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />
+        <Text style={styles.counts}>  Keep the screen on while it learns. When the screen sleeps, Android pauses Atlas and learning stops.</Text>
+      </TouchableOpacity>
       <View style={styles.row}>
         <TouchableOpacity
           onPress={running ? stopLearning : start}

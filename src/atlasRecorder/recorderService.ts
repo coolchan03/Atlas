@@ -74,7 +74,7 @@ export const recorderService = {
     starting = true;
     try {
       await audioRecorderService.startRecording();
-      keepScreenOn(true);
+      keepScreenOn(true, 'recorder');
       live({ phase: 'recording', startedAt: Date.now() });
     } finally { starting = false; }
   },
@@ -82,7 +82,7 @@ export const recorderService = {
   /** Stops, saves the audio and starts making the transcript. Resolves the new recording's id. */
   async stop(): Promise<string> {
     if (useRecorderLive.getState().phase !== 'recording') throw new Error('Not recording.');
-    keepScreenOn(false);
+    keepScreenOn(false, 'recorder');
     const started = useRecorderLive.getState().startedAt;
     let result: { path: string; durationSeconds: number };
     try {
@@ -159,7 +159,7 @@ export const recorderService = {
   /** Throws the recording away without saving. */
   discard(): void {
     if (useRecorderLive.getState().phase !== 'recording') return;
-    keepScreenOn(false);
+    keepScreenOn(false, 'recorder');
     audioRecorderService.cancelRecording();
     live({ phase: 'idle' });
   },

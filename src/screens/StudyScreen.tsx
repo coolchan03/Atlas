@@ -195,7 +195,7 @@ export const StudyScreen: React.FC = () => {
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
     void listVoices('en').then(setVoices).catch(() => setVoices([]));
-    return () => { stopRef.current = true; stopEpisode.current = true; stop(); stopPodcastAudio(); cancelVideoExport(); keepScreenOn(false); }; // leaving the screen stops playback
+    return () => { stopRef.current = true; stopEpisode.current = true; stop(); stopPodcastAudio(); cancelVideoExport(); keepScreenOn(false, 'study'); }; // leaving the screen stops playback
   }, []);
   // Android back button closes the open item (and stops audio) instead of leaving the screen.
   React.useEffect(() => {
@@ -233,7 +233,7 @@ export const StudyScreen: React.FC = () => {
     stopEpisode.current = false;
     setPodOpen(false);
     setBusy('Podcast');
-    keepScreenOn(true); // long job: don't let the phone sleep and pause it
+    keepScreenOn(true, 'study'); // long job: don't let the phone sleep and pause it
     try {
       const r = await generatePodcast(projectId, { ...pod, hosts: voices.length >= 2 ? pod.hosts : 1, shouldStop: () => stopEpisode.current }, (m) => setBusy(m));
       add(projectId, r);
@@ -241,14 +241,14 @@ export const StudyScreen: React.FC = () => {
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make the episode', String(e?.message || e));
-    } finally { setBusy(null); keepScreenOn(false); }
+    } finally { setBusy(null); keepScreenOn(false, 'study'); }
   };
 
   const runGame = async (type: GameType) => {
     if (blockedByProtection()) return;
     const label = PROJECT_GAMES.find((g) => g.type === type)?.label || 'Game';
     setBusy(label);
-    keepScreenOn(true);
+    keepScreenOn(true, 'study');
     try {
       const r = await generateGame(projectId, type, { topic, onStep: (m) => setBusy(m) });
       // Review and daily read live progress; they are not worth saving as items.
@@ -257,7 +257,7 @@ export const StudyScreen: React.FC = () => {
       setView(r);
     } catch (e: any) {
       Alert.alert('Could not make the game', String(e?.message || e));
-    } finally { setBusy(null); keepScreenOn(false); }
+    } finally { setBusy(null); keepScreenOn(false, 'study'); }
   };
 
   const run = async (kind: StudyResult['kind']) => {
@@ -284,7 +284,7 @@ export const StudyScreen: React.FC = () => {
     stop();
     stopPodcastAudio(); // a line playing from a file would otherwise play on top of the new one
     stopRef.current = false;
-    keepScreenOn(true);
+    keepScreenOn(true, 'study');
     let finished = false;
     const prefs = useBriefPrefs.getState();
     const audioKey = source?.audioKey;
@@ -337,14 +337,14 @@ export const StudyScreen: React.FC = () => {
       Alert.alert('Playback stopped', String(e?.message || e));
     }
     if (playToken.current !== my) return; // a newer play (seek) took over
-    keepScreenOn(false);
+    keepScreenOn(false, 'study');
     setPlaying(null);
     if (finished) { setResumeAt(0); if (isBrief) useBriefPrefs.getState().set({ listened: null }); }
   };
   const halt = () => {
     playToken.current++; stopRef.current = true; stop(); stopPodcastAudio();
     if (nativePlayer.isAvailable()) nativePlayer.stop();
-    keepScreenOn(false); setPlaying(null);
+    keepScreenOn(false, 'study'); setPlaying(null);
   };
 
   const [exporting, setExporting] = useState<VideoProgress | null>(null);
@@ -354,12 +354,12 @@ export const StudyScreen: React.FC = () => {
     halt();
     setSavedVideo(null);
     setExporting({ fraction: 0, stage: 'voice' });
-    keepScreenOn(true); // encoding takes minutes; don't let the phone sleep
+    keepScreenOn(true, 'study'); // encoding takes minutes; don't let the phone sleep
     try {
       setSavedVideo(await exportSlidesVideo(title, slides, setExporting));
     } catch (e: any) {
       if (!(e instanceof VideoExportCancelled)) Alert.alert('Could not save the video', String(e?.message || e));
-    } finally { setExporting(null); keepScreenOn(false); }
+    } finally { setExporting(null); keepScreenOn(false, 'study'); }
   };
   const askSaveVideo = (title: string, slides: NonNullable<StudyResult['slides']>) => {
     if (project?.pinVerifier) {

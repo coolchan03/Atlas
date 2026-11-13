@@ -22,3 +22,19 @@ it('tells a new person to add a subject and start a task, and drops the subject 
   rtl.fireEvent.press(list.getByTestId('new-expert-add'));
   expect(list.queryByTestId('no-experts-hint')).toBeNull();
 });
+
+it('the Teach screen can turn off keeping the screen on while it learns, and the choice is saved', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const { useLearningStore } = require('../../../src/learning/store');
+  const view = rtl.render(React.createElement(LearningScreen));
+  const toggle = () => view.getByTestId('learning-keep-awake');
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  rtl.fireEvent.press(toggle());
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  expect(Object.values(useLearningStore.getState().config).some((c: any) => c.keepAwake === false)).toBe(true);
+  rtl.fireEvent.press(toggle());
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+});

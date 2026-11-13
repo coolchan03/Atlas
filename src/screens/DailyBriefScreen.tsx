@@ -39,7 +39,7 @@ function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
     if (step) return;
     started.current = Date.now();
     setElapsed(0); setDone([]); setError(null); setStep('Starting...');
-    keepScreenOn(true);
+    keepScreenOn(true, 'brief');
     try {
       const r = await makeBriefing((m) => setStep((prev) => {
         // Keep the finished steps visible under the current one.
@@ -49,7 +49,7 @@ function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
       onDone(r);
     } catch (e: any) {
       setError(String(e?.message || e));
-    } finally { setStep(null); keepScreenOn(false); }
+    } finally { setStep(null); keepScreenOn(false, 'brief'); }
   };
   return { step, done, error, elapsed, start };
 }

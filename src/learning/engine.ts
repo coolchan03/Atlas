@@ -37,7 +37,7 @@ import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycl
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
 import { rankClaims, recallScore } from './claimText';
-import { keepScreenOn } from '../atlasVoice/tts';
+import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
@@ -513,10 +513,18 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
 }
 
 // ------------------------------------------------------------------ loop
+let awakeTimer: ReturnType<typeof setInterval> | null = null;
 export async function startLearning(agentId: string): Promise<void> {
   if (running) return;
   running = true;
-  keepScreenOn(true); // the phone must not sleep while it learns, even after leaving this screen
+  // The phone must not sleep while it learns, even after leaving this screen (unless turned off on the Teach screen). The setting is
+  // read again every few seconds, which also puts the screen-on flag back if Android dropped it.
+  const apply = () => {
+    holdBackgroundWork('learning', true); // keeps learning going even if the screen does go off
+    holdScreenOnly('learning', L().getConfig(agentId).keepAwake !== false);
+  };
+  apply();
+  awakeTimer = setInterval(() => { apply(); refreshPower(); }, 15000);
   stopRequested = false;
   baseModel = useAppStore.getState().activeModelId || '';
   const interrupted = L().get(agentId).checkpoint;
@@ -588,7 +596,9 @@ export async function startLearning(agentId: string): Promise<void> {
     }
   } finally {
     running = false;
-    keepScreenOn(false);
+    if (awakeTimer) { clearInterval(awakeTimer); awakeTimer = null; }
+    holdBackgroundWork('learning', false);
+    holdScreenOnly('learning', false);
     stopRequested = false;
     L().patch(agentId, { checkpoint: undefined });
     L().log({ agentId, kind: 'info', title: 'Learning stopped', body: '' });

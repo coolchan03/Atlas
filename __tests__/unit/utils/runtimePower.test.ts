@@ -44,4 +44,35 @@ describe('runtimePower', () => {
     expect(setKeepScreenOn).toHaveBeenCalledWith(false);
     expect(setAiWorkActive).toHaveBeenCalledWith(false, null);
   });
+
+  it('one feature letting go does not turn the screen off for another (learning kept on while Practice closes)', async () => {
+    const { holdScreenOnly, holdBackgroundWork } = require('../../../src/atlasTools/runtimePower');
+    holdBackgroundWork('learning', true);
+    holdScreenOnly('learning', true);
+    holdScreenOnly('screen:practice', true);
+    await flushNativeSync();
+    expect(setKeepScreenOn).toHaveBeenCalledWith(true);
+    expect(setAiWorkActive).toHaveBeenCalledWith(true, 'Learning in the background');
+    holdScreenOnly('screen:practice', false);
+    await flushNativeSync();
+    expect(setKeepScreenOn).not.toHaveBeenCalledWith(false);
+    // The person turns the option off: the display may sleep, but learning keeps going in the background.
+    holdScreenOnly('learning', false);
+    await flushNativeSync();
+    expect(setKeepScreenOn).toHaveBeenCalledWith(false);
+    expect(setAiWorkActive).not.toHaveBeenCalledWith(false, null);
+    holdBackgroundWork('learning', false);
+    await flushNativeSync();
+    expect(setAiWorkActive).toHaveBeenCalledWith(false, null);
+  });
+
+  it('a screen that only needs the display awake does not start the AI foreground notice', async () => {
+    const { holdScreenOnly } = require('../../../src/atlasTools/runtimePower');
+    holdScreenOnly('screen:recorder', true);
+    await flushNativeSync();
+    expect(setKeepScreenOn).toHaveBeenCalledWith(true);
+    expect(setAiWorkActive).not.toHaveBeenCalled();
+    holdScreenOnly('screen:recorder', false);
+    await flushNativeSync();
+  });
 });

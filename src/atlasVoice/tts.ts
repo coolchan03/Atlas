@@ -1,3 +1,4 @@
+import { holdScreenOnly } from '../atlasTools/runtimePower';
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
@@ -107,10 +108,12 @@ export function setEarpieceRoute(on: boolean): void {
   try { Native.setEarpiece?.(on)?.catch?.(() => undefined); } catch { /* older build */ }
 }
 
-/** Keep the screen awake (learning mode). */
-export function keepScreenOn(on: boolean): void {
-  if (!ttsAvailable()) return;
-  Native.keepScreenOn?.(on).catch(() => undefined);
+/**
+ * Keeps the screen awake for a feature, under its own reason ('recorder', 'study'...). This only forwards to the one owner of the
+ * screen-on flag (atlasTools/runtimePower), so one feature letting go cannot turn the screen off in the middle of another's job.
+ */
+export function keepScreenOn(on: boolean, reason = 'misc'): void {
+  holdScreenOnly(`screen:${reason}`, on);
 }
 
 /**

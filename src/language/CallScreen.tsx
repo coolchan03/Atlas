@@ -166,9 +166,9 @@ export const CallScreen: React.FC = () => {
   // The phone's Back button hangs up a live call (it used to be the only way out), and the screen stays on during it.
   useEffect(() => {
     if (!call || state?.phase === 'ended') return;
-    keepScreenOn(true);
+    keepScreenOn(true, 'language-call');
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { call.hangUp(); return true; });
-    return () => { sub.remove(); keepScreenOn(false); };
+    return () => { sub.remove(); keepScreenOn(false, 'language-call'); };
   }, [call, state?.phase === 'ended']); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!call || state?.phase === 'ended') return;
