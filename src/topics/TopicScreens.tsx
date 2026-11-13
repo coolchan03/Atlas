@@ -19,6 +19,7 @@ import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { keepMissed } from './review';
+import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
 import { useOffGrid } from '../atlasTools/offGrid';
 import { UndoRow, useUndo } from '../components/UndoRow';
@@ -287,6 +288,8 @@ export const TopicBoardScreen: React.FC = () => {
         <ExamMatchCard course={course} />
         <Button title="Send this course to another phone" variant="outline" testID="course-share"
           onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
+        <Button title="Save a printable study guide" variant="outline" testID="course-guide"
+          onPress={() => saveStudyGuide(course).catch((e) => Alert.alert('Could not make the guide', String(e?.message || e)))} />
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}
           onPress={(s) => (twoPane ? setPicked(s.key) : navigation.navigate('TopicSquare', { courseId, key: s.key }))} />
       </ScrollView>

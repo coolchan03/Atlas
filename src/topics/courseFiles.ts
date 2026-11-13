@@ -3,6 +3,8 @@ import RNFS from 'react-native-fs';
 import { pick, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { safeFileName, saveText } from '../study/exportFiles';
+import { shareItem } from '../utils/shareItem';
+import { studyGuideHtml } from './studyGuide';
 import { COURSE_FILE_EXTENSION, courseToFile, parseCourseFile } from './shareCourse';
 import { useTopics, type Course } from './store';
 
@@ -19,4 +21,13 @@ export async function importCourseFile(projectId?: string): Promise<string | nul
   const local = (await resolvePickedFileUri(file.uri, file.name || 'course.json')).replace(/^file:\/\//, '');
   const shared = parseCourseFile(await RNFS.readFile(local, 'utf8'));
   return useTopics.getState().addShared(shared, projectId);
+}
+
+/** Writes the course as a printable HTML study guide and opens the phone's share sheet with it (print it from a browser, or send it on). */
+export async function saveStudyGuide(course: Course): Promise<boolean> {
+  const dir = `${RNFS.DocumentDirectoryPath}/atlas-exports`;
+  await RNFS.mkdir(dir);
+  const path = `${dir}/${safeFileName(`${course.title} study guide`, '.html')}`;
+  await RNFS.writeFile(path, studyGuideHtml(course), 'utf8');
+  return shareItem({ title: `${course.title} study guide`, file: path });
 }
