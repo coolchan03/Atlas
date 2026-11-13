@@ -43,6 +43,8 @@ export interface NearbyStatus {
   lastSync?: string;
   lastError?: string;
   syncing: boolean;
+  /** A big document being sent to the other phone right now. */
+  transfer?: { label: string; doc: number; docs: number; percent: number };
 }
 type Incoming = { requestId: string; peerId: string; payload: string; newPair: boolean };
 /** A piece of recording audio (not a full sync message), or null. */
@@ -207,10 +209,16 @@ class NearbySyncService {
   /** After an exchange, send the other phone the project documents it does not have yet, textbooks included. */
   private async sendDocs(peerId: string, remote: SyncSnapshot) {
     const ids = useProjectStore.getState().projects.filter(p => !p.pinVerifier && !p.protectedBlob).map(p => p.id);
-    await sendMissingDocs(ids, remote.docs, async (piece) => {
-      const reply = await native().sync(peerId, JSON.stringify({ ...piece, sourceId: this.deviceId }));
-      if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
-    }).catch(error => this.publish({ lastError: `Documents: ${String(error?.message ?? error)}` }));
+    this.cancelTransfer = false;
+    await sendMissingDocs(ids, remote.docs, {
+      send: async (piece) => {
+        if (this.cancelTransfer) throw new Error('Cancelled');
+        const reply = await native().sync(peerId, JSON.stringify({ ...piece, sourceId: this.deviceId }));
+        if (reply.payload.startsWith('{"error":')) throw new Error(JSON.parse(reply.payload).error);
+      },
+      report: (p) => this.publish({ transfer: { label: p.name, doc: p.doc, docs: p.docs, percent: Math.round((p.piece / p.pieces) * 100) } }),
+    }).catch(error => this.publish({ lastError: this.cancelTransfer ? 'Document sending was cancelled.' : `Documents: ${String(error?.message ?? error)}` }))
+      .finally(() => this.publish({ transfer: undefined }));
   }
   /** After an exchange, send the other phone the cloned-voice samples it does not have yet. */
   private async sendVoiceRefs(peerId: string, remote: SyncSnapshot) {
@@ -309,6 +317,9 @@ class NearbySyncService {
       if (ownsBusy) { this.busy = false; this.publish({ syncing: false }); }
     }
   }
+  /** Stops sending documents after the piece in flight; they are offered again at the next sync. */
+  cancelTransfer = false;
+  stopTransfer() { this.cancelTransfer = true; }
   async init() {
     if (!nearbyAvailable || this.appListener) return;
     this.appListener = AppState.addEventListener('change', state => {

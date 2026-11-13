@@ -40,11 +40,13 @@ async function addBook(ragService: any, projectId: string, size: number) {
 it('sends a 9 MB textbook to a phone that lacks it, intact and searchable, and sends nothing to a phone that has it', async () => {
   const { ragService, docs, projectId } = await setup();
   const book = await addBook(ragService, projectId, 9 * 1024 * 1024 + 11);
-  const pieces: any[] = [];
-  expect(await docs.sendMissingDocs([projectId], [], async (p: any) => { pieces.push(JSON.parse(JSON.stringify(p))); })).toBe(1);
+  const pieces: any[] = []; const reports: any[] = [];
+  expect(await docs.sendMissingDocs([projectId], [], { send: async (p: any) => { pieces.push(JSON.parse(JSON.stringify(p))); }, report: (p: any) => reports.push(p) })).toBe(1);
   expect(pieces.filter((p) => p.kind === 'docfile')).toHaveLength(3);
+  expect(reports.map((r) => r.piece)).toEqual([1, 2, 3]);
+  expect(reports[0]).toMatchObject({ name: 'Textbook.pdf', doc: 1, docs: 1, pieces: 3 });
   expect(pieces.filter((p) => p.kind === 'doctext').length).toBeGreaterThan(0);
-  expect(await docs.sendMissingDocs([projectId], await docs.docsOnPhone([projectId]), async () => { throw new Error('should not send'); })).toBe(0);
+  expect(await docs.sendMissingDocs([projectId], await docs.docsOnPhone([projectId]), { send: async () => { throw new Error('should not send'); } })).toBe(0);
 
   // The other phone: no copy of the book yet.
   for (const d of await ragService.getDocumentsByProject(projectId)) await ragService.deleteDocument(d.id);
@@ -65,8 +67,8 @@ it('sends a 9 MB textbook to a phone that lacks it, intact and searchable, and s
 it('refuses a damaged piece and leaves the project without the document', async () => {
   const { ragService, docs, projectId } = await setup();
   await addBook(ragService, projectId, 5 * 1024 * 1024);
-  const pieces: any[] = [];
-  await docs.sendMissingDocs([projectId], [], async (p: any) => { pieces.push(JSON.parse(JSON.stringify(p))); });
+  const pieces: any[] = []; const reports: any[] = [];
+  await docs.sendMissingDocs([projectId], [], { send: async (p: any) => { pieces.push(JSON.parse(JSON.stringify(p))); }, report: (p: any) => reports.push(p) });
   for (const d of await ragService.getDocumentsByProject(projectId)) await ragService.deleteDocument(d.id);
   const bad = Buffer.from(pieces[pieces.length - 1].data, 'base64'); bad[0] ^= 1;
   pieces[pieces.length - 1].data = bad.toString('base64');

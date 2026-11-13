@@ -52,15 +52,17 @@ export async function docsOnPhone(projectIds: string[]): Promise<string[]> {
 export const isLarge = (size: number): boolean => size > INLINE_BYTES;
 
 /** Sends each document the other phone lacks: its text first, then the file. Returns how many documents were sent. */
-export async function sendMissingDocs(
-  projectIds: string[], theirs: string[] | undefined, send: (piece: DocTextBatch | DocFileChunk) => Promise<void>,
-): Promise<number> {
+export interface DocProgress { name: string; doc: number; docs: number; piece: number; pieces: number }
+export interface DocSendIo { send: (piece: DocTextBatch | DocFileChunk) => Promise<void>; report?: (p: DocProgress) => void }
+
+export async function sendMissingDocs(projectIds: string[], theirs: string[] | undefined, io: DocSendIo): Promise<number> {
+  const { send, report } = io;
   if (!Array.isArray(theirs)) return 0;
   const have = new Set(theirs);
   let sent = 0;
-  for (const doc of await localDocs(projectIds)) {
+  const missing = (await localDocs(projectIds)).filter((d) => !have.has(docKey(d.meta)));
+  for (const doc of missing) {
     const key = docKey(doc.meta);
-    if (have.has(key)) continue;
     const text = (await ragService.getDocumentChunks(doc.id)).map(({ content, position }) => ({ content, position }));
     if (!text.length) continue;
     const batches: DocTextBatch['chunks'][] = [];
@@ -77,6 +79,7 @@ export async function sendMissingDocs(
       const data = await RNFS.read(doc.path, DOC_CHUNK_BYTES, index * DOC_CHUNK_BYTES, 'base64');
       digest.update(data);
       await send({ kind: 'docfile', key, meta: doc.meta, index, total, data, ...(index + 1 === total ? { checksum: digest.hex() } : {}) });
+      report?.({ name: doc.meta.name, doc: sent + 1, docs: missing.length, piece: index + 1, pieces: total });
     }
     sent++;
   }

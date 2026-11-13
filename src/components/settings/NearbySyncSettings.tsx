@@ -137,6 +137,12 @@ export function NearbySyncSettings() {
           </Pressable>
         </View>)}
         {status.lastSync && <Text style={[styles.note, { color: colors.textSecondary }]}>Last sync: {new Date(status.lastSync).toLocaleString()}</Text>}
+        {status.transfer && (
+          <View testID="sync-transfer">
+            <Text style={[styles.note, { color: colors.textSecondary }]}>Sending {status.transfer.label} ({status.transfer.doc} of {status.transfer.docs}): {status.transfer.percent}%</Text>
+            <Pressable onPress={() => nearbySync.stopTransfer()} accessibilityRole="button" testID="sync-transfer-cancel"><Text style={{ color: colors.primary }}>Cancel sending</Text></Pressable>
+          </View>
+        )}
         {status.syncing && <Text style={[styles.note, { color: colors.textSecondary }]}>Synchronizing…</Text>}
         {status.lastError && <Text style={[styles.note, { color: colors.textSecondary }]}>Last issue: {status.lastError}</Text>}
       </>}
