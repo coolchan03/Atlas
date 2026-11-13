@@ -150,6 +150,13 @@ class WorkerDownload(
 
         val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE)
 
+        // A 206 is only safe to append when the server says it starts exactly where our partial file ends.
+        if (code == 206 && targetFile.exists() && !contentRangeStartsAt(response.header("Content-Range"), targetFile.length())) {
+            Log.w(TAG, "handleResponse mismatched Content-Range id=$downloadId header=${response.header("Content-Range")} fileBytes=${targetFile.length()}")
+            if (!targetFile.delete()) Log.w(TAG, "Failed to delete misaligned partial file: ${targetFile.path}")
+            return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
+        }
+
         val currentFileBytes = if (targetFile.exists() && code == 206) targetFile.length() else 0L
         val contentLength = body.contentLength()
         val totalBytes = calculateTotalBytes(code, currentFileBytes, contentLength, download.totalBytes)
@@ -230,6 +237,7 @@ class WorkerDownload(
         // its LiteRT models. A transient Content-Length / payload undershoot from
         // the CDN should not be treated as corruption when no SHA is available.
         val skipSizeValidation = parseSkipSizeValidation(download.metadataJson)
+        var shaVerified = false
         if (authoritativeExpectedBytes > 0L && !skipSizeValidation) {
             val sizeDiffPercent = abs(bytesWritten - authoritativeExpectedBytes).toDouble() / authoritativeExpectedBytes
             if (sizeDiffPercent > 0.001) {
@@ -254,6 +262,18 @@ class WorkerDownload(
                     if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
                     return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
                 }
+                shaVerified = true
+            }
+        }
+
+        // A published SHA-256 is always checked after a complete transfer, even when the size matches exactly:
+        // an equal-size bit flip must never be marked COMPLETED.
+        val publishedSha = download.expectedSha256
+        if (!publishedSha.isNullOrEmpty() && !shaVerified) {
+            if (computeFileSha256(targetFile).lowercase() != publishedSha.lowercase()) {
+                Log.w(TAG, "streamToFile SHA mismatch id=$downloadId file=${download.fileName}")
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
+                return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
             }
         }
 
@@ -365,6 +385,14 @@ class WorkerDownload(
                     description = "Keeps large model downloads running in the background"
                 }
             )
+        }
+
+        /** True when a `Content-Range: bytes start-end/total` header starts exactly at [offset]. */
+        internal fun contentRangeStartsAt(header: String?, offset: Long): Boolean {
+            val m = Regex("^bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)$").find(header?.trim() ?: return false) ?: return false
+            val start = m.groupValues[1].toLongOrNull() ?: return false
+            val end = m.groupValues[2].toLongOrNull() ?: return false
+            return start == offset && end >= start
         }
 
         internal fun computeFileSha256(file: File): String {
