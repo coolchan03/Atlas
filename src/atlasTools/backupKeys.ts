@@ -13,7 +13,7 @@ export const RESTORABLE_STORE_KEYS = new Set([
   'atlas-language',
   // Practice questions and review dates (textbook question banks), exam prep, study plan, About me, Home widgets, call choices.
   'atlas-exercises', 'atlas-cpa-prep', 'atlas-study-plan', 'atlas-about-me', 'atlas-custom-home-shortcuts-v1', 'atlas-call-prefs',
-  'atlas-pressure-log', 'atlas-memory-choice-v1',
+  'atlas-pressure-log', 'atlas-memory-choice-v1', 'atlas-ask-later',
 ]);
 
 /**

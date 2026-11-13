@@ -18,6 +18,7 @@ import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summa
 import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
+import { AskLaterCard } from './AskLaterCard';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
@@ -286,6 +287,7 @@ export const TopicBoardScreen: React.FC = () => {
         <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-progress">{p.done} of {p.total} squares · {stars} stars</Text>
         <SourcesCard course={course} />
         <ExamMatchCard course={course} />
+        <AskLaterCard course={course} />
         <Button title="Send this course to another phone" variant="outline" testID="course-share"
           onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
         <Button title="Save a printable study guide" variant="outline" testID="course-guide"

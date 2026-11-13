@@ -33,6 +33,7 @@ const STORES: Record<string, () => any> = {
   'atlas-topics': () => require('../topics/store').useTopics,
   'atlas-pins': () => require('../pins/store').usePins,
   'atlas-exercises': () => require('../study/exercises').useExerciseStore,
+  'atlas-ask-later': () => require('../topics/askLater').useAskLater,
   'atlas-cpa-prep': () => require('../cpa/store').useCpa,
   'atlas-study-plan': () => require('../study/planStore').usePlanStore,
   'atlas-custom-home-shortcuts-v1': () => require('../screens/HomeScreen/homeShortcutStore').useHomeShortcuts,
