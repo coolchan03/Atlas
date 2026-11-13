@@ -12,14 +12,16 @@ import { sha256 } from 'js-sha256';
 import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue } from '../../atlasTools/backupKeys';
 import { rehydrateStores } from '../../atlasTools/storeRegistry';
 import { DEVICE_SETTING, keepThisDevice } from '../../atlasTools/deviceSettings';
+import { mergeExercises } from './exerciseMerge';
 import { LIST_STORES, listIds, mergeListStore, type Baseline } from './listMerge';
 
 const STAMPS = 'atlas-sync-store-stamps-v1';
 export const APP_STORE = 'local-llm-app-storage';
 export const RECORDINGS = 'atlas-recordings';
 export const LANGUAGE = 'atlas-language';
+export const EXERCISES = 'atlas-exercises';
 /** Stores merged item by item every time, so work done on both phones is all kept. */
-const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE, ...LIST_STORES]);
+const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE, EXERCISES, ...LIST_STORES]);
 /** The offline library list holds file paths that exist only on one phone: syncing it breaks the other's list. */
 const NOT_SYNCED = new Set(['atlas-offline-library']);
 const BASELINE = 'atlas-sync-list-baseline-v1';
@@ -90,6 +92,7 @@ export function combine(key: string, { local, remote, deletedRecordings = {}, re
     mine.state = { ...mine.state, recordings: [...kept, ...fresh] };
     return JSON.stringify(mine);
   }
+  if (key === EXERCISES) return local ? mergeExercises(local, remote, remoteNewer) : remote;
   if (key === LANGUAGE) return local ? mergeLanguage(local, remote, remoteNewer) : remote;
   if (LIST_STORES.has(key)) return local ? mergeListStore(key, { local, remote, remoteNewer, baseline }) : remote;
   return remote;
