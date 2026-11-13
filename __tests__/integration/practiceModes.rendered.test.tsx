@@ -84,12 +84,12 @@ it('shows the daily goal and streak only when it is switched on', () => {
 it('clears the practice history after asking, and keeps the daily-goal setting', () => {
   const { rtl, r, store } = mount();
   const { Alert } = require('react-native');
-  rtl.act(() => { store.getState().addSet([calc('a', 'Tax', 1)]); store.getState().record('a', false); store.getState().setGoal({ on: true }); });
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 1), projectId: 'p1' }, { ...calc('b', 'Tax', 1), projectId: 'other' }]); store.getState().record('a', false); store.getState().setGoal({ on: true }); });
   const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t: any, _m: any, buttons: any) => { buttons.find((b: any) => b.text === 'Clear').onPress(); });
   rtl.fireEvent.press(r.getByTestId('practice-clear'));
   expect(ask).toHaveBeenCalled();
-  expect(Object.keys(store.getState().exercises)).toHaveLength(0);
-  expect(store.getState().progress).toEqual({});
+  expect(Object.keys(store.getState().exercises)).toEqual(['b']); // only this project's questions go; another project's stay
+  expect(store.getState().progress.a).toBeUndefined();
   expect(store.getState().goal.on).toBe(true);
   expect(r.getByTestId('practice-note').props.children).toBe('Practice history cleared.');
   ask.mockRestore();
