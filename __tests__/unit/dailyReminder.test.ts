@@ -1,4 +1,3 @@
-import { NativeModules } from 'react-native';
 import { addDailyReminder, dailyRule } from '../../src/atlasTools/deviceTools';
 
 it('makes a daily rule that ends on the exam day', () => {
@@ -9,8 +8,8 @@ it('makes a daily rule that ends on the exam day', () => {
 
 it('opens the calendar with a 19:00 daily event that is not in the past', async () => {
   const open = jest.fn().mockResolvedValue(true);
-  (NativeModules as any).AtlasDevice = { addRepeatingCalendarEvent: open };
   jest.resetModules();
+  (require('react-native').NativeModules as any).AtlasDevice = { addRepeatingCalendarEvent: open };
   const { addDailyReminder: fresh } = require('../../src/atlasTools/deviceTools');
   await fresh('Study', { until: '2026-12-20' });
   const [title, start, end, rule] = open.mock.calls[0];

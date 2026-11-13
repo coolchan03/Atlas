@@ -168,7 +168,7 @@ export async function addDailyReminder(title: string, more: { hour?: number; unt
   const { hour = 19, until, description = '' } = more;
   const start = new Date(); start.setHours(hour, 0, 0, 0);
   if (start.getTime() < Date.now()) start.setDate(start.getDate() + 1);
-  if (!Native.addRepeatingCalendarEvent) return 'This build cannot open the calendar for a repeating event.';
+  if (!Native?.addRepeatingCalendarEvent) return 'This build cannot open the calendar for a repeating event.';
   await Native.addRepeatingCalendarEvent(title, start.getTime(), start.getTime() + 30 * 60000, dailyRule(until), description);
   return 'Opened the calendar with a daily reminder filled in. Save it there.';
 }
