@@ -83,3 +83,21 @@ describe('understanding is shown from how you answered, not from a tick', () => 
     expect(topicEvidence(other, progress(other.map((x) => x.id), other.map((x) => x.id)), { topic: 'Leases', projectId: 'p1' }).status).toBe('not-checked');
   });
 });
+
+describe('the exam date', () => {
+  const { pace, describePace, validDay } = require('../../../src/cpa/schedule');
+  const now = new Date(2026, 5, 1, 15, 0, 0).getTime();
+  it('counts the days and how many topics a week that leaves', () => {
+    const p = pace('2026-06-29', 8, now);
+    expect(p).toEqual({ daysLeft: 28, remaining: 8, perWeek: 2 });
+    expect(describePace(p)).toBe('28 days to go, 8 topics still to understand: about 2 a week.');
+    expect(describePace(pace('2026-06-29', 0, now))).toMatch(/Every topic is understood/);
+    expect(describePace(pace('2026-05-01', 3, now))).toMatch(/has passed/);
+    expect(describePace(pace('2026-06-01', 3, now))).toBe('The exam is today.');
+  });
+  it('ignores a date that is not real', () => {
+    expect(validDay('2026-02-30')).toBeUndefined();
+    expect(validDay('June 1')).toBeUndefined();
+    expect(pace('nonsense', 3, now)).toBeNull();
+  });
+});

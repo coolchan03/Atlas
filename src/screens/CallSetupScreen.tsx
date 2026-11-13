@@ -56,6 +56,8 @@ export const CallSetupScreen: React.FC = () => {
     await startCall((screen, params) => navigation.navigate(screen, params), choice);
     setBusy(false);
   };
+  const lastName = last.agentId ? agents.find((a) => a.id === last.agentId)?.name : undefined;
+  const callAgain = async () => { setBusy(true); await startCall((screen, params) => navigation.navigate(screen, params), last); setBusy(false); };
   const save = () => {
     addShortcut({ title: callTitle(choice.agentId), action: 'call', agentId: choice.agentId, modelId: choice.modelId, projectId: choice.projectId, voiceProfileId: choice.voiceProfileId });
     Alert.alert('Saved on Home', `${callTitle(choice.agentId)} is now a one-tap button on the Home screen.`);
@@ -66,6 +68,7 @@ export const CallSetupScreen: React.FC = () => {
       <ScreenHeader title="Call" />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.hint, { color: colors.textSecondary }]}>Talk hands-free with any agent. Choose who, which model and which project folder it can use, then call. Your choice is remembered.</Text>
+        {Object.keys(last).length > 0 && <Button title={lastName ? `Call ${lastName} again` : 'Call again'} onPress={callAgain} disabled={busy} testID="call-again" />}
         <Choices testID="call-agent" title="Who to call" options={[{ id: '', label: 'No agent' }, ...agents.map((a) => ({ id: a.id, label: a.name }))]} value={choice.agentId ?? ''} onPick={(id) => set({ agentId: id || undefined })} />
         <Choices testID="call-model" title="Model" hint="Loaded now means whatever is ready. Choosing another loads it first." options={[{ id: '', label: 'Loaded now' }, ...models.map((m) => ({ id: m.id, label: m.name }))]} value={choice.modelId ?? ''} onPick={(id) => set({ modelId: id || undefined })} />
         <Choices testID="call-project" title="Project folder" hint="The agent can use that project's documents, such as your therapy folder." options={[{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))]} value={choice.projectId ?? ''} onPick={(id) => set({ projectId: id || undefined })} />

@@ -135,3 +135,18 @@ it('Check on a topic opens a quiz of that topic from this exam only, never anoth
   expect(view.queryByText(/Statement b\d/)).toBeNull();
   expect(view.queryByText(/about Inventory/)).toBeNull();
 });
+
+it('shows how many days are left and how many topics a week that means once an exam date is set', () => {
+  const { rtl, React, screens, stores } = open();
+  stores.cpa.setState({ exams: {} });
+  require('../../src/cpa/setup').setupAllCpaExams();
+  mockParams = { code: 'AUD' };
+  const view = rtl.render(React.createElement(screens.CpaExamScreen));
+  expect(view.getByText(/Add your exam date/)).toBeTruthy();
+  expect(view.getByTestId('cpa-date-set').props.accessibilityState?.disabled).toBe(true);
+  const date = new Date(Date.now() + 70 * 86_400_000);
+  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  rtl.fireEvent.changeText(view.getByTestId('cpa-date-input'), iso);
+  rtl.fireEvent.press(view.getByTestId('cpa-date-set'));
+  expect(view.getByTestId('cpa-pace').props.children).toMatch(/^70 days to go, \d+ topics still to understand: about [\d.]+ a week\.$/);
+});

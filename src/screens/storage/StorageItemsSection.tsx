@@ -27,11 +27,13 @@ export const StorageItemsSection: React.FC = () => {
 
   if (groups === null) return null;
   if (!groups.length) return <Card><Text style={[styles.empty, { color: colors.textSecondary }]}>Nothing downloaded or recorded yet.</Text></Card>;
+  const total = groups.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.bytes, 0), 0);
   return (
     <>
+      <Text style={[styles.meta, { color: colors.textSecondary }]} testID="storage-total">Atlas keeps {size(total)} in the lists below.</Text>
       {groups.map((group) => (
         <Card key={group.id} style={styles.card} testID={`storage-group-${group.id}`}>
-          <Text style={[styles.title, { color: colors.text }]}>{group.title}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{group.title} ({size(group.items.reduce((s, i) => s + i.bytes, 0))})</Text>
           {group.items.map((item) => (
             <View key={item.id} style={styles.row}>
               <View style={styles.info}>

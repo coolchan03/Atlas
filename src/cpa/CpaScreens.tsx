@@ -15,6 +15,7 @@ import { EXAMS, examInfo, type ExamCode } from './blueprints';
 import { addToPractice } from './importQuestions';
 import { parseOutline } from './outline';
 import { describeEvidence, topicEvidence } from './progress';
+import { describePace, pace, validDay } from './schedule';
 import { setupAllCpaExams } from './setup';
 import { useCpa, type CpaTopic } from './store';
 
@@ -96,6 +97,8 @@ export const CpaExamScreen: React.FC = () => {
   const addTopic = useCpa((s) => s.addTopic);
   const removeTopic = useCpa((s) => s.removeTopic);
   const replaceOutline = useCpa((s) => s.replaceOutline);
+  const setExamDate = useCpa((s) => s.setExamDate);
+  const [dateText, setDateText] = useState('');
   const [docs, setDocs] = useState<number | null>(null);
   const [message, setMessage] = useState('');
   const [newTopic, setNewTopic] = useState('');
@@ -120,6 +123,15 @@ export const CpaExamScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>{info.name}</Text>
         <Text style={{ color: colors.textSecondary }} testID="cpa-summary">{status.understood} of {status.rows.length} topics understood · {status.covered} ticked · {status.questions} practice questions</Text>
+
+        <Card style={styles.card} testID="cpa-date">
+          <Text style={[styles.title, { color: colors.text }]}>Exam date</Text>
+          {status.exam.examDate ? <Text style={{ color: colors.text }} testID="cpa-pace">{describePace(pace(status.exam.examDate, status.rows.length - status.understood)!)}</Text> : <Text style={[styles.small, { color: colors.textSecondary }]}>Add your exam date to see how many topics a week it takes.</Text>}
+          <View style={styles.row}>
+            <TextInput value={dateText} onChangeText={setDateText} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="cpa-date-input" autoCapitalize="none" />
+            <Button title="Set" variant="outline" disabled={!validDay(dateText.trim())} onPress={() => { setExamDate(code, validDay(dateText.trim())); setDateText(''); }} testID="cpa-date-set" />
+          </View>
+        </Card>
 
         <Card style={styles.card}>
           <Text style={[styles.title, { color: colors.text }]}>Your materials</Text>

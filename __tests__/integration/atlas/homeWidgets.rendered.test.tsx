@@ -96,6 +96,12 @@ it('the Call tile lets you call a chosen agent, with a chosen model and project 
   expect(useAtlasVoiceStore.getState().handsFree).toBe(true);
   expect(useCallPrefs.getState().last).toMatchObject({ agentId: therapist.id, modelId: 'm2', projectId: project.id }); // remembered for next time
 
+  // The next time, one tap calls the same agent again.
+  expect(view.getByText('Call Therapist again')).toBeTruthy();
+  const before = useChatStore.getState().conversations.length;
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('call-again')); });
+  await rtl.waitFor(() => expect(useChatStore.getState().conversations.length).toBe(before + 1));
+
   // Jake, with whatever model is loaded and no project.
   rtl.fireEvent.press(view.getByTestId(`call-agent-${jake.id}`));
   rtl.fireEvent.press(view.getByTestId('call-model-none'));

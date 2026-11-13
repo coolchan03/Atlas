@@ -24,8 +24,9 @@ it('lists the cloned-voice samples and a recording, and deleting one asks first 
 
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   const view = rtl.render(React.createElement(StorageItemsSection));
-  expect(await view.findByText('Cloned voice samples')).toBeTruthy();
+  expect(await view.findByText(/Cloned voice samples \(/)).toBeTruthy();
   expect(view.getByText('Mom')).toBeTruthy();
+  expect(view.getByTestId('storage-total').props.children.join('')).toMatch(/Atlas keeps \d+ KB in the lists below/);
 
   rtl.fireEvent.press(view.getByTestId('storage-delete-ref-a'));
   const [title, message, buttons] = alert.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
