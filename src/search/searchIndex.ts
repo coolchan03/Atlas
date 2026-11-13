@@ -50,7 +50,7 @@ function rank(text: string, q: string, words: string[]): number {
 
 export interface SearchData {
   conversations: { id: string; title: string; messages: { role: string; content: string; isSystemInfo?: boolean }[]; pinVerifier?: string; isPrivate?: boolean; updatedAt?: string }[];
-  projects: { id: string; name: string; description: string; course?: string }[];
+  projects: { id: string; name: string; description: string; course?: string; pinVerifier?: string; protectedBlob?: unknown }[];
   models: { id: string; name: string }[];
 }
 
@@ -80,8 +80,10 @@ export function searchEverything(query: string, data: SearchData, limit = 6): Se
   }
   for (const p of data.projects) {
     if (p.course === 'language') continue;
-    const score = Math.max(rank(p.name, q, words) * 3, rank(p.description, q, words));
-    if (score) hits.push({ kind: 'project', id: p.id, title: p.name, detail: p.description || undefined, route: 'ProjectDetail', params: { projectId: p.id }, icon: 'folder', score });
+    // A protected project can be found by its name only: its description and contents are never matched or shown.
+    const locked = !!(p.pinVerifier || p.protectedBlob);
+    const score = locked ? rank(p.name, q, words) * 3 : Math.max(rank(p.name, q, words) * 3, rank(p.description, q, words));
+    if (score) hits.push({ kind: 'project', id: p.id, title: p.name, detail: locked ? undefined : p.description || undefined, route: 'ProjectDetail', params: { projectId: p.id }, icon: 'folder', score });
   }
   for (const m of data.models) {
     const score = rank(m.name, q, words) * 3;

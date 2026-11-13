@@ -53,3 +53,12 @@ describe('private chats stay out of search (audit P1)', () => {
     expect(ids).not.toContain('c4');
   });
 });
+
+describe('protected projects (audit P1)', () => {
+  it('match by name only and show no description', () => {
+    const d = { ...data, projects: [{ id: 'sec', name: 'Taxes', description: 'madrid secret plan', pinVerifier: 'x' }] };
+    expect(searchEverything('madrid', d as any).filter((h: any) => h.kind === 'project')).toHaveLength(0);
+    const byName = searchEverything('taxes', d as any).find((h: any) => h.kind === 'project') as any;
+    expect(byName.detail).toBeUndefined();
+  });
+});
