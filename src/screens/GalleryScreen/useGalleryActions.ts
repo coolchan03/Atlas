@@ -159,7 +159,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
       if (Platform.OS === 'ios') {
-        await shareItem({ title: 'Image', file: image.imagePath });
+        await shareItem({ file: image.imagePath });
         return;
       }
       await PermissionsAndroid.request(

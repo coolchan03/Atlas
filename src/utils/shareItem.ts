@@ -6,12 +6,13 @@ import { NativeModules, Platform, Share } from 'react-native';
  * Closing the sheet is not an error. Returns whether the sheet opened.
  */
 export async function shareItem(item: { title?: string; text?: string; file?: string }): Promise<boolean> {
-  const { title = 'Atlas', text, file } = item;
+  const { title: given, text, file } = item;
+  const title = given ?? 'Atlas';
   try {
     if (file) {
       const device = Platform.OS === 'android' ? NativeModules.AtlasDevice : undefined;
       if (device?.shareFile) { await device.shareFile(file, title); return true; }
-      await Share.share({ title, url: file.startsWith('file://') ? file : `file://${file}` });
+      await Share.share({ ...(given ? { title } : {}), url: file.startsWith('file://') ? file : `file://${file}` });
       return true;
     }
     await Share.share({ title, message: text ?? '' });
