@@ -4,6 +4,7 @@ import { useTheme } from '../../theme';
 import { documentService } from '../../services/documentService';
 import { addImportedQuestions } from '../../learning/importService';
 import { divide, normalizeQuestions, type ImportTarget, type NormalizedQuestion } from '../../learning/questionImport';
+import { parseQuestionTable } from '../../learning/questionTable';
 import { sectionStyles as s } from './sectionStyles';
 
 const TARGETS: Array<{ id: ImportTarget; label: string; note: string }> = [
@@ -27,7 +28,8 @@ export const QuestionImport: React.FC<{ subjectId?: string; onAdded: () => void;
     setBusy(true);
     try {
       const ask = (system: string, user: string) => require('../../study/engine').askModel(system, user);
-      const items = await normalizeQuestions(source, ask, topics);
+      // A table (CSV or tab-separated) is read in code, with no AI and no size limit.
+      const items = parseQuestionTable(source) ?? await normalizeQuestions(source, ask, topics);
       if (!items.length) Alert.alert('No questions found', 'The AI could not find questions with answers in that text. Each question needs its answer written next to it.');
       setFound(items.length ? items : null);
     } catch (e: any) { Alert.alert('Could not read the questions', String(e?.message || e)); } finally { setBusy(false); }
@@ -36,7 +38,7 @@ export const QuestionImport: React.FC<{ subjectId?: string; onAdded: () => void;
     const { pick, types, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
     try {
       const [file] = await pick({ type: [types.allFiles], mode: 'import', allowMultiSelection: false });
-      if (file) setSource(await documentService.textFromPicked(file.uri, file.name ?? 'questions.txt', 60000));
+      if (file) setSource(await documentService.textFromPicked(file.uri, file.name ?? 'questions.txt', /\.(csv|tsv)$/i.test(file.name ?? '') ? 2000000 : 60000));
     } catch (e: any) {
       if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) Alert.alert('Could not open that file', String(e?.message || e));
     }
