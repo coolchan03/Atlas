@@ -19,6 +19,62 @@ class AtlasSensorModule(private val ctx: ReactApplicationContext) :
 
     override fun getName() = "AtlasSensor"
 
+    // Every sensor the phone has, one live reading each, for the Sensors screen.
+    private val liveTypes = mutableSetOf<Int>()
+    private val live = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            try {
+                val m = Arguments.createMap()
+                m.putInt("type", e.sensor.type)
+                val values = Arguments.createArray()
+                e.values.forEach { values.pushDouble(it.toDouble()) }
+                m.putArray("values", values)
+                m.putInt("accuracy", e.accuracy)
+                ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("AtlasSensorValue", m)
+            } catch (_: Exception) {}
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    /** The phone's own sensors (wake-up duplicates left out): type, name, maker, range and resolution. */
+    @ReactMethod
+    fun listSensors(promise: Promise) {
+        try {
+            val out = Arguments.createArray()
+            sensors.getSensorList(Sensor.TYPE_ALL).filter { !it.isWakeUpSensor }.forEach { s ->
+                val m = Arguments.createMap()
+                m.putInt("type", s.type); m.putString("name", s.name); m.putString("vendor", s.vendor)
+                m.putString("stringType", s.stringType)
+                m.putDouble("maxRange", s.maximumRange.toDouble()); m.putDouble("resolution", s.resolution.toDouble())
+                out.pushMap(m)
+            }
+            promise.resolve(out)
+        } catch (e: Throwable) { promise.reject("SENSOR_LIST", e.message ?: e.toString()) }
+    }
+
+    /** Starts live readings from the default sensor of a type. Resolves false if there is none or it needs a permission. */
+    @ReactMethod
+    fun startSensor(type: Int, promise: Promise) {
+        try {
+            if (type in liveTypes) { promise.resolve(true); return }
+            val s = sensors.getDefaultSensor(type)
+            if (s == null) { promise.resolve(false); return }
+            val ok = sensors.registerListener(live, s, SensorManager.SENSOR_DELAY_UI)
+            if (ok) liveTypes.add(type)
+            promise.resolve(ok)
+        } catch (_: SecurityException) { promise.resolve(false) }
+        catch (e: Throwable) { promise.reject("SENSOR_START", e.message ?: e.toString()) }
+    }
+
+    @ReactMethod
+    fun stopSensor(type: Int, promise: Promise) {
+        try {
+            val s = sensors.getDefaultSensor(type)
+            if (s != null && liveTypes.remove(type)) sensors.unregisterListener(live, s)
+            promise.resolve(true)
+        } catch (e: Throwable) { promise.reject("SENSOR_STOP", e.message ?: e.toString()) }
+    }
+
     @ReactMethod fun addListener(@Suppress("UNUSED_PARAMETER") eventName: String) {}
     @ReactMethod fun removeListeners(@Suppress("UNUSED_PARAMETER") count: Int) {}
 

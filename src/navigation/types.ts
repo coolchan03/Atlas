@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Learning: { agentId?: string } | undefined;
   TeachList: undefined;
   Workflows: undefined;
+  Sensors: undefined;
   Knowledge: undefined;
   Emergency: undefined;
   OfflineLibrary: undefined;

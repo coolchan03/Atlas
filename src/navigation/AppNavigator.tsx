@@ -75,6 +75,7 @@ import { ReadAloudScreen } from '../screens/ReadAloudScreen';
 import { LearningReliabilityScreen } from '../screens/LearningReliabilityScreen';
 import { LearningListScreen } from '../screens/LearningListScreen';
 import { WorkflowsScreen } from '../workflows/WorkflowsScreen';
+import { SensorsScreen } from '../sensors/SensorsScreen';
 import { useRegisteredScreens } from './screenRegistry';
 import { NAV_ITEMS, TAB_LONG_PRESS, resolveNavBar, type NavItemId } from '../utils/navBar';
 import { openAppLink } from './appLinks';
@@ -320,6 +321,7 @@ export const AppNavigator: React.FC = () => {
         />
         <RootStack.Screen name="TeachList" component={LearningListScreen} />
         <RootStack.Screen name="Workflows" component={WorkflowsScreen} />
+        <RootStack.Screen name="Sensors" component={SensorsScreen} />
         <RootStack.Screen name="Learning" component={LearningScreen} />
         <RootStack.Screen name="Knowledge" component={KnowledgeScreen} />
         <RootStack.Screen name="Emergency" component={EmergencyScreen} />
