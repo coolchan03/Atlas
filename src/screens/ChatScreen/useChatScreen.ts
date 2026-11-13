@@ -25,6 +25,7 @@ import { saveReportToProject } from '../../services/researchReportStorage';
 import { saveImageToGallery } from './useSaveImage';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { checkAnswerPrompt } from '../../services/checkAnswer';
+import { showCodeCheck } from '../../study/verifyCalc';
 import { toggleChatTool, toolsForConversation } from '../../services/tools/chatTools';
 import {
   isSuspiciousRecoveredImageModel,
@@ -395,7 +396,8 @@ export const useChatScreen = () => {
     const msgs = activeConversation?.messages ?? [];
     const upTo = msgs.findIndex((m) => m.id === message.id);
     const earlier = (upTo < 0 ? msgs : msgs.slice(0, upTo)).map((m) => m.content);
-    handleSend(checkAnswerPrompt(message.content, earlier));
+    const askModel = () => handleSend(checkAnswerPrompt(message.content, earlier));
+    if (!showCodeCheck(message.content, askModel)) askModel(); // calculations are recomputed in code first, not by asking the same model again
   };
 
   // After picking a text model, replay the stashed message (no retype needed).
