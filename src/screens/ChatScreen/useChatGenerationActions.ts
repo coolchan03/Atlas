@@ -415,7 +415,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, messageT
     + (chatNote ? `\n\nInstructions for this chat:\n${chatNote}` : '')
     + locationNote()
     + learnedNote(messageText)
-    + skillsNote(messageText, skillsFor(conversation?.agentId), llmService.getPerformanceSettings?.()?.contextLength || 4096, agentSkillNames(conversation?.agentId))
+    + skillsNote(messageText, skillsFor(conversation?.agentId), { contextTokens: llmService.getPerformanceSettings?.()?.contextLength || 4096, specialist: agentSkillNames(conversation?.agentId) })
     + (llmService.isThinkingEnabled?.() ? thinkingNote(deps.settings as any) : '');
   return { enabledTools, rawPrompt, localToolSupport };
 }

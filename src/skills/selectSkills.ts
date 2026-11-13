@@ -39,7 +39,8 @@ export function pickSkill(message: string, skills: Skill[], specialist: string[]
   const on = skills.filter((s) => s.enabled);
   const named = calledSkill(message, on);
   if (named) return named;
-  const ranked = on.map((s) => ({ s, score: relevance(message, s) + (specialist.includes(s.name) ? SPECIALIST_BOOST : 0) })).sort((a, b) => b.score - a.score);
+  // The boost only helps a skill the message already has something to do with; it never makes an unrelated skill apply.
+  const ranked = on.map((s) => { const rel = relevance(message, s); return { s, score: rel > 0 && specialist.includes(s.name) ? rel + SPECIALIST_BOOST : rel }; }).sort((a, b) => b.score - a.score);
   const best = ranked[0];
   if (best && best.score >= MIN_SCORE) return best.s;
   // An agent with exactly one specialty always works that way, even when the message is short ("here it is").
@@ -47,7 +48,9 @@ export function pickSkill(message: string, skills: Skill[], specialist: string[]
 }
 
 /** The note added under the chat's instructions, or '' when no skill applies. */
-export function skillsNote(message: string, skills: Skill[], contextTokens: number, specialist: string[] = []): string {
+/** `limits` is the model's context size, or that and the skills the chosen agent specialises in. */
+export function skillsNote(message: string, skills: Skill[], limits: number | { contextTokens: number; specialist?: string[] }): string {
+  const { contextTokens, specialist = [] } = typeof limits === 'number' ? { contextTokens: limits } : limits;
   const skill = pickSkill(message, skills, specialist);
   if (!skill) return '';
   const room = skillBudgetChars(contextTokens);
