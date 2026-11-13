@@ -12,6 +12,10 @@ import { check, missedExercises, practiceSet, streak, topicScores, useExerciseSt
 import { generatePractice } from '../study/practice';
 import { makeDrillSet, type DrillKind } from '../study/drills';
 import { buildExam, gradeExam, type Exam, type ExamResult } from '../study/exam';
+import { QuestionImport } from './learningReliability/QuestionImport';
+import { addToPractice } from '../cpa/importQuestions';
+import { useCpa } from '../cpa/store';
+import { pickAndAddFiles, summarize } from '../learning/documents';
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -30,6 +34,10 @@ export const PracticeScreen: React.FC = () => {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [result, setResult] = useState<ExamResult | null>(null);
   const [cards, setCards] = useState<Exercise[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  // An exam's checklist topics, when this project is one, so imported questions are filed under them.
+  const cpaExams = useCpa((s) => s.exams);
+  const checklistTopics = useMemo(() => Object.values(cpaExams).find((e) => e?.projectId === projectId)?.topics.map((t) => t.name) ?? [], [cpaExams, projectId]);
   const [pickDrill, setPickDrill] = useState(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
@@ -99,6 +107,19 @@ export const PracticeScreen: React.FC = () => {
           <Flashcards cards={cards} colors={colors} onStop={() => setCards(null)}
             onGotIt={(id) => setCards((c) => (c ?? []).filter((x) => x.id !== id))}
             onAgain={(id) => setCards((c) => { const me = (c ?? []).find((x) => x.id === id); return me ? [...(c ?? []).filter((x) => x.id !== id), me] : c; })} />
+        )}
+        {home && (
+          <View>
+            <TouchableOpacity onPress={() => setAdding((v) => !v)} accessibilityRole="button" testID="practice-add"><Text style={{ color: colors.primary }}>{adding ? 'Hide' : 'Add your own questions or files'}</Text></TouchableOpacity>
+            {adding && (
+              <View>
+                <QuestionImport topics={checklistTopics} onAdded={() => undefined} onConfirm={(items) => { const r = addToPractice(items, projectId, checklistTopics); return `${r.added} questions added${r.repeats ? `, ${r.repeats} skipped because they were already there` : ''}.`; }} />
+                <TouchableOpacity onPress={() => { pickAndAddFiles(projectId, setNote).then((r) => { if (r) setNote(summarize(r)); }).catch((e: any) => Alert.alert('Could not add those', String(e?.message || e))); }} accessibilityRole="button" testID="practice-add-files">
+                  <Text style={{ color: colors.primary }}>Add files to this project (textbooks, notes)</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
         {home && (
           <PracticeHome topic={topic} setTopic={setTopic} busy={busy} note={note} pickDrill={pickDrill} setPickDrill={setPickDrill}

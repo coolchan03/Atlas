@@ -21,6 +21,7 @@ import { isPal, useAgentStore } from '../stores/agentStore';
 import { useAppStore } from '../stores/appStore';
 import { SliderSetting } from '../components/SliderSetting';
 import { ModelChips } from '../components/ModelChips';
+import { ProjectChips } from '../components/ProjectChips';
 import { VoiceProfileChips } from '../components/VoiceProfileChips';
 import { Switch } from 'react-native';
 
@@ -31,7 +32,7 @@ const PAL_PROFILE_FIELDS: Array<{ key: 'age' | 'occupation' | 'origin' | 'appear
   { key: 'appearance', label: 'Appearance / other notes', placeholder: 'e.g. tall, dark hair, athletic' },
 ];
 
-function buildAdvFields(adv: { custom: boolean; temperature: number; topP: number; maxTokens: number; repeatPenalty: number; contextLength: number; toolsCustom: boolean; tools: string[]; modelId: string; voiceProfileId: string }) {
+function buildAdvFields(adv: { custom: boolean; temperature: number; topP: number; maxTokens: number; repeatPenalty: number; contextLength: number; toolsCustom: boolean; tools: string[]; modelId: string; voiceProfileId: string; projectId: string }) {
   return {
     temperature: adv.custom ? adv.temperature : undefined,
     topP: adv.custom ? adv.topP : undefined,
@@ -41,6 +42,7 @@ function buildAdvFields(adv: { custom: boolean; temperature: number; topP: numbe
     enabledTools: adv.toolsCustom ? adv.tools : undefined,
     modelId: adv.modelId || undefined,
     voiceProfileId: adv.voiceProfileId || undefined,
+    projectId: adv.projectId || undefined,
   };
 }
 
@@ -144,6 +146,7 @@ export const AgentEditScreen: React.FC = () => {
     toolsCustom: false,
     modelId: '',
     voiceProfileId: '',
+    projectId: '',
     tools: (g?.enabledTools as string[]) ?? ['search_knowledge_base'],
   });
 
@@ -162,6 +165,7 @@ export const AgentEditScreen: React.FC = () => {
         toolsCustom: Array.isArray(a.enabledTools),
         modelId: a.modelId ?? '',
         voiceProfileId: a.voiceProfileId ?? '',
+        projectId: a.projectId ?? '',
         tools: a.enabledTools ?? p.tools,
       }));
     }
@@ -296,6 +300,11 @@ export const AgentEditScreen: React.FC = () => {
           <Text style={styles.label}>Model</Text>
           <Text style={styles.hint}>Picking this agent switches to this model (loading takes a few seconds). "Current model" = don't switch.</Text>
           <ModelChips value={adv.modelId} onChange={(id) => setAdv((p) => ({ ...p, modelId: id }))} colors={colors} />
+
+          {/* Project folder whose documents this agent uses */}
+          <Text style={styles.label}>Project folder</Text>
+          <Text style={styles.hint}>New chats with this agent use this project's documents (for example a therapist with your therapy folder). A chat already in a project keeps its own.</Text>
+          <ProjectChips value={adv.projectId} onChange={(id) => setAdv((p) => ({ ...p, projectId: id }))} colors={colors} testID="agent-project" />
 
           {/* Voice used to read this agent's answers aloud */}
           <Text style={styles.label}>Voice</Text>

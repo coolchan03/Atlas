@@ -16,6 +16,7 @@ import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus }
 import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
+import { QuestionImport } from './learningReliability/QuestionImport';
 const literalStyles = StyleSheet.create({
   s1: { marginTop: 0 },
   s2: { fontWeight: '700' },
@@ -361,6 +362,9 @@ export const LearningScreen: React.FC = () => {
           <TouchableOpacity disabled={running} onPress={() => auditNow(agentId)} style={styles.smallBtn}>
           <Text style={styles.smallBtnText}>Manager audit now</Text>
         </TouchableOpacity>
+      {foldHead('own-questions', 'Your own questions and tests')}
+      {!folded['own-questions'] && <QuestionImport subjectId={agentId} onAdded={() => undefined} />}
+
       <Text style={styles.label}>Question bank</Text>
       <Text style={styles.note}>The learner writes it, the judge approves or rejects (the learner can argue back once), the manager can drop or add questions. Tap a question to open it. You can then approve it, reject it or remove it yourself.</Text>
       {bank.filter((b) => b.status !== 'dropped').slice(-40).map((b) => {

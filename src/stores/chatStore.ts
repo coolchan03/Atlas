@@ -1,5 +1,6 @@
 /* eslint-disable max-params -- Existing createConversation API keeps its compatibility with private-chat callers. */
 import { create } from 'zustand';
+import { agentProjectFolder } from './agentFolder';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { encryptedChatStorage } from './encryptedChatStorage';
 import { Message, Conversation, GenerationMeta } from '../types';
@@ -224,7 +225,7 @@ export const useChatStore = create<ChatState>()(
 
       setConversationAgent: (conversationId, agentId) => {
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
-          (conv) => ({ ...conv, agentId: agentId ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+          (conv) => ({ ...conv, agentId: agentId ?? undefined, projectId: conv.projectId ?? agentProjectFolder(agentId), updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationVoiceProfile: (conversationId, voiceProfileId) => {

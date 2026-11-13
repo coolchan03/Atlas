@@ -40,6 +40,8 @@ interface TopicsState {
   addShared: (shared: SharedCourse, projectId?: string) => string;
   addSources: (id: string, sources: CourseSource[]) => void;
   removeSource: (id: string, sourceId: string) => void;
+  /** Connects the course to a project (its documents are searched for each square), or disconnects it. */
+  setProject: (id: string, projectId: string | undefined) => void;
   clearContent: (id: string, key: string) => void;
   /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
   addRemedial: (id: string, afterKey: string) => boolean;
@@ -72,6 +74,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     return id;
   },
   addSources: (id, sources) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, sources: [...(c.sources ?? []), ...sources].slice(-MAX_SOURCES) } : c)) })),
+  setProject: (id, projectId) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, projectId } : c)) })),
   removeSource: (id, sourceId) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, sources: (c.sources ?? []).filter((x) => x.id !== sourceId) } : c)) })),
   clearContent: (id, key) => set((s) => ({ courses: s.courses.map((c) => {
     if (c.id !== id) return c;

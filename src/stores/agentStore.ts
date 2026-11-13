@@ -36,6 +36,8 @@ export interface Agent {
   enabledTools?: string[];
   /** 'pal' = a character to talk to or role-play with (Friend, Jake). Unset = a working agent, except the two pals Atlas ships. */
   kind?: 'agent' | 'pal';
+  /** A project folder whose documents this agent uses in every new chat (a chat that is already in a project keeps its own). */
+  projectId?: string;
   /** Names of Skills (from the skill library) this agent specialises in. They apply even if the person never added them to Skills. */
   skills?: string[];
   /** Quick facts about the pal character for reference (shown on their edit screen). */

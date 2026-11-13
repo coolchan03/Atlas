@@ -14,7 +14,8 @@ import { courseProgress, useTopics, type Course } from './store';
 import { createCourse, findSources, squareContent } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, type CourseSource } from './sources';
-import { addFilesToProject, pickFiles, projectForSubject, type PickedFile } from '../learning/documents';
+import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
+import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
@@ -183,6 +184,16 @@ function SourcesCard({ course }: { course: Course }) {
     try { add(await findSources(course.topic, course.request.goal, setStep)); } catch (e: any) { setError(String(e?.message || e)); }
     setBusy(false);
   };
+  const addToProject = async () => {
+    setError(null);
+    try {
+      // A course with no project gets one named after its subject, so the files have somewhere to live.
+      const projectId = course.projectId ?? projectForSubject(course.topic);
+      if (!course.projectId) useTopics.getState().setProject(course.id, projectId);
+      const result = await pickAndAddFiles(projectId, setStep);
+      if (result) Alert.alert('Documents', summarize(result));
+    } catch (e: any) { setError(String(e?.message || e)); }
+  };
   const saveNote = () => {
     add([makeSource({ title: noteTitle || 'My notes', kind: 'note', text: noteText }, `note-${Date.now()}`)]);
     setNoting(false); setNoteTitle(''); setNoteText('');
@@ -218,6 +229,9 @@ function SourcesCard({ course }: { course: Course }) {
       ))}
       {busy && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]}>{step}</Text></View>}
       {!!error && <Text style={{ color: colors.error }} testID="sources-error">{error}</Text>}
+      <Text style={[styles.meta, { color: colors.textMuted }]}>Project folder: its documents (a whole textbook is fine) are searched for each square you open.</Text>
+      <ProjectChips value={course.projectId ?? ''} onChange={(id) => useTopics.getState().setProject(course.id, id || undefined)} colors={colors} testID="course-project" />
+      <Chip label="Add files to the project" on={false} onPress={addToProject} testID="course-project-files" />
       {noting ? (
         <View style={styles.gap}>
           <TextInput value={noteTitle} onChangeText={setNoteTitle} placeholder="Title" placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="note-title" />
