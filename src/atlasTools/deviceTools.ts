@@ -7,7 +7,6 @@ import RNFS from 'react-native-fs';
  */
 const Native: any = NativeModules.AtlasDevice;
 const TEXT_EXT = /\.(txt|md|markdown|html?|css|js|ts|json|csv|xml|ya?ml|ini|log|py|java|kt|c|cpp|h|sh)$/i;
-const MAX_READ = 120_000;
 /** How much of one file is read into memory so every page of a long textbook can be reached (each reply still shows only one page). */
 const MAX_FILE_TEXT = 6_000_000;
 

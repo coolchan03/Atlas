@@ -38,5 +38,7 @@ jobs:
         run: ./node_modules/.bin/patch-package
       - name: Type check
         run: ./node_modules/.bin/tsc --noEmit -p .
+      - name: Lint (ESLint on src)
+        run: ./node_modules/.bin/eslint src --quiet
       - name: Run all available core regression tests
         run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent

@@ -8,6 +8,7 @@ const INK_DIM = '#CCCCCC';
 const RING = '#888888';
 const BACKDROP = '#000000';
 const LEVEL_BACKDROP = '#15803D';
+const LABEL_BACKING = 'rgba(0,0,0,0.78)';
 
 type Accel = { x: number; y: number; z: number } | null;
 
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
   disc: { position: 'absolute', backgroundColor: INK },
   middle: { top: '50%' },
   ring: { position: 'absolute', borderWidth: 3, borderColor: RING },
-  tiltBack: { backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 2 },
+  tiltBack: { backgroundColor: LABEL_BACKING, borderRadius: 24, paddingHorizontal: 18, paddingVertical: 2 },
   tilt: { color: INK, fontSize: 72, fontWeight: '300' },
   caption: { color: INK_DIM, fontSize: 14, marginTop: 8 },
 });
