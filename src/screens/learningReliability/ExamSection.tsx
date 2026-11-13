@@ -1,3 +1,4 @@
+import { sampleNote } from '../../learning/confidence';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../theme';
@@ -13,7 +14,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 /** One line for one run: right answers, outdated figures, unsupported citations, speed and memory. */
 export function describeResult(r: ExamResult): string {
   const m = r.metrics;
-  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}`;
+  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}`;
 }
 
 const History: React.FC<{ history: ExamResult[] }> = ({ history }) => {

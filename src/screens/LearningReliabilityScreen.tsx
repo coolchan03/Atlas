@@ -1,3 +1,4 @@
+import { confidenceOf } from '../learning/confidence';
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -63,7 +64,7 @@ export function LearningReliabilityScreen() {
           <View key={c.id} style={[styles.claim, { borderColor: colors.border }]}>
             <Text style={[styles.strong, { color: colors.text }]}>{c.claim}</Text>
             <Text style={[styles.small, styles.meta, { color: colors.textSecondary }]}>
-              {agents.find((a) => a.id === c.agentId)?.name || c.agentId || 'Agent not recorded'} · {c.topic} · {c.status} · {c.citations} citations · {c.sourcePassages} source passages
+              {agents.find((a) => a.id === c.agentId)?.name || c.agentId || 'Agent not recorded'} · {c.topic} · {confidenceOf(c).label} · {c.citations} citations · {c.sourcePassages} source passages
             </Text>
             <TouchableOpacity onPress={() => showSources(c.id)} style={styles.showEvidence} accessibilityLabel={`Review evidence for ${c.topic}`}>
               <Text style={{ color: colors.primary }}>{selected === c.id ? 'Evidence shown below' : 'Show evidence & review'}</Text>
