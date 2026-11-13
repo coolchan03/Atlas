@@ -22,11 +22,11 @@ it('lenient keeps only clear rejections of questions; strict keeps all; balanced
   expect(rejectionKind('too vague, not specific')).toBe('vague');
   expect(rejectionKind('duplicate of question 2')).toBe('duplicate');
   expect(rejectionKind('off topic')).toBe('off-task');
-  expect(rejectionStands('lenient', 'too vague', 0, 8)).toBe(false);
-  expect(rejectionStands('lenient', 'duplicate of 2', 0, 8)).toBe(true);
-  expect(rejectionStands('strict', 'too vague', 0, 8)).toBe(true);
-  expect(rejectionStands('balanced', 'too vague', 3, 8)).toBe(true);
-  expect(rejectionStands('balanced', 'too vague', 4, 8)).toBe(false);
+  expect(rejectionStands('lenient', 'too vague', { vagueSoFar: 0, size: 8 })).toBe(false);
+  expect(rejectionStands('lenient', 'duplicate of 2', { vagueSoFar: 0, size: 8 })).toBe(true);
+  expect(rejectionStands('strict', 'too vague', { vagueSoFar: 0, size: 8 })).toBe(true);
+  expect(rejectionStands('balanced', 'too vague', { vagueSoFar: 3, size: 8 })).toBe(true);
+  expect(rejectionStands('balanced', 'too vague', { vagueSoFar: 4, size: 8 })).toBe(false);
 });
 
 it('the instructions to the judge change with the level', () => {

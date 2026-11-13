@@ -30,11 +30,11 @@ export function rejectionKind(reason: string): RejectionKind {
 }
 
 /** Whether a rejection stands: lenient keeps only the clear ones, balanced allows "vague" for at most half the bank, strict keeps all. */
-export function rejectionStands(strictness: Strictness | undefined, reason: string, vagueSoFar: number, bankSize: number): boolean {
+export function rejectionStands(strictness: Strictness | undefined, reason: string, bank: { vagueSoFar: number; size: number }): boolean {
   const kind = rejectionKind(reason);
   if (kind !== 'vague' || (strictness ?? DEFAULT_STRICTNESS) === 'strict') return true;
   if ((strictness ?? DEFAULT_STRICTNESS) === 'lenient') return false;
-  return vagueSoFar < Math.floor(bankSize / 2);
+  return bank.vagueSoFar < Math.floor(bank.size / 2);
 }
 
 /** The judge's instructions for questions and for reports, by how demanding it is. */

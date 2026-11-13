@@ -226,7 +226,7 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
   items.forEach((it, i) => {
     const v = r.get(i + 1);
     // A rejection only for being too broad is kept only as far as the judge's strictness allows (lenient: never).
-    const stands = !!v && !v.ok && rejectionStands(cfg.judgeStrictness, v.reason, vague, items.length);
+    const stands = !!v && !v.ok && rejectionStands(cfg.judgeStrictness, v.reason, { vagueSoFar: vague, size: items.length });
     if (stands && v && /vague|specific|broad|general/i.test(v.reason)) vague += 1;
     if (!v || v.ok || !stands) L().updateItem(agent.id, it.id, { status: 'approved' });
     else { L().updateItem(agent.id, it.id, { status: 'rejected', reason: v.reason || 'rejected' }); rejected.push({ ...it, reason: v.reason }); }
