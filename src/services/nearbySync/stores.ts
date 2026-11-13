@@ -9,7 +9,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
-import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue } from '../../atlasTools/backupKeys';
+import { EXCLUDED_BACKUP_KEYS, RESTORABLE_STORE_KEYS, sanitizeBackupValue, stripProtectedDerivatives } from '../../atlasTools/backupKeys';
 import { rehydrateStores } from '../../atlasTools/storeRegistry';
 import { keepConflictCopy } from './conflictCopies';
 import { DEVICE_SETTING, keepThisDevice } from '../../atlasTools/deviceSettings';
@@ -43,7 +43,8 @@ export const syncedStoreKeys = (): string[] =>
 
 /** The part of a store that is shared: for app settings only the person's choices. */
 export function shareable(key: string, raw: string): string | null {
-  const safe = sanitizeBackupValue(raw);
+  const clean = sanitizeBackupValue(raw);
+  const safe = clean && stripProtectedDerivatives(key, clean);
   if (!safe || key !== APP_STORE) return safe;
   const parsed = JSON.parse(safe);
   const settings = Object.fromEntries(Object.entries(parsed?.state?.settings ?? {}).filter(([k]) => !DEVICE_SETTING.test(k)));

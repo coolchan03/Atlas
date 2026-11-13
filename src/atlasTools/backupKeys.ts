@@ -56,3 +56,32 @@ export function sanitizeBackupValue(raw: string): string | null {
   try { return JSON.stringify(stripSensitiveFields(JSON.parse(raw))); }
   catch { return null; }
 }
+
+/** Ids of projects that are protected (PIN or sealed). Anything made from their documents must not leave this phone in readable form. */
+function protectedProjectIds(): Set<string> {
+  try {
+    const { useProjectStore } = require('../stores/projectStore'); // NOSONAR: lazy so this module stays light
+    return new Set(useProjectStore.getState().projects.filter((p: any) => p.pinVerifier || p.protectedBlob).map((p: any) => p.id));
+  } catch { return new Set(); }
+}
+
+/**
+ * Practice questions and courses made from a protected project's documents are derived from protected material, but they live in
+ * ordinary stores. They are left out of backups and sync so protected content never travels as readable text.
+ */
+export function stripProtectedDerivatives(key: string, raw: string): string {
+  if (key !== 'atlas-exercises' && key !== 'atlas-topics') return raw;
+  const locked = protectedProjectIds();
+  if (!locked.size) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    const state = parsed?.state;
+    if (!state) return raw;
+    if (key === 'atlas-topics' && Array.isArray(state.courses)) state.courses = state.courses.filter((c: any) => !(c?.projectId && locked.has(c.projectId)));
+    if (key === 'atlas-exercises' && state.exercises && typeof state.exercises === 'object') {
+      const drop = Object.keys(state.exercises).filter((id) => { const p = state.exercises[id]?.projectId; return p && locked.has(p); });
+      for (const id of drop) { delete state.exercises[id]; if (state.progress) delete state.progress[id]; }
+    }
+    return JSON.stringify(parsed);
+  } catch { return raw; }
+}

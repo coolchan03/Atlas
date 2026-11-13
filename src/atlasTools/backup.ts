@@ -24,11 +24,12 @@ import { useBackupReminder } from './backupReminder';
  * Plain JSON exports omit private content, project documents and downloaded models.
  */
 const MAGIC = 'OffGridAtlasBackup';
-import { RESTORABLE_STORE_KEYS, EXCLUDED_BACKUP_KEYS, sanitizeBackupValue } from './backupKeys';
+import { RESTORABLE_STORE_KEYS, EXCLUDED_BACKUP_KEYS, sanitizeBackupValue, stripProtectedDerivatives } from './backupKeys';
 
 export { RESTORABLE_STORE_KEYS, EXCLUDED_BACKUP_KEYS, sanitizeBackupValue };
 function portableStoreValue(key: string, raw: string): string | null {
-  const safe = sanitizeBackupValue(raw);
+  const clean = sanitizeBackupValue(raw);
+  const safe = clean && stripProtectedDerivatives(key, clean);
   if (!safe) return null;
   if (key !== 'local-llm-project-storage' && key !== 'local-llm-chat-storage') return safe;
   try {
