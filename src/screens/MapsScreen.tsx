@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { OfflineNote } from '../components/OfflineNote';
 import { shareItem } from '../utils/shareItem';
 import {
   StyleSheet, ActivityIndicator, Alert, Clipboard, FlatList, Linking, Modal, NativeEventEmitter, NativeModules, ScrollView, Switch, Text, TextInput,
@@ -311,6 +312,7 @@ export const MapsScreen: React.FC = () => {
         <View style={literalStyles.s44}>
           {mapArea}
           <ScrollView style={literalStyles.s45} contentContainerStyle={literalStyles.s46}>
+            <OfflineNote what="downloading maps" />
             {gpsCard}{actions}{placesList}
           </ScrollView>
         </View>
@@ -318,6 +320,7 @@ export const MapsScreen: React.FC = () => {
         <>
           {mapArea}
           <ScrollView style={literalStyles.s47} contentContainerStyle={literalStyles.s48}>
+            <OfflineNote what="downloading maps" />
             {gpsCard}{actions}{placesList}
           </ScrollView>
         </>

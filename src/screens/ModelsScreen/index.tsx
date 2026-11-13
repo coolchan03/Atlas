@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from 'react';
+import { OfflineNote } from '../../components/OfflineNote';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -71,6 +72,7 @@ export const ModelsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
+      <OfflineNote what="downloading models" />
       {/* Collapse header/import/tabs when showing model detail - detail has its own header.
            Use height:0 + overflow:hidden instead of unmounting so AttachStep components
            stay registered with the SpotlightTourProvider (prevents broken spotlight overlays). */}

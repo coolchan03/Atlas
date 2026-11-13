@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { OfflineNote } from '../components/OfflineNote';
 import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackground } from '../components/ScreenBackground';
@@ -115,6 +116,7 @@ export const DailyBriefScreen: React.FC = () => {
         <Text style={styles.title}>Daily briefing</Text>
       </View>
       <ScrollView contentContainerStyle={[styles.content, wide.column]} keyboardShouldPersistTaps="handled">
+        <OfflineNote what="the daily briefing" />
         <Card
           title={today ? today.title : "Today's news, read to you"}
           subtitle={[new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), today?.minutes && `about ${today.minutes} min`].filter(Boolean).join(' · ')}
