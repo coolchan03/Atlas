@@ -14,6 +14,7 @@ import { useTheme } from '../theme';
 import { useChatStore } from '../stores';
 import { protectChat, permanentlyUnprotectChat } from '../stores/encryptedChatStorage';
 import { deleteChatWithUndo } from '../chats/undoDelete';
+import { chatContextFor } from '../chats/chatContext';
 import type { Conversation } from '../types';
 import { conversationToPlainText, conversationToText, hasShareableTurns } from '../utils/chatExport';
 import { safeFileName, saveMarkdown, saveText } from '../study/exportFiles';
@@ -90,6 +91,7 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
             <Text numberOfLines={1} style={{ color: colors.textMuted, paddingHorizontal: 20, paddingBottom: 7 }}>
               {menuTarget.pinVerifier ? 'Locked conversation' : menuTarget.title}
             </Text>
+            {menuAction('info', 'What this chat uses', () => finishMenu(() => Alert.alert('What this chat uses', chatContextFor(menuTarget).join('\n'))))}
             {menuAction('edit-2', 'Rename', () => finishMenu(() => {
               setRenameTitle(menuTarget.title); setRenameTarget(menuTarget);
             }))}
