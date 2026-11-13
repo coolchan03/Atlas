@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Fold } from '../components/Fold';
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Button } from '../components/Button';
 import { CitationChips } from '../components/CitationChips';
@@ -97,7 +98,7 @@ export interface HomeProps {
   topic: string; setTopic: (t: string) => void; busy: boolean; note: string; pickDrill: boolean; setPickDrill: (b: boolean) => void;
   goalOn: boolean; goalLine: string | null; perDay: number; setGoalOn: (on: boolean) => void;
   scores: Array<{ topic: string; attempts: number; percent: number }>;
-  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onExam: () => void; onMock: (count: number) => void; onCards: () => void; onClear: () => void;
+  onMake: () => void; onDrills: (kinds: DrillKind[]) => void; onStart: (topic?: string) => void; onMock: (count: number) => void; onCards: () => void; onClear: () => void;
   colors: Colors;
 }
 
@@ -107,17 +108,18 @@ export const PracticeHome: React.FC<HomeProps> = (p) => (
     {p.goalLine && <Text testID="goal-line" style={{ color: p.colors.textSecondary }}>{p.goalLine}</Text>}
     <TextInput testID="practice-topic" value={p.topic} onChangeText={p.setTopic} placeholder="Topic or chapter (optional)" placeholderTextColor={p.colors.textMuted} style={[st.input, st.top8, { borderColor: p.colors.border, color: p.colors.text }]} />
     <Button title={p.busy ? 'Writing questions...' : 'Make questions from my documents'} onPress={p.onMake} loading={p.busy} disabled={p.busy} testID="practice-make" style={st.top10} />
+    <Button title="Practise what I have (missed and due first)" variant="outline" onPress={() => p.onStart(p.topic.trim() || undefined)} testID="practice-start" style={st.top8} />
+    <Text style={[st.small12, st.top10, { color: p.colors.textMuted }]}>Mock exam: questions spread evenly over every topic, 90 seconds each, with your pace by topic at the end.</Text>
+    <View style={st.wrap}>
+      {[10, 20, 50].map((n) => <Button key={n} title={`${n} questions`} variant="outline" onPress={() => p.onMock(n)} testID={`practice-mock-${n}`} style={st.top8} />)}
+    </View>
+    <Fold title="More ways to practise" testID="practice-more">
+    <Button title="Flashcards from my misses" variant="outline" onPress={p.onCards} testID="practice-cards" style={st.top8} />
     <Button title="Accounting drills (balance sheet, interest, loans, statements...)" variant="outline" onPress={() => p.onDrills(ACCOUNTING_DRILLS)} testID="practice-drills" style={st.top8} />
     <Button title="Research statistics drills (doctoral courses)" variant="outline" onPress={() => p.onDrills(STATS_DRILLS)} testID="practice-stats-drills" style={st.top8} />
     <Button title={p.pickDrill ? 'Hide drill types' : 'Pick one drill type'} variant="ghost" onPress={() => p.setPickDrill(!p.pickDrill)} testID="practice-pick-drill" style={st.top6} />
     {p.pickDrill && <DrillPicker kinds={[...ACCOUNTING_DRILLS, ...STATS_DRILLS]} onPick={(k) => p.onDrills([k])} colors={p.colors} />}
-    <Button title="Practise what I have (missed and due first)" variant="outline" onPress={() => p.onStart(p.topic.trim() || undefined)} testID="practice-start" style={st.top8} />
-    <Text style={[st.small12, st.top10, { color: p.colors.textMuted }]}>Mock exam: questions spread evenly over every topic, 90 seconds each, with your pace by topic at the end.</Text>
-    <View style={st.wrap}>
-      {[10, 25, 50].map((n) => <Button key={n} title={`${n} questions`} variant="outline" onPress={() => p.onMock(n)} testID={`practice-mock-${n}`} style={st.top8} />)}
-    </View>
-    <Button title="Timed exam (20 questions, 30 minutes)" variant="outline" onPress={p.onExam} testID="practice-exam" style={st.top8} />
-    <Button title="Flashcards from my misses" variant="outline" onPress={p.onCards} testID="practice-cards" style={st.top8} />
+    </Fold>
     {!!p.note && <Text testID="practice-note" style={[st.top10, { color: p.colors.textSecondary }]}>{p.note}</Text>}
     <View style={[st.wrap, st.top14]}>
       <Switch value={p.goalOn} onValueChange={p.setGoalOn} testID="goal-switch" />

@@ -1,4 +1,4 @@
-import { buildMockExam, gradeExam } from '../../../src/study/exam';
+import { buildMockExam, gradeExam, paceOf } from '../../../src/study/exam';
 import type { Exercise } from '../../../src/study/exercises';
 
 const q = (id: string, topic: string): Exercise => ({ id, topic, kind: 'truefalse', prompt: id, answer: true });
@@ -23,8 +23,9 @@ it('reports the pace by topic when times were recorded', () => {
   const exam = buildMockExam(bank, {}, { count: 3 });
   const bankById = Object.fromEntries(bank.map((e) => [e.id, e]));
   const times = Object.fromEntries(exam.ids.map((id, i) => [id, (i + 1) * 20]));
-  const graded = gradeExam(exam, bankById, {}, times);
-  expect(graded.pace?.averageSeconds).toBe(40);
-  expect(graded.pace?.slowest[0].seconds).toBe(60);
+  const pace = paceOf(exam, bankById, times);
+  expect(pace?.averageSeconds).toBe(40);
+  expect(pace?.slowest[0].seconds).toBe(60);
   expect(gradeExam(exam, bankById, {}).pace).toBeUndefined();
+  expect(paceOf(exam, bankById, {})).toBeUndefined();
 });

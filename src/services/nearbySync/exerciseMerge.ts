@@ -5,20 +5,32 @@
  */
 type Obj = Record<string, any>;
 
+/** True when `theirs` has been studied more than `mine` (more attempts, or the same attempts and a later review date). */
+const studiedMore = (theirs: Obj, mine: Obj): boolean => {
+  const a = theirs.attempts ?? 0; const b = mine.attempts ?? 0;
+  return a > b || (a === b && (theirs.due ?? 0) > (mine.due ?? 0));
+};
+
+function mergeProgress(mine: Obj = {}, theirs: Obj = {}): Obj {
+  const out: Obj = { ...mine };
+  for (const [id, p] of Object.entries<Obj>(theirs)) if (!out[id] || studiedMore(p, out[id])) out[id] = p;
+  return out;
+}
+
+function mergeDaily(mine: Obj = {}, theirs: Obj = {}): Obj {
+  const out: Obj = { ...mine };
+  for (const [day, n] of Object.entries<number>(theirs)) out[day] = Math.max(out[day] ?? 0, n);
+  return out;
+}
+
 export function mergeExercises(localRaw: string, remoteRaw: string, remoteNewer = true): string {
   const a = JSON.parse(localRaw); const b = JSON.parse(remoteRaw);
   const x: Obj = a.state ?? {}; const y: Obj = b.state ?? {};
-  const progress: Obj = { ...(x.progress ?? {}) };
-  for (const [id, theirs] of Object.entries<Obj>(y.progress ?? {})) {
-    const mine = progress[id];
-    if (!mine || (theirs.attempts ?? 0) > (mine.attempts ?? 0) || ((theirs.attempts ?? 0) === (mine.attempts ?? 0) && (theirs.due ?? 0) > (mine.due ?? 0))) progress[id] = theirs;
-  }
-  const daily: Obj = { ...(x.daily ?? {}) };
-  for (const [day, n] of Object.entries<number>(y.daily ?? {})) daily[day] = Math.max(daily[day] ?? 0, n);
   const state = {
     ...(remoteNewer ? { ...x, ...y } : { ...y, ...x }),
     exercises: { ...(y.exercises ?? {}), ...(x.exercises ?? {}) },
-    progress, daily,
+    progress: mergeProgress(x.progress, y.progress),
+    daily: mergeDaily(x.daily, y.daily),
   };
   return JSON.stringify({ ...(remoteNewer ? { ...a, ...b } : { ...b, ...a }), state, version: Math.max(a.version ?? 0, b.version ?? 0) });
 }

@@ -19,6 +19,7 @@ import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
+import { Fold } from '../components/Fold';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
@@ -285,6 +286,7 @@ export const TopicBoardScreen: React.FC = () => {
         {!!course.summary && <Text style={[styles.meta, { color: colors.textSecondary }]}>{course.summary}</Text>}
         {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
         <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-progress">{p.done} of {p.total} squares · {stars} stars</Text>
+        <Fold title="Sources, exam match, questions and sharing" testID="course-tools">
         <SourcesCard course={course} />
         <ExamMatchCard course={course} />
         <AskLaterCard course={course} />
@@ -292,6 +294,7 @@ export const TopicBoardScreen: React.FC = () => {
           onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
         <Button title="Save a printable study guide" variant="outline" testID="course-guide"
           onPress={() => saveStudyGuide(course).catch((e) => Alert.alert('Could not make the guide', String(e?.message || e)))} />
+        </Fold>
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}
           onPress={(s) => (twoPane ? setPicked(s.key) : navigation.navigate('TopicSquare', { courseId, key: s.key }))} />
       </ScrollView>

@@ -59,6 +59,12 @@ const settingFields = (shared: string): Record<string, unknown> => {
 };
 
 /** Applies a remote store to the local raw value. Returns the new raw value, or null to leave it. */
+/** Stores merged by their own rules, item by item (the language course, practice questions). */
+const WHOLE_STORE_MERGE: Record<string, (local: string, remote: string, remoteNewer: boolean) => string> = {
+  [LANGUAGE]: (l, r, n) => mergeLanguage(l, r, n),
+  [EXERCISES]: (l, r, n) => mergeExercises(l, r, n),
+};
+
 export function combine(key: string, { local, remote, deletedRecordings = {}, remoteNewer = true, times, baseline }: {
   local: string | null; remote: string; deletedRecordings?: Record<string, number>; remoteNewer?: boolean;
   /** List stores: the ids both phones had at the last sync (listMerge.ts). */
@@ -92,8 +98,8 @@ export function combine(key: string, { local, remote, deletedRecordings = {}, re
     mine.state = { ...mine.state, recordings: [...kept, ...fresh] };
     return JSON.stringify(mine);
   }
-  if (key === EXERCISES) return local ? mergeExercises(local, remote, remoteNewer) : remote;
-  if (key === LANGUAGE) return local ? mergeLanguage(local, remote, remoteNewer) : remote;
+  const whole = WHOLE_STORE_MERGE[key];
+  if (whole) return local ? whole(local, remote, remoteNewer) : remote;
   if (LIST_STORES.has(key)) return local ? mergeListStore(key, { local, remote, remoteNewer, baseline }) : remote;
   return remote;
 }

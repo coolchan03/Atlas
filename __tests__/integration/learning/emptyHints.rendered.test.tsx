@@ -38,3 +38,26 @@ it('the Teach screen can turn off keeping the screen on while it learns, and the
   rtl.fireEvent.press(toggle());
   expect(toggle().props.accessibilityState.checked).toBe(true);
 });
+
+it('Refine with AI suggests a clearer task, which can be used or ignored', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const engine = require('../../../src/study/engine');
+  const ask = jest.spyOn(engine, 'askModel').mockResolvedValue('"Improved task: Become an expert in small business income tax: sole proprietors and S corporations, deductions and estimated payments, at an intermediate level, with answers that cite the rule."');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const { useLearningStore } = require('../../../src/learning/store');
+  const view = rtl.render(React.createElement(LearningScreen));
+  expect(view.getByTestId('learning-refine')).toBeTruthy();
+  rtl.fireEvent.changeText(view.getByPlaceholderText(/Treat wound infections/), 'tax stuff for small business');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('learning-refine')); });
+  await rtl.waitFor(() => expect(view.getByTestId('learning-suggestion')).toBeTruthy());
+  expect(ask.mock.calls[0][1]).toContain('TASK: tax stuff for small business');
+  expect(view.getByText(/Suggested task: Become an expert in small business income tax/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('learning-suggestion-keep'));
+  expect(view.queryByTestId('learning-suggestion')).toBeNull();
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('learning-refine')); });
+  await rtl.waitFor(() => expect(view.getByTestId('learning-suggestion-use')).toBeTruthy());
+  rtl.fireEvent.press(view.getByTestId('learning-suggestion-use'));
+  expect(Object.values(useLearningStore.getState().config).some((c: any) => /^Become an expert in small business income tax/.test(c.topic))).toBe(true);
+});

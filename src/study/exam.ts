@@ -27,7 +27,7 @@ export function buildMockExam(exercises: Exercise[], progress: Record<string, Pr
 export const secondsLeft = (exam: Exam, now: number): number => Math.max(0, Math.round(exam.minutes * 60 - (now - exam.startedAt) / 1000));
 
 /** Grades the answers given so far. A question left blank counts as wrong and as unanswered. */
-export function gradeExam(exam: Exam, exercises: Record<string, Exercise>, answers: Record<string, unknown>, times?: Record<string, number>): ExamResult {
+export function gradeExam(exam: Exam, exercises: Record<string, Exercise>, answers: Record<string, unknown>): ExamResult {
   const topics = new Map<string, { correct: number; total: number }>();
   const wrong: string[] = [];
   let correct = 0; let unanswered = 0;
@@ -42,12 +42,20 @@ export function gradeExam(exam: Exam, exercises: Record<string, Exercise>, answe
     topics.set(ex.topic ?? 'General', { correct: t.correct + (ok ? 1 : 0), total: t.total + 1 });
   }
   const total = exam.ids.length;
-  const result: ExamResult = { correct, total, unanswered, percent: total ? Math.round((correct / total) * 100) : 0, byTopic: [...topics].map(([topic, v]) => ({ topic, ...v })).sort((a, b) => a.correct / a.total - b.correct / b.total), wrong };
-  if (times && Object.keys(times).length) {
-    const perTopic = new Map<string, number[]>();
-    for (const id of exam.ids) { const e = exercises[id]; if (e && times[id] !== undefined) perTopic.set(e.topic ?? 'General', [...(perTopic.get(e.topic ?? 'General') ?? []), times[id]]); }
-    const all = [...perTopic.values()].flat();
-    result.pace = { averageSeconds: Math.round(all.reduce((a, b) => a + b, 0) / Math.max(1, all.length)), slowest: [...perTopic].map(([topic, v]) => ({ topic, seconds: Math.round(v.reduce((a, b) => a + b, 0) / v.length) })).sort((a, b) => b.seconds - a.seconds).slice(0, 3) };
+  return { correct, total, unanswered, percent: total ? Math.round((correct / total) * 100) : 0, byTopic: [...topics].map(([topic, v]) => ({ topic, ...v })).sort((a, b) => a.correct / a.total - b.correct / b.total), wrong };
+}
+
+/** How long the answers took: the average, and the topics that took longest per question (from the seconds spent on each question). */
+export function paceOf(exam: Exam, exercises: Record<string, Exercise>, times: Record<string, number>): ExamResult['pace'] | undefined {
+  const perTopic = new Map<string, number[]>();
+  for (const id of exam.ids) {
+    const e = exercises[id];
+    if (e && times[id] !== undefined) perTopic.set(e.topic ?? 'General', [...(perTopic.get(e.topic ?? 'General') ?? []), times[id]]);
   }
-  return result;
+  const all = [...perTopic.values()].flat();
+  if (!all.length) return undefined;
+  return {
+    averageSeconds: Math.round(all.reduce((a, b) => a + b, 0) / all.length),
+    slowest: [...perTopic].map(([topic, v]) => ({ topic, seconds: Math.round(v.reduce((a, b) => a + b, 0) / v.length) })).sort((a, b) => b.seconds - a.seconds).slice(0, 3),
+  };
 }

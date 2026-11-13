@@ -11,7 +11,7 @@ import { keepScreenOn } from '../atlasVoice/tts';
 import { check, missedExercises, practiceSet, streak, topicScores, useExerciseStore, type Exercise, type Verdict } from '../study/exercises';
 import { generatePractice } from '../study/practice';
 import { makeDrillSet, type DrillKind } from '../study/drills';
-import { buildExam, buildMockExam, gradeExam, type Exam, type ExamResult } from '../study/exam';
+import { buildMockExam, gradeExam, paceOf, type Exam, type ExamResult } from '../study/exam';
 import { QuestionImport } from './learningReliability/QuestionImport';
 import { addToPractice } from '../cpa/importQuestions';
 import { useCpa } from '../cpa/store';
@@ -79,16 +79,10 @@ export const PracticeScreen: React.FC = () => {
     setAnswers({}); setResult(null); timesRef.current = {};
     setExam(buildMockExam(all, progress, { count: Math.min(count, all.length) }));
   };
-  const startExam = () => {
-    timesRef.current = {};
-    if (!all.length) { setNote('No questions yet. Make some from your documents, or start some drills first.'); return; }
-    setAnswers({}); setResult(null);
-    setExam(buildExam(all, progress, { count: Math.min(20, all.length), minutes: 30 }));
-  };
   const finishExam = useCallback(() => {
     if (!exam) return;
     const bank = useExerciseStore.getState().exercises;
-    const graded = gradeExam(exam, bank, answersRef.current, timesRef.current);
+    const graded = { ...gradeExam(exam, bank, answersRef.current), pace: paceOf(exam, bank, timesRef.current) };
     exam.ids.forEach((id) => { if (bank[id]) record(id, !graded.wrong.includes(id)); });
     setResult(graded); setExam(null);
   }, [exam, record]);
@@ -132,7 +126,7 @@ export const PracticeScreen: React.FC = () => {
           <PracticeHome topic={topic} setTopic={setTopic} busy={busy} note={note} pickDrill={pickDrill} setPickDrill={setPickDrill}
             goalOn={goal.on} perDay={goal.perDay} setGoalOn={(on) => setGoal({ on })}
             goalLine={goal.on ? `Today: ${done} of ${goal.perDay} questions. Streak: ${days} day${days === 1 ? '' : 's'}.` : null}
-            scores={topicScores(all, progress)} onMake={make} onDrills={drills} onStart={start} onExam={startExam} onMock={startMock} onCards={startCards} onClear={confirmClear} colors={colors} />
+            scores={topicScores(all, progress)} onMake={make} onDrills={drills} onStart={start} onMock={startMock} onCards={startCards} onClear={confirmClear} colors={colors} />
         )}
         {current && (
           <PracticeRun current={current} left={queue.length} value={progress[current.id]?.saved} earlierNote={progress[current.id]?.note} verdict={verdict} note={progress[current.id]?.note}

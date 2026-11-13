@@ -15,6 +15,7 @@ import { markSources, superscript } from '../study/replySources';
 import { useProjectStore, useAppStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
 import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
+import { refineTask } from '../learning/refineTask';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
@@ -133,6 +134,15 @@ export const LearningScreen: React.FC = () => {
     await shareItem({ title: `Reports on ${name}`, text: reportsMarkdown(name, reports) });
     if (path) Alert.alert('Saved as a file too', path);
   };
+  const [refining, setRefining] = useState(false);
+  const [suggestion, setSuggestion] = useState('');
+  const refine = async () => {
+    setRefining(true); setSuggestion('');
+    try {
+      const project = projects.find((p) => p.id === cfg.projectId)?.name;
+      setSuggestion(await refineTask(cfg.topic, (s, u) => require('../study/engine').askModel(s, u), { project }));
+    } catch (e: any) { Alert.alert('Could not refine the task', String(e?.message || e)); } finally { setRefining(false); }
+  };
   const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).catch((e) => setStatusText(String(e?.message || e))).finally(() => setRunning(false)); };
 
   const settings = (
@@ -170,6 +180,16 @@ export const LearningScreen: React.FC = () => {
             placeholderTextColor={colors.textMuted}
             multiline
           />
+          <TouchableOpacity onPress={refine} disabled={running || refining || cfg.topic.trim().length < 3} testID="learning-refine" accessibilityRole="button">
+            <Text style={[styles.smallBtnText, { color: cfg.topic.trim().length < 3 ? colors.textMuted : colors.primary }]}>{refining ? 'Refining...' : 'Refine with AI'}</Text>
+          </TouchableOpacity>
+          {!!suggestion && (
+            <View testID="learning-suggestion" style={styles.row}>
+              <Text style={[styles.counts, styles.suggestionText]}>Suggested task: {suggestion}</Text>
+              <TouchableOpacity onPress={() => { setConfig(agentId, { topic: suggestion }); setSuggestion(''); }} testID="learning-suggestion-use"><Text style={styles.smallBtnText}>Use it</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setSuggestion('')} testID="learning-suggestion-keep"><Text style={styles.smallBtnText}>Keep mine</Text></TouchableOpacity>
+            </View>
+          )}
 
           <Text style={styles.label}>Knowledge base (project)</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -475,6 +495,7 @@ export const LearningScreen: React.FC = () => {
 };
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  suggestionText: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { marginRight: SPACING.md },

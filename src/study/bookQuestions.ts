@@ -9,12 +9,15 @@ const START = /^\s*(?:\(?\d{1,3}[.)]|Q\s*\d{0,3}[.:)]|Question\s*\d{0,3}[.:]|Pro
 const OPTION = /^\s*\(?[A-Ea-e][.)]\s+\S/;
 const ANSWER = /^\s*(?:correct\s+)?(?:answer|ans|solution)\s*[:.-]\s*(.+)$/i;
 
+/** A chunk from a PDF read by page starts with its page, "(p. 12) ": that goes from the text into the source. */
+function withoutPage(text: string, source: string): { text: string; source: string } {
+  const page = /^\(p\. (\d+)\)\s*/.exec(text);
+  return page ? { text: text.slice(page[0].length), source: `${source} p. ${page[1]}` } : { text, source };
+}
+
 /** Question-shaped passages in one text: numbered or labelled starters, and sentences that end in a question mark, with options and a printed answer. */
 export function extractQuestions(rawText: string, rawSource: string): BookQuestion[] {
-  // A chunk from a PDF read by page starts with its page, "(p. 12) ": drop it from the text and keep it in the source.
-  const page = /^\(p\. (\d+)\)\s*/.exec(rawText);
-  const text = page ? rawText.slice(page[0].length) : rawText;
-  const source = page ? `${rawSource} p. ${page[1]}` : rawSource;
+  const { text, source } = withoutPage(rawText, rawSource);
   const out: BookQuestion[] = [];
   const lines = text.replace(/\r/g, '').split('\n');
   for (let i = 0; i < lines.length; i++) {
