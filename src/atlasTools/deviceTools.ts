@@ -8,6 +8,8 @@ import RNFS from 'react-native-fs';
 const Native: any = NativeModules.AtlasDevice;
 const TEXT_EXT = /\.(txt|md|markdown|html?|css|js|ts|json|csv|xml|ya?ml|ini|log|py|java|kt|c|cpp|h|sh)$/i;
 const MAX_READ = 120_000;
+/** How much of one file is read into memory so every page of a long textbook can be reached (each reply still shows only one page). */
+const MAX_FILE_TEXT = 6_000_000;
 
 export async function hasAllFiles(): Promise<boolean> {
   try { return !!(await Native?.hasAllFilesAccess()); } catch { return false; }
@@ -25,6 +27,10 @@ async function resolvePath(p?: string): Promise<string> {
   const ws = await workspaceDir();
   if (!p || p === '.' || p === '/') return ws;
   let path = p.trim().replace(/^file:\/\//, '');
+  // Encoded or alternative separators and dot segments are refused before any check, so they cannot slip past the containment test.
+  try { if (/%/.test(path)) path = decodeURIComponent(path); } catch { throw new Error('Invalid path.'); }
+  if (/[\\\u0000-\u001f\u2215\u2216\uff0f\uff3c]/.test(path)) throw new Error('Invalid characters in path.');
+  if (path.split('/').some((seg) => seg === '..')) throw new Error('Paths with .. are not allowed.');
   if (!path.startsWith('/')) path = `${ws}/${path}`;
   path = path.replace(/\/+/g, '/');
   if (path.includes('/../') || path.endsWith('/..')) throw new Error('Paths with .. are not allowed.');
@@ -74,15 +80,15 @@ function readBudget(): number {
 
 async function fullText(p: string, ext: string): Promise<string> {
   const { OFFICE_EXTENSIONS, extractOffice } = require('../services/officeExtract');
-  if (OFFICE_EXTENSIONS.includes(ext)) return extractOffice(p, ext, MAX_READ);
+  if (OFFICE_EXTENSIONS.includes(ext)) return extractOffice(p, ext, MAX_FILE_TEXT);
   if (ext === '.pdf') {
     const { pdfExtractor } = require('../services/pdfExtractor');
-    const t: string = await pdfExtractor.extractText(p, MAX_READ);
+    const t: string = await pdfExtractor.extractText(p, MAX_FILE_TEXT);
     if (!t) throw new Error('No text found in this PDF (it may be scanned pictures).');
     return t;
   }
   if (!TEXT_EXT.test(p)) throw new Error('This tool reads text, CSV, JSON, code, PDF, Word, PowerPoint, Excel, OpenDocument, EPUB and RTF files.');
-  return (await RNFS.readFile(p, 'utf8')).slice(0, MAX_READ);
+  return (await RNFS.readFile(p, 'utf8')).slice(0, MAX_FILE_TEXT);
 }
 
 export async function readFile(path: string, offset = 0): Promise<string> {

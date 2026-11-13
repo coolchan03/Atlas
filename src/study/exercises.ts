@@ -7,6 +7,7 @@ import type { Difficulty } from './difficulty';
 import { create } from 'zustand';
 import { persist, createJSONStorage, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { localUniqueId } from '../utils/uniqueId';
 
 export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
 interface Base { id: string; topic?: string; /** How hard it is (beginner, moderate or hard), when it was written or kept at a chosen level. */ level?: Difficulty; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; prompt: string; explain?: string; source?: ExerciseSource }
@@ -118,7 +119,8 @@ export function groundExercises(raw: unknown[], chunks: SourceChunk[], topic?: s
 function hash(s: string): number { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
 
 // ---------------------------------------------------------------- progress, review and difficulty
-export interface Progress { box: number; due: number; attempts: number; correct: number; last?: boolean; saved?: unknown; /** Marked in the current round; the typed answer stays on screen until the question is asked again. */ answered?: boolean; /** The person's own note on why they got it wrong. */ note?: string }
+export interface Progress { box: number; due: number; attempts: number; correct: number; last?: boolean; saved?: unknown; /** Marked in the current round; the typed answer stays on screen until the question is asked again. */ answered?: boolean; /** The person's own note on why they got it wrong. */ note?: string;
+  /** Attempts made on each phone since they last matched (`base` is the shared count before that), so two phones' independent attempts add up when they sync instead of one replacing the other. */ dev?: Record<string, { a: number; c: number }>; base?: number; baseC?: number }
 const DAYS = [0, 1, 2, 4, 8, 16];
 
 /**
@@ -146,6 +148,8 @@ export function pruneBank(bank: Record<string, Exercise>, _progress?: Record<str
 }
 
 interface ExerciseState {
+  /** This phone's id for per-phone attempt counts (never copied from another phone). */
+  deviceId?: string;
   progress: Record<string, Progress>;
   /** Questions answered per day (YYYY-MM-DD), for the optional streak and daily goal. */
   daily: Record<string, number>;
@@ -179,9 +183,13 @@ export const useExerciseStore = create<ExerciseState>()(persist((set) => ({
   addSet: (s) => set((st) => pruneBank({ ...st.exercises, ...Object.fromEntries(s.map((e) => [e.id, e])) }, st.progress, s.map((e) => e.id))),
   record: (id, correct, now = Date.now()) => set((st) => {
     const p = st.progress[id] ?? { box: 0, due: 0, attempts: 0, correct: 0 };
+    const me = st.deviceId ?? localUniqueId('dev');
+    const mine = p.dev?.[me] ?? { a: 0, c: 0 };
+    const dev = { ...(p.dev ?? {}), [me]: { a: mine.a + 1, c: mine.c + (correct ? 1 : 0) } };
+    const base = p.base ?? p.attempts; const baseC = p.baseC ?? p.correct;
     const box = correct ? Math.min(DAYS.length - 1, p.box + 1) : 0;
     const day = new Date(now).toISOString().slice(0, 10);
-    return { progress: { ...st.progress, [id]: { ...p, box, due: now + DAYS[box] * 86400000, attempts: p.attempts + 1, correct: p.correct + (correct ? 1 : 0), last: correct, answered: true } }, daily: { ...st.daily, [day]: (st.daily[day] ?? 0) + 1 } };
+    return { progress: { ...st.progress, [id]: { ...p, box, due: now + DAYS[box] * 86400000, attempts: p.attempts + 1, correct: p.correct + (correct ? 1 : 0), last: correct, answered: true, dev, base, baseC } }, daily: { ...st.daily, [day]: (st.daily[day] ?? 0) + 1 }, deviceId: me };
   }),
   saveDraft: (id, draft) => set((st) => ({ progress: { ...st.progress, [id]: { ...(st.progress[id] ?? { box: 0, due: 0, attempts: 0, correct: 0 }), saved: draft } } })),
   clearSet: (topic) => set((st) => {

@@ -11,9 +11,22 @@ const studiedMore = (theirs: Obj, mine: Obj): boolean => {
   return a > b || (a === b && (theirs.due ?? 0) > (mine.due ?? 0));
 };
 
+/** Both copies counted attempts per phone: take each phone's highest count once, so 6 attempts here and 9 there make 15 (repeat syncs change nothing). */
+function mergeCounts(winner: Obj, loser: Obj): Obj {
+  if (!winner.dev && !loser.dev) return winner;
+  const dev: Record<string, { a: number; c: number }> = {};
+  for (const src of [winner.dev ?? {}, loser.dev ?? {}]) for (const [d, v] of Object.entries<any>(src)) dev[d] = { a: Math.max(dev[d]?.a ?? 0, v.a), c: Math.max(dev[d]?.c ?? 0, v.c) };
+  const base = Math.max(winner.base ?? 0, loser.base ?? 0); const baseC = Math.max(winner.baseC ?? 0, loser.baseC ?? 0);
+  const sum = (k: 'a' | 'c') => Object.values(dev).reduce((n, v) => n + v[k], 0);
+  return { ...winner, dev, base, baseC, attempts: base + sum('a'), correct: baseC + sum('c') };
+}
+
 function mergeProgress(mine: Obj = {}, theirs: Obj = {}): Obj {
   const out: Obj = { ...mine };
-  for (const [id, p] of Object.entries<Obj>(theirs)) if (!out[id] || studiedMore(p, out[id])) out[id] = p;
+  for (const [id, p] of Object.entries<Obj>(theirs)) {
+    if (!out[id]) out[id] = p;
+    else out[id] = studiedMore(p, out[id]) ? mergeCounts(p, out[id]) : mergeCounts(out[id], p);
+  }
   return out;
 }
 
@@ -31,6 +44,7 @@ export function mergeExercises(localRaw: string, remoteRaw: string, remoteNewer 
     exercises: { ...(y.exercises ?? {}), ...(x.exercises ?? {}) },
     progress: mergeProgress(x.progress, y.progress),
     daily: mergeDaily(x.daily, y.daily),
+    deviceId: x.deviceId, // each phone keeps its own id
   };
   return JSON.stringify({ ...(remoteNewer ? { ...a, ...b } : { ...b, ...a }), state, version: Math.max(a.version ?? 0, b.version ?? 0) });
 }

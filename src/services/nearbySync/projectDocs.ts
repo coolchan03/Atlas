@@ -21,12 +21,14 @@ const ROOT = () => `${RNFS.DocumentDirectoryPath}/atlas-project-files`;
 const safeId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id);
 const safeName = (name: unknown): name is string => typeof name === 'string' && name.length > 0 && name.length <= 200 && name !== '.' && name !== '..' && !/[\\/\x00-\x1f:]/.test(name);
 
-export interface DocMeta { projectId: string; name: string; size: number; enabled: boolean; createdAt: string }
+export interface DocMeta { projectId: string; name: string; size: number; enabled: boolean; createdAt: string; /** SHA-256 of the file's bytes: two revisions with the same name and length are different documents. */ sha256?: string }
 export interface DocTextBatch { kind: 'doctext'; key: string; index: number; total: number; chunks: { content: string; position: number }[] }
 export interface DocFileChunk { kind: 'docfile'; key: string; meta: DocMeta; index: number; total: number; data: string; checksum?: string }
 
 /** One stable name for a document on both phones. */
-export const docKey = (m: { projectId: string; name: string; size: number }): string => `${m.projectId}|${m.size}|${m.name}`;
+export const docKey = (m: { projectId: string; name: string; size: number; sha256?: string }): string => `${m.projectId}|${m.size}|${m.sha256 ?? ''}|${m.name}`;
+/** The file's SHA-256 from the phone's native hasher (undefined when it cannot be read; then only name and size identify it). */
+const fileSha = async (path: string): Promise<string | undefined> => { try { const h = await RNFS.hash(path, 'sha256'); return DIGEST.test(h) ? h : undefined; } catch { return undefined; } };
 const partOf = (key: string) => `${ROOT()}/${sha256(key).slice(0, 24)}.part`;
 
 type Local = { id: number; path: string; meta: DocMeta };
@@ -37,7 +39,8 @@ async function localDocs(projectIds: string[]): Promise<Local[]> {
     for (const doc of await ragService.getDocumentsByProject(projectId)) {
       if (!safeName(doc.name) || !Number.isSafeInteger(Number(doc.size)) || Number(doc.size) <= 0 || Number(doc.size) > MAX_DOC_BYTES) continue;
       if (!await RNFS.exists(doc.path)) continue;
-      out.push({ id: doc.id, path: doc.path, meta: { projectId, name: doc.name, size: Number(doc.size), enabled: doc.enabled !== 0, createdAt: doc.created_at } });
+      const sha = await fileSha(doc.path);
+      out.push({ id: doc.id, path: doc.path, meta: { projectId, name: doc.name, size: Number(doc.size), enabled: doc.enabled !== 0, createdAt: doc.created_at, ...(sha ? { sha256: sha } : {}) } });
     }
   }
   return out;
@@ -119,7 +122,7 @@ async function verifyFile(path: string, size: number, checksum: string): Promise
 }
 
 const metaValid = (meta: DocMeta | undefined): boolean => !!meta && safeId(meta.projectId) && safeName(meta.name) && Number.isSafeInteger(meta.size) && meta.size > 0 &&
-  meta.size <= MAX_DOC_BYTES && typeof meta.enabled === 'boolean' && typeof meta.createdAt === 'string';
+  meta.size <= MAX_DOC_BYTES && typeof meta.enabled === 'boolean' && typeof meta.createdAt === 'string' && (meta.sha256 === undefined || DIGEST.test(meta.sha256));
 
 function checkPiece(piece: DocFileChunk): void {
   const { key, meta, index, total, data, checksum } = piece;
@@ -130,6 +133,17 @@ function checkPiece(piece: DocFileChunk): void {
   if (!project || project.pinVerifier || project.protectedBlob) throw new Error('That project is not on this phone yet.');
 }
 
+/** True when this phone already has the same document: same name and size, and (when the sender sent one) the same bytes. */
+async function hasDocument(meta: DocMeta): Promise<boolean> {
+  for (const d of await ragService.getDocumentsByProject(meta.projectId)) {
+    if (d.name !== meta.name || Number(d.size) !== meta.size) continue;
+    if (!meta.sha256) return true;
+    const mine = await fileSha(d.path);
+    if (!mine || mine === meta.sha256) return true; // unreadable: keep the old behavior, never duplicate
+  }
+  return false;
+}
+
 /** Writes this piece to the .part file. Returns false when the phone already has the document (nothing is staged). */
 async function stagePiece(piece: DocFileChunk, part: string): Promise<boolean> {
   const { key, meta, index, total, data } = piece;
@@ -137,7 +151,7 @@ async function stagePiece(piece: DocFileChunk, part: string): Promise<boolean> {
   if (index !== total - 1 && bytes !== DOC_CHUNK_BYTES) throw new Error('Invalid document piece length.');
   const drop = async () => { files.delete(key); await RNFS.unlink(part).catch(() => undefined); };
   if (index === 0) {
-    const have = (await ragService.getDocumentsByProject(meta.projectId)).some((d) => d.name === meta.name && Number(d.size) === meta.size);
+    const have = await hasDocument(meta);
     if (have) { files.delete(key); texts.delete(key); return false; }
     files.set(key, { next: 1, total, bytes, digest: sha256.create().update(data) });
     try { await RNFS.writeFile(part, data, 'base64'); } catch (e) { await drop(); throw e; }
