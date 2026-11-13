@@ -4,6 +4,7 @@
  * contract between the AI and the app: the kinds of square, the questions the AI is asked, and a strict reader for what it
  * answers. Pure, so it is tested without a device.
  */
+import { difficultyNote, type Difficulty } from '../study/difficulty';
 import { parseJsonLoose, str } from '../study/games/json';
 import { evalExpression } from '../study/mathTools';
 import { DRILL_LABELS } from '../study/drills';
@@ -144,7 +145,7 @@ export type SquareContent =
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
   | { kind: 'dictation'; lang: string; sentences: string[] };
 
-export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string }
+export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
 
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
@@ -176,7 +177,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 

@@ -10,6 +10,7 @@ import { useProjectStore } from '../stores';
 import { keepScreenOn } from '../atlasVoice/tts';
 import { check, missedExercises, practiceSet, streak, topicScores, useExerciseStore, type Exercise, type Verdict } from '../study/exercises';
 import { generatePractice } from '../study/practice';
+import type { Difficulty } from '../study/difficulty';
 import { makeDrillSet, type DrillKind } from '../study/drills';
 import { buildMockExam, gradeExam, paceOf, type Exam, type ExamResult } from '../study/exam';
 import { QuestionImport } from './learningReliability/QuestionImport';
@@ -42,7 +43,9 @@ export const PracticeScreen: React.FC = () => {
   const answersRef = useRef(answers);
   answersRef.current = answers;
   // Only this project's questions (and older ones that belong to no project), so one CPA exam never mixes with another.
-  const all = useMemo(() => Object.values(exercises).filter((e) => !e.projectId || e.projectId === projectId), [exercises, projectId]);
+  const [level, setLevel] = useState<Difficulty | null>(null);
+  // With a level chosen, only the questions written at that level: practice, mock exams and flashcards all follow it.
+  const all = useMemo(() => Object.values(exercises).filter((e) => (!e.projectId || e.projectId === projectId) && (!level || e.level === level)), [exercises, projectId, level]);
   const current = queue[0];
   const today = todayKey();
 
@@ -53,10 +56,10 @@ export const PracticeScreen: React.FC = () => {
   const makeFor = async (forTopic: string) => {
     setBusy(true); setNote('');
     try {
-      const r = await generatePractice(projectId, forTopic);
+      const r = await generatePractice(projectId, forTopic, { level: level ?? undefined });
       setNote(`${r.added} questions added${r.dropped ? `, ${r.dropped} skipped (${r.reasons.join(', ')})` : ''}.`);
       const fresh = useExerciseStore.getState();
-      queueUp(practiceSet(Object.values(fresh.exercises).filter((e) => !e.projectId || e.projectId === projectId), fresh.progress, { topic: forTopic.trim() || undefined }));
+      queueUp(practiceSet(Object.values(fresh.exercises).filter((e) => (!e.projectId || e.projectId === projectId) && (!level || e.level === level)), fresh.progress, { topic: forTopic.trim() || undefined }));
     } catch (e: any) { Alert.alert('Could not make questions', String(e?.message || e)); } finally { setBusy(false); }
   };
   const make = () => makeFor(topic);
@@ -123,7 +126,7 @@ export const PracticeScreen: React.FC = () => {
           </View>
         )}
         {home && (
-          <PracticeHome topic={topic} setTopic={setTopic} busy={busy} note={note} pickDrill={pickDrill} setPickDrill={setPickDrill}
+          <PracticeHome level={level} setLevel={setLevel} topic={topic} setTopic={setTopic} busy={busy} note={note} pickDrill={pickDrill} setPickDrill={setPickDrill}
             goalOn={goal.on} perDay={goal.perDay} setGoalOn={(on) => setGoal({ on })}
             goalLine={goal.on ? `Today: ${done} of ${goal.perDay} questions. Streak: ${days} day${days === 1 ? '' : 's'}.` : null}
             scores={topicScores(all, progress)} onMake={make} onDrills={drills} onStart={start} onMock={startMock} onCards={startCards} onClear={confirmClear} colors={colors} />

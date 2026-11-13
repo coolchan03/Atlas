@@ -7,6 +7,7 @@ import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
+import { chapterPlan, findChapters } from './chapters';
 import { bookQuestionsPrompt, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { makeSource, parsePicks, pickPrompt, relevantExcerpts, type Candidate, type CourseSource } from './sources';
 
@@ -28,6 +29,26 @@ async function askUntil<T>(prompt: { system: string; user: string }, read: (raw:
 export async function createCourse(request: CourseRequest, sources: CourseSource[] = [], projectId?: string): Promise<string> {
   const plan = await askUntil(planMessages(request, sources), parsePlan, 'a course plan');
   return useTopics.getState().add(request, plan, { sources, projectId });
+}
+
+/** All the text of a project's documents, in order (to find the textbook's chapters in). */
+async function projectText(projectId: string): Promise<string> {
+  const { ragService } = require('../services/rag');
+  const parts: string[] = [];
+  for (const doc of await ragService.getDocumentsByProject(projectId)) {
+    for (const chunk of await ragService.getDocumentChunks(doc.id)) parts.push(String(chunk.content));
+  }
+  return parts.join('\n');
+}
+
+/**
+ * A course with one unit per chapter of the textbook in the project: a lesson, key-term cards and a test of that chapter, in the book's own
+ * order. Made in code from the chapter headings, so no chapter is skipped. Null when the book's chapters cannot be found (then the AI plans the course).
+ */
+export async function createChapterCourse(request: CourseRequest, sources: CourseSource[], projectId: string): Promise<string | null> {
+  const chapters = findChapters(await projectText(projectId));
+  if (chapters.length < 3) return null;
+  return useTopics.getState().add(request, chapterPlan(chapters, request.topic), { sources, projectId });
 }
 
 /** Passages from the shared documents of the course's project that match the square (none when there is no project or no documents). */
@@ -66,7 +87,7 @@ export async function squareContent(course: Course, key: string): Promise<Square
   const excerpts = [...await projectExcerpts(course.projectId, `${square.title} ${square.focus}`), ...relevantExcerpts(course.sources ?? [], `${square.title} ${square.focus}`)].slice(0, 5);
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
-    square: asked, before, minutes: course.request.minutes,
+    square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
     bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn(await projectQuestionBank(course.projectId), `${square.title} ${square.focus}`)) : '',
     excerpts,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);

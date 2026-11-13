@@ -9,9 +9,9 @@ import { Button } from '../components/Button';
 import { ForceLoadModel } from '../components/ForceLoadModel';
 import { Board } from '../language/Board';
 import type { Space, SpaceKind } from '../language/board';
-import { FORMATS, type SquareContent, type SquareFormat } from './formats';
+import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } from './formats';
 import { courseProgress, useTopics, type Course } from './store';
-import { createCourse, findSources, squareContent } from './service';
+import { createChapterCourse, createCourse, findSources, squareContent } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
@@ -20,6 +20,7 @@ import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
+import { DIFFICULTIES } from '../study/difficulty';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
@@ -57,6 +58,35 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+/** The choice to build the course chapter by chapter, shown only when there is a textbook (files added now, or a project with documents). */
+function ByChapterToggle({ show, on, onToggle }: { show: boolean; on: boolean; onToggle: () => void }) {
+  const { colors } = useTheme();
+  if (!show) return null;
+  return (
+    <TouchableOpacity style={styles.row} onPress={onToggle} testID="course-by-chapter" accessibilityRole="switch" accessibilityState={{ checked: on }}>
+      <Icon name={on ? 'check-square' : 'square'} size={18} color={on ? colors.primary : colors.textMuted} />
+      <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]}>One unit for each chapter of my textbook, in its own order, each with a lesson, key terms and a chapter test</Text>
+    </TouchableOpacity>
+  );
+}
+
+/** Everything that happens between "Make my course" and the board: sources found online, files added to the project, then the plan (by chapter when the book has them). */
+async function buildCourse(args: { request: CourseRequest; online: boolean; files: PickedFile[]; projectId?: string; byChapter: boolean; setStep: (s: string) => void }): Promise<string> {
+  const { request, online, files, byChapter, setStep } = args;
+  let sources = online ? await findSources(request.topic, request.goal, setStep) : [];
+  let projectId = args.projectId;
+  if (files.length) {
+    // Files go into the course's project, so they are searched for each square (a whole textbook is fine). Without a project, one is made for this subject.
+    projectId = projectId ?? projectForSubject(request.topic);
+    const result = await addFilesToProject({ projectId, files, onProgress: setStep });
+    sources = [...sources, ...(await outlineSources(files.filter((f) => result.added.includes(f.name))))].slice(0, MAX_SOURCES);
+    if (result.failed.length) Alert.alert('Some files could not be added', result.failed.map((f) => `${f.name}: ${f.reason}`).join('\n'));
+  }
+  setStep('Designing your board...');
+  // With a textbook in the project, one unit per chapter (each tested); if its chapters cannot be found the AI plans the course.
+  return (byChapter && projectId ? await createChapterCourse(request, sources, projectId) : null) ?? await createCourse(request, sources, projectId);
+}
+
 /** Your courses, and a form to make a new one on any subject. */
 export const TopicsScreen: React.FC = () => {
   const undo = useUndo();
@@ -74,6 +104,7 @@ export const TopicsScreen: React.FC = () => {
   const [level, setLevel] = useState(LEVELS[0]);
   const [minutes, setMinutes] = useState(10);
   const [online, setOnline] = useState(false);
+  const [byChapter, setByChapter] = useState(true);
   const offGrid = useOffGrid((st) => st.on);
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [step, setStep] = useState('Designing your board...');
@@ -83,17 +114,7 @@ export const TopicsScreen: React.FC = () => {
   const make = async () => {
     setBusy(true); setError(null); setStep('Designing your board...');
     try {
-      let sources = online ? await findSources(topic.trim(), goal.trim(), setStep) : [];
-      let projectId = given.projectId;
-      if (files.length) {
-        // Files go into the course's project, so they are searched for each square (a whole textbook is fine). Without a project, one is made for this subject.
-        projectId = projectId ?? projectForSubject(topic.trim());
-        const result = await addFilesToProject({ projectId, files, onProgress: setStep });
-        sources = [...sources, ...(await outlineSources(files.filter((f) => result.added.includes(f.name))))].slice(0, MAX_SOURCES);
-        if (result.failed.length) Alert.alert('Some files could not be added', result.failed.map((f) => `${f.name}: ${f.reason}`).join('\n'));
-      }
-      setStep('Designing your board...');
-      const id = await createCourse({ topic: topic.trim(), goal: goal.trim(), level, how: how.trim(), minutes }, sources, projectId);
+      const id = await buildCourse({ request: { topic: topic.trim(), goal: goal.trim(), level, how: how.trim(), minutes }, online, files, projectId: given.projectId, byChapter, setStep });
       setForm(false); setTopic(''); setGoal(''); setHow(''); setFiles([]);
       navigation.navigate('TopicBoard', { courseId: id });
     } catch (e: any) { setError(String(e?.message || e)); }
@@ -157,6 +178,7 @@ export const TopicsScreen: React.FC = () => {
               </View>
             ))}
             <Chip label="Add files" on={false} onPress={chooseFiles} testID="course-add-files" />
+            <ByChapterToggle show={files.length > 0 || !!given.projectId} on={byChapter} onToggle={() => setByChapter(!byChapter)} />
             <TouchableOpacity style={styles.row} onPress={() => setOnline(!online)} testID="course-online" accessibilityRole="switch" accessibilityState={{ checked: online }}>
               <Icon name={online ? 'check-square' : 'square'} size={18} color={online ? colors.primary : colors.textMuted} />
               <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]}>Look for good sources online first and build the course from them (uses the internet){offGrid ? '. Off-grid mode is on, so this will not work until you turn it off.' : ''}</Text>
@@ -286,6 +308,10 @@ export const TopicBoardScreen: React.FC = () => {
         {!!course.summary && <Text style={[styles.meta, { color: colors.textSecondary }]}>{course.summary}</Text>}
         {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
         <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-progress">{p.done} of {p.total} squares · {stars} stars</Text>
+        <Text style={[styles.meta, { color: colors.textSecondary }]}>How hard</Text>
+        <View style={styles.chips} testID="course-difficulty">
+          {DIFFICULTIES.map((d) => <Chip key={d.id} label={d.label} on={(course.difficulty ?? 'beginner') === d.id} onPress={() => useTopics.getState().setDifficulty(course.id, d.id)} testID={`course-difficulty-${d.id}`} />)}
+        </View>
         <Fold title="Sources, exam match, questions and sharing" testID="course-tools">
         <SourcesCard course={course} />
         <ExamMatchCard course={course} />

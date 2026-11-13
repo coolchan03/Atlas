@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 import type { CoursePlan, CourseRequest, PlannedSquare, SquareContent } from './formats';
+import { difficultyFromLevel, type Difficulty } from '../study/difficulty';
 import { MAX_SOURCES, type CourseSource } from './sources';
 
 export interface Course {
@@ -24,6 +25,8 @@ export interface Course {
   projectId?: string;
   /** Per square: the passages from the learner's own books and sources it was written from, so they can check it. */
   cited?: Record<string, { source: string; text: string }[]>;
+  /** How hard the squares, questions and tests are (beginner, moderate or hard). */
+  difficulty?: Difficulty;
 }
 
 export interface SharedCourse {
@@ -47,6 +50,8 @@ interface TopicsState {
   /** Adds one lesson square for each item (before the final quiz when the board ends with one). */
   addLessons: (id: string, items: { title: string; focus: string; unit: string }[]) => void;
   setCited: (id: string, key: string, passages: { source: string; text: string }[]) => void;
+  /** Changes the difficulty; squares not played yet are written again at the new level. */
+  setDifficulty: (id: string, difficulty: Difficulty) => void;
   clearContent: (id: string, key: string) => void;
   /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
   addRemedial: (id: string, afterKey: string) => boolean;
@@ -62,7 +67,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     const id = localUniqueId('course');
     const course: Course = {
       id, topic: request.topic, title: plan.title, summary: plan.summary, style: plan.style, theme: plan.theme, request,
-      squares: plan.squares, content: {}, progress: {}, createdAt: Date.now(), sources, projectId,
+      squares: plan.squares, content: {}, progress: {}, createdAt: Date.now(), sources, projectId, difficulty: difficultyFromLevel(request.level),
     };
     set((s) => ({ courses: [course, ...s.courses].slice(0, 20) }));
     return id;
@@ -89,6 +94,9 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     const squares = last?.checkpoint && last.format === 'quiz' ? [...c.squares.slice(0, -1), ...added, last] : [...c.squares, ...added];
     return { ...c, squares: squares.slice(0, 80) };
   }) })),
+  setDifficulty: (id, difficulty) => set((s) => ({ courses: s.courses.map((c) => (c.id !== id || c.difficulty === difficulty ? c : {
+    ...c, difficulty, content: Object.fromEntries(Object.entries(c.content).filter(([key]) => !!c.progress[key])),
+  })) })),
   setCited: (id, key, passages) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, cited: { ...(c.cited ?? {}), [key]: passages.slice(0, 6) } } : c)) })),
   clearContent: (id, key) => set((s) => ({ courses: s.courses.map((c) => {
     if (c.id !== id) return c;

@@ -57,3 +57,19 @@ it('finds a question at the start of a page-numbered chunk and keeps the page in
   const [q] = extractQuestions('(p. 212) 4. Which method values inventory using the oldest costs first?\nAnswer: FIFO', 'Tax book.pdf');
   expect(q).toMatchObject({ answer: 'FIFO', source: 'Tax book.pdf p. 212' });
 });
+
+it('tells the AI how hard to make a square, from the course difficulty', async () => {
+  installRealSqlite();
+  const { squareContent } = require('../../src/topics/service');
+  const { useTopics } = require('../../src/topics/store');
+  asked.length = 0;
+  const squares = [{ key: 's1', format: 'quiz', title: 'Leases', focus: 'Lessee accounting', unit: 'U1' }];
+  const base = { id: 'c', topic: 'FAR', title: 'FAR', summary: '', style: '', theme: '', request: { topic: 'FAR', goal: '', level: 'x', how: '', minutes: 10 }, squares, content: {}, progress: {}, createdAt: 1, sources: [] };
+  useTopics.setState({ courses: [{ ...base, difficulty: 'hard' }] });
+  await squareContent(useTopics.getState().courses[0], 's1');
+  expect(asked[0]).toContain('HARD difficulty');
+  asked.length = 0;
+  useTopics.setState({ courses: [{ ...base, difficulty: 'beginner' }] });
+  await squareContent(useTopics.getState().courses[0], 's1');
+  expect(asked[0]).toContain('BEGINNER difficulty');
+});

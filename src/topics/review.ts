@@ -11,7 +11,7 @@ export function keepMissed({ course, square, content, missed }: { course: Course
   if (content.kind !== 'quiz') return 0;
   const set: Exercise[] = missed.map((i) => ({ q: content.questions[i], i })).filter((x) => !!x.q).map(({ q, i }) => ({
     id: `sq-${course.id}-${square.key}-${i}`, kind: 'mcq' as const, topic: square.title, projectId: course.projectId,
-    prompt: q.q, choices: q.options, answer: q.answer, explain: q.why || undefined,
+    prompt: q.q, choices: q.options, answer: q.answer, explain: q.why || undefined, level: course.difficulty,
   }));
   if (!set.length) return 0;
   const store = useExerciseStore.getState();

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { DIFFICULTIES, type Difficulty } from '../study/difficulty';
 import { Fold } from '../components/Fold';
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Button } from '../components/Button';
@@ -95,6 +96,7 @@ export const WhyWrong: React.FC<{ value?: string; onChange: (t: string) => void;
 );
 
 export interface HomeProps {
+  level: Difficulty | null; setLevel: (l: Difficulty | null) => void;
   topic: string; setTopic: (t: string) => void; busy: boolean; note: string; pickDrill: boolean; setPickDrill: (b: boolean) => void;
   goalOn: boolean; goalLine: string | null; perDay: number; setGoalOn: (on: boolean) => void;
   scores: Array<{ topic: string; attempts: number; percent: number }>;
@@ -106,6 +108,11 @@ export interface HomeProps {
 export const PracticeHome: React.FC<HomeProps> = (p) => (
   <View>
     {p.goalLine && <Text testID="goal-line" style={{ color: p.colors.textSecondary }}>{p.goalLine}</Text>}
+    <View style={[st.wrap, st.top8]} testID="practice-level">
+      {[{ id: null, label: 'All levels' }, ...DIFFICULTIES].map((d) => (
+        <Button key={d.label} title={d.label} variant={p.level === d.id ? 'primary' : 'outline'} size="small" onPress={() => p.setLevel(d.id)} testID={`practice-level-${d.id ?? 'all'}`} style={st.top6} />
+      ))}
+    </View>
     <TextInput testID="practice-topic" value={p.topic} onChangeText={p.setTopic} placeholder="Topic or chapter (optional)" placeholderTextColor={p.colors.textMuted} style={[st.input, st.top8, { borderColor: p.colors.border, color: p.colors.text }]} />
     <Button title={p.busy ? 'Writing questions...' : 'Make questions from my documents'} onPress={p.onMake} loading={p.busy} disabled={p.busy} testID="practice-make" style={st.top10} />
     <Button title="Practise what I have (missed and due first)" variant="outline" onPress={() => p.onStart(p.topic.trim() || undefined)} testID="practice-start" style={st.top8} />

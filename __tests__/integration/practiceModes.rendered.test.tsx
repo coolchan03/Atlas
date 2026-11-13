@@ -114,3 +114,17 @@ it('a timed mock exam of 10 questions shows the pace by topic at the end', () =>
   rtl.fireEvent.press(r.getByTestId('exam-finish'));
   expect(r.getByTestId('exam-pace').props.children.join('')).toMatch(/seconds a question/);
 });
+
+it('practice, mock exams and flashcards follow the level chosen: only questions written at that level', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([{ ...calc('easy1', 'Tax', 1), level: 'beginner' }, { ...calc('hard1', 'Tax', 2), level: 'hard' }, { ...calc('hard2', 'Tax', 3), level: 'hard' }]); });
+  rtl.fireEvent.press(r.getByTestId('practice-level-hard'));
+  rtl.fireEvent.press(r.getByTestId('practice-mock-10'));
+  expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 2/); // the two hard ones, not the beginner one
+  rtl.fireEvent.press(r.getByTestId('exam-next'));
+  rtl.fireEvent.press(r.getByTestId('exam-finish'));
+  rtl.fireEvent.press(r.getByTestId('exam-done'));
+  rtl.fireEvent.press(r.getByTestId('practice-level-beginner'));
+  rtl.fireEvent.press(r.getByTestId('practice-start'));
+  expect(r.getByText(/What is easy1\?/)).toBeTruthy();
+});

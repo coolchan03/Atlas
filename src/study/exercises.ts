@@ -3,12 +3,13 @@
  * material it comes from. Answers are checked in code (numbers, dropdown tables, orders, matches); the model only writes the
  * question. Exercises the material does not support are dropped (grounding), and malformed model output never throws.
  */
+import type { Difficulty } from './difficulty';
 import { create } from 'zustand';
 import { persist, createJSONStorage, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
-interface Base { id: string; topic?: string; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; prompt: string; explain?: string; source?: ExerciseSource }
+interface Base { id: string; topic?: string; /** How hard it is (beginner, moderate or hard), when it was written or kept at a chosen level. */ level?: Difficulty; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; prompt: string; explain?: string; source?: ExerciseSource }
 export type TableRow = { label: string; options?: string[]; account?: string; amount?: number; group?: string };
 export type Exercise = Base & (
   | { kind: 'mcq'; choices: string[]; answer: number }
