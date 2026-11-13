@@ -381,6 +381,8 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** Answers from this project's books quote the passage and name the document, and say when something is not in the books. */
+  citeBooks?: boolean;
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;

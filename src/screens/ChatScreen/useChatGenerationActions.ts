@@ -363,6 +363,9 @@ export async function injectRagContext(projectId: string | undefined, query: str
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nThis project has shared documents (the same for every chat in the project):\n${docList}`;
     kbPrompt += '\nUse the excerpts below when they are relevant, and say which document you used.';
+    if (useProjectStore.getState().getProject(projectId)?.citeBooks) {
+      kbPrompt += '\nCITE THE BOOKS: when the question is about what these documents cover, answer from the excerpts and quote the exact words you rely on in quotation marks, naming the document and the part number. If the excerpts do not cover it, begin your answer with "Not in your books:" and then give a short general answer, clearly marked as not from the documents. Never present your own knowledge as if it came from them.';
+    }
     // Only point at tools this turn actually has: a missing tool makes small models stall or apologise.
     if (enabledTools.includes('search_knowledge_base')) kbPrompt += '\nUse the search_knowledge_base tool to look up anything else in these documents.';
     if (enabledTools.includes('update_project_document')) kbPrompt += '\nWhen the user asks, or the project instructions say so, update a shared document with update_project_document.';

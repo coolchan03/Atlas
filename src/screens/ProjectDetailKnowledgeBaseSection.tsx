@@ -7,6 +7,7 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
+import { useProjectStore } from '../stores/projectStore';
 import type { RagDocument } from '../services/rag';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 
@@ -26,6 +27,7 @@ export interface KBSectionProps {
 
 export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, styles, setAlertState, onNavigateToKb, onDocumentPress }) => {
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
+  const citeBooks = useProjectStore((s) => s.projects.find((p) => p.id === projectId)?.citeBooks);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const isPickingRef = useRef(false);
@@ -118,6 +120,13 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         <View style={styles.kbIndexing}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.kbIndexingText} numberOfLines={1}>Indexing {indexingFile}...</Text>
+        </View>
+      )}
+
+      {kbDocs.length > 0 && (
+        <View style={styles.kbIndexing} testID="project-cite-books">
+          <Switch value={!!citeBooks} onValueChange={(v) => useProjectStore.getState().updateProject(projectId, { citeBooks: v })} accessibilityLabel="Cite my books" testID="project-cite-switch" />
+          <Text style={styles.kbIndexingText}>Cite my books: answers quote the passage, name the document, and say "Not in your books" when it is not there.</Text>
         </View>
       )}
 
