@@ -1,5 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
+import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
 import { agentSkillNames, skillsFor } from '../../skills/agentSkills';
 import { relevantTools } from '../../services/tools/relevantTools';
 import { locationNote } from '../../atlasMaps/locationNote';
@@ -306,8 +307,12 @@ async function generateWithCompactionRetry(
 ): Promise<boolean> {
   const extCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
   logger.log(`[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`);
+  // A specialist (the exact calculator) may be added for THIS turn only, when the AI alone is unreliable. The chat's own tools stay as chosen.
+  const routed = routeSpecialists(opts.prompt, enabledTools);
+  noteRouted(opts.id, routed);
+  const turnTools = [...enabledTools, ...routed];
   const gen = (msgs: Message[]) => (enabledTools.length > 0 || extCount > 0)
-    ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
+    ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: turnTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
   let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
   // Atlas: compress older messages BEFORE the context is full, so long chats keep going smoothly.

@@ -43,6 +43,6 @@ export function chatContextFor(conv: Conversation): string[] {
     locked: !!conv.pinVerifier, privateChat: !!conv.isPrivate,
     projectName: project ? project.name : undefined, projectLocked: !!(project?.pinVerifier || project?.protectedBlob),
     model: remote ?? (local ? { name: local.name, remote: false, loaded: app.loadedTextModelId === local.id } : undefined),
-    agentName: agent?.name, toolIds: toolsForConversation(conv), offGrid: offGridOn(),
+    agentName: agent?.name, toolIds: toolsForConversation(conv), offGrid: offGridOn(), routedThisTurn: require('../services/tools/specialistRouting').routedForTurn(conv.id),
   });
 }
