@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
 import { StorageItemsSection } from './storage/StorageItemsSection';
+import { CacheCleanupSection } from './storage/CacheCleanupSection';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
@@ -148,6 +149,7 @@ export const StorageSettingsScreen: React.FC = () => {
           </View>
         </Card>
 
+        <CacheCleanupSection onChanged={loadStorageInfo} />
         <StorageItemsSection />
 
         {staleDownloads.length > 0 && (
