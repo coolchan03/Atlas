@@ -503,6 +503,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
   stopRequested = false;
   baseModel = useAppStore.getState().activeModelId || '';
   roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
+  holdScreenOnly('learning-exam', true); // the phone must not sleep during the exam
   try {
     const results: ExamMetrics[] = [];
     for (const mode of EXAM_MODES) {
@@ -514,7 +515,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
       results.push(metrics);
     }
     return results;
-  } finally { running = false; status('Idle'); }
+  } finally { holdScreenOnly('learning-exam', false); running = false; status('Idle'); }
 }
 
 // ------------------------------------------------------------------ loop

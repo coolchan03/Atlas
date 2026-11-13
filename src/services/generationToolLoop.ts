@@ -7,6 +7,7 @@ import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
+import { AVAILABLE_TOOLS } from './tools/registry';
 import { withTimeout } from '../utils/withTimeout';
 import { fileClaimNote } from './fileClaim';
 import type { ToolCall, ToolResult } from './tools/types';
@@ -285,10 +286,18 @@ export const TOOL_TIMEOUT_MS = 3 * 60 * 1000;
 const LONG_TOOL = /research|podcast|image|video|download|sync|backup/i;
 export const toolTimeoutFor = (name: string): number => (LONG_TOOL.test(name) ? 10 * 60 * 1000 : TOOL_TIMEOUT_MS);
 
-async function executeToolCallSafely(tc: ToolCall): Promise<ToolResult> {
+const BUILT_IN_TOOL_IDS = new Set(AVAILABLE_TOOLS.map((t) => t.id));
+
+async function executeToolCallSafely(tc: ToolCall, enabledToolIds?: string[]): Promise<ToolResult> {
   const exts = getToolExtensions();
   const ext = exts.find(e => e.canHandle(tc.name));
   const start = Date.now();
+  // Authorization at the execution boundary: a built-in tool the model asks for that is not enabled for this chat is refused,
+  // even if the model invented the call (the tool list sent to the model is only a hint, not the permission).
+  if (!ext && enabledToolIds && BUILT_IN_TOOL_IDS.has(tc.name) && !enabledToolIds.includes(tc.name)) {
+    logger.warn(`[ToolLoop] refused "${tc.name}": not enabled for this chat`);
+    return toolErrorResult(tc, new Error(`The "${tc.name}" tool is not enabled for this chat, so it was not run.`), start);
+  }
   try {
     const raw = await withTimeout(Promise.resolve(ext ? ext.execute(tc) : executeToolCall(tc)), toolTimeoutFor(tc.name), `The "${tc.name}" tool`);
     return normalizeToolResult(tc, raw);
@@ -311,7 +320,7 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
     }
     if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const result = await executeToolCallSafely(tc);
+    const result = await executeToolCallSafely(tc, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`, role: 'tool',
@@ -502,7 +511,7 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
     // the model (toolResultModelContent) is never empty — a failure/empty is stated
     // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
     // mistake it for a successful answer.
-    const result = await executeToolCallSafely(toolCall);
+    const result = await executeToolCallSafely(toolCall, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(name, result);
     const resultContent = toolResultModelContent(result);
     const toolCallMsg: Message = { id: `tc-${Date.now()}-${name}`, role: 'assistant', content: '',

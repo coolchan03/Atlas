@@ -49,7 +49,7 @@ function rank(text: string, q: string, words: string[]): number {
 }
 
 export interface SearchData {
-  conversations: { id: string; title: string; messages: { role: string; content: string; isSystemInfo?: boolean }[]; pinVerifier?: string; updatedAt?: string }[];
+  conversations: { id: string; title: string; messages: { role: string; content: string; isSystemInfo?: boolean }[]; pinVerifier?: string; isPrivate?: boolean; updatedAt?: string }[];
   projects: { id: string; name: string; description: string; course?: string }[];
   models: { id: string; name: string }[];
 }
@@ -71,7 +71,7 @@ export function searchEverything(query: string, data: SearchData, limit = 6): Se
     if (score) hits.push({ kind: 'screen', id: d.route, title: d.title, route: d.route, params: d.params, icon: d.icon, score });
   }
   for (const c of data.conversations) {
-    if (c.pinVerifier) continue;
+    if (c.pinVerifier || c.isPrivate) continue;
     const byTitle = rank(c.title, q, words);
     const said = c.messages.find((m) => (m.role === 'user' || m.role === 'assistant') && !m.isSystemInfo && norm(m.content).includes(q));
     if (byTitle || said) {

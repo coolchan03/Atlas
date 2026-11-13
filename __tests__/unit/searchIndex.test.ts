@@ -5,6 +5,7 @@ const data: SearchData = {
     { id: 'c1', title: 'Trip to Madrid', messages: [{ role: 'user', content: 'Plan three days in Madrid' }, { role: 'assistant', content: 'Day 1: the Prado museum' }] },
     { id: 'c2', title: 'Recipes', messages: [{ role: 'user', content: 'How long do I bake sourdough?' }] },
     { id: 'c3', title: 'Secret madrid plans', messages: [{ role: 'user', content: 'madrid' }], pinVerifier: 'x' },
+    { id: 'c4', title: 'Temporary madrid chat', messages: [{ role: 'user', content: 'madrid' }], isPrivate: true },
   ],
   projects: [
     { id: 'p1', name: 'Chemistry', description: 'Notes for the exam' },
@@ -41,5 +42,14 @@ describe('search everything', () => {
   it('puts a title match ahead of a keyword match, and ignores accents and capitals', () => {
     expect(searchEverything('APPEARANCE', data)[0].route).toBe('Appearance');
     expect(searchEverything('cafe', { ...data, conversations: [{ id: 'c9', title: 'Café plans', messages: [] }] }).some((h) => h.id === 'c9')).toBe(true);
+  });
+});
+
+describe('private chats stay out of search (audit P1)', () => {
+  it('excludes in-memory private chats and PIN chats', () => {
+    const ids = searchEverything('madrid', data).map((h: any) => h.id);
+    expect(ids).toContain('c1');
+    expect(ids).not.toContain('c3');
+    expect(ids).not.toContain('c4');
   });
 });

@@ -67,3 +67,13 @@ describe('T09 queue isolation', () => {
     expect(seen[2]).toMatchObject({ id: '4', imageMode: 'force' });
   });
 });
+
+describe('T11 execution-time tool authorization', () => {
+  it('refuses a built-in tool that is not enabled for the chat', async () => {
+    jest.resetModules();
+    const { executeToolCalls: _unused } = { executeToolCalls: null } as any;
+    const { executeToolCall } = require('../../src/services/tools/handlers');
+    const r = await executeToolCall({ id: '1', name: 'update_project_document', arguments: { name: 'a', content: 'b' } });
+    expect(r.error).toMatch(/project chat/);
+  });
+});

@@ -58,6 +58,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const name = requireString(call, 'name');
       const content = requireString(call, 'content');
       if (!name || !content) throw new Error('Missing required parameter: name and content');
+      if (!call.context?.projectId) throw new Error('update_project_document only works inside a project chat.');
       return handleUpdateProjectDocument({ name, content, mode: call.arguments?.mode, projectId: call.context?.projectId });
     }
     case 'search_offline_library': {
