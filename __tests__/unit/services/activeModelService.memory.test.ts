@@ -189,6 +189,14 @@ describe('checkMemoryForModel — severity classification (the load-dialog decis
     expect(r.canLoad).toBe(false);
   });
 
+  it('a refusal explains the estimate with a range and offers choices, without applying any', async () => {
+    const r = await checkMemoryForModel({ modelId: 'm', modelType: 'text', ids: IDS, lists: listsWith(4 * 1024 ** 3) });
+    expect(r.message).toMatch(/Estimate: about [\d.]+ GB \(likely between/);
+    expect(r.message).toMatch(/not a guarantee/);
+    expect(r.message).toMatch(/You can: .*smaller or more compressed/);
+    expect(r.canLoad).toBe(false); // the decision is unchanged: the person chooses
+  });
+
   it("'blocked' + NOT canLoad when the model id is not in the list", async () => {
     const r = await checkMemoryForModel({ modelId: 'missing', modelType: 'text', ids: IDS, lists: listsWith(2 * 1024 ** 3) });
     expect(r.severity).toBe('blocked');

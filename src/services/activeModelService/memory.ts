@@ -16,6 +16,7 @@ import {
 } from './types';
 import { useAppStore } from '../../stores';
 import { modelMemoryBudgetMB, modelWarningThresholdMB, LoadPolicy } from '../memoryBudget';
+import { describeEstimate, estimateTextLoad, loadAlternatives } from '../loadEstimate';
 
 // ---------------------------------------------------------------------------
 // Budget helpers
@@ -118,6 +119,18 @@ export function getOtherLoadedMemoryGB(
   return totalGB;
 }
 
+/** The estimate and the choices, as text to add to a warning or refusal. Empty when the model has no size to go on. */
+function textEstimateNote(model: DownloadedModel, budgetGB: number): string {
+  if (!model.fileSize) return '';
+  const settings = useAppStore.getState().settings;
+  const e = estimateTextLoad({ fileSizeBytes: model.fileSize, mmProjBytes: (model as { mmProjFileSize?: number }).mmProjFileSize, contextLength: settings.contextLength || 4096, overheadMultiplier: textOverheadMultiplier(settings.inferenceBackend) });
+  const choices = loadAlternatives(e, budgetGB);
+  return `
+
+${describeEstimate(e)}${choices.length ? `
+You can: ${choices.join(' ')}` : ''}`;
+}
+
 // ---------------------------------------------------------------------------
 // checkMemoryForModel
 // ---------------------------------------------------------------------------
@@ -176,6 +189,8 @@ export async function checkMemoryForModel(
       message: `${modelName} - load override approved for this session.`,
     };
   }
+  // The gate above is unchanged. This adds an honest explanation, with a range and what the person can choose, to a warning or a refusal.
+  const explain = modelType === 'text' ? textEstimateNote(model as DownloadedModel, memoryBudgetGB) : '';
   const requiredStr = requiredMemoryGB.toFixed(1);
   const totalStr = totalRequiredMemoryGB.toFixed(1);
   const budgetStr = memoryBudgetGB.toFixed(1);
@@ -193,14 +208,14 @@ export async function checkMemoryForModel(
           `Total would be ~${totalStr} GB, exceeding your device's ~${budgetStr} GB safe limit. ` +
           `Unload the other model first, or choose a smaller model.`
         : `${modelName} requires ~${requiredStr} GB which exceeds your device's ~${budgetStr} GB safe limit. ` +
-          `This model is too large for your device. Choose a smaller model.`;
+          `This model is too large for your device. Choose a smaller model.${explain}`;
   } else if (totalRequiredMemoryGB > warningThresholdGB) {
     severity = 'warning';
     canLoad = true;
     message =
       `Loading ${modelName} will use ~${requiredStr} GB. ` +
       `Total model memory will be ~${totalStr} GB, near your device's safe limit. ` +
-      `The app may become slow. Continue anyway?`;
+      `The app may become slow. Continue anyway?${explain}`;
   } else {
     severity = 'safe';
     canLoad = true;
