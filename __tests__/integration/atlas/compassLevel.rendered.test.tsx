@@ -74,13 +74,13 @@ it('shows height from GPS and from air pressure side by side, and warns when pre
   const { usePressureLog } = require('../../../src/atlasTools/pressureLog');
   const hour = 3_600_000;
   const now = Date.now();
-  // Four readings across three hours: down 4 hPa at the same GPS height of 120 m.
-  usePressureLog.setState({ samples: [0, 1, 2, 3].map((i) => ({ at: now - (3 - i) * hour, hpa: 1013 - i * 1.33, gpsM: 120 })) });
+  // Four readings across three hours: down 3 hPa at the same GPS height of 120 m.
+  usePressureLog.setState({ samples: [0, 1, 2, 3].map((i) => ({ at: now - (3 - i) * hour, hpa: 1013 - i, gpsM: 120 })) });
   const units = { imperial: false, temp: 'c' };
   const view = rtl.render(React.createElement(PressureCard, { pressure: { hpa: 1009, altM: 35 }, gps: { altitude: 120, accuracy: 6 }, units, now }));
   expect(view.getByText(/GPS: 120 m/)).toBeTruthy();
   expect(view.getByText(/Air pressure: 35 m \(1009.0 hPa\)/)).toBeTruthy();
-  expect(view.getByTestId('pressure-trend').props.children.join('')).toMatch(/Pressure is falling: -4.0 hPa over 3 hours/);
+  expect(view.getByTestId('pressure-trend').props.children.join('')).toMatch(/Pressure is falling: -3.0 hPa over 3 hours/);
   expect(view.getByTestId('pressure-hint').props.children).toMatch(/weather may be turning/);
   usePressureLog.setState({ samples: [] });
   const fresh = rtl.render(React.createElement(PressureCard, { pressure: { hpa: 1009, altM: 35 }, gps: null, units, now }));
