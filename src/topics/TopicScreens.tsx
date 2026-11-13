@@ -13,7 +13,8 @@ import { FORMATS, type SquareContent, type SquareFormat } from './formats';
 import { courseProgress, useTopics, type Course } from './store';
 import { createCourse, findSources, squareContent } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
-import { makeSource, type CourseSource } from './sources';
+import { MAX_SOURCES, makeSource, outlineSources, type CourseSource } from './sources';
+import { addFilesToProject, pickFiles, projectForSubject, type PickedFile } from '../learning/documents';
 import { SquareView } from './SquareViews';
 
 /** The board's colored band is chosen by a square's kind; each format borrows one so formats read apart at a glance. */
@@ -63,6 +64,7 @@ export const TopicsScreen: React.FC = () => {
   const [level, setLevel] = useState(LEVELS[0]);
   const [minutes, setMinutes] = useState(10);
   const [online, setOnline] = useState(false);
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [step, setStep] = useState('Designing your board...');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,13 +72,27 @@ export const TopicsScreen: React.FC = () => {
   const make = async () => {
     setBusy(true); setError(null); setStep('Designing your board...');
     try {
-      const sources = online ? await findSources(topic.trim(), goal.trim(), setStep) : [];
+      let sources = online ? await findSources(topic.trim(), goal.trim(), setStep) : [];
+      let projectId = given.projectId;
+      if (files.length) {
+        // Files go into the course's project, so they are searched for each square (a whole textbook is fine). Without a project, one is made for this subject.
+        projectId = projectId ?? projectForSubject(topic.trim());
+        const result = await addFilesToProject({ projectId, files, onProgress: setStep });
+        sources = [...sources, ...(await outlineSources(files.filter((f) => result.added.includes(f.name))))].slice(0, MAX_SOURCES);
+        if (result.failed.length) Alert.alert('Some files could not be added', result.failed.map((f) => `${f.name}: ${f.reason}`).join('\n'));
+      }
       setStep('Designing your board...');
-      const id = await createCourse({ topic: topic.trim(), goal: goal.trim(), level, how: how.trim(), minutes }, sources, given.projectId);
-      setForm(false); setTopic(''); setGoal(''); setHow('');
+      const id = await createCourse({ topic: topic.trim(), goal: goal.trim(), level, how: how.trim(), minutes }, sources, projectId);
+      setForm(false); setTopic(''); setGoal(''); setHow(''); setFiles([]);
       navigation.navigate('TopicBoard', { courseId: id });
     } catch (e: any) { setError(String(e?.message || e)); }
     setBusy(false);
+  };
+  const chooseFiles = async () => {
+    try {
+      const picked = await pickFiles();
+      if (picked) setFiles((current) => [...current, ...picked.filter((p) => !current.some((a) => a.name === p.name))]);
+    } catch (e: any) { setError(String(e?.message || e)); }
   };
   const openFile = async () => {
     try {
@@ -122,6 +138,15 @@ export const TopicsScreen: React.FC = () => {
               placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="course-how" />
             <Text style={[styles.meta, { color: colors.textSecondary }]}>Minutes per square</Text>
             <View style={styles.chips}>{SITTINGS.map((m) => <Chip key={m} label={`${m}`} on={minutes === m} onPress={() => setMinutes(m)} testID={`course-minutes-${m}`} />)}</View>
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>Your own material (textbooks, notes, question banks): the course is built from it, and each square is written from the parts that cover it.</Text>
+            {files.map((f) => (
+              <View key={f.name} style={styles.row}>
+                <Icon name="file-text" size={14} color={colors.textMuted} />
+                <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]} numberOfLines={1}>{f.name}</Text>
+                <TouchableOpacity onPress={() => setFiles((current) => current.filter((x) => x.name !== f.name))} testID={`course-file-remove-${f.name}`} accessibilityLabel={`Remove ${f.name}`}><Icon name="x" size={16} color={colors.textMuted} /></TouchableOpacity>
+              </View>
+            ))}
+            <Chip label="Add files" on={false} onPress={chooseFiles} testID="course-add-files" />
             <TouchableOpacity style={styles.row} onPress={() => setOnline(!online)} testID="course-online" accessibilityRole="switch" accessibilityState={{ checked: online }}>
               <Icon name={online ? 'check-square' : 'square'} size={18} color={online ? colors.primary : colors.textMuted} />
               <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]}>Look for good sources online first and build the course from them (uses the internet)</Text>
@@ -166,14 +191,18 @@ function SourcesCard({ course }: { course: Course }) {
     setError(null);
     try {
       const { pick, types } = require('@react-native-documents/picker');
-      const RNFS = require('react-native-fs').default ?? require('react-native-fs');
-      const { resolvePickedFileUri } = require('../utils/resolvePickedFileUri');
-      const file = (await pick({ mode: 'open', type: [types.allFiles], allowMultiSelection: false }))?.[0];
-      if (!file) return;
-      const local = (await resolvePickedFileUri(file.uri, file.name || 'notes.txt')).replace(/^file:\/\//, '');
-      const text: string = await RNFS.readFile(local, 'utf8');
-      if (text.trim().length < 50) { setError('That file has very little text in it. Use a .txt or .md file.'); return; }
-      add([makeSource({ title: file.name || 'File', kind: 'file', text }, `file-${Date.now()}`)]);
+      const { documentService } = require('../services/documentService');
+      const picked: Array<{ uri: string; name?: string }> = (await pick({ mode: 'open', type: [types.allFiles], allowMultiSelection: true })) ?? [];
+      const found: CourseSource[] = [];
+      const unreadable: string[] = [];
+      for (const [i, file] of picked.entries()) {
+        // Any readable document (PDF, Word, text...), not only plain text. The first part of each is kept as a source.
+        const text: string = await documentService.textFromPicked(file.uri, file.name || 'notes.txt', 12000).catch(() => '');
+        if (text.trim().length < 50) { unreadable.push(file.name || 'a file'); continue; }
+        found.push(makeSource({ title: file.name || 'File', kind: 'file', text }, `file-${Date.now()}-${i}`));
+      }
+      if (found.length) add(found);
+      if (unreadable.length) setError(`Could not read any text in: ${unreadable.join(', ')}.`);
     } catch (e: any) { if (e?.code !== 'OPERATION_CANCELED') setError(String(e?.message || e)); }
   };
   return (
@@ -202,7 +231,7 @@ function SourcesCard({ course }: { course: Course }) {
         <View style={styles.chips}>
           <Chip label="Find sources online" on={false} onPress={find} testID="sources-find" />
           <Chip label="Paste notes" on={false} onPress={() => setNoting(true)} testID="sources-note" />
-          <Chip label="Add a text file" on={false} onPress={pickFile} testID="sources-file" />
+          <Chip label="Add files" on={false} onPress={pickFile} testID="sources-file" />
         </View>
       )}
     </View>

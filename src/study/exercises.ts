@@ -8,7 +8,7 @@ import { persist, createJSONStorage, type PersistStorage, type StorageValue } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
-interface Base { id: string; topic?: string; prompt: string; explain?: string; source?: ExerciseSource }
+interface Base { id: string; topic?: string; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; prompt: string; explain?: string; source?: ExerciseSource }
 export type TableRow = { label: string; options?: string[]; account?: string; amount?: number; group?: string };
 export type Exercise = Base & (
   | { kind: 'mcq'; choices: string[]; answer: number }

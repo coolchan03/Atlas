@@ -17,7 +17,7 @@ const todayKey = () => new Date().toISOString().slice(0, 10);
 
 export const PracticeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { projectId } = useRoute<any>().params as { projectId: string };
+  const { projectId, topic: startTopic } = useRoute<any>().params as { projectId: string; topic?: string };
   const { colors } = useTheme();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
   const { exercises, progress, daily, goal, addSet, record, saveDraft, freshen, setNote: saveNote, setGoal, clearAll } = useExerciseStore();
@@ -33,7 +33,8 @@ export const PracticeScreen: React.FC = () => {
   const [pickDrill, setPickDrill] = useState(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
-  const all = useMemo(() => Object.values(exercises), [exercises]);
+  // Only this project's questions (and older ones that belong to no project), so one CPA exam never mixes with another.
+  const all = useMemo(() => Object.values(exercises).filter((e) => !e.projectId || e.projectId === projectId), [exercises, projectId]);
   const current = queue[0];
   const today = todayKey();
 
@@ -41,15 +42,24 @@ export const PracticeScreen: React.FC = () => {
   useEffect(() => { keepScreenOn(!!exam); return () => keepScreenOn(false); }, [exam]);
 
   const queueUp = (list: Exercise[]) => { freshen(list.map((e) => e.id)); setVerdict(undefined); setQueue(list); };
-  const make = async () => {
+  const makeFor = async (forTopic: string) => {
     setBusy(true); setNote('');
     try {
-      const r = await generatePractice(projectId, topic);
+      const r = await generatePractice(projectId, forTopic);
       setNote(`${r.added} questions added${r.dropped ? `, ${r.dropped} skipped (${r.reasons.join(', ')})` : ''}.`);
       const fresh = useExerciseStore.getState();
-      queueUp(practiceSet(Object.values(fresh.exercises), fresh.progress, { topic: topic.trim() || undefined }));
+      queueUp(practiceSet(Object.values(fresh.exercises).filter((e) => !e.projectId || e.projectId === projectId), fresh.progress, { topic: forTopic.trim() || undefined }));
     } catch (e: any) { Alert.alert('Could not make questions', String(e?.message || e)); } finally { setBusy(false); }
   };
+  const make = () => makeFor(topic);
+  // Opened from a checklist: a short quiz on that topic, from the questions already there or new ones from the documents.
+  useEffect(() => {
+    if (!startTopic) return;
+    setTopic(startTopic);
+    const fresh = useExerciseStore.getState();
+    const have = practiceSet(Object.values(fresh.exercises).filter((e) => !e.projectId || e.projectId === projectId), fresh.progress, { topic: startTopic, count: 5 });
+    if (have.length >= 5) queueUp(have); else void makeFor(startTopic);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const drills = (kinds: DrillKind[]) => { const set = makeDrillSet(8, Date.now() % 100000, kinds); addSet(set); setNote(''); setPickDrill(false); queueUp(set); };
   const start = (t?: string) => { queueUp(practiceSet(all, progress, { topic: t })); if (!all.length) setNote('No questions yet. Make some from your documents.'); };
   const submit = () => { if (!current) return; const v = check(current, progress[current.id]?.saved); setVerdict(v); record(current.id, v.correct); };

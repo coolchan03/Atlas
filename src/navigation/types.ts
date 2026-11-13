@@ -14,13 +14,14 @@ export type RootStackParamList = {
   TeachList: undefined;
   Workflows: undefined;
   Sensors: undefined;
+  CallSetup: undefined;
   Knowledge: undefined;
   Emergency: undefined;
   OfflineLibrary: undefined;
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
   Study: { projectId: string; openAt?: number };
-  Practice: { projectId: string };
+  Practice: { projectId: string; topic?: string };
   Planner: undefined;
   Rubric: undefined;
   DailyBrief: undefined;

@@ -10,13 +10,12 @@ import { LoadModelSheet } from '../../components/LoadModelSheet';
 import { arrangeTiles, moveTile, toggleTile } from './homeTiles';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { HomeShortcutsCard } from './HomeShortcutsCard';
-import { startQuickCall } from './quickCall';
 
 type Props = { navigation: any; mode: LayoutMode };
-type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load' | 'call'; optional?: boolean; tint: string; tintDark: string; color: [string, string] };
+type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load'; optional?: boolean; tint: string; tintDark: string; color: [string, string] };
 const destinations: Destination[] = [
   { key: 'chat', label: 'Chat', hint: 'Talk with your local AI', icon: 'message-circle', tab: 'ChatsTab', tint: '#DBF0FF', tintDark: '#12283A', color: ['#1D4ED8', '#60A5FA'] },
-  { key: 'call', label: 'Call Atlas', hint: 'Talk hands-free with your AI, one tap', icon: 'phone', action: 'call', tint: '#DBF0FF', tintDark: '#12283A', color: ['#1D4ED8', '#60A5FA'] },
+  { key: 'call', label: 'Call', hint: 'Talk hands-free with an agent you choose, using a model and project folder you choose', icon: 'phone', screen: 'CallSetup', tint: '#DBF0FF', tintDark: '#12283A', color: ['#1D4ED8', '#60A5FA'] },
   { key: 'music', label: 'Music Studio', hint: 'Original tunes composed by your local AI', icon: 'music', screen: 'MusicStudio', optional: true, tint: '#FFE4EF', tintDark: '#321422', color: ['#9D174D', '#F472B6'] },
   { key: 'projects', label: 'Projects', hint: 'Your organized work', icon: 'folder', tab: 'ProjectsTab', tint: '#E1F6E8', tintDark: '#12291C', color: ['#047857', '#34D399'] },
   { key: 'models', label: 'Get models', hint: 'Download or import AI models', icon: 'download', tab: 'ModelsTab', tint: '#FFF0D4', tintDark: '#33260F', color: ['#B3620F', '#F2A93B'] },
@@ -70,7 +69,6 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   const padding = compact ? 10 : simple ? 22 : grid ? 16 : 17;
   const go = (item: Destination) => {
     if (item.action === 'load') setLoadOpen(true);
-    else if (item.action === 'call') startQuickCall((screen, params) => navigation.getParent()?.navigate(screen, params));
     else if (item.tab) navigation.navigate(item.tab);
     else if (item.screen) navigation.getParent()?.navigate(item.screen);
   };

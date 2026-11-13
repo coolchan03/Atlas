@@ -12,6 +12,6 @@ export async function generatePractice(projectId: string, topic: string, opts: {
   const chunks: SourceChunk[] = sources.map((s) => ({ doc: s.doc, section: `part ${s.part}`, text: s.text }));
   const text = await askModel('You write exam practice questions strictly from the supplied material. Output only JSON.', exercisePrompt(chunks.slice(0, 6), kinds, count));
   const { kept, dropped } = groundExercises(readExercises(text), chunks, topic.trim() || sources[0].doc);
-  useExerciseStore.getState().addSet(kept);
+  useExerciseStore.getState().addSet(kept.map((e) => ({ ...e, projectId })));
   return { added: kept.length, dropped: dropped.length, reasons: [...new Set(dropped.map((d) => d.why))] };
 }

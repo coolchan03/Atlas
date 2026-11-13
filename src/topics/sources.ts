@@ -85,3 +85,19 @@ export const makeSource = (s: { title: string; kind: CourseSource['kind']; text:
   ({ id, title: str(s.title, 80) || 'Untitled', kind: s.kind, url: s.url, text: s.text.replace(/\s+\n/g, '\n').slice(0, 12000), addedAt: Date.now() });
 
 export const MAX_SOURCES = 12;
+
+/**
+ * The opening of each added file, kept as a source so the course plan knows what the material covers (contents pages and
+ * introductions are usually first). The whole file is searched later, from the project, when each square is written.
+ */
+export async function outlineSources(files: Array<{ path: string; name: string }>): Promise<CourseSource[]> {
+  const { documentService } = require('../services/documentService');
+  const out: CourseSource[] = [];
+  for (const f of files) {
+    try {
+      const text: string = await documentService.textFromPicked(f.path, f.name, 6000);
+      if (text.trim().length >= 50) out.push(makeSource({ title: f.name, kind: 'file', text }, `file-${Date.now()}-${out.length}`));
+    } catch { /* the file is still in the project; it just adds no outline */ }
+  }
+  return out;
+}

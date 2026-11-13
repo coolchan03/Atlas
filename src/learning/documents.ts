@@ -48,8 +48,10 @@ export async function addFilesToProject(o: {
   return result;
 }
 
-/** Lets the person pick files, and adds them to the project. Resolves null when the picker was closed. */
-export async function pickAndAddFiles(projectId: string, onProgress?: (m: string) => void): Promise<AddResult | null> {
+export interface PickedFile { path: string; name: string; size: number }
+
+/** Lets the person pick files, ready to read from. Resolves null when the picker was closed. */
+export async function pickFiles(): Promise<PickedFile[] | null> {
   const { pick, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
   const { Platform } = require('react-native');
   let picked: Array<{ uri: string; name?: string | null; size?: number | null }>;
@@ -60,9 +62,15 @@ export async function pickAndAddFiles(projectId: string, onProgress?: (m: string
     throw e;
   }
   if (!picked?.length) return null;
-  const files = [];
+  const files: PickedFile[] = [];
   for (const f of picked) { const name = f.name || 'document'; files.push({ path: await resolvePickedFileUri(f.uri, name), name, size: f.size || 0 }); }
-  return addFilesToProject({ projectId, files, onProgress });
+  return files;
+}
+
+/** Lets the person pick files, and adds them to the project. Resolves null when the picker was closed. */
+export async function pickAndAddFiles(projectId: string, onProgress?: (m: string) => void): Promise<AddResult | null> {
+  const files = await pickFiles();
+  return files ? addFilesToProject({ projectId, files, onProgress }) : null;
 }
 
 /** Adds every readable file in the Atlas workspace folder. */

@@ -5,6 +5,10 @@
 import { installNativeBoundary, GB, requireRTL } from '../harness/nativeBoundary';
 import { createDownloadedModel } from '../utils/factories';
 
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(), pickDirectory: jest.fn(), keepLocalCopy: jest.fn(async ({ files }: any) => files.map((f: any) => ({ status: 'success', localUri: f.uri }))), isErrorWithCode: () => false, errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' }, types: { allFiles: '*/*' },
+}));
+
 const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn() };
 let mockParams: any = {};
 jest.mock('@react-navigation/native', () => ({
@@ -199,3 +203,50 @@ it('a course made from a project belongs to that project, and the project\'s pag
   await rtl.waitFor(() => expect(useTopics.getState().courses.length).toBe(2), { timeout: 8000 });
   expect(useTopics.getState().courses.find((c: any) => c.title === 'Accounting basics')?.projectId).toBe('p1');
 }, 60000);
+
+it('lets you add textbooks and question banks on the create-a-course form, keeps them in the course\'s project, and plans from them', async () => {
+  const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { pick } = require('@react-native-documents/picker');
+  const { useAppStore, useProjectStore } = require('../../src/stores');
+  const { hardwareService } = require('../../src/services/hardware');
+  const { ragService } = require('../../src/services/rag');
+  const { documentService } = require('../../src/services/documentService');
+  const { TopicsScreen } = require('../../src/topics/TopicScreens');
+  const { useTopics } = require('../../src/topics/store');
+
+  useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' });
+  boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+  await hardwareService.refreshMemoryInfo();
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf', fileSize: 500 * 1024 * 1024 })], activeModelId: 'llm' });
+  useTopics.setState({ courses: [] });
+  mockParams = {};
+  // Indexing a document and reading its first page are the device-side jobs here; the course code around them is real.
+  const indexed: string[] = [];
+  jest.spyOn(ragService, 'getDocumentsByProject').mockResolvedValue([]);
+  jest.spyOn(ragService, 'indexDocument').mockImplementation(async (d: any) => { indexed.push(d.fileName); return 1; });
+  jest.spyOn(documentService, 'textFromPicked').mockResolvedValue('Contents: Chapter 1 Revenue recognition. Chapter 2 Leases. Chapter 3 Inventory. Chapter 4 Consolidations.');
+  (pick as jest.Mock).mockResolvedValueOnce([
+    { uri: 'file:///docs/FAR-textbook.pdf', name: 'FAR-textbook.pdf', size: 4_000_000 },
+    { uri: 'file:///docs/FAR-question-bank.docx', name: 'FAR-question-bank.docx', size: 900_000 },
+  ]);
+
+  boundary.llama!.scriptCompletion({ text: PLAN });
+  const list = rtl.render(React.createElement(TopicsScreen));
+  rtl.fireEvent.press(list.getByTestId('course-new'));
+  rtl.fireEvent.changeText(list.getByTestId('course-topic'), 'Financial accounting and reporting');
+  await rtl.act(async () => { rtl.fireEvent.press(list.getByTestId('course-add-files')); });
+  expect(await list.findByText('FAR-textbook.pdf')).toBeTruthy();
+  expect(list.getByText('FAR-question-bank.docx')).toBeTruthy();
+  rtl.fireEvent.press(list.getByTestId('course-file-remove-FAR-question-bank.docx'));
+  expect(list.queryByText('FAR-question-bank.docx')).toBeNull();
+
+  rtl.fireEvent.press(list.getByTestId('course-make'));
+  await rtl.waitFor(() => expect(useTopics.getState().courses).toHaveLength(1), { timeout: 8000 });
+  const course = useTopics.getState().courses[0];
+  expect(indexed).toEqual(['FAR-textbook.pdf']); // the one still listed
+  expect(course.projectId).toBeTruthy();
+  expect(useProjectStore.getState().projects.find((p: any) => p.id === course.projectId)?.name).toBe('Financial accounting and reporting documents');
+  expect(course.sources.map((x: any) => x.title)).toEqual(['FAR-textbook.pdf']); // its opening is kept so the plan knows what it covers
+});
