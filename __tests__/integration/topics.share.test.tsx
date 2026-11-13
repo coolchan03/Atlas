@@ -47,6 +47,7 @@ it('sends a course as a file and opens it on another phone without the progress'
 
   mockParams = { courseId: 'c1' };
   const board = rtl.render(React.createElement(TopicBoardScreen));
+  rtl.fireEvent.press(board.getByTestId('course-tools-toggle'));
   rtl.fireEvent.press(board.getByTestId('course-share'));
   await rtl.waitFor(() => expect(mockSaved).not.toBeNull());
   expect(mockSaved!.name).toBe('Accounting basics.atlascourse.json');

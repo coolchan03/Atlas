@@ -51,6 +51,7 @@ it('starts code-made accounting drills without any documents and marks a wrong e
   const { PracticeScreen } = require('../../src/screens/PracticeScreen');
   const { useExerciseStore } = require('../../src/study/exercises');
   const r = rtl.render(React.createElement(PracticeScreen));
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
   rtl.fireEvent.press(r.getByTestId('practice-drills'));
   expect(r.getByTestId('practice-prompt')).toBeTruthy();
   const first = useExerciseStore.getState().exercises;

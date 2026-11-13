@@ -28,6 +28,7 @@ it('lists exam topics the books never cover, and adds the covered ones to the bo
     squares: [{ key: 's1', format: 'lesson', title: 'Basis', focus: 'Basis of property', unit: 'U1' }, { key: 's2', format: 'quiz', title: 'Final quiz', focus: 'All', unit: 'U1', checkpoint: true }],
     content: {}, progress: { s1: { stars: 3 } }, createdAt: 1, sources: [], projectId: project.id }] });
   const view = rtl.render(React.createElement(TopicBoardScreen));
+  rtl.fireEvent.press(view.getByTestId('course-tools-toggle'));
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('exam-match-REG')); });
   await rtl.waitFor(() => expect(view.getByTestId('exam-match-result')).toBeTruthy());
   expect(view.getByText(/Not in your books/)).toBeTruthy();

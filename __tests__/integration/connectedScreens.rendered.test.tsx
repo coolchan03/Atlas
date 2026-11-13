@@ -69,6 +69,7 @@ it('a course on its board can be connected to a project, and files added from th
   mockParams = { courseId: 'c1' };
   const view = rtl.render(React.createElement(TopicBoardScreen));
 
+  rtl.fireEvent.press(view.getByTestId('course-tools-toggle'));
   rtl.fireEvent.press(view.getByTestId(`course-project-${project.id}`));
   expect(useTopics.getState().courses[0].projectId).toBe(project.id);
 

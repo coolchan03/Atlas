@@ -24,6 +24,7 @@ function mount() {
 
 it('practises one drill type, keeps a note on a miss, and shows it when the question comes back', () => {
   const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
   rtl.fireEvent.press(r.getByTestId('practice-pick-drill'));
   rtl.fireEvent.press(r.getByTestId('drill-bond-price'));
   const ids = Object.keys(store.getState().exercises);
@@ -46,6 +47,7 @@ it('practises one drill type, keeps a note on a miss, and shows it when the ques
 it('turns misses into flashcards and takes a card out when it is known', () => {
   const { rtl, r, store } = mount();
   rtl.act(() => { store.getState().addSet([calc('a', 'Tax', 42), calc('b', 'Tax', 7)]); store.getState().record('a', false); store.getState().record('b', true); });
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
   rtl.fireEvent.press(r.getByTestId('practice-cards'));
   expect(r.getByText(/What is a\?/)).toBeTruthy();
   expect(r.queryByTestId('card-answer')).toBeNull();
@@ -58,7 +60,7 @@ it('turns misses into flashcards and takes a card out when it is known', () => {
 it('runs a timed exam with no feedback until the end, then scores it by topic and offers the misses', () => {
   const { rtl, r, store } = mount();
   rtl.act(() => { store.getState().addSet([calc('a', 'Tax', 1), calc('b', 'Audit', 2)]); });
-  rtl.fireEvent.press(r.getByTestId('practice-exam'));
+  rtl.fireEvent.press(r.getByTestId('practice-mock-20'));
   expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 2/);
   const first = r.getByTestId('exam-prompt').props.children;
   rtl.fireEvent.changeText(r.getByTestId('practice-input'), first.includes('a?') ? '1' : '2'); // right
@@ -96,6 +98,7 @@ it('clears the practice history after asking, and keeps the daily-goal setting',
 it('a flashcard shows the book\'s explanation and the passage with its page when turned over', () => {
   const { rtl, r, store } = mount();
   rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 42), explain: 'Because basis is cost.', source: { doc: 'Tax book.pdf', page: 212, quote: 'Basis is the cost of the asset' } }]); store.getState().record('a', false); });
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
   rtl.fireEvent.press(r.getByTestId('practice-cards'));
   rtl.fireEvent.press(r.getByTestId('card'));
   expect(r.getByTestId('card-explain').props.children).toBe('Because basis is cost.');
