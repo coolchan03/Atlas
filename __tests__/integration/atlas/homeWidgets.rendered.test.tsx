@@ -186,3 +186,16 @@ it('removing a widget needs no confirmation and can be undone, back in the same 
   expect(useHomeShortcuts.getState().shortcuts.map((w: { title: string }) => w.title)).toEqual(['One', 'Two', 'Three']);
   expect(view.queryByTestId('undo-row')).toBeNull();
 });
+
+it('a review widget shows how many questions are due and opens Practice', () => {
+  const { rtl, view } = setup([]);
+  const { useHomeShortcuts } = require('../../../src/screens/HomeScreen/homeShortcutStore');
+  const { useExerciseStore } = require('../../../src/study/exercises');
+  useExerciseStore.setState({ exercises: { a: { id: 'a', kind: 'truefalse', prompt: 'q', answer: true }, b: { id: 'b', kind: 'truefalse', prompt: 'r', answer: true } },
+    progress: { a: { box: 0, due: 0, attempts: 1, correct: 0, last: false }, b: { box: 2, due: 9e12, attempts: 3, correct: 3, last: true } } });
+  let id = '';
+  rtl.act(() => { id = useHomeShortcuts.getState().addShortcut({ title: 'Review', action: 'review' }).id; });
+  expect(view.getByText(/Questions to review · 1 due/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId(`launch-shortcut-${id}`));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Practice', undefined);
+});

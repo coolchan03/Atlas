@@ -8,6 +8,8 @@ import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { UndoRow, useUndo } from '../../components/UndoRow';
+import { dueCount } from '../../topics/review';
+import { useExerciseStore } from '../../study/exercises';
 import { useTopics } from '../../topics/store';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { activeModelService } from '../../services/activeModelService';
@@ -41,6 +43,7 @@ const WIDGET_ACTIONS: Array<{ id: HomeWidgetAction; label: string }> = [
   { id: 'course', label: 'Open a course board' },
   { id: 'project', label: 'Open a project' },
   { id: 'practice', label: 'Practice a project' },
+  { id: 'review', label: 'Questions to review' },
 ];
 const actionLabel = (action: HomeWidgetAction | undefined) => WIDGET_ACTIONS.find((a) => a.id === (action || 'chat'))?.label || 'Open chat';
 const inChat = (action?: HomeWidgetAction) => action === 'call' || action === 'chat' || !action;
@@ -91,6 +94,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const conversations = useChatStore((s) => s.conversations);
   const courses = useTopics((s) => s.courses);
   const undo = useUndo();
+  useExerciseStore((s) => s.progress); // redraw the due count when answers change
   const [open, setOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState('');
   const [draft, setDraft] = useState<Details>(initial);
@@ -157,6 +161,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
       if (screen) { openScreen(screen); return; }
       if (action === 'course' && shortcut.courseId) { openScreen('TopicBoard', { courseId: shortcut.courseId }); return; }
       if (action === 'project' && shortcut.projectId) { openScreen('ProjectDetail', { projectId: shortcut.projectId }); return; }
+      if (action === 'review') { openScreen('Practice'); return; }
       if (action === 'practice') { openScreen('Practice', shortcut.projectId ? { projectId: shortcut.projectId } : undefined); return; }
       if (action === 'model-picker') { navigation.navigate('ModelsTab', { initialTab: 'text' }); return; }
       if (action === 'resume-last' || action === 'resume-most') {
@@ -206,6 +211,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
         const isMusicPlayer = widget.action === 'music-player';
         const isLearning = widget.action === 'learning-status';
         const isReader = widget.action === 'read-aloud';
+        const dueNow = widget.action === 'review' ? dueCount() : null;
         return (
           <View key={widget.id} style={[styles.savedRow, { borderTopColor: colors.border }]}>
             <View style={styles.flex}>
@@ -214,7 +220,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
                 <Text style={[styles.small, { color: colors.textSecondary }]}>{inChat(widget.action)
                   ? [widget.action === 'call' ? 'Call' : 'Chat', agent, localModels.find((m) => m.id === widget.modelId)?.name, projects.find((p) => p.id === widget.projectId)?.name,
                     widget.conversationId ? (conversations.find((c) => c.id === widget.conversationId)?.title.slice(0, 22) ?? 'chat removed') : undefined, voice].filter(Boolean).join(' · ')
-                  : [actionLabel(widget.action), widget.action === 'course' ? courses.find((c) => c.id === widget.courseId)?.title : undefined,
+                  : [actionLabel(widget.action), dueNow === null ? undefined : `${dueNow} due`, widget.action === 'course' ? courses.find((c) => c.id === widget.courseId)?.title : undefined,
                     widget.action === 'project' || widget.action === 'practice' ? projects.find((p) => p.id === widget.projectId)?.name : undefined].filter(Boolean).join(' · ')}</Text>
               </TouchableOpacity>
               {isMusicPlayer && <MusicPlayerWidget openStudio={() => openScreen('MusicStudio')}/>}

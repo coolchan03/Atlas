@@ -9,7 +9,7 @@ export type HomeWidgetAction =
   'chat' | 'call' | 'resume-last' | 'resume-most' |
   'model-picker' | 'music-studio' | 'music-player' | 'learning' |
   'learning-status' | 'daily-brief' | 'recorder' | 'compass' | 'read-aloud' |
-  'course' | 'project' | 'practice';
+  'course' | 'project' | 'practice' | 'review';
 export interface HomeShortcut {
   id: string;
   title: string;
