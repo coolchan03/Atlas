@@ -67,6 +67,7 @@ export type RootStackParamList = {
   Backup: undefined;
   AssistantAccess: undefined;
   BackgroundSettings: undefined;
+  TaskCenter: undefined;
   BriefingPaper: { createdAt: number };
   NoiseMeter: undefined;
   MetalDetector: undefined;

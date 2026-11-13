@@ -3,6 +3,7 @@
  * Private AI assistant that runs entirely on your device
  */
 
+import { useTasks } from './src/tasks/taskRegistry';
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback } from 'react';
 import { ActivityIndicator, AppState, Image, View, StyleSheet, LogBox } from 'react-native';
@@ -88,6 +89,7 @@ const ensureRemoteServerStoreHydrated = async () => {
 
 function App() {
   useNearbyPairingIntent();
+  useEffect(() => { useTasks.getState().markInterrupted(); }, []); // work cut off by Android shows as interrupted, never as still running
   useEffect(() => startShareIntake(), []);
   useEffect(() => startAppLinks(), []);
   useEffect(() => startScheduler(), []);

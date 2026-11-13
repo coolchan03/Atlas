@@ -3,6 +3,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { documentService } from '../services/documentService';
 import { ragService } from '../services/rag';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { trackTask, useTasks } from '../tasks/taskRegistry';
 
 /** Documents a learning cycle reads from: files picked on the phone, or everything in the Atlas folder, indexed into a project. */
 export interface AddResult { added: string[]; skipped: string[]; failed: Array<{ name: string; reason: string }> }
@@ -34,18 +35,27 @@ export async function addFilesToProject(o: {
   projectId: string; files: Array<{ path: string; name: string; size: number }>; onProgress?: (m: string) => void; index?: Index;
 }): Promise<AddResult> {
   const { projectId, files, onProgress, index = (p) => ragService.indexDocument(p) } = o;
-  const have = new Set((await ragService.getDocumentsByProject(projectId)).map((d: { name: string }) => d.name));
-  const result: AddResult = { added: [], skipped: [], failed: [] };
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    if (have.has(f.name)) { result.skipped.push(f.name); continue; }
-    onProgress?.(`Adding ${i + 1} of ${files.length}: ${f.name}`);
-    try {
-      await index({ projectId, filePath: f.path, fileName: f.name, fileSize: f.size });
-      result.added.push(f.name); have.add(f.name);
-    } catch (e: any) { result.failed.push({ name: f.name, reason: String(e?.message || e) }); }
-  }
-  return result;
+  const project = useProjectStore.getState().projects.find((p) => p.id === projectId);
+  const protectedScope = !!(project?.pinVerifier || project?.protectedBlob);
+  const result = await trackTask({ type: 'import', title: `Adding ${files.length} file${files.length === 1 ? '' : 's'} to ${project?.name ?? 'a project'}`, protectedScope, retryable: true }, async (ctl) => {
+    const have = new Set((await ragService.getDocumentsByProject(projectId)).map((d: { name: string }) => d.name));
+    const out: AddResult = { added: [], skipped: [], failed: [] };
+    for (let i = 0; i < files.length; i++) {
+      if (ctl.cancelled()) break; // a safe point: files already added are kept
+      const f = files[i];
+      if (have.has(f.name)) { out.skipped.push(f.name); continue; }
+      onProgress?.(`Adding ${i + 1} of ${files.length}: ${f.name}`);
+      ctl.progress({ stage: f.name, completed: i, total: files.length });
+      try {
+        await index({ projectId, filePath: f.path, fileName: f.name, fileSize: f.size });
+        out.added.push(f.name); have.add(f.name);
+      } catch (e: any) { out.failed.push({ name: f.name, reason: String(e?.message || e) }); }
+    }
+    // Every file failing is a failed job (visible in the task center), not a quiet "done".
+    if (out.failed.length && !out.added.length && !out.skipped.length) useTasks.getState().fail(ctl.id, `None of the files could be added: ${out.failed[0].reason}`, true);
+    return out;
+  });
+  return result ?? { added: [], skipped: [], failed: [] };
 }
 
 export interface PickedFile { path: string; name: string; size: number }

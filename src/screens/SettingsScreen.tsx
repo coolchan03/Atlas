@@ -159,6 +159,7 @@ export const SettingsScreen: React.FC = () => {
                 { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
                 { icon: 'save', title: 'Backup & sync', desc: 'Back up and restore; sync with nearby devices', screen: 'Backup' as const },
                 { icon: 'users', title: 'Assistant permissions', desc: 'Review all requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },
+                { icon: 'activity', title: 'Task center', desc: 'See, cancel and retry imports, downloads and other long jobs', screen: 'TaskCenter' as const },
                 { icon: 'image', title: 'Background images', desc: 'Set a background photo for any screen', screen: 'BackgroundSettings' as const },
               ],
             },
