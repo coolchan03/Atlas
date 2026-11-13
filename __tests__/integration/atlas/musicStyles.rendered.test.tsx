@@ -16,7 +16,7 @@ it('shows holidays and places as their own groups and sets a fitting sound when 
   for (const label of ['Jazz', 'Vaporwave', 'Thanksgiving', 'Halloween', 'Cinco de Mayo', 'Italian restaurant', '1920s', 'Retro 80s synth', 'Pop', 'Rock']) expect(view.getByText(label)).toBeTruthy();
   rtl.fireEvent.press(view.getByText('Christmas'));
   const selected = view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected);
-  expect(selected.some((r: any) => rtl.within(r).queryByText('Bells'))).toBe(true);
+  expect(selected.some((r: any) => rtl.within(r).queryByText('Style band'))).toBe(true);
   rtl.fireEvent.press(view.getByText('Jazz'));
-  expect(view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected).some((r: any) => rtl.within(r).queryByText('Electric piano'))).toBe(true);
+  expect(view.getAllByRole('radio').filter((r: any) => r.props.accessibilityState?.selected).some((r: any) => rtl.within(r).queryByText('Style band'))).toBe(true);
 });

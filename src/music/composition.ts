@@ -106,16 +106,18 @@ function loopSeconds(score: MusicScore, rate: number): number {
   return Math.max(...score.notes.map((note) => (note.beat + note.length) * 60 / score.bpm));
 }
 
-interface MixContext { bpm: number; preset: SoundPreset; rate: number; loopFrames: number }
+interface MixContext { bpm: number; preset: SoundPreset; rate: number; loopFrames: number; band?: MusicScore['band']; /** Notes already made, so a repeated chord or drum hit is built once. */ made: Map<string, Float32Array> }
 
 /** Adds one note to the mix, repeating it every loop until the buffer is full. The note is made once and copied. */
-function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loopFrames }: MixContext): void {
+function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loopFrames, band, made }: MixContext): void {
   if (!Number.isFinite(note.pitch) || !Number.isFinite(note.beat) || !Number.isFinite(note.length) || !Number.isFinite(note.gain)) throw new Error('Invalid score note');
   const frames = buffer.length;
   const startInLoop = Math.round(note.beat * 60 / bpm * rate);
   const samples = Math.ceil(note.length * 60 / bpm * rate);
   if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
-  const wave = noteWave(note, { samples, rate, preset });
+  const key = `${note.pitch}|${samples}|${note.gain}|${note.role ?? 'melody'}`;
+  let wave = made.get(key);
+  if (!wave) { wave = noteWave(note, { samples, rate, preset, band }); made.set(key, wave); }
   for (let start = startInLoop; start < frames; start += loopFrames) {
     const end = Math.min(samples, frames - start);
     for (let i = 0; i < end; i++) buffer[start + i] += wave[i];
@@ -151,7 +153,8 @@ export function renderMusic(score: MusicScore, { preset = 'keys', rate = MUSIC_R
   const frames = Math.ceil(requestedSeconds * rate);
   const buffer = new Float32Array(frames);
   const loopFrames = Math.max(1, Math.round(baseSeconds * rate));
-  const context = { bpm: score.bpm, preset, rate, loopFrames };
+  // "Style band" plays each part on the instrument the style was written for.
+  const context = { bpm: score.bpm, preset, rate, loopFrames, band: preset === 'band' ? score.band : undefined, made: new Map() };
   for (const note of score.notes) mixNote(buffer, note, context);
   const peak = echoAndSmooth(buffer, preset, rate);
   const scale = peak > 0 ? 0.72 / peak : 0;

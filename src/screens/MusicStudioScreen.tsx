@@ -14,11 +14,14 @@ import { MUSIC_RATE, composeInstrumental, parseMusicScore, renderMusic, type Mus
 
 const makeMessage = (role: 'system' | 'user', content: string) => ({ id: `${role}-${Date.now()}`, role, content, timestamp: Date.now() });
 const SOUND: Array<{ id: SoundPreset; label: string }> = [
+  { id: 'band', label: 'Style band' },
   { id: 'keys', label: 'Soft keys' }, { id: 'ambient', label: 'Warm pads' },
   { id: 'bell', label: 'Bells' }, { id: 'synth', label: 'Synth' },
   { id: 'epiano', label: 'Electric piano' }, { id: 'guitar', label: 'Guitar' },
   { id: 'overdrive', label: 'Rock guitar' }, { id: 'organ', label: 'Organ' },
 ];
+/** The instrument for the four plain moods, which have no band of their own. */
+const PLAIN_SOUND: Record<string, SoundPreset> = { study: 'keys', ambient: 'ambient', cinematic: 'synth', electronic: 'synth' };
 const BASIC_MOODS: Array<{ id: MusicMood; label: string }> = [
   { id: 'study', label: 'Focus' }, { id: 'ambient', label: 'Ambient' },
   { id: 'cinematic', label: 'Cinematic' }, { id: 'electronic', label: 'Electronic' },
@@ -37,7 +40,7 @@ const DURATIONS = [30, 60, 90] as const;
 export function MusicStudioScreen() {
   const { colors } = useTheme();
   const [prompt, setPrompt] = useState('Peaceful, unobtrusive background music for reading');
-  const [sound, setSound] = useState<SoundPreset>('ambient');
+  const [sound, setSound] = useState<SoundPreset>('keys');
   const [mood, setMood] = useState<MusicMood>('study');
   const [duration, setDuration] = useState<number>(60);
   const [busy, setBusy] = useState(false);
@@ -143,7 +146,7 @@ export function MusicStudioScreen() {
         {STYLE_GROUPS.map((group) => (
           <View key={group.title}>
             <Text style={[styles.small, { color: colors.textSecondary }]}>{group.title}</Text>
-            {chips(group.items, mood, (id: MusicMood) => { setMood(id); if (id in STYLES) setSound(STYLES[id as StyleMood].sound); })}
+            {chips(group.items, mood, (id: MusicMood) => { setMood(id); setSound(id in STYLES ? 'band' : PLAIN_SOUND[id as string] ?? 'keys'); })}
           </View>
         ))}
         <Text style={[styles.label, { color: colors.text }]}>Instrument sound</Text>

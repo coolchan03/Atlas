@@ -3,7 +3,11 @@
  * Each style is plain data (tempo, scale, chords, rhythm), so a new one needs no new code. Every tune is original:
  * no famous melody is used, only the feel (bells for Christmas, a slow waltz for winter, and so on).
  */
-import type { MusicNote, SoundPreset } from './types';
+import { composeFromSpec, seedFor } from './arrange';
+import type { StyleGroup, StyleSpec } from './styleTypes';
+import type { MusicNote } from './types';
+
+export type { StyleGroup, StyleSpec };
 
 export type StyleMood =
   | 'jazz' | 'vaporwave' | 'eerie' | 'bossa' | 'lofi' | 'noir' | 'space' | 'rain' | 'spa' | 'campfire' | 'chiptune' | 'western'
@@ -12,34 +16,6 @@ export type StyleMood =
   | 'italian' | 'frenchcafe' | 'tiki' | 'tavern' | 'shanty' | 'carnival'
   | 'twenties' | 'fifties' | 'surf' | 'disco' | 'retro80s' | 'pop' | 'rock' | 'funk' | 'reggae' | 'country' | 'blues' | 'classical' | 'lullaby' | 'march' | 'edm' | 'hiphop';
 
-export type StyleGroup = 'Moods and genres' | 'Eras and genres' | 'Seasons and holidays' | 'Places and settings';
-
-type Bass = 'root' | 'walk' | 'pulse' | 'drone';
-type Perc = 'none' | 'soft' | 'four' | 'swing' | 'sleigh' | 'industrial' | 'backbeat' | 'offbeat';
-type Tune = 'arp' | 'walk' | 'sparse';
-
-export interface StyleSpec {
-  label: string;
-  group: StyleGroup;
-  /** The instrument sound that suits the style; the person can still change it. */
-  sound: SoundPreset;
-  bpm: number;
-  beatsPerBar: 3 | 4 | 6;
-  /** Semitone steps of the scale. */
-  scale: number[];
-  /** Chord roots as scale degrees, one per bar, for 8 bars. */
-  progression: number[];
-  /** Which scale steps above the root sound together: [0, 2, 4] is a plain chord, add 6 for a seventh. */
-  chord: number[];
-  tune: Tune;
-  /** Melody notes per bar (arp and walk) or long notes per bar (sparse). */
-  density: number;
-  /** 0 to 0.4: how late the off-beat eighths fall. */
-  swing: number;
-  bass: Bass;
-  perc: Perc;
-  padGain: number;
-}
 
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const DORIAN = [0, 2, 3, 5, 7, 9, 10];
@@ -109,85 +85,33 @@ export const STYLES: Record<StyleMood, StyleSpec> = {
 
 export const isStyleMood = (mood: string): mood is StyleMood => mood in STYLES;
 
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
 
-/** The pitch of a scale step, counting past the top of the scale into the next octave. */
-const stepPitch = (spec: StyleSpec, tonic: number, step: number) => tonic + spec.scale[((step % 7) + 7) % 7] + 12 * Math.floor(step / 7);
+/** How each style plays its chords, where it differs from the bar length. */
+const COMP: Partial<Record<StyleMood, StyleSpec['comp']>> = {
+  jazz: 'swingcomp', lofi: 'swingcomp', noir: 'swingcomp', blues: 'swingcomp', bossa: 'bossa', funk: 'stabs', disco: 'stabs', edm: 'stabs', reggae: 'offbeat',
+  rock: 'eighths', surf: 'eighths', summer: 'eighths', pop: 'arp', retro80s: 'arp', chiptune: 'arp', spring: 'arp', newyear: 'arp', classical: 'alberti',
+  country: 'strum', campfire: 'strum', western: 'strum', thanksgiving: 'strum', frenchcafe: 'oompah', march: 'oompah', fifties: 'strum', tiki: 'offbeat', cincodemayo: 'jig',
+};
 
-/** Beat position of the nth equal slice of a bar, with the off-beat slices held back by the swing amount. */
-function slot(spec: StyleSpec, at: { bar: number; n: number; slices: number }): number {
-  const { bar, n, slices } = at;
-  const width = spec.beatsPerBar / slices;
-  const late = n % 2 === 1 ? spec.swing * width : 0;
-  return bar * spec.beatsPerBar + n * width + late;
-}
+/** The instrument for each part where the style is not simply one instrument for everything. */
+const BAND: Partial<Record<StyleMood, StyleSpec['band']>> = {
+  jazz: { melody: 'bell', pad: 'epiano', bass: 'bass' }, lofi: { melody: 'epiano', pad: 'epiano', bass: 'bass' }, noir: { melody: 'epiano', pad: 'pad', bass: 'bass' },
+  bossa: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, funk: { melody: 'saw', pad: 'epiano', bass: 'bass' }, disco: { melody: 'saw', pad: 'epiano', bass: 'bass' },
+  rock: { melody: 'driven', pad: 'driven', bass: 'bass' }, surf: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, country: { melody: 'pluck', pad: 'pluck', bass: 'bass' },
+  blues: { melody: 'pluck', pad: 'epiano', bass: 'bass' }, reggae: { melody: 'pluck', pad: 'organ', bass: 'bass' }, retro80s: { melody: 'saw', pad: 'pad', bass: 'bass' },
+  edm: { melody: 'saw', pad: 'saw', bass: 'bass' }, pop: { melody: 'piano', pad: 'pad', bass: 'bass' }, classical: { melody: 'piano', pad: 'piano', bass: 'bass' },
+  twenties: { melody: 'piano', pad: 'piano', bass: 'bass' }, fifties: { melody: 'epiano', pad: 'piano', bass: 'bass' }, italian: { melody: 'pluck', pad: 'pluck', bass: 'bass' },
+  cincodemayo: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, christmas: { melody: 'bell', pad: 'pad', bass: 'bass' }, winter: { melody: 'bell', pad: 'pad', bass: 'bass' },
+  halloween: { melody: 'bell', pad: 'pad', bass: 'bass' }, chiptune: { melody: 'saw', pad: 'saw', bass: 'bass' }, summer: { melody: 'saw', pad: 'epiano', bass: 'bass' },
+  march: { melody: 'organ', pad: 'organ', bass: 'bass' }, carnival: { melody: 'bell', pad: 'organ', bass: 'bass' }, tavern: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, shanty: { melody: 'pluck', pad: 'organ', bass: 'bass' },
+};
 
-function chordNotes(spec: StyleSpec, tonic: number, bar: number): MusicNote[] {
-  const degree = spec.progression[bar];
-  return spec.chord.map((offset) => ({ pitch: stepPitch(spec, tonic, degree + offset) + 12, beat: bar * spec.beatsPerBar, length: spec.beatsPerBar - 0.05, gain: spec.padGain, role: 'pad' as const }));
-}
+/** The style with its chord pattern and band filled in. */
+export const specFor = (mood: StyleMood): StyleSpec => ({ ...STYLES[mood], comp: STYLES[mood].comp ?? COMP[mood], band: STYLES[mood].band ?? BAND[mood] });
 
-function bassNotes(spec: StyleSpec, tonic: number, bar: number): MusicNote[] {
-  const degree = spec.progression[bar];
-  const base = bar * spec.beatsPerBar;
-  const root = stepPitch(spec, tonic, degree) - 12;
-  if (spec.bass === 'drone') return [{ pitch: tonic - 12, beat: base, length: spec.beatsPerBar - 0.05, gain: 0.3, role: 'bass' }];
-  if (spec.bass === 'root') return [{ pitch: root, beat: base, length: spec.beatsPerBar - 0.35, gain: 0.25, role: 'bass' }];
-  const walk = [0, 2, 4, 5].map((step) => stepPitch(spec, tonic, degree + step) - 12);
-  return Array.from({ length: spec.beatsPerBar }, (_, beat) => ({
-    pitch: spec.bass === 'walk' ? walk[beat % 4] : root + (beat % 2 ? 7 : 0),
-    beat: base + beat, length: 0.9, gain: 0.24, role: 'bass' as const,
-  }));
-}
-
-function tuneNotes(spec: StyleSpec, key: { tonic: number; seed: number }, bar: number): MusicNote[] {
-  const { tonic, seed } = key;
-  const degree = spec.progression[bar];
-  const out: MusicNote[] = [];
-  const top = tonic + 24;
-  for (let n = 0; n < spec.density; n++) {
-    const beat = spec.tune === 'sparse'
-      ? bar * spec.beatsPerBar + (n * spec.beatsPerBar) / spec.density
-      : slot(spec, { bar, n, slices: spec.density });
-    // Rests: some bars leave a gap, decided by the seed, so the tune breathes.
-    if ((seed >>> ((bar + n) % 24)) % 5 === 0 && spec.tune !== 'arp') continue;
-    let step: number;
-    if (spec.tune === 'arp') step = degree + spec.chord[[0, 2, 1, 2][n % 4] % spec.chord.length];
-    else step = degree + ((seed >>> ((bar * 3 + n) % 28)) % 5) + (n % 2);
-    const length = spec.tune === 'sparse' ? (spec.beatsPerBar / spec.density) * 0.9 : (spec.beatsPerBar / spec.density) * 0.85;
-    out.push({ pitch: Math.min(90, stepPitch(spec, top, step)), beat, length, gain: n === 0 ? 0.26 : 0.18, role: 'melody' });
-  }
-  return out;
-}
-
-function percNotes(spec: StyleSpec, bar: number, seed: number): MusicNote[] {
-  const base = bar * spec.beatsPerBar;
-  const hit = (beat: number, pitch: number, gain: number): MusicNote => ({ pitch, beat, length: 0.25, gain, role: 'perc' });
-  switch (spec.perc) {
-    case 'four': return Array.from({ length: spec.beatsPerBar * 2 }, (_, n) => (n % 2 === 0 ? hit(base + n / 2, 40, 0.5) : hit(base + n / 2, 90, 0.12)));
-    case 'backbeat': return Array.from({ length: spec.beatsPerBar }, (_, n) => (n % 2 === 0 ? hit(base + n, 40, 0.5) : hit(base + n, 82, 0.28)));
-    case 'offbeat': return Array.from({ length: spec.beatsPerBar }, (_, n) => hit(base + n + 0.5, 90, 0.16));
-    case 'soft': return [hit(base, 40, 0.3), hit(base + spec.beatsPerBar / 2, 90, 0.1)];
-    case 'swing': return Array.from({ length: spec.beatsPerBar * 2 }, (_, n) => hit(slot(spec, { bar, n, slices: spec.beatsPerBar * 2 }), 91, n % 2 ? 0.07 : 0.11));
-    case 'sleigh': return Array.from({ length: spec.beatsPerBar }, (_, n) => hit(base + n, 91, n === 0 ? 0.16 : 0.1));
-    case 'industrial': return [0, 1, 2, 3].filter((n) => (seed >>> ((bar * 4 + n) % 30)) % 3 === 0).map((n) => hit(base + n + 0.5, n % 2 ? 80 : 44, 0.22));
-    default: return [];
-  }
-}
-
-/** A seeded 8-bar tune in one of the styles above. The same prompt always makes the same tune. */
-export function composeStyled(prompt: string, mood: StyleMood): { title: string; bpm: number; notes: MusicNote[] } {
-  const spec = STYLES[mood];
-  const seed = hash(`${mood}:${prompt.toLowerCase().trim()}`);
-  const tonic = 48 + (seed % 5);
-  const notes: MusicNote[] = [];
-  for (let bar = 0; bar < 8; bar++) {
-    notes.push(...chordNotes(spec, tonic, bar), ...bassNotes(spec, tonic, bar), ...tuneNotes(spec, { tonic, seed }, bar), ...percNotes(spec, bar, seed));
-  }
+/** A seeded 16-bar tune in one of the styles above, with the band it was written for. The same prompt always makes the same tune. */
+export function composeStyled(prompt: string, mood: StyleMood): { title: string; bpm: number; notes: MusicNote[]; band?: StyleSpec['band'] } {
+  const spec = specFor(mood);
   const label = prompt.trim().replace(/[\r\n]+/g, ' ').slice(0, 56) || spec.label;
-  return { title: `${label} (${spec.label})`, bpm: spec.bpm, notes };
+  return { title: `${label} (${spec.label})`, bpm: spec.bpm, notes: composeFromSpec(spec, seedFor(prompt, mood)), band: spec.band };
 }

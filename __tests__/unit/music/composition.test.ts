@@ -60,7 +60,7 @@ describe('Style presets (jazz, vaporwave, eerie, seasons, holidays, eras and pla
   it('keeps each style apart: jazz swings, Christmas has sleigh ticks, eerie holds a drone, rock has a backbeat', () => {
     expect(composeInstrumental('x', 'jazz').notes.some((n) => n.role === 'melody' && !Number.isInteger(n.beat * 2))).toBe(true);
     expect(composeInstrumental('x', 'christmas').notes.some((n) => n.role === 'perc')).toBe(true);
-    expect(composeInstrumental('x', 'eerie').notes.filter((n) => n.role === 'bass')).toHaveLength(8);
+    expect(composeInstrumental('x', 'eerie').notes.filter((n) => n.role === 'bass')).toHaveLength(16);
     const rock = composeInstrumental('x', 'rock').notes.filter((n) => n.role === 'perc');
     expect(rock.some((n) => n.pitch < 60)).toBe(true); // a kick
     expect(rock.some((n) => n.pitch >= 60 && n.pitch < 86)).toBe(true); // a snare
@@ -94,5 +94,65 @@ describe('instruments sound different from each other and behave like what they 
   });
   it('every instrument makes sound', () => {
     for (const p of ['keys', 'bell', 'synth', 'ambient', 'epiano', 'guitar', 'overdrive', 'organ'] as SoundPreset[]) expect(rms(wave(p), 0, 4800)).toBeGreaterThan(0.01);
+  });
+});
+
+describe('the tunes are music, not noise: form, harmony, motifs, fills and a band', () => {
+  const { STYLES, specFor } = require('../../../src/music/styles') as { STYLES: Record<string, any>; specFor: (m: string) => any };
+  const { chordPitchClasses, seedFor, BARS } = require('../../../src/music/arrange');
+  const tune = (style: string) => composeInstrumental('a quiet evening', style as MusicMood);
+  const bar = (score: any, role: string, b: number, bpb: number) => score.notes.filter((n: any) => n.role === role && n.beat >= b * bpb && n.beat < (b + 1) * bpb).sort((x: any, y: any) => x.beat - y.beat);
+
+  it.each(Object.keys(STYLES))('%s is 16 bars long, in two sections, with a different chord in the B section from the A section somewhere', (style) => {
+    const spec = specFor(style);
+    const score = tune(style);
+    const end = Math.max(...score.notes.map((n: any) => n.beat));
+    expect(end).toBeGreaterThan((BARS - 1) * spec.beatsPerBar);
+    expect(end).toBeLessThan(BARS * spec.beatsPerBar);
+    const seed = seedFor('a quiet evening', style);
+    const a = Array.from({ length: 8 }, (_, i) => chordPitchClasses(spec, seed, i).join());
+    const b = Array.from({ length: 8 }, (_, i) => chordPitchClasses(spec, seed, i + 8).join());
+    expect(a.join('|')).not.toBe(b.join('|'));
+  });
+  it.each(['jazz', 'rock', 'country', 'pop', 'classical', 'bossa', 'funk', 'blues'])('%s: the first melody note of every bar is a note of that bar\'s chord', (style) => {
+    const spec = specFor(style);
+    const score = tune(style);
+    const seed = seedFor('a quiet evening', style);
+    for (let b = 0; b < BARS; b++) {
+      const first = bar(score, 'melody', b, spec.beatsPerBar)[0];
+      if (!first) continue;
+      expect(chordPitchClasses(spec, seed, b)).toContain(first.pitch % 12);
+    }
+  });
+  it('a melody repeats its shape: the up-and-down contour of bar 1 comes back in bar 5', () => {
+    for (const style of ['jazz', 'rock', 'pop', 'country']) {
+      const spec = specFor(style);
+      const shape = (b: number) => { const ns = bar(tune(style), 'melody', b, spec.beatsPerBar); return ns.slice(1).map((n: any, i: number) => Math.sign(n.pitch - ns[i].pitch)).join(); };
+      expect(shape(4)).toBe(shape(0));
+    }
+  });
+  it('drums fill the last beat of each section', () => {
+    for (const style of ['rock', 'pop', 'country', 'funk']) {
+      const spec = specFor(style);
+      const hits = (b: number) => bar(tune(style), 'perc', b, spec.beatsPerBar).filter((n: any) => n.beat >= (b + 1) * spec.beatsPerBar - 1).length;
+      expect(hits(7)).toBeGreaterThan(hits(6));
+      expect(hits(15)).toBeGreaterThan(hits(14));
+    }
+  });
+  it('most styles use more than one instrument at once, and the bass is always its own instrument', () => {
+    let multi = 0;
+    for (const style of Object.keys(STYLES)) {
+      const band = tune(style).band;
+      if (band) { expect(band.bass).toBe('bass'); if (new Set(Object.values(band)).size >= 2) multi++; }
+    }
+    expect(multi).toBeGreaterThan(25);
+  });
+  it('the style band sounds different from one instrument for everything', () => {
+    const score = tune('jazz');
+    const band = renderMusic(score, { preset: 'band', seconds: 8 });
+    const keys = renderMusic(score, { preset: 'keys', seconds: 8 });
+    let diff = 0;
+    for (let i = 0; i < band.length; i++) diff += Math.abs(band[i] - keys[i]);
+    expect(diff / band.length).toBeGreaterThan(100);
   });
 });
