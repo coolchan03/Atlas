@@ -25,6 +25,7 @@ import { DIFFICULTIES } from '../study/difficulty';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
+import { ResizableSplit } from '../components/ResizableSplit';
 import { useOffGrid } from '../atlasTools/offGrid';
 import { UndoRow, useUndo } from '../components/UndoRow';
 
@@ -306,11 +307,8 @@ export const TopicBoardScreen: React.FC = () => {
   const open = (i: number) => i === 0 || done(spaces[i - 1].key) || done(spaces[i].key);
   const p = courseProgress(course);
   const stars = Object.values(course.progress).reduce((n, x) => n + x.stars, 0);
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <Header title={course.theme || course.title} onBack={() => navigation.goBack()} />
-      <View style={twoPane ? styles.panes : styles.fill}>
-      <ScrollView style={twoPane ? styles.paneLeft : undefined} contentContainerStyle={styles.body}>
+  const boardPane = (
+    <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.name, { color: colors.text }]}>{course.title}</Text>
         {!!course.summary && <Text style={[styles.meta, { color: colors.textSecondary }]}>{course.summary}</Text>}
         {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
@@ -331,14 +329,18 @@ export const TopicBoardScreen: React.FC = () => {
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}
           onPress={(s) => (twoPane ? setPicked(s.key) : navigation.navigate('TopicSquare', { courseId, key: s.key }))} />
       </ScrollView>
-      {twoPane && (
-        <View style={[styles.paneRight, { borderLeftColor: colors.border }]} testID="board-detail-pane">
+  );
+  const detailPane = (
+    <View style={styles.fill} testID="board-detail-pane">
           {picked
             ? <TopicSquareScreen key={picked} courseId={courseId} squareKey={picked} embedded onNext={setPicked} />
             : <Text style={[styles.meta, styles.body, { color: colors.textSecondary }]}>Pick a square on the board to play it here.</Text>}
         </View>
-      )}
-      </View>
+  );
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <Header title={course.theme || course.title} onBack={() => navigation.goBack()} />
+      {twoPane ? <ResizableSplit testID="board-split" first={boardPane} second={detailPane} /> : boardPane}
     </SafeAreaView>
   );
 };
@@ -458,9 +460,6 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
 const styles = StyleSheet.create({
   container: { flex: 1 },
   fill: { flex: 1 },
-  panes: { flex: 1, flexDirection: 'row' },
-  paneLeft: { flex: 1 },
-  paneRight: { flex: 1, borderLeftWidth: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   title: { fontSize: 22, fontWeight: '400', flex: 1 },
   body: { padding: 16, gap: 12, paddingBottom: 60 },

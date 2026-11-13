@@ -22,6 +22,7 @@ export const RESTORABLE_STORE_KEYS = new Set([
  */
 export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-backup-reminder': 'when this phone last reminded about a backup',
+  'atlas-pane-ratios': 'how this phone or tablet splits its screen',
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
   'atlas-tasks': 'running and failed jobs of this phone, which cannot continue on another phone',
   'atlas-model-speed': 'measured speed of this phone\'s models',
