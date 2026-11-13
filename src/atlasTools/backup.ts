@@ -65,6 +65,14 @@ export function lockedChatsNotOpen(): number {
   } catch { return 0; }
 }
 
+function assertBackupSize(bytes: number, encrypted: boolean): void {
+  const limitMb = encrypted ? 35 : 50;
+  if (bytes <= limitMb * 1024 * 1024) return;
+  const kind = encrypted ? 'password-protected' : 'plain';
+  const hint = encrypted ? ' or leave out some project files' : '';
+  throw new Error(`Backup is ${(bytes / 1048576).toFixed(1)} MB, over the ${limitMb} MB limit for ${kind} backups. Nothing was changed. Export fewer conversations${hint}.`);
+}
+
 export async function exportBackup(password?: string): Promise<string | null> {
   if (password !== undefined && password.length < 12) throw new Error('Encrypted backups require a password of at least 12 characters.');
   // Device-bound encrypted chats cannot be decrypted after transfer to a new
@@ -122,9 +130,7 @@ export async function exportBackup(password?: string): Promise<string | null> {
   // Protect memory/storage from accidentally exporting unbounded chat archives.
   // UTF-8 may occupy more bytes than the JavaScript string length.
   const bytes = unescape(encodeURIComponent(backupJson)).length;
-  if (bytes > (password ? 35 : 50) * 1024 * 1024) {
-    throw new Error('Backup exceeds 50 MB. Export fewer conversations or use a future encrypted archive format.');
-  }
+  assertBackupSize(bytes, !!password);
   const output = password ? await portableCrypto().encryptPortableBackup(backupJson, password) : backupJson;
   await RNFS.writeFile(path, output, 'utf8');
   try {

@@ -9,6 +9,10 @@ import java.util.zip.ZipInputStream
 internal object AtlasZipExtractor {
     data class Result(val files: Int, val bytes: Long)
 
+    /** Archive bombs: more entries than any model needs, or less free space than the next file plus a safety margin, stop the extraction. */
+    private const val MAX_ENTRIES = 50_000
+    private const val MIN_FREE_BYTES = 256L * 1024 * 1024
+
     fun extract(ctx: Context, zipPath: String, modelDir: String,
                 onProgress: (Int, Long) -> Unit): Result {
         val library = File(ctx.filesDir, "image_models").canonicalFile
@@ -29,6 +33,8 @@ internal object AtlasZipExtractor {
         ZipInputStream(archive.inputStream().buffered(256 * 1024)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
+                if (fileCount >= MAX_ENTRIES) throw IOException("Model ZIP has too many files")
+                if (outputDir.usableSpace < MIN_FREE_BYTES) throw IOException("Not enough free storage to unpack this ZIP")
                 val entryName = entry.name.replace('\\', '/')
                 if (entryName.startsWith("/") || entryName.isBlank() ||
                     entryName.split('/').any { it == ".." || it == "." }) {
@@ -56,6 +62,9 @@ internal object AtlasZipExtractor {
                                 if (n == 0) continue
                                 dest.write(buffer, 0, n)
                                 entryBytes += n
+                                if (entryBytes % (64L * 1024 * 1024) < n && outputDir.usableSpace < MIN_FREE_BYTES) {
+                                    throw IOException("Not enough free storage to unpack $entryName")
+                                }
                             }
                         }
                         if (entry.size >= 0 && entryBytes != entry.size) {
