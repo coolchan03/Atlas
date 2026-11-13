@@ -21,7 +21,8 @@ export interface NormalizedQuestion {
 }
 
 const SAME = 0.8;
-const MAX_QUESTIONS = 100;
+/** A safety limit on one run. It used to be 100, which silently cut a question bank short; reaching this one is reported. */
+export const MAX_QUESTIONS = 5000;
 const CHUNK = 6000;
 const text = (v: unknown, max = 400): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -90,13 +91,23 @@ export function chunks(source: string, size = CHUNK): string[] {
 }
 
 /** Reads pasted questions into the standard form with the AI, a piece at a time. Returns what it found; the person reviews it. */
+export interface ImportReport { questions: NormalizedQuestion[]; pieces: number; piecesRead: number; capped: boolean }
+
 export async function normalizeQuestions(source: string, ask: Ask, topics: string[] = []): Promise<NormalizedQuestion[]> {
+  return (await normalizeQuestionsReport(source, ask, topics)).questions;
+}
+
+/** The same, plus how much of the text was read, so a stop at the safety limit is never silent. */
+export async function normalizeQuestionsReport(source: string, ask: Ask, topics: string[] = []): Promise<ImportReport> {
   const found: NormalizedQuestion[] = [];
+  const all = chunks(source);
+  let piecesRead = 0;
   // With a list of topics (an exam outline) the AI files each question under one of them.
   const system = topics.length ? `${SYSTEM} Set "topic" to the one of these that fits best, exactly as written, or leave it out: ${topics.slice(0, 60).join('; ')}.` : SYSTEM;
-  for (const piece of chunks(source)) {
+  for (const piece of all) {
     if (found.length >= MAX_QUESTIONS) break;
     found.push(...readNormalized(await ask(system, piece)));
+    piecesRead++;
   }
-  return found.slice(0, MAX_QUESTIONS);
+  return { questions: found.slice(0, MAX_QUESTIONS), pieces: all.length, piecesRead, capped: piecesRead < all.length || found.length > MAX_QUESTIONS };
 }

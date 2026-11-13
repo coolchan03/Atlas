@@ -30,6 +30,28 @@ export async function listReadableFiles(dir: string): Promise<Array<{ path: stri
   return out;
 }
 
+/** SHA-256 of a file, or null when it cannot be read. */
+const fileHash = async (path: string): Promise<string | null> => { try { return await RNFS.hash(path, 'sha256'); } catch { return null; } };
+
+/** True when the new file has the same bytes as one of the documents already stored under that name (or when that cannot be told: then it is treated as a duplicate, as before). */
+async function sameBytes(path: string, stored: Array<{ path?: string }>): Promise<boolean> {
+  const mine = await fileHash(path);
+  if (!mine) return true;
+  for (const d of stored) {
+    if (!d.path) return true;
+    const theirs = await fileHash(d.path);
+    if (!theirs || theirs === mine) return true;
+  }
+  return false;
+}
+
+/** "book.pdf" becomes "book (2).pdf", "book (3).pdf" ... until the name is free. */
+export function uniqueName(name: string, taken: Set<string>): string {
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name; const ext = dot > 0 ? name.slice(dot) : '';
+  for (let n = 2; ; n++) { const candidate = `${stem} (${n})${ext}`; if (!taken.has(candidate)) return candidate; }
+}
+
 /** Indexes the files into the project. Files already in it (same name) are skipped, a file that cannot be read is reported and the rest carry on. */
 export async function addFilesToProject(o: {
   projectId: string; files: Array<{ path: string; name: string; size: number }>; onProgress?: (m: string) => void; index?: Index;
@@ -38,12 +60,17 @@ export async function addFilesToProject(o: {
   const project = useProjectStore.getState().projects.find((p) => p.id === projectId);
   const protectedScope = !!(project?.pinVerifier || project?.protectedBlob);
   const result = await trackTask({ type: 'import', title: `Adding ${files.length} file${files.length === 1 ? '' : 's'} to ${project?.name ?? 'a project'}`, protectedScope, retryable: true }, async (ctl) => {
-    const have = new Set((await ragService.getDocumentsByProject(projectId)).map((d: { name: string }) => d.name));
+    const existing: Array<{ name: string; path?: string }> = await ragService.getDocumentsByProject(projectId);
+    const have = new Set(existing.map((d) => d.name));
     const out: AddResult = { added: [], skipped: [], failed: [] };
     for (let i = 0; i < files.length; i++) {
       if (ctl.cancelled()) break; // a safe point: files already added are kept
-      const f = files[i];
-      if (have.has(f.name)) { out.skipped.push(f.name); continue; }
+      let f = files[i];
+      if (have.has(f.name)) {
+        // Same name: only a true duplicate (same bytes) is skipped. A different book or edition with the same file name is kept under its own name.
+        if (await sameBytes(f.path, existing.filter((d) => d.name === f.name))) { out.skipped.push(f.name); continue; }
+        f = { ...f, name: uniqueName(f.name, have) };
+      }
       onProgress?.(`Adding ${i + 1} of ${files.length}: ${f.name}`);
       ctl.progress({ stage: f.name, completed: i, total: files.length });
       try {
