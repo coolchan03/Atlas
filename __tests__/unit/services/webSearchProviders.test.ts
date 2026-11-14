@@ -38,7 +38,7 @@ describe('web search providers', () => {
     brave.mockResolvedValue([{ title: 'Brave Example', url: 'https://www.example.com/a/', snippet: 'brave snippet' }]);
     const out = await searchWeb('example', brave);
     expect(out.provider).toBe('meta');
-    expect(out.results[0].url).toBe('https://example.com/a'.replace('https://example.com/a', out.results[0].url));
+    expect(out.results[0].url).toMatch(/example\.com\/a/);
     expect(out.results[0].snippet).toMatch(/found by DuckDuckGo, Mojeek, Brave/);
     expect(out.results.some((r) => r.title === 'Example - Wikipedia')).toBe(true);
     expect(out.results.some((r) => /Ad$/.test(r.title))).toBe(false);

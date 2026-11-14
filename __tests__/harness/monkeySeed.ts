@@ -26,7 +26,7 @@ export function seedApp(): Seeded {
   });
   const project = useProjectStore.getState().createProject({ name: 'FAR prep', description: 'Notes', systemPrompt: 'Tutor', icon: '#1D4ED8' });
   for (const r of studyResults()) useStudyStore.getState().add(project.id, r);
-  const chats = [createConversationWithMessages({ title: 'Lease questions', projectId: project.id }), createConversationWithMessages({ title: 'Taxes' }), createConversationWithMessages({ title: 'Archived', isArchived: true } as never)];
+  const chats = [createConversationWithMessages(4, { title: 'Lease questions', projectId: project.id }), createConversationWithMessages(2, { title: 'Taxes' }), { ...createConversationWithMessages(2, { title: 'Archived' }), isArchived: true }];
   useChatStore.setState({ conversations: chats, activeConversationId: chats[0].id });
   return { project: project.id, model: 'm1', image: 'img1', agent: useAgentStore.getState().agents[0].id, chat: chats[0].id };
 }
