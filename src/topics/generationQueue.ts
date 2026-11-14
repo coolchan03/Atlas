@@ -23,7 +23,9 @@ function pump(): void {
   pending.forEach((j, i) => { if (j.priority > pending[best].priority) best = i; });
   const [job] = pending.splice(best, 1);
   running = true;
-  job.run().then(job.resolve, job.reject).finally(() => { known.delete(job.key); running = false; pump(); });
+  // The job is forgotten before its result is handed over, so asking for the same lesson again afterwards writes it again.
+  const finish = (settle: () => void) => { known.delete(job.key); running = false; settle(); pump(); };
+  job.run().then((v) => finish(() => job.resolve(v)), (e) => finish(() => job.reject(e)));
 }
 
 /** Queues work under a key. `priority` 1 is a lesson the person is waiting for; 0 is one prepared ahead. */
