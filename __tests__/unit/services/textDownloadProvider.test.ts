@@ -158,7 +158,7 @@ describe('re-issue, subscribe and reconcile', () => {
   it('does nothing on relaunch on Android, where the work resumes by itself', async () => {
     setOS('android');
     useDownloadStore.getState().add(entry() as never);
-    await textProvider.reconcile!();
+    await textProvider.reconcile?.();
     expect(mm.downloadModelBackground).not.toHaveBeenCalled();
   });
 
@@ -169,7 +169,7 @@ describe('re-issue, subscribe and reconcile', () => {
     useDownloadStore.getState().add(entry({ modelKey: 'org/model/x.gguf', downloadId: 'dl-x', fileName: 'x.gguf' }) as never);
     useDownloadStore.getState().add(entry({ modelKey: 'org/model/y.gguf', downloadId: 'dl-y', fileName: 'y.gguf', status: 'completed' }) as never);
     mm.downloadModelBackground.mockRejectedValueOnce(new Error('queue failed'));
-    await textProvider.reconcile!();
+    await textProvider.reconcile?.();
     await new Promise((r) => setImmediate(r));
     expect(useDownloadStore.getState().downloads['done/m/d.gguf']).toBeUndefined();
     expect(mm.downloadModelBackground).toHaveBeenCalledTimes(1);
