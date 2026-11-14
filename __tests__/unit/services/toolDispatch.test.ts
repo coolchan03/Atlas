@@ -4,8 +4,8 @@ const mockDT = {
   addCalendarEvent: jest.fn(async (t: string, s: string) => `added ${t} ${s}`), draftMessage: jest.fn(async (k: string, b: string) => `draft ${k} ${b}`), rememberFact: jest.fn(async (f: string) => `remembered ${f}`),
   confirm: jest.fn(async () => true), lastFileRead: 0, __esModule: true,
 };
-const mockSearchWeb = jest.fn((..._a: unknown[]) => undefined as unknown);
-const mockSearchProject = jest.fn((..._a: unknown[]) => undefined as unknown);
+const mockSearchWeb = jest.fn<Promise<unknown>, unknown[]>();
+const mockSearchProject = jest.fn<Promise<unknown>, unknown[]>();
 const mockSaveNote = jest.fn(async (..._a: unknown[]) => undefined);
 jest.mock('../../../src/atlasTools/deviceTools', () => mockDT);
 jest.mock('../../../src/study/studyTools', () => ({ runStudyTool: jest.fn(async (n: string) => `study ${n}`) }));
