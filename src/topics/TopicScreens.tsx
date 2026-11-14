@@ -22,6 +22,7 @@ import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
 import { DIFFICULTIES } from '../study/difficulty';
+import { AHEAD_CHOICES, aheadFor, prepareAhead, usePrepare } from './prepare';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
@@ -293,6 +294,10 @@ export const TopicBoardScreen: React.FC = () => {
   const course = useTopics((s) => s.courses.find((c) => c.id === courseId));
   const { twoPane } = useLayoutClass();
   const [picked, setPicked] = useState<string | null>(null);
+  const prep = usePrepare();
+  const doneCount = course ? Object.keys(course.progress).length : 0;
+  // Write the next lessons in the background whenever the board is opened, a square is finished, or the setting or difficulty changes.
+  React.useEffect(() => { if (course) void prepareAhead(courseId); }, [courseId, doneCount, course?.difficulty, course?.prepareAhead]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!course) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Course" onBack={() => navigation.goBack()} /></SafeAreaView>;
 
   const done = (key: string) => !!course.progress[key];
@@ -311,6 +316,16 @@ export const TopicBoardScreen: React.FC = () => {
         <View style={styles.chips} testID="course-difficulty">
           {DIFFICULTIES.map((d) => <Chip key={d.id} label={d.label} on={(course.difficulty ?? 'beginner') === d.id} onPress={() => useTopics.getState().setDifficulty(course.id, d.id)} testID={`course-difficulty-${d.id}`} />)}
         </View>
+        <Text style={[styles.meta, { color: colors.textSecondary }]}>Write the next lessons ahead</Text>
+        <View style={styles.chips} testID="course-ahead">
+          {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
+        </View>
+        {prep.courseId === course.id && !!prep.working && (
+          <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson'}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
+        )}
+        {prep.courseId === course.id && !prep.working && !!prep.error && (
+          <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-error">Could not write ahead ({prep.error}). Each lesson is written when you open it.</Text>
+        )}
         <Fold title="Sources, exam match, questions and sharing" testID="course-tools">
         <SourcesCard course={course} />
         <ExamMatchCard course={course} />

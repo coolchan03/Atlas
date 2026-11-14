@@ -27,6 +27,8 @@ export interface Course {
   cited?: Record<string, { source: string; text: string }[]>;
   /** How hard the squares, questions and tests are (beginner, moderate or hard). */
   difficulty?: Difficulty;
+  /** How many of the next lessons are written ahead of time while you play (0 turns it off). Missing means the default. */
+  prepareAhead?: number;
 }
 
 export interface SharedCourse {
@@ -52,6 +54,8 @@ interface TopicsState {
   setCited: (id: string, key: string, passages: { source: string; text: string }[]) => void;
   /** Changes the difficulty; squares not played yet are written again at the new level. */
   setDifficulty: (id: string, difficulty: Difficulty) => void;
+  /** Sets how many of the next lessons are written ahead of time. */
+  setPrepareAhead: (id: string, count: number) => void;
   clearContent: (id: string, key: string) => void;
   /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
   addRemedial: (id: string, afterKey: string) => boolean;
@@ -117,6 +121,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     }) }));
     return added;
   },
+  setPrepareAhead: (id, count) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, prepareAhead: Math.max(0, Math.min(5, Math.round(count))) } : c)) })),
   setContent: (id, key, content) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, content: { ...c.content, [key]: content } } : c)) })),
   complete: (id, key, stars) => set((s) => ({
     courses: s.courses.map((c) => (c.id === id

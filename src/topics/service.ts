@@ -9,6 +9,7 @@ import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, pl
 import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
+import { enqueue } from './generationQueue';
 import { makeSource, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, type Candidate, type CourseSource } from './sources';
 
 const MAX_TRIES = 2;
@@ -62,8 +63,20 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
   } catch { return []; }
 }
 
-/** The content of a square: kept from before, or written now. */
-export async function squareContent(course: Course, key: string): Promise<SquareContent> {
+/**
+ * The content of a square: kept from before, or written now. Lessons are written one at a time; `background` marks one being prepared
+ * ahead, which waits for any lesson the person is actually waiting for.
+ */
+export function squareContent(course: Course, key: string, opts: { background?: boolean } = {}): Promise<SquareContent> {
+  const kept = course.content[key];
+  if (kept) return Promise.resolve(kept);
+  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key), opts.background ? 0 : 1);
+}
+
+async function writeSquare(courseId: string, key: string): Promise<SquareContent> {
+  // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
+  const course = useTopics.getState().courses.find((c) => c.id === courseId);
+  if (!course) throw new Error('That course is not on this phone any more.');
   const kept = course.content[key];
   if (kept) return kept;
   const index = course.squares.findIndex((s) => s.key === key);

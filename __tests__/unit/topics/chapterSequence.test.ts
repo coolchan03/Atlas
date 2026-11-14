@@ -42,3 +42,28 @@ describe('how much the reading says', () => {
     expect(ask('lesson')).not.toContain('READING');
   });
 });
+
+describe('deeper chapters and the exam minimum', () => {
+  const { MAX_CHAPTER_SQUARES } = require('../../../src/topics/chapterSequence');
+  const { examPlan, MIN_EXAM_SQUARES } = require('../../../src/cpa/course');
+  const { EXAMS } = require('../../../src/cpa/blueprints');
+  const { defaultTopics } = require('../../../src/cpa/store');
+
+  it('adds extra practice before the chapter exam, up to fourteen squares, and stays at six by default', () => {
+    expect(chapterSquares('Leases', 'Area', 'for the exam')).toHaveLength(6);
+    const ten = chapterSquares('Leases', 'Area', 'for the exam', 10);
+    expect(ten).toHaveLength(10);
+    expect(ten.map((s: { format: string }) => s.format)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'truefalse', 'fill', 'scenario', 'recall', 'quiz']);
+    expect(chapterSquares('Leases', 'Area', 'for the exam', 99)).toHaveLength(MAX_CHAPTER_SQUARES);
+    expect(ten[ten.length - 1].checkpoint).toBe(true);
+  });
+
+  it('every exam board has at least 100 squares, however few topics its outline has', () => {
+    for (const e of EXAMS) {
+      const plan = examPlan(e.code, defaultTopics(e.code));
+      expect(plan.squares.length).toBeGreaterThanOrEqual(MIN_EXAM_SQUARES);
+    }
+    const few = Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, area: 'Area', name: `Topic ${i}`, covered: false }));
+    expect(examPlan('FAR', few).squares.length).toBeGreaterThanOrEqual(MIN_EXAM_SQUARES);
+  });
+});

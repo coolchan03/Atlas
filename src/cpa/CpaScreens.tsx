@@ -175,7 +175,7 @@ export const CpaExamScreen: React.FC = () => {
           <View style={styles.row}>
             <Button title={status.board ? `Open the ${code} board` : `Start the ${code} board`} onPress={() => { const id = ensureExamCourse(code); if (id) navigation.navigate('TopicBoard', { courseId: id }); }} testID="cpa-board-open" />
             {!!status.board && <Button title="Rebuild from the checklist" variant="outline" testID="cpa-board-rebuild"
-              onPress={() => Alert.alert('Rebuild the board?', 'The board is made again from the checklist. Squares you already played start over.', [{ text: 'Cancel' }, { text: 'Rebuild', onPress: () => { const id = ensureExamCourse(code, true); if (id) navigation.navigate('TopicBoard', { courseId: id }); } }])} />}
+              onPress={() => Alert.alert('Rebuild the board?', 'The board is made again from the checklist, with more squares. Squares with the same name keep their stars and the lessons already written.', [{ text: 'Cancel' }, { text: 'Rebuild', onPress: () => { const id = ensureExamCourse(code, true); if (id) navigation.navigate('TopicBoard', { courseId: id }); } }])} />}
           </View>
         </Card>
 
