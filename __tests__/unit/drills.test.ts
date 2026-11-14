@@ -121,7 +121,7 @@ describe('question bank size', () => {
 });
 
 describe('variantOf (UX-07)', () => {
-  const { variantOf, makeDrill } = require('../../src/study/drills');
+  const { variantOf } = require('../../src/study/drills');
   it('gives a drill a new question of the same kind with new numbers and a computed answer', () => {
     const original = makeDrill('percent-of', 123);
     const v = variantOf(original);

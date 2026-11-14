@@ -31,6 +31,11 @@ function wordsToDigits(text: string): string {
     .replace(new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join('|')})\\b`, 'gi'), (w) => String(NUMBER_WORDS[w.toLowerCase()]));
 }
 
+/** The years (1990 to 2099) a text names, such as the tax years a rule applies to. */
+export function yearsOf(text: string): number[] {
+  return [...new Set((text.match(/\b(?:19[9]\d|20\d\d)\b/g) ?? []).map(Number))].sort((a, b) => a - b);
+}
+
 /** 0 to 1: how much of the smaller claim's words the other one shares. */
 export function similarity(a: string, b: string): number {
   const x = new Set(tokens(a));

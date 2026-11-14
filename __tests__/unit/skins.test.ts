@@ -33,7 +33,7 @@ describe('skins', () => {
 });
 
 describe('extra rounded preset (UX-04)', () => {
-  const { reshapeStyle, pillRadius } = require('../../src/theme/useThemedStyles');
+  const { pillRadius } = require('../../src/theme/useThemedStyles');
   const shape = { radius: 2, minBorder: 0, shadow: 'none', pill: true } as const;
   it('makes padded controls pills, square icon buttons circles, and keeps cards content-safe', () => {
     expect(reshapeStyle({ borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fff' }, shape, '#0f0').borderRadius).toBe(999);
