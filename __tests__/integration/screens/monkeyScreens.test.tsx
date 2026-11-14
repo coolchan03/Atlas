@@ -9,18 +9,6 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNav, useRoute: () => ({ params: mockParams }), useFocusEffect: (cb: () => void) => { require('react').useEffect(cb, []); }, useIsFocused: () => true,
 }));
 
-type Seed = () => Record<string, unknown>;
-const src = [{ n: 1, doc: 'Book', part: 1, text: 'Assets equal liabilities plus equity.' }, { n: 2, doc: 'Book', part: 2, text: 'A lease is a contract to use an asset.' }];
-const results = (): unknown[] => [
-  { kind: 'guide', createdAt: 1, topic: 'Leases', title: 'Study guide', sources: src, text: '# Guide\n\nA lease is a contract [2].' },
-  { kind: 'cards', createdAt: 2, topic: 'Leases', title: 'Cards', sources: src, cards: [{ q: 'What is a lease?', a: 'A contract', src: [2] }, { q: 'Assets?', a: 'What you own', src: [1] }] },
-  { kind: 'quiz', createdAt: 3, topic: 'Leases', title: 'Quiz', sources: src, quiz: [{ q: 'Which is a lease?', options: ['a', 'b', 'c'], answer: 1, why: 'because', src: [2] }] },
-  { kind: 'podcast', createdAt: 4, topic: 'Leases', title: 'Episode', sources: src, hosts: 2, minutes: 3, podcast: [{ host: 'A', text: 'Welcome to leases.' }, { host: 'B', text: 'A lease is a contract.' }] },
-  { kind: 'slides', createdAt: 5, topic: 'Leases', title: 'Deck', sources: src, slides: [{ title: 'Leases', bullets: ['Contract', 'Asset'], narration: 'Leases are contracts.', src: [2] }] },
-  { kind: 'game', createdAt: 6, topic: 'Leases', title: 'Memory pairs', sources: src, game: { type: 'pairs', data: { terms: [{ answer: 'Lease', clue: 'Contract to use an asset', src: [2] }, { answer: 'Equity', clue: 'Owner claim', src: [1] }, { answer: 'Assets', clue: 'What you own', src: [1] }, { answer: 'Debt', clue: 'What you owe', src: [1] }], cards: [] } } },
-  { kind: 'answer', createdAt: 7, topic: 'Q', title: 'Answer', sources: src, text: 'It is a contract [2].' },
-];
-
 const CASES: Array<[string, string, string, Record<string, unknown> | ((ids: Seeded) => Record<string, unknown>), number]> = [
   ['StudyScreen', '../../../src/screens/StudyScreen', 'StudyScreen', (ids) => ({ projectId: ids.project }), 160],
   ['MyModelsScreen', '../../../src/screens/MyModelsScreen', 'MyModelsScreen', {}, 120],
