@@ -141,9 +141,9 @@ describe('retry', () => {
 
 describe('re-issue, subscribe and reconcile', () => {
   it('rebuilds a queued download from its saved parameters', async () => {
-    await textProvider.reissue({ modelId: 'org/model', fileName: 'file.gguf', url: 'https://hf/f', totalBytes: 100, combinedTotalBytes: 130, quantization: 'Q8', sha256: 'abc', metadataJson: JSON.stringify({ mmProjFileName: 'mm.gguf', mmProjDownloadUrl: 'https://hf/mm' }) } as never);
+    await textProvider.reissue?.({ modelId: 'org/model', fileName: 'file.gguf', url: 'https://hf/f', totalBytes: 100, combinedTotalBytes: 130, quantization: 'Q8', sha256: 'abc', metadataJson: JSON.stringify({ mmProjFileName: 'mm.gguf', mmProjDownloadUrl: 'https://hf/mm' }) } as never);
     expect(startModelDownload).toHaveBeenCalledWith('org/model', expect.objectContaining({ name: 'file.gguf', size: 100, quantization: 'Q8', sha256: 'abc', mmProjFile: { name: 'mm.gguf', size: 30, downloadUrl: 'https://hf/mm' } }));
-    await textProvider.reissue({ modelId: 'm', fileName: 'f', url: 'u' } as never);
+    await textProvider.reissue?.({ modelId: 'm', fileName: 'f', url: 'u' } as never);
     expect(startModelDownload).toHaveBeenLastCalledWith('m', expect.objectContaining({ size: 0, quantization: 'Unknown' }));
   });
 
