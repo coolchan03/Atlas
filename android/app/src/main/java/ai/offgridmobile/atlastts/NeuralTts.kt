@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
+import com.k2fsa.sherpa.onnx.GeneratedAudio
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
@@ -60,9 +61,15 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
                               reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
+        return generatePocket(engine, PocketText.prepare(text), sid, speed, reference, steps).samples
+    }
+
+    /** One cloned-voice generation exactly as given (no tidying), with its timing logged. */
+    private fun generatePocket(engine: OfflineTts, text: String, sid: Int, speed: Float,
+                               reference: VoiceCloneWav.Reference?, steps: Int): GeneratedAudio {
         val ref = reference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
         val started = System.nanoTime()
-        val audio = engine.generateWithConfig(PocketText.prepare(text), GenerationConfig(
+        val audio = engine.generateWithConfig(text, GenerationConfig(
             sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
             numSteps = steps,
             extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
@@ -71,7 +78,59 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
         // One line per generation (adb logcat -s AtlasTts): enough to compare steps, check the sample rate the engine
         // reports against the one the player uses, and see how long a cold voice takes.
         Log.i("AtlasTts", "pocket generated ${audio.samples.size} samples at ${audio.sampleRate} Hz (engine ${try { engine.sampleRate() } catch (_: Throwable) { -1 }} Hz), steps=$steps, ${ms} ms")
-        return audio.samples
+        return audio
+    }
+
+    /** One run of the voice lab: the same sentence at one setting, saved as a WAV file and measured. */
+    class LabRun(val label: String, val steps: Int, val millis: Long, val audioRate: Int, val engineRate: Int, val path: String,
+                 val stats: VoiceStats.Stats?, val error: String?)
+    class LabReport(val referenceRate: Int, val reference: VoiceStats.Stats?, val runs: List<LabRun>)
+
+    /**
+     * Voice lab (a hidden screen): generates [text] with the loaded cloned voice at each of [stepsList], once more at the
+     * first step count with the text exactly as typed (no tidying), saves each as a WAV file in [dir] and measures it, along
+     * with the reference recording. Speech is stopped first; runs on the generation thread like all engine use.
+     */
+    fun lab(text: String, sid: Int, speed: Float, stepsList: List<Int>, dir: File): LabReport {
+        bump("interrupted")
+        try { track?.pause(); track?.flush() } catch (_: Throwable) {}
+        return genExec.submit(Callable<LabReport> {
+            val engine = tts ?: throw IllegalStateException("No voice is loaded")
+            if (!pocketLoaded) throw IllegalStateException("The lab needs a cloned Pocket TTS voice")
+            val reference = cloneReference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
+            dir.mkdirs()
+            val engineRate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
+            val runs = ArrayList<LabRun>()
+            val plan = stepsList.map { Triple("steps $it, text tidied", it, true) } + listOf(Triple("steps ${stepsList.first()}, text as typed", stepsList.first(), false))
+            for ((label, steps, tidy) in plan) {
+                val started = System.nanoTime()
+                try {
+                    val audio = generatePocket(engine, if (tidy) PocketText.prepare(text) else text, sid, speed, reference, steps)
+                    val ms = (System.nanoTime() - started) / 1_000_000
+                    val file = File(dir, "lab-${label.replace(Regex("[^a-z0-9]+"), "-")}.wav")
+                    file.writeBytes(WavFile.encode(audio.samples, audio.sampleRate))
+                    runs.add(LabRun(label, steps, ms, audio.sampleRate, engineRate, file.path, VoiceStats.analyze(audio.samples, audio.sampleRate), null))
+                } catch (t: Throwable) {
+                    runs.add(LabRun(label, steps, (System.nanoTime() - started) / 1_000_000, 0, engineRate, "", null, t.message ?: t.toString()))
+                }
+            }
+            LabReport(reference.sampleRate, VoiceStats.analyze(reference.samples, reference.sampleRate), runs)
+        }).get()
+    }
+
+    /**
+     * Plays a WAV file through the very same output the voice uses (one AudioTrack, streamed in float), so a lab recording can be
+     * compared with the same audio played by Android's own player.
+     */
+    fun playFile(path: String, id: String) {
+        val wav = WavFile.decode(File(path).readBytes())
+        val my = bump("interrupted")
+        try { track?.pause(); track?.flush() } catch (_: Throwable) {}
+        val queue = LinkedBlockingQueue<FloatArray>()
+        val end = FloatArray(0)
+        queue.put(wav.samples); queue.put(end)
+        val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        Thread { play(queue, end, wav.rate, id, my, failure) }.start()
     }
 
     val ready: Boolean get() = tts != null

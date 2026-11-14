@@ -8,7 +8,9 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.Locale
 
@@ -434,6 +436,76 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                 } else promise.resolve(0) // newer voice choice won
             } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_CLONE_LOAD", e.message ?: e.toString()) }
         }
+    }
+
+    private fun statsMap(s: VoiceStats.Stats?): WritableMap? {
+        if (s == null) return null
+        return Arguments.createMap().apply {
+            putInt("samples", s.samples); putDouble("seconds", s.seconds); putDouble("peak", s.peak); putDouble("rms", s.rms)
+            putDouble("clippedPercent", s.clippedPercent); putInt("leadSilenceMs", s.leadSilenceMs); putInt("trailSilenceMs", s.trailSilenceMs)
+            putInt("longestGapMs", s.longestGapMs); putInt("bursts", s.bursts); putDouble("noiseFloorDb", s.noiseFloorDb)
+        }
+    }
+
+    /**
+     * Voice lab (hidden screen): generates the text with the loaded cloned voice at each number of steps, saves each as a WAV file
+     * and measures it, plus the reference recording. Resolves the report; the voice must already be loaded.
+     */
+    @ReactMethod
+    fun voiceLab(text: String, stepsList: ReadableArray, promise: Promise) {
+        Thread {
+            try {
+                val steps = (0 until stepsList.size()).map { stepsList.getInt(it) }.filter { it in listOf(2, 3, 5, 8) }
+                if (steps.isEmpty()) throw IllegalArgumentException("Choose at least one quality step count")
+                if (neuralDir.isEmpty()) throw IllegalStateException("Choose a cloned voice first")
+                val dir = java.io.File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "voice-lab")
+                val report = neural.lab(text, neuralSid, rate, steps, dir)
+                val out = Arguments.createMap()
+                out.putInt("referenceRate", report.referenceRate)
+                out.putMap("reference", statsMap(report.reference))
+                out.putString("folder", dir.path)
+                val runs = Arguments.createArray()
+                for (r in report.runs) {
+                    runs.pushMap(Arguments.createMap().apply {
+                        putString("label", r.label); putInt("steps", r.steps); putDouble("millis", r.millis.toDouble())
+                        putInt("audioRate", r.audioRate); putInt("engineRate", r.engineRate); putString("path", r.path)
+                        putMap("stats", statsMap(r.stats))
+                        if (r.error != null) putString("error", r.error)
+                    })
+                }
+                out.putArray("runs", runs)
+                promise.resolve(out)
+            } catch (e: Throwable) { promise.reject("VOICE_LAB", e.message ?: e.toString()) }
+        }.start()
+    }
+
+    /** Plays a lab recording through the voice's own output (one streamed AudioTrack). */
+    @ReactMethod
+    fun labPlayThroughVoice(path: String, promise: Promise) {
+        try { neural.playFile(path, "voice-lab"); promise.resolve(true) } catch (e: Throwable) { promise.reject("VOICE_LAB_PLAY", e.message ?: e.toString()) }
+    }
+
+    @Volatile private var labPlayer: android.media.MediaPlayer? = null
+
+    /** Plays a lab recording with Android's own media player, a different route to the speaker, to compare against the voice's output. */
+    @ReactMethod
+    fun labPlayWithAndroid(path: String, promise: Promise) {
+        try {
+            try { neural.stop() } catch (_: Throwable) {}
+            labPlayer?.let { try { it.release() } catch (_: Throwable) {} }
+            val p = android.media.MediaPlayer()
+            p.setDataSource(path)
+            p.setOnCompletionListener { try { it.release() } catch (_: Throwable) {}; if (labPlayer === it) labPlayer = null }
+            p.prepare(); p.start()
+            labPlayer = p
+            promise.resolve(true)
+        } catch (e: Throwable) { promise.reject("VOICE_LAB_PLAY", e.message ?: e.toString()) }
+    }
+
+    @ReactMethod
+    fun labStop(promise: Promise) {
+        try { neural.stop(); labPlayer?.let { try { it.stop(); it.release() } catch (_: Throwable) {} }; labPlayer = null; promise.resolve(true) }
+        catch (e: Throwable) { promise.reject("VOICE_LAB_PLAY", e.message ?: e.toString()) }
     }
 
     @ReactMethod
