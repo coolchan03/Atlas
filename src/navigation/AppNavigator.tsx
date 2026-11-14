@@ -73,6 +73,7 @@ import { QuickHomeScreen } from '../screens/HomeScreen/QuickHome';
 import { PresentationScreen } from '../screens/PresentationScreen';
 import { MusicStudioScreen } from '../screens/MusicStudioScreen';
 import { ReadAloudScreen } from '../screens/ReadAloudScreen';
+import { VoiceLabScreen } from '../screens/VoiceLabScreen';
 import { LearningReliabilityScreen } from '../screens/LearningReliabilityScreen';
 import { LearningListScreen } from '../screens/LearningListScreen';
 import { WorkflowsScreen } from '../workflows/WorkflowsScreen';
@@ -378,6 +379,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Presentations" component={PresentationScreen} />
         <RootStack.Screen name="MusicStudio" component={MusicStudioScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="ReadAloud" component={ReadAloudScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="VoiceLab" component={VoiceLabScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="LearningReliability" component={LearningReliabilityScreen} options={{ headerShown: false }} />
         <RootStack.Screen
           name="About"

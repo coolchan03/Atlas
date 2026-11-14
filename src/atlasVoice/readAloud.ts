@@ -162,7 +162,7 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
 }
 
 /** The voice profile Read aloud uses: the one chosen if it still exists, otherwise the first saved voice, otherwise none. */
-export function readVoiceProfile(): { id: string; voiceId: string; sid: number; referenceId?: string } | undefined {
+export function readVoiceProfile(): { id: string; name: string; voiceId: string; sid: number; referenceId?: string } | undefined {
   const { profiles } = useVoiceProfiles.getState();
   const chosen = useAtlasVoiceStore.getState().readVoiceId;
   return profiles.find((p) => p.id === chosen) ?? profiles[0];

@@ -62,6 +62,7 @@ export type RootStackParamList = {
   Presentations: { slides?: import('../services/presentationTemplates').PresentationSlide[]; name?: string } | undefined;
   MusicStudio: undefined;
   ReadAloud: undefined;
+  VoiceLab: undefined;
   LearningReliability: undefined;
   Pins: undefined;
   Backup: undefined;

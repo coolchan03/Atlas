@@ -10,6 +10,7 @@ import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import packageJson from '../../package.json';
 import { appVersionLabel } from '../utils/appVersion';
+import { useSecretTaps } from '../hooks/useSecretTaps';
 import { gatherDiagnostics } from '../atlasTools/diagnostics';
 import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
 import { ModelGpuTest } from '../components/ModelGpuTest';
@@ -18,6 +19,8 @@ import { AppUpdateCard } from '../components/settings/AppUpdateCard';
 
 export const AboutScreen: React.FC = () => {
   const navigation = useNavigation();
+  // Seven quick taps on the version open the cloning voice's hidden lab.
+  const secretTap = useSecretTaps(7, () => (navigation as unknown as { navigate: (name: string) => void }).navigate('VoiceLab'));
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const focusTrigger = useFocusTrigger();
@@ -66,7 +69,9 @@ export const AboutScreen: React.FC = () => {
         <View style={styles.heroSection}>
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
           <Text style={styles.appName}>Atlas</Text>
-          <Text style={styles.version} testID="about-version">Version {appVersionLabel()}</Text>
+          <TouchableOpacity activeOpacity={1} onPress={secretTap} accessible={false} testID="about-version-tap">
+            <Text style={styles.version} testID="about-version">Version {appVersionLabel()}</Text>
+          </TouchableOpacity>
           <Text style={styles.runtimeInfo}>llama.rn {packageJson.dependencies['llama.rn']} · llama.rn build {BuildInfo.number}</Text>
           <Text style={styles.runtimeInfo}>LLM runtime: {llamaRuntimeStatus}</Text>
           <Text style={styles.description}>
