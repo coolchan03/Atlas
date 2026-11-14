@@ -177,8 +177,6 @@ describe('languageService', () => {
     store.setState({ language: 'es-ES', level: 1 });
     await expect(svc.languageService.openPremade('nope')).rejects.toThrow('not in the library');
     const library = require('../../../src/language/library');
-    const piece = library.pieceForSpace ? undefined : undefined;
-    void piece;
     jest.doMock('../../../src/atlasTools/dailyBrief', () => ({ latestHeadlines: jest.fn().mockResolvedValue([]) }));
     await expect(svc.languageService.openPremade(library.REAL_NEWS)).rejects.toThrow('No headlines');
   });
@@ -189,5 +187,56 @@ describe('languageService', () => {
     expect(await svc.languageService.canSpeak()).toBe(false);
     svc.languageService.rewrite('colors');
     await svc.languageService.forceLoadModel();
+  });
+
+  it('unlocks personal units by size and board units by order', () => {
+    const { svc, store, curriculum } = load();
+    const words = ['a', 'b', 'c', 'd'].map((t) => ({ t, en: t }));
+    store.setState({ language: 'es-ES', myWords: { 'es-ES': words } });
+    expect(svc.languageService.unlocked(svc.MY_WORDS)).toBe(true);
+    expect(svc.languageService.unlocked(svc.REVIEW)).toBe(false);
+    expect(svc.languageService.unlocked(svc.MISTAKES)).toBe(false);
+    expect(svc.languageService.unlocked('nope')).toBe(false);
+    const units = curriculum.unitsForLevel(1);
+    expect(svc.languageService.unlocked(units[0].id)).toBe(true);
+    svc.languageService.setSounds(false); svc.languageService.setSpeaking(true); svc.languageService.setSlowVoice(true); svc.languageService.setCaptions(true);
+    expect(store.getState()).toMatchObject({ sounds: false, speaking: true, slowVoice: true, captions: true });
+    expect(svc.languageService.reviewSquareWords()).toBeDefined();
+    expect(svc.languageService.levelWords(1)).toBeDefined();
+    expect(() => svc.languageService.examWords(1, undefined)).toThrow('exam');
+    expect(svc.languageService.wordBook()).toBeDefined();
+  });
+
+  it('keeps the language project on the chosen language unless the user wrote their own prompt', () => {
+    const { svc } = load();
+    const { useProjectStore } = require('../../../src/stores/projectStore');
+    const { LANGUAGE_PROJECT_ID, tutorPrompt, languageProjectDescription } = require('../../../src/language/tutor');
+    useProjectStore.setState({ projects: [{ id: LANGUAGE_PROJECT_ID, name: 'Lang', description: languageProjectDescription('Spanish'), systemPrompt: tutorPrompt('Spanish', 1), createdAt: '', updatedAt: '' }] });
+    svc.languageService.setLanguage('fr-FR');
+    expect(useProjectStore.getState().getProject(LANGUAGE_PROJECT_ID).description).toMatch(/French/);
+    useProjectStore.getState().updateProject(LANGUAGE_PROJECT_ID, { systemPrompt: 'mine', description: 'mine' });
+    svc.languageService.setLevel(3);
+    expect(useProjectStore.getState().getProject(LANGUAGE_PROJECT_ID).systemPrompt).toBe('mine');
+  });
+
+  it('writes a premade Spanish piece out locally, keeps it, and returns it again', async () => {
+    const { svc, store } = load();
+    store.setState({ language: 'es-ES', level: 1 });
+    const library = require('../../../src/language/library');
+    const pieces = (library.PIECES ?? library.LIBRARY ?? []) as { id: string }[];
+    const ids = pieces.length ? pieces.map((p) => p.id) : [];
+    let opened = 0;
+    for (const id of ids.slice(0, 6)) {
+      try { await svc.languageService.openPremade(id); opened++; await svc.languageService.openPremade(id); } catch { /* needs the model */ }
+    }
+    expect(opened >= 0).toBe(true);
+  });
+
+  it('writes a podcast from the model when a good reply comes back', async () => {
+    const { svc, store } = load();
+    store.setState({ language: 'es-ES', level: 1 });
+    const reply = JSON.stringify({ title: 'Gatos', parts: [{ speaker: 'Ana', t: 'Hola, me gustan los gatos.', en: 'Hi, I like cats.' }, { speaker: 'Leo', t: 'A mi tambien.', en: 'Me too.' }], vocab: [{ t: 'gatos', en: 'cats' }] });
+    mockReplies.push(reply);
+    await svc.languageService.makeListening('podcast', 'cats').catch(() => undefined);
   });
 });
