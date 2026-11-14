@@ -3,6 +3,7 @@ import { speakInAndWait, stop as stopSpeech, takeSpeechFailure, watchSpeechPhase
 import { useAtlasVoiceStore } from './store';
 import { useVoiceProfiles } from './profiles';
 import { loadVoiceForSpeech, restoreSavedVoice, restoreSavedVoiceSoon } from './neural';
+import { readResumeBridge } from './readResume';
 
 /** Longest piece spoken at once: short enough to show progress and to pause, long enough to sound natural. */
 const MAX_PART = 600;
@@ -75,6 +76,10 @@ interface ReaderState {
   phase: ReaderPhase;
   /** Why reading stopped by itself, when it did ('' otherwise). */
   failure: string;
+  /** The part reading picked up at from an earlier session of the same text (0 when it started from the top). */
+  resumedAt: number;
+  /** When the sleep timer will pause reading (epoch ms), or 0 when it is off. */
+  sleepAt: number;
   /** True from pressing play until the voice is actually heard: a cloned voice has to load first and that can take several seconds. */
   preparing: boolean;
 }
@@ -91,15 +96,31 @@ interface Deps {
   watchPhase?: (onPhase: (p: 'speaking' | 'buffering') => void) => () => void;
   /** Why the last piece failed, if it did (reading it clears it). */
   failure?: () => string;
+  /** Remembers how far a text was read, so opening it again carries on from there. */
+  resume?: { get: (key: string) => number; set: (key: string, index: number) => void; clear: (key: string) => void };
+  /** The clock, for the sleep timer. */
+  now?: () => number;
+}
+
+/** A short key for a text: its length and a hash of its start and end, so the same document is recognised when it is opened again. */
+export function textKey(text: string): string {
+  const sample = `${text.slice(0, 2000)}${text.slice(-2000)}`;
+  let h = 2166136261;
+  for (let i = 0; i < sample.length; i++) { h ^= sample.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return `${text.length}-${(h >>> 0).toString(36)}`;
 }
 
 /**
  * Reads a document aloud one piece at a time, with pause, stop and skip. The voice, speed and engine are the
  * app's saved ones. The reader owns all of its state; screens and widgets only show it and send intents.
  */
-export function createReadAloud({ speak, stopSpeaking, release, watchStart, watchPhase, failure }: Deps) {
-  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0, preparing: false, phase: 'idle', failure: '' }));
+export function createReadAloud({ speak, stopSpeaking, release, watchStart, watchPhase, failure, resume, now = Date.now }: Deps) {
+  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0, preparing: false, phase: 'idle', failure: '', resumedAt: 0, sleepAt: 0 }));
   let run = 0;
+  let key = '';
+  let sleepTimer: ReturnType<typeof setTimeout> | undefined;
+  let sleepDue = false;
+  const remember = (index: number) => { if (key && index > 0) resume?.set(key, index); };
   const show = (phase: ReaderPhase, extra: Partial<ReaderState> = {}) =>
     useReader.setState({ phase, preparing: phase === 'loading' || phase === 'generating', ...extra });
   watchStart?.(() => { if (useReader.getState().status === 'reading') show('speaking'); });
@@ -109,7 +130,7 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
     const control: SpeakControl = { cancelled: () => mine !== run, phase: (p) => { if (mine === run) show(p); } };
     while (mine === run) {
       const { parts, index } = useReader.getState();
-      if (index >= parts.length) { show('idle', { status: 'idle', index: 0 }); release?.(); return; }
+      if (index >= parts.length) { if (key) resume?.clear(key); show('idle', { status: 'idle', index: 0, resumedAt: 0 }); release?.(); return; }
       show('loading', { failure: '' });
       let finished = false;
       let problem = '';
@@ -120,7 +141,10 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
       if (problem) { show('failed', { status: 'paused', failure: problem }); return; }
       // Something else started speaking (a chat reply or a call): keep our place and wait for the person.
       if (!finished) { show('paused', { status: 'paused' }); return; }
-      useReader.setState({ index: index + 1 });
+      useReader.setState({ index: index + 1, resumedAt: 0 });
+      remember(index + 1);
+      // The sleep timer ran out while this part was being read: stop at the end of it, keeping the place.
+      if (sleepDue) { sleepDue = false; useReader.setState({ sleepAt: 0 }); show('paused', { status: 'paused' }); return; }
     }
   };
 
@@ -131,10 +155,20 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
     run += 1;
     loop(run);
   };
+  const setSleep = (minutes: number) => {
+    if (sleepTimer) clearTimeout(sleepTimer);
+    sleepDue = false;
+    if (!Number.isFinite(minutes) || minutes <= 0) { useReader.setState({ sleepAt: 0 }); return; }
+    useReader.setState({ sleepAt: now() + minutes * 60000 });
+    sleepTimer = setTimeout(() => { sleepDue = true; }, minutes * 60000);
+  };
   const stop = () => {
     run += 1;
     stopSpeaking();
-    show('idle', { status: 'idle', index: 0, failure: '' });
+    if (sleepTimer) clearTimeout(sleepTimer);
+    sleepDue = false;
+    if (key) resume?.clear(key);
+    show('idle', { status: 'idle', index: 0, failure: '', resumedAt: 0, sleepAt: 0 });
     release?.();
   };
   const pause = () => {
@@ -146,7 +180,11 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
   /** Opens new text, replacing whatever was loaded. Reading starts only when the person presses play. */
   const load = (text: string, title = '') => {
     stop();
-    useReader.setState({ parts: splitForReading(cleanForReading(text)), title, index: 0 });
+    const parts = splitForReading(cleanForReading(text));
+    key = textKey(text);
+    const saved = resume?.get(key) ?? 0;
+    const at = saved > 0 && saved < parts.length ? saved : 0;
+    useReader.setState({ parts, title, index: at, resumedAt: at });
   };
   /** Moves by whole pieces. While reading, carries on from the new place. */
   const jump = (delta: number) => {
@@ -154,11 +192,12 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
     if (!parts.length) return;
     const next = Math.min(parts.length - 1, Math.max(0, index + delta));
     if (status === 'reading') { run += 1; stopSpeaking(); }
-    show('paused', { index: next, status: status === 'reading' ? 'paused' : status, failure: '' });
+    show('paused', { index: next, status: status === 'reading' ? 'paused' : status, failure: '', resumedAt: 0 });
+    remember(next);
     if (status === 'reading') play();
   };
 
-  return { useReader, play, pause, stop, load, jump };
+  return { useReader, play, pause, stop, load, jump, setSleep };
 }
 
 /** The voice profile Read aloud uses: the one chosen if it still exists, otherwise the first saved voice, otherwise none. */
@@ -173,9 +212,9 @@ export function readVoiceProfile(): { id: string; name: string; voiceId: string;
  * The chosen voice and its recording must be active before any text is handed to the engine; if they cannot be, it says so
  * instead of reading in some other voice.
  */
-async function speakInChosenVoice(text: string, control: SpeakControl): Promise<boolean> {
+/** Makes the voice chosen for Read aloud (and its recording) the active one. Throws a readable error when it cannot be. */
+export async function prepareReadVoice(): Promise<void> {
   const profile = readVoiceProfile();
-  control.phase('loading');
   if (profile) {
     try { await loadVoiceForSpeech(profile.voiceId, profile.sid, { referenceId: profile.referenceId, steps: profile.steps }); }
     catch (e) { throw new Error(`The voice could not be loaded: ${(e as Error)?.message || 'unknown error'}`); }
@@ -183,6 +222,11 @@ async function speakInChosenVoice(text: string, control: SpeakControl): Promise<
     // Without a chosen profile this puts the saved voice back, in case a briefing left a borrowed one loaded. It costs nothing when it is already loaded.
     await restoreSavedVoice().catch(() => undefined);
   }
+}
+
+async function speakInChosenVoice(text: string, control: SpeakControl): Promise<boolean> {
+  control.phase('loading');
+  await prepareReadVoice();
   // Stopped or skipped while the voice was loading: say nothing, rather than starting a reading the person has already cancelled.
   if (control.cancelled()) return false;
   control.phase('generating');
@@ -196,5 +240,6 @@ export const readAloud = createReadAloud({
   release: () => { if (readVoiceProfile()) restoreSavedVoiceSoon(); },
   watchPhase: (onPhase) => watchSpeechPhase((phase, id) => { if (id.startsWith('read-aloud')) onPhase(phase); }),
   failure: takeSpeechFailure,
+  resume: readResumeBridge,
 });
 export const useReadAloud = readAloud.useReader;

@@ -10,6 +10,7 @@ import { ReadVoiceChooser } from '../atlasVoice/ReadVoiceChooser';
 import { useReadAloudSource } from '../atlasVoice/useReadAloudSource';
 import { ttsAvailable } from '../atlasVoice/tts';
 import { readAloud, readingMinutes, useReadAloud } from '../atlasVoice/readAloud';
+import { ReadAloudExtras } from './ReadAloudExtras';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 
@@ -129,6 +130,7 @@ export const ReadAloudScreen: React.FC = () => {
         </View>
 
         <Player canPlay={available && !!text.trim()} onPlay={source.play} />
+        <ReadAloudExtras text={text} title={document?.title ?? ''} canSave={available && !!text.trim()} />
       </ScrollView>
     </SafeAreaView>
   );

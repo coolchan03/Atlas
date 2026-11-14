@@ -97,3 +97,24 @@ it('the Home widget reads pasted text in the voice chosen on it, and a deleted v
   expect(view.queryByText('My voice')).toBeNull();
   expect(view.getByTestId('read-voice-none')).toBeTruthy();
 });
+
+it('sets a sleep timer, and saves the reading as an audio file in the chosen voice, saying when only part of it fit', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const rn = require('react-native');
+  Object.defineProperty(rn.Platform, 'OS', { value: 'android', configurable: true });
+  const synth = jest.fn(async (_t: string, p: string) => p);
+  rn.NativeModules.AtlasTts = { synthesizeToFile: synth, setRate: jest.fn(async () => true), activateClonedVoice: jest.fn(async () => 1), setNeuralVoice: jest.fn(async () => 1), installedNeuralVoices: jest.fn(async () => []) };
+  const view = rtl.render(React.createElement(require('../../../src/screens/ReadAloudScreen').ReadAloudScreen));
+  rtl.fireEvent.press(view.getByTestId('read-aloud-sleep-30'));
+  expect(view.getByText(/pauses at the end of the part being read/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('read-aloud-sleep-0'));
+  expect(view.queryByText(/pauses at the end of the part being read/)).toBeNull();
+  rtl.fireEvent.changeText(view.getByTestId('read-aloud-text'), 'A sentence that is read aloud. '.repeat(1000));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('read-aloud-save')); });
+  await rtl.waitFor(() => expect(view.getByTestId('read-aloud-saved')).toBeTruthy());
+  expect(synth).toHaveBeenCalledTimes(1);
+  expect(String(synth.mock.calls[0][1])).toMatch(/read-aloud\/reading-\d+\.wav$/);
+  expect(view.getByText(/Only the first .* of .* characters fit in one file/)).toBeTruthy();
+});

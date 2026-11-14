@@ -134,3 +134,51 @@ describe('while the voice is getting ready', () => {
     expect(reader.useReader.getState().preparing).toBe(false);
   });
 });
+
+describe('resuming and the sleep timer', () => {
+  const flush = () => new Promise((r) => setImmediate(r));
+  const longText = Array.from({ length: 12 }, (_, i) => `Paragraph number ${i + 1} of a long document, with enough words to count as its own part of the reading. ${'More words follow here. '.repeat(25)}`).join('\n\n');
+  function reader(extra: Record<string, unknown> = {}) {
+    const store: Record<string, number> = {};
+    const resume = { get: (k: string) => store[k] ?? 0, set: (k: string, i: number) => { store[k] = i; }, clear: (k: string) => { delete store[k]; } };
+    const finish: Array<(ok: boolean) => void> = [];
+    const r = createReadAloud({ speak: () => new Promise<boolean>((resolve) => { finish.push(resolve); }), stopSpeaking: jest.fn(), resume, ...extra });
+    return { r, store, finish, done: async () => { finish.shift()!(true); await flush(); } };
+  }
+
+  it('picks up where it left off when the same text is opened again, and starts over once finished or stopped', async () => {
+    const a = reader();
+    a.r.load(longText);
+    const parts = a.r.useReader.getState().parts.length;
+    expect(parts).toBeGreaterThan(3);
+    a.r.play();
+    await a.done(); await a.done();
+    expect(a.r.useReader.getState().index).toBe(2);
+    a.r.pause();
+    const again = createReadAloud({ speak: () => new Promise<boolean>(() => undefined), stopSpeaking: jest.fn(), resume: { get: (k) => a.store[k] ?? 0, set: () => undefined, clear: () => undefined } });
+    again.load(longText);
+    expect(again.useReader.getState()).toMatchObject({ index: 2, resumedAt: 2 });
+    again.load(`${longText} extra`); // a different text starts at the top
+    expect(again.useReader.getState().index).toBe(0);
+    a.r.stop();
+    expect(Object.keys(a.store)).toHaveLength(0);
+  });
+
+  it('pauses at the end of the part being read when the sleep timer runs out, keeping the place', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+    try {
+      const a = reader({ now: () => 1000 });
+      a.r.load(longText);
+      a.r.play();
+      a.r.setSleep(15);
+      expect(a.r.useReader.getState().sleepAt).toBe(1000 + 15 * 60000);
+      await a.done();
+      expect(a.r.useReader.getState().status).toBe('reading'); // not yet
+      jest.advanceTimersByTime(15 * 60000);
+      await a.done(); // the part being read finishes
+      expect(a.r.useReader.getState()).toMatchObject({ status: 'paused', phase: 'paused', index: 2, sleepAt: 0 });
+      a.r.setSleep(0);
+      expect(a.r.useReader.getState().sleepAt).toBe(0);
+    } finally { jest.useRealTimers(); }
+  });
+});
