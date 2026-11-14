@@ -78,10 +78,23 @@ export interface Comparison { relation: Relation; matchId?: string; reason?: str
 const DUPLICATE_AT = 0.85;
 const RELATED_AT = 0.5;
 
-/** The same subject with a different number or an opposite statement. */
+/** A year, such as a tax year. Claims about different years are different versions of a rule, not disagreements. */
+const isYear = (n: string) => /^(?:19|20)\d\d$/.test(n);
+const POLARITY = new Set(['never', 'cannot', 'without', 'neither', 'nor']);
+/** The words of a claim that name its subject: numbers and negations left out, so "$13,850" against "$14,600" still reads as the same subject. */
+const subjectWords = (t: string) => tokens(t).filter((w) => !/^\d/.test(w) && !POLARITY.has(w));
+const subjectSimilarity = (a: string, b: string) => similarity(subjectWords(a).join(' '), subjectWords(b).join(' '));
+/** Two claims have to be nearly word for word the same statement before a different number or a "not" counts as disagreement. */
+const SAME_STATEMENT = 0.8;
+
+/** The same statement with a different number or an opposite statement. Different years, or only loosely similar wording, are not conflicts. */
 function conflict(a: string, b: string): string | undefined {
-  const na = numbersIn(a);
-  const nb = numbersIn(b);
+  if (subjectSimilarity(a, b) < SAME_STATEMENT) return undefined;
+  const ya = numbersIn(a).filter(isYear);
+  const yb = numbersIn(b).filter(isYear);
+  if (ya.length && yb.length && (ya.some((n) => !yb.includes(n)) || yb.some((n) => !ya.includes(n)))) return undefined;
+  const na = numbersIn(a).filter((n) => !isYear(n));
+  const nb = numbersIn(b).filter((n) => !isYear(n));
   const differs = na.length > 0 && nb.length > 0 && na.some((n) => !nb.includes(n)) && nb.some((n) => !na.includes(n));
   if (differs) return `States different numbers (${na.join(', ')} against ${nb.join(', ')})`;
   if (NEGATION.test(a) !== NEGATION.test(b)) return 'Says the opposite of a known claim';

@@ -16,6 +16,16 @@ describe('comparing claims', () => {
     expect(r.reason).toMatch(/different numbers/);
   });
 
+  it('does not call a different tax year a disagreement', () => {
+    expect(compareClaim('The standard deduction for a single filer in 2023 is 13850 dollars.', known).relation).toBe('new');
+  });
+
+  it('does not call loosely related sentences with different numbers or a "not" a disagreement', () => {
+    const tax = [{ id: 't', text: 'Section 401 allows employees to defer 23000 dollars of salary into a retirement plan each year.' }];
+    expect(compareClaim('Section 402 does not tax employer contributions to a retirement plan until distributed to employees.', tax).relation).toBe('new');
+    expect(compareClaim('Section 415 limits annual additions to 69000 dollars for each participant in a defined contribution retirement plan.', tax).relation).toBe('new');
+  });
+
   it('flags an opposite statement as a contradiction', () => {
     expect(compareClaim('Boiling water for one minute does not make it safe to drink.', known)).toMatchObject({ relation: 'contradicts', matchId: 'b' });
   });
