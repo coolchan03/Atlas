@@ -1,6 +1,6 @@
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 import { explore } from '../../harness/monkey';
-import { createDownloadedModel, createONNXImageModel } from '../../utils/factories';
+import { withProfiles, seedApp, type Seeded } from '../../harness/monkeySeed';
 
 const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => () => undefined), canGoBack: () => true, getParent: () => ({ navigate: jest.fn() }) };
 let mockParams: any = {};
@@ -21,7 +21,7 @@ const results = (): unknown[] => [
   { kind: 'answer', createdAt: 7, topic: 'Q', title: 'Answer', sources: src, text: 'It is a contract [2].' },
 ];
 
-const CASES: Array<[string, string, string, Record<string, unknown> | ((ids: { project: string; model: string; image: string; agent: string }) => Record<string, unknown>), number]> = [
+const CASES: Array<[string, string, string, Record<string, unknown> | ((ids: Seeded) => Record<string, unknown>), number]> = [
   ['StudyScreen', '../../../src/screens/StudyScreen', 'StudyScreen', (ids) => ({ projectId: ids.project }), 160],
   ['MyModelsScreen', '../../../src/screens/MyModelsScreen', 'MyModelsScreen', {}, 120],
   ['PresentationScreen', '../../../src/screens/PresentationScreen', 'PresentationScreen', {}, 160],
@@ -40,24 +40,14 @@ const CASES: Array<[string, string, string, Record<string, unknown> | ((ids: { p
 ];
 
 describe('screens survive being pressed everywhere, with realistic data', () => {
-  it.each(CASES)('%s', async (_name, path, exportName, params, presses) => {
+  it.each(withProfiles(CASES))('%s', async (_name, path, exportName, params, presses, profile) => {
     jest.resetModules();
     installNativeBoundary({ fs: true });
     const rtl = requireRTL();
     const React = require('react');
     const rn = require('react-native');
     try { jest.spyOn(rn.PermissionsAndroid, 'request').mockResolvedValue('granted' as never); jest.spyOn(rn.PermissionsAndroid, 'requestMultiple').mockResolvedValue({} as never); } catch { /* not present */ }
-    const { useAppStore } = require('../../../src/stores');
-    const { useProjectStore } = require('../../../src/stores/projectStore');
-    const { useStudyStore } = require('../../../src/study/store');
-    const { useAgentStore } = require('../../../src/stores/agentStore');
-    const model = createDownloadedModel({ id: 'm1', name: 'Test model', filePath: '/models/m1.gguf', fileSize: 800 * 1024 * 1024 });
-    const image = createONNXImageModel({ id: 'img1', name: 'Test image model' });
-    useAppStore.setState({ downloadedModels: [model, createDownloadedModel({ id: 'm2', name: 'Second', filePath: '/models/m2.gguf', fileSize: 2 * 1024 ** 3 })], activeModelId: 'm1', downloadedImageModels: [image], modelNicknames: { m2: 'Big one' } });
-    const project = useProjectStore.getState().createProject({ name: 'FAR prep', description: 'Notes', systemPrompt: 'Tutor', icon: '#1D4ED8' });
-    for (const r of results()) useStudyStore.getState().add(project.id, r);
-    const agent = useAgentStore.getState().agents[0];
-    const ids = { project: project.id, model: 'm1', image: 'img1', agent: agent.id };
+    const ids = seedApp(profile);
     mockParams = typeof params === 'function' ? params(ids) : params;
     const view = rtl.render(React.createElement(require(path)[exportName]));
     for (const seed of [1, 7]) await explore(view as never, { seed, presses: Math.round(presses / 2) });

@@ -1,6 +1,6 @@
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 import { explore } from '../../harness/monkey';
-import { seedApp } from '../../harness/monkeySeed';
+import { PROFILES, seedApp } from '../../harness/monkeySeed';
 import { buildCloze, buildFixItems, buildPairs } from '../../../src/study/games/logic';
 
 const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => () => undefined), canGoBack: () => true, getParent: () => ({ navigate: jest.fn() }) };
@@ -40,12 +40,12 @@ const FILES: Record<string, string> = {
 };
 
 describe('project games survive being played at random', () => {
-  it.each(Object.keys(DATA))('%s', async (name) => {
+  it.each(Object.keys(DATA).flatMap((n) => PROFILES.map((profile) => [`${n} (${profile})`, n, profile] as const)))('%s', async (_label, name, profile) => {
     jest.resetModules();
     installNativeBoundary({ fs: true });
     const rtl = requireRTL();
     const React = require('react');
-    const ids = seedApp();
+    const ids = seedApp(profile);
     const type = name.replace(/Game$/, '').toLowerCase();
     const result = { kind: 'game', createdAt: 9, topic: 'Leases', title: name, sources, game: { type, data: DATA[name] } };
     const Game = require(`../../../src/components/games/${FILES[name]}`)[name];

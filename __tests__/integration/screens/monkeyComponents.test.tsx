@@ -1,6 +1,6 @@
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 import { explore } from '../../harness/monkey';
-import { seedApp, type Seeded } from '../../harness/monkeySeed';
+import { withProfiles, seedApp, type Seeded } from '../../harness/monkeySeed';
 
 const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => () => undefined), canGoBack: () => true, getParent: () => ({ navigate: jest.fn() }) };
 jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useNavigation: () => mockNav, useRoute: () => ({ params: {} }), useFocusEffect: (cb: () => void) => { require('react').useEffect(cb, []); }, useIsFocused: () => true }));
@@ -28,14 +28,15 @@ const CASES: Array<[string, string, string, Props, number]> = [
 ];
 
 describe('shared components survive being pressed everywhere', () => {
-  it.each(CASES)('%s', async (name, file, exportName, props, presses) => {
+  it.each(withProfiles(CASES))('%s', async (label, file, exportName, props, presses, profile) => {
+    const name = String(label).replace(/ \(.*\)$/, '');
     jest.resetModules();
     installNativeBoundary({ fs: true });
     const rtl = requireRTL();
     const React = require('react');
     const rn = require('react-native');
     try { jest.spyOn(rn.PermissionsAndroid, 'request').mockResolvedValue('granted' as never); jest.spyOn(rn.PermissionsAndroid, 'check').mockResolvedValue(true as never); jest.spyOn(rn.PermissionsAndroid, 'requestMultiple').mockResolvedValue({} as never); } catch { /* not present */ }
-    const ids = seedApp();
+    const ids = seedApp(profile);
     const Component = require(`../../../src/components/${file}`)[exportName];
     if (name === 'ExerciseAnswers') {
       const { useTheme } = require('../../../src/theme');

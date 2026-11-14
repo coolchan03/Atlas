@@ -14,13 +14,25 @@ export const studyResults = (): unknown[] => [
 
 export interface Seeded { project: string; model: string; image: string; agent: string; chat: string }
 
-export function seedApp(): Seeded {
+export type Profile = 'full' | 'empty' | 'busy';
+export const PROFILES: Profile[] = ['full', 'empty', 'busy'];
+/** Every case under every profile; the first value (the name) says which. */
+export const withProfiles = <T extends [string, ...unknown[]]>(cases: T[]): Array<[...T, Profile]> =>
+  cases.flatMap((c) => PROFILES.map((profile) => [`${c[0]} (${profile})`, ...c.slice(1), profile] as unknown as [...T, Profile]));
+
+/**
+ * full: models, a project with saved work and chats. empty: a fresh install. busy: the same data with a model loaded, off-grid on, the dark
+ * theme with compact large text and rounded corners, tools on and a private chat open, so state-dependent branches flip.
+ */
+export function seedApp(profile: Profile = 'full'): Seeded {
   const RNFS = require('react-native-fs');
+  const none = profile === 'empty';
   if (!RNFS.getFSInfo) RNFS.getFSInfo = jest.fn(async () => ({ freeSpace: 50 * 1024 ** 3, totalSpace: 128 * 1024 ** 3 }));
   const { useAppStore, useChatStore } = require('../../src/stores');
   const { useProjectStore } = require('../../src/stores/projectStore');
   const { useStudyStore } = require('../../src/study/store');
   const { useAgentStore } = require('../../src/stores/agentStore');
+  if (none) return { project: 'missing-project', model: 'missing-model', image: 'missing-image', agent: 'missing-agent', chat: 'missing-chat' };
   const model = createDownloadedModel({ id: 'm1', name: 'Test model', filePath: '/models/m1.gguf', fileSize: 800 * 1024 * 1024 });
   useAppStore.setState({
     downloadedModels: [model, createDownloadedModel({ id: 'm2', name: 'Second', filePath: '/models/m2.gguf', fileSize: 2 * 1024 ** 3 })],
@@ -30,5 +42,15 @@ export function seedApp(): Seeded {
   for (const r of studyResults()) useStudyStore.getState().add(project.id, r);
   const chats = [createConversationWithMessages(4, { title: 'Lease questions', projectId: project.id }), createConversationWithMessages(2, { title: 'Taxes' }), { ...createConversationWithMessages(2, { title: 'Archived' }), isArchived: true }];
   useChatStore.setState({ conversations: chats, activeConversationId: chats[0].id });
+  if (profile === 'busy') {
+    const state = useAppStore.getState();
+    useAppStore.setState({
+      loadedTextModelId: 'm1', themeMode: 'dark',
+      settings: { ...state.settings, showGenerationDetails: true, enabledTools: ['calculator', 'web_search', 'read_url', 'search_knowledge_base'], appearance: { layoutMode: 'compact', density: 'compact', textSize: 'xlarge', cornerRadius: 2, chatLayout: 'bubbles' } },
+    } as never);
+    require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true });
+    const priv = { ...createConversationWithMessages(3, { title: 'Private' }), isPrivate: true };
+    useChatStore.setState({ conversations: [priv, ...chats], activeConversationId: priv.id } as never);
+  }
   return { project: project.id, model: 'm1', image: 'img1', agent: useAgentStore.getState().agents[0].id, chat: chats[0].id };
 }

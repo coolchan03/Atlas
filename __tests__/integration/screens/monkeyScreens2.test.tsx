@@ -1,6 +1,6 @@
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 import { explore } from '../../harness/monkey';
-import { seedApp, type Seeded } from '../../harness/monkeySeed';
+import { withProfiles, seedApp, type Seeded } from '../../harness/monkeySeed';
 
 const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => () => undefined), canGoBack: () => true, getParent: () => ({ navigate: jest.fn() }) };
 let mockParams: any = {};
@@ -43,7 +43,7 @@ const CASES: Array<[string, string, string, P, number]> = [
 ];
 
 describe('more screens survive being pressed everywhere, with realistic data', () => {
-  it.each(CASES)('%s', async (_name, path, exportName, params, presses) => {
+  it.each(withProfiles(CASES))('%s', async (_name, path, exportName, params, presses, profile) => {
     jest.resetModules();
     installNativeBoundary({ fs: true });
     const rtl = requireRTL();
@@ -51,7 +51,7 @@ describe('more screens survive being pressed everywhere, with realistic data', (
     const rn = require('react-native');
     try { jest.spyOn(rn.PermissionsAndroid, 'request').mockResolvedValue('granted' as never); jest.spyOn(rn.PermissionsAndroid, 'requestMultiple').mockResolvedValue({} as never); } catch { /* not present */ }
     if (exportName === 'NoiseMeterScreen') jest.doMock('react-native-audio-api', () => ({ AudioRecorder: class { onAudioReady(): void { /* no audio in tests */ } start(): void { /* */ } stop(): void { /* */ } }, AudioManager: { setAudioSessionOptions: jest.fn(), requestRecordingPermissions: jest.fn(async () => 'Granted') } }));
-    const ids = seedApp();
+    const ids = seedApp(profile);
     mockParams = typeof params === 'function' ? params(ids) : params;
     if (exportName === 'CpaExamScreen') { const { setupCpaExam } = require('../../../src/cpa/setup'); setupCpaExam('FAR'); }
     const view = rtl.render(React.createElement(require(path)[exportName]));
