@@ -102,6 +102,15 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const { createScheduledTask } = require('../../schedule/createFromTool');
       return createScheduledTask(call.arguments ?? {});
     }
+    case 'list_maps':
+      return require('../../atlasMaps/mapQuery').describeMaps();
+    case 'map_places': {
+      const num = (v: unknown) => (v === undefined || v === null || String(v).trim() === '' ? undefined : Number(v));
+      return require('../../atlasMaps/mapQuery').placesNear({
+        query: typeof call.arguments?.query === 'string' ? call.arguments.query : '', lat: num(call.arguments?.lat), lon: num(call.arguments?.lon),
+        radiusKm: num(call.arguments?.radius_km), limit: num(call.arguments?.limit),
+      });
+    }
     case 'my_location': {
       const M = require('../../atlasMaps/maps');
       let fix = M.useMaps.getState().lastFix;

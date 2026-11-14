@@ -269,6 +269,24 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         promise.resolve(true)
     }
 
+    /** Where an offline map file covers (for the AI's map tools). Rejects when the file cannot be read. */
+    @ReactMethod
+    fun mapInfo(path: String, promise: Promise) {
+        Thread {
+            try { promise.resolve(AtlasMapQuery.info(ctx, path)) }
+            catch (e: Throwable) { promise.reject("MAP_INFO", e.message ?: "Cannot read this map file") }
+        }.start()
+    }
+
+    /** Named places near a point in an offline map file, nearest first. `query` filters by name or kind ("hospital", "cafe"). */
+    @ReactMethod
+    fun mapPlaces(path: String, lat: Double, lon: Double, radiusM: Double, query: String, limit: Int, promise: Promise) {
+        Thread {
+            try { promise.resolve(AtlasMapQuery.places(ctx, path, lat, lon, radiusM, query, limit)) }
+            catch (e: Throwable) { promise.reject("MAP_PLACES", e.message ?: "Cannot search this map file") }
+        }.start()
+    }
+
     @ReactMethod
     fun getBatteryTemperature(promise: Promise) {
         try {

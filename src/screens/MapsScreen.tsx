@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { pick, types } from '@react-native-documents/picker';
+import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { importMapZip, MAP_SOURCES } from '../atlasMaps/importMap';
 import { useTheme } from '../theme';
 import { useEmergencyColors, useOffGrid } from '../atlasTools/offGrid';
 import {
@@ -392,7 +394,18 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
       const res = await pick({ mode: 'open', requestLongTermAccess: true, type: [types.allFiles], allowMultiSelection: false });
       const f = res?.[0];
       if (!f) return;
-      if (!/\.map$/i.test(f.name || '')) { Alert.alert('Not a map file', 'Pick a Mapsforge ".map" file (for example from download.mapsforge.org or openandromaps.org).'); return; }
+      if (/\.zip$/i.test(f.name || '')) {
+        try {
+          const copy = await resolvePickedFileUri(f.uri, f.name || 'maps.zip');
+          const placed = await importMapZip(copy);
+          await refresh();
+          setCurrent(placed[0]);
+          const what = placed.length === 1 ? 'The map is' : `${placed.length} maps are`;
+          Alert.alert('Map ready', `${what} on your phone and works offline.`);
+        } catch (x: any) { Alert.alert('Could not use that zip', String(x?.message || x)); }
+        return;
+      }
+      if (!/\.map$/i.test(f.name || '')) { Alert.alert('Not a map file', 'Pick a Mapsforge ".map" file, or a ".zip" that has one inside (for example from download.mapsforge.org or openandromaps.org).'); return; }
       addExternal(f.uri, (f.name || 'map').replace(/\.map$/i, ''));
       setCurrent(f.uri);
     } catch { /* cancelled */ }
@@ -444,8 +457,15 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
               <Text style={literalStyles.s66}>Download a map (needs internet)</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={openFile} style={[literalStyles.s67, { borderColor: colors.border }]}>
-              <Text style={{ color: colors.text }}>Open a .map file already on the phone</Text>
+              <Text style={{ color: colors.text }}>Open a .map or .zip file already on the phone</Text>
             </TouchableOpacity>
+            <Text style={[{ color: colors.textSecondary }, literalStyles.s69]}>Where to find map files</Text>
+            {MAP_SOURCES.map((src) => (
+              <TouchableOpacity key={src.url} onPress={() => Linking.openURL(src.url).catch(() => undefined)} accessibilityRole="link" accessibilityLabel={`Open ${src.name} in the browser`} style={[literalStyles.s67, { borderColor: colors.border }]}>
+                <Text style={{ color: colors.text }}>{src.name}</Text>
+                <Text style={[{ color: colors.textMuted }, literalStyles.s26]}>{src.note}</Text>
+              </TouchableOpacity>
+            ))}
             <View style={literalStyles.s68}>
               <Text style={[{ color: colors.text }, literalStyles.s32]}>Miles and feet (off = km and meters)</Text>
               <Switch value={imperial} onValueChange={setImperial} />

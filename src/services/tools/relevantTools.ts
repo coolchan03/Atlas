@@ -26,6 +26,8 @@ const TRIGGERS: Record<string, RegExp> = {
   calendar_events: /\b(calendar|event|events|meeting|schedule|agenda|appointment|busy|free|plans|week|tomorrow|today)\b/i,
   add_calendar_event: /\b(calendar|event|meeting|appointment|schedule|remind|reminder|book|add)\b/i,
   my_location: /\b(where am i|location|gps|near|nearby|how far|direction|which way|camp|car|waypoint|coordinates|altitude)\b/i,
+  list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
+  map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
   remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
   schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
   draft_message: /\b(text|sms|email|e-mail|message|reply|send|write to|tell|call|phone|dial|ring)\b/i,

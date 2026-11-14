@@ -25,7 +25,7 @@ export const TOOL_GROUPS: Array<{ id: string; label: string; hint: string; tools
   { id: 'calendar', label: 'Calendar', hint: 'Read your events, and add one (asks first)', tools: ['calendar_events', 'add_calendar_event'] },
   { id: 'files', label: 'Files', hint: 'List, read, write and open files, build web pages (asks before writing)', tools: ['list_files', 'read_file', 'write_file', 'create_web_page', 'open_file'] },
   { id: 'memory', label: 'Memory', hint: 'Remember things about you', tools: ['remember'] },
-  { id: 'phone', label: 'Phone', hint: 'Location, battery and storage, drafting texts and emails, reminders', tools: ['my_location', 'get_device_info', 'draft_message', 'schedule_task'] },
+  { id: 'phone', label: 'Phone', hint: 'Location, places on your offline maps, battery and storage, drafting texts and emails, reminders', tools: ['my_location', 'list_maps', 'map_places', 'get_device_info', 'draft_message', 'schedule_task'] },
 ];
 
 /** Whether every tool of a group is on. */

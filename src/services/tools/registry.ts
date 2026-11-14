@@ -242,6 +242,22 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: {},
   },
   {
+    id: 'list_maps', name: 'list_maps', displayName: 'Offline maps', icon: 'map',
+    description: "The offline map files on this phone and the area each covers, and whether the user's position is inside one. Use before searching places, or when the user asks what maps they have.",
+    parameters: {},
+  },
+  {
+    id: 'map_places', name: 'map_places', displayName: 'Places on the map', icon: 'map-pin',
+    description: "Find named places (hospital, cafe, campsite, peak, street, shop...) in the offline map file near the user or near a latitude and longitude. Works with no internet. Use for 'what is near me', 'where is the nearest hospital', 'is there a campground around here'. Only places OpenStreetMap names are listed.",
+    parameters: {
+      query: { type: 'string', description: 'What to look for, for example hospital, cafe or a place name. Leave empty for everything named.' },
+      lat: { type: 'string', description: 'Latitude to search around (default: the user\'s position)' },
+      lon: { type: 'string', description: 'Longitude to search around' },
+      radius_km: { type: 'string', description: 'How far to look, 1 to 30 km (default 5)' },
+      limit: { type: 'string', description: 'How many results, 1 to 25 (default 10)' },
+    },
+  },
+  {
     id: 'remember', name: 'remember', displayName: 'Remember',
     description: 'Save a lasting fact about the user that they want you to remember in future chats (preferences, people, health, plans). Only when the user shares it or asks you to remember.', icon: 'bookmark',
     parameters: { fact: { type: 'string', description: 'One short fact', required: true } },
