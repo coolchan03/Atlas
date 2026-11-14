@@ -4,7 +4,7 @@
  * contract between the AI and the app: the kinds of square, the questions the AI is asked, and a strict reader for what it
  * answers. Pure, so it is tested without a device.
  */
-import { difficultyNote, type Difficulty } from '../study/difficulty';
+import { difficultyNote, readingNote, type Difficulty } from '../study/difficulty';
 import { parseJsonLoose, str } from '../study/games/json';
 import { evalExpression } from '../study/mathTools';
 import { DRILL_LABELS } from '../study/drills';
@@ -71,7 +71,8 @@ export const FORMAT_IDS = FORMATS.map((f) => f.id);
 export interface PlannedSquare { key: string; format: SquareFormat; title: string; focus: string; unit: string; checkpoint?: boolean; remedial?: boolean }
 export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
 
-export const MAX_SQUARES = 60;
+/** The longest board: 60 chapters of six squares each, and the checks between them. */
+export const MAX_SQUARES = 400;
 const asFormat = (v: unknown): SquareFormat => (FORMAT_IDS.includes(String(v).toLowerCase() as SquareFormat) ? (String(v).toLowerCase() as SquareFormat) : 'lesson');
 
 /** What the person asked for, passed to the AI. */
@@ -177,7 +178,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) : ''}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 
@@ -192,7 +193,7 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
     const keyPoints = list(j.keyPoints).map((k) => str(k, 200)).filter(Boolean).slice(0, 8);
     const commonMistakes = list(j.commonMistakes).map((m) => str(m, 240)).filter(Boolean).slice(0, 4);
     const check = j.quickCheck && str(j.quickCheck.q, 240) && str(j.quickCheck.a, 240) ? { q: str(j.quickCheck.q, 240), a: str(j.quickCheck.a, 240) } : undefined;
-    return sections.length ? { kind: 'lesson', sections: sections.slice(0, 7), keyPoints, ...(commonMistakes.length ? { commonMistakes } : {}), ...(check ? { quickCheck: check } : {}) } : null;
+    return sections.length ? { kind: 'lesson', sections: sections.slice(0, 12), keyPoints, ...(commonMistakes.length ? { commonMistakes } : {}), ...(check ? { quickCheck: check } : {}) } : null;
   }
   if (format === 'quiz' || format === 'fill' || format === 'truefalse' || format === 'scenario' || format === 'reading' || format === 'predict') {
     const questions = list(j.questions).map((q) => {

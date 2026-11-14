@@ -3,7 +3,7 @@
  * written (so it opens at once, even offline) and your own notes; it never holds your progress, your project link, or the
  * text of web pages (only their titles and addresses). Pure, so it is tested without a device.
  */
-import { FORMAT_IDS, type PlannedSquare, type SquareContent } from './formats';
+import { FORMAT_IDS, MAX_SQUARES, type PlannedSquare, type SquareContent } from './formats';
 import type { Course, SharedCourse } from './store';
 
 export const COURSE_FILE_EXTENSION = 'atlascourse.json';
@@ -55,7 +55,7 @@ export function parseCourseFile(raw: string): SharedCourse {
   let json: any;
   try { json = JSON.parse(raw); } catch { throw new Error('That is not an Atlas course file.'); }
   if (json?.atlasCourse !== 1 || !Array.isArray(json.squares)) throw new Error('That is not an Atlas course file.');
-  const squares: PlannedSquare[] = json.squares.slice(0, 40).filter((s: any) => s && typeof s.key === 'string' && /^[\w-]{1,20}$/.test(s.key) && FORMAT_IDS.includes(s.format) && text(s.title, 80))
+  const squares: PlannedSquare[] = json.squares.slice(0, MAX_SQUARES).filter((s: any) => s && typeof s.key === 'string' && /^[\w-]{1,20}$/.test(s.key) && FORMAT_IDS.includes(s.format) && text(s.title, 80))
     .map((s: any) => ({ key: s.key, format: s.format, title: text(s.title, 60), focus: text(s.focus, 240) || text(s.title, 60), unit: text(s.unit, 80) || 'Course', ...(s.checkpoint ? { checkpoint: true } : {}), ...(s.remedial ? { remedial: true } : {}) }));
   if (squares.length < 2) throw new Error('That course has no squares in it.');
   const keys = new Set(squares.map((s) => s.key));

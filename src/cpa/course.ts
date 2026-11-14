@@ -1,30 +1,30 @@
 /**
- * Each professional exam (CPA, bar, CFA and the rest) is its own board-game course, like every other thing you learn: one lesson square for each topic on the checklist,
- * a quiz at the end of each area and a whole-exam quiz last. The course belongs to the exam's project, so every square is written from the
+ * Each professional exam (CPA, bar, CFA and the rest) is its own board-game course, like every other thing you learn: six squares for each topic on the checklist
+ * (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), a review exam at the end of each area and a whole-exam check last. The course belongs to the exam's project, so every square is written from the
  * textbooks and notes added there. The plan is made here from the checklist, with no AI, so the board always matches the topics.
  */
 import { useTopics, type Course } from '../topics/store';
 import type { CoursePlan, PlannedSquare } from '../topics/formats';
+import { chapterSquares } from '../topics/chapterSequence';
+import { MAX_SQUARES } from '../topics/formats';
 import { examInfo, examLabel, type ExamCode } from './blueprints';
 import { useCpa, type CpaTopic } from './store';
 
-const MAX = 60;
 
-/** The board for an exam's topics. Areas become units; when there are too many topics the area quizzes are dropped first. */
+/** The board for an exam's topics. Areas become units; every topic is a chapter of six squares, and each area ends with a review exam. */
 export function examPlan(code: ExamCode, topics: CpaTopic[]): CoursePlan {
   const info = examInfo(code);
   const areas = [...new Set(topics.map((t) => t.area))];
-  const withQuizzes = topics.length + areas.length + 1 <= MAX;
   const squares: PlannedSquare[] = [];
-  const add = (sq: Omit<PlannedSquare, 'key'>) => { if (squares.length < MAX) squares.push({ key: `s${squares.length + 1}`, ...sq }); };
+  const add = (sq: Omit<PlannedSquare, 'key'>) => { if (squares.length < MAX_SQUARES) squares.push({ key: `s${squares.length + 1}`, ...sq }); };
   for (const area of areas) {
-    for (const t of topics.filter((x) => x.area === area)) add({ format: 'lesson', title: t.name.slice(0, 60), focus: `${t.name} for the ${examLabel(code)} exam (${area})`, unit: area });
-    if (withQuizzes) add({ format: 'quiz', title: `${area}: check`.slice(0, 60), focus: `Everything in: ${area}`, unit: area, checkpoint: true });
+    for (const t of topics.filter((x) => x.area === area)) chapterSquares(t.name, area, `for the ${examLabel(code)} exam (${area})`).forEach(add);
+    add({ format: 'quiz', title: `${area}: review exam`.slice(0, 60), focus: `Everything in: ${area}`, unit: area, checkpoint: true });
   }
   add({ format: 'quiz', title: 'Whole exam check', focus: `Mixed questions from every area of the ${examLabel(code)} exam`, unit: areas[areas.length - 1] ?? 'Exam', checkpoint: true });
   return {
-    title: `${examLabel(code)}: ${info.name}`, summary: `Learn every topic on the ${code} checklist, then check yourself.`,
-    style: 'One lesson for each topic, written from your own textbooks and notes, with a quiz after each area.', theme: `${code} exam board`, squares,
+    title: `${examLabel(code)}: ${info.name}`, summary: `Work through every topic on the ${code} checklist: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.`,
+    style: 'Six squares for each topic, written from your own textbooks and notes: the reading, key terms, a worked example, a quiz, an assignment and a chapter exam.', theme: `${code} exam board`, squares,
   };
 }
 

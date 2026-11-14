@@ -36,22 +36,17 @@ export function findChapters(text: string): Chapter[] {
   return [...byNumber.values()].sort((a, b) => a.number - b.number).slice(0, 60).map((h) => ({ number: h.number, title: h.title, size: h.size }));
 }
 
-import type { CoursePlan, PlannedSquare } from './formats';
+import { MAX_SQUARES, type CoursePlan, type PlannedSquare } from './formats';
+import { CHAPTER_SQUARES, chapterSquares } from './chapterSequence';
 
 /** "Chapter 7: Leases". */
 export const chapterName = (c: Chapter): string => (c.title ? `Chapter ${c.number}: ${c.title}` : `Chapter ${c.number}`);
 
-/** A lesson, key-term cards and a chapter test for every chapter (just the lesson and test when there are many chapters), within the board's size limit. */
+/** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */
 export function chapterPlan(chapters: Chapter[], book: string): CoursePlan {
-  const withCards = chapters.length * 3 <= 60;
-  const used = chapters.slice(0, withCards ? 20 : 30);
+  const used = chapters.slice(0, Math.floor(MAX_SQUARES / CHAPTER_SQUARES));
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
-  for (const c of used) {
-    const name = chapterName(c); const unit = `Chapter ${c.number}`;
-    add({ format: 'lesson', title: name.slice(0, 60), focus: `${name} of the textbook: its main ideas, in the order the book teaches them`, unit });
-    if (withCards) add({ format: 'cards', title: `${unit}: key terms`.slice(0, 60), focus: `The key terms and definitions of ${name}`, unit });
-    add({ format: 'quiz', title: `${unit} test`.slice(0, 60), focus: `A test of everything in ${name}`, unit, checkpoint: true });
-  }
-  return { title: book, summary: `Every chapter of the book, one unit each: learn it, learn its terms, then take its test.`, style: 'The book\'s own order, one chapter at a time, each ending in a test of that chapter.', theme: 'Chapter by chapter', squares };
+  for (const c of used) chapterSquares(chapterName(c), `Chapter ${c.number}`, 'of the textbook').forEach(add);
+  return { title: book, summary: 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
 }

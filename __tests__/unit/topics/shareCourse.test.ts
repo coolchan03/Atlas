@@ -5,7 +5,7 @@ const base = (extra: Record<string, unknown> = {}) => ({ atlasCourse: 1, title: 
 const parse = (o: unknown) => parseCourseFile(JSON.stringify(o));
 
 describe('validContent checks each kind', () => {
-  const good: Record<string, unknown> = {
+  const goodByKind: Record<string, unknown> = {
     lesson: { kind: 'lesson', sections: [{ text: 'x' }] },
     quiz: { kind: 'quiz', questions: [{ q: 'q', options: ['a', 'b'], answer: 1 }] },
     cards: { kind: 'cards', cards: [{ front: 'f', back: 'b' }] },
@@ -20,7 +20,7 @@ describe('validContent checks each kind', () => {
     sort: { kind: 'sort', groups: ['g', 'h'], items: [0, 1, 0, 1].map((group, i) => ({ text: `t${i}`, group })) },
     dictation: { kind: 'dictation', sentences: ['a', 'b', 'c'] },
   };
-  it.each(Object.keys(good))('accepts a good %s', (k) => expect(validContent(good[k])).toBe(true));
+  it.each(Object.keys(goodByKind))('accepts a good %s', (k) => expect(validContent(goodByKind[k])).toBe(true));
   const bad: Record<string, unknown> = {
     lesson: { kind: 'lesson', sections: [] }, quiz: { kind: 'quiz', questions: [{ q: 'q', options: ['a'], answer: 3 }] },
     cards: { kind: 'cards', cards: [{ front: 1 }] }, match: { kind: 'match', pairs: [] }, order: { kind: 'order', steps: [1] },

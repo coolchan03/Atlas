@@ -15,3 +15,11 @@ export function difficultyFromLevel(level: string): Difficulty {
   if (/intermediate/i.test(level)) return 'moderate';
   return 'beginner';
 }
+
+const READING: Record<Difficulty, string> = {
+  beginner: 'This square is the READING, written as the full chapter for a beginner: every idea explained from the start with examples, in the order a textbook teaches it, nothing assumed and nothing skipped.',
+  moderate: 'This square is the READING, written as a clear condensed chapter: the ideas and rules in order with the main examples, without repeating the basics.',
+  hard: 'This square is the READING, written as an expert summary: the general rules, the exceptions and the points most often tested, tight and without hand-holding.',
+};
+/** How much a lesson square should read like a chapter: the whole chapter for beginners, a summary and the rules for experts. */
+export const readingNote = (d: Difficulty | undefined): string => (d ? `${READING[d]}\n` : '');

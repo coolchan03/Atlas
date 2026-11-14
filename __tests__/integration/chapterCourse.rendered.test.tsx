@@ -15,7 +15,7 @@ jest.mock('@react-navigation/native', () => ({
 
 const chapter = (n: number, name: string) => `Chapter ${n}: ${name}\n${`${name} explained in detail with many sentences about the topic. `.repeat(40)}`;
 
-it('makes one unit per chapter with a lesson, key terms and a test, in the book\'s order', async () => {
+it('makes one unit per chapter with six squares (reading, key terms, worked example, quiz, assignment, chapter exam), in the book\'s order', async () => {
   installRealSqlite();
   const rtl = requireRTL();
   const React = require('react');
@@ -35,12 +35,10 @@ it('makes one unit per chapter with a lesson, key terms and a test, in the book\
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('course-make')); });
   await rtl.waitFor(() => expect(useTopics.getState().courses).toHaveLength(1));
   const course = useTopics.getState().courses[0];
-  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([
-    'Chapter 1: Leases', 'Chapter 1: key terms', 'Chapter 1 test',
-    'Chapter 2: Bonds', 'Chapter 2: key terms', 'Chapter 2 test',
-    'Chapter 3: Revenue', 'Chapter 3: key terms', 'Chapter 3 test',
-  ]);
-  expect(course.squares.filter((s: { checkpoint?: boolean }) => s.checkpoint).map((s: { format: string }) => s.format)).toEqual(['quiz', 'quiz', 'quiz']);
+  const per = (name: string) => [name, `${name}: key terms`, `${name}: worked example`, `${name}: quiz`, `${name}: assignment`, `${name}: chapter exam`];
+  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([...per('Chapter 1: Leases'), ...per('Chapter 2: Bonds'), ...per('Chapter 3: Revenue')]);
+  expect(course.squares.map((s: { format: string }) => s.format).slice(0, 6)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'quiz']);
+  expect(course.squares.filter((s: { checkpoint?: boolean }) => s.checkpoint)).toHaveLength(3);
   expect(course.projectId).toBe(project.id);
   expect(course.difficulty).toBe('beginner');
 });
