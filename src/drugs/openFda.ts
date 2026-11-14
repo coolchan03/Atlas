@@ -94,3 +94,25 @@ export function tidyLabels(labels: DrugLabel[]): DrugLabel[] {
     .sort((a, b) => b.updated.localeCompare(a.updated))
     .filter((l) => { const k = `${l.brand}|${l.generic}|${l.manufacturer}`.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
 }
+
+export interface InteractionNote { /** The label whose text says it. */ from: string; /** The medicine it mentions. */ about: string; sentences: string[] }
+
+const namesOf = (l: DrugLabel): string[] =>
+  [...new Set([l.brand, ...l.generic.split(',')].map((n) => n.trim().toLowerCase()).filter((n) => n.length >= 4))];
+
+const sentencesAbout = (text: string, names: string[]): string[] =>
+  (text.match(/[^.!?\n]+[.!?]?/g) ?? []).map((s) => s.trim()).filter((s) => s && names.some((n) => s.toLowerCase().includes(n))).slice(0, 3);
+
+/**
+ * Whether each label's own text mentions the other medicine, in its interactions, warnings or when-using sections, with the sentences
+ * that do. This only finds where one label names the other: no mention is not proof that two medicines are safe together.
+ */
+export function compareLabels(a: DrugLabel, b: DrugLabel): InteractionNote[] {
+  const out: InteractionNote[] = [];
+  for (const [from, other] of [[a, b], [b, a]] as const) {
+    const text = [from.sections.interactions, from.sections.warnings, from.sections.when_using, from.sections.contraindications].filter(Boolean).join('\n');
+    const sentences = sentencesAbout(text, namesOf(other));
+    if (sentences.length) out.push({ from: from.brand || from.generic, about: other.brand || other.generic, sentences });
+  }
+  return out;
+}

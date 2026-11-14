@@ -50,3 +50,19 @@ describe('looking a medicine up', () => {
     expect(tidyLabels([a, b]).map((l) => l.id)).toEqual(['new']);
   });
 });
+
+describe('comparing two labels', () => {
+  const { compareLabels } = require('../../../src/drugs/openFda');
+  const label = (id: string, brand: string, generic: string, sections: Record<string, string>) => ({ id, brand, generic, manufacturer: '', type: 'OTC', route: '', updated: '', sections });
+
+  it('finds where one label names the other medicine, by brand or generic name, and says nothing when neither does', () => {
+    const advil = label('a', 'Advil', 'IBUPROFEN', { interactions: 'Do not use with aspirin unless a doctor says so. Other drugs may also interact.' });
+    const aspirin = label('b', 'Bayer', 'ASPIRIN', { warnings: 'Ask a doctor before use. Taking Advil or other NSAIDs can raise bleeding risk.' });
+    const tylenol = label('c', 'Tylenol', 'ACETAMINOPHEN', { warnings: 'Liver warning.' });
+    const both = compareLabels(advil, aspirin);
+    expect(both.map((n: { from: string }) => n.from)).toEqual(['Advil', 'Bayer']);
+    expect(both[0].sentences[0]).toContain('aspirin');
+    expect(both[1].sentences[0]).toContain('Advil');
+    expect(compareLabels(advil, tylenol)).toEqual([]);
+  });
+});

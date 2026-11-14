@@ -71,3 +71,23 @@ it('gives the chat tool the label text, and says plainly when nothing could be f
   expect(await drugLabelsForChat('nothing-saved')).toContain('Do not guess doses');
   await expect(drugLabelsForChat('  ')).rejects.toThrow('name');
 });
+
+it('compares an open label with another saved one and says when neither names the other', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { useSavedDrugs } = require('../../../src/drugs/store');
+  const mk = (id: string, brand: string, generic: string, sections: Record<string, string>) => ({ id, brand, generic, manufacturer: '', type: 'OTC', route: '', updated: '2025-01-01', sections });
+  useSavedDrugs.getState().save([
+    mk('a', 'Advil', 'IBUPROFEN', { interactions: 'Do not use with aspirin unless a doctor says so.' }),
+    mk('b', 'Bayer', 'ASPIRIN', { warnings: 'Ask a doctor first.' }),
+    mk('c', 'Tylenol', 'ACETAMINOPHEN', { warnings: 'Liver warning.' }),
+  ]);
+  const view = rtl.render(React.createElement(require('../../../src/screens/DrugReferenceScreen').DrugReferenceScreen));
+  rtl.fireEvent.press(view.getByTestId('drug-open-a'));
+  rtl.fireEvent.press(view.getByTestId('drug-compare-b'));
+  expect(view.getByText(/The Advil label mentions Bayer/)).toBeTruthy();
+  expect(view.getAllByText('Do not use with aspirin unless a doctor says so.').length).toBe(2); // in the label itself and in the comparison
+  rtl.fireEvent.press(view.getByTestId('drug-compare-c'));
+  expect(view.getByTestId('drug-compare-none')).toBeTruthy();
+});

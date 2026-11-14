@@ -5,15 +5,35 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { DRUG_SECTIONS, DrugLabel } from '../drugs/openFda';
+import { DRUG_SECTIONS, DrugLabel, compareLabels } from '../drugs/openFda';
 import { lookupDrug, useSavedDrugs } from '../drugs/store';
 
 const nameOf = (l: DrugLabel) => l.brand || l.generic;
 const subtitle = (l: DrugLabel) => [l.brand && l.generic ? l.generic : '', l.manufacturer, l.type].filter(Boolean).join(' · ');
 
+/** Whether two saved labels name each other, with the sentences that do. */
+const CompareView: React.FC<{ a: DrugLabel; b: DrugLabel }> = ({ a, b }) => {
+  const { colors } = useTheme();
+  const notes = compareLabels(a, b);
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="drug-compare">
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{nameOf(a)} and {nameOf(b)}</Text>
+      {notes.length === 0 && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="drug-compare-none">Neither label names the other medicine. That is not proof they are safe together: ask a pharmacist or doctor.</Text>}
+      {notes.map((n) => (
+        <View key={n.from} style={styles.block}>
+          <Text style={[styles.meta, { color: colors.error }]}>The {n.from} label mentions {n.about}:</Text>
+          {n.sentences.map((x) => <Text key={x} style={{ color: colors.text }}>{x}</Text>)}
+        </View>
+      ))}
+    </View>
+  );
+};
+
 /** One medicine's label, section by section, in the manufacturer's own words. */
 const LabelView: React.FC<{ label: DrugLabel; onBack: () => void }> = ({ label, onBack }) => {
   const { colors } = useTheme();
+  const others = useSavedDrugs((st) => st.saved).filter((x) => x.id !== label.id);
+  const [other, setOther] = useState<DrugLabel | null>(null);
   return (
     <View style={styles.block} testID="drug-label">
       <TouchableOpacity onPress={onBack} style={styles.back} accessibilityRole="button" testID="drug-back">
@@ -29,6 +49,21 @@ const LabelView: React.FC<{ label: DrugLabel; onBack: () => void }> = ({ label, 
         </View>
       ))}
       {!Object.keys(label.sections).length && <Text style={[styles.meta, { color: colors.textSecondary }]}>This label has no text sections.</Text>}
+      {others.length > 0 && (
+        <View style={styles.block} testID="drug-compare-picker">
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Taking it with another medicine?</Text>
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>Pick a saved label to see whether either label names the other.</Text>
+          <View style={styles.row}>
+            {others.map((x) => (
+              <TouchableOpacity key={x.id} onPress={() => setOther(other?.id === x.id ? null : x)} accessibilityRole="button" testID={`drug-compare-${x.id}`}
+                style={[styles.action, { borderColor: other?.id === x.id ? colors.primary : colors.border }]}>
+                <Text style={{ color: colors.text }}>{nameOf(x)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {!!other && <CompareView a={label} b={other} />}
+        </View>
+      )}
     </View>
   );
 };
