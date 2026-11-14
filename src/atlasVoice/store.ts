@@ -54,7 +54,8 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   neuralVoice: '',
   neuralSid: 0,
   neuralReferenceId: '',
-  cloneSteps: 2,
+  /** 0 is automatic: the best quality (8 steps) this phone keeps up with, stepping down only if it is too slow. */
+  cloneSteps: 0,
   readVoiceId: '',
   setReadVoiceId: (readVoiceId) => set({ readVoiceId }),
   earpiece: false,
@@ -63,7 +64,7 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
   podcastExtraVoices: [],
   setPodcastExtraVoices: (podcastExtraVoices) => set({ podcastExtraVoices }),
   setEarpiece: (earpiece) => set({ earpiece }),
-  setCloneSteps: (steps) => set({ cloneSteps: [2, 3, 5, 8].includes(steps) ? steps : 2 }),
+  setCloneSteps: (steps) => set({ cloneSteps: [0, 2, 3, 5, 8].includes(steps) ? steps : 0 }),
   setNeural: (neuralVoice, sid, referenceId) => set((s) => ({
     neuralVoice, neuralSid: sid ?? s.neuralSid,
     neuralReferenceId: referenceId ?? (neuralVoice === s.neuralVoice ? s.neuralReferenceId : ''),
@@ -77,5 +78,11 @@ export const useAtlasVoiceStore = create<AtlasVoiceState>()(persist((set) => ({
 }), {
   name: 'atlas-voice-settings',
   storage: createJSONStorage(() => AsyncStorage),
+  // 2 steps was the old default, so anyone still on it moves to automatic; a deliberate 3, 5 or 8 is kept.
+  version: 1,
+  migrate: (state, version) => {
+    const old = state as { cloneSteps?: number };
+    return version < 1 && old.cloneSteps === 2 ? { ...old, cloneSteps: 0 } as never : state as never;
+  },
   partialize: (s) => ({ handsFree: s.handsFree, rate: s.rate, autoSpeakInChat: s.autoSpeakInChat, neuralVoice: s.neuralVoice, neuralSid: s.neuralSid, neuralReferenceId: s.neuralReferenceId, cloneSteps: s.cloneSteps, readVoiceId: s.readVoiceId, earpiece: s.earpiece, podcastVoices: s.podcastVoices, podcastExtraVoices: s.podcastExtraVoices }),
 }));

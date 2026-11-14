@@ -225,7 +225,7 @@ const setNative = async (id: string, sid: number, referenceId: string): Promise<
   if (isPocketVoiceId(id)) {
     if (!Native.activateClonedVoice) throw new Error('Cloning requires an updated Android version of Atlas.');
     const count: number = await Native.activateClonedVoice(id, n.sid, n.style, referenceId,
-      useAtlasVoiceStore.getState().cloneSteps || 2);
+      useAtlasVoiceStore.getState().cloneSteps);
     if (count === 0) throw new Error('Voice selection was superseded by another choice.');
     return count;
   }

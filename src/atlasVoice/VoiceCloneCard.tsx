@@ -9,8 +9,8 @@ import { useVoiceSample } from './useVoiceSample';
 import { useVoiceCreation } from './useVoiceCreation';
 import { SPEEDS } from './VoiceProfilesCard';
 
-const STEPS = [2, 3, 5, 8];
-const STEP_LABELS: Record<number, string> = { 2: 'Fastest (2): phone calls', 3: 'Balanced (3): recommended', 5: 'Smoother (5): clearer, slower', 8: 'Best quality (8): slowest' };
+const STEPS = [0, 2, 3, 5, 8];
+const STEP_LABELS: Record<number, string> = { 0: 'Automatic (recommended): best quality this phone keeps up with', 2: 'Fastest (2): phone calls', 3: 'Balanced (3)', 5: 'Smoother (5)', 8: 'Best quality (8)' };
 const MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2';
 
 type Reference = ReturnType<typeof useCloneReferences.getState>['references'][number];
@@ -248,7 +248,7 @@ function Advanced({ colors, steps, onSteps, canTest, onSpeedTest, result }: {
   return (
     <View style={styles.step}>
       <Text style={[styles.stepTitle, { color: colors.text }]}>Speed or quality</Text>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>More steps is slower and not always better. This voice engine is built to work in only a few steps, so a very low or very high setting can sound robotic. If a setting sounds off, go back to Balanced. The fastest setting is best for phone calls only if it still sounds right to you.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>Automatic starts at the best quality (8 steps) and drops to 5, 3 or 2 only if this phone cannot make speech faster than it is spoken. Fewer steps sounds flatter and choppier; more steps sounds smoother. Pick a number to fix it. The fastest setting suits phone calls on a slow phone.</Text>
       <View style={styles.row}>
         {STEPS.map((n) => (
           <TouchableOpacity key={n} onPress={() => onSteps(n)} accessibilityRole="radio" accessibilityState={{ selected: steps === n }}

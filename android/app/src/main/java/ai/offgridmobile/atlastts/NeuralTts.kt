@@ -14,6 +14,7 @@ import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsPocketModelConfig
 import com.k2fsa.sherpa.onnx.GenerationConfig
 import java.io.File
+import kotlin.math.max
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
@@ -47,9 +48,11 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
     @Volatile private var speakers = 0
     @Volatile private var pocketLoaded = false
     @Volatile private var cloneReference: VoiceCloneWav.Reference? = null
-    @Volatile private var cloneSteps: Int = 2
+    /** 0 means automatic: the best quality this phone keeps up with (see [AutoSteps]). */
+    @Volatile private var cloneSteps: Int = 0
+    private val auto = AutoSteps()
 
-    fun setCloneSteps(steps: Int) { require(steps in listOf(2, 3, 5, 8)); cloneSteps = steps }
+    fun setCloneSteps(steps: Int) { require(steps in listOf(0, 2, 3, 5, 8)); cloneSteps = steps }
     val cloneStepsNow: Int get() = cloneSteps
 
     /** A new reference applies to the next utterance, never to the currently generating sentence. */
@@ -61,7 +64,11 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
                               reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
-        return generatePocket(engine, PocketText.prepare(text, steps), sid, speed, reference, steps).samples
+        val used = if (steps == 0) auto.steps else steps
+        val began = System.nanoTime()
+        val audio = generatePocket(engine, PocketText.prepare(text, used), sid, speed, reference, used)
+        if (steps == 0) auto.record((System.nanoTime() - began) / 1_000_000, audio.samples.size.toDouble() / max(1, audio.sampleRate))
+        return audio.samples
     }
 
     /** One cloned-voice generation exactly as given (no tidying), with its timing logged. */

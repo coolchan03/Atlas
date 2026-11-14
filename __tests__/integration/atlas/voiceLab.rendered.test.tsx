@@ -53,7 +53,7 @@ it('loads the cloned voice, runs the chosen steps, shows each run, plays it both
   rtl.fireEvent.press(view.getByTestId('voice-lab-step-3')); // leave 2 and 5
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-lab-run')); });
   await rtl.waitFor(() => expect(view.getByTestId('voice-lab-results')).toBeTruthy());
-  expect(native.activateClonedVoice).toHaveBeenCalledWith('pocket-tts-int8', 0, expect.anything(), 'ref-jake', 2);
+  expect(native.activateClonedVoice).toHaveBeenCalledWith('pocket-tts-int8', 0, expect.anything(), 'ref-jake', 0); // 0 is automatic quality
   expect(native.voiceLab).toHaveBeenCalledWith('Hey man how is it going', [2, 5]);
   expect(view.getByText(/19 bursts/)).toBeTruthy();
   expect(view.getByText(/separate bursts of sound/)).toBeTruthy(); // flagged as stuttering

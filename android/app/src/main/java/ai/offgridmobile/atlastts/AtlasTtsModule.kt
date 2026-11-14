@@ -409,7 +409,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         if (dir == null || !NeuralTts.isPocket(dir)) {
             promise.reject("NO_POCKET_MODEL", "Import the complete Pocket TTS model first"); return
         }
-        if (steps !in listOf(2, 3, 5, 8)) { promise.reject("BAD_STEPS", "Invalid quality setting"); return }
+        if (steps !in listOf(0, 2, 3, 5, 8)) { promise.reject("BAD_STEPS", "Invalid quality setting"); return }
         val g = ++voiceGen
         voiceExec.execute {
             try {
