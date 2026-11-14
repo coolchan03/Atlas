@@ -50,6 +50,7 @@ describe('more screens survive being pressed everywhere, with realistic data', (
     const React = require('react');
     const rn = require('react-native');
     try { jest.spyOn(rn.PermissionsAndroid, 'request').mockResolvedValue('granted' as never); jest.spyOn(rn.PermissionsAndroid, 'requestMultiple').mockResolvedValue({} as never); } catch { /* not present */ }
+    if (exportName === 'NoiseMeterScreen') jest.doMock('react-native-audio-api', () => ({ AudioRecorder: class { onAudioReady(): void { /* no audio in tests */ } start(): void { /* */ } stop(): void { /* */ } }, AudioManager: { setAudioSessionOptions: jest.fn(), requestRecordingPermissions: jest.fn(async () => 'Granted') } }));
     const ids = seedApp();
     mockParams = typeof params === 'function' ? params(ids) : params;
     if (exportName === 'CpaExamScreen') { const { setupCpaExam } = require('../../../src/cpa/setup'); setupCpaExam('FAR'); }
