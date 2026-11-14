@@ -4,9 +4,9 @@ const mockDT = {
   addCalendarEvent: jest.fn(async (t: string, s: string) => `added ${t} ${s}`), draftMessage: jest.fn(async (k: string, b: string) => `draft ${k} ${b}`), rememberFact: jest.fn(async (f: string) => `remembered ${f}`),
   confirm: jest.fn(async () => true), lastFileRead: 0, __esModule: true,
 };
-const mockSearchWeb = jest.fn();
-const mockSearchProject = jest.fn();
-const mockSaveNote = jest.fn(async () => undefined);
+const mockSearchWeb = jest.fn((..._a: unknown[]) => undefined as unknown);
+const mockSearchProject = jest.fn((..._a: unknown[]) => undefined as unknown);
+const mockSaveNote = jest.fn(async (..._a: unknown[]) => undefined);
 jest.mock('../../../src/atlasTools/deviceTools', () => mockDT);
 jest.mock('../../../src/study/studyTools', () => ({ runStudyTool: jest.fn(async (n: string) => `study ${n}`) }));
 jest.mock('../../../src/atlasTools/offlineLibrary', () => ({ libraryToolAnswer: jest.fn(async (q: string) => `library ${q}`) }));
@@ -113,7 +113,7 @@ describe('web and knowledge tools', () => {
     (global as any).fetch = jest.fn(async () => ({ ok: true, url: 'https://a.org/page', text: async () => html }));
     const out = (await call('read_url', { url: ' "https://a.org/page" ' })).content;
     expect(out).toMatch(/## Title[\s\S]*Hello world[\s\S]*- one[\s\S]*> quote[\s\S]*### Small[\s\S]*`code`/); expect(out).not.toMatch(/menu/);
-    (global as any).fetch = jest.fn(async () => ({ ok: true, url: 'https://a.org/p', text: async () => '<html><body><p>' + 'x'.repeat(5000) + '</p></body></html>' }));
+    (global as any).fetch = jest.fn(async () => ({ ok: true, url: 'https://a.org/p', text: async () => `<html><body><p>${'x'.repeat(5000)}</p></body></html>` }));
     expect((await call('read_url', { url: 'https://a.org/p' })).content).toMatch(/\[Content truncated\]/);
     (global as any).fetch = jest.fn(async () => ({ ok: true, url: 'https://a.org/e', text: async () => '<html><body></body></html>' }));
     expect((await call('read_url', { url: 'https://a.org/e' })).content).toMatch(/no readable content/);
