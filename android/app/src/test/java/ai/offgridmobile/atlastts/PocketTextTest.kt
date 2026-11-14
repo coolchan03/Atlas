@@ -1,37 +1,34 @@
 package ai.offgridmobile.atlastts
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PocketTextTest {
     @Test
-    fun aLongPassageBecomesShortPiecesThatEachStartWithACapitalAndEndWithPunctuation() {
-        val text = "the quick brown fox jumps over the lazy dog, and then it keeps running across the field while the farmer watches from the gate, " +
-            "wondering why anything would run that fast on a cold morning. Next comes another sentence that is also fairly long and has several parts, so it must be cut as well"
-        val pieces = PocketText.prepare(text)
-        assertTrue(pieces.size >= 3)
-        for (p in pieces) {
-            assertTrue(p.trim().length <= PocketText.MAX_CHARS)
-            assertTrue(p.trim().first().isUpperCase())
-            assertTrue(p.last() in ".!?,;:")
-        }
+    fun aPhraseWithNoEndingGetsAFullStop() {
+        assertEquals("Hey man how is it going.", PocketText.prepare("Hey man how is it going"))
+        assertEquals("        Hi there.", PocketText.prepare("hi there"))
     }
 
     @Test
-    fun aVeryShortPieceGetsPaddingAndAFullStop() {
-        assertEquals(listOf("        Yes."), PocketText.prepare("yes"))
+    fun aLongSentenceIsNotCutOrPadded() {
+        val text = "the quick brown fox jumps over the lazy dog, and then it keeps running across the field while the farmer watches from the gate"
+        assertEquals("The quick brown fox jumps over the lazy dog, and then it keeps running across the field while the farmer watches from the gate.", PocketText.prepare(text))
     }
 
     @Test
-    fun aLongRunWithNoPunctuationIsCutAtWordBoundaries() {
-        val pieces = PocketText.prepare("word ".repeat(120))
-        assertTrue(pieces.size >= 3)
-        assertTrue(pieces.all { it.trim().length <= PocketText.MAX_CHARS })
+    fun existingPunctuationIsKept() {
+        assertEquals("How are you today? Fine, thanks.", PocketText.prepare("How are you today?  Fine, thanks."))
+        assertEquals("        Wow!", PocketText.prepare("wow!"))
     }
 
     @Test
-    fun textWithNothingToSayGivesNoPieces() {
-        assertTrue(PocketText.prepare("  ... --- ").isEmpty())
+    fun aTrailingCommaBecomesAFullStop() {
+        assertEquals("Well, this is what I think about it all.", PocketText.prepare("Well, this is what I think about it all,"))
+    }
+
+    @Test
+    fun textWithNothingToSayIsLeftAlone() {
+        assertEquals("  ... ", PocketText.prepare("  ... "))
     }
 }

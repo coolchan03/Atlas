@@ -51,29 +51,16 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         cloneReference = reference
     }
 
-    /** The samples for [text]. A cloned voice reads short, tidied pieces one after another (see [PocketText]) instead of one long run. */
+    /** The samples for [text]. A cloned voice gets its text tidied first (see [PocketText]) so it knows where the speech ends. */
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
                               reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
         val ref = reference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
-        val pieces = PocketText.prepare(text)
-        val rate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
-        val pause = FloatArray(rate / 10)
-        val out = ArrayList<FloatArray>()
-        var total = 0
-        for ((i, piece) in pieces.withIndex()) {
-            val audio = engine.generateWithConfig(piece, GenerationConfig(
-                sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
-                numSteps = steps,
-                extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
-            )).samples
-            if (i > 0) { out.add(pause); total += pause.size }
-            out.add(audio); total += audio.size
-        }
-        val all = FloatArray(total)
-        var at = 0
-        for (a in out) { System.arraycopy(a, 0, all, at, a.size); at += a.size }
-        return all
+        return engine.generateWithConfig(PocketText.prepare(text), GenerationConfig(
+            sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
+            numSteps = steps,
+            extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
+        )).samples
     }
 
     val ready: Boolean get() = tts != null
