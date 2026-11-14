@@ -34,8 +34,11 @@ export function Board({ spaces, isDone, isOpen, current, onPress, onFocus }: {
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { width } = useWindowDimensions();
-  const inner = Math.min(width, 640) - SPACING.lg * 2 - SPACING.md * 2 - 4;
+  const { width: screen } = useWindowDimensions();
+  // The room the board really has: a screen may pad it, so the squares are sized from its own measured width, not the window's.
+  const [measured, setMeasured] = React.useState<number | null>(null);
+  const available = Math.min(measured ?? screen, 640);
+  const inner = available - SPACING.lg * 2 - SPACING.md * 2 - 4;
   const size = Math.floor((inner - GAP * (COLS - 1)) / COLS);
   const rows: Space[][] = [];
   for (let i = 0; i < spaces.length; i += COLS) rows.push(spaces.slice(i, i + COLS));
@@ -52,12 +55,17 @@ export function Board({ spaces, isDone, isOpen, current, onPress, onFocus }: {
     onFocus(p.wrap + p.board + p.row);
   };
   return (
-    <View style={styles.wrap} testID="language-board" onLayout={(e) => { place.current.wrap = e.nativeEvent.layout.y; located(); }}>
+    <View style={styles.wrap} testID="language-board" onLayout={(e) => {
+      place.current.wrap = e.nativeEvent.layout.y;
+      const w = Math.floor(e.nativeEvent.layout.width);
+      if (w > 0 && w !== measured) setMeasured(w);
+      located();
+    }}>
       {!!turn && isOpen(current) && !isDone(turn.key) && (
         <View style={styles.turnCard}>
           <View style={styles.turnText}>
             <Text style={styles.turnLabel}>Your turn</Text>
-            <Text style={styles.turnTitle} numberOfLines={1}>{turn.title}</Text>
+            <Text style={styles.turnTitle} numberOfLines={2}>{turn.title}</Text>
             {untilExam !== null && <Text style={styles.turnLabel} testID="board-exam-countdown">Exam in {untilExam} {untilExam === 1 ? 'lesson' : 'lessons'}</Text>}
           </View>
           <TouchableOpacity style={styles.turnButton} onPress={() => onPress(turn, current)} testID="board-take-turn" accessibilityLabel={`Play ${turn.title}`}>
@@ -84,9 +92,9 @@ export function Board({ spaces, isDone, isOpen, current, onPress, onFocus }: {
                         style={[styles.square, { width: size, height: size, backgroundColor: done ? colors.primary : colors.background },
                           i === current && styles.current, !open && styles.locked]}>
                         <View style={[styles.band, { backgroundColor: done ? colors.background : band(s.kind, colors) }]} />
-                        <Text style={[styles.number, done && styles.onPrimary]}>{i === 0 ? 'START' : i === spaces.length - 1 ? 'FINISH' : i + 1}</Text>
+                        <Text style={[styles.number, done && styles.onPrimary]} allowFontScaling={false}>{i === 0 ? 'START' : i === spaces.length - 1 ? 'FINISH' : i + 1}</Text>
                         <Icon name={open ? s.icon : 'lock'} size={18} color={done ? colors.background : open ? colors.primary : colors.textMuted} />
-                        <Text style={[styles.label, done && styles.onPrimary]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{s.title}</Text>
+                        <Text style={[styles.label, done && styles.onPrimary]} numberOfLines={3} ellipsizeMode="tail" allowFontScaling={false} lineBreakStrategyIOS="none">{s.title}</Text>
                         {i === current && !done && (
                           <View style={styles.pawn} testID="board-pawn"><Icon name="user" size={13} color={colors.background} /></View>
                         )}
@@ -123,7 +131,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   current: { borderColor: colors.primary, borderWidth: 3 },
   locked: { opacity: 0.45 },
   number: { ...TYPOGRAPHY.meta, color: colors.textMuted, position: 'absolute' as const, top: BAND + 1, left: 4, fontSize: 9 },
-  label: { ...TYPOGRAPHY.meta, color: colors.text, textAlign: 'center' as const },
+  label: { ...TYPOGRAPHY.meta, fontSize: 10, lineHeight: 12, color: colors.text, textAlign: 'center' as const, flexShrink: 1 },
   onPrimary: { color: colors.background },
   pawn: {
     position: 'absolute' as const, top: BAND, right: 2, width: 22, height: 22, borderRadius: 11,
