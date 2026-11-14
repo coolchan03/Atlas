@@ -1,8 +1,8 @@
-/* eslint-disable react-native/no-inline-styles, max-lines-per-function, complexity -- Existing chat orchestrator coordinates many native model and UI lifecycles. */
+/* eslint-disable max-lines-per-function, complexity -- Existing chat orchestrator coordinates many native model and UI lifecycles. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import { isProtectedProjectUnlocked } from '../../stores/protectedProjectStorage';
-import { FlatList, Keyboard, InteractionManager, Platform, View } from 'react-native';
+import { FlatList, Keyboard, InteractionManager, Platform, StyleSheet, View } from 'react-native';
 // Edge-to-edge-aware KeyboardAvoidingView. RN's own version leaves a residual
 // padding band on Android under edge-to-edge (adjustResize is a no-op there);
 // this one reconciles the keyboard frame against the navigation-bar inset.
@@ -341,7 +341,7 @@ export const ChatScreen: React.FC = () => {
         />
         <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
         <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
-        <View style={[{ flex: 1 }, wide.column]}>
+        <View style={[flexOne.fill, wide.column]}>
         <ChatMessageArea
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}
@@ -397,3 +397,5 @@ export const ChatScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+const flexOne = StyleSheet.create({ fill: { flex: 1 } });

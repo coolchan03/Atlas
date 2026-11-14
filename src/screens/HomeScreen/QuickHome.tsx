@@ -1,6 +1,6 @@
-/* eslint-disable react-native/no-inline-styles, prefer-template, complexity */
+/* eslint-disable prefer-template, complexity */
 import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
@@ -12,6 +12,7 @@ import { ScreenBackground } from '../../components/ScreenBackground';
 import { HomeShortcutsCard } from './HomeShortcutsCard';
 import { HomeSearch, HomeStudyCard } from './HomeStudyCard';
 import { TILE } from '../../theme/tilePalette';
+import { pick } from '../../utils/pick';
 
 type Props = { navigation: any; mode: LayoutMode };
 type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load'; optional?: boolean; tint: string; tintDark: string; color: [string, string] };
@@ -70,53 +71,50 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   const save = (next: { order?: string[]; hidden?: string[] }) => updateSettings({ homeTiles: next });
   const fontSize = simple ? 21 : compact ? 16 : 18;
   const padding = compact ? 10 : simple ? 22 : grid ? 16 : 17;
+  // Sizes for the chosen layout mode, worked out once so the styles below only read them.
+  const look = {
+    screenPad: compact ? 12 : 22, title: simple ? 31 : compact ? 24 : 29, sub: simple ? 18 : 14, subGap: compact ? 10 : 20,
+    listDir: tiles ? 'row' as const : 'column' as const, listGap: tiles ? 8 : 12,
+    tileDir: tiles ? 'column' as const : 'row' as const, tileBasis: tiles ? '47%' as const : undefined, tileGrow: tiles ? 1 : 0,
+    tileRadius: compact ? 10 : simple ? 19 : 15, tileHeight: focus ? 120 : grid ? 140 : simple ? 92 : compact ? 90 : 76, tileGap: tiles ? 8 : 15,
+    tileJustify: grid ? 'center' as const : undefined, badge: simple ? 46 : grid ? 54 : 36, textFlex: tiles ? undefined : 1,
+    hint: simple ? 15 : 12,
+    textAlign: tiles ? 'center' as const : 'flex-start' as const,
+  };
   const go = (item: Destination) => {
     if (item.action === 'load') setLoadOpen(true);
     else if (item.tab) navigation.navigate(item.tab);
     else if (item.screen) navigation.getParent()?.navigate(item.screen);
   };
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
+    <SafeAreaView style={[staticStyles.h1, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenBackground screenKey="Home" />
-      <ScrollView testID={'home-' + mode} contentContainerStyle={{ padding: compact ? 12 : 22, paddingBottom: 44 }}>
-        <Text style={{ color: colors.text, fontSize: simple ? 31 : compact ? 24 : 29, fontWeight: '700' }}>Atlas</Text>
-        <Text style={{ color: colors.textSecondary, fontSize: simple ? 18 : 14, marginTop: 6, marginBottom: compact ? 10 : 20 }}>
+      <ScrollView testID={'home-' + mode} contentContainerStyle={[staticStyles.h14, { padding: look.screenPad }]}>
+        <Text style={[staticStyles.h2, { color: colors.text, fontSize: look.title }]}>Atlas</Text>
+        <Text style={[staticStyles.h3, { color: colors.textSecondary, fontSize: look.sub, marginBottom: look.subGap }]}>
           {focus ? 'What do you want to do?' : simple ? 'What would you like to do?' : compact ? 'Quick access' : 'Choose something to explore'}
         </Text>
         <HomeSearch navigation={navigation} tiles={destinations.map((d) => ({ key: d.key, label: d.label, hint: d.hint }))} onTile={(k) => go(byKey(k))} />
         <HomeStudyCard navigation={navigation} />
         <HomeShortcutsCard navigation={navigation} />
-        <View style={{ flexDirection: tiles ? 'row' : 'column', flexWrap: 'wrap', gap: tiles ? 8 : 12 }}>
+        <View style={[staticStyles.h4, { flexDirection: look.listDir, gap: look.listGap }]}>
           {items.map(item => {
             const accent = item.color[isDark ? 1 : 0];
             const colored = colorful || grid;
             return (
               <TouchableOpacity key={item.label} testID={'quick-home-' + item.key}
                 accessibilityRole="button" accessibilityLabel={item.label + '. ' + item.hint}
-                onPress={() => (editing ? undefined : go(item))} style={{
-                  opacity: editing && hiddenSet.has(item.key) ? 0.45 : 1,
-                  flexDirection: tiles ? 'column' : 'row', alignItems: 'center',
-                  flexBasis: tiles ? '47%' : undefined, flexGrow: tiles ? 1 : 0,
-                  backgroundColor: colored ? (isDark ? item.tintDark : item.tint) : colors.surface,
-                  borderColor: colored ? accent : colors.border,
-                  borderWidth: 1, borderRadius: compact ? 10 : simple ? 19 : 15,
-                  padding, minHeight: focus ? 120 : grid ? 140 : simple ? 92 : compact ? 90 : 76, gap: tiles ? 8 : 15,
-                  justifyContent: grid ? 'center' : undefined,
-                }}>
-                <View style={{
-                  width: simple ? 46 : grid ? 54 : 36, height: simple ? 46 : grid ? 54 : 36, borderRadius: 12,
-                  backgroundColor: colored ? (isDark ? colors.surfaceLight : '#FFFFFF') : colors.surfaceLight,
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
+                onPress={() => (editing ? undefined : go(item))} style={[staticStyles.h5, { opacity: pick(editing && hiddenSet.has(item.key), 0.45, 1), flexDirection: look.tileDir, flexBasis: look.tileBasis, flexGrow: look.tileGrow, backgroundColor: colored ? (isDark ? item.tintDark : item.tint) : colors.surface, borderColor: colored ? accent : colors.border, borderRadius: look.tileRadius, padding, minHeight: look.tileHeight, gap: look.tileGap, justifyContent: look.tileJustify }]}>
+                <View style={[staticStyles.h6, { width: look.badge, height: look.badge, backgroundColor: colored ? (isDark ? colors.surfaceLight : '#FFFFFF') : colors.surfaceLight }]}>
                   <Icon name={item.icon} size={simple ? 26 : grid ? 30 : 21} color={colored ? accent : colors.primary} />
                 </View>
-                <View style={{ flex: tiles ? undefined : 1, alignItems: tiles ? 'center' : 'flex-start' }}>
-                  <Text style={{ fontSize, color: colors.text, fontWeight: '700' }}>{item.label}</Text>
-                  {!tiles && <Text style={{ color: colors.textSecondary, fontSize: simple ? 15 : 12, marginTop: 4 }}>{item.hint}</Text>}
+                <View style={{ flex: look.textFlex, alignItems: look.textAlign }}>
+                  <Text style={[staticStyles.h7, { fontSize, color: colors.text }]}>{item.label}</Text>
+                  {!tiles && <Text style={[staticStyles.h8, { color: colors.textSecondary, fontSize: look.hint }]}>{item.hint}</Text>}
                 </View>
                 {!tiles && !editing && <Icon name="chevron-right" size={simple ? 23 : 19} color={colors.textMuted} />}
                 {editing && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <View style={staticStyles.h9}>
                     <TouchableOpacity testID={'tile-up-' + item.key} accessibilityLabel={'Move ' + item.label + ' up'} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => save(moveTile(keys, prefs, { key: item.key, by: -1 }))}>
                       <Icon name="arrow-up" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
@@ -135,12 +133,12 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
           })}
         </View>
         {!focus && (
-          <TouchableOpacity testID="home-customize" onPress={() => setEditing((v) => !v)} accessibilityRole="button" style={{ alignSelf: 'center', marginTop: 18, padding: 10 }}>
-            <Text style={{ color: colors.primary, fontWeight: '600' }}>{editing ? 'Done' : 'Customize this screen'}</Text>
+          <TouchableOpacity testID="home-customize" onPress={() => setEditing((v) => !v)} accessibilityRole="button" style={staticStyles.h10}>
+            <Text style={[staticStyles.h11, { color: colors.primary }]}>{editing ? 'Done' : 'Customize this screen'}</Text>
           </TouchableOpacity>
         )}
-        {editing && <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 4 }}>Use the arrows to move a tile and the eye to hide or show it.</Text>}
-        {(colorful || focus) && <Text style={{ color: colors.textMuted, marginTop: 20, textAlign: 'center' }}>
+        {editing && <Text style={[staticStyles.h12, { color: colors.textMuted }]}>Use the arrows to move a tile and the eye to hide or show it.</Text>}
+        {(colorful || focus) && <Text style={[staticStyles.h13, { color: colors.textMuted }]}>
           Your models and conversations stay on your device.
         </Text>}
       </ScrollView>
@@ -150,3 +148,20 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
     </SafeAreaView>
   );
 };
+
+const staticStyles = StyleSheet.create({
+  h1: { flex: 1 },
+  h2: { fontWeight: '700' },
+  h3: { marginTop: 6 },
+  h4: { flexWrap: 'wrap' },
+  h5: { alignItems: 'center', borderWidth: 1 },
+  h6: { borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  h7: { fontWeight: '700' },
+  h8: { marginTop: 4 },
+  h9: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  h10: { alignSelf: 'center', marginTop: 18, padding: 10 },
+  h11: { fontWeight: '600' },
+  h12: { textAlign: 'center', marginTop: 4 },
+  h13: { marginTop: 20, textAlign: 'center' },
+  h14: { paddingBottom: 44 },
+});

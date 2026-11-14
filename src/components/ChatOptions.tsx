@@ -1,4 +1,4 @@
-/* eslint-disable react-native/no-inline-styles, max-params -- Legacy dialog styles and compact action helper use dynamic theme tokens. */
+/* eslint-disable max-params -- Legacy dialog styles and compact action helper use dynamic theme tokens. */
 /**
  * One long-press menu for a chat, shared by every chat list (Home recents, Chats tab,
  * project chats, an open chat): rename, pin, share, set/remove PIN, archive, delete. Lists call `open(chat)` and
@@ -71,9 +71,9 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
   const open = (conversation: Conversation) => setMenuTarget(conversation);
   const menuAction = (icon: string, label: string, action: () => void, destructive = false) => (
     <TouchableOpacity key={label} accessibilityRole="button" testID={`chat-option-${  label.toLowerCase().replace(/\s+/g, '-')}`}
-      onPress={action} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: 20 }}>
+      onPress={action} style={staticStyles.h1}>
       <Icon name={icon} size={20} color={destructive ? colors.error : colors.textSecondary} />
-      <Text style={{ fontSize: 16, color: destructive ? colors.error : colors.text }}>{label}</Text>
+      <Text style={[staticStyles.h2, { color: destructive ? colors.error : colors.text }]}>{label}</Text>
     </TouchableOpacity>
   );
 
@@ -87,8 +87,8 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
         onClose={() => setMenuTarget(null)}
         onClosed={() => { const action = afterMenuClose.current; afterMenuClose.current = null; action?.(); }}>
         {menuTarget && (
-          <View style={{ paddingBottom: 12 }}>
-            <Text numberOfLines={1} style={{ color: colors.textMuted, paddingHorizontal: 20, paddingBottom: 7 }}>
+          <View style={staticStyles.h3}>
+            <Text numberOfLines={1} style={[staticStyles.h4, { color: colors.textMuted }]}>
               {menuTarget.pinVerifier ? 'Locked conversation' : menuTarget.title}
             </Text>
             {menuAction('info', 'What this chat uses', () => finishMenu(() => Alert.alert('What this chat uses', chatContextFor(menuTarget).join('\n'))))}
@@ -119,7 +119,7 @@ export function useChatOptions(opts?: { onDeleted?: (conversationId: string) => 
               useChatStore.getState().setConversationArchived(menuTarget.id, !menuTarget.isArchived);
               finishMenu();
             })}
-            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 7 }} />
+            <View style={[staticStyles.h5, { backgroundColor: colors.border }]} />
             {menuAction('trash-2', 'Delete', () => finishMenu(() => confirmDelete(menuTarget)), true)}
           </View>
         )}
@@ -168,4 +168,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 18 },
   note: { fontSize: 12 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 18 },
+});
+
+const staticStyles = StyleSheet.create({
+  h1: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: 20 },
+  h2: { fontSize: 16 },
+  h3: { paddingBottom: 12 },
+  h4: { paddingHorizontal: 20, paddingBottom: 7 },
+  h5: { height: 1, marginVertical: 7 },
 });

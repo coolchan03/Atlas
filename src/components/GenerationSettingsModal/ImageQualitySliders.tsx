@@ -1,6 +1,5 @@
-/* eslint-disable react-native/no-inline-styles -- Image setting chips use the selected theme colors. */
 import React from 'react';
-import { View, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity, StyleSheet } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -68,16 +67,14 @@ export const ImageQualityBasicSliders: React.FC = () => {
         formatValue={(v) => `${v}x${heightFor(v)}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: heightFor(value) })}
       />
-      {showAspect && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 }}>
+      {showAspect && <View style={staticStyles.h1}>
         {aspectPresets.map(option => {
           const selected = settings.imageWidth === option.width && settings.imageHeight === option.height;
           return (
             <TouchableOpacity key={option.label} testID={`image-aspect-${  option.label.toLowerCase()}`}
               accessibilityRole="button" accessibilityState={{ selected }}
               onPress={() => updateSettings({ imageWidth: option.width, imageHeight: option.height })}
-              style={{ borderRadius: 9, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7,
-                backgroundColor: selected ? colors.surfaceLight : colors.background,
-                borderColor: selected ? colors.primary : colors.border }}>
+              style={[staticStyles.h2, { backgroundColor: selected ? colors.surfaceLight : colors.background, borderColor: selected ? colors.primary : colors.border }]}>
               <Text style={{ color: selected ? colors.primary : colors.textSecondary }}>{option.label}</Text>
             </TouchableOpacity>
           );
@@ -125,3 +122,8 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
     </>
   );
 };
+
+const staticStyles = StyleSheet.create({
+  h1: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 },
+  h2: { borderRadius: 9, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
+});

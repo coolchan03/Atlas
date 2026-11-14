@@ -1,4 +1,3 @@
-/* eslint-disable react-native/no-inline-styles -- Existing chat progress components share dynamic themed layout. */
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
@@ -223,8 +222,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           <Text style={styles.classifyingText}>{chat.researchStatus}</Text>
           <AnimatedPressable testID="cancel-deep-research" onPress={() => {
             cancelDeepResearch();
-          }} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ color: colors.primary, fontSize: 12 }}>Cancel</Text>
+          }} style={staticStyles.h1}>
+            <Text style={[staticStyles.h2, { color: colors.primary }]}>Cancel</Text>
           </AnimatedPressable>
         </View>
       )}
@@ -315,4 +314,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
 
 const hiddenStyle = StyleSheet.create({
   hidden: { opacity: 0 },
+});
+
+const staticStyles = StyleSheet.create({
+  h1: { paddingHorizontal: 10, paddingVertical: 4 },
+  h2: { fontSize: 12 },
 });

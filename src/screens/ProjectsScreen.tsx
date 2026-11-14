@@ -1,4 +1,3 @@
-/* eslint-disable react-native/no-inline-styles -- Inline pin affordance retains the existing themed project row. */
 import React, { useState } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
@@ -6,8 +5,7 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  Platform,
-} from 'react-native';
+  Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -121,7 +119,7 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
             ) : null}
           </View>
           <TouchableOpacity accessibilityLabel={item.isPinned ? 'Unpin project' : 'Pin project'}
-            testID={`pin-project-${  item.id}`} style={{ padding: 10 }}
+            testID={`pin-project-${  item.id}`} style={staticStyles.h1}
             onPress={() => {
               try { updateProject(item.id, { isPinned: !item.isPinned }); }
               catch (error: any) { setAlertState(showAlert('Cannot pin project', String(error?.message || error))); }
@@ -335,4 +333,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 16,
     marginLeft: 10,
   },
+});
+
+const staticStyles = StyleSheet.create({
+  h1: { padding: 10 },
 });

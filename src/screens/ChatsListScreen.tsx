@@ -1,7 +1,7 @@
-/* eslint-disable react-native/no-inline-styles, react-native/no-color-literals, max-lines -- Existing protected-chat vault, search, and folder list share access-control state. */
+/* eslint-disable max-lines -- Existing protected-chat vault, search, and folder list share access-control state. */
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { View, Text, FlatList, TouchableOpacity, Platform, Modal, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform, Modal, TextInput, StyleSheet } from 'react-native';
 import { unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
 import { useChatOptions } from '../components/ChatOptions';
 import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
@@ -249,9 +249,9 @@ export const ChatsListScreen: React.FC = () => {
           setExpandedProjectIds(ids => open ? ids.filter(id => id !== row.projectId) : [...ids, row.projectId]);
           if (query) setSearchCollapsedIds(ids => open ? [...ids, row.projectId] : ids.filter(id => id !== row.projectId));
         }}
-        style={[styles.chatItem, { gap: SPACING.sm, borderWidth: 1, borderColor: colors.border }]}>
+        style={[styles.chatItem, { gap: SPACING.sm, borderWidth: BORDER, borderColor: colors.border }]}>
         <Icon name={row.locked ? 'lock' : 'folder'} size={21} color={colors.primary} />
-        <View style={{ flex: 1 }}>
+        <View style={staticStyles.h1}>
           <Text style={styles.chatTitle} numberOfLines={1}>{row.name}</Text>
           {!row.locked && <Text style={styles.chatPreview}>{row.count} {row.count === 1 ? 'chat' : 'chats'}</Text>}
         </View>
@@ -273,14 +273,14 @@ export const ChatsListScreen: React.FC = () => {
           <Text style={styles.title}>{showArchived ? 'Archived chats' : vaultOpen && hideLocked ? 'Chats + vault' : 'Chats'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => { setSearchOpen(v => !v); setSearchText(''); setSearchCollapsedIds([]); }}
-          accessibilityLabel={searchOpen ? 'Close chat search' : 'Search chats'} style={{ padding: 8 }}>
+          accessibilityLabel={searchOpen ? 'Close chat search' : 'Search chats'} style={staticStyles.h2}>
           <Icon name={searchOpen ? 'x' : 'search'} size={19} color={colors.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleNewChat(true)} testID="new-private-chat"
-          accessibilityLabel="New private chat (not saved)" style={{ padding: 8 }}>
+          accessibilityLabel="New private chat (not saved)" style={staticStyles.h3}>
           <Icon name="eye-off" size={19} color={colors.textMuted} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={{ padding: 8 }}>
+        <TouchableOpacity onPress={() => setShowArchived(v => !v)} accessibilityLabel={showArchived ? 'Show current chats' : 'Show archived chats'} style={staticStyles.h4}>
           <Icon name={showArchived ? 'inbox' : 'archive'} size={19} color={colors.textMuted} />
         </TouchableOpacity>
         <AttachStep index={[2, 14]}>
@@ -295,11 +295,10 @@ export const ChatsListScreen: React.FC = () => {
       </View>
 
       {searchOpen && (
-        <View style={{ marginHorizontal: SPACING.lg, marginTop: 10, marginBottom: 8,
-          borderWidth: 1, borderColor: colors.border, borderRadius: 9, backgroundColor: colors.surface }}>
+        <View style={[staticStyles.h5, { marginHorizontal: SPACING.lg, borderColor: colors.border, backgroundColor: colors.surface }]}>
           <TextInput autoFocus value={searchText} onChangeText={setSearchText}
             testID="search-chats-input" placeholder="Search chats and projects"
-            placeholderTextColor={colors.textMuted} style={{ color: colors.text, paddingHorizontal: 13, paddingVertical: 10 }} />
+            placeholderTextColor={colors.textMuted} style={[staticStyles.h6, { color: colors.text }]} />
         </View>
       )}
       {chatRows.length === 0 ? (
@@ -341,14 +340,14 @@ export const ChatsListScreen: React.FC = () => {
         />
       )}
       <Modal visible={vaultPrompt} transparent animationType="fade" onRequestClose={() => setVaultPrompt(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-          <View style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 14, gap: 14 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>Enter PIN</Text>
-            <TextInput value={vaultPin} onChangeText={v => setVaultPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" autoFocus style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, padding: 12, borderRadius: 8 }} />
+        <View style={staticStyles.h7}>
+          <View style={[staticStyles.h8, { backgroundColor: colors.surface }]}>
+            <Text style={[staticStyles.h9, { color: colors.text }]}>Enter PIN</Text>
+            <TextInput value={vaultPin} onChangeText={v => setVaultPin(v.replace(/\D/g, '').slice(0, 12))} placeholder="4–12 digits" placeholderTextColor={colors.textMuted} secureTextEntry keyboardType="number-pad" autoFocus style={[staticStyles.h10, { color: colors.text, borderColor: colors.border }]} />
             {!!vaultError && <Text style={{ color: colors.error }}>{vaultError}</Text>}
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+            <View style={staticStyles.h11}>
               <TouchableOpacity onPress={() => setVaultPrompt(false)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity disabled={vaultPin.length < 4} onPress={openVault}><Text style={{ color: colors.primary, fontWeight: '700' }}>Open</Text></TouchableOpacity>
+              <TouchableOpacity disabled={vaultPin.length < 4} onPress={openVault}><Text style={[staticStyles.h12, { color: colors.primary }]}>Open</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -385,3 +384,21 @@ export const ChatsListScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+/** One pixel borders and the dim layer behind dialogs. */
+const BORDER = 1;
+const SCRIM = 'rgba(0,0,0,0.55)';
+const staticStyles = StyleSheet.create({
+  h1: { flex: 1 },
+  h2: { padding: 8 },
+  h3: { padding: 8 },
+  h4: { padding: 8 },
+  h5: { marginTop: 10, marginBottom: 8, borderWidth: 1, borderRadius: 9 },
+  h6: { paddingHorizontal: 13, paddingVertical: 10 },
+  h7: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: SCRIM },
+  h8: { padding: 20, borderRadius: 14, gap: 14 },
+  h9: { fontSize: 18, fontWeight: '600' },
+  h10: { borderWidth: 1, padding: 12, borderRadius: 8 },
+  h11: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16 },
+  h12: { fontWeight: '700' },
+});
