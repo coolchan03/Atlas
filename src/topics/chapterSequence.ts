@@ -25,15 +25,22 @@ function extraSquares(name: string, unit: string, about: string): Square[] {
   ];
 }
 
+/** A chapter: its name, the unit it belongs to, and what it is for ("for the FAR exam (Area)"). */
+export interface Chapter { name: string; unit: string; about: string }
+
 /**
- * The squares of a chapter called `name`, in the order they are played. `about` says what it is for ("for the FAR exam (Area)").
- * `size` is 6 (the default) up to 14: the squares beyond six are extra practice, placed before the chapter exam.
+ * The squares of a chapter, in the order they are played. `size` is 6 up to 14: the squares beyond six are extra practice, placed
+ * before the chapter exam.
  */
-export function chapterSquares(name: string, unit: string, about: string, size = CHAPTER_SQUARES): Square[] {
+export function deepChapter(chapter: Chapter, size: number): Square[] {
+  const { name, unit, about } = chapter;
   const six = baseSquares(name, unit, about);
   const extra = extraSquares(name, unit, about).slice(0, Math.max(0, Math.min(MAX_CHAPTER_SQUARES, size) - CHAPTER_SQUARES));
   return [...six.slice(0, -1), ...extra, six[six.length - 1]];
 }
+
+/** The six squares of a chapter called `name`, in the order they are played. `about` says what it is for ("for the FAR exam (Area)"). */
+export const chapterSquares = (name: string, unit: string, about: string): Square[] => deepChapter({ name, unit, about }, CHAPTER_SQUARES);
 
 function baseSquares(name: string, unit: string, about: string): Square[] {
   return [

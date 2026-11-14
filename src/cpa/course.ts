@@ -5,7 +5,7 @@
  */
 import { useTopics, type Course } from '../topics/store';
 import type { CoursePlan, PlannedSquare } from '../topics/formats';
-import { CHAPTER_SQUARES, MAX_CHAPTER_SQUARES, chapterSquares } from '../topics/chapterSequence';
+import { CHAPTER_SQUARES, MAX_CHAPTER_SQUARES, deepChapter } from '../topics/chapterSequence';
 import { MAX_SQUARES } from '../topics/formats';
 import { examInfo, examLabel, type ExamCode } from './blueprints';
 import { useCpa, type CpaTopic } from './store';
@@ -23,7 +23,7 @@ export function examPlan(code: ExamCode, topics: CpaTopic[]): CoursePlan {
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => { if (squares.length < MAX_SQUARES) squares.push({ key: `s${squares.length + 1}`, ...sq }); };
   for (const area of areas) {
-    for (const t of topics.filter((x) => x.area === area)) chapterSquares(t.name, area, `for the ${examLabel(code)} exam (${area})`, size).forEach(add);
+    for (const t of topics.filter((x) => x.area === area)) deepChapter({ name: t.name, unit: area, about: `for the ${examLabel(code)} exam (${area})` }, size).forEach(add);
     add({ format: 'quiz', title: `${area}: review exam`.slice(0, 60), focus: `Everything in: ${area}`, unit: area, checkpoint: true });
   }
   add({ format: 'quiz', title: 'Whole exam check', focus: `Mixed questions from every area of the ${examLabel(code)} exam`, unit: areas[areas.length - 1] ?? 'Exam', checkpoint: true });

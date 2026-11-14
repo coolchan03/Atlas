@@ -44,17 +44,17 @@ describe('how much the reading says', () => {
 });
 
 describe('deeper chapters and the exam minimum', () => {
-  const { MAX_CHAPTER_SQUARES } = require('../../../src/topics/chapterSequence');
-  const { examPlan, MIN_EXAM_SQUARES } = require('../../../src/cpa/course');
+  const { MAX_CHAPTER_SQUARES, deepChapter } = require('../../../src/topics/chapterSequence');
+  const { MIN_EXAM_SQUARES } = require('../../../src/cpa/course');
   const { EXAMS } = require('../../../src/cpa/blueprints');
   const { defaultTopics } = require('../../../src/cpa/store');
 
   it('adds extra practice before the chapter exam, up to fourteen squares, and stays at six by default', () => {
     expect(chapterSquares('Leases', 'Area', 'for the exam')).toHaveLength(6);
-    const ten = chapterSquares('Leases', 'Area', 'for the exam', 10);
+    const ten = deepChapter({ name: 'Leases', unit: 'Area', about: 'for the exam' }, 10);
     expect(ten).toHaveLength(10);
     expect(ten.map((s: { format: string }) => s.format)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'truefalse', 'fill', 'scenario', 'recall', 'quiz']);
-    expect(chapterSquares('Leases', 'Area', 'for the exam', 99)).toHaveLength(MAX_CHAPTER_SQUARES);
+    expect(deepChapter({ name: 'Leases', unit: 'Area', about: 'for the exam' }, 99)).toHaveLength(MAX_CHAPTER_SQUARES);
     expect(ten[ten.length - 1].checkpoint).toBe(true);
   });
 
