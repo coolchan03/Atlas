@@ -71,14 +71,6 @@ function rebuild(b64: string, mutate: (files: Files) => void, opts: { fixManifes
   return Buffer.from(JSON.stringify({ zip: true, files: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, Buffer.from(v, 'utf8').toString('base64')])) })).toString('base64');
 }
 
-const unpack = async (d: Dev, zipPath: string) => {
-  const dest = '/inspect';
-  await require('react-native-zip-archive').unzip(zipPath, dest);
-  return { dest, read: (p: string) => d.RNFS.readFile(`${dest}/${p}`, 'utf8') as Promise<string>, exists: (p: string) => d.RNFS.exists(`${dest}/${p}`) as Promise<boolean> };
-};
-const lines = (t: string) => t.split('\n').filter(Boolean).map((l) => JSON.parse(l));
-
-
 describe('export scopes, previews and bad records', () => {
   it('exports by agent, subject and date, with originals, and records each export', async () => {
     const a = device(); const { law, acct } = await teach(a);
