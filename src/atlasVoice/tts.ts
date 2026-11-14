@@ -13,14 +13,39 @@ const Native: any = NativeModules.AtlasTts;
 let emitter: NativeEventEmitter | null = null;
 let counter = 0;
 /** speakAndWait callers waiting for their own utterance to finish. */
-const waiters = new Map<string, (ok: boolean) => void>();
+const waiters = new Map<string, (ok: boolean, failure?: string) => void>();
+
+/** What the voice is doing right now, as reported by the voice engine itself (not guessed from the button that was pressed). */
+export type SpeechPhase = 'speaking' | 'buffering';
+const phaseWatchers = new Set<(phase: SpeechPhase, utteranceId: string) => void>();
+/** Hears when audio actually starts, runs out while the next piece is made (buffering), or carries on again. Returns a function that stops listening. */
+export function watchSpeechPhase(fn: (phase: SpeechPhase, utteranceId: string) => void): () => void {
+  phaseWatchers.add(fn);
+  return () => { phaseWatchers.delete(fn); };
+}
+const announce = (phase: SpeechPhase, id = '') => phaseWatchers.forEach((fn) => { try { fn(phase, id); } catch { /* a watcher must not break speech */ } });
+
+let lastFailure = '';
+/** Why the last spoken line failed, if it did ('' when it was only stopped). Reading it clears it. */
+export function takeSpeechFailure(): string { const f = lastFailure; lastFailure = ''; return f; }
 
 export const ttsAvailable = (): boolean => Platform.OS === 'android' && !!Native;
 
 function ensureListeners(): void {
   if (emitter || !ttsAvailable()) return;
   emitter = new NativeEventEmitter(Native);
-  emitter.addListener('AtlasTtsStart', (e: { utteranceId: string }) => markSpeechStarted(e?.utteranceId || 'tts'));
+  emitter.addListener('AtlasTtsStart', (e: { utteranceId: string }) => { markSpeechStarted(e?.utteranceId || 'tts'); announce('speaking', e?.utteranceId); });
+  emitter.addListener('AtlasTtsBuffering', (e: { utteranceId: string }) => announce('buffering', e?.utteranceId));
+  emitter.addListener('AtlasTtsResumed', (e: { utteranceId: string }) => announce('speaking', e?.utteranceId));
+  emitter.addListener('AtlasTtsError', (e: { utteranceId: string; message?: string }) => {
+    const message = e?.message || 'The voice failed';
+    logger.error('[AtlasTts] speech failed', message);
+    markSpeechFinished(e.utteranceId);
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(false, message); }
+    const s = useAtlasVoiceStore.getState();
+    if (s.speakingKey === e.utteranceId) s.setSpeaking(null);
+  });
   emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
     markSpeechFinished(e.utteranceId);
     const w = waiters.get(e.utteranceId);
@@ -164,9 +189,10 @@ function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitc
     const myKey = `${messageId}~${++counter}`;
     const st = useAtlasVoiceStore.getState();
     let settled = false;
-    const finish = (ok: boolean) => {
+    const finish = (ok: boolean, failure?: string) => {
       if (settled) return;
       settled = true;
+      lastFailure = failure ?? '';
       waiters.delete(myKey);
       unsub();
       Native.setPitch?.(1.0).catch(() => undefined);

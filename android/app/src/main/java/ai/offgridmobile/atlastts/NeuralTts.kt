@@ -3,6 +3,7 @@ package ai.offgridmobile.atlastts
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
@@ -22,7 +23,7 @@ import java.util.concurrent.TimeUnit
  * Text is generated sentence by sentence on one thread and played on another, so speech
  * starts after the first sentence instead of after the whole answer.
  */
-class NeuralTts(private val emit: (String, String) -> Unit) {
+class NeuralTts(private val emit: (String, String, String) -> Unit) {
     // Every use of the native engine (load, generate, release) runs on this ONE thread,
     // so a voice can never be freed while it is generating.
     private val genExec = Executors.newSingleThreadExecutor()
@@ -36,6 +37,9 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     @Volatile var depth = 1f
     private val tokenA = java.util.concurrent.atomic.AtomicInteger(0)
     private val token: Int get() = tokenA.get()
+    /** Why the last token change happened: the person stopped speech ("cancelled") or other speech started ("interrupted"). */
+    @Volatile private var endReason = "cancelled"
+    private fun bump(reason: String): Int { endReason = reason; return tokenA.incrementAndGet() }
     /** Play through the earpiece (phone-call style) instead of the loudspeaker. */
     @Volatile var earpiece = false
     @Volatile private var track: AudioTrack? = null
@@ -45,6 +49,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     @Volatile private var cloneSteps: Int = 2
 
     fun setCloneSteps(steps: Int) { require(steps in listOf(2, 3, 5, 8)); cloneSteps = steps }
+    val cloneStepsNow: Int get() = cloneSteps
 
     /** A new reference applies to the next utterance, never to the currently generating sentence. */
     fun setReference(reference: VoiceCloneWav.Reference?) {
@@ -56,11 +61,17 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
                               reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
         val ref = reference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
-        return engine.generateWithConfig(PocketText.prepare(text), GenerationConfig(
+        val started = System.nanoTime()
+        val audio = engine.generateWithConfig(PocketText.prepare(text), GenerationConfig(
             sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
             numSteps = steps,
             extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
-        )).samples
+        ))
+        val ms = (System.nanoTime() - started) / 1_000_000
+        // One line per generation (adb logcat -s AtlasTts): enough to compare steps, check the sample rate the engine
+        // reports against the one the player uses, and see how long a cold voice takes.
+        Log.i("AtlasTts", "pocket generated ${audio.samples.size} samples at ${audio.sampleRate} Hz (engine ${try { engine.sampleRate() } catch (_: Throwable) { -1 }} Hz), steps=$steps, ${ms} ms")
+        return audio.samples
     }
 
     val ready: Boolean get() = tts != null
@@ -70,7 +81,9 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
      * multi-accent Kokoro packages. Blocks the caller (never call from the UI thread).
      */
     fun load(dir: String, accent: String = "") {
-        tokenA.incrementAndGet()
+        // The same voice is already loaded: nothing to do, and speech that is playing must not be cut off by a reload that changes nothing.
+        if (dir == loadedDir && accent == loadedAccent && tts != null) return
+        bump("interrupted")
         genExec.submit(Callable<Unit> {
             if (dir == loadedDir && accent == loadedAccent && tts != null) return@Callable
             freeEngine()
@@ -213,12 +226,12 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
     }
 
     fun stop() {
-        tokenA.incrementAndGet()
+        bump("cancelled")
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
     }
 
     fun speak(parts: List<String>, id: String, sid: Int, speed: Float) {
-        val my = tokenA.incrementAndGet()
+        val my = bump("interrupted")
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
         val it = parts.iterator()
         genExec.execute { run({ if (it.hasNext()) it.next() else null }, id, sid, speed, my) }
@@ -234,7 +247,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
      * sentence instead of after the whole reply. Ends (and reports done) after [speakStreamEnd].
      */
     fun speakStreamStart(id: String, sid: Int, speed: Float) {
-        val my = tokenA.incrementAndGet()
+        val my = bump("interrupted")
         try { track?.pause(); track?.flush() } catch (_: Throwable) {}
         val input = LinkedBlockingQueue<Any>()
         streamIn = input
@@ -255,32 +268,44 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
 
     fun speakStreamEnd() { streamIn?.put(streamEnd); streamIn = null }
 
-    /** Generates each part the source hands over (null = no more) and queues it for the player. */
+    /** Generates each part the source hands over (null = no more) and queues it for the player. Failures are reported, never swallowed. */
     private fun run(nextPart: () -> String?, id: String, sid: Int, speed: Float, my: Int) {
         val engine = tts
-        if (engine == null || token != my) { emit(if (token == my) "AtlasTtsDone" else "AtlasTtsStopped", id); return }
+        if (token != my) { emit("AtlasTtsStopped", id, endReason); return }
+        if (engine == null) { emit("AtlasTtsError", id, "No voice is loaded"); return }
         val reference = cloneReference; val steps = cloneSteps
         val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
         val queue = LinkedBlockingQueue<FloatArray>()
         val end = FloatArray(0)
-        val player = Thread { play(queue, end, rate, id, my) }
+        val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val player = Thread { play(queue, end, rate, id, my, failure) }
         player.start()
         try {
             while (token == my) {
                 val p = nextPart() ?: break
                 val audio = generateAudio(engine, p, sid, genSpeed, reference, steps)
                 if (token != my) break
+                if (audio.isEmpty()) continue // nothing for this piece: the player reports it if nothing at all is heard
                 queue.put(audio)
                 queue.put(FloatArray(rate / 8)) // short pause between sentences
             }
-        } catch (_: Throwable) {}
+        } catch (t: Throwable) {
+            Log.e("AtlasTts", "generation failed", t)
+            failure.compareAndSet(null, t.message ?: t.toString())
+        }
         queue.put(end)
     }
 
-    /** Plays one utterance on its own AudioTrack, which this thread owns and releases. */
-    private fun play(queue: LinkedBlockingQueue<FloatArray>, end: FloatArray, rate: Int, id: String, my: Int) {
+    /**
+     * Plays one utterance on its own AudioTrack, which this thread owns and releases. Ends with exactly one event:
+     * AtlasTtsDone (all of it was heard), AtlasTtsError (a failure, or nothing could be heard) or AtlasTtsStopped (cancelled or interrupted).
+     */
+    private fun play(queue: LinkedBlockingQueue<FloatArray>, end: FloatArray, rate: Int, id: String, my: Int,
+                     failure: java.util.concurrent.atomic.AtomicReference<String?>) {
         var t: AudioTrack? = null
         var frames = 0L
+        var started = false
+        var buffering = false
         try {
             val min = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
             t = AudioTrack.Builder()
@@ -291,36 +316,50 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
                 .build()
             if (android.os.Build.VERSION.SDK_INT >= 31) { try { t.setStartThresholdInFrames(1) } catch (_: Throwable) {} }
             track = t
-            var started = false
             while (token == my) {
-                val buf = queue.poll(200, TimeUnit.MILLISECONDS) ?: continue
+                val buf = queue.poll(200, TimeUnit.MILLISECONDS)
+                if (buf == null) {
+                    // Audio already heard has run out and the next piece is still being made.
+                    if (started && !buffering) { buffering = true; emit("AtlasTtsBuffering", id, "") }
+                    continue
+                }
                 if (buf === end) break
-                if (!started) { started = true; t.play(); emit("AtlasTtsStart", id) }
+                if (!started) { started = true; t.play(); emit("AtlasTtsStart", id, "") }
+                else if (buffering) { buffering = false; emit("AtlasTtsResumed", id, "") }
                 var off = 0
                 while (off < buf.size && token == my) {
                     val n = t.write(buf, off, minOf(4096, buf.size - off), AudioTrack.WRITE_BLOCKING)
-                    if (n <= 0) break
+                    if (n <= 0) { failure.compareAndSet(null, "The audio output refused the sound (error $n)"); break }
                     off += n
                 }
                 frames += buf.size
+                if (failure.get() != null) break
             }
-            if (token == my && started) {
+            if (token == my && started && failure.get() == null) {
                 // A little silence makes sure the buffer is full enough to play out, then wait for the end.
                 val tail = FloatArray(rate / 2)
                 t.write(tail, 0, tail.size, AudioTrack.WRITE_NON_BLOCKING)
                 var last = -1; var still = 0L
                 while (token == my && t.playbackHeadPosition < frames) {
                     val h = t.playbackHeadPosition
-                    if (h == last) { still += 40; if (still > 1500) break } else { still = 0; last = h }
+                    if (h == last) { still += 40; if (still > 1500) { failure.compareAndSet(null, "The audio output stopped moving before the speech finished"); break } } else { still = 0; last = h }
                     Thread.sleep(40)
                 }
                 try { t.stop() } catch (_: Throwable) {}
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            Log.e("AtlasTts", "playback failed", e)
+            failure.compareAndSet(null, e.message ?: e.toString())
         } finally {
             if (track === t) track = null
             try { t?.release() } catch (_: Throwable) {}
         }
-        emit(if (token == my) "AtlasTtsDone" else "AtlasTtsStopped", id)
+        val problem = failure.get()
+        when {
+            problem != null -> emit("AtlasTtsError", id, problem)
+            token != my -> emit("AtlasTtsStopped", id, endReason)
+            !started -> emit("AtlasTtsError", id, "The voice produced no audio")
+            else -> emit("AtlasTtsDone", id, "")
+        }
     }
 }

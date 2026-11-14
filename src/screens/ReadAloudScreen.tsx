@@ -13,6 +13,27 @@ import { readAloud, readingMinutes, useReadAloud } from '../atlasVoice/readAloud
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 
+/** What the voice is really doing, from the engine's own reports: loading, making sound, making the next part, or why it failed. */
+const PhaseNotice: React.FC = () => {
+  const { colors } = useTheme();
+  const reader = useReadAloud();
+  const reading = reader.status === 'reading';
+  if (reader.phase === 'failed') {
+    return <Text style={[styles.meta, { color: colors.error }]} testID="read-aloud-failed">Reading stopped: {reader.failure}. Press play to try this part again.</Text>;
+  }
+  const loading = reading && reader.preparing;
+  if (!loading && !(reading && reader.phase === 'buffering')) return null;
+  const message = loading
+    ? (reader.phase === 'loading' ? 'Loading the voice and your recording. A cloned voice can take several seconds the first time.' : 'Making the first sound.')
+    : 'Making the next part.';
+  return (
+    <View style={styles.preparing} testID={loading ? 'read-aloud-preparing' : 'read-aloud-buffering'}>
+      <ActivityIndicator color={colors.primary} />
+      <Text style={[styles.meta, { color: colors.textSecondary }]}>{message}</Text>
+    </View>
+  );
+};
+
 /** Progress, the piece being read, and the play, pause, stop and skip buttons. */
 const Player: React.FC<{ canPlay: boolean; onPlay: () => void }> = ({ canPlay, onPlay }) => {
   const { colors } = useTheme();
@@ -29,12 +50,7 @@ const Player: React.FC<{ canPlay: boolean; onPlay: () => void }> = ({ canPlay, o
       <Text style={[styles.meta, { color: colors.textSecondary }]}>
         {hasParts ? `Part ${Math.min(reader.index + 1, reader.parts.length)} of ${reader.parts.length}` : 'Ready when you are'}
       </Text>
-      {reading && reader.preparing && (
-        <View style={styles.preparing} testID="read-aloud-preparing">
-          <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.meta, { color: colors.textSecondary }]}>Getting the voice ready. A cloned voice can take several seconds the first time.</Text>
-        </View>
-      )}
+      <PhaseNotice />
       <View style={styles.controls}>
         <TouchableOpacity onPress={() => readAloud.jump(-1)} disabled={!hasParts} accessibilityLabel="Previous part" testID="read-aloud-prev">
           <Icon name="skip-back" size={22} color={hasParts ? colors.text : colors.textMuted} />

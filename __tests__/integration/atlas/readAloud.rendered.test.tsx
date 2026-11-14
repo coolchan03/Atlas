@@ -19,7 +19,7 @@ function open(element: string) {
   const rtl = requireRTL();
   const React = require('react');
   const { useReadAloud } = require('../../../src/atlasVoice/readAloud');
-  useReadAloud.setState({ status: 'idle', title: '', parts: [], index: 0 });
+  useReadAloud.setState({ status: 'idle', title: '', parts: [], index: 0, phase: 'idle', failure: '', preparing: false });
   const mod = element === 'screen'
     ? React.createElement(require('../../../src/screens/ReadAloudScreen').ReadAloudScreen)
     : React.createElement(require('../../../src/screens/HomeScreen/ReadAloudWidget').ReadAloudWidget, { openReader: mockNavigate });
@@ -40,6 +40,21 @@ it('shows progress while reading and pauses and stops from its buttons', () => {
   expect(useReadAloud.getState().index).toBe(2);
   rtl.fireEvent.press(view.getByTestId('read-aloud-stop'));
   expect(useReadAloud.getState()).toMatchObject({ status: 'idle', index: 0 });
+});
+
+it('says what the voice is really doing: loading, making the first sound, making the next part, and why it failed', () => {
+  const { rtl, view, useReadAloud } = open('screen');
+  const parts = { parts: ['Hey man how is it going.'], index: 0, status: 'reading' as const };
+  rtl.act(() => useReadAloud.setState({ ...parts, phase: 'loading', preparing: true }));
+  expect(view.getByText(/Loading the voice and your recording/)).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ phase: 'generating', preparing: true }));
+  expect(view.getByText('Making the first sound.')).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ phase: 'speaking', preparing: false }));
+  expect(view.queryByTestId('read-aloud-preparing')).toBeNull();
+  rtl.act(() => useReadAloud.setState({ phase: 'buffering' }));
+  expect(view.getByText('Making the next part.')).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ status: 'paused', phase: 'failed', failure: 'The voice produced no audio' }));
+  expect(view.getByTestId('read-aloud-failed').props.children.join('')).toContain('The voice produced no audio');
 });
 
 it('shows a typed text with its word count and a Clear button', () => {

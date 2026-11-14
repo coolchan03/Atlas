@@ -28,7 +28,9 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
     private val pending = mutableListOf<Triple<String, String, String>>()
 
     // ---- natural (neural) voices ----
-    private val neural by lazy { NeuralTts { e, id -> emit(e, id) } }
+    private val neural by lazy { NeuralTts { e, id, detail -> emit(e, id, detail) } }
+    /** Choosing a voice (reading the recording, loading the model, setting the reference) is one job at a time, in the order asked, so two choices can never leave the engine holding a mix of them. */
+    private val voiceExec = java.util.concurrent.Executors.newSingleThreadExecutor()
     @Volatile private var neuralDir = ""
     @Volatile private var neuralSid = 0
     @Volatile private var voiceGen = 0
@@ -83,10 +85,11 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
 
     override fun getName(): String = "AtlasTts"
 
-    private fun emit(event: String, id: String) {
+    private fun emit(event: String, id: String, detail: String = "") {
         try {
             val map = Arguments.createMap()
             map.putString("utteranceId", id)
+            if (detail.isNotEmpty()) { map.putString("message", detail); map.putString("reason", detail) }
             ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit(event, map)
         } catch (_: Exception) {}
     }
@@ -406,13 +409,20 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
         }
         if (steps !in listOf(2, 3, 5, 8)) { promise.reject("BAD_STEPS", "Invalid quality setting"); return }
         val g = ++voiceGen
-        Thread {
+        voiceExec.execute {
             try {
+                // A newer choice was made while this one waited its turn: skip the work (a model load can take many seconds).
+                if (g != voiceGen) { promise.resolve(0); return@execute }
+                val accent = if (style?.hasKey("accent") == true) style.getString("accent") ?: "" else ""
+                // The same clone is already active: nothing to load, and speech that is playing is left alone.
+                if (neural.loadedDir == dir.path && neural.ready && neuralDir == dir.path && activeReferenceId == referenceId &&
+                    neuralSid == sid && neural.cloneStepsNow == steps) {
+                    promise.resolve(neural.numSpeakers()); return@execute
+                }
                 val source = referenceFile(referenceId)
                 if (!source.isFile) throw IllegalArgumentException("The reference recording was deleted")
                 val audio = VoiceCloneWav.decode(source.readBytes())
-                val accent = if (style?.hasKey("accent") == true) style.getString("accent") ?: "" else ""
-                neural.load(dir.path, accent)
+                neural.load(dir.path, accent) // the same model for another clone is not reloaded, and does not interrupt speech
                 if (g == voiceGen) {
                     neuralSid = sid
                     neural.depth = 1f
@@ -423,7 +433,7 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
                     promise.resolve(neural.numSpeakers())
                 } else promise.resolve(0) // newer voice choice won
             } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_CLONE_LOAD", e.message ?: e.toString()) }
-        }.start()
+        }
     }
 
     @ReactMethod
@@ -578,20 +588,21 @@ class AtlasTtsModule(private val ctx: ReactApplicationContext) : ReactContextBas
      */
     @ReactMethod
     fun setNeuralVoice(id: String, sid: Int, style: ReadableMap?, promise: Promise) {
-        neuralSid = sid
         val accent = if (style?.hasKey("accent") == true) style.getString("accent") ?: "" else ""
-        neural.depth = if (style?.hasKey("depth") == true) style.getDouble("depth").toFloat() else 1f
+        val depth = if (style?.hasKey("depth") == true) style.getDouble("depth").toFloat() else 1f
         val g = ++voiceGen
         if (id.isBlank()) { neuralDir = ""; neural.releaseAsync(); promise.resolve(0); return }
         val dir = findVoice(id)
         if (dir == null) { neuralDir = ""; promise.reject("NO_VOICE", "Voice not downloaded (if it was on an SD card, put the card back)"); return }
-        Thread {
+        voiceExec.execute {
             try {
+                if (g != voiceGen) { promise.resolve(0); return@execute }
                 neural.load(dir.path, accent)
-                if (g == voiceGen) { neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
+                // The speaker and depth change only once this choice is the one that won, so speech already playing is not altered by a choice still loading.
+                if (g == voiceGen) { neuralSid = sid; neural.depth = depth; neuralDir = dir.path; promise.resolve(neural.numSpeakers()) }
                 else promise.resolve(0) // a newer choice was made while this one loaded
             } catch (e: Throwable) { if (g == voiceGen) neuralDir = ""; promise.reject("VOICE_LOAD", e.message ?: e.toString()) }
-        }.start()
+        }
     }
 
     @ReactMethod

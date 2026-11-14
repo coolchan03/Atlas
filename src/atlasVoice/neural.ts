@@ -236,20 +236,36 @@ const setNative = async (id: string, sid: number, referenceId: string): Promise<
 let loadedKey = '';
 const keyOf = (id: string, sid: number, referenceId = '') => (id ? `${id}#${sid}#${referenceId}` : '');
 
+/**
+ * Every change of the active voice (the saved voice, an agent's clone, a restore after speech) runs here, one at a time and in the
+ * order asked. Two choices overlapping used to leave the engine holding a mix of them: a restore landing in the middle of a new
+ * voice loading, or the key saying one voice while the engine had loaded another.
+ */
+let voiceQueue: Promise<unknown> = Promise.resolve();
+const serialVoice = <T>(job: () => Promise<T>): Promise<T> => {
+  const run = voiceQueue.then(job, job);
+  voiceQueue = run.catch(() => undefined);
+  return run;
+};
+/** Counts requests for a particular voice for speech. A restore asked for before a newer request is dropped, so a stop never undoes the voice a new reading just asked for. */
+let voiceEpoch = 0;
+
 /** Switch the saved reading voice, without silently reverting to another voice. */
-export async function selectVoice(id: string, sid?: number, requestedReferenceId?: string): Promise<number> {
-  const st = useAtlasVoiceStore.getState();
-  const s = sid ?? (id === st.neuralVoice ? st.neuralSid : 0);
-  const ref = resolveReferenceId(id, requestedReferenceId, id === st.neuralVoice ? st.neuralReferenceId : '');
-  const n: number = neuralAvailable() ? await setNative(id, s, ref) : 0;
-  loadedKey = keyOf(id, s, ref);
-  if (id) useNeuralVoices.getState().set({ speakerCount: { ...useNeuralVoices.getState().speakerCount, [id]: n } });
-  st.setNeural(id, s, ref);
-  return n;
+export function selectVoice(id: string, sid?: number, requestedReferenceId?: string): Promise<number> {
+  voiceEpoch += 1;
+  return serialVoice(async () => {
+    const st = useAtlasVoiceStore.getState();
+    const s = sid ?? (id === st.neuralVoice ? st.neuralSid : 0);
+    const ref = resolveReferenceId(id, requestedReferenceId, id === st.neuralVoice ? st.neuralReferenceId : '');
+    const n: number = neuralAvailable() ? await setNative(id, s, ref) : 0;
+    loadedKey = keyOf(id, s, ref);
+    if (id) useNeuralVoices.getState().set({ speakerCount: { ...useNeuralVoices.getState().speakerCount, [id]: n } });
+    st.setNeural(id, s, ref);
+    return n;
+  });
 }
 
-/** Restore the selected model and private clone after restart. */
-export async function restoreVoice(): Promise<void> {
+async function restoreNow(): Promise<void> {
   const st = useAtlasVoiceStore.getState();
   if (!st.neuralVoice || !neuralAvailable()) return;
   const ref = resolveReferenceId(st.neuralVoice, undefined, st.neuralReferenceId);
@@ -257,8 +273,10 @@ export async function restoreVoice(): Promise<void> {
   catch { st.setNeural(''); loadedKey = ''; }
 }
 
-/** Switch to an agent's own cloned voice without changing the app's saved voice. */
-export async function loadVoiceForSpeech(id: string, sid: number, requestedReferenceId?: string): Promise<void> {
+/** Restore the selected model and private clone after restart. */
+export const restoreVoice = (): Promise<void> => serialVoice(restoreNow);
+
+async function loadNow(id: string, sid: number, requestedReferenceId?: string): Promise<void> {
   const st = useAtlasVoiceStore.getState();
   const ref = resolveReferenceId(id, requestedReferenceId, id === st.neuralVoice ? st.neuralReferenceId : '');
   if (!referenceCanSpeak(id, ref)) throw new Error('That cloned voice has no reference WAV.');
@@ -267,15 +285,40 @@ export async function loadVoiceForSpeech(id: string, sid: number, requestedRefer
     await setNative(id, sid, ref);
     loadedKey = keyOf(id, sid, ref);
   } catch (e) {
-    if (keyOf(st.neuralVoice, st.neuralSid, st.neuralReferenceId) !== loadedKey) await restoreVoice();
+    if (keyOf(st.neuralVoice, st.neuralSid, st.neuralReferenceId) !== loadedKey) await restoreNow();
     throw e;
   }
 }
 
-/** Put the saved voice back after an agent has spoken. */
-export async function restoreSavedVoice(): Promise<void> {
-  const st = useAtlasVoiceStore.getState();
-  await loadVoiceForSpeech(st.neuralVoice, st.neuralSid, st.neuralReferenceId);
+/** Switch to an agent's own cloned voice without changing the app's saved voice. Resolves once that voice and its recording are active. */
+export function loadVoiceForSpeech(id: string, sid: number, requestedReferenceId?: string): Promise<void> {
+  voiceEpoch += 1;
+  return serialVoice(() => loadNow(id, sid, requestedReferenceId));
+}
+
+/**
+ * Put the saved voice back after an agent has spoken. If a voice for speech was asked for after this was, that newer request wins
+ * and nothing is restored, so stopping one reading never reloads the saved voice underneath the next one.
+ */
+export function restoreSavedVoice(): Promise<void> {
+  const asked = voiceEpoch;
+  return serialVoice(async () => {
+    if (voiceEpoch !== asked) return;
+    const st = useAtlasVoiceStore.getState();
+    await loadNow(st.neuralVoice, st.neuralSid, st.neuralReferenceId);
+  });
+}
+
+/**
+ * Put the saved voice back after a short quiet time instead of at once. Pressing play again soon (the usual way a reading is used)
+ * then finds the borrowed voice still loaded, instead of waiting for the saved voice to load and the borrowed one to load again.
+ */
+export function restoreSavedVoiceSoon(delayMs = 15000): void {
+  const asked = voiceEpoch;
+  setTimeout(() => {
+    if (voiceEpoch !== asked) return;
+    restoreSavedVoice().catch(() => undefined);
+  }, delayMs);
 }
 
 /** Voices for podcast hosts: distinct-sounding speakers when the model has many. */

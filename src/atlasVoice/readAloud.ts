@@ -1,9 +1,8 @@
 import { create } from 'zustand';
-import { speakInAndWait, stop as stopSpeech } from './tts';
+import { speakInAndWait, stop as stopSpeech, takeSpeechFailure, watchSpeechPhase } from './tts';
 import { useAtlasVoiceStore } from './store';
 import { useVoiceProfiles } from './profiles';
-import { loadVoiceForSpeech, restoreSavedVoice } from './neural';
-import { watchSpeechActivity } from '../music/speechActivity';
+import { loadVoiceForSpeech, restoreSavedVoice, restoreSavedVoiceSoon } from './neural';
 
 /** Longest piece spoken at once: short enough to show progress and to pause, long enough to sound natural. */
 const MAX_PART = 600;
@@ -66,35 +65,61 @@ export function readingMinutes(words: number, rate: number): number {
 }
 
 export type ReaderStatus = 'idle' | 'reading' | 'paused';
-interface ReaderState { status: ReaderStatus; title: string; parts: string[]; index: number; /** True from pressing play until the voice is actually heard: a cloned voice has to load first and that can take several seconds. */ preparing: boolean }
+/**
+ * What is really happening, from the voice engine's own reports: loading (the voice and its recording are being made ready),
+ * generating (the first sound is being made), speaking, buffering (the next piece is still being made), paused, failed.
+ */
+export type ReaderPhase = 'idle' | 'loading' | 'generating' | 'speaking' | 'buffering' | 'paused' | 'failed';
+interface ReaderState {
+  status: ReaderStatus; title: string; parts: string[]; index: number;
+  phase: ReaderPhase;
+  /** Why reading stopped by itself, when it did ('' otherwise). */
+  failure: string;
+  /** True from pressing play until the voice is actually heard: a cloned voice has to load first and that can take several seconds. */
+  preparing: boolean;
+}
+/** What a piece being spoken can tell the reader: whether the person has already stopped it, and which stage it has reached. */
+export interface SpeakControl { cancelled: () => boolean; phase: (p: 'loading' | 'generating') => void }
 interface Deps {
-  speak: (text: string) => Promise<boolean>;
+  speak: (text: string, control: SpeakControl) => Promise<boolean>;
   stopSpeaking: () => void;
   /** Called when reading ends or is stopped, so a borrowed voice can be given back. */
   release?: () => void;
   /** Calls back when sound starts. Returns a function that stops listening. */
   watchStart?: (onStart: () => void) => () => void;
+  /** Calls back when the engine reports speaking or buffering. */
+  watchPhase?: (onPhase: (p: 'speaking' | 'buffering') => void) => () => void;
+  /** Why the last piece failed, if it did (reading it clears it). */
+  failure?: () => string;
 }
 
 /**
  * Reads a document aloud one piece at a time, with pause, stop and skip. The voice, speed and engine are the
  * app's saved ones. The reader owns all of its state; screens and widgets only show it and send intents.
  */
-export function createReadAloud({ speak, stopSpeaking, release, watchStart }: Deps) {
-  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0, preparing: false }));
+export function createReadAloud({ speak, stopSpeaking, release, watchStart, watchPhase, failure }: Deps) {
+  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0, preparing: false, phase: 'idle', failure: '' }));
   let run = 0;
-  watchStart?.(() => { if (useReader.getState().preparing) useReader.setState({ preparing: false }); });
+  const show = (phase: ReaderPhase, extra: Partial<ReaderState> = {}) =>
+    useReader.setState({ phase, preparing: phase === 'loading' || phase === 'generating', ...extra });
+  watchStart?.(() => { if (useReader.getState().status === 'reading') show('speaking'); });
+  watchPhase?.((p) => { if (useReader.getState().status === 'reading') show(p); });
 
   const loop = async (mine: number) => {
+    const control: SpeakControl = { cancelled: () => mine !== run, phase: (p) => { if (mine === run) show(p); } };
     while (mine === run) {
       const { parts, index } = useReader.getState();
-      if (index >= parts.length) { useReader.setState({ status: 'idle', index: 0, preparing: false }); release?.(); return; }
-      useReader.setState({ preparing: true });
+      if (index >= parts.length) { show('idle', { status: 'idle', index: 0 }); release?.(); return; }
+      show('loading', { failure: '' });
       let finished = false;
-      try { finished = await speak(parts[index]); } catch { finished = false; }
+      let problem = '';
+      try { finished = await speak(parts[index], control); } catch (e) { problem = (e as Error)?.message || 'The voice failed'; }
       if (mine !== run) return;
+      problem = problem || failure?.() || '';
+      // The voice failed: say why and keep the place, instead of looking as if it is still reading.
+      if (problem) { show('failed', { status: 'paused', failure: problem }); return; }
       // Something else started speaking (a chat reply or a call): keep our place and wait for the person.
-      if (!finished) { useReader.setState({ status: 'paused', preparing: false }); return; }
+      if (!finished) { show('paused', { status: 'paused' }); return; }
       useReader.setState({ index: index + 1 });
     }
   };
@@ -109,14 +134,14 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart }: De
   const stop = () => {
     run += 1;
     stopSpeaking();
-    useReader.setState({ status: 'idle', index: 0, preparing: false });
+    show('idle', { status: 'idle', index: 0, failure: '' });
     release?.();
   };
   const pause = () => {
     if (useReader.getState().status !== 'reading') return;
     run += 1;
     stopSpeaking();
-    useReader.setState({ status: 'paused', preparing: false });
+    show('paused', { status: 'paused' });
   };
   /** Opens new text, replacing whatever was loaded. Reading starts only when the person presses play. */
   const load = (text: string, title = '') => {
@@ -129,7 +154,7 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart }: De
     if (!parts.length) return;
     const next = Math.min(parts.length - 1, Math.max(0, index + delta));
     if (status === 'reading') { run += 1; stopSpeaking(); }
-    useReader.setState({ index: next, status: status === 'reading' ? 'paused' : status, preparing: false });
+    show('paused', { index: next, status: status === 'reading' ? 'paused' : status, failure: '' });
     if (status === 'reading') play();
   };
 
@@ -143,14 +168,24 @@ export function readVoiceProfile(): { id: string; voiceId: string; sid: number; 
   return profiles.find((p) => p.id === chosen) ?? profiles[0];
 }
 
-/** Reads one piece in the voice chosen for Read aloud, borrowing a saved voice profile (even a cloned one) when one is chosen. */
-async function speakInChosenVoice(text: string): Promise<boolean> {
+/**
+ * Reads one piece in the voice chosen for Read aloud, borrowing a saved voice profile (even a cloned one) when one is chosen.
+ * The chosen voice and its recording must be active before any text is handed to the engine; if they cannot be, it says so
+ * instead of reading in some other voice.
+ */
+async function speakInChosenVoice(text: string, control: SpeakControl): Promise<boolean> {
   const profile = readVoiceProfile();
-  try {
+  control.phase('loading');
+  if (profile) {
+    try { await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId); }
+    catch (e) { throw new Error(`The voice could not be loaded: ${(e as Error)?.message || 'unknown error'}`); }
+  } else {
     // Without a chosen profile this puts the saved voice back, in case a briefing left a borrowed one loaded. It costs nothing when it is already loaded.
-    if (profile) await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
-    else await restoreSavedVoice();
-  } catch { await restoreSavedVoice().catch(() => undefined); } // the saved voice is better than silence
+    await restoreSavedVoice().catch(() => undefined);
+  }
+  // Stopped or skipped while the voice was loading: say nothing, rather than starting a reading the person has already cancelled.
+  if (control.cancelled()) return false;
+  control.phase('generating');
   // An empty language means the phone's own default, the same as the speak button in chat.
   return speakInAndWait(text, '', { messageId: 'read-aloud' });
 }
@@ -158,7 +193,8 @@ async function speakInChosenVoice(text: string): Promise<boolean> {
 export const readAloud = createReadAloud({
   speak: speakInChosenVoice,
   stopSpeaking: stopSpeech,
-  release: () => { if (readVoiceProfile()) restoreSavedVoice().catch(() => undefined); },
-  watchStart: (onStart) => watchSpeechActivity((active) => { if (active) onStart(); }),
+  release: () => { if (readVoiceProfile()) restoreSavedVoiceSoon(); },
+  watchPhase: (onPhase) => watchSpeechPhase((phase, id) => { if (id.startsWith('read-aloud')) onPhase(phase); }),
+  failure: takeSpeechFailure,
 });
 export const useReadAloud = readAloud.useReader;
