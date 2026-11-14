@@ -89,6 +89,14 @@ jobs:
           # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
           zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
           ls -la android/app/libs
+      - name: Kotlin compile gate (a Kotlin mistake stops the run here, not after the full build)
+        working-directory: android
+        run: |
+          set -o pipefail
+          ./gradlew :app:compileReleaseKotlin -PatlasBuild=${{ github.run_number }} -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../kotlin-gate.log || {
+            grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Caused by" ../kotlin-gate.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
       - name: Find the Android NDK for the image engines
         run: |
           set -euo pipefail
