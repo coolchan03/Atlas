@@ -10,7 +10,10 @@ jest.mock('../../src/study/engine', () => ({
   gatherSources: jest.fn(async () => []),
 }));
 
-const BOOK = `Chapter 4 review questions
+const BOOK = `Chapter 4 explains how a lessee accounts for a lease under ASC 842. The lessee records a right-of-use asset and a lease liability at the start of the lease.
+The liability is the present value of the payments not yet made, and the asset starts at that amount plus any costs paid up front.
+Capital gains depend on how long the asset was held: more than one year is long term, one year or less is short term for the tax return.
+Chapter 4 review questions
 1. Under ASC 842, which two items does a lessee record for most leases?
 a) A right-of-use asset b) A lease liability c) Rent expense only
 Answer: a and b

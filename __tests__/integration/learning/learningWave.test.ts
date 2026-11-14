@@ -46,7 +46,6 @@ function load() {
   store.useLearningStore.getState().setConfig(AGENT, { topic: 'Safe drinking water', projectId: 'p1', mode: 'keep', continuous: false, useLibrary: false, useWeb: false, bankSize: 2, reportsPerJudge: 2, judgesPerManager: 1 });
   return { engine, store: store.useLearningStore, db: ledger.learningKnowledgeDb, mastery: new MasteryStore(ledger.learningKnowledgeDb), memory: new MemoryLedger(ledger.learningKnowledgeDb) };
 }
-const events = (store: any) => store.getState().events.filter((e: any) => e.agentId === AGENT).map((e: any) => e.title);
 
 
 const cfg = (store: any, over: Record<string, unknown>) => store.getState().setConfig(AGENT, over);

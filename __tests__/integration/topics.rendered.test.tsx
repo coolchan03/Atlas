@@ -53,7 +53,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
   rtl.fireEvent.press(list.getByTestId('course-make'));
   await rtl.waitFor(() => expect(useTopics.getState().courses).toHaveLength(1), { timeout: 8000 });
   const course = useTopics.getState().courses[0];
-  expect(course.squares.map((s: any) => s.format)).toEqual(['lesson', 'practice', 'quiz']);
+  expect(course.squares.map((s: any) => s.format)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'quiz', 'practice', 'quiz']);
   expect(mockNav.navigate).toHaveBeenCalledWith('TopicBoard', { courseId: course.id });
   list.unmount();
 
@@ -62,7 +62,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
   const board = rtl.render(React.createElement(TopicBoardScreen));
   expect(board.getByText('Accounting basics')).toBeTruthy();
   expect(board.getByTestId('course-style')).toBeTruthy();
-  expect(board.getByTestId('course-progress').props.children.join('')).toContain('0 of 3');
+  expect(board.getByTestId('course-progress').props.children.join('')).toContain('0 of 8');
   board.unmount();
 
   // A lesson square is written when opened, then finished.
@@ -76,7 +76,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
 
   // A practice square: the learner answers and the AI marks it.
   boundary.llama!.scriptCompletion({ text: PRACTICE });
-  mockParams = { courseId: course.id, key: 's2' };
+  mockParams = { courseId: course.id, key: 's5' }; // the chapter's assignment square
   const practice = rtl.render(React.createElement(TopicSquareScreen));
   expect(await practice.findByText('Is a delivery van an asset or a liability?', {}, { timeout: 8000 })).toBeTruthy();
   boundary.llama!.scriptCompletion({ text: GRADE });
@@ -84,7 +84,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
   rtl.fireEvent.press(practice.getByTestId('practice-check'));
   expect(await practice.findByTestId('practice-feedback', {}, { timeout: 8000 })).toBeTruthy();
   rtl.fireEvent.press(practice.getByTestId('practice-done'));
-  expect(useTopics.getState().courses[0].progress.s2.stars).toBe(3);
+  expect(useTopics.getState().courses[0].progress.s5.stars).toBe(3);
   expect(await practice.findByTestId('square-finished')).toBeTruthy();
 }, 60000);
 

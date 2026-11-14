@@ -10,16 +10,22 @@ describe('topic courses: what the AI plans', () => {
       { format: 'match', title: 'Accounts to types', focus: 'pair them' },
       { format: 'quiz', title: 'Check', focus: 'all of it' },
     ]));
-    expect(p?.squares.map((s) => s.format)).toEqual(['lesson', 'practice', 'match', 'quiz']);
-    expect(p?.squares.map((s) => s.key)).toEqual(['s1', 's2', 's3', 's4']);
+    // The lesson becomes a chapter of six squares; the AI's own practice, match and closing quiz stay.
+    expect(p?.squares.map((s) => s.format)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'quiz', 'practice', 'match', 'quiz']);
+    expect(p?.squares.map((s) => s.key)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9']);
+    expect(p?.squares[0].title).toBe('Assets and liabilities');
     expect(p?.theme).toBe('The Ledger Road');
-    expect(p?.squares[3].checkpoint).toBe(true);
+    expect(p?.squares[8].checkpoint).toBe(true);
   });
   it('adds a final quiz when the plan does not end with one, and treats an unknown format as a lesson', () => {
     const p = parsePlan(plan([{ format: 'lesson', title: 'a', focus: 'a' }, { format: 'hologram', title: 'b', focus: 'b' }, { format: 'cards', title: 'c', focus: 'c' }]));
-    expect(p?.squares).toHaveLength(4);
-    expect(p?.squares[1].format).toBe('lesson');
-    expect(p?.squares[3]).toMatchObject({ format: 'quiz', title: 'Final quiz', checkpoint: true });
+    // lesson a (six squares) and the unknown format b read as a lesson (six more); the key terms c after it are dropped, and b's chapter exam closes the course.
+    expect(p?.squares).toHaveLength(12);
+    expect(p?.squares[6].format).toBe('lesson');
+    expect(p?.squares[6].title).toBe('b');
+    expect(p?.squares[11]).toMatchObject({ format: 'quiz', title: 'b: chapter exam', checkpoint: true });
+    const noQuizEnd = parsePlan(plan([{ format: 'lesson', title: 'a', focus: 'a' }, { format: 'match', title: 'm', focus: 'm' }, { format: 'practice', title: 'p', focus: 'p' }]));
+    expect(noQuizEnd?.squares.at(-1)).toMatchObject({ format: 'quiz', title: 'Final quiz', checkpoint: true });
   });
   it('refuses a plan that is too small or not JSON', () => {
     expect(parsePlan(plan([{ format: 'lesson', title: 'only', focus: 'x' }]))).toBeNull();

@@ -136,7 +136,7 @@ export async function projectQuestionBank(projectId: string | undefined): Promis
       let key = new Map<number, string>();
       for (const c of chunks) {
         for (const q of extractQuestions(String(c.content), doc.name)) {
-          const dedupe = q.question.slice(0, 60).toLowerCase();
+          const dedupe = q.question.slice(0, 240).toLowerCase();
           if (!seen.has(dedupe)) { seen.add(dedupe); found.push(q); }
         }
         const here = parseAnswerKey(String(c.content));

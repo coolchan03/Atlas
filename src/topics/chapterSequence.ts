@@ -21,3 +21,18 @@ export function chapterSquares(name: string, unit: string, about: string): Squar
     { format: 'quiz', title: fit(name, ': chapter exam'), focus: `The chapter exam for ${name} ${about}: harder mixed questions across everything in the chapter, like a real exam`, unit, checkpoint: true },
   ];
 }
+
+/**
+ * A course the AI planned has one lesson square per topic. Each lesson becomes a full chapter of six squares, and the plain quiz or key-terms square the
+ * AI put straight after it is dropped (the chapter has its own). Squares of any other kind (matching, ordering, practice, unit tests) stay where they are.
+ */
+export function expandLessons(squares: PlannedSquare[], max: number): PlannedSquare[] {
+  const out: Square[] = [];
+  squares.forEach((sq, i) => {
+    if (sq.format === 'lesson' && !sq.checkpoint) { chapterSquares(sq.title, sq.unit, `(${sq.focus})`).forEach((c) => out.push(c)); return; }
+    const before = squares[i - 1];
+    const redundant = (sq.format === 'quiz' || sq.format === 'cards') && !sq.checkpoint && before?.format === 'lesson' && before.unit === sq.unit;
+    if (!redundant) out.push(sq);
+  });
+  return out.slice(0, max).map((sq, i) => ({ ...sq, key: `s${i + 1}` }));
+}

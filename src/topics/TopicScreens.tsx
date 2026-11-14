@@ -14,7 +14,7 @@ import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } fr
 import { courseProgress, useTopics, type Course } from './store';
 import { createChapterCourse, createCourse, findSources, squareContent } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
-import { MAX_SOURCES, makeSource, outlineSources, type CourseSource } from './sources';
+import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
 import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
@@ -241,7 +241,7 @@ function SourcesCard({ course }: { course: Course }) {
       const unreadable: string[] = [];
       for (const [i, file] of picked.entries()) {
         // Any readable document (PDF, Word, text...), not only plain text. The first part of each is kept as a source.
-        const text: string = await documentService.textFromPicked(file.uri, file.name || 'notes.txt', 12000).catch(() => '');
+        const text: string = await documentService.textFromPicked(file.uri, file.name || 'notes.txt', 300000).catch(() => '');
         if (text.trim().length < 50) { unreadable.push(file.name || 'a file'); continue; }
         found.push(makeSource({ title: file.name || 'File', kind: 'file', text }, `file-${Date.now()}-${i}`));
       }
@@ -255,8 +255,8 @@ function SourcesCard({ course }: { course: Course }) {
       <Text style={[styles.meta, { color: colors.textMuted }]}>Squares are written from these where they cover the point. Squares already written stay as they are.</Text>
       {sources.map((x) => (
         <View key={x.id} style={styles.row}>
-          <Icon name={x.kind === 'web' ? 'globe' : x.kind === 'file' ? 'file-text' : 'edit-3'} size={14} color={colors.textMuted} />
-          <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]} numberOfLines={1}>{x.title}</Text>
+          <Icon name={x.questionBank ? 'help-circle' : x.kind === 'web' ? 'globe' : x.kind === 'file' ? 'file-text' : 'edit-3'} size={14} color={colors.textMuted} />
+          <Text style={[styles.meta, styles.grow, { color: colors.textSecondary }]} numberOfLines={1}>{x.title}{x.questionBank ? ` (question bank: ${sourceQuestions([x]).length} questions, used for quizzes and exams)` : ''}</Text>
           <TouchableOpacity onPress={() => useTopics.getState().removeSource(course.id, x.id)} testID={`source-remove-${x.id}`} accessibilityLabel={`Remove ${x.title}`}><Icon name="x" size={16} color={colors.textMuted} /></TouchableOpacity>
         </View>
       ))}

@@ -5,6 +5,7 @@
  * answers. Pure, so it is tested without a device.
  */
 import { difficultyNote, readingNote, type Difficulty } from '../study/difficulty';
+import { expandLessons } from './chapterSequence';
 import { parseJsonLoose, str } from '../study/games/json';
 import { evalExpression } from '../study/mathTools';
 import { DRILL_LABELS } from '../study/drills';
@@ -118,6 +119,8 @@ export function parsePlan(raw: string): CoursePlan | null {
     });
   });
   if (squares.length < 3) return null;
+  const planned = expandLessons(squares, MAX_SQUARES - 1);
+  squares.splice(0, squares.length, ...planned);
   const last = squares[squares.length - 1];
   if (last.format !== 'quiz') {
     squares.push({ key: `s${squares.length + 1}`, format: 'quiz', title: 'Final quiz', focus: 'Everything in the course', unit: last.unit, checkpoint: true });

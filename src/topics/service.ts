@@ -8,8 +8,8 @@ import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
-import { bookQuestionsPrompt, projectQuestionBank, questionsOn } from '../study/bookQuestions';
-import { makeSource, parsePicks, pickPrompt, relevantExcerpts, type Candidate, type CourseSource } from './sources';
+import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
+import { makeSource, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, type Candidate, type CourseSource } from './sources';
 
 const MAX_TRIES = 2;
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -27,7 +27,7 @@ async function askUntil<T>(prompt: { system: string; user: string }, read: (raw:
 
 /** Plans a course for the request and saves it. Returns its id. */
 export async function createCourse(request: CourseRequest, sources: CourseSource[] = [], projectId?: string): Promise<string> {
-  const plan = await askUntil(planMessages(request, sources), parsePlan, 'a course plan');
+  const plan = await askUntil(planMessages(request, sources.filter((x) => !x.questionBank)), parsePlan, 'a course plan');
   return useTopics.getState().add(request, plan, { sources, projectId });
 }
 
@@ -57,7 +57,8 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
   try {
     const { ragService } = require('../services/rag');
     const found = await ragService.searchProject(projectId, query);
-    return (found?.chunks ?? []).slice(0, 3).map((c: { name: string; content: string }) => ({ source: c.name, text: String(c.content).slice(0, 700) }));
+    // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
+    return (found?.chunks ?? []).filter((c: { content: string }) => !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string }) => ({ source: c.name, text: String(c.content).slice(0, 700) }));
   } catch { return []; }
 }
 
@@ -88,7 +89,7 @@ export async function squareContent(course: Course, key: string): Promise<Square
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
-    bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn(await projectQuestionBank(course.projectId), `${square.title} ${square.focus}`)) : '',
+    bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '',
     excerpts,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   useTopics.getState().setContent(course.id, key, content);

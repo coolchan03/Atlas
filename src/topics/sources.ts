@@ -4,6 +4,7 @@
  * The pure parts (matching a square to passages, reading the AI's picks) are tested without a device.
  */
 import { str } from '../study/games/json';
+import { applyAnswerKey, extractQuestions, isQuestionBankText, parseAnswerKey, type BookQuestion } from '../study/bookQuestions';
 
 export interface CourseSource {
   id: string;
@@ -13,6 +14,8 @@ export interface CourseSource {
   url?: string;
   text: string;
   addedAt: number;
+  /** A question bank (mostly questions, maybe with an answer key): its questions are used for quizzes and exams, and it is never taught from as reading. */
+  questionBank?: boolean;
 }
 
 export interface Candidate { title: string; snippet: string; url: string }
@@ -39,6 +42,7 @@ export function relevantExcerpts(sources: CourseSource[], query: string, maxChar
   if (!want.size) return [];
   const scored: { source: string; text: string; score: number }[] = [];
   for (const s of sources) {
+    if (s.questionBank) continue; // a question bank is asked from, not read as a lesson
     for (const p of passages(s.text)) {
       const have = new Set(words(p));
       let shared = 0;
@@ -80,9 +84,27 @@ export function parsePicks(reply: string, count: number): number[] {
   return out;
 }
 
-/** A note or file turned into a source. */
-export const makeSource = (s: { title: string; kind: CourseSource['kind']; text: string; url?: string }, id: string): CourseSource =>
-  ({ id, title: str(s.title, 80) || 'Untitled', kind: s.kind, url: s.url, text: s.text.replace(/\s+\n/g, '\n').slice(0, 12000), addedAt: Date.now() });
+/** The most text kept from a note or file, and from a question bank (a bank is long and every question matters). */
+const KEEP_TEXT = 12000;
+const KEEP_BANK = 300000;
+
+/** A note or file turned into a source. A text that is mostly questions is recognised as a question bank and kept in full. */
+export const makeSource = (s: { title: string; kind: CourseSource['kind']; text: string; url?: string }, id: string): CourseSource => {
+  const bank = s.kind !== 'web' && isQuestionBankText(s.text);
+  return { id, title: str(s.title, 80) || 'Untitled', kind: s.kind, url: s.url, text: s.text.replace(/\s+\n/g, '\n').slice(0, bank ? KEEP_BANK : KEEP_TEXT), addedAt: Date.now(), ...(bank ? { questionBank: true } : {}) };
+};
+
+/** Every question in the question-bank sources of a course, with answers from a key at the end where the bank has one. */
+export function sourceQuestions(sources: CourseSource[] | undefined): BookQuestion[] {
+  const out: BookQuestion[] = [];
+  for (const src of sources ?? []) {
+    if (!src.questionBank) continue;
+    const found = new Map<string, BookQuestion>();
+    for (const q of extractQuestions(src.text, src.title)) found.set(q.question.slice(0, 240).toLowerCase(), q);
+    out.push(...applyAnswerKey([...found.values()], parseAnswerKey(src.text)));
+  }
+  return out;
+}
 
 export const MAX_SOURCES = 12;
 

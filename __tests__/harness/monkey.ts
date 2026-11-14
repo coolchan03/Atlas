@@ -32,6 +32,11 @@ export async function explore(view: { UNSAFE_root: any }, options: MonkeyOptions
   const touched = new Map<string, number>();
   let pressed = 0;
   // Dialogs answer themselves: a random action button (never Cancel) is pressed, so the work behind every confirmation also runs.
+  // Pressing everything starts network calls (add-on downloads, searches). On a real network they finish after the test is over and their
+  // dialogs then hit a torn-down environment, so the explorer is offline: they fail at once, while the test can still see them.
+  const realFetch = (global as { fetch?: unknown }).fetch;
+  const offline = !(realFetch && (realFetch as { _isMockFunction?: boolean })._isMockFunction);
+  if (offline) (global as { fetch?: unknown }).fetch = jest.fn(async () => { throw new Error('No network in tests'); });
   const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(((_t: string, _m?: string, buttons?: Array<{ text?: string; style?: string; onPress?: (v?: string) => void }>) => {
     const actions = (buttons ?? []).filter((b) => b.style !== 'cancel');
     const pick = actions[Math.floor(next() * actions.length)];
@@ -62,6 +67,8 @@ export async function explore(view: { UNSAFE_root: any }, options: MonkeyOptions
       pressed++;
     } catch (e) { errors.push(`${label(target.node)}: ${String((e as Error)?.message ?? e).slice(0, 120)}`); }
   }
+  await act(async () => { for (let i = 0; i < 4; i++) await new Promise((resolve) => setImmediate(resolve)); }); // let failed calls finish while the test is alive
   alertSpy.mockRestore();
+  if (offline) (global as { fetch?: unknown }).fetch = realFetch;
   return { pressed, errors };
 }
