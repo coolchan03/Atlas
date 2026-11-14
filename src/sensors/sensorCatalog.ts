@@ -43,3 +43,36 @@ export function uniqueSensors(list: ListedSensor[]): ListedSensor[] {
 }
 
 export const labelOf = (s: ListedSensor): string => SENSOR_INFO[s.type]?.label ?? (s.stringType?.split('.').pop()?.replace(/_/g, ' ') || s.name);
+
+export type SensorGroup = 'motion' | 'environment' | 'orientation' | 'activity' | 'other';
+export interface SensorMeta { group: SensorGroup; icon: string; /** Full scale of one axis, for sensors that report x, y and z. */ scale?: number }
+
+/** Where each sensor sits on the screen, its icon, and (for x/y/z sensors) how big a full bar is. */
+export const SENSOR_META: Record<number, SensorMeta> = {
+  1: { group: 'motion', icon: 'move', scale: 20 }, 4: { group: 'motion', icon: 'rotate-cw', scale: 8 }, 9: { group: 'motion', icon: 'arrow-down', scale: 10 },
+  10: { group: 'motion', icon: 'wind', scale: 10 }, 2: { group: 'orientation', icon: 'compass' }, 11: { group: 'orientation', icon: 'navigation', scale: 1 },
+  15: { group: 'orientation', icon: 'rotate-ccw', scale: 1 }, 20: { group: 'orientation', icon: 'compass', scale: 1 },
+  5: { group: 'environment', icon: 'sun' }, 6: { group: 'environment', icon: 'cloud' }, 12: { group: 'environment', icon: 'droplet' },
+  13: { group: 'environment', icon: 'thermometer' }, 8: { group: 'environment', icon: 'smartphone' },
+  17: { group: 'activity', icon: 'activity' }, 18: { group: 'activity', icon: 'activity' }, 19: { group: 'activity', icon: 'award' },
+  29: { group: 'activity', icon: 'pause-circle' }, 30: { group: 'activity', icon: 'play-circle' },
+};
+const OTHER: SensorMeta = { group: 'other', icon: 'cpu' };
+export const metaOf = (type: number): SensorMeta => SENSOR_META[type] ?? OTHER;
+
+export const SENSOR_GROUPS: Array<{ id: SensorGroup; label: string }> = [
+  { id: 'environment', label: 'Around you' }, { id: 'motion', label: 'Motion' }, { id: 'orientation', label: 'Direction' },
+  { id: 'activity', label: 'Activity' }, { id: 'other', label: 'Other sensors' },
+];
+
+/** The sensors split into the screen's groups, in a steady order, with empty groups left out. */
+export function groupSensors<T extends { type: number }>(list: T[]): Array<{ id: SensorGroup; label: string; sensors: T[] }> {
+  return SENSOR_GROUPS.map((g) => ({ ...g, sensors: list.filter((s) => metaOf(s.type).group === g.id) })).filter((g) => g.sensors.length > 0);
+}
+
+/** x, y and z of a reading with how far along its bar each one is, from -1 (full negative) to 1 (full positive). Null for other sensors. */
+export function axisBars(type: number, v: number[] | undefined): Array<{ axis: string; value: number; fraction: number }> | null {
+  const scale = SENSOR_META[type]?.scale;
+  if (!scale || !v || v.length < 3) return null;
+  return ['x', 'y', 'z'].map((axis, i) => ({ axis, value: v[i], fraction: Math.max(-1, Math.min(1, (Number.isFinite(v[i]) ? v[i] : 0) / scale)) }));
+}
