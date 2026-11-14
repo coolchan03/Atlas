@@ -1,5 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
+import { followUpQuery } from '../../services/rag/followUp';
 import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
 import { agentSkillNames, skillsFor } from '../../skills/agentSkills';
 import { relevantTools } from '../../services/tools/relevantTools';
@@ -505,7 +506,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // Offline research already contains the selected document excerpts; do not inject them twice.
   let basePrompt = usedOfflineProjectEvidence
     ? rawPrompt
-    : await injectRagContext(conversation?.projectId, messageText, rawPrompt, enabledTools);
+    : await injectRagContext(conversation?.projectId, followUpQuery(messageText, conversation?.messages), rawPrompt, enabledTools);
 
   // In voice/audio mode the voice feature augments the prompt for spoken
   // output. No-op (returns undefined) when none is registered.
@@ -763,7 +764,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const rawPrompt = promptBase + await expertKnowledgeNote(messageText) + chartNote(messageText);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
-  const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt, enabledTools);
+  const basePrompt = await injectRagContext(conversation?.projectId, followUpQuery(messageText, conversation?.messages), rawPrompt, enabledTools);
   const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
   // MCP/extension hints come solely from augmentSystemPromptForTools in the tool loop
   // (see the send path above) — adding them here too would double-inject.
