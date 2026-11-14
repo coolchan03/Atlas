@@ -2,6 +2,7 @@ import { RagSearchResult } from './database';
 import { knowledgeSource } from './knowledgeSource';
 import { embeddingService } from './embedding';
 import { cosineSimilarity } from './vectorMath';
+import { rankChunks } from './rankChunks';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -64,7 +65,8 @@ class RetrievalService {
     }));
 
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK);
+    // Take extra candidates, then keep the ones that are about the question and spread them over the documents.
+    return rankChunks(query, scored.slice(0, topK * 3), topK);
   }
 
   formatForPrompt(result: SearchResult): string {

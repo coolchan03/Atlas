@@ -322,10 +322,8 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
 
     const result = await retrievalService.search(PROJECT, 'solar panel roof');
 
-    expect(result.chunks.length).toBe(2);
-    // The solar doc must rank first — real cosine over the real stored vectors.
-    expect(result.chunks[0].name).toBe('solar.txt');
-    expect(result.chunks[0].score).toBeGreaterThan(result.chunks[1].score);
+    // The solar doc ranks first — real cosine over the real stored vectors — and the battery doc, which is far weaker, is not sent as context.
+    expect(result.chunks.map((c: { name: string }) => c.name)).toEqual(['solar.txt']);
     expect(result.chunks[0].score).toBeGreaterThan(0);
   });
 
