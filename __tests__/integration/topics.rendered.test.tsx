@@ -251,17 +251,12 @@ it('lets you add textbooks and question banks on the create-a-course form, keeps
   expect(course.sources.map((x: any) => x.title)).toEqual(['FAR-textbook.pdf']); // its opening is kept so the plan knows what it covers
 });
 
-it('Learn a topic opens Professional exam prep (UX-01), but not inside a project', () => {
+it('Learn a topic no longer offers a Professional exam prep card', () => {
   const rtl = requireRTL();
   const React = require('react');
   const { TopicsScreen } = require('../../src/topics/TopicScreens');
   mockParams = {};
   const list = rtl.render(React.createElement(TopicsScreen));
-  rtl.fireEvent.press(list.getByTestId('topics-exam-prep'));
-  expect(mockNav.navigate).toHaveBeenCalledWith('CpaPrep');
-  list.unmount();
-  mockParams = { projectId: 'p1' };
-  const inProject = rtl.render(React.createElement(TopicsScreen));
-  expect(inProject.queryByTestId('topics-exam-prep')).toBeNull();
-  mockParams = {};
+  expect(list.queryByTestId('topics-exam-prep')).toBeNull();
+  expect(list.queryByText('Professional exam prep')).toBeNull();
 });

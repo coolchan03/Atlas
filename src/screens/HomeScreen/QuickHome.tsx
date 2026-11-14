@@ -28,7 +28,6 @@ const destinations: Destination[] = [
   { key: 'workflows', label: 'Multi-step helpers', hint: 'Bank statement to CSV, repair help, dinner from what you have, explain a letter, contracts and more', icon: 'list', screen: 'Workflows', ...TILE.amber },
   { key: 'recorder', label: 'Recorder', hint: 'Record a talk, get a transcript with speakers', icon: 'mic', screen: 'Recorder', ...TILE.red },
   { key: 'language', label: 'Learn a language', hint: 'Lessons, games and practice calls', icon: 'book', screen: 'Language', ...TILE.teal },
-  { key: 'cpa', label: 'Professional exam prep', hint: 'CPA, CMA, CFA, the bar, LSAT, MCAT, GRE, GMAT, SAT, ACT and more: your textbooks, question banks, a board and a checklist of what you really understand', icon: 'award', screen: 'CpaPrep', optional: true, ...TILE.blue },
   { key: 'topics', label: 'Learn a topic', hint: 'AI makes lessons, quizzes and exercises. You read and practice them', icon: 'grid', screen: 'Topics', ...TILE.blue },
   { key: 'teach', label: 'Teach the AI', hint: 'AI researches a subject and builds its own knowledge. You can then ask it anything about that subject', icon: 'trending-up', screen: 'TeachList', ...TILE.teal },
   { key: 'textbook', label: 'Knowledge base', hint: 'Give the AI your own documents (PDFs, notes) so it can answer questions about them', icon: 'book-open', screen: 'Knowledge', ...TILE.blue },
