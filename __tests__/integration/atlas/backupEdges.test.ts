@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
 import { exportBackup, importBackup, checkBackup } from '../../../src/atlasTools/backup';
 const mockStore = new Map<string, string>();
