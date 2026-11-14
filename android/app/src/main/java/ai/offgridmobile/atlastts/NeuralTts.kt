@@ -68,7 +68,8 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
         val began = System.nanoTime()
         val audio = generatePocket(engine, PocketText.prepare(text, used), sid, speed, reference, used)
         if (steps == 0) auto.record((System.nanoTime() - began) / 1_000_000, audio.samples.size.toDouble() / max(1, audio.sampleRate))
-        return audio.samples
+        // The lead-in and the voice's own pause before it stops would be heard as a delay before every sentence: keep a short breath either side.
+        return VoiceStats.trimSilence(audio.samples, audio.sampleRate, 80, 160)
     }
 
     /** One cloned-voice generation exactly as given (no tidying), with its timing logged. */

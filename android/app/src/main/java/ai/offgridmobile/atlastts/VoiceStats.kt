@@ -72,4 +72,31 @@ object VoiceStats {
             bursts = if (first < 0) 0 else bursts, noiseFloorDb = 20 * log10(max(floor, 1e-6)),
         )
     }
+
+    /**
+     * Cuts quiet stretches at the start and end of speech down to [keepLeadMs] and [keepTrailMs]: the lead-in given to the voice (and
+     * the voice's own pause before it stops) would otherwise be heard as a delay before every sentence. Sound is never cut: only
+     * windows under 2% of the loudest window, and only outside the first and last sound.
+     */
+    fun trimSilence(samples: FloatArray, rate: Int, keepLeadMs: Int, keepTrailMs: Int): FloatArray {
+        if (samples.isEmpty() || rate <= 0) return samples
+        val window = max(1, rate * WINDOW_MS / 1000)
+        var top = 0.0
+        val levels = ArrayList<Double>()
+        var i = 0
+        while (i < samples.size) {
+            val end = minOf(samples.size, i + window)
+            var w = 0.0
+            for (j in i until end) { val v = samples[j].toDouble(); w += v * v }
+            val level = sqrt(w / (end - i)); levels.add(level); if (level > top) top = level
+            i = end
+        }
+        val threshold = max(top * 0.02, 0.001)
+        val first = levels.indexOfFirst { it > threshold }
+        val last = levels.indexOfLast { it > threshold }
+        if (first < 0) return samples
+        val from = max(0, first * window - rate * keepLeadMs / 1000)
+        val to = minOf(samples.size, (last + 1) * window + rate * keepTrailMs / 1000)
+        return if (from == 0 && to == samples.size) samples else samples.copyOfRange(from, to)
+    }
 }

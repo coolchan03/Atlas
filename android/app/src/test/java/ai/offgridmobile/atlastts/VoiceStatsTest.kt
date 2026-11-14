@@ -53,4 +53,23 @@ class VoiceStatsTest {
         assertEquals(samples.size, back.samples.size)
         assertEquals(samples[50].toDouble(), back.samples[50].toDouble(), 0.001)
     }
+
+    @Test
+    fun trimsLongSilenceAroundSpeechButNeverTheSpeech() {
+        val speech = tone(500)
+        val trimmed = VoiceStats.trimSilence(silence(600) + speech + silence(700), rate, 80, 160)
+        assertEquals((rate * (80 + 500 + 160)) / 1000.0, trimmed.size.toDouble(), rate * 0.04)
+        val back = VoiceStats.analyze(trimmed, rate)
+        assertTrue(back.leadSilenceMs in 60..100)
+        assertTrue(back.trailSilenceMs in 140..180)
+        assertEquals(1, back.bursts)
+    }
+
+    @Test
+    fun leavesShortSilenceAndAllSilenceAlone() {
+        val a = silence(30) + tone(200) + silence(50)
+        assertEquals(a.size, VoiceStats.trimSilence(a, rate, 80, 160).size)
+        val none = silence(1000)
+        assertEquals(none.size, VoiceStats.trimSilence(none, rate, 80, 160).size)
+    }
 }
