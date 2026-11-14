@@ -15,6 +15,8 @@ export const studyResults = (): unknown[] => [
 export interface Seeded { project: string; model: string; image: string; agent: string; chat: string }
 
 export function seedApp(): Seeded {
+  const RNFS = require('react-native-fs');
+  if (!RNFS.getFSInfo) RNFS.getFSInfo = jest.fn(async () => ({ freeSpace: 50 * 1024 ** 3, totalSpace: 128 * 1024 ** 3 }));
   const { useAppStore, useChatStore } = require('../../src/stores');
   const { useProjectStore } = require('../../src/stores/projectStore');
   const { useStudyStore } = require('../../src/study/store');

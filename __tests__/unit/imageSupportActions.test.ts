@@ -1,8 +1,8 @@
 const mockPick = jest.fn();
 const mockAttach = jest.fn();
 const mockModify = jest.fn();
-const mockUnload = jest.fn(async () => undefined);
-const mockAddModel = jest.fn(async () => undefined);
+const mockUnload = jest.fn(async (..._a: unknown[]) => undefined);
+const mockAddModel = jest.fn(async (..._a: unknown[]) => undefined);
 const listeners: Record<string, (e: unknown) => void> = {};
 
 jest.mock('@react-native-documents/picker', () => ({ pick: (...a: unknown[]) => mockPick(...a), types: { allFiles: '*/*' }, isErrorWithCode: (e: any) => !!e?.code, errorCodes: { OPERATION_CANCELED: 'CANCELED' } }));
