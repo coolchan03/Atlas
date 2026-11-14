@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import RNFS from 'react-native-fs';
 import Icon from 'react-native-vector-icons/Feather';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useTheme } from '../theme';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
-import { wavBytes, toBase64 } from '../atlasVoice/jingles';
 import { shareItem } from '../utils/shareItem';
 import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } from '../music/styles';
 import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
-import { MUSIC_RATE, renderMusic, type MusicScore } from '../music/composition';
+import type { MusicScore } from '../music/composition';
+import { saveInstrumental } from '../music/saveTrack';
+import { composeMusic } from '../music/composerAgent';
 
 const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
 const GROUPS: StyleGroup[] = ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'];
@@ -40,24 +40,9 @@ export function MusicStudioScreen() {
     try { await instrumentalPlayer.play(track); }
     catch (error: any) { Alert.alert('Playback failed', String(error?.message || error)); }
   };
-  const saveScore = async (next: MusicScore): Promise<void> => {
-    const pcm = renderMusic(next, { preset: 'band', seconds: duration });
-    const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
-    await RNFS.mkdir(dir);
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const path = `${dir}/instrumental-${id}.wav`;
-    const scorePath = `${dir}/instrumental-${id}.json`;
-    try {
-      await RNFS.writeFile(path, toBase64(wavBytes(pcm, MUSIC_RATE)), 'base64');
-      await RNFS.writeFile(scorePath, JSON.stringify({ ...next, mood, sound: 'band', duration }, null, 2), 'utf8');
-    } catch (error) {
-      await RNFS.unlink(path).catch(() => undefined);
-      await RNFS.unlink(scorePath).catch(() => undefined);
-      throw error;
-    }
-    const track: InstrumentalTrack = { id, title: next.title, path, scorePath, mood, sound: 'band', seconds: duration, createdAt: new Date().toISOString() };
-    useMusicLibrary.getState().addTrack(track);
-    setSelected(id);
+  const saveScore = async (next: MusicScore, by?: string): Promise<void> => {
+    const track = await saveInstrumental(next, { mood, seconds: duration, by });
+    setSelected(track.id);
     setScore(next);
     await play(track); // Crossfades if another track is playing; navigation does not stop it.
   };
@@ -68,6 +53,17 @@ export function MusicStudioScreen() {
     setBusy(true);
     try { await saveScore(composeStyled(prompt, useMood, { variant: useVariant, energy })); }
     catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
+    finally { setBusy(false); }
+  };
+  /** The hidden composer writes the tune with the on-phone AI and a long list of instruments; the built-in composer steps in if it cannot. */
+  const askComposer = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const composed = await composeMusic(`${prompt} ${STYLES[mood].label}`.trim(), { seconds: duration, style: mood });
+      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
+      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
+    } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
     finally { setBusy(false); }
   };
   const another = () => { setVariant(variant + 1); return make({ variant: variant + 1 }); };
@@ -135,6 +131,9 @@ export function MusicStudioScreen() {
         <View style={styles.options}>
           <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, styles.grow, { borderColor: colors.primary }]}>
             {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Make music</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={askComposer} disabled={busy} testID="music-ai-composer" style={[styles.action, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.text }}>Ask the AI composer</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={surprise} disabled={busy} testID="music-surprise" style={[styles.action, { borderColor: colors.border }]}>
             <Text style={{ color: colors.text }}>Surprise me</Text>

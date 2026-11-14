@@ -102,6 +102,8 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const { createScheduledTask } = require('../../schedule/createFromTool');
       return createScheduledTask(call.arguments ?? {});
     }
+    case 'make_music':
+      return require('../../music/composerAgent').makeMusicForChat(call.arguments ?? {});
     case 'list_maps':
       return require('../../atlasMaps/mapQuery').describeMaps();
     case 'map_places': {

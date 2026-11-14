@@ -242,6 +242,15 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: {},
   },
   {
+    id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',
+    description: "Make an original instrumental tune and play it. A specialist composer with dozens of instruments writes it, not you: just describe what the user wants. Use when they ask for music, a song, a tune, background music, a lullaby, a soundtrack or a beat. Instrumental only, no singing.",
+    parameters: {
+      description: { type: 'string', description: 'What the music should be like: mood, style, scene, instruments the user named', required: true },
+      seconds: { type: 'string', description: 'Length in seconds, 20 to 120 (default 60)' },
+      style: { type: 'string', description: 'A style word if the user gave one, for example jazz, lo-fi, classical, rock, film' },
+    },
+  },
+  {
     id: 'list_maps', name: 'list_maps', displayName: 'Offline maps', icon: 'map',
     description: "The offline map files on this phone and the area each covers, and whether the user's position is inside one. Use before searching places, or when the user asks what maps they have.",
     parameters: {},
