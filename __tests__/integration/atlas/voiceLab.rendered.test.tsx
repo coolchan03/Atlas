@@ -32,7 +32,7 @@ function setup(report: Record<string, unknown>) {
   return { rtl, native, view: rtl.render(React.createElement(VoiceLabScreen)) };
 }
 
-const run = (label: string, steps: number, s = stats(), over: Record<string, unknown> = {}) => ({ label, steps, millis: 1400, audioRate: 24000, engineRate: 24000, path: `/files/voice-lab/${steps}.wav`, stats: s, ...over });
+const run = (label: string, steps: number, s = stats(), over: Record<string, unknown> = {}) => ({ label, steps, millis: 400, audioRate: 24000, engineRate: 24000, path: `/files/voice-lab/${steps}.wav`, stats: s, ...over });
 const report = (runs: unknown[], reference = stats({ seconds: 9 })) => ({ referenceRate: 24000, reference, folder: '/files/voice-lab', runs });
 
 it('opens from seven quick taps on the version, and not from fewer', () => {
@@ -87,6 +87,22 @@ it('explains a runaway as-typed run and a missing first syllable from the number
   expect(view.getByText(/Without an ending full stop the voice does not know where to stop/)).toBeTruthy();
   expect(view.getByText(/first syllable gets lost/)).toBeTruthy();
   expect(view.queryByText(/The runs differ in length/)).toBeNull(); // the as-typed runaway is explained once, not as a second problem
+});
+
+it('recommends the highest clean step count and saves it for that voice only', async () => {
+  const { rtl, view } = setup(report([
+    run('steps 2, text tidied', 2, stats({ bursts: 6 })), run('steps 3, text tidied', 3), run('steps 3, tidied + lead-in', 3),
+    run('steps 5, tidied + lead-in', 5), run('steps 8, tidied + lead-in', 8, stats({ bursts: 40 })), run('steps 2, text as typed', 2, stats({ seconds: 9 })),
+  ]));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-lab-run')); });
+  await rtl.waitFor(() => expect(view.getByTestId('voice-lab-advice')).toBeTruthy());
+  expect(view.getByText(/5 steps is the highest that came out clean/)).toBeTruthy(); // 8 stuttered, so 5
+  rtl.fireEvent.press(view.getByTestId('voice-lab-use-steps'));
+  const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+  expect(useVoiceProfiles.getState().profiles[0].steps).toBe(5);
+  expect(view.getByText(/This voice is set to 5 steps/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('voice-lab-clear-steps'));
+  expect(useVoiceProfiles.getState().profiles[0].steps).toBeUndefined();
 });
 
 it('says so when the engine cannot run the lab', async () => {

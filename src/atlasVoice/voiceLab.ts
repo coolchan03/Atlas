@@ -31,7 +31,7 @@ export async function runVoiceLab(text: string, steps: number[]): Promise<{ repo
   if (!labAvailable()) throw new Error('The voice lab needs the Android app with the cloning voice.');
   const profile = readVoiceProfile();
   if (!profile?.referenceId) throw new Error('Choose a cloned voice (one with a recording) under Read aloud first.');
-  await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
+  await loadVoiceForSpeech(profile.voiceId, profile.sid, { referenceId: profile.referenceId, steps: profile.steps });
   const report: LabReport = await Native.voiceLab(text, steps);
   const voice = profile.name;
   logger.log(`[VoiceLab] ${formatReport(report, text, voice)}`);
@@ -41,6 +41,29 @@ export async function runVoiceLab(text: string, steps: number[]): Promise<{ repo
 export const playThroughVoice = (path: string): Promise<boolean> => Native.labPlayThroughVoice(path);
 export const playWithAndroid = (path: string): Promise<boolean> => Native.labPlayWithAndroid(path);
 export const stopLab = (): Promise<boolean> => Native?.labStop?.() ?? Promise.resolve(true);
+
+export interface StepsAdvice { steps: number; why: string }
+
+/**
+ * The best step count for a voice from its lab runs: the highest one whose speech came out clean (no stutter, no long silence, no
+ * clipping), about as long as the others (a run that is far longer or shorter did not stop where it should) and made faster than
+ * it is spoken. Judged on the runs the app would actually use: the tidied text, with the lead-in at 3 steps and up.
+ */
+export function recommendSteps(report: LabReport, text: string): StepsAdvice | null {
+  const syllables = roughSyllables(text);
+  const used = report.runs.filter((r) => r.stats && !r.error && !r.label.includes('as typed') && (r.steps < 3 ? r.label.includes('text tidied') : r.label.includes('lead-in')));
+  if (!used.length) return null;
+  const lengths = used.map((r) => r.stats!.seconds).sort((a, b) => a - b);
+  const median = lengths[Math.floor(lengths.length / 2)];
+  const clean = used.filter((r) => {
+    const s = r.stats!;
+    return r.millis / 1000 / Math.max(s.seconds, 0.01) <= 0.6 && s.bursts <= syllables * 2 + 2 && s.longestGapMs <= 600 && s.clippedPercent <= 0.5
+      && s.seconds >= median * 0.7 && s.seconds <= median * 1.3;
+  });
+  if (!clean.length) return null;
+  const best = clean.reduce((a, b) => (b.steps > a.steps ? b : a));
+  return { steps: best.steps, why: `${best.steps} steps is the highest that came out clean here (${f(best.stats!.seconds, 1)} s of speech made in ${f(best.millis / 1000, 1)} s).` };
+}
 
 const f = (n: number, digits = 2) => (Number.isFinite(n) ? n.toFixed(digits) : '?');
 

@@ -162,7 +162,7 @@ export function createReadAloud({ speak, stopSpeaking, release, watchStart, watc
 }
 
 /** The voice profile Read aloud uses: the one chosen if it still exists, otherwise the first saved voice, otherwise none. */
-export function readVoiceProfile(): { id: string; name: string; voiceId: string; sid: number; referenceId?: string } | undefined {
+export function readVoiceProfile(): { id: string; name: string; voiceId: string; sid: number; referenceId?: string; steps?: number } | undefined {
   const { profiles } = useVoiceProfiles.getState();
   const chosen = useAtlasVoiceStore.getState().readVoiceId;
   return profiles.find((p) => p.id === chosen) ?? profiles[0];
@@ -177,7 +177,7 @@ async function speakInChosenVoice(text: string, control: SpeakControl): Promise<
   const profile = readVoiceProfile();
   control.phase('loading');
   if (profile) {
-    try { await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId); }
+    try { await loadVoiceForSpeech(profile.voiceId, profile.sid, { referenceId: profile.referenceId, steps: profile.steps }); }
     catch (e) { throw new Error(`The voice could not be loaded: ${(e as Error)?.message || 'unknown error'}`); }
   } else {
     // Without a chosen profile this puts the saved voice back, in case a briefing left a borrowed one loaded. It costs nothing when it is already loaded.

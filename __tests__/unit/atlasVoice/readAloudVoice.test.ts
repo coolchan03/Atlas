@@ -98,6 +98,22 @@ describe('repeated playback', () => {
   });
 });
 
+describe('quality steps', () => {
+  it('uses the voice\'s own steps when it has them, and the app setting (automatic) when it does not', async () => {
+    const t = load();
+    t.engine.slow = false;
+    t.read('First.');
+    await t.settle();
+    expect(t.native.activateClonedVoice.mock.calls[0][4]).toBe(0); // automatic
+    t.emit('AtlasTtsStart', t.lastKey()); t.emit('AtlasTtsDone', t.lastKey());
+    await t.settle();
+    t.profiles.getState().setSteps(t.jake.id, 8);
+    t.read('Second.');
+    await t.settle();
+    expect(t.native.activateClonedVoice.mock.calls[1][4]).toBe(8); // the same voice again, now at its own steps
+  });
+});
+
 describe('stopping while loading', () => {
   it('never starts speaking after the person pressed stop', async () => {
     const t = load();

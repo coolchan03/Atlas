@@ -33,7 +33,7 @@ function speakAsAgent(text: string, messageId: string, profile: VoiceProfile | n
     restoreSavedVoice().catch(() => undefined).finally(() => speak(text, messageId));
     return;
   }
-  loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId)
+  loadVoiceForSpeech(profile.voiceId, profile.sid, { referenceId: profile.referenceId, steps: profile.steps })
     .then(() => speak(text, messageId, profile.rate))
     .catch((error) => {
       logger.warn(`[AtlasVoice] agent voice unavailable; using saved voice: ${String(error)}`);

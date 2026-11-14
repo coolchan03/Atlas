@@ -6,8 +6,10 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { ReadVoiceChooser } from '../atlasVoice/ReadVoiceChooser';
 import {
-  DEFAULT_LAB_TEXT, LAB_STEPS, LabReport, findings, formatReport, labAvailable, playThroughVoice, playWithAndroid, runVoiceLab, stopLab,
+  DEFAULT_LAB_TEXT, LAB_STEPS, LabReport, findings, formatReport, labAvailable, playThroughVoice, playWithAndroid, recommendSteps, runVoiceLab, stopLab,
 } from '../atlasVoice/voiceLab';
+import { readVoiceProfile } from '../atlasVoice/readAloud';
+import { useVoiceProfiles } from '../atlasVoice/profiles';
 
 /** Hidden screen (tap the version in About seven times): a deeper test of the cloning voice. */
 export const VoiceLabScreen: React.FC = () => {
@@ -18,6 +20,10 @@ export const VoiceLabScreen: React.FC = () => {
   const [result, setResult] = useState<{ report: LabReport; voice: string; text: string } | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const profiles = useVoiceProfiles((st) => st.profiles);
+  const setProfileSteps = useVoiceProfiles((st) => st.setSteps);
+  const current = readVoiceProfile();
+  const own = profiles.find((p) => p.id === current?.id)?.steps;
 
   const toggle = (n: number) => setSteps((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n].sort((a, b) => a - b)));
   const run = useCallback(async () => {
@@ -85,6 +91,27 @@ export const VoiceLabScreen: React.FC = () => {
             ))}
             <Text style={[styles.label, { color: colors.text }]}>What the numbers suggest</Text>
             {findings(result.report, result.text).map((x) => <Text key={x} style={small}>{'•'} {x}</Text>)}
+            {(() => {
+              const advice = recommendSteps(result.report, result.text);
+              return (
+                <View style={styles.results} testID="voice-lab-advice">
+                  <Text style={[styles.label, { color: colors.text }]}>Quality for this voice</Text>
+                  <Text style={small}>{advice ? advice.why : 'No setting came out clean enough to recommend one.'}{own ? ` This voice is set to ${own} steps.` : ' This voice follows the app setting (automatic by default).'}</Text>
+                  <View style={styles.row}>
+                    {!!advice && !!current && (
+                      <TouchableOpacity onPress={() => setProfileSteps(current.id, advice.steps)} style={[styles.action, { borderColor: colors.primary }]} testID="voice-lab-use-steps" accessibilityRole="button">
+                        <Text style={{ color: colors.primary }}>Use {advice.steps} steps for {result.voice}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {!!own && !!current && (
+                      <TouchableOpacity onPress={() => setProfileSteps(current.id, undefined)} style={[styles.action, { borderColor: colors.border }]} testID="voice-lab-clear-steps" accessibilityRole="button">
+                        <Text style={{ color: colors.text }}>Follow the app setting</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
             <Text style={small}>Files are in {result.report.folder}</Text>
             <View style={styles.row}>
               <TouchableOpacity onPress={() => { Clipboard.setString(formatReport(result.report, result.text, result.voice)); setCopied(true); }} style={[styles.action, { borderColor: colors.border }]} testID="voice-lab-copy" accessibilityRole="button">

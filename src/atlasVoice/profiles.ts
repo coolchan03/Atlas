@@ -16,6 +16,8 @@ export interface VoiceProfile {
   rate: number;
   /** Pocket TTS reference audio id, stored privately by the native engine. */
   referenceId?: string;
+  /** Cloning quality for this voice only (2, 3, 5 or 8); missing means the app-wide setting, which is automatic by default. */
+  steps?: number;
   createdAt: string;
 }
 
@@ -26,6 +28,8 @@ interface VoiceProfilesState {
   removeProfile: (id: string) => void;
   /** How fast this voice speaks (1 is normal). */
   setRate: (id: string, rate: number) => void;
+  /** Sets or clears (undefined) the quality steps used for this voice only. */
+  setSteps: (id: string, steps: number | undefined) => void;
   /** Adds the ready-made profiles not saved yet (same voice and speaker). Returns how many were added. */
   addPresets: (presets: Omit<VoiceProfile, 'id' | 'createdAt'>[]) => number;
 }
@@ -46,6 +50,7 @@ export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set, get) 
   })),
   removeProfile: (id) => set((s) => ({ profiles: s.profiles.filter((p) => p.id !== id) })),
   setRate: (id, rate) => set((s) => ({ profiles: s.profiles.map((p) => (p.id === id && Number.isFinite(rate) ? { ...p, rate: Math.min(2, Math.max(0.5, rate)) } : p)) })),
+  setSteps: (id, steps) => set((s) => ({ profiles: s.profiles.map((p) => (p.id === id ? { ...p, steps: steps && [2, 3, 5, 8].includes(steps) ? steps : undefined } : p)) })),
   addPresets: (presets) => {
     const add = missingPresets(get().profiles, presets);
     add.forEach((p) => get().addProfile(p));
