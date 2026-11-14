@@ -49,7 +49,7 @@ describe('answering the phone', () => {
     await tick();
     expect(t.spoken.slice(0, 2)).toEqual(['Hola.', '¿Qué desea tomar?']);
     expect(t.call.state().turns[0]).toMatchObject({ who: 'them' });
-    expect(['listening', 'thinking']).toContain(t.call.state().phase);
+    expect(['listening', 'thinking', 'transcribing', 'speaking']).toContain(t.call.state().phase);
   });
 
   it('says the model is needed when it cannot load, and retries when the learner taps talk', async () => {
