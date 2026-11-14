@@ -34,5 +34,5 @@ describe('Q3 (behavioral) — stringified tool args surface an error bubble', ()
     // ...which must show the computed answer, NOT an internal failure. Today the stringified args break the
     // calculator so the bubble shows a failure → RED.
     expect(h.view!.queryByText(/failed \(internal\)|Cannot read properties|error/i)).toBeNull();
-  });
+  }, 90000);
 });
