@@ -45,6 +45,8 @@ describe('screens survive being pressed everywhere, with realistic data', () => 
     installNativeBoundary({ fs: true });
     const rtl = requireRTL();
     const React = require('react');
+    const rn = require('react-native');
+    try { jest.spyOn(rn.PermissionsAndroid, 'request').mockResolvedValue('granted' as never); jest.spyOn(rn.PermissionsAndroid, 'requestMultiple').mockResolvedValue({} as never); } catch { /* not present */ }
     const { useAppStore } = require('../../../src/stores');
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { useStudyStore } = require('../../../src/study/store');
