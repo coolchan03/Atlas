@@ -102,6 +102,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       const { createScheduledTask } = require('../../schedule/createFromTool');
       return createScheduledTask(call.arguments ?? {});
     }
+    case 'learned_knowledge': {
+      const q = requireString(call, 'question');
+      if (!q) throw new Error('Missing required parameter: question');
+      return require('../../learning/askLearned').askLearned(q, call.context?.projectId);
+    }
     case 'make_music':
       return require('../../music/composerAgent').makeMusicForChat(call.arguments ?? {});
     case 'list_maps':

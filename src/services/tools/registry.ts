@@ -242,6 +242,11 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: {},
   },
   {
+    id: 'learned_knowledge', name: 'learned_knowledge', displayName: 'What I learned', icon: 'book-open',
+    description: "Look up what the AI has learned in its learning sessions about a question, with where each point came from and whether it has been checked. If it says nothing was learned, it also lists the connected sources (project documents, offline library, the web) to check next. Use this first when the user asks what you know or learned about a subject.",
+    parameters: { question: { type: 'string', description: 'The question or subject to look up', required: true } },
+  },
+  {
     id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',
     description: "Make an original instrumental tune and play it. A specialist composer with dozens of instruments writes it, not you: just describe what the user wants. Use when they ask for music, a song, a tune, background music, a lullaby, a soundtrack or a beat. Instrumental only, no singing.",
     parameters: {

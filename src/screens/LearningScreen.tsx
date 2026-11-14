@@ -17,6 +17,8 @@ import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus }
 import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
 import { refineTask } from '../learning/refineTask';
 import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
+import { startTalkChat } from '../learning/talk';
+import { askAsReport } from '../learning/askReport';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
@@ -143,6 +145,18 @@ export const LearningScreen: React.FC = () => {
       const project = projects.find((p) => p.id === cfg.projectId)?.name;
       setSuggestion(await refineTask(cfg.topic, (s, u) => require('../study/engine').askModel(s, u), { project }));
     } catch (e: any) { Alert.alert('Could not refine the task', String(e?.message || e)); } finally { setRefining(false); }
+  };
+  const askReport = () => {
+    const r = askAsReport(agentId, newQ);
+    if (!r.queued) { Alert.alert('Ask for a report', r.why ?? 'Could not queue the question.'); return; }
+    setNewQ('');
+    Alert.alert('Question queued', `It is researched next and written up as a report. The judge and the manager review it as soon as it is written. Find it under "Reports it wrote".${r.started ? ' Learning has started.' : ''}`);
+  };
+  const talk = () => {
+    try {
+      const chat = startTalkChat(agentId);
+      navigation.navigate('Chat', { conversationId: chat.conversationId, ...(chat.projectId ? { projectId: chat.projectId } : {}), starter: chat.starter });
+    } catch (e: any) { Alert.alert('Could not start the chat', String(e?.message || e)); }
   };
   const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).catch((e) => setStatusText(String(e?.message || e))).finally(() => setRunning(false)); };
 
@@ -281,6 +295,11 @@ export const LearningScreen: React.FC = () => {
         >
           <Icon name={running ? 'square' : 'play'} size={16} color="#fff" />
           <Text style={styles.bigBtnText}>{running ? 'Stop' : 'Start learning'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={talk} accessibilityRole="button" accessibilityLabel="Talk to the AI about what it has learned" testID="learning-talk"
+          style={[styles.bigBtn, styles.outlineBtn, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
+          <Icon name="message-circle" size={16} color={colors.primary} />
+          <Text style={[styles.bigBtnText, { color: colors.primary }]}>Talk to it</Text>
         </TouchableOpacity>
       </View>
 
@@ -435,6 +454,7 @@ export const LearningScreen: React.FC = () => {
       <View style={[styles.row, literalStyles.s3]}>
         <TextInput style={[styles.input, styles.grow]} value={newQ} onChangeText={setNewQ} placeholder="Add your own question" placeholderTextColor={colors.textMuted} />
         <TouchableOpacity onPress={() => { if (newQ.trim()) { addItems(agentId, [newItem(newQ, st?.round || 1, 'approved')]); setNewQ(''); } }} style={styles.smallBtn}><Text style={styles.smallBtnText}>Add</Text></TouchableOpacity>
+        <TouchableOpacity onPress={askReport} style={styles.smallBtn} accessibilityRole="button" accessibilityLabel="Ask this as a report that the judge and manager review" testID="learning-ask-report"><Text style={styles.smallBtnText}>Ask as a report</Text></TouchableOpacity>
         <TouchableOpacity disabled={running} onPress={() => newRound(agentId)} style={styles.smallBtn}><Text style={styles.smallBtnText}>New round</Text></TouchableOpacity>
       </View>
 
@@ -538,6 +558,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   scoreRow: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, marginTop: 6, flexWrap: 'wrap' as const },
   bar: { width: 8, marginRight: 3, borderRadius: 2 },
   direction: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: 6 },
+  outlineBtn: { borderWidth: 1 },
   bigBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10, gap: 8 },
   bigBtnText: { color: '#fff', fontWeight: '600' as const, fontSize: 15 },
   smallBtn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border },

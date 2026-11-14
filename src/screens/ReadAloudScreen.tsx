@@ -29,6 +29,12 @@ const Player: React.FC<{ canPlay: boolean; onPlay: () => void }> = ({ canPlay, o
       <Text style={[styles.meta, { color: colors.textSecondary }]}>
         {hasParts ? `Part ${Math.min(reader.index + 1, reader.parts.length)} of ${reader.parts.length}` : 'Ready when you are'}
       </Text>
+      {reading && reader.preparing && (
+        <View style={styles.preparing} testID="read-aloud-preparing">
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>Getting the voice ready. A cloned voice can take several seconds the first time.</Text>
+        </View>
+      )}
       <View style={styles.controls}>
         <TouchableOpacity onPress={() => readAloud.jump(-1)} disabled={!hasParts} accessibilityLabel="Previous part" testID="read-aloud-prev">
           <Icon name="skip-back" size={22} color={hasParts ? colors.text : colors.textMuted} />
@@ -118,6 +124,7 @@ const styles = StyleSheet.create({
   note: { ...TYPOGRAPHY.bodySmall },
   label: { ...TYPOGRAPHY.h3 },
   meta: { ...TYPOGRAPHY.bodySmall, fontSize: 12 },
+  preparing: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xs },
   input: { ...TYPOGRAPHY.body, minHeight: 160, borderWidth: 1, borderRadius: 10, padding: SPACING.md },
   card: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, borderWidth: 1, borderRadius: 10, padding: SPACING.md },
   cardText: { flex: 1 },

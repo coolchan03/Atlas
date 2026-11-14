@@ -106,3 +106,31 @@ describe('reading a document one piece at a time', () => {
     expect(r.useReader.getState().status).toBe('idle');
   });
 });
+
+describe('while the voice is getting ready', () => {
+  it('says it is preparing from the moment play is pressed until sound starts, and not after a stop or a pause', async () => {
+    let start: () => void = () => undefined;
+    const gate: { finish: (v: boolean) => void } = { finish: () => undefined };
+    const reader = createReadAloud({
+      speak: () => new Promise<boolean>((resolve) => { gate.finish = resolve; }), stopSpeaking: jest.fn(),
+      watchStart: (cb: () => void) => { start = cb; return () => undefined; },
+    });
+    reader.load('Hey man how is it going');
+    expect(reader.useReader.getState().preparing).toBe(false);
+    reader.play();
+    expect(reader.useReader.getState()).toMatchObject({ status: 'reading', preparing: true });
+    start();
+    expect(reader.useReader.getState().preparing).toBe(false);
+    gate.finish(true);
+    await new Promise((r) => setImmediate(r));
+    expect(reader.useReader.getState()).toMatchObject({ status: 'idle', preparing: false });
+    reader.load('Another sentence here');
+    reader.play();
+    expect(reader.useReader.getState().preparing).toBe(true);
+    reader.pause();
+    expect(reader.useReader.getState().preparing).toBe(false);
+    reader.play();
+    reader.stop();
+    expect(reader.useReader.getState().preparing).toBe(false);
+  });
+});

@@ -38,6 +38,9 @@ export type Step =
  * The plan itself is the foundations-first order the learner wrote it in.
  */
 export function planStep(ctx: { bank: BankItem[]; pendingItemIds: string[]; unaskedConflicts: OpenContradiction[]; due: DueConcept[] }): Step {
+  // A question the person asked themselves comes before everything else.
+  const asked = ctx.bank.find((b) => b.kind === 'asked' && b.status === 'approved' && !ctx.pendingItemIds.includes(b.id));
+  if (asked) return { type: 'study', item: asked };
   if (ctx.unaskedConflicts.length) return { type: 'resolve', conflict: ctx.unaskedConflicts[0] };
   if (ctx.due.length) return { type: 'practice', concepts: ctx.due };
   const item = ctx.bank.find((b) => b.status === 'approved' && !ctx.pendingItemIds.includes(b.id));

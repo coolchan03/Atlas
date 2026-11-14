@@ -50,8 +50,8 @@ export interface BankItem {
   /** Judge feedback for a redo. */
   feedback?: string;
   round: number;
-  /** 'resolve' = made from two claims that disagree; everything else is ordinary study. */
-  kind?: 'study' | 'resolve';
+  /** 'resolve' = made from two claims that disagree; 'asked' = a question the person asked to be answered as a reviewed report, done first and judged and managed at once; everything else is ordinary study. */
+  kind?: 'study' | 'resolve' | 'asked';
 }
 
 export interface ReportSource { n: number; title: string; kind: 'project' | 'library' | 'web'; url?: string; passage?: string; retrievedAt?: string; sourceId?: string; locator?: string; publicationDate?: string; effectiveFrom?: string; effectiveTo?: string; taxYear?: number }

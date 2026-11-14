@@ -35,6 +35,7 @@ import { DEFAULT_STRICTNESS, questionRubric, rejectionStands, reportRubric } fro
 import { learningKnowledgeDb } from './knowledgeDb';
 import { ingestClaims } from './claimIngest';
 import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycleRules';
+import { waveDigest, waveReports, waveTally } from './wave';
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
 import { rankClaims, recallScore } from './claimText';
@@ -350,6 +351,13 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
   L().log({ agentId: agent.id, kind: 'info', title: `Practice: ${recalled} of ${due.length} recalled`, body: 'Graded by comparing each answer with what was stored, not by the model.' });
 }
 
+/** The other reports of this wave, for the judge to check the batch against (empty when this batch is the whole wave so far). */
+function waveContext(agentId: string, batchIds: string[]): string {
+  const st = L().get(agentId);
+  const digest = waveDigest(waveReports(st.reportLog, st.bank, st.round), { exclude: batchIds, max: 20, answerChars: 160 });
+  return digest ? `\n\nTHE OTHER REPORTS OF THIS WAVE, already written. Check the reports above against them: say so in your reason if a report contradicts one of these, or only repeats it.\n${digest}` : '';
+}
+
 async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   const st = L().get(agent.id);
   const reps = st.pendingReports;
@@ -357,7 +365,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
   status('Judge is checking the reports...');
   const verdict = await ask(
     `${reportRubric(cfg.judgeStrictness)}${st.judgeNote ? `\nManager's note to you: ${st.judgeNote}` : ''}${st.direction ? `\nCurrent direction: ${st.direction}` : ''}`,
-    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}\n\n${(cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === 'strict' ? `For each report write one line: "<number>: PASS <score>/10 | FACTS <n> | CITES <n> | COMPLETE <n> | RELEVANT <n> | LOGIC <n> | CLEAR <n> - <why>" or the same with FAIL and what is wrong and how to fix it. Every <n> is 0 to 10. FACTS: is every statement true? Be strict about numbers, dates, limits and names. CITES: does each [n] source really say what the sentence says? Good writing, completeness or clarity never make up for a wrong fact: if a material fact is wrong, FACTS must be below 6 and the verdict FAIL. ` : `For each report write one line: "<number>: PASS <score>/10 - <why>" or "<number>: FAIL <score>/10 - what is wrong and how to fix it". The score is 0 to 10. You may add FACTS <n> and CITES <n> (0 to 10) if you can judge them. `}Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
+    `TASK: ${cfg.topic}\n\n${reps.map((r, i) => `REPORT ${i + 1}\nQuestion: ${r.q}\n${r.report}\nSources it had: ${r.sources ? r.sources.slice(0, 700) : '(none)'}`).join('\n\n---\n\n')}${waveContext(agent.id, reps.map((r) => r.itemId))}\n\n${(cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === 'strict' ? `For each report write one line: "<number>: PASS <score>/10 | FACTS <n> | CITES <n> | COMPLETE <n> | RELEVANT <n> | LOGIC <n> | CLEAR <n> - <why>" or the same with FAIL and what is wrong and how to fix it. Every <n> is 0 to 10. FACTS: is every statement true? Be strict about numbers, dates, limits and names. CITES: does each [n] source really say what the sentence says? Good writing, completeness or clarity never make up for a wrong fact: if a material fact is wrong, FACTS must be below 6 and the verdict FAIL. ` : `For each report write one line: "<number>: PASS <score>/10 - <why>" or "<number>: FAIL <score>/10 - what is wrong and how to fix it". The score is 0 to 10. You may add FACTS <n> and CITES <n> (0 to 10) if you can judge them. `}Then 1-3 lines starting "LESSON:" with a short rule the learner should follow from now on.`,
     'judge',
   );
   const r = rulings(verdict, reps.length);
@@ -434,6 +442,15 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
 }
 
 // ------------------------------------------------------------------ 3. manager
+/** Every report of the current wave with its verdict, so the manager reviews the whole wave and not the last few log lines. */
+function waveForManager(agentId: string): string {
+  const st = L().get(agentId);
+  const reports = waveReports(st.reportLog, st.bank, st.round);
+  if (!reports.length) return '';
+  const t = waveTally(reports);
+  return `ALL ${t.total} REPORTS OF THIS WAVE (${t.passed} passed, ${t.failed} failed, ${t.waiting} not judged yet). Review the judge's rulings across all of them: is it consistent from one report to the next, and do the reports agree with each other?\n${waveDigest(reports, { max: 30, answerChars: 140 })}\n\n`;
+}
+
 async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
   const st = L().get(agent.id);
   status('Manager is reviewing the learner and the judge...');
@@ -451,7 +468,7 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
   }, 'Not available.');
   const out = await ask(
     'You are the manager. You make sure the learner and the judge stay on the ORIGINAL task. You catch drift, a judge that is too harsh or too lenient, and gaps in the study plan. You never approve unsafe or unsupported lessons. Prefer resolving contradictions, missing foundations, old rules and repeated failures before creating new topics. Do not treat an LLM judge score as proof.',
-    `ORIGINAL TASK: ${cfg.topic}\n\nMeasured state of what has been learned:\n${measured}\n\nUnresolved/failed questions (research new evidence before repeating):\n${unresolved.map((b) => `- ${b.q}: ${b.reason || b.status}`).join('\n') || '(none)'}\n\nOpen questions:\n${numbered(open).slice(0, 1500) || '(none)'}\n\nRejected by the judge:\n${st.bank.filter((b) => b.status === 'rejected').slice(-6).map((b) => `- ${b.q} (${b.reason})`).join('\n') || '(none)'}\n\nRecent work:\n${recent.map((e) => `${e.title}\n${e.body.slice(0, 450)}`).join('\n\n').slice(0, 3200)}\n\nJudge findings:\n${st.pendingFindings.join('\n').slice(0, 1500)}\n\nCurrent lessons:\n${currentLessons || '(none)'}\n\nReply with exactly these parts:\nSTATUS: ON TRACK or DRIFTING, and one sentence why\nDIRECTION: one sentence telling the learner what to focus on next\nJUDGE NOTE: one sentence on how the judge should judge (too harsh, too lenient, or fine)\nDROP: number of an open question that is off the task (one line each, or none)\nADD: a missing question that matters for the task (0-3 lines)\nLESSON: the full lesson list, one per line, at most 12, merged and corrected`,
+    `ORIGINAL TASK: ${cfg.topic}\n\nMeasured state of what has been learned:\n${measured}\n\n${waveForManager(agent.id)}Unresolved/failed questions (research new evidence before repeating):\n${unresolved.map((b) => `- ${b.q}: ${b.reason || b.status}`).join('\n') || '(none)'}\n\nOpen questions:\n${numbered(open).slice(0, 1500) || '(none)'}\n\nRejected by the judge:\n${st.bank.filter((b) => b.status === 'rejected').slice(-6).map((b) => `- ${b.q} (${b.reason})`).join('\n') || '(none)'}\n\nRecent work:\n${recent.map((e) => `${e.title}\n${e.body.slice(0, 450)}`).join('\n\n').slice(0, 3200)}\n\nJudge findings:\n${st.pendingFindings.join('\n').slice(0, 1500)}\n\nCurrent lessons:\n${currentLessons || '(none)'}\n\nReply with exactly these parts:\nSTATUS: ON TRACK or DRIFTING, and one sentence why\nDIRECTION: one sentence telling the learner what to focus on next\nJUDGE NOTE: one sentence on how the judge should judge (too harsh, too lenient, or fine)\nDROP: number of an open question that is off the task (one line each, or none)\nADD: a missing question that matters for the task (0-3 lines)\nLESSON: the full lesson list, one per line, at most 12, merged and corrected`,
     'manager',
   );
   const statusLine = tagged(out, 'STATUS')[0] || '';
@@ -585,9 +602,10 @@ export async function startLearning(agentId: string): Promise<void> {
         if (stopRequested) break;
         const st2 = L().get(agentId);
         const noMoreQuestions = !st2.bank.some((b) => b.status === 'approved' && !st2.pendingReports.some((p) => p.itemId === b.id));
-        if (st2.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) || noMoreQuestions) {
+        const askedNow = next.kind === 'asked';
+        if (st2.reportsSinceJudge >= Math.max(1, cfg.reportsPerJudge) || noMoreQuestions || askedNow) {
           await judgeReports(learningAgent(agentId)!, cfg);
-          if (L().get(agentId).judgesSinceManager >= Math.max(1, cfg.judgesPerManager) && !stopRequested) {
+          if ((askedNow || L().get(agentId).judgesSinceManager >= Math.max(1, cfg.judgesPerManager)) && !stopRequested) {
             await managerReview(learningAgent(agentId)!, cfg);
           }
         }

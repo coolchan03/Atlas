@@ -3,6 +3,7 @@ import { speakInAndWait, stop as stopSpeech } from './tts';
 import { useAtlasVoiceStore } from './store';
 import { useVoiceProfiles } from './profiles';
 import { loadVoiceForSpeech, restoreSavedVoice } from './neural';
+import { watchSpeechActivity } from '../music/speechActivity';
 
 /** Longest piece spoken at once: short enough to show progress and to pause, long enough to sound natural. */
 const MAX_PART = 600;
@@ -65,31 +66,35 @@ export function readingMinutes(words: number, rate: number): number {
 }
 
 export type ReaderStatus = 'idle' | 'reading' | 'paused';
-interface ReaderState { status: ReaderStatus; title: string; parts: string[]; index: number }
+interface ReaderState { status: ReaderStatus; title: string; parts: string[]; index: number; /** True from pressing play until the voice is actually heard: a cloned voice has to load first and that can take several seconds. */ preparing: boolean }
 interface Deps {
   speak: (text: string) => Promise<boolean>;
   stopSpeaking: () => void;
   /** Called when reading ends or is stopped, so a borrowed voice can be given back. */
   release?: () => void;
+  /** Calls back when sound starts. Returns a function that stops listening. */
+  watchStart?: (onStart: () => void) => () => void;
 }
 
 /**
  * Reads a document aloud one piece at a time, with pause, stop and skip. The voice, speed and engine are the
  * app's saved ones. The reader owns all of its state; screens and widgets only show it and send intents.
  */
-export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
-  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0 }));
+export function createReadAloud({ speak, stopSpeaking, release, watchStart }: Deps) {
+  const useReader = create<ReaderState>(() => ({ status: 'idle', title: '', parts: [], index: 0, preparing: false }));
   let run = 0;
+  watchStart?.(() => { if (useReader.getState().preparing) useReader.setState({ preparing: false }); });
 
   const loop = async (mine: number) => {
     while (mine === run) {
       const { parts, index } = useReader.getState();
-      if (index >= parts.length) { useReader.setState({ status: 'idle', index: 0 }); release?.(); return; }
+      if (index >= parts.length) { useReader.setState({ status: 'idle', index: 0, preparing: false }); release?.(); return; }
+      useReader.setState({ preparing: true });
       let finished = false;
       try { finished = await speak(parts[index]); } catch { finished = false; }
       if (mine !== run) return;
       // Something else started speaking (a chat reply or a call): keep our place and wait for the person.
-      if (!finished) { useReader.setState({ status: 'paused' }); return; }
+      if (!finished) { useReader.setState({ status: 'paused', preparing: false }); return; }
       useReader.setState({ index: index + 1 });
     }
   };
@@ -104,14 +109,14 @@ export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
   const stop = () => {
     run += 1;
     stopSpeaking();
-    useReader.setState({ status: 'idle', index: 0 });
+    useReader.setState({ status: 'idle', index: 0, preparing: false });
     release?.();
   };
   const pause = () => {
     if (useReader.getState().status !== 'reading') return;
     run += 1;
     stopSpeaking();
-    useReader.setState({ status: 'paused' });
+    useReader.setState({ status: 'paused', preparing: false });
   };
   /** Opens new text, replacing whatever was loaded. Reading starts only when the person presses play. */
   const load = (text: string, title = '') => {
@@ -124,7 +129,7 @@ export function createReadAloud({ speak, stopSpeaking, release }: Deps) {
     if (!parts.length) return;
     const next = Math.min(parts.length - 1, Math.max(0, index + delta));
     if (status === 'reading') { run += 1; stopSpeaking(); }
-    useReader.setState({ index: next, status: status === 'reading' ? 'paused' : status });
+    useReader.setState({ index: next, status: status === 'reading' ? 'paused' : status, preparing: false });
     if (status === 'reading') play();
   };
 
@@ -154,5 +159,6 @@ export const readAloud = createReadAloud({
   speak: speakInChosenVoice,
   stopSpeaking: stopSpeech,
   release: () => { if (readVoiceProfile()) restoreSavedVoice().catch(() => undefined); },
+  watchStart: (onStart) => watchSpeechActivity((active) => { if (active) onStart(); }),
 });
 export const useReadAloud = readAloud.useReader;
