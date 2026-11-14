@@ -38,7 +38,7 @@ import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycl
 import { waveDigest, waveReports, waveTally } from './wave';
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
-import { rankClaims, recallScore } from './claimText';
+import { conflictReason, rankClaims, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
@@ -558,6 +558,14 @@ export async function startLearning(agentId: string): Promise<void> {
   // One-way, additive archive. Old judge-passed reports do NOT become verified.
   try { for (const r of L().get(agentId).reportLog ?? []) learningKnowledgeDb.archiveReport(agentId, r); }
   catch (e) { L().log({ agentId, kind: 'error', title: 'Report archive unavailable', body: String(e) }); }
+  // Conflicts stored by the older, noisier check (the same rule in different years, loosely alike sentences) are re-checked first:
+  // otherwise each one still turns into a "Two claims disagree" study question ahead of everything else.
+  const cleared = safely(() => learningKnowledgeDb.dismissStaleContradictions((a, b) => !!conflictReason(a, b)), []);
+  if (cleared.length) {
+    const gone = (q: string) => cleared.some((c) => q.includes(`A: "${c.a}"`) && q.includes(`B: "${c.b}"`));
+    L().patch(agentId, { bank: L().get(agentId).bank.filter((it) => !(it.kind === 'resolve' && (it.status === 'pending' || it.status === 'approved') && gone(it.q))) });
+    L().log({ agentId, kind: 'info', title: `Cleared ${cleared.length} conflict${cleared.length === 1 ? '' : 's'} that were not real`, body: 'They were claims for different years, or only loosely alike. Real conflicts, with the same wording and a different figure, are kept.' });
+  }
   let problems = 0;
   const startedRound = L().get(agentId).round;
   let workedThisRun = false;

@@ -93,7 +93,7 @@ const subjectSimilarity = (a: string, b: string) => similarity(subjectWords(a).j
 const SAME_STATEMENT = 0.8;
 
 /** The same statement with a different number or an opposite statement. Different years, or only loosely similar wording, are not conflicts. */
-function conflict(a: string, b: string): string | undefined {
+export function conflictReason(a: string, b: string): string | undefined {
   if (subjectSimilarity(a, b) < SAME_STATEMENT) return undefined;
   const ya = numbersIn(a).filter(isYear);
   const yb = numbersIn(b).filter(isYear);
@@ -114,7 +114,7 @@ export function compareClaim(claim: string, known: Array<{ id: string; text: str
     if (score >= RELATED_AT && (!best || score > best.score)) best = { id: k.id, score, text: k.text };
   }
   if (!best) return { relation: 'new' };
-  const reason = conflict(claim, best.text);
+  const reason = conflictReason(claim, best.text);
   if (reason) return { relation: 'contradicts', matchId: best.id, reason };
   return best.score >= DUPLICATE_AT ? { relation: 'duplicate', matchId: best.id } : { relation: 'new', matchId: best.id };
 }

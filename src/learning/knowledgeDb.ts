@@ -263,6 +263,33 @@ export class LearningKnowledgeDb {
     this.sql('UPDATE atlas_contradictions SET resolved_at = ?, resolution = ? WHERE id = ?', [isoNow(), nonblank(resolution, 'resolution'), id]);
   }
 
+  /**
+   * Re-checks the conflicts nobody has resolved with a rule (`stillConflicts`) and closes the ones that no longer count: claims for
+   * different years, or sentences only loosely alike, which the older check flagged by mistake. A claim that was only disputed
+   * because of such a conflict goes back to unreviewed, and the change is written to its history. Returns the pairs closed.
+   */
+  dismissStaleContradictions(stillConflicts: (a: string, b: string) => boolean): Array<{ a: string; b: string }> {
+    const closed: Array<{ a: string; b: string }> = [];
+    const touched = new Set<string>();
+    for (const c of this.openContradictions(5000)) {
+      if (stillConflicts(c.a.text, c.b.text)) continue;
+      this.resolveContradiction(c.id, 'Not a conflict under the current rules: the claims are for different years, or only loosely alike.');
+      closed.push({ a: c.a.text, b: c.b.text });
+      touched.add(c.a.id); touched.add(c.b.id);
+    }
+    const now = isoNow();
+    for (const id of touched) {
+      const claim = this.getClaim(id);
+      if (!claim || claim.status !== 'disputed') continue;
+      const stillOpen = Number(((this.sql('SELECT COUNT(*) AS n FROM atlas_contradictions WHERE resolved_at IS NULL AND (claim_a = ? OR claim_b = ?)', [id, id]).rows ?? [])[0] as any)?.n) || 0;
+      // A claim also disputed because its cited passage did not contain what it states stays disputed.
+      if (stillOpen || /cited passage does not contain/i.test(String(claim.uncertainty ?? ''))) continue;
+      this.sql('UPDATE atlas_claims SET status = ?, updated_at = ? WHERE id = ?', ['candidate', now, id]);
+      this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, 'disputed', 'candidate', 'conflict-recheck', 'The conflict it was flagged for no longer counts (different years or loosely alike)', now]);
+    }
+    return closed;
+  }
+
   getClaim(id: string): Record<string, any> | null {
     return (this.sql('SELECT * FROM atlas_claims WHERE id = ?', [id]).rows ?? [])[0] as Record<string, any> ?? null;
   }
