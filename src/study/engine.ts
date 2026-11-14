@@ -214,7 +214,8 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     const quiz: QuizItem[] = blocks.map((b) => {
       const q = b.match(/^\s*Q(?:uestion)?\s*\d*\s*[:.)]\s*(.+)/im)?.[1]?.trim();
       const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*\\(?${L}\\s*[).:\\-–]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
-      const ans = 'ABCD'.indexOf((b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase());
+      const letter = (b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase();
+      const ans = letter ? 'ABCD'.indexOf(letter) : -1; // no answer letter must never count as A
       // Reject partial/ambiguous options instead of accepting an answer that
       // points outside the parsed choices (common with small local models).
       if (!q || opts.length !== 4 || ans < 0 || ans >= opts.length ||
