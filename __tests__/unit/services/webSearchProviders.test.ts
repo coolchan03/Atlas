@@ -5,7 +5,7 @@ jest.mock('react-native-keychain', () => ({
 import * as Keychain from 'react-native-keychain';
 import { PROVIDERS, searchWeb, useSearchSettings } from '../../../src/services/tools/webSearchProviders';
 
-const ok = (body: unknown, text = false) => ({ ok: true, status: 200, json: async () => body, text: async () => String(body) }) as unknown as Response;
+const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body, text: async () => String(body) }) as unknown as Response;
 const fail = (status: number) => ({ ok: false, status, json: async () => ({}), text: async () => '' }) as unknown as Response;
 const ddgHtml = '<div class="result results_links"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fa&rut=1">Example &amp; A</a><a class="result__snippet">A <b>snippet</b> here</a></div><div class="result__body"><a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Ad</a></div><div class="result__body"><a class="result__a" href="//other.org/x">Other</a></div><div class="result__body">no link</div>';
 const mojeekHtml = '<li class="r1"><a class="title" href="https://example.com/a?utm=1">Example A</a><p class="s">Mojeek <i>text</i></p></li><li class="r "><h2><a href="https://m.org/b">Mojeek B</a></h2></li><li class="r2">nothing</li>';
