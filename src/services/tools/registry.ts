@@ -247,6 +247,11 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: { question: { type: 'string', description: 'The question or subject to look up', required: true } },
   },
   {
+    id: 'drug_label', name: 'drug_label', displayName: 'Drug label', icon: 'activity',
+    description: "Look up the FDA label of a medicine by brand or generic name: what it is for, dose, warnings, who must not use it and interactions, in the manufacturer's own words. Use when the user asks about a medicine, a dose, a side effect or whether two medicines mix. Needs a connection for a first lookup; labels looked up before work offline. Quote the label and say it is not medical advice.",
+    parameters: { name: { type: 'string', description: 'The medicine, brand or generic name, for example ibuprofen or Advil', required: true } },
+  },
+  {
     id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',
     description: "Make an original instrumental tune and play it. A specialist composer with dozens of instruments writes it, not you: just describe what the user wants. Use when they ask for music, a song, a tune, background music, a lullaby, a soundtrack or a beat. Instrumental only, no singing.",
     parameters: {

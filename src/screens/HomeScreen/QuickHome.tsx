@@ -39,6 +39,7 @@ const destinations: Destination[] = [
   { key: 'practice', label: 'Practice', hint: 'Quiz yourself on a knowledge base project', icon: 'check-square', screen: 'Knowledge', optional: true, ...TILE.teal },
   { key: 'emergency', label: 'Emergency', hint: 'Offline emergency cards and first aid', icon: 'alert-triangle', screen: 'Emergency', optional: true, ...TILE.red },
   { key: 'survival', label: 'Survival manual', hint: 'The field manual, offline', icon: 'life-buoy', screen: 'SurvivalManual', optional: true, ...TILE.green },
+  { key: 'drugs', label: 'Drug labels', hint: 'The FDA label for a medicine: use, dose, warnings and interactions. Kept for offline reading', icon: 'activity', screen: 'DrugReference', optional: true, ...TILE.red },
   { key: 'library', label: 'Offline library', hint: 'Medical and general reference, offline', icon: 'book-open', screen: 'OfflineLibrary', optional: true, ...TILE.violet },
   { key: 'atlashub', label: 'Atlas tools', hint: 'Maps, phrases, compass, off-grid mode', icon: 'compass', screen: 'AtlasHub', optional: true, ...TILE.blue },
   { key: 'sensors', label: 'Sensors', hint: 'Every sensor on this phone: GPS, pressure, light, motion and more', icon: 'cpu', screen: 'Sensors', optional: true, ...TILE.cyan },

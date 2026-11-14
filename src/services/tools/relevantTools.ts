@@ -27,6 +27,7 @@ const TRIGGERS: Record<string, RegExp> = {
   add_calendar_event: /\b(calendar|event|meeting|appointment|schedule|remind|reminder|book|add)\b/i,
   my_location: /\b(where am i|location|gps|near|nearby|how far|direction|which way|camp|car|waypoint|coordinates|altitude)\b/i,
   learned_knowledge: /./, // kept whenever it is switched on: only the talk chat with a learning AI switches it on
+  drug_label: /\b(medicine|medication|drug|dose|dosage|ibuprofen|acetaminophen|tylenol|advil|aspirin|antibiotic|side effects?|interact(s|ion|ions)?|prescription|over[- ]the[- ]counter|otc|mg)\b/i,
   make_music: /\b(music|song|tune|melody|compose|composer|instrumental|soundtrack|beat|jingle|lullaby|ambient|jazz|lo-?fi|play me|background (music|sound))\b/i,
   list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
   map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,

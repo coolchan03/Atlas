@@ -21,7 +21,7 @@ export const PROJECT_TOOL_IDS = [...STUDY_TOOL_IDS, 'search_knowledge_base', 'up
  * (relevantTools.ts), so turning a whole group on does not slow replies down.
  */
 export const TOOL_GROUPS: Array<{ id: string; label: string; hint: string; tools: string[] }> = [
-  { id: 'facts', label: 'Check facts and the web', hint: 'Search the web, open links, know the date and time, use the calculator', tools: ['web_search', 'read_url', 'get_current_datetime', 'calculator'] },
+  { id: 'facts', label: 'Check facts and the web', hint: 'Search the web, open links, know the date and time, use the calculator, look up FDA drug labels', tools: ['web_search', 'read_url', 'get_current_datetime', 'calculator', 'drug_label'] },
   { id: 'calendar', label: 'Calendar', hint: 'Read your events, and add one (asks first)', tools: ['calendar_events', 'add_calendar_event'] },
   { id: 'files', label: 'Files', hint: 'List, read, write and open files, build web pages (asks before writing)', tools: ['list_files', 'read_file', 'write_file', 'create_web_page', 'open_file'] },
   { id: 'music', label: 'Make music', hint: 'Ask for a tune and a hidden composer with dozens of instruments writes and plays it (instrumental only)', tools: ['make_music'] },

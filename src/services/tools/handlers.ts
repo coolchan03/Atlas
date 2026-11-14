@@ -107,6 +107,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: question');
       return require('../../learning/askLearned').askLearned(q, call.context?.projectId);
     }
+    case 'drug_label': {
+      const name = requireString(call, 'name');
+      if (!name) throw new Error('Missing required parameter: name');
+      return require('../../drugs/store').drugLabelsForChat(name);
+    }
     case 'make_music':
       return require('../../music/composerAgent').makeMusicForChat(call.arguments ?? {});
     case 'list_maps':
