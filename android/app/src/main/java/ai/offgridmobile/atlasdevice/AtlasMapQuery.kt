@@ -94,7 +94,7 @@ object AtlasMapQuery {
             val south = tileY(lat - dLat)
             val x0 = min(west, east); val x1 = min(max(west, east), x0 + MAX_TILES_PER_SIDE - 1)
             val y0 = min(north, south); val y1 = min(max(north, south), y0 + MAX_TILES_PER_SIDE - 1)
-            val result = opened.file.readNamedItems(Tile(x0, y0, ZOOM, TILE_SIZE), Tile(x1, y1, ZOOM, TILE_SIZE))
+            val result = opened.file.readMapData(Tile(x0, y0, ZOOM, TILE_SIZE), Tile(x1, y1, ZOOM, TILE_SIZE))
             val wanted = query.trim().lowercase()
             val found = ArrayList<Triple<Double, String, WritableMap>>()
             var scanned = 0
