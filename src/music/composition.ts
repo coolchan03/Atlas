@@ -115,7 +115,7 @@ function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loo
   const startInLoop = Math.round(note.beat * 60 / bpm * rate);
   const samples = Math.ceil(note.length * 60 / bpm * rate);
   if (samples < 1 || samples > rate * 14) throw new Error('Instrumental note too long');
-  const key = `${note.pitch}|${samples}|${note.gain}|${note.role ?? 'melody'}`;
+  const key = `${note.pitch}|${samples}|${note.gain}|${note.role ?? 'melody'}|${note.voice ?? ''}`;
   let wave = made.get(key);
   if (!wave) { wave = noteWave(note, { samples, rate, preset, band }); made.set(key, wave); }
   for (let start = startInLoop; start < frames; start += loopFrames) {

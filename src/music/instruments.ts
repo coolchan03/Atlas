@@ -7,7 +7,7 @@
  * - drums: a swept sine kick, a snare of noise and two tones, and a metallic hi-hat made of six clashing square waves.
  * It is still synthesised, not sampled, so it will not fool anyone into thinking real players are in the room.
  */
-import type { Band, MusicNote, MusicRole, SoundPreset, Voice as VoiceName } from './types';
+import type { Band, DrumKind, MusicNote, MusicRole, SoundPreset, Voice as VoiceName } from './types';
 
 const TAU = 2 * Math.PI;
 const NYQUIST_GUARD = 9000; // partials above this are left out so they cannot alias at the lowest sample rate used
@@ -127,7 +127,96 @@ const organ: Gen = (hz, n, rate) => {
   return out;
 };
 
+
+// ---- More instruments. Each is a small recipe like the ones above: a few partials, a breath or bow, a fade. ----
+
+/** Breath and bow noise, low-passed, as a tiny steady hiss under a note. */
+const hiss = (i: number, amount: number): number => noise(i * 5 + 11) * amount;
+const vibrato = (t: number, depth: number, shape: { hz?: number; delay?: number } = {}): number => 1 + depth * Math.min(1, t / (shape.delay ?? 0.18)) * Math.sin(TAU * (shape.hz ?? 5.2) * t);
+
+/** Sustained instruments: partial amplitudes, a vibrato, and a little breath. Every partial follows the note's own pitch. */
+function sustained(amps: number[], o: { vib?: number; breath?: number; swell?: number }): Gen {
+  return (hz, n, rate) => {
+    const out = new Float32Array(n);
+    const top = amps.length;
+    for (let k = 1; k <= top; k++) {
+      const a = amps[k - 1];
+      if (!a || hz * k >= NYQUIST_GUARD) continue;
+      let phase = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / rate;
+        phase += TAU * hz * k * vibrato(t, o.vib ?? 0) / rate;
+        out[i] += a * Math.sin(phase);
+      }
+    }
+    if (o.breath) for (let i = 0; i < n; i++) out[i] += hiss(i, o.breath) * Math.min(1, i / (rate * 0.05));
+    if (o.swell) for (let i = 0; i < n; i++) out[i] *= 0.6 + 0.4 * Math.min(1, i / (rate * o.swell));
+    return out;
+  };
+}
+
+const flute = sustained([1, 0.18, 0.08, 0.03], { vib: 0.006, breath: 0.05 });
+const clarinet = sustained([1, 0.02, 0.5, 0.02, 0.28, 0.02, 0.14], { vib: 0.003, breath: 0.015 }); // mostly odd partials: the hollow, woody tone
+const oboe = sustained([1, 0.7, 0.55, 0.45, 0.3, 0.2, 0.12, 0.06], { vib: 0.006, breath: 0.02 });
+const violin = sustained([1, 0.62, 0.45, 0.34, 0.26, 0.2, 0.15, 0.1, 0.07, 0.05], { vib: 0.009, breath: 0.012, swell: 0.12 });
+const cello = sustained([1, 0.7, 0.5, 0.36, 0.26, 0.17, 0.1, 0.06], { vib: 0.007, breath: 0.015, swell: 0.18 });
+const trumpet = sustained([1, 0.9, 0.78, 0.6, 0.44, 0.3, 0.2, 0.12, 0.07], { vib: 0.004, breath: 0.012, swell: 0.05 });
+const horn = sustained([1, 0.55, 0.32, 0.2, 0.1, 0.05], { vib: 0.003, breath: 0.012, swell: 0.1 });
+const sax = sustained([1, 0.7, 0.62, 0.38, 0.3, 0.2, 0.12, 0.08], { vib: 0.007, breath: 0.035, swell: 0.06 });
+const accordion = sustained([1, 0.5, 0.45, 0.4, 0.25, 0.2, 0.1], { vib: 0.002, breath: 0.01 });
+const harmonica = sustained([1, 0.4, 0.5, 0.25, 0.3, 0.12], { vib: 0.004, breath: 0.03 });
+const choir: Gen = (hz, n, rate) => {
+  // An "ah": a few slightly detuned voices whose partials are strongest near two vowel resonances (about 700 and 1100 Hz).
+  const out = new Float32Array(n);
+  for (const cents of [-9, 0, 8]) {
+    const base = hz * 2 ** (cents / 1200);
+    for (let k = 1; k <= 12; k++) {
+      const f = base * k;
+      if (f >= NYQUIST_GUARD) break;
+      const formant = Math.exp(-(((f - 700) / 220) ** 2)) + 0.7 * Math.exp(-(((f - 1100) / 260) ** 2)) + 0.12;
+      const a = 0.3 * formant / k ** 0.6;
+      for (let i = 0; i < n; i++) { const t = i / rate; out[i] += a * Math.sin(TAU * f * vibrato(t, 0.005, { hz: 5.6, delay: 0.3 }) * t); }
+    }
+  }
+  return out;
+};
+const warmpad: Gen = (hz, n, rate) => { const out = new Float32Array(n); const parts: Partial1[] = []; for (const cents of [-8, 0, 8]) for (let k = 1; k <= 6; k++) parts.push({ f: k * hz * 2 ** (cents / 1200), a: 0.5 / k ** 1.6, fast: 0.04 }); bank(out, parts, rate); return out; };
+const glasspad: Gen = (hz, n, rate) => { const out = new Float32Array(n); const parts: Partial1[] = []; for (const [r, a] of [[1, 1], [2, 0.5], [3.01, 0.35], [4.99, 0.2], [7.02, 0.1]]) for (const cents of [-5, 5]) parts.push({ f: hz * r * 2 ** (cents / 1200), a: a * 0.35, fast: 0.05 }); bank(out, parts, rate); return out; };
+
+/** Struck bars and plucked or tuned-percussion sounds, each a few partials that die at their own speed. */
+function struck(parts: Array<[number, number, number]>): Gen {
+  return (hz, n, rate) => { const out = new Float32Array(n); bank(out, parts.map(([r, a, fast]) => ({ f: hz * r, a, fast })), rate); return out; };
+}
+const marimba = struck([[1, 1, 5], [4, 0.28, 14], [10, 0.08, 30]]);
+const vibes = (hz: number, n: number, rate: number): Float32Array => { const o = struck([[1, 1, 1.4], [4, 0.25, 4], [10, 0.08, 10]])(hz, n, rate); for (let i = 0; i < n; i++) o[i] *= 1 + 0.18 * Math.sin(TAU * 5.5 * i / rate); return o; };
+const glock = struck([[1, 1, 2.6], [2.76, 0.45, 5], [5.4, 0.25, 9], [8.93, 0.12, 14]]);
+const kalimba = struck([[1, 1, 3.2], [5.4, 0.18, 9], [9.3, 0.07, 16]]);
+const musicbox = struck([[1, 1, 2.2], [3, 0.12, 5], [6.3, 0.2, 7], [9.1, 0.08, 12]]);
+const steeldrum = struck([[1, 1, 3], [2.0, 0.62, 4.2], [3.0, 0.4, 5.5], [4.05, 0.2, 8]]);
+const harp: Gen = (hz, n, rate) => pluckedString({ hz, n, rate }, { bright: 0.75, damp: 0.9988 });
+const banjo: Gen = (hz, n, rate) => { const o = pluckedString({ hz, n, rate }, { bright: 0.95, damp: 0.994 }); for (let i = 0; i < n; i++) o[i] *= Math.exp(-i / (rate * 0.55)); return o; };
+const harpsichord: Gen = (hz, n, rate) => { const o = pluckedString({ hz, n, rate }, { bright: 0.9, damp: 0.9965 }); for (let i = 0; i < n; i++) o[i] *= Math.exp(-i / (rate * 0.7)); return o; };
+const upright: Gen = (hz, n, rate) => { const o = pluckedString({ hz, n, rate }, { bright: 0.12, damp: 0.9975 }); for (let i = 0; i < n; i++) { const t = i / rate; o[i] = (o[i] * 0.85 + 0.3 * Math.sin(TAU * hz * t) * Math.exp(-t * 3)) * Math.exp(-t * 2.4); } return o; };
+const squarelead: Gen = (hz, n, rate) => { const out = new Float32Array(n); const parts: Partial1[] = []; for (let k = 1; k <= 15; k += 2) parts.push({ f: k * hz, a: 0.6 / k, fast: 0.02 }); bank(out, parts, rate); return out; };
+const synthpluck: Gen = (hz, n, rate) => { const out = new Float32Array(n); const parts: Partial1[] = []; for (let k = 1; k <= 8; k++) parts.push({ f: k * hz, a: 0.55 / k, fast: 4 + k * 3 }); bank(out, parts, rate); return out; };
+
+const EXTRA_GENERATORS = {
+  flute, clarinet, oboe, violin, cello, trumpet, horn, sax, harp, marimba, vibes, glock, kalimba, musicbox, accordion, harmonica, banjo, steeldrum,
+  choir, harpsichord, upright, squarelead, synthpluck, warmpad, glasspad,
+};
+/** Attack and release (seconds) of the added instruments: bowed and blown sounds swell, struck and plucked ones start at once. */
+const EXTRA_SHAPE: Record<keyof typeof EXTRA_GENERATORS, { attack: number; release: number }> = {
+  flute: { attack: 0.05, release: 0.12 }, clarinet: { attack: 0.04, release: 0.1 }, oboe: { attack: 0.04, release: 0.1 }, violin: { attack: 0.07, release: 0.18 },
+  cello: { attack: 0.09, release: 0.22 }, trumpet: { attack: 0.03, release: 0.09 }, horn: { attack: 0.06, release: 0.14 }, sax: { attack: 0.04, release: 0.1 },
+  harp: { attack: 0.003, release: 0.15 }, marimba: { attack: 0.002, release: 0.08 }, vibes: { attack: 0.003, release: 0.3 }, glock: { attack: 0.002, release: 0.2 },
+  kalimba: { attack: 0.002, release: 0.15 }, musicbox: { attack: 0.002, release: 0.2 }, accordion: { attack: 0.05, release: 0.08 }, harmonica: { attack: 0.04, release: 0.08 },
+  banjo: { attack: 0.002, release: 0.08 }, steeldrum: { attack: 0.003, release: 0.2 }, choir: { attack: 0.3, release: 0.4 }, harpsichord: { attack: 0.002, release: 0.06 },
+  upright: { attack: 0.005, release: 0.1 }, squarelead: { attack: 0.01, release: 0.08 }, synthpluck: { attack: 0.002, release: 0.08 }, warmpad: { attack: 0.35, release: 0.45 },
+  glasspad: { attack: 0.3, release: 0.5 },
+};
+
 const GENERATORS: Record<VoiceName, Gen> = {
+  ...EXTRA_GENERATORS,
   piano, pluck, driven, bass, organ, pad: strings, saw: strings,
   // Two-operator FM with a fast-fading modulator: the bright "bark" of an electric piano, then a rounder tone.
   epiano: pointwise((t, hz) => (Math.sin(TAU * hz * t + 1.7 * Math.exp(-t * 7) * Math.sin(TAU * hz * t)) + 0.22 * Math.sin(TAU * hz * 2 * t) * Math.exp(-t * 9)) * Math.exp(-t * 1.5) + 0.04 * Math.exp(-t * 60) * Math.sin(TAU * hz * 7.1 * t)),
@@ -143,6 +232,7 @@ const GENERATORS: Record<VoiceName, Gen> = {
 
 /** Attack and release (seconds) for each voice; pads swell in and out, plucked and struck sounds start at once. */
 const SHAPE: Record<VoiceName, { attack: number; release: number }> = {
+  ...EXTRA_SHAPE,
   driven: { attack: 0.003, release: 0.08 }, piano: { attack: 0.004, release: 0.1 }, epiano: { attack: 0.004, release: 0.12 }, pluck: { attack: 0.003, release: 0.08 },
   organ: { attack: 0.012, release: 0.06 }, bell: { attack: 0.003, release: 0.2 }, saw: { attack: 0.01, release: 0.1 },
   pad: { attack: 0.24, release: 0.33 }, bass: { attack: 0.006, release: 0.08 }, sine: { attack: 0.05, release: 0.2 },
@@ -179,17 +269,40 @@ function drumSample(pitch: number, i: number, rate: number): number {
   return rough * 0.6 * Math.exp(-t * (pitch >= 91 ? 70 : 42));
 }
 
+/** Named percussion. Each is a short synthesised hit: swept sines for drums, noise for snares and shakers, clashing squares for metal. */
+function drumByKind(kind: DrumKind, i: number, rate: number): number {
+  const t = i / rate;
+  switch (kind) {
+    case 'kick': return drumSample(40, i, rate);
+    case 'snare': return drumSample(70, i, rate);
+    case 'hat': return drumSample(88, i, rate);
+    case 'openhat': return drumSample(92, i, rate) * 0.9 + 0.1 * (noise(i) - noise(i - 1)) * Math.exp(-t * 14);
+    case 'clap': return 0.8 * noise(i) * (Math.exp(-t * 40) + 0.7 * Math.exp(-(((t - 0.012) ** 2) * 30000)) + 0.5 * Math.exp(-(((t - 0.024) ** 2) * 30000)) + 0.4 * Math.exp(-t * 14));
+    case 'tom': return Math.sin(TAU * (110 * t + 9 * (1 - Math.exp(-t * 14)))) * Math.exp(-t * 7) + 0.1 * noise(i) * Math.exp(-t * 120);
+    case 'rim': return (Math.sin(TAU * 1700 * t) * 0.5 + 0.35 * noise(i)) * Math.exp(-t * 130);
+    case 'cowbell': return (square(562, t) * 0.4 + square(845, t) * 0.4) * Math.exp(-t * 11);
+    case 'shaker': return 0.6 * (noise(i) - noise(i - 1)) * (Math.exp(-t * 28) + 0.5 * Math.exp(-(((t - 0.04) ** 2) * 900)));
+    case 'crash': return drumSample(95, i, rate) * 1.2 * Math.exp(-t * 2.2) + 0.25 * (noise(i) - noise(i - 1)) * Math.exp(-t * 2.5);
+    default: return 0;
+  }
+}
+export const DRUM_KINDS: DrumKind[] = ['kick', 'snare', 'hat', 'openhat', 'clap', 'tom', 'rim', 'cowbell', 'shaker', 'crash'];
+export const isDrumKind = (v: unknown): v is DrumKind => typeof v === 'string' && (DRUM_KINDS as string[]).includes(v);
+export const isVoiceName = (v: unknown): v is VoiceName => typeof v === 'string' && Object.prototype.hasOwnProperty.call(GENERATORS, v);
+
 /** The samples of one note: its own attack and release already applied, ready to be added to the mix wherever it plays. */
 export function noteWave(note: MusicNote, format: { samples: number; rate: number; preset: SoundPreset; band?: Partial<Band> }): Float32Array {
   const { samples, rate, preset, band } = format;
   const out = new Float32Array(samples);
   const role = note.role ?? 'melody';
   if (role === 'perc') {
-    for (let i = 0; i < samples; i++) out[i] = drumSample(note.pitch, i, rate) * note.gain;
+    const kind = note.voice;
+    if (isDrumKind(kind)) for (let i = 0; i < samples; i++) out[i] = drumByKind(kind, i, rate) * note.gain;
+    else for (let i = 0; i < samples; i++) out[i] = drumSample(note.pitch, i, rate) * note.gain;
     return out;
   }
   const hz = 440 * 2 ** ((note.pitch - 69) / 12);
-  const name = band?.[partOf(role)] ?? KIT[preset][partOf(role)];
+  const name = isVoiceName(note.voice) ? note.voice : band?.[partOf(role)] ?? KIT[preset][partOf(role)];
   const raw = GENERATORS[name](hz, samples, rate);
   const { attack, release } = SHAPE[name];
   for (let i = 0; i < samples; i++) {
