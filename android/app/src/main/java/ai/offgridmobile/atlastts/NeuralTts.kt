@@ -11,7 +11,6 @@ import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsPocketModelConfig
 import com.k2fsa.sherpa.onnx.GenerationConfig
-import com.k2fsa.sherpa.onnx.GeneratedAudio
 import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -52,15 +51,29 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
         cloneReference = reference
     }
 
+    /** The samples for [text]. A cloned voice reads short, tidied pieces one after another (see [PocketText]) instead of one long run. */
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
-                              reference: VoiceCloneWav.Reference?, steps: Int): GeneratedAudio {
-        if (!pocketLoaded) return engine.generate(text, sid, speed)
+                              reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
+        if (!pocketLoaded) return engine.generate(text, sid, speed).samples
         val ref = reference ?: throw IllegalStateException("Choose a recording before using a cloned Pocket TTS voice")
-        return engine.generateWithConfig(text, GenerationConfig(
-            sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
-            numSteps = steps,
-            extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
-        ))
+        val pieces = PocketText.prepare(text)
+        val rate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
+        val pause = FloatArray(rate / 10)
+        val out = ArrayList<FloatArray>()
+        var total = 0
+        for ((i, piece) in pieces.withIndex()) {
+            val audio = engine.generateWithConfig(piece, GenerationConfig(
+                sid = sid, speed = speed, referenceAudio = ref.samples, referenceSampleRate = ref.sampleRate,
+                numSteps = steps,
+                extra = mapOf("max_reference_audio_len" to VoiceReferenceCoach.REFERENCE_SECONDS.toString())
+            )).samples
+            if (i > 0) { out.add(pause); total += pause.size }
+            out.add(audio); total += audio.size
+        }
+        val all = FloatArray(total)
+        var at = 0
+        for (a in out) { System.arraycopy(a, 0, all, at, a.size); at += a.size }
+        return all
     }
 
     val ready: Boolean get() = tts != null
@@ -201,7 +214,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
             fun put(a: ShortArray) { val b = java.nio.ByteBuffer.allocate(a.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN); b.asShortBuffer().put(a); out.write(b.array()) }
             for (p in parts) {
                 if (cancelled()) return@Callable null
-                val f = generateAudio(engine, p, sid, genSpeed, reference, steps).samples
+                val f = generateAudio(engine, p, sid, genSpeed, reference, steps)
                 put(ShortArray(f.size) { (f[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() })
                 put(gap)
             }
@@ -270,7 +283,7 @@ class NeuralTts(private val emit: (String, String) -> Unit) {
                 val p = nextPart() ?: break
                 val audio = generateAudio(engine, p, sid, genSpeed, reference, steps)
                 if (token != my) break
-                queue.put(audio.samples)
+                queue.put(audio)
                 queue.put(FloatArray(rate / 8)) // short pause between sentences
             }
         } catch (_: Throwable) {}
