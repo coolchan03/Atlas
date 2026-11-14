@@ -21,6 +21,7 @@ export const RESTORABLE_STORE_KEYS = new Set([
  * in RESTORABLE_STORE_KEYS, handled by sync itself (recordings, voices), or listed here, so a new store cannot be forgotten.
  */
 export const NOT_BACKED_UP: Record<string, string> = {
+  'atlas-drug-labels': 'FDA drug labels seen on this phone: public text that is looked up again when needed',
   'atlas-backup-reminder': 'when this phone last reminded about a backup',
   'atlas-pane-ratios': 'how this phone or tablet splits its screen',
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
