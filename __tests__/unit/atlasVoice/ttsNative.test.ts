@@ -174,3 +174,5 @@ describe('voices and files', () => {
     expect(native.cancelSynthesis).toHaveBeenCalled();
   });
 });
+
+export {};
