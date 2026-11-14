@@ -44,34 +44,59 @@ export const stopLab = (): Promise<boolean> => Native?.labStop?.() ?? Promise.re
 
 const f = (n: number, digits = 2) => (Number.isFinite(n) ? n.toFixed(digits) : '?');
 
+function referenceFindings(ref: LabStats | undefined): string[] {
+  if (!ref) return [];
+  const out: string[] = [];
+  if (ref.seconds < 5 || ref.seconds > 12) out.push(`The reference recording is ${f(ref.seconds, 1)} s; the voice works best with 5 to 12 s of clear speech.`);
+  if (ref.clippedPercent > 0.5) out.push(`The reference recording is clipped (${f(ref.clippedPercent, 1)}% of samples at full scale): record it again, quieter or farther from the microphone.`);
+  if (ref.noiseFloorDb > -45) out.push(`The reference recording is noisy (quietest part at ${f(ref.noiseFloorDb, 0)} dB): a quieter room gives a cleaner clone.`);
+  if (ref.peak < 0.1) out.push('The reference recording is very quiet; record it closer to the microphone.');
+  return out;
+}
+
+function runFindings(r: LabRun, syllables: number): string[] {
+  const s = r.stats!;
+  const out: string[] = [];
+  if (r.audioRate !== r.engineRate) out.push(`${r.label}: the file is ${r.audioRate} Hz but the engine reports ${r.engineRate} Hz. If the voice plays too fast, slow or pitched, this is the cause.`);
+  const rtf = r.millis / 1000 / Math.max(s.seconds, 0.01);
+  if (rtf > 1) out.push(`${r.label}: it took ${f(r.millis / 1000, 1)} s to make ${f(s.seconds, 1)} s of speech. Slower than real time stalls while streaming long text.`);
+  // An as-typed run that ran away is explained once, by the comparison below, not again as a stutter of its own.
+  if (r.label.includes('as typed')) return out;
+  if (s.bursts > syllables * 2 + 2) out.push(`${r.label}: ${s.bursts} separate bursts of sound for about ${syllables} syllables. More than twice as many points to stuttering or repeating inside the file itself.`);
+  if (s.longestGapMs > 600) out.push(`${r.label}: a ${s.longestGapMs} ms silence in the middle of the phrase.`);
+  if (s.trailSilenceMs > 1200 || s.seconds > syllables * 0.6 + 2) out.push(`${r.label}: ${f(s.seconds, 1)} s for a ${syllables}-syllable phrase, with ${s.trailSilenceMs} ms of silence at the end. The voice kept going after the words ended.`);
+  if (s.clippedPercent > 0.5) out.push(`${r.label}: the output is clipped (${f(s.clippedPercent, 1)}%), which sounds harsh or distorted.`);
+  return out;
+}
+
+function comparisonFindings(good: LabRun[]): string[] {
+  const out: string[] = [];
+  const typed = good.find((r) => r.label.includes('as typed'));
+  const tidied = good.filter((r) => r.label.includes('text tidied'));
+  const longestTidy = tidied.length ? Math.max(...tidied.map((r) => r.stats!.seconds)) : 0;
+  if (typed && tidied.length && typed.stats!.seconds > longestTidy * 3) {
+    out.push(`Text exactly as typed ran ${f(typed.stats!.seconds, 1)} s against ${f(longestTidy, 1)} s tidied. Without an ending full stop the voice does not know where to stop and runs on, repeating or stuttering. The app now adds the full stop before the voice reads.`);
+  }
+  if (tidied.some((r) => r.stats!.leadSilenceMs === 0 && r.steps >= 3) && good.some((r) => r.label.includes('lead-in'))) {
+    out.push('At 3 or more steps the speech starts on the very first sample, which is when its first syllable gets lost. Compare the "tidied + lead-in" runs: the app now gives the voice that lead-in at those steps.');
+  }
+  const durations = good.filter((r) => !r.label.includes('as typed')).map((r) => r.stats!.seconds);
+  if (durations.length > 1 && Math.max(...durations) - Math.min(...durations) > 1) {
+    out.push(`The runs differ in length by ${f(Math.max(...durations) - Math.min(...durations), 1)} s. The same sentence should take about the same time at any step count; a large difference means the voice is not stopping reliably.`);
+  }
+  return out;
+}
+
 /** What the numbers suggest, in plain words. Each line says what was seen and what it points to; none of them is proof. */
 export function findings(report: LabReport, text: string): string[] {
-  const out: string[] = [];
   const syllables = roughSyllables(text);
-  const ref = report.reference;
-  if (ref) {
-    if (ref.seconds < 5 || ref.seconds > 12) out.push(`The reference recording is ${f(ref.seconds, 1)} s; the voice works best with 5 to 12 s of clear speech.`);
-    if (ref.clippedPercent > 0.5) out.push(`The reference recording is clipped (${f(ref.clippedPercent, 1)}% of samples at full scale): record it again, quieter or farther from the microphone.`);
-    if (ref.noiseFloorDb > -45) out.push(`The reference recording is noisy (quietest part at ${f(ref.noiseFloorDb, 0)} dB): a quieter room gives a cleaner clone.`);
-    if (ref.peak < 0.1) out.push('The reference recording is very quiet; record it closer to the microphone.');
-  }
   const good = report.runs.filter((r) => r.stats && !r.error);
-  for (const r of report.runs) if (r.error) out.push(`${r.label}: failed (${r.error}).`);
-  for (const r of good) {
-    const s = r.stats!;
-    if (r.audioRate !== r.engineRate) out.push(`${r.label}: the file is ${r.audioRate} Hz but the engine reports ${r.engineRate} Hz. If the voice plays too fast, slow or pitched, this is the cause.`);
-    const rtf = r.millis / 1000 / Math.max(s.seconds, 0.01);
-    if (rtf > 1) out.push(`${r.label}: it took ${f(r.millis / 1000, 1)} s to make ${f(s.seconds, 1)} s of speech. Slower than real time stalls while streaming long text.`);
-    if (s.bursts > syllables * 2 + 2) out.push(`${r.label}: ${s.bursts} separate bursts of sound for about ${syllables} syllables. More than twice as many points to stuttering or repeating inside the file itself.`);
-    if (s.longestGapMs > 600) out.push(`${r.label}: a ${s.longestGapMs} ms silence in the middle of the phrase.`);
-    if (s.trailSilenceMs > 1200 || s.seconds > syllables * 0.6 + 2) out.push(`${r.label}: ${f(s.seconds, 1)} s for a ${syllables}-syllable phrase, with ${s.trailSilenceMs} ms of silence at the end. The voice kept going after the words ended.`);
-    if (s.clippedPercent > 0.5) out.push(`${r.label}: the output is clipped (${f(s.clippedPercent, 1)}%), which sounds harsh or distorted.`);
-  }
-  if (good.length > 1) {
-    const durations = good.map((r) => r.stats!.seconds);
-    const spread = Math.max(...durations) - Math.min(...durations);
-    if (spread > 1) out.push(`The runs differ in length by ${f(spread, 1)} s. The same sentence should take about the same time at any step count; a large difference means the voice is not stopping reliably.`);
-  }
+  const out = [
+    ...referenceFindings(report.reference),
+    ...report.runs.filter((r) => r.error).map((r) => `${r.label}: failed (${r.error}).`),
+    ...good.flatMap((r) => runFindings(r, syllables)),
+    ...comparisonFindings(good),
+  ];
   if (!out.length) out.push('Nothing in the numbers looks wrong. Play each file both ways: if a file sounds clean with Android\'s player but glitches through the voice output, the problem is in playback, not in the voice.');
   return out;
 }

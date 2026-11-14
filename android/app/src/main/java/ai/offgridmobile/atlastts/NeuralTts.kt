@@ -61,7 +61,7 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
                               reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
-        return generatePocket(engine, PocketText.prepare(text), sid, speed, reference, steps).samples
+        return generatePocket(engine, PocketText.prepare(text, steps), sid, speed, reference, steps).samples
     }
 
     /** One cloned-voice generation exactly as given (no tidying), with its timing logged. */
@@ -101,11 +101,17 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
             dir.mkdirs()
             val engineRate = try { engine.sampleRate() } catch (_: Throwable) { 24000 }
             val runs = ArrayList<LabRun>()
-            val plan = stepsList.map { Triple("steps $it, text tidied", it, true) } + listOf(Triple("steps ${stepsList.first()}, text as typed", stepsList.first(), false))
-            for ((label, steps, tidy) in plan) {
+            // Each setting with the text tidied only; from 3 steps up also with the lead-in the app adds there; and once as typed.
+            val plan = ArrayList<Triple<String, Int, String>>()
+            for (n in stepsList) {
+                plan.add(Triple("steps $n, text tidied", n, PocketText.tidy(text)))
+                if (n >= PocketText.LEAD_FROM_STEPS) plan.add(Triple("steps $n, tidied + lead-in", n, PocketText.prepare(text, n)))
+            }
+            plan.add(Triple("steps ${stepsList.first()}, text as typed", stepsList.first(), text))
+            for ((label, steps, input) in plan) {
                 val started = System.nanoTime()
                 try {
-                    val audio = generatePocket(engine, if (tidy) PocketText.prepare(text) else text, sid, speed, reference, steps)
+                    val audio = generatePocket(engine, input, sid, speed, reference, steps)
                     val ms = (System.nanoTime() - started) / 1_000_000
                     val file = File(dir, "lab-${label.replace(Regex("[^a-z0-9]+"), "-")}.wav")
                     file.writeBytes(WavFile.encode(audio.samples, audio.sampleRate))

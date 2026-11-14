@@ -8,14 +8,23 @@ package ai.offgridmobile.atlastts
  */
 object PocketText {
     private const val SHORT_WORDS = 5
+    private const val LEAD = "        "
+    /** From this many steps up the model started speech with its first syllable already gone (measured in the voice lab), so it is given room to start. */
+    const val LEAD_FROM_STEPS = 3
+
+    /** [text] tidied, and given a lead-in at the step counts that need one: what the app hands the model. */
+    fun prepare(text: String, steps: Int): String {
+        val t = tidy(text)
+        return if (steps >= LEAD_FROM_STEPS && !t.startsWith(LEAD)) LEAD + t else t
+    }
 
     /** [text] as the model expects to read it. Blank text with nothing to say stays as it is. */
-    fun prepare(text: String): String {
+    fun tidy(text: String): String {
         var t = text.replace(Regex("\\s+"), " ").trim().trimStart('-', '*', '"', '\'', '(', '[')
         if (!t.any { it.isLetterOrDigit() }) return text
         t = t.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         if (!t.last().let { it in ".!?" }) t = t.trimEnd(',', ';', ':', '-', ' ') + "."
-        if (t.split(' ').size < SHORT_WORDS) t = "        $t"
+        if (t.split(' ').size < SHORT_WORDS) t = LEAD + t
         return t
     }
 }

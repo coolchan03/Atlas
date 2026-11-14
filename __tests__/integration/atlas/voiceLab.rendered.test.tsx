@@ -78,6 +78,17 @@ it('says what is wrong with the recording, the sample rate and slow generation, 
   expect(view.getByText(/Failed: out of memory/)).toBeTruthy();
 });
 
+it('explains a runaway as-typed run and a missing first syllable from the numbers', async () => {
+  const runaway = stats({ seconds: 40, bursts: 55 });
+  const noLead = stats({ leadSilenceMs: 0 });
+  const { rtl, view } = setup(report([run('steps 2, text tidied', 2, stats({ leadSilenceMs: 0 })), run('steps 3, text tidied', 3, noLead), run('steps 3, tidied + lead-in', 3, stats({ leadSilenceMs: 160 })), run('steps 2, text as typed', 2, runaway)]));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-lab-run')); });
+  await rtl.waitFor(() => expect(view.getByTestId('voice-lab-results')).toBeTruthy());
+  expect(view.getByText(/Without an ending full stop the voice does not know where to stop/)).toBeTruthy();
+  expect(view.getByText(/first syllable gets lost/)).toBeTruthy();
+  expect(view.queryByText(/The runs differ in length/)).toBeNull(); // the as-typed runaway is explained once, not as a second problem
+});
+
 it('says so when the engine cannot run the lab', async () => {
   const { rtl, native, view } = setup(report([]));
   native.voiceLab.mockRejectedValueOnce(new Error('The lab needs a cloned Pocket TTS voice'));
