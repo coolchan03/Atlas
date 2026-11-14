@@ -81,6 +81,29 @@ export async function resolveAddon(a: Addon): Promise<{ file: string; size: stri
   return best;
 }
 
+/** The year and month in a Kiwix file name (`name_2025-01.zim`), as 202501, or 0 when it has none. */
+export const zimStamp = (fileName: string): number => {
+  const m = fileName.match(/(\d{4})-(\d{2})\.zim$/);
+  return m ? Number(m[1]) * 100 + Number(m[2]) : 0;
+};
+
+/** True when the file on the Kiwix server is a later edition than the installed one. */
+export const isNewerZim = (installedPath: string, newestFile: string): boolean => {
+  const have = zimStamp(installedPath.split('/').pop() ?? '');
+  const latest = zimStamp(newestFile);
+  return have > 0 && latest > have;
+};
+
+/** The newer file on the Kiwix server for an installed add-on, or null when it is up to date or the server cannot be reached. */
+export async function newerVersionOf(a: Addon): Promise<string | null> {
+  try {
+    const installed = await installedAddonPath(a);
+    if (!installed) return null;
+    const { file } = await resolveAddon(a);
+    return isNewerZim(installed, file) ? file : null;
+  } catch { return null; }
+}
+
 export async function installedAddonPath(a: Addon): Promise<string | null> {
   // Look on the phone and on the SD card.
   for (const base of require('./storage').allBases() as string[]) {

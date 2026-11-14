@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
-import { ADDONS, Addon, useAddonDownloads, downloadAddon, cancelAddon, deleteAddon, installedAddonPath, resolveAddon } from '../atlasTools/addons';
+import { ADDONS, Addon, useAddonDownloads, downloadAddon, cancelAddon, deleteAddon, installedAddonPath, newerVersionOf, resolveAddon } from '../atlasTools/addons';
 const literalStyles = StyleSheet.create({
   s1: { borderRadius: 10, padding: 14, marginBottom: 12 },
   s2: { fontSize: 15, fontWeight: '600' },
@@ -26,10 +26,15 @@ export function AddonsSection() {
   const progress = useAddonDownloads((s) => s.progress);
   const resolved = useAddonDownloads((s) => s.resolved);
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [newer, setNewer] = useState<Record<string, string>>({});
   const refresh = async () => {
     const out: Record<string, boolean> = {};
     for (const a of ADDONS) out[a.id] = !!(await installedAddonPath(a).catch(() => null));
     setInstalled(out);
+    // A newer edition of a pack you already have: found quietly, and only when the Kiwix server can be reached.
+    const found: Record<string, string> = {};
+    for (const a of ADDONS) if (out[a.id]) { const f = await newerVersionOf(a); if (f) found[a.id] = f; }
+    setNewer(found);
   };
   useEffect(() => { void refresh(); }, [Object.keys(progress).length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -71,9 +76,16 @@ export function AddonsSection() {
                 <Text style={[{ color: colors.textSecondary }, literalStyles.s12]}>{Math.round((p || 0) * 100)}% · Stop</Text>
               </TouchableOpacity>
             ) : installed[a.id] ? (
+              <View style={literalStyles.s11}>
+                {!!newer[a.id] && (
+                  <TouchableOpacity onPress={() => get(a)} style={[literalStyles.s13, { borderColor: colors.primary }, literalStyles.s14]} testID={`addon-update-${a.id}`}>
+                    <Text style={{ color: colors.primary }}>Update</Text>
+                  </TouchableOpacity>
+                )}
               <TouchableOpacity onPress={() => Alert.alert('Remove add-on?', a.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => { deleteAddon(a).then(refresh).catch(() => undefined); } }])}>
                 <Text style={{ color: colors.primary }}>Installed ✓</Text>
               </TouchableOpacity>
+              </View>
             ) : (
               <TouchableOpacity onPress={() => get(a)} style={[literalStyles.s13, { borderColor: colors.primary }, literalStyles.s14]}>
                 <Text style={{ color: colors.primary }}>Get</Text>
