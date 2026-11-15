@@ -97,7 +97,7 @@ describe('practice scoring without a model', () => {
 });
 
 describe('claims that are not claims (a report discussing its own material)', () => {
-  const { isStandaloneClaim, claimSentences, compareClaim } = require('../../../src/learning/claimText');
+  const { isStandaloneClaim } = require('../../../src/learning/claimText');
 
   it('rejects fragments that begin mid-sentence and sentences about "Claim A" or "Statement B"', () => {
     expect(isStandaloneClaim(', at least 61 full days) within that window .')).toBe(false);
