@@ -11,7 +11,7 @@ describe('putting a report into the knowledge ledger', () => {
   it('stores each claim as a candidate with the passage it cites, never as verified', () => {
     const db = memoryKnowledgeDb();
     const r = ingestClaims(db, base({ reportText: 'ANSWER: Boil the water for one minute. [1]', sources: [source(1, 'Boil water for one minute to make it safe to drink.')] }));
-    expect(r).toEqual({ added: 1, duplicates: 0, contradictions: 0, unsupported: 0 });
+    expect(r).toEqual({ added: 1, duplicates: 0, contradictions: 0, unsupported: 0, updates: 0 });
     expect(status(db, 'r1:claim:1')).toBe('candidate');
     expect(db.getClaimSources('r1:claim:1')[0].passage).toContain('Boil water');
   });
@@ -28,7 +28,7 @@ describe('putting a report into the knowledge ledger', () => {
     const db = memoryKnowledgeDb();
     ingestClaims(db, base({ reportText: 'ANSWER: Boil the water for one minute. [1]', sources: [source(1, 'Boil water for one minute.')] }));
     const second = ingestClaims(db, base({ reportId: 'r2', reportText: 'ANSWER: Boil the water for one minute. [1]', sources: [source(1, 'Water should be boiled for one minute, a second manual says.')] }));
-    expect(second).toEqual({ added: 0, duplicates: 1, contradictions: 0, unsupported: 0 });
+    expect(second).toEqual({ added: 0, duplicates: 1, contradictions: 0, unsupported: 0, updates: 0 });
     expect(db.getClaimSources('r1:claim:1')).toHaveLength(2);
     expect(db.getClaim('r2:claim:1')).toBeNull();
   });
