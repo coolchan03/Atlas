@@ -23,6 +23,9 @@ import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
+import { matchExam, type ExamCode } from '../cpa/blueprints';
+import { setupCpaExam } from '../cpa/setup';
+import { ensureExamCourse } from '../cpa/course';
 import { AHEAD_CHOICES, aheadFor, prepareAhead, usePrepare } from './prepare';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
@@ -74,9 +77,23 @@ function ByChapterToggle({ show, on, onToggle }: { show: boolean; on: boolean; o
   );
 }
 
+/** A subject that names a known exam ("CFA level 1", "Series 7"): its folder and board come from the layout Atlas already knows, with any files added to that folder. */
+async function buildKnownExam(code: ExamCode, files: PickedFile[], setStep: (s: string) => void): Promise<string | null> {
+  const projectId = setupCpaExam(code);
+  if (files.length && projectId) {
+    const result = await addFilesToProject({ projectId, files, onProgress: setStep });
+    if (result.failed.length) Alert.alert('Some files could not be added', result.failed.map((f) => `${f.name}: ${f.reason}`).join('\n'));
+  }
+  setStep('Making the board from the exam layout...');
+  return ensureExamCourse(code);
+}
+
 /** Everything that happens between "Make my course" and the board: sources found online, files added to the project, then the plan (by chapter when the book has them). */
 async function buildCourse(args: { request: CourseRequest; online: boolean; files: PickedFile[]; projectId?: string; byChapter: boolean; setStep: (s: string) => void }): Promise<string> {
   const { request, online, files, byChapter, setStep } = args;
+  const known = matchExam(request.topic);
+  const examBoard = known ? await buildKnownExam(known, files, setStep) : null;
+  if (examBoard) return examBoard;
   let sources = online ? await findSources(request.topic, request.goal, setStep) : [];
   let projectId = args.projectId;
   if (files.length) {

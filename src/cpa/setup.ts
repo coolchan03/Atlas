@@ -1,6 +1,6 @@
 /** Makes a project for each exam you set up (the four CPA sections at once, the others one at a time), each with its own documents and its own checklist. Safe to run again: nothing is duplicated. */
 import { useProjectStore } from '../stores/projectStore';
-import { CPA_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
+import { CPA_EXAMS, examFolder, examLabel, type ExamCode } from './blueprints';
 import { defaultTopics, useCpa } from './store';
 import { useExerciseStore, type Exercise } from '../study/exercises';
 
@@ -26,15 +26,26 @@ export function ensureCpaProject(): string {
   return id;
 }
 
+/** The folder (project) an exam's material lives in: CPA Study for every CPA exam; CFA Study, CMA Study or "<exam> Study" for the others. Made on first use, never twice. */
+export function ensureExamProject(code: ExamCode): string {
+  const folder = examFolder(code);
+  if (folder.key === 'cpa') return ensureCpaProject();
+  const projects = useProjectStore.getState();
+  return projects.projects.find((p) => p.name === folder.name)?.id ?? projects.createProject({
+    name: folder.name, description: `Your textbooks, notes and question banks for ${examLabel(code)}. Each exam keeps its own questions and scores.`,
+    systemPrompt: tutorPrompt(code, examLabel(code)), icon: '#1D4ED8',
+  } as any).id;
+}
+
 /**
- * Sets up an exam with its checklist. A CPA exam uses the one shared CPA Study project (made if it is not there), so every textbook, note
- * and study pack for the CPA is in one place; an exam that already has its own project keeps it, and the other professional exams have none.
- * Returns the exam's project id.
+ * Sets up an exam with its checklist, from the layout and blueprint Atlas already knows for it. Every exam has a folder (project) for its
+ * material, made automatically: CPA Study for the CPA exams, one folder per other exam (the CFA levels and the CMA parts share one each).
+ * An exam that already has its own project keeps it. Returns the exam's project id.
  */
 export function setupCpaExam(code: ExamCode): string | undefined {
   const store = useCpa.getState();
   const existing = store.exams[code];
-  const projectId = existing?.projectId ?? (examInfo(code).group === 'cpa' ? ensureCpaProject() : undefined);
+  const projectId = existing?.projectId ?? ensureExamProject(code);
   if (existing?.topics?.length) {
     if (projectId && !existing.projectId) store.setExam(code, { ...existing, projectId });
     return projectId;

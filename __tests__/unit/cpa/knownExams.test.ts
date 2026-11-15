@@ -1,0 +1,33 @@
+import { matchExam, examFolder } from '../../../src/cpa/blueprints';
+import { setupCpaExam } from '../../../src/cpa/setup';
+import { useCpa } from '../../../src/cpa/store';
+import { useProjectStore } from '../../../src/stores/projectStore';
+
+beforeEach(() => { useCpa.setState({ exams: {}, groupProjectId: undefined }); useProjectStore.setState({ projects: [] } as any); });
+
+describe('an exam that is named is already known', () => {
+  it.each([
+    ['CFA level 1', 'CFA1'], ['cfa level II exam prep', 'CFA2'], ['Series 7', 'SERIES7'], ['the Bar exam', 'BAR'], ['CPA FAR', 'FAR'],
+    ['studying for the enrolled agent exam', 'EA'], ['CMA Part 2', 'CMA2'], ['PMP prep', 'PMP'], ['usmle step 1', 'USMLE1'], ['SAT prep', 'SAT'],
+  ])('%s is %s', (name, code) => { expect(matchExam(name)).toBe(code); });
+
+  it('does not take ordinary words for an exam', () => {
+    expect(matchExam('far-reaching effects of the printing press')).toBeNull();
+    expect(matchExam('I sat down to learn python')).toBeNull();
+    expect(matchExam('Python for beginners')).toBeNull();
+  });
+});
+
+describe('every exam has a folder, made automatically', () => {
+  it('shares one folder per family and gives each other exam its own', () => {
+    expect(examFolder('FAR').name).toBe('CPA Study');
+    expect(examFolder('CFA2').name).toBe('CFA Study');
+    expect(examFolder('SERIES7').name).toBe('Series 7 Study');
+    const cfa1 = setupCpaExam('CFA1');
+    expect(setupCpaExam('CFA2')).toBe(cfa1);
+    const bar = setupCpaExam('BAR');
+    expect(bar).not.toBe(cfa1);
+    expect(useProjectStore.getState().projects.map((p) => p.name).sort()).toEqual(['Bar exam Study', 'CFA Study']);
+    expect(useCpa.getState().exams.CFA1?.topics.length).toBeGreaterThan(0); // the layout is already known
+  });
+});

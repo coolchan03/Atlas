@@ -138,3 +138,41 @@ export const EXAM_FIELDS: ExamField[] = ['Accounting, tax and finance', 'Law and
 export const examLabel = (code: ExamCode): string => EXAMS.find((e) => e.code === code)!.label;
 
 export const examInfo = (code: ExamCode): ExamInfo => EXAMS.find((e) => e.code === code)!;
+
+/** The folder an exam's material lives in: every CPA exam shares "CPA Study", the CFA levels share "CFA Study", the CMA parts "CMA Study", any other exam has its own. */
+export function examFolder(code: ExamCode): { key: string; name: string } {
+  const info = examInfo(code);
+  if (info.group === 'cpa') return { key: 'cpa', name: 'CPA Study' };
+  if (code.startsWith('CFA')) return { key: 'cfa', name: 'CFA Study' };
+  if (code.startsWith('CMA')) return { key: 'cma', name: 'CMA Study' };
+  return { key: code.toLowerCase(), name: `${info.label} Study` };
+}
+
+/** What a person may call each exam, besides its label. Compared in lower case with punctuation removed. */
+const ALIASES: Partial<Record<ExamCode, string[]>> = {
+  FAR: ['cpa far', 'far exam', 'financial accounting and reporting'], AUD: ['cpa aud', 'aud exam', 'auditing and attestation'], REG: ['cpa reg', 'reg exam', 'taxation and regulation'], TCP: ['cpa tcp', 'tax compliance and planning'],
+  BAR: ['bar exam', 'ube', 'uniform bar exam', 'multistate bar'], CFA1: ['cfa level 1', 'cfa level i', 'cfa l1', 'cfa 1', 'cfa level one'], CFA2: ['cfa level 2', 'cfa level ii', 'cfa l2', 'cfa 2', 'cfa level two'],
+  CMA1: ['cma part 1', 'cma 1', 'cma part one'], CMA2: ['cma part 2', 'cma 2', 'cma part two'], EA: ['enrolled agent', 'ea exam', 'irs special enrollment examination', 'see exam'],
+  SERIES7: ['series 7', 'series seven', 'general securities representative'], USMLE1: ['usmle step 1', 'usmle 1', 'step 1'], NCLEX: ['nclex', 'nclex rn', 'nclex-rn'], MCAT: ['mcat'], LSAT: ['lsat'],
+  SAT: ['sat', 'sat exam', 'sat test'], ACT: ['act exam', 'act test'], GRE: ['gre', 'gre exam'], GMAT: ['gmat'], PMP: ['pmp', 'project management professional'], CISSP: ['cissp'],
+};
+const plain = (t: string): string => t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * The exam a typed subject names ("CFA level 1", "the Bar exam", "Series 7 prep"), or null. When it matches, Atlas already knows the exam's
+ * layout and blueprint, so the course is built from that instead of being planned from scratch. A name must match whole words, so "far" in
+ * "far-reaching" or "sat" in "I sat down" does not count; short names need the word "exam", "test" or "prep" beside them.
+ */
+export function matchExam(subject: string): ExamCode | null {
+  const text = ` ${plain(subject)} `;
+  const hasCue = /\b(exam|test|prep|practice|study|section|level|part|step)\b/.test(text);
+  for (const e of EXAMS) {
+    const names = [plain(e.label), plain(e.name), ...(ALIASES[e.code] ?? [])].filter(Boolean);
+    for (const n of names) {
+      if (!text.includes(` ${n} `)) continue;
+      const short = n.length <= 5 && !/\d/.test(n);
+      if (!short || hasCue) return e.code;
+    }
+  }
+  return null;
+}

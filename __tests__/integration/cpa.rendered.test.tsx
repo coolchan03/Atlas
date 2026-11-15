@@ -47,7 +47,7 @@ it('sets up FAR, AUD and REG with their own checklists and creates no project', 
   const view = rtl.render(React.createElement(screens.CpaPrepScreen));
   expect(view.getAllByText('Not set up yet')).toHaveLength(4);
   rtl.fireEvent.press(view.getByTestId('cpa-setup'));
-  expect(stores.projects.getState().projects.filter((p: { name: string }) => /^CPA /.test(p.name))).toHaveLength(0); // no project is forced
+  expect(stores.projects.getState().projects.filter((p: { name: string }) => p.name === 'CPA Study')).toHaveLength(1); // one folder for all the CPA material, made for you
   for (const code of ['REG', 'FAR', 'AUD']) expect(stores.cpa.getState().exams[code].topics.length).toBeGreaterThan(0);
   expect(stores.cpa.getState().exams.TCP).toBeUndefined(); // the discipline is the person's own choice
   expect(view.queryByTestId('cpa-setup')).toBeNull();
@@ -57,7 +57,7 @@ it('sets up FAR, AUD and REG with their own checklists and creates no project', 
   // Setting up again changes nothing.
   stores.cpa.getState().setExam('FAR', { ...stores.cpa.getState().exams.FAR, topics: stores.cpa.getState().exams.FAR.topics.slice(0, 3) });
   require('../../src/cpa/setup').setupAllCpaExams();
-  expect(stores.projects.getState().projects.filter((p: { name: string }) => /^CPA /.test(p.name))).toHaveLength(0);
+  expect(stores.projects.getState().projects.filter((p: { name: string }) => p.name === 'CPA Study')).toHaveLength(1); // still one folder
   expect(stores.cpa.getState().exams.FAR.topics).toHaveLength(3);
 });
 
