@@ -54,6 +54,7 @@ jest.mock('../../../src/services/rag/embedding', () => ({
 }));
 
 import { ragService, retrievalService } from '../../../src/services/rag';
+import { resetEmbeddingCache } from '../../../src/services/rag/retrieval';
 import { ragDatabase } from '../../../src/services/rag/database';
 import { embeddingService } from '../../../src/services/rag/embedding';
 import { cosineSimilarity } from '../../../src/services/rag/vectorMath';
@@ -64,6 +65,7 @@ const mockDocService = documentService as jest.Mocked<typeof documentService>;
 describe('Embedding Flow Integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetEmbeddingCache(); // each test puts its own rows under the service
     (ragDatabase as any).ready = false;
     (ragDatabase as any).db = null;
     mockExecuteSync.mockReturnValue({ rows: [], insertId: 0, rowsAffected: 0 });

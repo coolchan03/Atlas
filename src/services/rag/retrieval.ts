@@ -29,8 +29,11 @@ export interface SearchOptions { topK?: number; include?: (docName: string) => b
 /** The stored embeddings of a project, kept in memory until a document is added, removed or switched, so a lesson (many searches in a row) does not read and decode every one each time. Not kept for a protected project, nor for a very large one. */
 const embeddingCache = new Map<string, { version: number; stored: ReturnType<typeof ragDatabase.getEmbeddingsByProject> }>();
 const MAX_CACHED = 40000;
+/** Forgets the kept embeddings (for a test that swaps the database under the service). */
+export const resetEmbeddingCache = (): void => embeddingCache.clear();
 function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSource>) {
-  if (isProtectedProject(projectId)) return source.getEmbeddingsByProject(projectId);
+  // No version to compare (or a protected project): read fresh every time.
+  if (isProtectedProject(projectId) || typeof ragDatabase.version !== 'number') return source.getEmbeddingsByProject(projectId);
   const hit = embeddingCache.get(projectId);
   if (hit && hit.version === ragDatabase.version) return hit.stored;
   const stored = source.getEmbeddingsByProject(projectId);
