@@ -75,3 +75,26 @@ it('the judge is Lenient by default, and the Teach screen can make it Balanced o
   expect(view.getByTestId('learning-strictness-strict').props.accessibilityState.selected).toBe(true);
   expect(Object.values(useLearningStore.getState().config).some((c: any) => c.judgeStrictness === 'strict')).toBe(true);
 });
+
+/** The order things appear in a rendered screen, as testIDs and text, top to bottom and left to right. */
+const order = (node: any, out: string[] = []): string[] => {
+  if (node == null || typeof node === 'string') { if (node) out.push(node); return out; }
+  if (Array.isArray(node)) { node.forEach((n) => order(n, out)); return out; }
+  if (node.props?.testID) out.push(node.props.testID);
+  (node.children ?? []).forEach((c: any) => order(c, out));
+  return out;
+};
+
+it('puts the symbols before the title: checkmark, then book, then "Teach the AI"', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const { LearningListScreen } = require('../../../src/screens/LearningListScreen');
+  const screen = order(rtl.render(React.createElement(LearningScreen)).toJSON());
+  expect(screen.indexOf('learning-reliability-dashboard')).toBeGreaterThanOrEqual(0);
+  expect(screen.indexOf('learning-reliability-dashboard')).toBeLessThan(screen.indexOf('open-knowledge'));
+  expect(screen.indexOf('open-knowledge')).toBeLessThan(screen.indexOf('Teach the AI'));
+  const list = order(rtl.render(React.createElement(LearningListScreen)).toJSON());
+  expect(list.indexOf('learning-reliability-dashboard')).toBeLessThan(list.indexOf('Teach the AI'));
+});

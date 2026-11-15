@@ -7,6 +7,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 
 interface Props {
   title: string;
+  /** Controls shown before the title, after the back arrow (symbols such as a book or a checkmark come first, then the title). */
+  left?: React.ReactNode;
   /** Right-hand control, such as a refresh or mode button. */
   right?: React.ReactNode;
   /** Pass the night-red palette on the emergency tool screens; defaults to the app theme. */
@@ -16,7 +18,7 @@ interface Props {
 }
 
 /** The back arrow, title and optional action shared by the full-screen tools. */
-export const ScreenHeader: React.FC<Props> = ({ title, right, colors: given, onBack }) => {
+export const ScreenHeader: React.FC<Props> = ({ title, left, right, colors: given, onBack }) => {
   const navigation = useNavigation<any>();
   const { colors: theme } = useTheme();
   const colors = given ?? theme;
@@ -25,6 +27,7 @@ export const ScreenHeader: React.FC<Props> = ({ title, right, colors: given, onB
       <TouchableOpacity style={styles.back} onPress={() => (onBack ? onBack() : navigation.goBack())} accessibilityRole="button" accessibilityLabel="Back">
         <Icon name="arrow-left" size={22} color={colors.text} />
       </TouchableOpacity>
+      {left}
       <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
       {right}
     </View>

@@ -43,8 +43,8 @@ export const LearningListScreen: React.FC = () => {
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenBackground screenKey="Learning" />
-      <ScreenHeader title="Teach the AI" right={
-        <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
+      <ScreenHeader title="Teach the AI" left={
+        <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} style={styles.symbol} accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
           <Icon name="check-square" size={20} color={colors.text} />
         </TouchableOpacity>
       } />
@@ -92,6 +92,7 @@ export const LearningListScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  symbol: { marginRight: SPACING.md },
   body: { padding: SPACING.lg, paddingBottom: 80 },
   note: { ...TYPOGRAPHY.bodySmall, marginBottom: SPACING.md },
   card: { marginBottom: SPACING.md },

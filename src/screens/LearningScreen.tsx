@@ -504,7 +504,6 @@ export const LearningScreen: React.FC = () => {
       <ScreenBackground screenKey="Learning" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.title}>Teach the AI</Text>
         <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} style={styles.back}
           accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
           <Icon name="check-square" size={20} color={colors.text} />
@@ -512,6 +511,7 @@ export const LearningScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.navigate('Knowledge')} style={styles.back} accessibilityLabel="Knowledge: documents, experts, library, import and export" testID="open-knowledge">
           <Icon name="book-open" size={20} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.title}>Teach the AI</Text>
       </View>
       {wide ? (
         <View style={styles.wideRow}>
