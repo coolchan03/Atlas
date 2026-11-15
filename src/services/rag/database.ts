@@ -246,6 +246,20 @@ class RagDatabase {
     return (result.rows ?? []) as unknown as RagSearchResult[];
   }
 
+  /** Per document: how many passages and characters it has, and the bytes the project's embeddings take. For the library size card. */
+  getLibraryStats(projectId: string): { documents: Array<{ id: number; chunks: number; chars: number }>; embeddingBytes: number } {
+    const db = this.getDb();
+    const docs = db.executeSync(
+      `SELECT d.id AS id, COUNT(c.id) AS chunks, COALESCE(SUM(LENGTH(c.content)), 0) AS chars
+       FROM rag_documents d LEFT JOIN rag_chunks c ON c.doc_id = d.id WHERE d.project_id = ? GROUP BY d.id`, [projectId]);
+    const emb = db.executeSync(
+      `SELECT COALESCE(SUM(LENGTH(e.embedding)), 0) AS bytes FROM rag_embeddings e JOIN rag_documents d ON e.doc_id = d.id WHERE d.project_id = ?`, [projectId]);
+    return {
+      documents: ((docs.rows ?? []) as unknown as Array<{ id: number; chunks: number; chars: number }>).map((r) => ({ id: Number(r.id), chunks: Number(r.chunks), chars: Number(r.chars) })),
+      embeddingBytes: Number(((emb.rows ?? []) as unknown as Array<{ bytes: number }>)[0]?.bytes ?? 0),
+    };
+  }
+
   getChunksByProject(projectId: string, topK: number = 5): RagSearchResult[] {
     const db = this.getDb();
     const result = db.executeSync(

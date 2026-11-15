@@ -53,3 +53,12 @@ it('does not read the blank pages of a book that has a text layer from pictures'
   const { llmService } = require('../../../../src/services/llm');
   expect(llmService.generateResponse).not.toHaveBeenCalled();
 });
+
+it('stops between scanned pages when the person presses stop, and adds nothing', async () => {
+  mockPages.push('', '', '');
+  const { pagedChunksWithScans } = require('../../../../src/services/rag/pageChunks');
+  const { IndexStopped } = require('../../../../src/services/rag/indexControl');
+  let calls = 0;
+  await expect(pagedChunksWithScans('/x.pdf', { gate: async () => ++calls < 2 })).rejects.toBeInstanceOf(IndexStopped);
+  expect(calls).toBe(2);
+});

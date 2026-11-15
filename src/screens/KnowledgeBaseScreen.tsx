@@ -1,5 +1,7 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import { DocRoleLine } from '../components/DocRoleLine';
+import { describeLibrary, type LibraryStats } from '../services/rag/libraryStats';
+import { IndexStopped, gate, useIndexControl } from '../services/rag/indexControl';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -46,6 +48,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
+  const [stats, setStats] = useState<LibraryStats | null>(null);
+  const control = useIndexControl();
   const [isLoading, setIsLoading] = useState(true);
   const [isPicking, setIsPicking] = useState(false);
   const [indexError, setIndexError] = useState<{ fileName: string; message: string } | null>(null);
@@ -57,6 +61,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
     try {
       setIsLoading(true);
       setKbDocs(await ragService.getDocumentsByProject(projectId));
+      setStats(await ragService.libraryStats(projectId).catch(() => null));
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to load documents');
     } finally {
@@ -96,7 +101,10 @@ export const KnowledgeBaseScreen: React.FC = () => {
       }
       logger.log(`[KnowledgeBase] picker returned ${files.length} file(s): ${files.map(f => `${f.name} (${f.size}b)`).join(', ')}`);
 
+      control.reset();
+      let note = '';
       for (let i = 0; i < files.length; i++) {
+        if (!(await gate())) break; // paused here until resumed, or stopped: the files already added stay
         const file = files[i];
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
@@ -105,17 +113,22 @@ export const KnowledgeBaseScreen: React.FC = () => {
         logger.log(`[KnowledgeBase] indexing file ${i + 1}/${files.length} — name: ${fileName}, path: ${pathForDb?.substring(0, 80)}`);
 
         try {
-          await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
+          await ragService.indexDocument({
+            projectId, filePath: pathForDb, fileName, fileSize: file.size || 0, gate,
+            onProgress: (p) => { if (/scanned page/.test(p.message)) setIndexingFile(p.message); else if (p.stage === 'done' && p.message.length > 5) note = `${fileName}: ${p.message.replace(/^Done\.\s*/, '')}`; },
+          });
           logger.log(`[KnowledgeBase] indexed successfully: ${fileName}`);
         } catch (indexErr: any) {
           // The index aborted mid-way and rolled back (ragService.indexDocument is atomic — no
           // half-indexed doc is left behind). Surface it as a persistent, retriable error card on
           // the screen rather than a fire-and-forget alert, so the user sees the failure and can retry.
+          if (indexErr instanceof IndexStopped) break; // the person pressed stop: not an error
           logger.error(`[KnowledgeBase] index failed for "${fileName}" — ${indexErr?.message}`);
           setIndexError({ fileName, message: indexErr?.message || 'Unknown error' });
         }
       }
       await loadKbDocs();
+      if (note) Alert.alert('Added', note); // pages read from pictures can have misread characters, and some may not have been readable
     } catch (err: any) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) {
         logger.log('[KnowledgeBase] picker cancelled by user');
@@ -203,7 +216,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
     >
       <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.docSize}>{formatFileSize(item.size)}</Text>
+        <Text style={styles.docSize}>{formatFileSize(item.size)}{stats?.documents.find((d) => d.id === item.id) ? ` · ${stats.documents.find((d) => d.id === item.id)!.chunks.toLocaleString('en-US')} passages` : ''}</Text>
         <DocRoleLine name={item.name} names={kbDocs.map((d) => d.name)} />
       </View>
       <OfficialStandardButton name={item.name} />
@@ -247,9 +260,13 @@ export const KnowledgeBaseScreen: React.FC = () => {
       {indexingFile && (
         <View style={styles.indexingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.indexingText}>{/^(Adding|Copying|Unpacking)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
+          <Text style={styles.indexingText}>{control.paused ? 'Paused. ' : ''}{/^(Adding|Copying|Unpacking|Reading)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
+          <TouchableOpacity onPress={control.paused ? control.resume : control.pause} accessibilityRole="button" testID="kb-pause"><Text style={{ color: colors.primary }}>{control.paused ? 'Resume' : 'Pause'}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={control.stop} accessibilityRole="button" testID="kb-stop"><Text style={{ color: colors.error }}>Stop</Text></TouchableOpacity>
         </View>
       )}
+
+      {!!describeLibrary(stats) && !indexingFile && <Text style={styles.docSize} testID="kb-library-size">{describeLibrary(stats)}</Text>}
 
       {indexError && !indexingFile && (
         <View style={styles.errorCard} testID="kb-index-error-card">

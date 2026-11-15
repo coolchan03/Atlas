@@ -47,6 +47,8 @@ interface IndexDocumentParams {
   onProgress?: (progress: IndexProgress) => void;
   /** Allow a document with the same name (an update that replaces the old version afterwards). */
   replaceExisting?: boolean;
+  /** A safe point (between scanned pages): resolves false when the person pressed stop. */
+  gate?: () => Promise<boolean>;
 }
 
 /** What to tell the person when pages were read from pictures (a model can misread them) or could not be read. */
@@ -62,8 +64,8 @@ function scanNote(paged: { scanned: boolean; ocrPages: number[]; skipped: number
  * of pages, no text layer) has its pages read from the pictures when a vision model is loaded; without one the person is told what to do.
  * A FASB standard or a tax source is recognised from the first pages and marked, so it overrules textbooks whatever it is called.
  */
-async function readAndChunk(args: { fileName: string; filePath: string; attachment: { uri?: string; textContent?: string } | null | undefined; onProgress?: (p: IndexProgress) => void }) {
-  const { fileName, filePath, attachment, onProgress } = args;
+async function readAndChunk(args: { fileName: string; filePath: string; attachment: { uri?: string; textContent?: string } | null | undefined; onProgress?: (p: IndexProgress) => void; gate?: () => Promise<boolean> }) {
+  const { fileName, filePath, attachment, onProgress, gate } = args;
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const hasText = !!attachment?.textContent;
   if (!hasText && !(isPdf && canReadScans())) {
@@ -76,7 +78,7 @@ async function readAndChunk(args: { fileName: string; filePath: string; attachme
   noteTaxSource(fileName, source.textContent);
   onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
   // Anything that is not a PDF (or a PDF the phone cannot read by page) is chunked from the whole text.
-  const paged = isPdf ? await pagedChunksWithScans(source.uri || filePath, { onOcr: (page, done) => onProgress?.({ stage: 'extracting', message: `Reading scanned page ${page} from its picture (${done} so far)...` }) }) : null;
+  const paged = isPdf ? await pagedChunksWithScans(source.uri || filePath, { gate, onOcr: (page, done) => onProgress?.({ stage: 'extracting', message: `Reading scanned page ${page} from its picture (${done} so far)...` }) }) : null;
   if (paged?.ocrPages.length) {
     const head = paged.chunks.slice(0, 12).map((c) => c.content).join('\n');
     noteIfStandard(fileName, head);
@@ -107,7 +109,7 @@ class RagService {
     // A whole textbook is about 1.5 to 3 million characters; the old 500,000 cut most of one off.
     const RAG_MAX_CHARS = 3_000_000;
     const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
-    const { source, chunks, note } = await readAndChunk({ fileName, filePath, attachment, onProgress });
+    const { source, chunks, note } = await readAndChunk({ fileName, filePath, attachment, onProgress, gate: params.gate });
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }
@@ -272,6 +274,12 @@ class RagService {
     if (isProtectedProject(projectId)) return protectedVault.list(projectId);
     await this.ensureReady();
     return ragDatabase.getDocumentsByProject(projectId);
+  }
+
+  /** How big a project's library is on this phone: passages per document and the space they and their search data take. Null for a protected project. */
+  async libraryStats(projectId: string) {
+    await this.ensureReady();
+    return isProtectedProject(projectId) ? null : ragDatabase.getLibraryStats(projectId);
   }
 
   async getDocumentChunks(docId: number): Promise<{ content: string; position: number }[]> {
