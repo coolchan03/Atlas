@@ -1,3 +1,4 @@
+import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -203,6 +204,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.docSize}>{formatFileSize(item.size)}</Text>
       </View>
+      <OfficialStandardButton name={item.name} />
       <Switch
         value={item.enabled === 1}
         onValueChange={(val) => handleToggleDocument(item.id, val)}

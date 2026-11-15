@@ -1,3 +1,4 @@
+import { noteIfStandard } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
 import { pagedChunks } from './pageChunks';
 import { chunkDocument } from './chunking';
@@ -81,6 +82,8 @@ class RagService {
       );
     }
 
+    // A FASB standard or update is recognised from its first pages and marked as the standard itself, so it overrules textbooks whatever it is called.
+    noteIfStandard(fileName, attachment.textContent);
     onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
     // A PDF is chunked page by page so every chunk knows its page; anything else (or a PDF the phone cannot read by page) is chunked from the whole text.
     const paged = fileName.toLowerCase().endsWith('.pdf') ? await pagedChunks(attachment.uri || filePath) : null;

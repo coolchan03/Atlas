@@ -1,3 +1,4 @@
+import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -143,6 +144,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
                 <Text style={styles.kbDocName} numberOfLines={1}>{doc.name}</Text>
                 <Text style={styles.kbDocSize}>{formatFileSize(doc.size)}</Text>
               </View>
+              <OfficialStandardButton name={doc.name} size={14} />
               <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}
                 trackColor={{ false: colors.border, true: colors.primary }} />
               <TouchableOpacity style={styles.kbDocDelete} onPress={() => handleDeleteDocument(doc)}>

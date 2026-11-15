@@ -27,7 +27,10 @@ export const isOfficialUrl = (url: string): boolean => {
  * should be renamed, because the name is all Atlas can go on.
  */
 const OFFICIAL_NAME = /^(?:fasb|gasb|asc[\s_-]*\d{3}|asu[\s_-]*\d{4}-\d{2}|accounting standards (?:codification|update))|\bcodification\b|\basu[\s_-]*\d{4}-\d{2}\b/i;
-export const isOfficialDocumentName = (name: string): boolean => OFFICIAL_NAME.test(name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim());
+/** Names the person (or Atlas, from the first page) marked as the standard itself, wired in by officialDocs.ts so this file stays free of storage. */
+let marked: (name: string) => boolean = (_name) => false;
+export const setOfficialLookup = (fn: (name: string) => boolean): void => { marked = fn; };
+export const isOfficialDocumentName = (name: string): boolean => marked(name) || OFFICIAL_NAME.test(name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim());
 
 /** A web page of a standard-setter, or a document added under a standard's name. Anything else (books, notes, other web pages) is not an authority on its own. */
 export const isOfficialSource = (s: AuthoritySource): boolean => {
