@@ -1,6 +1,7 @@
 import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
 import { MAX_OCR_PAGES, canReadScans, pagedChunksWithScans } from './pageChunks';
+import { IndexStopped } from './indexControl';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
@@ -74,16 +75,13 @@ async function readAndChunk(args: { fileName: string; filePath: string; attachme
       : 'Could not extract text from document');
   }
   const source = { uri: attachment?.uri ?? filePath, textContent: attachment?.textContent ?? '' };
-  noteIfStandard(fileName, source.textContent);
-  noteTaxSource(fileName, source.textContent);
   onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
   // Anything that is not a PDF (or a PDF the phone cannot read by page) is chunked from the whole text.
   const paged = isPdf ? await pagedChunksWithScans(source.uri || filePath, { gate, onOcr: (page, done) => onProgress?.({ stage: 'extracting', message: `Reading scanned page ${page} from its picture (${done} so far)...` }) }) : null;
-  if (paged?.ocrPages.length) {
-    const head = paged.chunks.slice(0, 12).map((c) => c.content).join('\n');
-    noteIfStandard(fileName, head);
-    noteTaxSource(fileName, head);
-  }
+  // Marked only once the document is really read (a stopped scan leaves no mark behind). A scan is recognised from its first pages.
+  const head = paged?.ocrPages.length ? paged.chunks.slice(0, 12).map((c) => c.content).join('\n') : source.textContent;
+  noteIfStandard(fileName, head);
+  noteTaxSource(fileName, head);
   return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent), note: scanNote(paged) };
 }
 
@@ -109,7 +107,14 @@ class RagService {
     // A whole textbook is about 1.5 to 3 million characters; the old 500,000 cut most of one off.
     const RAG_MAX_CHARS = 3_000_000;
     const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
-    const { source, chunks, note } = await readAndChunk({ fileName, filePath, attachment, onProgress, gate: params.gate });
+    const { source, chunks, note } = await readAndChunk({ fileName, filePath, attachment, onProgress, gate: params.gate }).catch(async (e: unknown) => {
+      // Stopped part-way: nothing is added, and the copies made for it are removed (a protected project's plaintext copy included).
+      if (e instanceof IndexStopped) {
+        if (attachment?.uri && attachment.uri !== filePath) await removeOwnCopy(attachment.uri);
+        if (isProtected) await removeOwnCopy(filePath);
+      }
+      throw e;
+    });
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }

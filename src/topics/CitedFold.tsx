@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { quotedSentence, lessonText, spokenLesson, unbackedLines } from './citations';
 import { appSearch, verdictText, verifyLines, type LineVerdict } from './verifyLines';
 import { sourcePage } from './service';
@@ -21,9 +22,12 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
   const [page, setPage] = useState<{ key: string; text: string } | null>(null);
   const [verdicts, setVerdicts] = useState<LineVerdict[] | null>(null);
   const [checking, setChecking] = useState(false);
-  if (!passages.length) return null;
   const lesson = lessonText(content);
   const unbacked = unbackedLines(content, passages);
+  // A verdict belongs to the line it was made for: when the lesson is written again the lines change, so the old verdicts go.
+  const lineKey = unbacked.join('\n');
+  useEffect(() => { setVerdicts(null); }, [lineKey]);
+  if (!passages.length) return null;
   const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source && q.where === p.where) === i);
   const label = (p: Passage) => `${p.source}${p.where ? `, ${p.where}` : ''}`;
   const check = async (lines: string[]) => { setChecking(true); try { setVerdicts(await verifyLines(lines, { projectId, search: appSearch() ?? undefined })); } finally { setChecking(false); } };
@@ -75,11 +79,11 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
 }
 
 const styles = StyleSheet.create({
-  gap: { gap: 6 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
-  meta: { fontSize: 13 },
+  gap: { gap: SPACING.sm },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACING.md },
+  meta: { ...TYPOGRAPHY.bodySmall },
   link: { textDecorationLine: 'underline' },
-  card: { borderWidth: 1, borderRadius: 8, padding: 10, gap: 4 },
+  card: { borderWidth: 1, borderRadius: 8, padding: SPACING.md, gap: SPACING.xs },
   hit: { fontWeight: '400' },
 });
 

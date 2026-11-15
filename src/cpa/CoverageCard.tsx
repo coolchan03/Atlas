@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { coverageFor, type TopicCoverage } from './coverage';
@@ -35,4 +36,4 @@ export function CoverageCard({ code }: { code: ExamCode }) {
   );
 }
 
-const styles = StyleSheet.create({ card: { gap: 8 }, title: { fontSize: 16 }, list: { gap: 4 } });
+const styles = StyleSheet.create({ card: { gap: SPACING.sm }, title: { ...TYPOGRAPHY.h3 }, list: { gap: SPACING.xs } });

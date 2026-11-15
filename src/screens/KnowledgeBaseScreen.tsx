@@ -101,8 +101,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
       }
       logger.log(`[KnowledgeBase] picker returned ${files.length} file(s): ${files.map(f => `${f.name} (${f.size}b)`).join(', ')}`);
 
-      control.reset();
-      let note = '';
+      control.begin();
+      const notes: string[] = [];
       for (let i = 0; i < files.length; i++) {
         if (!(await gate())) break; // paused here until resumed, or stopped: the files already added stay
         const file = files[i];
@@ -115,7 +115,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         try {
           await ragService.indexDocument({
             projectId, filePath: pathForDb, fileName, fileSize: file.size || 0, gate,
-            onProgress: (p) => { if (/scanned page/.test(p.message)) setIndexingFile(p.message); else if (p.stage === 'done' && p.message.length > 5) note = `${fileName}: ${p.message.replace(/^Done\.\s*/, '')}`; },
+            onProgress: (p) => { if (/scanned page/.test(p.message)) setIndexingFile(p.message); else if (p.stage === 'done' && p.message.length > 5) notes.push(`${fileName}: ${p.message.replace(/^Done\.\s*/, '')}`); },
           });
           logger.log(`[KnowledgeBase] indexed successfully: ${fileName}`);
         } catch (indexErr: any) {
@@ -128,7 +128,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         }
       }
       await loadKbDocs();
-      if (note) Alert.alert('Added', note); // pages read from pictures can have misread characters, and some may not have been readable
+      if (notes.length) Alert.alert('Added', notes.join('\n\n')); // pages read from pictures can have misread characters, and some may not have been readable
     } catch (err: any) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) {
         logger.log('[KnowledgeBase] picker cancelled by user');
@@ -145,6 +145,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
       isPickingRef.current = false;
       setIsPicking(false);
       setIndexingFile(null);
+      control.end();
       logger.log('[KnowledgeBase] picker settled, lock released');
     }
   };
@@ -260,7 +261,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
       {indexingFile && (
         <View style={styles.indexingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.indexingText}>{control.paused ? 'Paused. ' : ''}{/^(Adding|Copying|Unpacking|Reading)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
+          <Text style={styles.indexingText}>{control.paused ? 'Pause asked: waits at the next file or scanned page. ' : ''}{/^(Adding|Copying|Unpacking|Reading)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
           <TouchableOpacity onPress={control.paused ? control.resume : control.pause} accessibilityRole="button" testID="kb-pause"><Text style={{ color: colors.primary }}>{control.paused ? 'Resume' : 'Pause'}</Text></TouchableOpacity>
           <TouchableOpacity onPress={control.stop} accessibilityRole="button" testID="kb-stop"><Text style={{ color: colors.error }}>Stop</Text></TouchableOpacity>
         </View>

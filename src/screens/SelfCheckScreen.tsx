@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   body: { padding: SPACING.lg, gap: SPACING.md, paddingBottom: 80 },
   note: { ...TYPOGRAPHY.bodySmall },
   summary: { ...TYPOGRAPHY.body },
-  card: { gap: 4 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  card: { gap: SPACING.xs },
+  head: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   name: { ...TYPOGRAPHY.h3 },
 });

@@ -42,3 +42,14 @@ it('waits while paused, goes on when resumed, and stops for good when stopped', 
   expect(await gate()).toBe(false);
   c.reset();
 });
+
+it('clears a pause when a run ends (never stuck), and does not clear it under another run that is still going', () => {
+  const { useIndexControl } = require('../../src/services/rag/indexControl');
+  const c = useIndexControl.getState();
+  c.begin(); c.begin();
+  c.pause();
+  c.end(); // one run is still going: the pause stays
+  expect(useIndexControl.getState().paused).toBe(true);
+  c.end(); // the last run ended: nothing is left paused
+  expect(useIndexControl.getState().paused).toBe(false);
+});

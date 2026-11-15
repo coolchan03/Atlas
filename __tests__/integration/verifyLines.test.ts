@@ -28,3 +28,10 @@ it('backs a line from the law in the project, finds another on an official site,
   const offline = await verifyLines([claims[1]], { projectId: 'p1', search: async () => { throw new Error('offline'); } });
   expect(offline[0].status).toBe('offline');
 });
+
+it('says "could not check" when there is no web search to use (off-grid), not "no support found"', async () => {
+  const { verifyLines, verdictText } = require('../../src/topics/verifyLines');
+  const out = await verifyLines(['Leases need a right-of-use asset at commencement.'], {});
+  expect(out[0].status).toBe('offline');
+  expect(verdictText(out[0])).toMatch(/Could not check/);
+});

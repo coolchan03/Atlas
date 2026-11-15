@@ -3,6 +3,7 @@ import { installNativeBoundary, requireRTL } from '../harness/nativeBoundary';
 
 it('shows each source with its page, opens the passage with the quoted sentence marked, and lists what no source backs', async () => {
   installNativeBoundary({ fs: true });
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web search: "check these lines" says it could not check
   const rtl = requireRTL();
   const React = require('react');
   const { CitedFold, RewriteRow } = require('../../src/topics/CitedFold');
@@ -25,4 +26,13 @@ it('shows each source with its page, opens the passage with the quoted sentence 
   expect(view.getByTestId('square-source-page')).toBeTruthy();
   rtl.fireEvent.press(view.getByTestId('square-rewrite-simpler'));
   expect(picked).toEqual(['simpler']);
+  // Check these lines: with no project and no web search the answer is "could not check", and it goes when the lesson is written again.
+  rtl.fireEvent.press(view.getByTestId('square-check-lines'));
+  await rtl.waitFor(() => expect(view.getByTestId('line-verdict-0')).toBeTruthy());
+  expect(view.getByText(/Could not check/)).toBeTruthy();
+  const again = { ...lesson, sections: [{ heading: 'H', text: 'The reporting rate must always equal 99.5 percent for every private company filing in every state.' }] };
+  view.rerender(React.createElement(React.Fragment, null,
+    React.createElement(RewriteRow, { show: true, onPick: () => undefined }),
+    React.createElement(CitedFold, { passages, content: again })));
+  expect(view.queryByTestId('line-verdict-0')).toBeNull();
 });

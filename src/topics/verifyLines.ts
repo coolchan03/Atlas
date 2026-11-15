@@ -47,7 +47,8 @@ export async function verifyLines(lines: string[], opts: { projectId?: string; s
   const out: LineVerdict[] = [];
   for (const line of lines) {
     const here = opts.projectId ? await inDocuments(line, opts.projectId) : null;
-    out.push(here ?? (opts.search ? await onTheWeb(line, opts.search) : { line, status: 'unverified' }));
+    // With no web search to use (off-grid mode, or no way to search) that is said as "could not check", not as "no support found".
+    out.push(here ?? (opts.search ? await onTheWeb(line, opts.search) : { line, status: 'offline' }));
   }
   return out;
 }

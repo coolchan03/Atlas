@@ -7,6 +7,12 @@ describe('what changed since the books', () => {
     expect(newestBookYear(['Intermediate Accounting 2021.pdf', 'Advanced Accounting (2022).pdf', 'Notes.pdf'])).toBe(2022);
     expect(newestBookYear(['Notes.pdf'])).toBeNull();
   });
+  it('ignores years in the future (effective dates) and numbers that are not years, and trusts a title over a snippet', async () => {
+    expect(yearOfPage('effective for fiscal years beginning after December 15, 2999', 2025)).toBe(0);
+    expect(newestBookYear(['scan_2048.pdf', 'Intermediate Accounting 2022.pdf'])).toBe(2022);
+    const search = async () => [{ title: 'ASU 2016-02 Leases (Topic 842)', url: 'https://www.fasb.org/asu-2016-02', snippet: 'effective for fiscal years beginning after December 15, 2026' }];
+    expect((await updatesSince({ topics: ['leases'], bookYear: 2022, search })).items).toEqual([]); // a 2016 update with a future effective date is not new
+  });
   it('picks the topics that change: FASB ones for accounting exams, IRS notices for tax, the first few for the rest', () => {
     expect(digestTopics('FAR', ['Leases', 'Revenue recognition', 'Cash and receivables', 'Income taxes'])).toEqual(['Accounting Standards Update', 'leases', 'revenue', 'income taxes']);
     expect(digestTopics('REG', ['Basis'])).toContain('IRS Notice');

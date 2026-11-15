@@ -5,7 +5,8 @@
  */
 import { create } from 'zustand';
 
-interface State { paused: boolean; stopped: boolean; pause: () => void; resume: () => void; stop: () => void; reset: () => void }
+interface State { paused: boolean; stopped: boolean; pause: () => void; resume: () => void; stop: () => void; reset: () => void; /** A run of adding documents starts: the controls are cleared unless another run is still going. */ begin: () => void; /** A run ends: the controls are cleared when none is left, so a pause is never left stuck. */ end: () => void }
+let running = 0;
 
 export const useIndexControl = create<State>((set) => ({
   paused: false, stopped: false,
@@ -13,6 +14,8 @@ export const useIndexControl = create<State>((set) => ({
   resume: () => set({ paused: false }),
   stop: () => set({ stopped: true, paused: false }),
   reset: () => set({ paused: false, stopped: false }),
+  begin: () => { if (running === 0) set({ paused: false, stopped: false }); running += 1; },
+  end: () => { running = Math.max(0, running - 1); if (running === 0) set({ paused: false, stopped: false }); },
 }));
 
 /** Thrown from inside the indexer when the person pressed stop. */

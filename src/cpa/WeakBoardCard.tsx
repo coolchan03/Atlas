@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { useExerciseStore } from '../study/exercises';
@@ -39,4 +40,4 @@ export function WeakBoardCard({ code }: { code: ExamCode }) {
   );
 }
 
-const styles = StyleSheet.create({ card: { gap: 8 }, title: { fontSize: 16 } });
+const styles = StyleSheet.create({ card: { gap: SPACING.sm }, title: { ...TYPOGRAPHY.h3 } });

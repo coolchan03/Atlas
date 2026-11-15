@@ -5,7 +5,7 @@
  */
 export type CheckStatus = 'pass' | 'fail' | 'skip';
 export interface CheckOutcome { status: CheckStatus; detail: string }
-export interface Check { id: string; name: string; run: () => Promise<CheckOutcome> }
+export interface Check { id: string; name: string; run: () => Promise<CheckOutcome>; /** For a check that loads a model, which can take a minute on a slow phone. */ timeoutMs?: number }
 export interface CheckResult extends CheckOutcome { id: string; name: string; ms: number }
 
 /** The longest one check may take. */
@@ -22,7 +22,7 @@ export async function runChecks(checks: Check[], onResult?: (r: CheckResult) => 
   for (const c of checks) {
     const started = Date.now();
     let outcome: CheckOutcome;
-    try { outcome = await withTimeout(c.run(), timeoutMs); } catch (e) { outcome = { status: 'fail', detail: String((e as Error)?.message || e).slice(0, 200) }; }
+    try { outcome = await withTimeout(c.run(), c.timeoutMs ?? timeoutMs); } catch (e) { outcome = { status: 'fail', detail: String((e as Error)?.message || e).slice(0, 200) }; }
     const result = { id: c.id, name: c.name, ms: Date.now() - started, ...outcome };
     out.push(result);
     onResult?.(result);
@@ -54,7 +54,7 @@ export function defaultChecks(projectId?: string): Check[] {
       const reply: string | null = await askRemote('Reply with the single word OK.', 'OK');
       return reply ? pass(`The server answered: "${reply.slice(0, 40)}".`) : fail('The server did not answer, so lessons fall back to the phone\'s model.');
     } },
-    { id: 'embedding', name: 'The search model', run: async () => {
+    { id: 'embedding', name: 'The search model', timeoutMs: 120_000, run: async () => {
       const { embeddingService } = require('../services/rag/embedding');
       if (!embeddingService.isLoaded()) await embeddingService.load();
       const v: number[] = await embeddingService.embed('lease accounting');
@@ -64,7 +64,8 @@ export function defaultChecks(projectId?: string): Check[] {
       if (!projectId) return skip('No project to search. Open a project or exam folder and run this again.');
       const { ragService } = require('../services/rag');
       const stats = await ragService.libraryStats(projectId);
-      if (!stats?.documents.length) return skip('This project has no documents yet.');
+      if (stats === null) return skip('This project is protected, so its documents cannot be searched from here. Unlock it and check from inside it.');
+      if (!stats.documents.length) return skip('This project has no documents yet.');
       const t = Date.now();
       const r = await ragService.searchProject(projectId, 'the', { topK: 3 });
       const chunks = stats.documents.reduce((n: number, d: { chunks: number }) => n + d.chunks, 0);
@@ -89,6 +90,8 @@ export function defaultChecks(projectId?: string): Check[] {
       const { NativeModules, PermissionsAndroid, Platform } = require('react-native');
       const native = NativeModules.AtlasMediaControls;
       if (!native?.show) return skip('This build has no lock-screen controls for this phone.');
+      // The test notification would replace the one a reading is using.
+      if (require('../atlasVoice/readAloud').readAloud.useReader.getState().status !== 'idle') return skip('Read aloud is in use right now. Stop it and run this again.');
       if (Platform.OS === 'android' && Platform.Version >= 33) {
         const ok = await PermissionsAndroid.check('android.permission.POST_NOTIFICATIONS');
         if (!ok) return fail('Notifications are not allowed for Atlas, so the controls cannot show. Allow them in the phone\'s app settings.');

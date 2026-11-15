@@ -10,14 +10,15 @@ export interface DigestItem { title: string; url: string; host: string; snippet:
 export interface Digest { items: DigestItem[]; searched: number; failed: number; offline: boolean }
 
 /** The year a page is about: the newest year in its title, snippet or address, or the year of an ASU number ("2023-01"). 0 when it shows none. */
-export function yearOfPage(text: string): number {
-  const years = [...text.matchAll(/(?<!\d)(20\d{2})(?!\d)/g)].map((m) => Number(m[1]));
+export function yearOfPage(text: string, now = new Date().getFullYear()): number {
+  // A year after this one is a date something takes effect ("fiscal years beginning after December 15, 2026"), not the year the page is from.
+  const years = [...text.matchAll(/(?<!\d)(20\d{2})(?!\d)/g)].map((m) => Number(m[1])).filter((y) => y <= now);
   return years.length ? Math.max(...years) : 0;
 }
 
 /** The newest year shown in the names of the documents (a book called "Intermediate Accounting 2022"), or null when none shows one. */
 export function newestBookYear(names: string[]): number | null {
-  const years = names.map((n) => yearOfPage(n)).filter(Boolean);
+  const years = names.map((n) => yearOfPage(n)).filter((y) => y >= 1990);
   return years.length ? Math.max(...years) : null;
 }
 
@@ -38,15 +39,19 @@ export async function updatesSince(opts: { topics: string[]; bookYear: number; s
   const { topics, bookYear, search, limit = 12 } = opts;
   const found = new Map<string, DigestItem>();
   let failed = 0;
-  for (const topic of topics) {
+  // A few topics at a time: each takes several searches, and they do not depend on each other.
+  const lookup = async (topic: string): Promise<void> => {
     try {
       for (const p of await officialPages(`${topic} ${bookYear + 1}`, search)) {
         if (!p.url) continue;
-        const year = Math.max(yearOfPage(`${p.title} ${p.snippet ?? ''} ${p.url}`), ...asuNumbers(`${p.title} ${p.snippet ?? ''}`).map((a) => Number(a.slice(0, 4))));
+        // What the page is called says its year best (its title, then an ASU number), then its text, then its address.
+        const asu = asuNumbers(`${p.title} ${p.snippet ?? ''}`).map((a) => Number(a.slice(0, 4)))[0] ?? 0;
+        const year = yearOfPage(p.title) || asu || yearOfPage(p.snippet ?? '') || yearOfPage(p.url);
         if (year > bookYear && !found.has(p.url)) found.set(p.url, { title: p.title, url: p.url, host: hostOf(p.url), snippet: (p.snippet ?? '').slice(0, 240), year, topic });
       }
     } catch { failed += 1; }
-  }
+  };
+  for (let i = 0; i < topics.length; i += 3) await Promise.all(topics.slice(i, i + 3).map(lookup));
   const items = [...found.values()].sort((a, b) => b.year - a.year).slice(0, limit);
   return { items, searched: topics.length, failed, offline: topics.length > 0 && failed === topics.length };
 }

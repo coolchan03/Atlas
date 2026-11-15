@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { appSearch } from '../topics/verifyLines';
 import { digestTopics, newestBookYear, updatesSince, type Digest } from '../standards/digest';
 import { useCpa } from './store';
+import { isEnabled, isTeaching } from '../standards/docRoles';
 import type { ExamCode } from './blueprints';
 
 /** "What changed since my book": pages on the standard-setters' own sites that are newer than the newest book in the folder. */
@@ -21,7 +23,9 @@ export function UpdatesCard({ code }: { code: ExamCode }) {
     setBusy(true); setNote('');
     try {
       const { ragService } = require('../services/rag');
-      const names: string[] = exam?.projectId ? (await ragService.getDocumentsByProject(exam.projectId)).map((d: { name: string }) => d.name) : [];
+      // The books are the documents lessons are taught from; the law and standards are dated by their own editions and say nothing of how old the books are.
+      const docs: Array<{ name: string; enabled?: number | boolean }> = exam?.projectId ? await ragService.getDocumentsByProject(exam.projectId) : [];
+      const names = docs.filter(isEnabled).map((d) => d.name).filter(isTeaching);
       const fromNames = newestBookYear(names);
       const bookYear = fromNames ?? new Date().getFullYear() - 2;
       if (!fromNames) setNote(`None of your document names show a year, so this assumes your books are from ${bookYear}. Put the year in the file name (for example "Intermediate Accounting 2022") to be exact.`);
@@ -51,4 +55,4 @@ export function UpdatesCard({ code }: { code: ExamCode }) {
   );
 }
 
-const styles = StyleSheet.create({ card: { gap: 8 }, title: { fontSize: 16 }, list: { gap: 8 } });
+const styles = StyleSheet.create({ card: { gap: SPACING.sm }, title: { ...TYPOGRAPHY.h3 }, list: { gap: SPACING.sm } });
