@@ -8,11 +8,13 @@ import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
+import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { enqueue } from './generationQueue';
 import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
+import { documentStanding } from '../standards/authority';
 
 const MAX_TRIES = 2;
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -45,23 +47,36 @@ async function projectText(projectId: string): Promise<string> {
 }
 
 /**
- * A course with one unit per chapter of the textbook in the project: a lesson, key-term cards and a test of that chapter, in the book's own
- * order. Made in code from the chapter headings, so no chapter is skipped. Null when the book's chapters cannot be found (then the AI plans the course).
+ * A course with one unit per chapter, from ALL the textbooks in the project: the same subject in several books is one unit (written from every
+ * book that covers it), and a chapter only one book has is kept. A lesson, key-term cards and a test for each, so no chapter of any book is skipped.
+ * Null when no book's chapters can be found (then the AI plans the course).
  */
 export async function createChapterCourse(request: CourseRequest, sources: CourseSource[], projectId: string): Promise<string | null> {
-  const chapters = findChapters(await projectText(projectId));
+  const books = await bookChapters(projectId, isOutlineDocument);
+  const topics = books.length ? mergeBooks(books) : [];
+  // Books whose chapters could not be told apart: fall back to the chapters found in the project's text as a whole.
+  const chapters = topics.length >= 3 ? asChapters(topics) : findChapters(await projectText(projectId));
   if (chapters.length < 3) return null;
-  return useTopics.getState().add(request, chapterPlan(chapters, request.topic), { sources, projectId });
+  return useTopics.getState().add(request, chapterPlan(chapters, request.topic, books.length > 1), { sources, projectId });
 }
 
-/** Passages from the shared documents of the course's project that match the square (none when there is no project or no documents). */
+/**
+ * Passages from ALL the documents of the course's project that match the square: the best passage of each book (two at most from one), not
+ * the top few overall, so one textbook cannot crowd out the others. Standards and the law come first, then textbooks, so a lesson is
+ * written from every book and the standard is the one it follows where they differ.
+ */
 async function projectExcerpts(projectId: string | undefined, query: string): Promise<Excerpt[]> {
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
-    const found = await ragService.searchProject(projectId, query);
-    // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
-    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string; position?: number; doc_id?: number }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, docId: c.doc_id, where: at.where, text: at.text.slice(0, 700) }; });
+    const found = await ragService.searchProject(projectId, query, { topK: 14 });
+    type Chunk = { name: string; content: string; position?: number; doc_id?: number };
+    // Passages that are mostly questions belong to a question bank, and the exam blueprint is a list of topics: neither is read as a lesson.
+    const usable: Chunk[] = (found?.chunks ?? []).filter((c: Chunk) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content)));
+    const perDoc = new Map<string, number>();
+    const picked = usable.filter((c) => { const n = perDoc.get(c.name) ?? 0; perDoc.set(c.name, n + 1); return n < 2; });
+    const ranked = picked.map((c, i) => ({ c, i, st: documentStanding(String(c.name)) })).sort((a, b) => a.st.rank - b.st.rank || a.i - b.i);
+    return ranked.slice(0, 6).map(({ c, st }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, docId: c.doc_id, where: at.where, rank: st.rank, label: st.label, text: at.text.slice(0, 600) }; });
   } catch { return []; }
 }
 
@@ -134,7 +149,7 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   }
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
   const query = `${square.title} ${square.focus}`;
-  let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 5);
+  let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 6);
   if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = [...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)].slice(0, 5);
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,

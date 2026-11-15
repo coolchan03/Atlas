@@ -43,10 +43,10 @@ import { CHAPTER_SQUARES, chapterSquares } from './chapterSequence';
 export const chapterName = (c: Chapter): string => (c.title ? `Chapter ${c.number}: ${c.title}` : `Chapter ${c.number}`);
 
 /** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */
-export function chapterPlan(chapters: Chapter[], book: string): CoursePlan {
+export function chapterPlan(chapters: Chapter[], book: string, manyBooks = false): CoursePlan {
   const used = chapters.slice(0, Math.floor(MAX_SQUARES / CHAPTER_SQUARES));
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
-  for (const c of used) chapterSquares(chapterName(c), `Chapter ${c.number}`, 'of the textbook').forEach(add);
-  return { title: book, summary: 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
+  for (const c of used) chapterSquares(chapterName(c), `Chapter ${c.number}`, manyBooks ? 'from all the textbooks in the project' : 'of the textbook').forEach(add);
+  return { title: book, summary: manyBooks ? 'Every chapter of every textbook, with the same subject in different books made one unit: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.' : 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
 }

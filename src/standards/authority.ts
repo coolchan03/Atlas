@@ -75,3 +75,10 @@ export function overrules(newer: AuthoritySource[], older: AuthoritySource[]): b
   if (n.rank < o.rank) return !(n.year && o.year && o.year - n.year >= 2);
   return n.rank === o.rank && n.rank < TEXTBOOK_RANK + 1 && !!n.year && !!o.year && n.year > o.year && n.rank <= 4;
 }
+
+/** How a project document ranks as an authority, from its name alone: 1 a standard-setter or the Code ... 5 a textbook, with a short label for prompts. */
+export function documentStanding(name: string): { rank: number; label: string } {
+  const s = standing({ kind: 'project', title: name } as AuthoritySource);
+  if (s.rank === 1) return { rank: 1, label: isOfficialSource({ kind: 'project', title: name } as AuthoritySource) && !classifyTaxSource(name) ? 'STANDARD' : (classifyTaxSource(name)?.label ?? 'STANDARD') };
+  return { rank: s.rank, label: classifyTaxSource(name)?.label ?? 'textbook' };
+}

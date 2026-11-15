@@ -282,12 +282,14 @@ class RagService {
     ragDatabase.toggleEnabled(docId, enabled);
   }
 
-  async searchProject(projectId: string, query: string, contextLength?: number) {
+  /** `options` is a context length in characters (an old way of calling it), or { contextLength, topK } to fetch more passages than the default five. */
+  async searchProject(projectId: string, query: string, options?: number | { contextLength?: number; topK?: number }) {
     await this.ensureReady();
+    const { contextLength, topK } = typeof options === 'number' ? { contextLength: options, topK: undefined } : (options ?? {});
     if (contextLength) {
-      return retrievalService.searchWithBudget({ projectId, query, contextLength });
+      return retrievalService.searchWithBudget({ projectId, query, contextLength, topK });
     }
-    return retrievalService.search(projectId, query);
+    return retrievalService.search(projectId, query, topK);
   }
 
   async deleteProjectDocuments(projectId: string): Promise<void> {

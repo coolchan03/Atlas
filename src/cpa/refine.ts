@@ -3,7 +3,7 @@
  * that the checklist does not already cover become topics, under the area they fit best. Safe to run again: it only adds what is missing, and
  * a rebuilt board keeps the stars and lessons already earned. Pure parts first (tested without a device), then the part that reads the project.
  */
-import { findChapters, type Chapter } from '../topics/chapters';
+import { bookChapters, type BookChapters } from '../topics/multiBook';
 import { useCpa, type CpaTopic } from './store';
 import { isOutlineDocument } from './outline';
 import { ensureExamCourse } from './course';
@@ -14,7 +14,6 @@ const words = (t: string): Set<string> => new Set((t.toLowerCase().match(/[a-z]{
 const shared = (a: Set<string>, b: Set<string>): number => [...a].filter((w) => b.has(w)).length;
 const SKIP = /^(preface|index|appendix|glossary|answers?|solutions?|contents|about|foreword)\b/i;
 
-export interface BookChapters { doc: string; chapters: Array<Pick<Chapter, 'number' | 'title'>> }
 export interface Addition { area: string; name: string; from: string }
 
 /** The topic a chapter title makes: the title, tidied, or null when it is not a subject (a preface, an index). */
@@ -54,21 +53,6 @@ export function additionsFrom(topics: CpaTopic[], books: BookChapters[]): Additi
   return out.slice(0, 60);
 }
 
-/** The chapters of each document in the project (question banks and the exam blueprint are not books). */
-async function chaptersOf(projectId: string): Promise<BookChapters[]> {
-  const { ragService } = require('../services/rag');
-  const { looksLikeQuestions } = require('../study/bookQuestions');
-  const out: BookChapters[] = [];
-  for (const doc of await ragService.getDocumentsByProject(projectId)) {
-    if (isOutlineDocument(String(doc.name))) continue;
-    const text = (await ragService.getDocumentChunks(doc.id)).map((c: { content: string }) => String(c.content).replace(/^\(p\. \d+\)\s*/, '')).join('\n');
-    if (looksLikeQuestions(text.slice(0, 4000))) continue;
-    const chapters = findChapters(text);
-    if (chapters.length >= 3) out.push({ doc: String(doc.name), chapters });
-  }
-  return out;
-}
-
 /**
  * Makes the outline more detailed from the documents. Returns how many topics were added; when there are any, the board is rebuilt so its
  * squares match (what was played and written is kept).
@@ -78,7 +62,7 @@ export async function refineOutline(code: ExamCode): Promise<number> {
   if (!exam?.projectId) return 0;
   let added = 0;
   try {
-    const adds = additionsFrom(exam.topics, await chaptersOf(exam.projectId));
+    const adds = additionsFrom(exam.topics, await bookChapters(exam.projectId, isOutlineDocument));
     adds.forEach((a) => useCpa.getState().addTopic(code, a.area, a.name));
     added = adds.length;
   } catch { return 0; }

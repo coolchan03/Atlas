@@ -19,7 +19,7 @@ export interface CourseSource {
 }
 
 /** A passage a square was written from: where it came from, a link when it is a web page, and the words. */
-export interface Excerpt { source: string; url?: string; /** The project document it is from, so the whole page can be opened. */ docId?: number; /** Where in it: "page 12", "part 3" or "paragraph 5". */ where?: string; text: string }
+export interface Excerpt { /** How high the source ranks as an authority (1 a standard or the law, 5 a textbook) and its label. */ rank?: number; label?: string; source: string; url?: string; /** The project document it is from, so the whole page can be opened. */ docId?: number; /** Where in it: "page 12", "part 3" or "paragraph 5". */ where?: string; text: string }
 
 /** A project chunk's place and words: a PDF chunk starts with "(p. 12)", which becomes "page 12"; any other file is told by its part number. */
 export function chunkPlace(content: string, position: number | undefined): { where?: string; text: string } {

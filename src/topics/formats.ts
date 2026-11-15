@@ -149,7 +149,7 @@ export type SquareContent =
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
   | { kind: 'dictation'; lang: string; sentences: string[] };
 
-export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; docId?: number; where?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; /** Questions the learner got wrong earlier in this course: a quiz asks about the same ideas again in new words. */ retry?: string[]; /** How to rewrite a square the learner found unclear. */ rewrite?: string; difficulty?: Difficulty }
+export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; docId?: number; where?: string; rank?: number; label?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; /** Questions the learner got wrong earlier in this course: a quiz asks about the same ideas again in new words. */ retry?: string[]; /** How to rewrite a square the learner found unclear. */ rewrite?: string; difficulty?: Difficulty }
 
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
@@ -181,7 +181,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${authorityNote(r.excerpts)}${r.excerpts.map((e) => `[${e.source}${e.label && e.label !== 'textbook' ? ` (${e.label})` : ''}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 
@@ -207,6 +207,17 @@ export function exampleIsComplete(example: string): boolean {
 
 /** What a lesson's writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
 export const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Use a Markdown table (a header row, a |---|---| row, then the rows, each on its own line) for anything with columns: comparisons, schedules, amortisation or depreciation tables, rate and threshold lists, and journal entries. Write a journal entry as a table with the columns Account | Debit | Credit, the debit line first, the credit line after it with "to" before the account name (for example "to Revenue"), and a short date or description line above it. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
+
+/** When passages come from several books, and some are a standard or the law: combine what the books agree on, and let the standard win where it differs. */
+export function authorityNote(excerpts: Array<{ source: string; rank?: number }> | undefined): string {
+  if (!excerpts?.length) return '';
+  const books = new Set(excerpts.map((e) => e.source)).size;
+  const official = excerpts.some((e) => (e.rank ?? 5) < 5);
+  const parts = [];
+  if (books > 1) parts.push('The passages come from different books: combine what they agree on, and where they differ say so briefly.');
+  if (official) parts.push('A passage marked STANDARD (or as the law, a regulation or a bulletin) outranks a textbook: where it differs from a textbook, teach the standard and say in one sentence that older books may still show the old rule.');
+  return parts.length ? `${parts.join(' ')}\n` : '';
+}
 
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
