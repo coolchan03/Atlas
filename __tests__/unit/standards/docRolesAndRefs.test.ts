@@ -1,4 +1,4 @@
-import { sectionRefs, refScore } from '../../../src/services/rag/sectionRefs';
+import { sectionRefs, refScore, crossReferences } from '../../../src/services/rag/sectionRefs';
 import { defaultRole } from '../../../src/standards/docRoles';
 import { figuresIn, unverifiedFigure } from '../../../src/topics/citations';
 import { mentions, rate } from '../../../src/cpa/coverage';
@@ -18,6 +18,15 @@ describe('exact references in a question', () => {
     expect(refScore('§ 179. Election to expense certain depreciable business assets', refs)).toBe(3);
     expect(refScore('Property is described in the text, see also § 179 for expensing.'.padStart(500, ' '), refs)).toBeLessThan(3);
     expect(refScore('Nothing about it', refs)).toBe(0);
+  });
+});
+
+describe('following the pointers in the law', () => {
+  it('finds the other sections a passage points to, and not the section it is', () => {
+    const passage = '§ 179. Election to expense. The term section 179 property means tangible property to which section 168 applies, see also section 1245(a) and Reg. 1.179-1.';
+    const ids = crossReferences(passage, 5).map((r) => r.id);
+    expect(ids).toEqual(expect.arrayContaining(['168', '1245(a)']));
+    expect(ids).not.toContain('179');
   });
 });
 

@@ -30,6 +30,13 @@ it('finds the passage that opens with the section asked about, searches by role,
   expect(new Set(reference.chunks.map((c: { name: string }) => c.name))).toEqual(new Set(['Title 26 - Internal Revenue Code.pdf']));
   expect((await ragService.searchProject('p1', 'depreciation', { topK: 5, include: () => false })).chunks).toEqual([]);
 
+  // A lesson follows a pointer in the law: § 179 here points to § 197, and the real search finds that section's passage.
+  const { followPointers } = require('../../src/topics/service');
+  const held = [{ name: 'Title 26 - Internal Revenue Code.pdf', content: '§ 179. Election to expense. See also section 197 for intangibles.', position: 99, doc_id: 1 }];
+  const pointed = await followPointers(held, (q: string) => ragService.searchProject('p1', q, { topK: 3 }));
+  expect(pointed).toHaveLength(1);
+  expect(pointed[0].content.trimStart().startsWith('§ 197.')).toBe(true);
+
   // A document added after a search is found by the next one (the cache is not stale).
   await add('Another book.pdf', filler('Chapter 9. More on expensing property.'));
   const after = await ragService.searchProject('p1', 'expensing', { topK: 10, include: isTeaching });

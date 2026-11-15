@@ -1,6 +1,6 @@
 import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
-import { pagedChunks } from './pageChunks';
+import { canReadScans, pagedChunksWithScans } from './pageChunks';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
@@ -49,6 +49,34 @@ interface IndexDocumentParams {
   replaceExisting?: boolean;
 }
 
+/**
+ * The text and chunks of a document that has been read. A PDF is chunked page by page so every chunk knows its page, and a scanned PDF (pictures
+ * of pages, no text layer) has its pages read from the pictures when a vision model is loaded; without one the person is told what to do.
+ * A FASB standard or a tax source is recognised from the first pages and marked, so it overrules textbooks whatever it is called.
+ */
+async function readAndChunk(args: { fileName: string; filePath: string; attachment: { uri?: string; textContent?: string } | null | undefined; onProgress?: (p: IndexProgress) => void }) {
+  const { fileName, filePath, attachment, onProgress } = args;
+  const isPdf = fileName.toLowerCase().endsWith('.pdf');
+  const hasText = !!attachment?.textContent;
+  if (!hasText && !(isPdf && canReadScans())) {
+    throw new Error(isPdf
+      ? 'This looks like a scanned PDF with no text layer, so there was no text to extract. Load a model that can see images (a vision model) and add it again: Atlas will read the pages from their pictures.'
+      : 'Could not extract text from document');
+  }
+  const source = { uri: attachment?.uri ?? filePath, textContent: attachment?.textContent ?? '' };
+  noteIfStandard(fileName, source.textContent);
+  noteTaxSource(fileName, source.textContent);
+  onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
+  // Anything that is not a PDF (or a PDF the phone cannot read by page) is chunked from the whole text.
+  const paged = isPdf ? await pagedChunksWithScans(source.uri || filePath, { onOcr: (page, done) => onProgress?.({ stage: 'extracting', message: `Reading scanned page ${page} from its picture (${done} so far)...` }) }) : null;
+  if (paged?.ocrPages.length) {
+    const head = paged.chunks.slice(0, 12).map((c) => c.content).join('\n');
+    noteIfStandard(fileName, head);
+    noteTaxSource(fileName, head);
+  }
+  return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent) };
+}
+
 class RagService {
   async ensureReady(): Promise<void> {
     await ragDatabase.ensureReady();
@@ -71,31 +99,14 @@ class RagService {
     // A whole textbook is about 1.5 to 3 million characters; the old 500,000 cut most of one off.
     const RAG_MAX_CHARS = 3_000_000;
     const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
-    if (!attachment?.textContent) {
-      // A PDF that extracts to zero text is a scanned / image-only PDF (no text layer);
-      // there is no on-device OCR, so name that cause instead of a generic failure (B-KB).
-      const isPdf = fileName.toLowerCase().endsWith('.pdf');
-      throw new Error(
-        isPdf
-          ? 'This looks like a scanned PDF with no text layer, so there was no text to extract (OCR is not available).'
-          : 'Could not extract text from document',
-      );
-    }
-
-    // A FASB standard or update is recognised from its first pages and marked as the standard itself, so it overrules textbooks whatever it is called.
-    noteIfStandard(fileName, attachment.textContent);
-    noteTaxSource(fileName, attachment.textContent); // a tax publication, bulletin, regulation or the Code, and its year, from its first pages
-    onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
-    // A PDF is chunked page by page so every chunk knows its page; anything else (or a PDF the phone cannot read by page) is chunked from the whole text.
-    const paged = fileName.toLowerCase().endsWith('.pdf') ? await pagedChunks(attachment.uri || filePath) : null;
-    const chunks = paged ?? chunkDocument(attachment.textContent);
+    const { source, chunks } = await readAndChunk({ fileName, filePath, attachment, onProgress });
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }
 
     if (isProtected) {
       // Protected project: chunks and embeddings go only into the encrypted vault, never rag.db.
-      // The extractor's durable copy (attachment.uri) holds the ORIGINAL plaintext bytes, so it
+      // The extractor's durable copy (source.uri) holds the ORIGINAL plaintext bytes, so it
       // is deleted with the picked file whether or not the vault write succeeds.
       try {
         onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
@@ -110,14 +121,14 @@ class RagService {
         return id;
       } finally {
         await removeOwnCopy(filePath);
-        if (attachment.uri && attachment.uri !== filePath) await removeOwnCopy(attachment.uri);
+        if (source.uri && source.uri !== filePath) await removeOwnCopy(source.uri);
       }
     }
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
     // The extractor saves a durable local copy. Index that path rather than a
     // picker/cache path that can disappear before the next backup.
-    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: attachment.uri || filePath, size: fileSize });
+    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: source.uri || filePath, size: fileSize });
     const rowIds = ragDatabase.insertChunks(docId, chunks);
 
     onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });

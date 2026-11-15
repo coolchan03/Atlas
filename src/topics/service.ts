@@ -16,6 +16,7 @@ import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
 import { documentStanding } from '../standards/authority';
 import { unverifiedFigure } from './citations';
+import { crossReferences, refScore } from '../services/rag/sectionRefs';
 import { isReference, isTeaching } from '../standards/docRoles';
 import { supersededEditions } from '../standards/taxSources';
 
@@ -63,6 +64,21 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
   return useTopics.getState().add(request, chapterPlan(chapters, request.topic, books.length > 1), { sources, projectId });
 }
 
+/** The passages that the given passages point to by section number, one pointer each, not repeating any passage already held. */
+export async function followPointers<T extends { name: string; content: string; position?: number; doc_id?: number }>(held: T[], lookup: (query: string) => Promise<{ chunks: T[] } | undefined>): Promise<T[]> {
+  const out: T[] = [];
+  const key = (c: T) => `${c.doc_id}:${c.position}`;
+  const have = new Set(held.map(key));
+  for (const c of held) {
+    const ref = crossReferences(String(c.content), 1)[0];
+    if (!ref) continue;
+    const r = await lookup(ref.needles[0]);
+    const hit = (r?.chunks ?? []).find((x) => !have.has(key(x)) && refScore(String(x.content), [ref]) >= 2);
+    if (hit) { have.add(key(hit)); out.push(hit); }
+  }
+  return out;
+}
+
 /**
  * Passages from ALL the documents of the course's project that match the square. Teaching documents (textbooks, publications, study packs)
  * give the best passage of each book, two at most from one, so no book crowds out the others. Reference documents (the Code, regulations,
@@ -90,7 +106,10 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
       return { source: c.name, docId: c.doc_id, where: at.where, rank: st.rank, label: st.label, role, text: at.text.slice(0, 600) };
     };
     const teach = (await best((n) => usable(n) && isTeaching(n), 14, 2)).map((c) => excerpt(c, 'teach')).sort((a, b) => (a.rank ?? 5) - (b.rank ?? 5));
-    const reference = (await best((n) => usable(n) && isReference(n), 8, 1)).slice(0, 2).map((c) => excerpt(c, 'reference'));
+    const found = (await best((n) => usable(n) && isReference(n), 8, 1)).slice(0, 2);
+    // The law points to other sections for its definitions ("as defined in section 168"): follow the first such pointer of each passage.
+    const pointed = await followPointers(found, (q) => ragService.searchProject(projectId, q, { topK: 3, include: (n: string) => usable(n) && isReference(n) }));
+    const reference = [...found, ...pointed].slice(0, 4).map((c) => excerpt(c, 'reference'));
     // A project with no teaching document (only the law, or only standards) is taught from what it has.
     if (!teach.length) return reference.map((e) => ({ ...e, role: 'teach' as const }));
     return [...teach.slice(0, 5), ...reference];

@@ -43,3 +43,19 @@ export function refScore(content: string, refs: Ref[]): number {
   }
   return best;
 }
+
+/**
+ * The sections a passage points to ("see section 168", "under § 1245(a)"), other than the one it is itself (a passage opens with its own heading,
+ * and a section that mentions its own number is not a cross-reference). The law is built of such pointers, so following them gives a lesson
+ * the definition it depends on. Pure. At most `limit`, in the order they appear.
+ */
+export function crossReferences(passage: string, limit = 2): Ref[] {
+  // Only the heading the passage opens with is itself (a pointer that happens to sit early in a short passage is not).
+  const heading = /^\s*(?:\(p\. \d+\)\s*)?(?:§+|sec(?:tion)?\.?)\s*(\d{1,4}[A-Za-z]?)/i.exec(passage);
+  const own = heading ? [heading[1]] : [];
+  const seen = new Set<string>();
+  return sectionRefs(passage)
+    .filter((r) => (r.kind === 'section' || r.kind === 'regulation') && !own.includes(r.id) && !own.some((o) => r.id.startsWith(`${o}(`) || o.startsWith(`${r.id}(`)))
+    .filter((r) => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
+    .slice(0, limit);
+}
