@@ -149,7 +149,7 @@ export type SquareContent =
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
   | { kind: 'dictation'; lang: string; sentences: string[] };
 
-export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; where?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
+export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; docId?: number; where?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; /** Questions the learner got wrong earlier in this course: a quiz asks about the same ideas again in new words. */ retry?: string[]; /** How to rewrite a square the learner found unclear. */ rewrite?: string; difficulty?: Difficulty }
 
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
@@ -181,7 +181,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 

@@ -35,6 +35,19 @@ const withoutMarkers = (text: string) => text.replace(/\[\d+\]/g, '').replace(/\
  * compared with what is already known, and saved as a new claim, an extra source for a known claim, or a recorded conflict.
  * Nothing here can mark a claim verified.
  */
+type Match = { relation: string; matchId?: string; reason?: string };
+/** What a new claim does to the ledger beside it: it replaces an older claim (an update), or it disputes it (a contradiction). */
+function recordOutcome(db: LearningKnowledgeDb, summary: IngestSummary, { id, match, updates }: { id: string; match: Match; updates: boolean }): void {
+  if (updates && match.matchId) {
+    db.supersedeClaim(match.matchId, id, match.reason ?? 'A newer official source says otherwise');
+    summary.updates += 1;
+  } else if (match.relation === 'contradicts' && match.matchId) {
+    db.recordContradiction(id, match.matchId, match.reason ?? 'Conflicts with a known claim');
+    db.flagDisputed(match.matchId, match.reason ?? 'Conflicts with a newer claim');
+    summary.contradictions += 1;
+  }
+}
+
 export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): IngestSummary {
   const summary: IngestSummary = { added: 0, duplicates: 0, contradictions: 0, unsupported: 0, updates: 0 };
   claimSentences(input.reportText).forEach((sentence, index) => {
@@ -71,14 +84,7 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
       uncertainty: note.slice(0, 600), sources: input.sources, citedNumbers: cited, contextNumbers: context ? [context] : [],
     });
     summary.added += 1;
-    if (updates && match.matchId) {
-      db.supersedeClaim(match.matchId, id, match.reason ?? 'A newer official source says otherwise');
-      summary.updates += 1;
-    } else if (match.relation === 'contradicts' && match.matchId) {
-      db.recordContradiction(id, match.matchId, match.reason ?? 'Conflicts with a known claim');
-      db.flagDisputed(match.matchId, match.reason ?? 'Conflicts with a newer claim');
-      summary.contradictions += 1;
-    }
+    recordOutcome(db, summary, { id, match, updates });
   });
   return summary;
 }

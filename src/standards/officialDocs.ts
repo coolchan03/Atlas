@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setOfficialLookup } from './authority';
+import { setTaxLookup, taxFromText, type TaxSource } from './taxSources';
 
 /**
  * Documents Atlas treats as the standard itself, whatever they are called. Two ways in: the person marks one (the shield on a
@@ -14,6 +15,9 @@ interface S {
   unmark: (name: string) => void;
   /** Names the person took the mark off: a document recognised from its first page is not marked again after that. */
   refused: string[];
+  /** What the first pages of a document showed it to be (a tax publication, bulletin, regulation or the Code, and its year), for files whose names say nothing. */
+  tax: Record<string, TaxSource>;
+  setTax: (name: string, found: TaxSource) => void;
 }
 
 export const useOfficialDocs = create<S>()(
@@ -21,6 +25,8 @@ export const useOfficialDocs = create<S>()(
     (set) => ({
       names: [],
       refused: [],
+      tax: {},
+      setTax: (name, found) => set((s) => ({ tax: { ...s.tax, [name]: found } })),
       mark: (name) => set((s) => (s.names.includes(name) ? s : { names: [...s.names, name], refused: s.refused.filter((n) => n !== name) })),
       unmark: (name) => set((s) => ({ names: s.names.filter((n) => n !== name), refused: s.refused.includes(name) ? s.refused : [...s.refused, name] })),
     }),
@@ -30,6 +36,15 @@ export const useOfficialDocs = create<S>()(
 
 // The name checks in authority.ts consult the marked names.
 setOfficialLookup((name) => useOfficialDocs.getState().names.includes(name));
+
+setTaxLookup((name) => useOfficialDocs.getState().tax[name]);
+
+/** Called when a document is added: remembers what kind of tax source its first pages show, and which year. */
+export function noteTaxSource(name: string, text: string): TaxSource | null {
+  const found = taxFromText(text);
+  if (found) useOfficialDocs.getState().setTax(name, found);
+  return found;
+}
 
 const STANDARD_BODY = /\b(financial accounting standards board|fasb)\b/i;
 const STANDARD_KIND = /\b(accounting standards update|accounting standards codification|statement of financial accounting standards|asc\s*\d{3}|asu\s*\d{4}-\d{2})\b/i;

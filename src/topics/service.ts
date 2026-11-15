@@ -12,6 +12,7 @@ import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questions
 import { enqueue } from './generationQueue';
 import { chunkPlace, makeSource, needsMoreInfo, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
+import { stillMissed } from './review';
 
 const MAX_TRIES = 2;
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -60,7 +61,7 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
     const { ragService } = require('../services/rag');
     const found = await ragService.searchProject(projectId, query);
     // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
-    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string; position?: number }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, where: at.where, text: at.text.slice(0, 700) }; });
+    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string; position?: number; doc_id?: number }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, docId: c.doc_id, where: at.where, text: at.text.slice(0, 700) }; });
   } catch { return []; }
 }
 
@@ -94,13 +95,20 @@ function withoutSources(content: SquareContent, excerpts: Excerpt[]): SquareCont
  * The content of a square: kept from before, or written now. Lessons are written one at a time; `background` marks one being prepared
  * ahead, which waits for any lesson the person is actually waiting for.
  */
-export function squareContent(course: Course, key: string, opts: { background?: boolean } = {}): Promise<SquareContent> {
+export const REWRITES = {
+  simpler: 'The learner found this unclear. Write it again in simpler words with shorter sentences, define every term the first time it appears, and use a plainer example.',
+  example: 'The learner found this unclear. Write it again with a different, fully worked example (problem, working and answer) and keep the explanation short.',
+  shorter: 'The learner wants less. Write it again shorter: only the ideas that matter, in a few short paragraphs.',
+} as const;
+export type Rewrite = keyof typeof REWRITES;
+
+export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key), opts.background ? 0 : 1);
+  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), opts.background ? 0 : 1);
 }
 
-async function writeSquare(courseId: string, key: string): Promise<SquareContent> {
+async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Promise<SquareContent> {
   // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!course) throw new Error('That course is not on this phone any more.');
@@ -133,6 +141,8 @@ async function writeSquare(courseId: string, key: string): Promise<SquareContent
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
     bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '',
     excerpts,
+    retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
+    rewrite: rewrite ? REWRITES[rewrite] : undefined,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   const written = withoutSources(content, excerpts);
   useTopics.getState().setContent(course.id, key, written);
@@ -181,4 +191,16 @@ export async function findSources(topic: string, goal: string, onStep: (m: strin
   }
   if (!sources.length) throw new Error('The pages found could not be read. Try again, or add your own notes instead.');
   return sources;
+}
+
+/** The whole text of the page (or part) of a project document that a passage came from, for reading it in full. Empty when it cannot be found. */
+export async function sourcePage(docId: number, where: string | undefined): Promise<string> {
+  try {
+    const { ragService } = require('../services/rag');
+    const chunks: Array<{ content: string; position: number }> = await ragService.getDocumentChunks(docId);
+    const page = /^page (\d+)$/.exec(where ?? '');
+    if (page) return chunks.filter((c) => String(c.content).startsWith(`(p. ${page[1]})`)).map((c) => String(c.content).replace(/^\(p\. \d+\)\s*/, '')).join('\n\n');
+    const part = /^part (\d+)$/.exec(where ?? '');
+    return part ? String(chunks.find((c) => c.position === Number(part[1]) - 1)?.content ?? '') : '';
+  } catch { return ''; }
 }

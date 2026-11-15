@@ -1,6 +1,6 @@
 import { courseRecoverable, useTrash } from '../trash/trash';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -12,7 +12,7 @@ import { Board } from '../language/Board';
 import type { Space, SpaceKind } from '../language/board';
 import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } from './formats';
 import { courseProgress, useTopics, type Course } from './store';
-import { createChapterCourse, createCourse, findSources, squareContent } from './service';
+import { createChapterCourse, createCourse, findSources, squareContent, type Rewrite } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
@@ -22,6 +22,7 @@ import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
 import { DIFFICULTIES } from '../study/difficulty';
+import { CitedFold, RewriteRow } from './CitedFold';
 import { AHEAD_CHOICES, aheadFor, prepareAhead, usePrepare } from './prepare';
 import { keepMissed } from './review';
 import { saveStudyGuide } from './courseFiles';
@@ -360,31 +361,6 @@ function SquareHeader({ title, embedded, onBack }: { title: string; embedded: bo
   return embedded ? <Text style={[styles.name, styles.body, { color: colors.text }]}>{title}</Text> : <Header title={title} onBack={onBack} />;
 }
 
-/** The passages of the learner's own books a square was written from, folded away until asked for. */
-function CitedFold({ passages }: { passages: { source: string; url?: string; where?: string; text: string }[] }) {
-  const { colors } = useTheme();
-  const [open, setOpen] = useState(false);
-  if (!passages.length) return null;
-  const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source && q.where === p.where) === i);
-  return (
-    <View testID="square-cited">
-      <Text style={[styles.meta, { color: colors.textMuted }]}>Where this came from</Text>
-      {sources.map((p) => (p.url
-        ? <Text key={`${p.source}-${p.where}`} style={[styles.link, { color: colors.primary }]} accessibilityRole="link" onPress={() => Linking.openURL(p.url!)} testID="square-source-link">{p.source}{p.where ? `, ${p.where}` : ''}</Text>
-        : <Text key={`${p.source}-${p.where}`} style={{ color: colors.textSecondary }}>{p.source}{p.where ? `, ${p.where}` : ''}</Text>))}
-      <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="square-cited-toggle">
-        <Text style={{ color: colors.primary }}>{open ? 'Hide' : 'Show'} where this came from ({passages.length} passage{passages.length === 1 ? '' : 's'} from your sources)</Text>
-      </TouchableOpacity>
-      {open && passages.map((p, i) => (
-        <View key={i} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-          <Text style={[styles.meta, { color: colors.textMuted }]}>{p.source}{p.where ? `, ${p.where}` : ''}</Text>
-          <Text style={{ color: colors.textSecondary }}>{p.text}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 /** One square: written when first opened, then played. */
 export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string; embedded?: boolean; onNext?: (key: string) => void }> = (props) => {
   const navigation = useNavigation<any>();
@@ -415,6 +391,8 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
     setStars(n);
   };
   const again = () => { useTopics.getState().clearContent(courseId, key); setContent(null); setStars(null); setAddedRemedial(false); load(); };
+  // A lesson that is unclear is written again, simpler, with a different example, or shorter.
+  const rewrite = (how: Rewrite) => { useTopics.getState().clearContent(courseId, key); setContent(null); setError(null); squareContent(course, key, { rewrite: how }).then(setContent).catch((e) => setError(String(e?.message || e))); };
   const askTutor = () => {
     const app = useAppStore.getState();
     const modelId = app.activeModelId ?? app.downloadedModels[0]?.id;
@@ -454,8 +432,9 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
                 <Text style={{ color: colors.primary }}>{cruising ? 'You got the last two right. Skip this lesson?' : 'I already know this'}</Text>
               </TouchableOpacity>
             )}
+            <RewriteRow show={square.format === 'lesson'} onPick={rewrite} />
             <SquareView content={content} onDone={finish} />
-            <CitedFold passages={course.cited?.[key] ?? []} />
+            <CitedFold passages={course.cited?.[key] ?? []} content={content} />
           </>
         ) : error ? (
           <View style={styles.gap}>
@@ -472,7 +451,6 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
 };
 
 const styles = StyleSheet.create({
-  link: { textDecorationLine: 'underline' },
   container: { flex: 1 },
   fill: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },

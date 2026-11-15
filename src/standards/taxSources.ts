@@ -32,16 +32,55 @@ function yearOf(name: string): number | undefined {
   return years.length ? years[years.length - 1] : undefined;
 }
 
+let lookup: (name: string) => TaxSource | undefined = (_name) => undefined;
+/** What was learned about a document from its first pages when it was added (officialDocs.ts), for names that say little. */
+export const setTaxLookup = (fn: (name: string) => TaxSource | undefined): void => { lookup = fn; };
+
+const make = (kind: TaxKind, year?: number, series?: string): TaxSource => ({ kind, rank: RANK[kind], label: LABEL[kind], year, series });
+const firstYear = (t: string): number | undefined => { const m = t.match(/(?<!\d)(20\d{2})(?!\d)/); return m ? Number(m[1]) : undefined; };
+
+/**
+ * What a document is, from the first pages of its text: "Internal Revenue Bulletin 2024-31", "Publication 17 ... for use in preparing 2024 returns",
+ * "Title 26 ... Internal Revenue Code", "26 CFR ... revised as of April 1, 2025". For files whose names say nothing. Null when it does not look like tax material.
+ */
+export function taxFromText(text: string): TaxSource | null {
+  const start = text.slice(0, 4000);
+  const bulletin = start.match(/Internal Revenue Bulletin[:\s]*(20\d{2})[-\s]+(\d{1,2})/i);
+  if (bulletin) return make('bulletin', Number(bulletin[1]));
+  const pub = start.match(/\bPublication\s+(\d{1,4}[A-Z]?)\b/);
+  if (pub && /Internal Revenue Service|Cat\. No\./i.test(start)) {
+    const prep = start.match(/(?:preparing|tax year|returns?)\D{0,25}(20\d{2})/i);
+    return make('publication', prep ? Number(prep[1]) : firstYear(start.slice(0, 800)), `pub-${pub[1].toLowerCase()}`);
+  }
+  if (/\b26\s*CFR\b|Code of Federal Regulations/i.test(start) && /Title\s+26|Internal Revenue/i.test(start)) {
+    const rev = start.match(/revised as of[^.]{0,30}(20\d{2})/i);
+    return make('regulation', rev ? Number(rev[1]) : firstYear(start), 'cfr-26');
+  }
+  if (/Internal Revenue Code of 1986|Title\s+26[^.]{0,40}Internal Revenue Code/i.test(start)) {
+    const cur = start.match(/(?:current through|as of|updated)[^.]{0,40}(20\d{2})/i);
+    return make('statute', cur ? Number(cur[1]) : firstYear(start), 'irc');
+  }
+  return null;
+}
+
 /** What a document is, by its name; null for anything that does not look like tax material at all (it is then just a document). */
 export function classifyTaxSource(name: string): TaxSource | null {
+  const byName = classifyByName(name);
+  const learned = lookup(name);
+  if (!learned) return byName;
+  if (!byName) return learned;
+  return { ...byName, year: byName.year ?? learned.year };
+}
+
+function classifyByName(name: string): TaxSource | null {
   const n = name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim();
   const year = yearOf(n);
-  const make = (kind: TaxKind, series?: string): TaxSource => ({ kind, rank: RANK[kind], label: LABEL[kind], year, series });
-  if (REGULATION.test(n)) return make('regulation', 'cfr-26');
-  if (BULLETIN.test(n)) return make('bulletin');
-  if (STATUTE.test(n)) return make('statute', 'irc');
+  const make2 = (kind: TaxKind, series?: string): TaxSource => make(kind, year, series);
+  if (REGULATION.test(n)) return make2('regulation', 'cfr-26');
+  if (BULLETIN.test(n)) return make2('bulletin');
+  if (STATUTE.test(n)) return make2('statute', 'irc');
   const pub = n.match(PUBLICATION);
-  if (pub) return make('publication', `pub-${(pub[0].match(/\d{1,4}[a-z]?/i)?.[0] ?? '').toLowerCase()}`);
+  if (pub) return make2('publication', `pub-${(pub[0].match(/\d{1,4}[a-z]?/i)?.[0] ?? '').toLowerCase()}`);
   return null;
 }
 
@@ -73,3 +112,18 @@ export function taxLabel(name: string): string {
 export const TAX_RULES = 'These sources differ in authority and age. Follow this order: the Internal Revenue Code (Title 26), then the Treasury regulations (CFR), then Internal Revenue Bulletins (rulings, procedures, notices), then IRS publications, then textbooks. When they differ, the higher one is right. Between editions of the same source, use the most recent. Say which source and which edition you used, and the tax year each figure applies to. An IRS publication explains the law and is not authority on its own.';
 
 export const hasTaxSources = (names: string[]): boolean => names.some((n) => !!classifyTaxSource(n));
+
+/** The tax years a question names ("2024", "tax year 2023"). */
+export const yearsAsked = (question: string): number[] => [...new Set([...question.matchAll(/(?<!\d)(20\d{2})(?!\d)/g)].map((m) => Number(m[1])))];
+
+/**
+ * Figures in tax material belong to a year. When the question names a year and an excerpt comes from a source of another year, say so, so a
+ * limit or rate from one year is not given as another's. Empty when the question names no year or every source matches it.
+ */
+export function yearNotes(question: string, sourceNames: string[]): string {
+  const asked = yearsAsked(question);
+  if (!asked.length) return '';
+  const off = [...new Set(sourceNames)].map((n) => ({ n, c: classifyTaxSource(n) })).filter((x): x is { n: string; c: TaxSource } => !!x.c?.year && !asked.includes(x.c.year));
+  if (!off.length) return '';
+  return `The question is about tax year ${asked.join(' and ')}. ${off.map((x) => `${x.n} is for ${x.c.year}`).join('; ')}: do not give figures from a different year as the answer. Say which year each figure is for, and that it may differ.`;
+}

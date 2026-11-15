@@ -25,3 +25,13 @@ export function dueCount(now = Date.now()): number {
   const { exercises, progress } = useExerciseStore.getState();
   return Object.values(exercises).filter((e) => { const p = progress[e.id]; return !!p && (p.last === false || p.due <= now) && p.attempts > 0; }).length;
 }
+
+/** Questions missed earlier in this course that are still wrong (not yet answered right in Practice), for a later quiz to ask again in new words. */
+export function stillMissed(courseId: string, limit: number): string[] {
+  const { exercises, progress } = useExerciseStore.getState();
+  return Object.values(exercises)
+    .filter((e) => e.id.startsWith(`sq-${courseId}-`) && progress[e.id]?.last === false && 'prompt' in e)
+    .map((e) => String((e as { prompt?: string }).prompt ?? '').slice(0, 200))
+    .filter(Boolean)
+    .slice(0, limit);
+}

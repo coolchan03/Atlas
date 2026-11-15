@@ -16,7 +16,7 @@
  * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
  * In session mode nothing changes until you tap "Keep what it learned".
  */
-import { TAX_RULES, supersededEditions, taxLabel } from '../standards/taxSources';
+import { TAX_RULES, supersededEditions, taxLabel, yearNotes } from '../standards/taxSources';
 import { runBackgroundJob, fitPrompt } from '../services/llmJobQueue';
 import RNFS from 'react-native-fs';
 import { localUniqueId } from '../utils/uniqueId';
@@ -139,7 +139,7 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
   if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
   return {
-    text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES}\n\n` : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
+    text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES} ${yearNotes(query, found.map((f) => f.title))}\n\n`.replace(' \n\n', '\n\n') : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
     list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
   };
 }

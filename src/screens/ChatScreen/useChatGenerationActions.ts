@@ -1,6 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
-import { TAX_RULES, hasTaxSources, supersededEditions } from '../../standards/taxSources';
+import { TAX_RULES, hasTaxSources, supersededEditions, yearNotes } from '../../standards/taxSources';
 import { followUpQuery } from '../../services/rag/followUp';
 import { officialDocumentNames } from '../../standards/authority';
 import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
@@ -386,6 +386,8 @@ export async function injectRagContext(projectId: string | undefined, query: str
     const r = await ragService.searchProject(projectId, query);
     const old = supersededEditions(docNames);
     if (old.size) r.chunks = r.chunks.filter((c: { name: string }) => !old.has(c.name));
+    const yearNote = yearNotes(query, r.chunks.map((c: { name: string }) => c.name));
+    if (yearNote) kbPrompt += `\n${yearNote}`;
     if (r.chunks.length > 0) {
       kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
       setTurnSources(sourcesFromChunks(r.chunks, enabledDocs)); // numbered as in the prompt, for the source list under the reply
