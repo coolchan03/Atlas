@@ -42,3 +42,14 @@ it('a fully scanned PDF without a vision model cannot be indexed, and the error 
   const { canReadScans } = require('../../../../src/services/rag/pageChunks');
   expect(canReadScans()).toBe(false);
 });
+
+it('does not read the blank pages of a book that has a text layer from pictures', async () => {
+  const text = 'A page with a real text layer. '.repeat(10);
+  mockPages.push(text, text, '', text, text, '', text);
+  const r = await run();
+  expect(r.scanned).toBe(false);
+  expect(r.ocrPages).toEqual([]);
+  expect(r.chunks).toHaveLength(5);
+  const { llmService } = require('../../../../src/services/llm');
+  expect(llmService.generateResponse).not.toHaveBeenCalled();
+});

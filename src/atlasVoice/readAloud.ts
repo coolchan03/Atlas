@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules } from 'react-native';
 import { create } from 'zustand';
 import { speakInAndWait, stop as stopSpeech, takeSpeechFailure, watchSpeechPhase } from './tts';
 import { useAtlasVoiceStore } from './store';
@@ -248,7 +248,7 @@ export const useReadAloud = readAloud.useReader;
 /** Lock-screen controls, where the phone has them (Android): the notification follows the reader and its buttons drive it. */
 function connectMediaControls(): void {
   const native = NativeModules.AtlasMediaControls;
-  if (Platform.OS !== 'android' || !native?.show) return;
+  if (!native?.show) return; // the phone has the controls when its native module is there
   const { startMediaControls } = require('./mediaControls');
   const controls = startMediaControls({ getState: readAloud.useReader.getState, subscribe: readAloud.useReader.subscribe, play: readAloud.play, pause: readAloud.pause, stop: readAloud.stop, jump: readAloud.jump }, native);
   new NativeEventEmitter(native).addListener('AtlasMediaAction', (e: { action: string }) => controls.press(e.action as never));

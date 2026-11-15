@@ -17,7 +17,7 @@ import { stillMissed } from './review';
 import { documentStanding } from '../standards/authority';
 import { unverifiedFigure } from './citations';
 import { crossReferences, refScore } from '../services/rag/sectionRefs';
-import { isReference, isTeaching } from '../standards/docRoles';
+import { isEnabled, isReference, isTeaching } from '../standards/docRoles';
 import { supersededEditions } from '../standards/taxSources';
 
 const MAX_TRIES = 2;
@@ -89,8 +89,8 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
-    const docs: Array<{ name: string; enabled?: boolean }> = await ragService.getDocumentsByProject(projectId);
-    const old = supersededEditions(docs.filter((d) => d.enabled !== false).map((d) => d.name));
+    const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsByProject(projectId);
+    const old = supersededEditions(docs.filter(isEnabled).map((d) => d.name));
     const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
     type Chunk = { name: string; content: string; position?: number; doc_id?: number };
     const best = async (include: (n: string) => boolean, topK: number, perDocMax: number): Promise<Chunk[]> => {

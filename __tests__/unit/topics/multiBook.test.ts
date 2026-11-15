@@ -28,6 +28,13 @@ describe('a course from all the textbooks', () => {
   });
 });
 
+describe('chapters of one book stay separate', () => {
+  it('does not fold two alike chapters of the same book into one unit', () => {
+    const one = book('Book.pdf', ['Property, plant and equipment: acquisition', 'Property, plant and equipment: depreciation', 'Leases']);
+    expect(mergeBooks([one]).map((t) => t.title)).toEqual(one.chapters.map((c) => c.title));
+  });
+});
+
 describe('a standard outranks the books', () => {
   it('ranks a FASB document and the Code above a textbook, and says so in the lesson prompt', () => {
     expect(documentStanding('ASC 842 Leases (FASB).pdf')).toMatchObject({ rank: 1, label: 'STANDARD' });

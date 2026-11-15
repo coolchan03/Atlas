@@ -1,8 +1,11 @@
-import { sectionRefs, refScore, crossReferences } from '../../../src/services/rag/sectionRefs';
+import { sectionRefs, refScore, crossReferences, indexOfRef } from '../../../src/services/rag/sectionRefs';
 import { defaultRole } from '../../../src/standards/docRoles';
 import { figuresIn, unverifiedFigure } from '../../../src/topics/citations';
 import { mentions, rate } from '../../../src/cpa/coverage';
 import { authorityNote } from '../../../src/topics/formats';
+import { isEnabled } from '../../../src/standards/docRoles';
+import { classifyTaxSource, supersededEditions } from '../../../src/standards/taxSources';
+import { matchExam } from '../../../src/cpa/blueprints';
 
 describe('exact references in a question', () => {
   it('finds sections, regulations, ASC topics, ASUs, rulings and notices, and not a bare number', () => {
@@ -59,5 +62,30 @@ describe('coverage', () => {
     expect(mentions('Intangible assets and goodwill', 'Goodwill and other intangible assets are tested for impairment.')).toBe(true);
     expect(mentions('Intangible assets and goodwill', 'Inventory is measured at cost.')).toBe(false);
     expect([rate(2, 3), rate(1, 5), rate(0, 0)]).toEqual(['good', 'thin', 'none']);
+  });
+});
+
+describe('review fixes', () => {
+  it('a reference is a whole reference: § 179 is not § 179A or § 1790', () => {
+    expect(indexOfRef('see § 179a for more', '§ 179')).toBe(-1);
+    expect(indexOfRef('see § 1790 for more', '§ 179')).toBe(-1);
+    expect(indexOfRef('see § 179(b) for more', '§ 179')).toBe(4);
+    expect(indexOfRef('§ 179. Election', '§ 179')).toBe(0);
+    expect(refScore('§ 179A. Allowance for clean-fuel vehicles', sectionRefs('§ 179'))).toBe(0);
+  });
+  it('a document switched off (0) is not enabled', () => {
+    expect([isEnabled({ enabled: 0 }), isEnabled({ enabled: 1 }), isEnabled({ enabled: false }), isEnabled({})]).toEqual([false, true, false, true]);
+  });
+  it('different parts of the regulations are different works, not editions of one', () => {
+    expect(classifyTaxSource('26 CFR Part 1 (2023).pdf')?.series).not.toBe(classifyTaxSource('26 CFR Part 301 (2024).pdf')?.series);
+    expect([...supersededEditions(['26 CFR Part 1 (2023).pdf', '26 CFR Part 301 (2024).pdf'])]).toEqual([]);
+    expect([...supersededEditions(['26 CFR Part 1 (2023).pdf', '26 CFR Part 1 (2025).pdf'])]).toEqual(['26 CFR Part 1 (2023).pdf']);
+  });
+  it('a topic that only mentions an exam word is not an exam', () => {
+    expect(matchExam('A far-reaching study of Roman history')).toBeNull();
+    expect(matchExam('Learn Python for the SAT')).toBeNull();
+    expect(matchExam('I sat down to study chemistry')).toBeNull();
+    expect(matchExam('CPA FAR')).toBe('FAR');
+    expect(matchExam('usmle step 1')).toBe('USMLE1');
   });
 });

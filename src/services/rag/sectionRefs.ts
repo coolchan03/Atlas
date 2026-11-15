@@ -16,29 +16,39 @@ const NOTICE = /\bnotice\s*(\d{4}-\d{1,3})/gi;
 export function sectionRefs(query: string): Ref[] {
   const out: Ref[] = [];
   const add = (r: Ref) => { if (!out.some((o) => o.kind === r.kind && o.id === r.id)) out.push(r); };
-  for (const m of query.matchAll(REG)) add({ kind: 'regulation', id: m[1], needles: [`§ ${m[1]}`, `§${m[1]}`, `Reg. ${m[1]}`, `${m[1]}`] });
+  for (const m of query.matchAll(REG)) add({ kind: 'regulation', id: m[1], needles: [`§ ${m[1]}`, `§${m[1]}`, `Reg. ${m[1]}`] });
   for (const m of query.matchAll(SECTION)) {
     const n = `${m[1]}${m[2] ?? ''}`;
     if (!/^\d/.test(m[1]) || out.some((o) => o.kind === 'regulation' && o.id.startsWith(m[1]))) continue;
     add({ kind: 'section', id: n, needles: [`§ ${n}`, `§${n}`, `Sec. ${n}`, `Section ${n}`, `SEC. ${m[1]}.`] });
   }
-  for (const m of query.matchAll(ASC)) add({ kind: 'asc', id: m[1], needles: [`ASC ${m[1]}`, `Topic ${m[1].slice(0, 3)}`, m[1]] });
-  for (const m of query.matchAll(ASU)) add({ kind: 'asu', id: m[1], needles: [`ASU ${m[1]}`, `Update No. ${m[1]}`, `Update ${m[1]}`, m[1]] });
+  for (const m of query.matchAll(ASC)) add({ kind: 'asc', id: m[1], needles: [`ASC ${m[1]}`, `Topic ${m[1].slice(0, 3)}`] });
+  for (const m of query.matchAll(ASU)) add({ kind: 'asu', id: m[1], needles: [`ASU ${m[1]}`, `Update No. ${m[1]}`, `Update ${m[1]}`] });
   for (const m of query.matchAll(RULING)) add({ kind: 'ruling', id: `${m[1].toLowerCase()} ${m[2]}`, needles: [`Rev. ${m[1].toLowerCase().startsWith('r') && /proc/i.test(m[1]) ? 'Proc.' : 'Rul.'} ${m[2]}`, `Rev. Rul. ${m[2]}`, `Rev. Proc. ${m[2]}`].filter((x, i, a) => a.indexOf(x) === i) });
   for (const m of query.matchAll(NOTICE)) add({ kind: 'notice', id: m[1], needles: [`Notice ${m[1]}`] });
   return out;
 }
 
+/** Where a reference first appears as a whole reference: "§ 179" is not found inside "§ 179A" or "§ 1790", but "§ 179(b)" and "§ 179." are. -1 when absent. */
+export function indexOfRef(lowerText: string, lowerNeedle: string): number {
+  let from = 0;
+  for (;;) {
+    const at = lowerText.indexOf(lowerNeedle, from);
+    if (at < 0) return -1;
+    if (!/[0-9a-z]/.test(lowerText[at + lowerNeedle.length] ?? '')) return at;
+    from = at + 1;
+  }
+}
+
 /** How well a chunk's start matches a reference: a heading that opens with it beats a passing mention. Higher is better; 0 means no match. */
 export function refScore(content: string, refs: Ref[]): number {
   let best = 0;
-  const head = content.slice(0, 80).toLowerCase();
+  const lower = content.toLowerCase();
   for (const r of refs) {
     for (const n of r.needles) {
-      const needle = n.toLowerCase();
-      const at = content.toLowerCase().indexOf(needle);
+      const at = indexOfRef(lower, n.toLowerCase());
       if (at < 0) continue;
-      best = Math.max(best, head.includes(needle) ? 3 : at < 400 ? 2 : 1);
+      best = Math.max(best, at < 80 ? 3 : at < 400 ? 2 : 1);
     }
   }
   return best;

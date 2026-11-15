@@ -6,7 +6,7 @@
 import { useCpa } from './store';
 import type { ExamCode } from './blueprints';
 import { isOutlineDocument } from './outline';
-import { isReference, isTeaching } from '../standards/docRoles';
+import { isEnabled, isReference, isTeaching } from '../standards/docRoles';
 import { supersededEditions } from '../standards/taxSources';
 
 export type Level = 'good' | 'thin' | 'none';
@@ -34,7 +34,7 @@ export async function coverageFor(code: ExamCode): Promise<TopicCoverage[]> {
   if (!exam?.projectId) return [];
   const { ragService } = require('../services/rag');
   const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsByProject(exam.projectId);
-  const old = supersededEditions(docs.map((d) => d.name));
+  const old = supersededEditions(docs.filter(isEnabled).map((d) => d.name));
   const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
   const out: TopicCoverage[] = [];
   for (const t of exam.topics) {

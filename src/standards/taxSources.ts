@@ -32,6 +32,9 @@ function yearOf(name: string): number | undefined {
   return years.length ? years[years.length - 1] : undefined;
 }
 
+/** Which part, subtitle, chapter or section of the Code or the regulations a document is, so different parts are not taken for editions of one work. "26 CFR Part 1" and "Part 301" are two works. */
+const partOf = (text: string): string => { const m = text.match(/\b(part|subpart|subtitle|chapter|section|volume|vol)\.?\s*([0-9]+[a-z]?|[ivxlc]+)\b/i); return m ? `-${m[1].toLowerCase().slice(0, 3)}${m[2].toLowerCase()}` : ''; };
+
 let lookup: (name: string) => TaxSource | undefined = (_name) => undefined;
 /** What was learned about a document from its first pages when it was added (officialDocs.ts), for names that say little. */
 export const setTaxLookup = (fn: (name: string) => TaxSource | undefined): void => { lookup = fn; };
@@ -54,11 +57,11 @@ export function taxFromText(text: string): TaxSource | null {
   }
   if (/\b26\s*CFR\b|Code of Federal Regulations/i.test(start) && /Title\s+26|Internal Revenue/i.test(start)) {
     const rev = start.match(/revised as of[^.]{0,30}(20\d{2})/i);
-    return make('regulation', rev ? Number(rev[1]) : firstYear(start), 'cfr-26');
+    return make('regulation', rev ? Number(rev[1]) : firstYear(start), `cfr-26${partOf(start.slice(0, 600))}`);
   }
   if (/Internal Revenue Code of 1986|Title\s+26[^.]{0,40}Internal Revenue Code/i.test(start)) {
     const cur = start.match(/(?:current through|as of|updated)[^.]{0,40}(20\d{2})/i);
-    return make('statute', cur ? Number(cur[1]) : firstYear(start), 'irc');
+    return make('statute', cur ? Number(cur[1]) : firstYear(start), `irc${partOf(start.slice(0, 600))}`);
   }
   return null;
 }
@@ -76,9 +79,9 @@ function classifyByName(name: string): TaxSource | null {
   const n = name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim();
   const year = yearOf(n);
   const make2 = (kind: TaxKind, series?: string): TaxSource => make(kind, year, series);
-  if (REGULATION.test(n)) return make2('regulation', 'cfr-26');
+  if (REGULATION.test(n)) return make2('regulation', `cfr-26${partOf(n)}`);
   if (BULLETIN.test(n)) return make2('bulletin');
-  if (STATUTE.test(n)) return make2('statute', 'irc');
+  if (STATUTE.test(n)) return make2('statute', `irc${partOf(n)}`);
   const pub = n.match(PUBLICATION);
   if (pub) return make2('publication', `pub-${(pub[0].match(/\d{1,4}[a-z]?/i)?.[0] ?? '').toLowerCase()}`);
   return null;

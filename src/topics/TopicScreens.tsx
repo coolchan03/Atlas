@@ -91,7 +91,8 @@ async function buildKnownExam(code: ExamCode, files: PickedFile[], setStep: (s: 
 /** Everything that happens between "Make my course" and the board: sources found online, files added to the project, then the plan (by chapter when the book has them). */
 async function buildCourse(args: { request: CourseRequest; online: boolean; files: PickedFile[]; projectId?: string; byChapter: boolean; setStep: (s: string) => void }): Promise<string> {
   const { request, online, files, byChapter, setStep } = args;
-  const known = matchExam(request.topic);
+  // A named exam gets its known layout, unless the person chose a project of their own for this course.
+  const known = args.projectId ? null : matchExam(request.topic);
   const examBoard = known ? await buildKnownExam(known, files, setStep) : null;
   if (examBoard) return examBoard;
   let sources = online ? await findSources(request.topic, request.goal, setStep) : [];
@@ -409,7 +410,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
   };
   const again = () => { useTopics.getState().clearContent(courseId, key); setContent(null); setStars(null); setAddedRemedial(false); load(); };
   // A lesson that is unclear is written again, simpler, with a different example, or shorter.
-  const rewrite = (how: Rewrite) => { useTopics.getState().clearContent(courseId, key); setContent(null); setError(null); squareContent(course, key, { rewrite: how }).then(setContent).catch((e) => setError(String(e?.message || e))); };
+  const rewrite = (how: Rewrite) => { useTopics.getState().clearContent(courseId, key); setContent(null); setError(null); squareContent(useTopics.getState().courses.find((c) => c.id === courseId) ?? course, key, { rewrite: how }).then(setContent).catch((e) => setError(String(e?.message || e))); };
   const askTutor = () => {
     const app = useAppStore.getState();
     const modelId = app.activeModelId ?? app.downloadedModels[0]?.id;

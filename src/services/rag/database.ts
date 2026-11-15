@@ -263,6 +263,7 @@ class RagDatabase {
     projectId: string; name: string; path: string; size: number;
     enabled: boolean; createdAt: string; chunks: { content: string; position: number }[];
   }[]): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('BEGIN');
     try {
@@ -294,6 +295,7 @@ class RagDatabase {
     projectId: string; name: string; path: string; size: number;
     enabled: boolean; createdAt: string; chunks: { content: string; position: number }[];
   }[]): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('BEGIN');
     try {

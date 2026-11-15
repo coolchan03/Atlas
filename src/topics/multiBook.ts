@@ -4,6 +4,7 @@
  * beside the topic they follow. The first book (the one with the most chapters) sets the order. Pure, apart from reading the project.
  */
 import { findChapters, type Chapter } from './chapters';
+import { isEnabled } from '../standards/docRoles';
 
 export interface BookChapters { doc: string; chapters: Array<Pick<Chapter, 'number' | 'title'>> }
 export interface MergedTopic { title: string; /** The books that have a chapter on it. */ docs: string[] }
@@ -24,7 +25,8 @@ export function mergeBooks(books: BookChapters[]): MergedTopic[] {
       const title = c.title.trim();
       if (title.length < 4 || SKIP.test(title)) continue;
       const w = words(title);
-      const at = topics.findIndex((t) => same(w, keyOf(t)));
+      // Only a topic from ANOTHER book is the same subject: two chapters of one book are two units, however alike their titles.
+      const at = topics.findIndex((t) => !t.docs.includes(book.doc) && same(w, keyOf(t)));
       if (at >= 0) {
         if (!topics[at].docs.includes(book.doc)) topics[at].docs.push(book.doc);
         after = at;
@@ -46,7 +48,7 @@ export async function bookChapters(projectId: string, skip: (docName: string) =>
   const { looksLikeQuestions } = require('../study/bookQuestions');
   const out: BookChapters[] = [];
   for (const doc of await ragService.getDocumentsByProject(projectId)) {
-    if (skip(String(doc.name))) continue;
+    if (!isEnabled(doc) || skip(String(doc.name))) continue;
     const text = (await ragService.getDocumentChunks(doc.id)).map((c: { content: string }) => String(c.content).replace(/^\(p\. \d+\)\s*/, '')).join('\n');
     if (looksLikeQuestions(text.slice(0, 4000))) continue;
     const chapters = findChapters(text);

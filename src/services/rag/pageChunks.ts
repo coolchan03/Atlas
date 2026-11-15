@@ -16,7 +16,7 @@ const MIN_PAGE_CHARS = 30;
 export const MAX_OCR_PAGES = 300;
 
 export interface PagedOptions { /** Called as scanned pages are read, with the page number and how many scanned pages will be read. */ onOcr?: (page: number, done: number) => void }
-export interface PagedResult { chunks: Chunk[]; /** Pages whose text was read from a picture by the vision model. */ ocrPages: number[]; /** Scanned pages left unread because of the page limit or because no vision model was loaded. */ skipped: number }
+export interface PagedResult { /** The document is a scan: most of its first pages have no text layer. */ scanned: boolean; chunks: Chunk[]; /** Pages whose text was read from a picture by the vision model. */ ocrPages: number[]; /** Scanned pages left unread because of the page limit or because no vision model was loaded. */ skipped: number }
 
 /** Whether a vision model is loaded, so scanned pages can be read. */
 export function canReadScans(): boolean {
@@ -39,15 +39,19 @@ export async function pagedChunksWithScans(path: string, opts: PagedOptions = {}
     const out: Chunk[] = [];
     const ocrPages: number[] = [];
     let skipped = 0;
-    const scans = canReadScans();
+    const canOcr = canReadScans();
+    let scans = false; // decided from the first pages: only a document that is mostly pictures is read that way
     let chars = 0;
     for (let start = 0; start < pages && chars < MAX_CHARS; start += BATCH) {
       const texts = await pdfExtractPages(path, start, Math.min(BATCH, pages - start));
+      if (start === 0) scans = texts.filter((t) => (t ?? '').replace(/\s/g, '').length < MIN_PAGE_CHARS).length >= texts.length / 2;
       for (let i = 0; i < texts.length && chars < MAX_CHARS; i++) {
         let text = (texts[i] ?? '').trim();
         if (text.replace(/\s/g, '').length < MIN_PAGE_CHARS) {
           // A page with no text layer: read it from its picture, within the limit, or count it as skipped.
-          if (!scans || ocrPages.length >= MAX_OCR_PAGES) { skipped += 1; continue; }
+          // A blank, divider or figure page of a book that has a text layer is just skipped; only a scan is read from pictures.
+          if (!scans) continue;
+          if (!canOcr || ocrPages.length >= MAX_OCR_PAGES) { skipped += 1; continue; }
           try { text = (await require('../../knowledge/ocr').ocrPage(path, start + i)).trim(); } catch { text = ''; }
           if (text.replace(/\s/g, '').length < MIN_PAGE_CHARS) { skipped += 1; continue; }
           ocrPages.push(start + i + 1);
@@ -57,6 +61,6 @@ export async function pagedChunksWithScans(path: string, opts: PagedOptions = {}
         for (const c of chunkDocument(text)) out.push({ content: `(p. ${start + i + 1}) ${c.content}`, position: out.length });
       }
     }
-    return chars >= 100 && out.length ? { chunks: out, ocrPages, skipped } : null;
+    return chars >= 100 && out.length ? { scanned: scans, chunks: out, ocrPages, skipped } : null;
   } catch { return null; }
 }

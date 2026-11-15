@@ -153,10 +153,12 @@ const ALIASES: Partial<Record<ExamCode, string[]>> = {
   FAR: ['cpa far', 'far exam', 'financial accounting and reporting'], AUD: ['cpa aud', 'aud exam', 'auditing and attestation'], REG: ['cpa reg', 'reg exam', 'taxation and regulation'], TCP: ['cpa tcp', 'tax compliance and planning'],
   BAR: ['bar exam', 'ube', 'uniform bar exam', 'multistate bar'], CFA1: ['cfa level 1', 'cfa level i', 'cfa l1', 'cfa 1', 'cfa level one'], CFA2: ['cfa level 2', 'cfa level ii', 'cfa l2', 'cfa 2', 'cfa level two'],
   CMA1: ['cma part 1', 'cma 1', 'cma part one'], CMA2: ['cma part 2', 'cma 2', 'cma part two'], EA: ['enrolled agent', 'ea exam', 'irs special enrollment examination', 'see exam'],
-  SERIES7: ['series 7', 'series seven', 'general securities representative'], USMLE1: ['usmle step 1', 'usmle 1', 'step 1'], NCLEX: ['nclex', 'nclex rn', 'nclex-rn'], MCAT: ['mcat'], LSAT: ['lsat'],
+  SERIES7: ['series 7', 'series seven', 'general securities representative'], USMLE1: ['usmle step 1', 'usmle 1'], NCLEX: ['nclex', 'nclex rn', 'nclex-rn'], MCAT: ['mcat'], LSAT: ['lsat'],
   SAT: ['sat', 'sat exam', 'sat test'], ACT: ['act exam', 'act test'], GRE: ['gre', 'gre exam'], GMAT: ['gmat'], PMP: ['pmp', 'project management professional'], CISSP: ['cissp'],
 };
-const plain = (t: string): string => t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// Hyphens stay, so "far-reaching" is one word and not "far".
+const plain = (t: string): string => t.toLowerCase().replace(/[^a-z0-9 -]+/g, ' ').replace(/\s+/g, ' ').trim();
+const FILLER = new Set(['for', 'the', 'a', 'an', 'to', 'my', 'on', 'of', 'and', 'exam', 'test', 'prep', 'practice', 'study', 'studying', 'learn', 'learning', 'about', 'course', 'section', 'part', 'level', 'step']);
 
 /**
  * The exam a typed subject names ("CFA level 1", "the Bar exam", "Series 7 prep"), or null. When it matches, Atlas already knows the exam's
@@ -165,13 +167,15 @@ const plain = (t: string): string => t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' '
  */
 export function matchExam(subject: string): ExamCode | null {
   const text = ` ${plain(subject)} `;
-  const hasCue = /\b(exam|test|prep|practice|study|section|level|part|step)\b/.test(text);
+  const hasCue = /\b(exam|test|prep|practice)\b/.test(text);
+  // The subject must BE the exam: its words are most of what was typed ("CFA level 1", "studying for the Bar exam"), not a long topic that mentions one.
+  const rest = (n: string) => plain(subject).split(' ').filter((w) => w && !FILLER.has(w) && !n.split(' ').includes(w)).length;
   for (const e of EXAMS) {
     const names = [plain(e.label), plain(e.name), ...(ALIASES[e.code] ?? [])].filter(Boolean);
     for (const n of names) {
       if (!text.includes(` ${n} `)) continue;
       const short = n.length <= 5 && !/\d/.test(n);
-      if (!short || hasCue) return e.code;
+      if ((!short || hasCue) && rest(n) === 0) return e.code;
     }
   }
   return null;

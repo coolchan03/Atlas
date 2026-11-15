@@ -42,3 +42,16 @@ it('finds the passage that opens with the section asked about, searches by role,
   const after = await ragService.searchProject('p1', 'expensing', { topK: 10, include: isTeaching });
   expect(after.chunks.some((c: { name: string }) => c.name === 'Another book.pdf')).toBe(true);
 });
+
+it('a backup restore or append counts as a change, so a search never serves the old text', async () => {
+  installRealSqlite();
+  const { ragDatabase } = require('../../src/services/rag/database');
+  await ragDatabase.ensureReady();
+  const doc = { projectId: 'p2', name: 'Restored.pdf', path: '/r', size: 1, enabled: true, createdAt: new Date().toISOString(), chunks: [{ content: 'restored text', position: 0 }] };
+  const v0 = ragDatabase.version;
+  ragDatabase.appendProjectDocuments([doc]);
+  expect(ragDatabase.version).toBeGreaterThan(v0);
+  const v1 = ragDatabase.version;
+  ragDatabase.restoreProjectDocuments(['p2'], [doc]);
+  expect(ragDatabase.version).toBeGreaterThan(v1);
+});

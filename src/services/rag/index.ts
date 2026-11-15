@@ -1,6 +1,6 @@
 import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
-import { canReadScans, pagedChunksWithScans } from './pageChunks';
+import { MAX_OCR_PAGES, canReadScans, pagedChunksWithScans } from './pageChunks';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
@@ -49,6 +49,14 @@ interface IndexDocumentParams {
   replaceExisting?: boolean;
 }
 
+/** What to tell the person when pages were read from pictures (a model can misread them) or could not be read. */
+function scanNote(paged: { scanned: boolean; ocrPages: number[]; skipped: number } | null): string {
+  if (!paged?.scanned) return '';
+  const read = paged.ocrPages.length ? `${paged.ocrPages.length} scanned page${paged.ocrPages.length === 1 ? ' was' : 's were'} read from pictures, so check numbers in them. ` : '';
+  const left = paged.skipped ? `${paged.skipped} page${paged.skipped === 1 ? '' : 's'} could not be read (more than ${MAX_OCR_PAGES} scanned pages, or no vision model).` : '';
+  return `${read}${left}`.trim();
+}
+
 /**
  * The text and chunks of a document that has been read. A PDF is chunked page by page so every chunk knows its page, and a scanned PDF (pictures
  * of pages, no text layer) has its pages read from the pictures when a vision model is loaded; without one the person is told what to do.
@@ -74,7 +82,7 @@ async function readAndChunk(args: { fileName: string; filePath: string; attachme
     noteIfStandard(fileName, head);
     noteTaxSource(fileName, head);
   }
-  return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent) };
+  return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent), note: scanNote(paged) };
 }
 
 class RagService {
@@ -99,7 +107,7 @@ class RagService {
     // A whole textbook is about 1.5 to 3 million characters; the old 500,000 cut most of one off.
     const RAG_MAX_CHARS = 3_000_000;
     const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
-    const { source, chunks } = await readAndChunk({ fileName, filePath, attachment, onProgress });
+    const { source, chunks, note } = await readAndChunk({ fileName, filePath, attachment, onProgress });
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }
@@ -117,7 +125,7 @@ class RagService {
           name: fileName, path: filePath, size: fileSize,
           chunks: chunks.map((c, i) => ({ content: c.content, position: c.position, embedding: embeddings[i] })),
         });
-        onProgress?.({ stage: 'done', message: 'Done' });
+        onProgress?.({ stage: 'done', message: note ? `Done. ${note}` : 'Done' });
         return id;
       } finally {
         await removeOwnCopy(filePath);
@@ -152,7 +160,7 @@ class RagService {
       throw err instanceof Error ? err : new Error('Embedding generation failed');
     }
 
-    onProgress?.({ stage: 'done', message: 'Done' });
+    onProgress?.({ stage: 'done', message: note ? `Done. ${note}` : 'Done' });
     logger.log(`[RAG] Indexed ${fileName}: ${chunks.length} chunks`);
     return docId;
   }

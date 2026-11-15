@@ -12,5 +12,7 @@ export type DocRole = 'teach' | 'reference';
 export const defaultRole = (name: string): DocRole => (documentStanding(name).rank <= 3 ? 'reference' : 'teach');
 
 export const roleOf = (name: string): DocRole => useOfficialDocs.getState().roles[name] ?? defaultRole(name);
+/** A document is on unless it was switched off (the database stores 1 or 0). */
+export const isEnabled = (doc: { enabled?: number | boolean }): boolean => doc.enabled !== false && doc.enabled !== 0;
 export const isReference = (name: string): boolean => roleOf(name) === 'reference';
 export const isTeaching = (name: string): boolean => roleOf(name) === 'teach';
