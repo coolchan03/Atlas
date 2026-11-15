@@ -66,3 +66,14 @@ describe('lessons on accounting', () => {
     expect(standardsNote('Biology: Cells')).toBe('');
   });
 });
+
+describe('documents added under a standard\'s name', () => {
+  const { isOfficialDocumentName, officialDocumentNames, isOfficialSource } = require('../../../src/standards/authority');
+  it('counts the ones named as a standard, and not a textbook that only mentions it', () => {
+    for (const n of ['FASB ASC 842 Leases.pdf', 'ASC 326 Credit Losses.pdf', 'ASU 2016-13.pdf', 'asu_2023-07 Segment Reporting.pdf', 'Accounting Standards Codification - Revenue.pdf', 'GASB 87.pdf', 'FAR Codification Notes.docx']) expect(isOfficialDocumentName(n)).toBe(true);
+    for (const n of ['Becker FAR Textbook.pdf', 'My notes on leases.docx', 'Intermediate Accounting Ch 21.pdf']) expect(isOfficialDocumentName(n)).toBe(false);
+    expect(officialDocumentNames(['ASU 2016-13.pdf', 'Becker FAR.pdf'])).toEqual(['ASU 2016-13.pdf']);
+    expect(isOfficialSource({ kind: 'project', title: 'FASB ASC 842.pdf' })).toBe(true);
+    expect(isOfficialSource({ kind: 'project', title: 'Becker FAR.pdf' })).toBe(false);
+  });
+});

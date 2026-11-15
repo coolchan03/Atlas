@@ -1,6 +1,7 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
 import { followUpQuery } from '../../services/rag/followUp';
+import { officialDocumentNames } from '../../standards/authority';
 import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
 import { agentSkillNames, skillsFor } from '../../skills/agentSkills';
 import { relevantTools } from '../../services/tools/relevantTools';
@@ -369,6 +370,9 @@ export async function injectRagContext(projectId: string | undefined, query: str
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nThis project has shared documents (the same for every chat in the project):\n${docList}`;
     kbPrompt += '\nUse the excerpts below when they are relevant, and say which document you used.';
+    // Documents named as a standard (FASB, ASC, ASU, Codification) are the rule itself: where one differs from a textbook, the standard wins.
+    const standards = officialDocumentNames(enabledDocs.map((d: import('../../services/rag').RagDocument) => d.name));
+    if (standards.length) kbPrompt += `\nThese documents are the standards themselves: ${standards.slice(0, 8).join(', ')}. Where an excerpt from one of them differs from a textbook or other notes, the standard is right and the textbook is out of date on that point: say what the textbook says, what the standard says, and name the standard.`;
     if (useProjectStore.getState().getProject(projectId)?.citeBooks) {
       kbPrompt += '\nCITE THE BOOKS: when the question is about what these documents cover, answer from the excerpts and quote the exact words you rely on in quotation marks, naming the document and the page, which each excerpt shows as (p. N). If the excerpts do not cover it, begin your answer with "Not in your books:" and then give a short general answer, clearly marked as not from the documents. Never present your own knowledge as if it came from them.';
     }
