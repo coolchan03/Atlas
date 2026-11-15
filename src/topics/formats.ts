@@ -149,7 +149,7 @@ export type SquareContent =
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
   | { kind: 'dictation'; lang: string; sentences: string[] };
 
-export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
+export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; where?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
 
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',

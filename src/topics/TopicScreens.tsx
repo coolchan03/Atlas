@@ -361,23 +361,23 @@ function SquareHeader({ title, embedded, onBack }: { title: string; embedded: bo
 }
 
 /** The passages of the learner's own books a square was written from, folded away until asked for. */
-function CitedFold({ passages }: { passages: { source: string; url?: string; text: string }[] }) {
+function CitedFold({ passages }: { passages: { source: string; url?: string; where?: string; text: string }[] }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   if (!passages.length) return null;
-  const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source) === i);
+  const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source && q.where === p.where) === i);
   return (
     <View testID="square-cited">
       <Text style={[styles.meta, { color: colors.textMuted }]}>Where this came from</Text>
       {sources.map((p) => (p.url
-        ? <Text key={p.source} style={[styles.link, { color: colors.primary }]} accessibilityRole="link" onPress={() => Linking.openURL(p.url!)} testID="square-source-link">{p.source}</Text>
-        : <Text key={p.source} style={{ color: colors.textSecondary }}>{p.source}</Text>))}
+        ? <Text key={`${p.source}-${p.where}`} style={[styles.link, { color: colors.primary }]} accessibilityRole="link" onPress={() => Linking.openURL(p.url!)} testID="square-source-link">{p.source}{p.where ? `, ${p.where}` : ''}</Text>
+        : <Text key={`${p.source}-${p.where}`} style={{ color: colors.textSecondary }}>{p.source}{p.where ? `, ${p.where}` : ''}</Text>))}
       <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="square-cited-toggle">
         <Text style={{ color: colors.primary }}>{open ? 'Hide' : 'Show'} where this came from ({passages.length} passage{passages.length === 1 ? '' : 's'} from your sources)</Text>
       </TouchableOpacity>
       {open && passages.map((p, i) => (
         <View key={i} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-          <Text style={[styles.meta, { color: colors.textMuted }]}>{p.source}</Text>
+          <Text style={[styles.meta, { color: colors.textMuted }]}>{p.source}{p.where ? `, ${p.where}` : ''}</Text>
           <Text style={{ color: colors.textSecondary }}>{p.text}</Text>
         </View>
       ))}

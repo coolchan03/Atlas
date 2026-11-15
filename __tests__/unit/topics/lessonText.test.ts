@@ -1,5 +1,5 @@
 import { contentMessages, exampleIsComplete, parseContent } from '../../../src/topics/formats';
-import { needsMoreInfo, relevantExcerpts, makeSource, withoutSourceMentions } from '../../../src/topics/sources';
+import { chunkPlace, needsMoreInfo, relevantExcerpts, makeSource, withoutSourceMentions } from '../../../src/topics/sources';
 import { isOutlineDocument, looksLikeOutline, outlineFromText } from '../../../src/cpa/outline';
 
 const lesson = (sections: unknown[]) => JSON.stringify({ sections, keyPoints: ['a'] });
@@ -28,6 +28,15 @@ describe('lesson text', () => {
     const src = makeSource({ title: 'Leases explained', kind: 'web', url: 'https://example.org/leases', text: 'A lease transfers the right to use an asset. The lessee records a right-of-use asset and a lease liability.' }, 'x');
     expect(relevantExcerpts([src], 'lease right-of-use asset')[0].url).toBe('https://example.org/leases');
     expect(needsMoreInfo([])).toBe(true);
+  });
+});
+
+describe('where in a source', () => {
+  it('names the page of a PDF passage and the part of other files, and the paragraph of a note', () => {
+    expect(chunkPlace('(p. 214) A lease is...', 3)).toEqual({ where: 'page 214', text: 'A lease is...' });
+    expect(chunkPlace('A lease is...', 3)).toEqual({ where: 'part 4', text: 'A lease is...' });
+    const note = makeSource({ title: 'Notes', kind: 'note', text: `${'Intro to something else entirely. '.repeat(20)}\n\nA lease transfers the right to use an asset. The lessee records a right-of-use asset.` }, 'n');
+    expect(relevantExcerpts([note], 'lease right-of-use asset')[0].where).toBe('paragraph 2');
   });
 });
 

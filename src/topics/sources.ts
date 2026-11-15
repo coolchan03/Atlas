@@ -19,7 +19,14 @@ export interface CourseSource {
 }
 
 /** A passage a square was written from: where it came from, a link when it is a web page, and the words. */
-export interface Excerpt { source: string; url?: string; text: string }
+export interface Excerpt { source: string; url?: string; /** Where in it: "page 12", "part 3" or "paragraph 5". */ where?: string; text: string }
+
+/** A project chunk's place and words: a PDF chunk starts with "(p. 12)", which becomes "page 12"; any other file is told by its part number. */
+export function chunkPlace(content: string, position: number | undefined): { where?: string; text: string } {
+  const m = /^\(p\. (\d+)\)\s*/.exec(content);
+  if (m) return { where: `page ${m[1]}`, text: content.slice(m[0].length) };
+  return { where: typeof position === 'number' ? `part ${position + 1}` : undefined, text: content };
+}
 
 export interface Candidate { title: string; snippet: string; url: string }
 
@@ -46,11 +53,11 @@ export function relevantExcerpts(sources: CourseSource[], query: string, maxChar
   const scored: Array<Excerpt & { score: number }> = [];
   for (const s of sources) {
     if (s.questionBank) continue; // a question bank is asked from, not read as a lesson
-    for (const p of passages(s.text)) {
+    for (const [at, p] of passages(s.text).entries()) {
       const have = new Set(words(p));
       let shared = 0;
       want.forEach((w) => { if (have.has(w)) shared++; });
-      if (shared >= 2) scored.push({ source: s.title, url: s.url, text: p, score: shared / Math.sqrt(have.size + 1) });
+      if (shared >= 2) scored.push({ source: s.title, url: s.url, where: `paragraph ${at + 1}`, text: p, score: shared / Math.sqrt(have.size + 1) });
     }
   }
   scored.sort((a, b) => b.score - a.score);
@@ -58,7 +65,7 @@ export function relevantExcerpts(sources: CourseSource[], query: string, maxChar
   let used = 0;
   for (const c of scored) {
     if (used + c.text.length > maxChars) continue;
-    out.push({ source: c.source, url: c.url, text: c.text });
+    out.push({ source: c.source, url: c.url, where: c.where, text: c.text });
     used += c.text.length;
     if (out.length >= 4) break;
   }

@@ -10,7 +10,7 @@ import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { enqueue } from './generationQueue';
-import { makeSource, needsMoreInfo, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
+import { chunkPlace, makeSource, needsMoreInfo, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 
 const MAX_TRIES = 2;
@@ -60,7 +60,7 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
     const { ragService } = require('../services/rag');
     const found = await ragService.searchProject(projectId, query);
     // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
-    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string }) => ({ source: c.name, text: String(c.content).slice(0, 700) }));
+    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string; position?: number }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, where: at.where, text: at.text.slice(0, 700) }; });
   } catch { return []; }
 }
 

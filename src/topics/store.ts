@@ -24,7 +24,7 @@ export interface Course {
   /** The project this course belongs to: its shared documents are material for the squares, and its chats are where the tutor talks. */
   projectId?: string;
   /** Per square: the passages from the learner's own books and sources it was written from, so they can check it. */
-  cited?: Record<string, { source: string; url?: string; text: string }[]>;
+  cited?: Record<string, { source: string; url?: string; where?: string; text: string }[]>;
   /** How hard the squares, questions and tests are (beginner, moderate or hard). */
   difficulty?: Difficulty;
   /** How many of the next lessons are written ahead of time while you play (0 turns it off). Missing means the default. */
@@ -51,7 +51,7 @@ interface TopicsState {
   setProject: (id: string, projectId: string | undefined) => void;
   /** Adds one lesson square for each item (before the final quiz when the board ends with one). */
   addLessons: (id: string, items: { title: string; focus: string; unit: string }[]) => void;
-  setCited: (id: string, key: string, passages: { source: string; url?: string; text: string }[]) => void;
+  setCited: (id: string, key: string, passages: { source: string; url?: string; where?: string; text: string }[]) => void;
   /** Changes the difficulty; squares not played yet are written again at the new level. */
   setDifficulty: (id: string, difficulty: Difficulty) => void;
   /** Sets how many of the next lessons are written ahead of time. */
