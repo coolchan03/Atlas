@@ -31,6 +31,18 @@ describe('lesson text', () => {
   });
 });
 
+describe('tables and journal entries', () => {
+  it('keeps a table, one row per line, and asks for journal entries as Account / Debit / Credit tables', () => {
+    const table = '| Account | Debit | Credit |\n|---|---|---|\n| Cash | 500 | |\n| to Revenue | | 500 |';
+    const c: any = parseContent('lesson', lesson([{ heading: 'H', text: 'Entry:', example: `${table}\n\nCash rose by 500, so the answer is a debit to Cash.` }]));
+    expect(c.sections[0].example.split('\n')).toHaveLength(6);
+    expect(c.sections[0].example).toContain('| Cash | 500 | |');
+    const m = contentMessages({ courseTitle: 'C', topic: 'FAR', level: 'x', how: '', style: '', square: { key: 's1', format: 'lesson', title: 'Leases', focus: 'f', unit: 'u' }, before: [], minutes: 10 } as any);
+    expect(m.user).toMatch(/Account \| Debit \| Credit/);
+    expect(m.user).toMatch(/Markdown table/);
+  });
+});
+
 describe('the exam blueprint', () => {
   const prose = Array.from({ length: 12 }, (_, i) => `Under ASC 842 a lessee recognises a right-of-use asset for lease number ${i} at the commencement date.`).join('\n');
   it('does not treat study text as an outline, and does not use the blueprint file as lesson text', async () => {

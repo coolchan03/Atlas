@@ -32,6 +32,7 @@ async function release(n = 1) {
 function course(squares = 5) {
   jest.resetModules();
   mockLog.length = 0; mockGates.length = 0; mockFail = false;
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web lookup in these tests
   const { useTopics } = require('../../src/topics/store');
   const plan = {
     title: 'T', summary: '', style: '', theme: '',

@@ -14,6 +14,7 @@ jest.mock('@react-navigation/native', () => ({
 
 it('writes ahead as the board opens, shows which lesson, and the choice turns it off or changes how many', async () => {
   installNativeBoundary({ fs: true });
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web lookup in this test
   const rtl = requireRTL();
   const React = require('react');
   const { useTopics } = require('../../src/topics/store');
