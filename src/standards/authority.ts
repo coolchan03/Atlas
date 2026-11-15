@@ -42,6 +42,8 @@ export const isOfficialSource = (s: AuthoritySource): boolean => {
 /** The names of the documents in a project that count as the standard itself. */
 export const officialDocumentNames = (names: string[]): string[] => names.filter(isOfficialDocumentName);
 
+import { TEXTBOOK_RANK, classifyTaxSource } from './taxSources';
+
 /** Accounting Standards Update numbers named in a text, newest first ("ASU 2016-13" and "ASU No. 2023-07"). */
 export function asuNumbers(text: string): string[] {
   const found = [...text.matchAll(/\bASU\s*(?:No\.?\s*)?(\d{4})-(\d{2})\b/gi)].map((m) => `${m[1]}-${m[2]}`);
@@ -50,16 +52,26 @@ export function asuNumbers(text: string): string[] {
 
 const dateOf = (s: AuthoritySource): string => s.effectiveFrom || s.publicationDate || '';
 
+/** How high a source ranks (1 is the law or a standard-setter) and the year of its edition, from what is known about it. */
+function standing(s: AuthoritySource): { rank: number; year?: number } {
+  const tax = s.title && (s.kind === 'project' || s.kind === 'library') ? classifyTaxSource(s.title) : null;
+  const dated = dateOf(s) ? Number(dateOf(s).slice(0, 4)) : undefined;
+  const year = dated || tax?.year;
+  if (isOfficialSource(s)) return { rank: 1, year };
+  if (tax) return { rank: tax.rank, year };
+  return { rank: TEXTBOOK_RANK, year };
+}
+
 /**
- * Does a claim resting on `newer` overrule one resting on `older`? Yes when the new one cites a standard-setter and the old one cites
- * none, unless the old one has a date and every official page of the new one has an earlier one: a newer textbook edition does not
- * lose to an older rule.
+ * Does a claim resting on `newer` overrule one resting on `older`? Yes when its best source ranks higher (a standard-setter or the Code
+ * over a textbook, a regulation over a publication), or ranks the same and is a later edition. Not when the higher source is a stale
+ * copy: two or more years older than the lower one it would overrule.
  */
 export function overrules(newer: AuthoritySource[], older: AuthoritySource[]): boolean {
-  const official = newer.filter(isOfficialSource);
-  if (!official.length || older.some(isOfficialSource)) return false;
-  const oldDates = older.map(dateOf).filter(Boolean).sort();
-  const newDates = official.map(dateOf).filter(Boolean).sort();
-  if (!oldDates.length || !newDates.length) return true;
-  return newDates[newDates.length - 1] >= oldDates[oldDates.length - 1];
+  if (!newer.length || !older.length) return false;
+  const best = (list: AuthoritySource[]) => list.map(standing).reduce((a, b) => (b.rank < a.rank ? b : a));
+  const n = best(newer);
+  const o = best(older);
+  if (n.rank < o.rank) return !(n.year && o.year && o.year - n.year >= 2);
+  return n.rank === o.rank && n.rank < TEXTBOOK_RANK + 1 && !!n.year && !!o.year && n.year > o.year && n.rank <= 4;
 }

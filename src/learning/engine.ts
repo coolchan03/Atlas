@@ -16,6 +16,7 @@
  * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
  * In session mode nothing changes until you tap "Keep what it learned".
  */
+import { TAX_RULES, supersededEditions, taxLabel } from '../standards/taxSources';
 import { runBackgroundJob, fitPrompt } from '../services/llmJobQueue';
 import RNFS from 'react-native-fs';
 import { localUniqueId } from '../utils/uniqueId';
@@ -105,7 +106,8 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   if (cfg.projectId) {
     try {
       const res: any = await ragService.searchProject(cfg.projectId, query);
-      (res?.chunks || []).slice(0, 3).forEach((c: any) => found.push({ title: String(c.name), kind: 'project', content: String(c.content).replace(/\s+/g, ' ').slice(0, 800), sourceId: c.doc_id != null ? `${cfg.projectId}:document:${c.doc_id}` : undefined, locator: c.position != null ? `chunk ${c.position}` : undefined }));
+      const old = supersededEditions((res?.chunks || []).map((c: any) => String(c.name)));
+      (res?.chunks || []).filter((c: any) => !old.has(String(c.name))).slice(0, 3).forEach((c: any) => found.push({ title: String(c.name), kind: 'project', content: String(c.content).replace(/\s+/g, ' ').slice(0, 800), sourceId: c.doc_id != null ? `${cfg.projectId}:document:${c.doc_id}` : undefined, locator: c.position != null ? `chunk ${c.position}` : undefined }));
     } catch (e) { logger.log(`[Learning] knowledge search failed: ${String(e)}`); }
   }
   if (cfg.useLibrary) {
@@ -137,7 +139,7 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
   if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
   return {
-    text: found.map((f, i) => `[${i + 1}] (${f.title}) ${f.content}`).join('\n\n'),
+    text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES}\n\n` : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
     list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
   };
 }
