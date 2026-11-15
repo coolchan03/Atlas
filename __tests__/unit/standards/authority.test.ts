@@ -33,7 +33,7 @@ describe('looking up the latest standards', () => {
   const hit = (title: string, url: string, snippet = '') => ({ title, url, snippet });
 
   it('keeps only the standard-setters\' own pages and puts the newest update first', async () => {
-    const search = jest.fn(async () => [
+    const search = jest.fn(async (_query: string) => [
       hit('Blog about leases', 'https://example.com/leases'),
       hit('ASU 2016-02 Leases', 'https://www.fasb.org/asu-2016-02'),
       hit('ASU 2023-01 Common control leases', 'https://www.fasb.org/asu-2023-01'),
