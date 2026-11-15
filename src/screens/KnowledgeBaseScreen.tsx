@@ -146,7 +146,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         await loadKbDocs();
         Alert.alert(
           'Pack imported',
-          `${r.added} added, ${r.skipped} already here${r.failed.length ? `, ${r.failed.length} failed (${r.failed.slice(0, 3).map((f) => f.name).join(', ')}${r.failed.length > 3 ? '...' : ''})` : ''}.`,
+          `${r.added} added, ${r.skipped} already here${r.failed.length ? `, ${r.failed.length} failed (${r.failed.slice(0, 3).map((f) => f.name).join(', ')}${r.failed.length > 3 ? '...' : ''})` : ''}${r.ignored.length ? `, ${r.ignored.length} not added because Atlas cannot read that kind of file (${r.ignored.slice(0, 3).join(', ')}${r.ignored.length > 3 ? '...' : ''})` : ''}.${r.total === 0 ? ' Nothing in the zip could be added.' : ''}`,
         );
       }
     } catch (err: any) {
