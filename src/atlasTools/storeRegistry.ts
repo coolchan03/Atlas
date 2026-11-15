@@ -40,6 +40,7 @@ const STORES: Record<string, () => any> = {
   'atlas-call-prefs': () => require('../screens/HomeScreen/callPrefs').useCallPrefs,
   'atlas-pressure-log': () => require('./pressureLog').usePressureLog,
   'atlas-memory-choice-v1': () => require('../stores/autoMemory').useAutoMemory,
+  'atlas-official-docs': () => require('../standards/officialDocs').useOfficialDocs,
 };
 
 /** Loads the given stores from storage again (unknown keys and missing stores are skipped). */

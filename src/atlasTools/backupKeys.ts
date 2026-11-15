@@ -14,6 +14,8 @@ export const RESTORABLE_STORE_KEYS = new Set([
   // Practice questions and review dates (textbook question banks), exam prep, study plan, About me, Home widgets, call choices.
   'atlas-exercises', 'atlas-cpa-prep', 'atlas-study-plan', 'atlas-about-me', 'atlas-custom-home-shortcuts-v1', 'atlas-call-prefs',
   'atlas-pressure-log', 'atlas-memory-choice-v1', 'atlas-ask-later',
+  // Which documents are the official standard, what each is for (teach or reference) and what the first pages of each showed (tax kind and year): the documents come back in an encrypted backup, so these must too.
+  'atlas-official-docs',
 ]);
 
 /**
@@ -21,7 +23,6 @@ export const RESTORABLE_STORE_KEYS = new Set([
  * in RESTORABLE_STORE_KEYS, handled by sync itself (recordings, voices), or listed here, so a new store cannot be forgotten.
  */
 export const NOT_BACKED_UP: Record<string, string> = {
-  'atlas-official-docs': 'which documents were marked as the official standard: the marks follow the document names, and the documents themselves are not part of a backup',
   'atlas-read-resume': 'how far recently read documents got on this phone',
   'atlas-drug-labels': 'FDA drug labels seen on this phone: public text that is looked up again when needed',
   'atlas-backup-reminder': 'when this phone last reminded about a backup',
