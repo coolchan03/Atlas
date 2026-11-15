@@ -235,7 +235,7 @@ it('lets you add textbooks and question banks on the create-a-course form, keeps
   boundary.llama!.scriptCompletion({ text: PLAN });
   const list = rtl.render(React.createElement(TopicsScreen));
   rtl.fireEvent.press(list.getByTestId('course-new'));
-  rtl.fireEvent.changeText(list.getByTestId('course-topic'), 'Financial accounting and reporting');
+  rtl.fireEvent.changeText(list.getByTestId('course-topic'), 'Managerial accounting basics');
   await rtl.act(async () => { rtl.fireEvent.press(list.getByTestId('course-add-files')); });
   expect(await list.findByText('FAR-textbook.pdf')).toBeTruthy();
   expect(list.getByText('FAR-question-bank.docx')).toBeTruthy();
@@ -247,7 +247,7 @@ it('lets you add textbooks and question banks on the create-a-course form, keeps
   const course = useTopics.getState().courses[0];
   expect(indexed).toEqual(['FAR-textbook.pdf']); // the one still listed
   expect(course.projectId).toBeTruthy();
-  expect(useProjectStore.getState().projects.find((p: any) => p.id === course.projectId)?.name).toBe('Financial accounting and reporting documents');
+  expect(useProjectStore.getState().projects.find((p: any) => p.id === course.projectId)?.name).toBe('Managerial accounting basics documents');
   expect(course.sources.map((x: any) => x.title)).toEqual(['FAR-textbook.pdf']); // its opening is kept so the plan knows what it covers
 });
 
