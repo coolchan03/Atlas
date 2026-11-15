@@ -95,3 +95,27 @@ describe('practice scoring without a model', () => {
     expect(rankClaims('How long to boil water?', known).map((k) => k.id)).toEqual(['1']);
   });
 });
+
+describe('claims that are not claims (a report discussing its own material)', () => {
+  const { isStandaloneClaim, claimSentences, compareClaim } = require('../../../src/learning/claimText');
+
+  it('rejects fragments that begin mid-sentence and sentences about "Claim A" or "Statement B"', () => {
+    expect(isStandaloneClaim(', at least 61 full days) within that window .')).toBe(false);
+    expect(isStandaloneClaim('Claim A likely reflects a generalized understanding of holding periods that assumes a full year context.')).toBe(false);
+    expect(isStandaloneClaim('Statement B is also correct because these distributions must originate from earnings and profits.')).toBe(false);
+    expect(isStandaloneClaim('Source Distinction: Use source to confirm how corporations must designate amounts.')).toBe(false);
+    expect(isStandaloneClaim('Short one.')).toBe(false);
+    expect(isStandaloneClaim('Qualified dividends must be held for more than 60 days during the 121-day period.')).toBe(true);
+  });
+
+  it('keeps only real claims from a report that mixes them with discussion', () => {
+    const text = 'ANSWER: Qualified dividends must be held for more than 60 days during the 121-day period around the ex-dividend date. [1]\nClaim A likely reflects a generalized understanding while Claim B is precise. [2]\n, at least 61 full days) within that window . [2]';
+    expect(claimSentences(text)).toEqual(['Qualified dividends must be held for more than 60 days during the 121-day period around the ex-dividend date. [1]']);
+  });
+
+  it('does not call two long sentences a conflict only because one has a "no" in it', () => {
+    const known = [{ id: 'k', text: 'Ordinary dividends are the most common distribution and are treated as ordinary income rather than capital gains when paid from earnings and profits of the corporation.' }];
+    const r = compareClaim('Ordinary dividends are classified as ordinary income because they come from earnings and profits and no holding period is required for this classification of the distribution.', known);
+    expect(r.relation).not.toBe('contradicts');
+  });
+});

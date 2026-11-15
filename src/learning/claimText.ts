@@ -102,7 +102,9 @@ export function conflictReason(a: string, b: string): string | undefined {
   const nb = numbersIn(b).filter((n) => !isYear(n));
   const differs = na.length > 0 && nb.length > 0 && na.some((n) => !nb.includes(n)) && nb.some((n) => !na.includes(n));
   if (differs) return `States different numbers (${na.join(', ')} against ${nb.join(', ')})`;
-  if (NEGATION.test(a) !== NEGATION.test(b)) return 'Says the opposite of a known claim';
+  // "Not" turns up all through legal and tax text, so the opposite of a claim is only called a conflict between two short statements of
+  // the same thing (nearly every word shared): long sentences that differ by one "no" are usually about different cases.
+  if (NEGATION.test(a) !== NEGATION.test(b) && subjectSimilarity(a, b) >= 0.9 && Math.max(a.length, b.length) <= 160) return 'Says the opposite of a known claim';
   return undefined;
 }
 
@@ -130,6 +132,19 @@ export function closestPassage(claim: string, passages: Array<{ n: number; passa
   return best?.n;
 }
 
+/**
+ * A claim is a complete statement about the subject. A sentence that begins mid-way (", at least 61 full days) within that window .") or that
+ * talks about other claims ("Claim A likely reflects...", "Statement B is also correct...", "Source Distinction: ...") is not one: it is
+ * the report discussing its own material, and storing it only creates conflicts between pieces of discussion.
+ */
+const META = /\b(?:claims?|statements?|sources?)\s+[AB]\b|\b(?:both|either|neither)\s+(?:claims?|statements?)\b|^(?:source distinction|reasoning|note)\s*:/i;
+export function isStandaloneClaim(sentence: string): boolean {
+  const t = sentence.replace(/^\s*[-*\d.)]+\s*/, '').trim();
+  if (!/^["'(]?[A-Z0-9]/.test(t)) return false;
+  if (t.split(/\s+/).length < 5) return false;
+  return !META.test(t);
+}
+
 /** Sentences of a report's answer, ready to be stored as separate claims, each keeping its [n] citation markers. No regex lookbehind: older Hermes builds lack it. */
 export function claimSentences(text: string): string[] {
   const section = text.split(/^\s*(?:REASONING|UNSURE)\s*:/im)[0];
@@ -138,7 +153,7 @@ export function claimSentences(text: string): string[] {
   for (const line of stripped.split('\n')) {
     for (const sentence of line.match(/[^.!?]+(?:[.!?]+(?:\s*\[\d+\])*(?=\s|$)|$)/g) ?? []) {
       const clean = sentence.replace(/^\s*[-*\d.)]+\s*/, '').trim();
-      if (clean.length >= 16 && clean.length <= 1200 && !/^(?:none|unknown|unsure)$/i.test(clean)) out.push(clean);
+      if (clean.length >= 16 && clean.length <= 1200 && !/^(?:none|unknown|unsure)$/i.test(clean) && isStandaloneClaim(clean)) out.push(clean);
     }
   }
   return [...new Set(out)].slice(0, 12);

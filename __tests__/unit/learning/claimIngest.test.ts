@@ -57,4 +57,14 @@ describe('putting a report into the knowledge ledger', () => {
     expect(db.openContradictions()).toEqual([]);
     expect(db.knownClaims('anything')).toEqual([]);
   });
+
+  it('does not turn a report that settles a conflict into new conflicts', () => {
+    const db = memoryKnowledgeDb();
+    ingestClaims(db, base({ reportText: 'ANSWER: Boil the water for one minute. [1]', sources: [source(1, 'Boil water for one minute.')] }));
+    const r = ingestClaims(db, base({ reportId: 'r2', settling: true, reportText: 'ANSWER: Boil the water for 3 minutes. [1]', sources: [source(1, 'Boil water for 3 minutes.')] }));
+    expect(r).toMatchObject({ added: 1, contradictions: 0 });
+    expect(db.openContradictions(10)).toHaveLength(0);
+    const normal = ingestClaims(db, base({ reportId: 'r3', reportText: 'ANSWER: Boil the water for 7 minutes. [1]', sources: [source(1, 'Boil water for 7 minutes.')] }));
+    expect(normal.contradictions).toBe(1);
+  });
 });

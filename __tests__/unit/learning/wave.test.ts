@@ -37,3 +37,14 @@ describe('a question the person asked', () => {
     expect(planStep({ bank: items, pendingItemIds: ['mine'], unaskedConflicts: [], due: [] })).toMatchObject({ item: { id: 'plan' } });
   });
 });
+
+describe('one conflict question at a time', () => {
+  const { planStep: plan } = require('../../../src/learning/cycleRules');
+  const conflict = [{ id: 'c', a: { id: 'a', text: 'x' }, b: { id: 'b', text: 'y' }, reason: 'r' }] as never;
+  const item = (over: Record<string, unknown>) => ({ id: 'i', q: 'q', status: 'approved', tries: 0, round: 1, ...over });
+  it('makes a conflict question when none is waiting, and studies the waiting one instead of making another', () => {
+    expect(plan({ bank: [], pendingItemIds: [], unaskedConflicts: conflict, due: [] })).toMatchObject({ type: 'resolve' });
+    const waiting = item({ id: 'r1', kind: 'resolve' });
+    expect(plan({ bank: [waiting], pendingItemIds: [], unaskedConflicts: conflict, due: [] })).toMatchObject({ type: 'study', item: { id: 'r1' } });
+  });
+});

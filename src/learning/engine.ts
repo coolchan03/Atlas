@@ -38,7 +38,7 @@ import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycl
 import { waveDigest, waveReports, waveTally } from './wave';
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
-import { conflictReason, rankClaims, recallScore } from './claimText';
+import { conflictReason, isStandaloneClaim, rankClaims, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
@@ -413,6 +413,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
           const stored = ingestClaims(learningKnowledgeDb, {
             topic: cfg.topic, question: rep.q, reportId: original?.id ?? rep.itemId, reportText: full,
             sources: original?.sourceList ?? [], reportStatus: assessment.status === 'disputed' ? 'disputed' : 'candidate', reportNote: reason,
+            settling: item.kind === 'resolve',
           });
           L().log({
             agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,
@@ -560,7 +561,7 @@ export async function startLearning(agentId: string): Promise<void> {
   catch (e) { L().log({ agentId, kind: 'error', title: 'Report archive unavailable', body: String(e) }); }
   // Conflicts stored by the older, noisier check (the same rule in different years, loosely alike sentences) are re-checked first:
   // otherwise each one still turns into a "Two claims disagree" study question ahead of everything else.
-  const cleared = safely(() => learningKnowledgeDb.dismissStaleContradictions((a, b) => !!conflictReason(a, b)), []);
+  const cleared = safely(() => learningKnowledgeDb.dismissStaleContradictions((a, b) => isStandaloneClaim(a) && isStandaloneClaim(b) && !!conflictReason(a, b)), []);
   if (cleared.length) {
     const gone = (q: string) => cleared.some((c) => q.includes(`A: "${c.a}"`) && q.includes(`B: "${c.b}"`));
     L().patch(agentId, { bank: L().get(agentId).bank.filter((it) => !(it.kind === 'resolve' && (it.status === 'pending' || it.status === 'approved') && gone(it.q))) });

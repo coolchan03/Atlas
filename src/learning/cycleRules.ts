@@ -41,7 +41,9 @@ export function planStep(ctx: { bank: BankItem[]; pendingItemIds: string[]; unas
   // A question the person asked themselves comes before everything else.
   const asked = ctx.bank.find((b) => b.kind === 'asked' && b.status === 'approved' && !ctx.pendingItemIds.includes(b.id));
   if (asked) return { type: 'study', item: asked };
-  if (ctx.unaskedConflicts.length) return { type: 'resolve', conflict: ctx.unaskedConflicts[0] };
+  // One conflict question at a time: while one is still waiting to be studied, no second one is made.
+  const waiting = ctx.bank.some((b) => b.kind === 'resolve' && (b.status === 'approved' || b.status === 'pending'));
+  if (ctx.unaskedConflicts.length && !waiting) return { type: 'resolve', conflict: ctx.unaskedConflicts[0] };
   if (ctx.due.length) return { type: 'practice', concepts: ctx.due };
   const item = ctx.bank.find((b) => b.status === 'approved' && !ctx.pendingItemIds.includes(b.id));
   return item ? { type: 'study', item } : { type: 'idle' };

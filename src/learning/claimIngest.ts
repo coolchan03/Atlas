@@ -12,6 +12,8 @@ export interface IngestInput {
   /** What the judge step decided about the whole report: a disputed report makes every new claim disputed. */
   reportStatus: 'candidate' | 'disputed';
   reportNote: string;
+  /** The report answers a question made to settle a conflict: its claims are compared and stored, but never become new conflicts (that would be a loop). */
+  settling?: boolean;
 }
 
 export interface IngestSummary {
@@ -41,7 +43,8 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
     const cited = citedNumbers(sentence);
     const citedSources = input.sources.filter((s) => cited.includes(s.n));
     const support = checkSupport(claim, citedSources.map((s) => s.passage ?? ''));
-    const match = compareClaim(claim, db.knownClaims(input.topic));
+    const found = compareClaim(claim, db.knownClaims(input.topic));
+    const match = input.settling && found.relation === 'contradicts' ? { relation: 'new' as const } : found;
 
     if (match.relation === 'duplicate' && match.matchId) {
       citedSources.forEach((s) => db.addSupport(match.matchId!, { ...s, reportId: input.reportId }));
