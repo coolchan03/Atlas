@@ -98,7 +98,14 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
 }
 
 /** When the learner's own material says little on a square, a quick look online: the top results' pages, kept with their links. Nothing when off-grid or offline. */
+/** The most a lesson waits for the web lookup: a slow network must not hold a lesson up. */
+const WEB_WAIT_MS = 12000;
 async function webExcerpts(query: string): Promise<Excerpt[]> {
+  const timeout = new Promise<Excerpt[]>((resolve) => { setTimeout(() => resolve([]), WEB_WAIT_MS).unref?.(); });
+  return Promise.race([lookUpOnline(query), timeout]);
+}
+
+async function lookUpOnline(query: string): Promise<Excerpt[]> {
   try {
     const { offGridOn } = require('../atlasTools/offGrid');
     if (offGridOn()) return [];

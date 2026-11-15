@@ -31,6 +31,7 @@ const GRADE = JSON.stringify({ score: 95, feedback: 'Right: the van is owned, so
 
 it('plans a course on any subject, then plays a lesson and a practice square the AI writes', async () => {
   const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web lookup while a lesson is written
   const rtl = requireRTL();
   const React = require('react');
   const { useAppStore } = require('../../src/stores');
@@ -90,6 +91,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
 
 it('says so, with a way to load the model, when the AI cannot write a square', async () => {
   installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web lookup while a lesson is written
   const rtl = requireRTL();
   const React = require('react');
   const { useAppStore } = require('../../src/stores');
@@ -108,6 +110,7 @@ it('says so, with a way to load the model, when the AI cannot write a square', a
 
 it('writes a square from the learner\'s own sources, and a bad result adds a lesson that explains it another way', async () => {
   const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // no web lookup while a lesson is written
   const rtl = requireRTL();
   const React = require('react');
   const { useAppStore } = require('../../src/stores');
