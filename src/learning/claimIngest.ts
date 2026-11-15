@@ -1,6 +1,7 @@
 import { citedNumbers, type EvidenceSource } from './evidenceGate';
 import { checkSupport, claimSentences, closestPassage, compareClaim } from './claimText';
 import type { LearningKnowledgeDb } from './knowledgeDb';
+import { overrules } from '../standards/authority';
 
 export interface IngestInput {
   topic: string;
@@ -21,6 +22,8 @@ export interface IngestSummary {
   contradictions: number;
   /** The cited passage does not contain what the claim states. */
   unsupported: number;
+  /** Overruled an older claim from the textbooks because a standard-setter's own page says otherwise. */
+  updates: number;
 }
 
 const withoutMarkers = (text: string) => text.replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim();
@@ -31,7 +34,7 @@ const withoutMarkers = (text: string) => text.replace(/\[\d+\]/g, '').replace(/\
  * Nothing here can mark a claim verified.
  */
 export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): IngestSummary {
-  const summary: IngestSummary = { added: 0, duplicates: 0, contradictions: 0, unsupported: 0 };
+  const summary: IngestSummary = { added: 0, duplicates: 0, contradictions: 0, unsupported: 0, updates: 0 };
   claimSentences(input.reportText).forEach((sentence, index) => {
     const id = `${input.reportId}:claim:${index + 1}`;
     const claim = withoutMarkers(sentence);
@@ -52,17 +55,23 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
       note = `The cited passage does not contain ${support.missingNumbers.length ? support.missingNumbers.join(', ') : 'enough of this claim'}. ${note}`.trim();
       summary.unsupported += 1;
     }
-    if (match.relation === 'contradicts') {
+    // A standard-setter's own page overrules an older claim that rests only on textbooks and notes: that is an update, not a disagreement.
+    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && overrules(citedSources, db.getClaimSources(match.matchId));
+    if (match.relation === 'contradicts' && !updates) {
       status = 'disputed';
       note = `${match.reason}. ${note}`.trim();
     }
+    if (updates) note = `Updates an older claim from the textbooks: ${match.reason}. ${note}`.trim();
     const context = cited.length ? undefined : closestPassage(claim, input.sources);
     db.saveCandidate({
       id, topic: input.topic, question: input.question, claimText: claim, reportId: input.reportId, status,
       uncertainty: note.slice(0, 600), sources: input.sources, citedNumbers: cited, contextNumbers: context ? [context] : [],
     });
     summary.added += 1;
-    if (match.relation === 'contradicts' && match.matchId) {
+    if (updates && match.matchId) {
+      db.supersedeClaim(match.matchId, id, match.reason ?? 'A newer official source says otherwise');
+      summary.updates += 1;
+    } else if (match.relation === 'contradicts' && match.matchId) {
       db.recordContradiction(id, match.matchId, match.reason ?? 'Conflicts with a known claim');
       db.flagDisputed(match.matchId, match.reason ?? 'Conflicts with a newer claim');
       summary.contradictions += 1;

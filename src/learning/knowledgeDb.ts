@@ -222,6 +222,15 @@ export class LearningKnowledgeDb {
     this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, claim.status, 'disputed', 'consistency-check', reason, now]);
   }
 
+  /** A claim that rests on older, unofficial sources is overruled by a newer official one: it is kept, marked superseded, and the reason is written to its history. */
+  supersedeClaim(id: string, byId: string, reason: string): void {
+    const claim = this.getClaim(id);
+    if (!claim || claim.status === 'superseded' || claim.status === 'rejected') return;
+    const now = isoNow();
+    this.sql('UPDATE atlas_claims SET status = ?, updated_at = ? WHERE id = ?', ['superseded', now, id]);
+    this.sql('INSERT INTO atlas_claim_history (claim_id,old_status,new_status,actor,reason,at) VALUES (?,?,?,?,?,?)', [id, claim.status, 'superseded', 'authority-check', `${reason} (overruled by claim ${byId})`, now]);
+  }
+
   /**
    * How much a person has verified and how fast: claims verified on this device, over the time since the first claim was stored.
    * Only reviews by a person count; nothing the model says does.

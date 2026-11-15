@@ -247,6 +247,11 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: { question: { type: 'string', description: 'The question or subject to look up', required: true } },
   },
   {
+    id: 'standards_check', name: 'standards_check', displayName: 'Latest standards', icon: 'shield',
+    description: "Look up what the standard-setter itself (FASB for accounting; also the SEC, IRS, AICPA and PCAOB) has published on a topic, to check a textbook against the latest rule. Use when a question is about accounting standards, GAAP, an ASC topic or an ASU, or when a textbook may be out of date. A newer standard overrules the textbook: say what each says, the ASU number and effective date, and quote it. If nothing official is found, say it is not checked.",
+    parameters: { topic: { type: 'string', description: 'The standard or topic, for example "ASC 842 leases", "credit losses CECL" or "segment reporting"', required: true } },
+  },
+  {
     id: 'drug_label', name: 'drug_label', displayName: 'Drug label', icon: 'activity',
     description: "Look up the FDA label of a medicine by brand or generic name: what it is for, dose, warnings, who must not use it and interactions, in the manufacturer's own words. Use when the user asks about a medicine, a dose, a side effect or whether two medicines mix. Needs a connection for a first lookup; labels looked up before work offline. Quote the label and say it is not medical advice.",
     parameters: { name: { type: 'string', description: 'The medicine, brand or generic name, for example ibuprofen or Advil', required: true } },

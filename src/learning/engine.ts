@@ -416,7 +416,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
           });
           L().log({
             agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,
-            body: `${stored.contradictions ? `${stored.contradictions} conflict with something already known and need a review.\n` : ''}${stored.unsupported ? `${stored.unsupported} cited a passage that does not contain what they state.` : ''}`.trim(),
+            body: `${stored.updates ? `${stored.updates} overrule${stored.updates === 1 ? 's' : ''} an older claim from the textbooks, because the standard-setter's own page says otherwise.\n` : ''}${stored.contradictions ? `${stored.contradictions} conflict with something already known and need a review.\n` : ''}${stored.unsupported ? `${stored.unsupported} cited a passage that does not contain what they state.` : ''}`.trim(),
           });
         } catch (e) { L().log({ agentId: agent.id, kind: 'error', title: 'Knowledge storage needs attention', body: String(e) }); }
       }

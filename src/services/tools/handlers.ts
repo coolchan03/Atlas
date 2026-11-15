@@ -107,6 +107,12 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: question');
       return require('../../learning/askLearned').askLearned(q, call.context?.projectId);
     }
+    case 'standards_check': {
+      const topic = requireString(call, 'topic');
+      if (!topic) throw new Error('Missing required parameter: topic');
+      const { standardsCheck } = require('../../standards/lookup');
+      return standardsCheck(topic, async (q: string) => (await searchWeb(q, braveSearch)).results);
+    }
     case 'drug_label': {
       const name = requireString(call, 'name');
       if (!name) throw new Error('Missing required parameter: name');

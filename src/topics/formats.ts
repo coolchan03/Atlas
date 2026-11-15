@@ -181,9 +181,19 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) : ''}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
+
+/**
+ * Accounting standards change. A textbook can predate an Accounting Standards Update, and a model asked to remember the update will
+ * invent numbers and dates, so a lesson never states one from memory: it marks the point to check, and the learner checks it with the
+ * latest-standards lookup, whose answer overrules the textbook.
+ */
+const ACCOUNTING = /\b(far|gaap|fasb|asc\s*\d{3}|financial accounting|accounting|cpa)\b/i;
+export const standardsNote = (text: string): string => (ACCOUNTING.test(text)
+  ? 'Accounting standards change, and a textbook can be older than the latest FASB update. Teach the rule as the excerpts give it. Where a rule is one that FASB has been changing (leases, revenue, credit losses, segment reporting, income taxes, crypto assets and so on), add a line starting "Check:" telling the learner to confirm it with the latest-standards check, because a newer standard overrules the book. Never state an ASU number or an effective date from memory.\n'
+  : '');
 
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
