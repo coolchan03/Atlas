@@ -1,5 +1,4 @@
 /** Everything added for studying survives a backup and a restore: document marks, roles and tax info, courses with their written lessons and sources, exam prep with its folder, and the missed questions. Only storage, the file picker and the password encryption are faked. */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
 import { exportBackup, importBackup } from '../../../src/atlasTools/backup';
 
