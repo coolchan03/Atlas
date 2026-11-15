@@ -25,6 +25,8 @@ import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
 import { refineOutline } from './refine';
 import { CoverageCard } from './CoverageCard';
+import { WeakBoardCard } from './WeakBoardCard';
+import { UpdatesCard } from './UpdatesCard';
 
 /** How many of an exam's topics are understood, from the practice results. */
 function useExamStatus(code: ExamCode) {
@@ -172,6 +174,8 @@ export const CpaExamScreen: React.FC = () => {
         </Card>
 
         {!!projectId && <CoverageCard code={code} />}
+        <WeakBoardCard code={code} />
+        {!!projectId && <UpdatesCard code={code} />}
 
         <Card style={styles.card} testID="cpa-board">
           <Text style={[styles.title, { color: colors.text }]}>Learn it on a board</Text>
