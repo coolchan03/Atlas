@@ -121,7 +121,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     }) }));
     return added;
   },
-  setPrepareAhead: (id, count) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, prepareAhead: Math.max(0, Math.min(5, Math.round(count))) } : c)) })),
+  setPrepareAhead: (id, count) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, prepareAhead: Math.max(0, Math.min(20, Math.round(count))) } : c)) })),
   setContent: (id, key, content) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, content: { ...c.content, [key]: content } } : c)) })),
   complete: (id, key, stars) => set((s) => ({
     courses: s.courses.map((c) => (c.id === id

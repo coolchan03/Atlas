@@ -51,8 +51,8 @@ describe('which lessons are written ahead', () => {
     useTopics.getState().complete(id, 's1', 3);
     useTopics.getState().setContent(id, 's2', { kind: 'lesson' });
     expect(prepare.nextToPrepare(get(), 3)).toEqual(['s3', 's4']); // the window is s2, s3, s4: s2 is already written
-    useTopics.getState().setPrepareAhead(id, 9);
-    expect(prepare.aheadFor(get())).toBe(5);
+    useTopics.getState().setPrepareAhead(id, 99);
+    expect(prepare.aheadFor(get())).toBe(20);
     useTopics.getState().setPrepareAhead(id, 0);
     expect(prepare.aheadFor(get())).toBe(0);
   });
