@@ -40,9 +40,11 @@ async function walk(dir: string, out: any[] = [], zips: any[] = []): Promise<{ i
  * Files already in the knowledge base are skipped, so it is safe to import again.
  */
 export async function importZipPack(projectId: string, onProgress: (msg: string) => void, shouldStop: () => boolean = () => false): Promise<PackResult | null> {
-  const files = await pick({ mode: 'open', type: [types.zip, 'application/zip', 'application/x-zip-compressed'], allowMultiSelection: false });
+  // Every file is offered and the name checked after: phones label a .zip with different types, and a type filter greys some of them out.
+  const files = await pick({ mode: 'open', type: [types.allFiles], allowMultiSelection: false });
   if (!files?.length) return null;
   const f = files[0];
+  if (!/\.zip$/i.test(f.name || '')) throw new Error(`"${f.name || 'That file'}" does not end in .zip. Pick a .zip file.`);
   onProgress('Copying the pack...');
   const local = await resolvePickedFileUri(f.uri, f.name || 'atlas-pack.zip');
   const res = await importZipFromPath(projectId, { path: local, name: f.name || 'pack.zip' }, { onProgress, shouldStop });
