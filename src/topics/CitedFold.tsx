@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
-import { quotedSentence, lessonText, unbackedLines } from './citations';
+import { quotedSentence, lessonText, spokenLesson, unbackedLines } from './citations';
+import { appSearch, verdictText, verifyLines, type LineVerdict } from './verifyLines';
 import { sourcePage } from './service';
+import { readAloud, useReadAloud } from '../atlasVoice/readAloud';
+import { ttsAvailable } from '../atlasVoice/tts';
 import type { SquareContent } from './formats';
 import type { Rewrite } from './service';
 
@@ -12,15 +15,18 @@ interface Passage { source: string; url?: string; docId?: number; where?: string
  * Where a square came from: each source with its page, part or paragraph (a web page is a link; a page of your own book opens in full),
  * the passages, with the sentence the lesson leans on highlighted, and the lines no passage backs.
  */
-export function CitedFold({ passages, content }: { passages: Passage[]; content?: SquareContent | null }) {
+export function CitedFold({ passages, content, projectId }: { passages: Passage[]; content?: SquareContent | null; projectId?: string }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<{ key: string; text: string } | null>(null);
+  const [verdicts, setVerdicts] = useState<LineVerdict[] | null>(null);
+  const [checking, setChecking] = useState(false);
   if (!passages.length) return null;
   const lesson = lessonText(content);
   const unbacked = unbackedLines(content, passages);
   const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source && q.where === p.where) === i);
   const label = (p: Passage) => `${p.source}${p.where ? `, ${p.where}` : ''}`;
+  const check = async (lines: string[]) => { setChecking(true); try { setVerdicts(await verifyLines(lines, { projectId, search: appSearch() ?? undefined })); } finally { setChecking(false); } };
   const openPage = async (p: Passage) => {
     const key = label(p);
     if (page?.key === key) { setPage(null); return; }
@@ -41,7 +47,13 @@ export function CitedFold({ passages, content }: { passages: Passage[]; content?
       {unbacked.length > 0 && (
         <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="square-unbacked">
           <Text style={[styles.meta, { color: colors.textMuted }]}>Not found in your sources (from the AI's own knowledge, so check it)</Text>
-          {unbacked.map((l, i) => <Text key={i} style={{ color: colors.textSecondary }}>{l}</Text>)}
+          {unbacked.map((l, i) => (
+            <View key={i}>
+              <Text style={{ color: colors.textSecondary }}>{l}</Text>
+              {!!verdicts?.[i] && <Text style={[styles.meta, { color: verdicts[i].status === 'unverified' || verdicts[i].status === 'offline' ? colors.error : colors.primary }]} testID={`line-verdict-${i}`}>{verdictText(verdicts[i])}</Text>}
+            </View>
+          ))}
+          <TouchableOpacity onPress={() => check(unbacked)} disabled={checking} accessibilityRole="button" testID="square-check-lines"><Text style={{ color: colors.primary }}>{checking ? 'Checking...' : 'Check these lines'}</Text></TouchableOpacity>
         </View>
       )}
       <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="square-cited-toggle">
@@ -71,16 +83,23 @@ const styles = StyleSheet.create({
   hit: { fontWeight: '400' },
 });
 
-/** "This is unclear": the learner asks for the lesson to be written again, simpler, with another example, or shorter. */
-export function RewriteRow({ show, onPick }: { show: boolean; onPick: (how: Rewrite) => void }) {
+/** "This is unclear": the learner asks for the lesson to be written again, simpler, with another example, or shorter. Also reads the lesson aloud in the voice chosen for Read aloud. */
+export function RewriteRow({ show, onPick, content, title }: { show: boolean; onPick: (how: Rewrite) => void; content?: SquareContent | null; title?: string }) {
   const { colors } = useTheme();
+  const reading = useReadAloud((s) => s.status === 'reading' && s.title === title);
   if (!show) return null;
+  const toggle = () => { if (reading) readAloud.stop(); else { readAloud.load(spokenLesson(content), title ?? 'Lesson'); readAloud.play(); } };
   return (
     <View style={styles.row} testID="square-rewrite">
       <Text style={[styles.meta, { color: colors.textMuted }]}>This is unclear:</Text>
       <TouchableOpacity onPress={() => onPick('simpler')} testID="square-rewrite-simpler"><Text style={{ color: colors.primary }}>Simpler</Text></TouchableOpacity>
       <TouchableOpacity onPress={() => onPick('example')} testID="square-rewrite-example"><Text style={{ color: colors.primary }}>Another example</Text></TouchableOpacity>
       <TouchableOpacity onPress={() => onPick('shorter')} testID="square-rewrite-shorter"><Text style={{ color: colors.primary }}>Shorter</Text></TouchableOpacity>
+      {!!content && ttsAvailable() && (
+        <TouchableOpacity onPress={toggle} accessibilityRole="button" accessibilityLabel={reading ? 'Stop reading this lesson' : 'Read this lesson aloud'} testID="square-read-aloud">
+          <Text style={{ color: colors.primary }}>{reading ? 'Stop reading' : 'Read aloud'}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

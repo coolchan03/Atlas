@@ -61,3 +61,25 @@ export function unverifiedFigure(question: { q: string; options: string[]; answe
   const missing = figuresIn(question.options[question.answer] ?? '').filter((n) => !have.has(n));
   return missing.length ? `Check ${missing.slice(0, 2).join(' and ')} against your sources: the AI worked it out, and none of your passages show it.` : null;
 }
+
+/** A table row spoken as words ("Cash, 500, nothing"), and the divider row of a Markdown table dropped. */
+function spokenLine(line: string): string {
+  const t = line.trim();
+  if (!t.startsWith('|')) return line;
+  if (/^\|?[\s:|-]+\|?$/.test(t)) return '';
+  return t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim() || 'nothing').join(', ');
+}
+
+/** What is read aloud for a lesson: each section's heading, text and example in order, then the key points; tables are read row by row. */
+export function spokenLesson(content: SquareContent | null | undefined): string {
+  if (!content || content.kind !== 'lesson') return '';
+  const part = (t: string) => t.split('\n').map(spokenLine).filter((l, i, a) => l || a[i - 1]).join('\n');
+  const body = content.sections.map((s) => [s.heading, part(s.text), s.example ? `For example. ${part(s.example)}` : ''].filter(Boolean).join('\n\n'));
+  const points = content.keyPoints.length ? `Key points.\n${content.keyPoints.join('\n')}` : '';
+  return [...body, points].filter(Boolean).join('\n\n');
+}
+
+/** How much of a line's words a text carries, 0 to 1. */
+export function supportOf(line: string, text: string): number {
+  return overlap(words(line), new Set(words(text)));
+}

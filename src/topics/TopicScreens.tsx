@@ -450,9 +450,9 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
                 <Text style={{ color: colors.primary }}>{cruising ? 'You got the last two right. Skip this lesson?' : 'I already know this'}</Text>
               </TouchableOpacity>
             )}
-            <RewriteRow show={square.format === 'lesson'} onPick={rewrite} />
+            <RewriteRow show={square.format === 'lesson'} onPick={rewrite} content={content} title={square.title} />
             <SquareView content={content} onDone={finish} />
-            <CitedFold passages={course.cited?.[key] ?? []} content={content} />
+            <CitedFold passages={course.cited?.[key] ?? []} content={content} projectId={course.projectId} />
           </>
         ) : error ? (
           <View style={styles.gap}>

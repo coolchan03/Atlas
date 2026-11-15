@@ -1,4 +1,4 @@
-import { quotedSentence, unbackedLines } from '../../../src/topics/citations';
+import { quotedSentence, spokenLesson, unbackedLines } from '../../../src/topics/citations';
 import { contentMessages } from '../../../src/topics/formats';
 import { REWRITES } from '../../../src/topics/service';
 import { taxFromText, yearNotes, classifyTaxSource, setTaxLookup } from '../../../src/standards/taxSources';
@@ -52,5 +52,18 @@ describe('quizzes and rewrites', () => {
   it('rewrites an unclear lesson the way the learner asked', () => {
     const m = contentMessages({ ...base, square: { ...base.square, format: 'lesson' }, rewrite: REWRITES.simpler } as any);
     expect(m.user).toMatch(/simpler words/);
+  });
+});
+
+describe('reading a lesson aloud', () => {
+  it('reads headings, text, examples and key points, and a table row by row', () => {
+    const table = '| Account | Debit | Credit |\n|---|---|---|\n| Cash | 500 | |\n| to Revenue | | 500 |';
+    const text = spokenLesson({ kind: 'lesson', sections: [{ heading: 'Sales', text: 'A **sale** is recorded.', example: table }], keyPoints: ['Debit cash'] });
+    expect(text).toContain('Sales');
+    expect(text).toContain('For example. Account, Debit, Credit');
+    expect(text).toContain('Cash, 500, nothing');
+    expect(text).toContain('to Revenue, nothing, 500');
+    expect(text).not.toMatch(/---/);
+    expect(text).toContain('Key points.\nDebit cash');
   });
 });
