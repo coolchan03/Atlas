@@ -23,6 +23,7 @@ import { CORE_CPA_CODES, organizeCpaInOneProject, setupAllCpaExams, setupCpaExam
 import { useCpa, type CpaTopic } from './store';
 import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
+import { refineOutline } from './refine';
 
 /** How many of an exam's topics are understood, from the practice results. */
 function useExamStatus(code: ExamCode) {
@@ -122,6 +123,8 @@ export const CpaExamScreen: React.FC = () => {
   const [outlineBusy, setOutlineBusy] = useState(false);
   const projectId = status.exam?.projectId;
   const groupProject = useCpa((s) => s.groupProjectId);
+  // The outline starts rough and gets more detailed from the documents in the project: each time the documents change, chapters the checklist lacks are added.
+  useEffect(() => { if (projectId && docs) refineOutline(code).then((n) => { if (n) setMessage(`Added ${n} topic${n === 1 ? '' : 's'} from your documents to the outline.`); }); }, [projectId, docs, code]);
   useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsByProject(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
   if (!status.exam) return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={examLabel(code)} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>

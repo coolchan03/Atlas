@@ -1,6 +1,6 @@
 /** Makes a project for each exam you set up (the four CPA sections at once, the others one at a time), each with its own documents and its own checklist. Safe to run again: nothing is duplicated. */
 import { useProjectStore } from '../stores/projectStore';
-import { CPA_EXAMS, examLabel, type ExamCode } from './blueprints';
+import { CPA_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
 import { defaultTopics, useCpa } from './store';
 import { useExerciseStore, type Exercise } from '../study/exercises';
 
@@ -9,13 +9,38 @@ export const projectNameFor = (code: ExamCode): string => examLabel(code);
 const tutorPrompt = (code: ExamCode, name: string): string =>
   `You are a patient exam tutor for ${examLabel(code)} (${name}). Answer from the documents in this project (the user's own textbooks, notes and question banks) and say which document you used. If the documents do not cover a point, say so and give a general answer clearly marked as not from their materials. When the user answers a practice question wrongly, explain why the right answer is right and why theirs is not, step by step, with the numbers. Never invent a rule, rate, threshold or standard number: if you are not sure, say so and tell them to check the source. Rules change, so remind them to check anything that depends on a tax year, a jurisdiction (state or country) or a standard's effective date. You teach for an exam: you are not giving legal, medical, tax or investment advice.`;
 
-/** Sets up an exam with its checklist. It does NOT create a project: studying needs none. Returns the exam's project id when it has one (older installs or the shared project). */
+export const CPA_PROJECT_NAME = 'CPA Study';
+const CPA_PROJECT_NAMES = [CPA_PROJECT_NAME, 'CPA Exam Preparation'];
+
+/** The one project all CPA material lives in: the one chosen before, one found by its name, or a new "CPA Study". Made on first use, never twice. */
+export function ensureCpaProject(): string {
+  const projects = useProjectStore.getState();
+  const known = useCpa.getState().groupProjectId;
+  const id = (known && projects.projects.some((p) => p.id === known) ? known : undefined)
+    ?? projects.projects.find((p) => CPA_PROJECT_NAMES.includes(p.name))?.id
+    ?? projects.createProject({
+      name: CPA_PROJECT_NAME, description: 'All your CPA textbooks, notes, question banks and study packs, for FAR, AUD, REG and your discipline. Each exam keeps its own questions and scores.',
+      systemPrompt: tutorPrompt('FAR', 'the CPA exam sections').replace('FAR (the CPA exam sections)', 'the CPA exams (FAR, AUD, REG and your discipline)'), icon: '#1D4ED8',
+    } as any).id;
+  if (known !== id) useCpa.getState().setGroupProject(id);
+  return id;
+}
+
+/**
+ * Sets up an exam with its checklist. A CPA exam uses the one shared CPA Study project (made if it is not there), so every textbook, note
+ * and study pack for the CPA is in one place; an exam that already has its own project keeps it, and the other professional exams have none.
+ * Returns the exam's project id.
+ */
 export function setupCpaExam(code: ExamCode): string | undefined {
   const store = useCpa.getState();
   const existing = store.exams[code];
-  if (existing?.topics?.length) return existing.projectId;
-  store.setExam(code, { ...existing, projectId: existing?.projectId ?? store.groupProjectId, topics: defaultTopics(code) });
-  return useCpa.getState().exams[code]?.projectId;
+  const projectId = existing?.projectId ?? (examInfo(code).group === 'cpa' ? ensureCpaProject() : undefined);
+  if (existing?.topics?.length) {
+    if (projectId && !existing.projectId) store.setExam(code, { ...existing, projectId });
+    return projectId;
+  }
+  store.setExam(code, { ...existing, projectId, topics: defaultTopics(code) });
+  return projectId;
 }
 
 /** The three core CPA sections. The discipline (BAR, ISC or TCP) is the person's own choice and is never set up for them. */
@@ -30,11 +55,7 @@ export const setupAllCpaExams = (): Record<string, string | undefined> =>
  */
 export function organizeCpaInOneProject(existingProjectId?: string): string {
   const projects = useProjectStore.getState();
-  const id = existingProjectId && projects.projects.some((p) => p.id === existingProjectId) ? existingProjectId
-    : (projects.projects.find((p) => p.name === 'CPA Exam Preparation')?.id ?? projects.createProject({
-      name: 'CPA Exam Preparation', description: 'Shared textbooks, notes and question banks for your CPA exams. Each exam keeps its own practice and scores.',
-      systemPrompt: tutorPrompt('FAR', 'the CPA exam sections').replace('FAR (the CPA exam sections)', 'the CPA exams (FAR, AUD, REG and your discipline)'), icon: '#1D4ED8',
-    } as any).id);
+  const id = existingProjectId && projects.projects.some((p) => p.id === existingProjectId) ? existingProjectId : ensureCpaProject();
   const cpa = useCpa.getState();
   cpa.setGroupProject(id);
   for (const [code, exam] of Object.entries(cpa.exams)) if (exam && !exam.projectId) cpa.setExam(code as ExamCode, { ...exam, projectId: id });

@@ -148,3 +148,17 @@ export function withoutSourceMentions(text: string, names: string[]): string {
 
 /** Fewer than two passages from the learner's own material: the lesson is thin, so look online. */
 export const needsMoreInfo = (found: Excerpt[]): boolean => found.length < 2;
+
+/** The least text that makes a page worth learning from. */
+const MIN_PAGE = 200;
+const UNREADABLE = /returned no readable content|enable javascript|access denied|are you a robot|captcha/i;
+
+/**
+ * The text to keep for a search result: the page when it was read and has real content, else the snippet the search gave (so a page that
+ * blocks the phone still adds what the search showed of it), else nothing.
+ */
+export function pageOrSnippet(c: Candidate, page: string | null): string {
+  if (page && page.length >= MIN_PAGE && !UNREADABLE.test(page.slice(0, 300))) return page;
+  const snippet = `${c.title}. ${c.snippet}`.trim();
+  return c.snippet.length >= 80 ? snippet : '';
+}

@@ -10,7 +10,7 @@ import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { enqueue } from './generationQueue';
-import { chunkPlace, makeSource, needsMoreInfo, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
+import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
 
@@ -180,16 +180,20 @@ export async function findSources(topic: string, goal: string, onStep: (m: strin
     const prompt = pickPrompt({ topic, goal, found: candidates });
     picks = parsePicks(await askModel(prompt.system, prompt.user), candidates.length);
   } catch { /* use the first few */ }
-  const chosen = (picks.length ? picks : [0, 1, 2, 3]).map((i) => candidates[i]).filter(Boolean).slice(0, 4);
+  // The AI's picks come first, then the rest, so a page that will not load is replaced by the next best one instead of ending the search.
+  const order = [...(picks.length ? picks : [0, 1, 2, 3]), ...candidates.map((_, i) => i)].filter((i, n, all) => candidates[i] && all.indexOf(i) === n);
   const sources: CourseSource[] = [];
-  for (const c of chosen) {
+  let lastError = '';
+  for (const i of order) {
+    if (sources.length >= 4) break;
+    const c = candidates[i];
     onStep(`Reading ${c.title.slice(0, 40)}...`);
-    try {
-      const text: string = await readPage(c.url, 6000);
-      if (text && text.length >= 300) sources.push(makeSource({ title: c.title, kind: 'web', url: c.url, text }, `src-${Date.now()}-${sources.length}`));
-    } catch { /* skip a page that will not load */ }
+    let page: string | null = null;
+    try { page = await readPage(c.url, 6000); } catch (e) { lastError = String((e as Error)?.message || e); }
+    const text = pageOrSnippet(c, page);
+    if (text) sources.push(makeSource({ title: c.title, kind: 'web', url: c.url, text }, `src-${Date.now()}-${sources.length}`));
   }
-  if (!sources.length) throw new Error('The pages found could not be read. Try again, or add your own notes instead.');
+  if (!sources.length) throw new Error(`The pages found could not be read${lastError ? ` (${lastError.slice(0, 80)})` : ''}. Check the internet connection, try a different topic wording, or add your own notes instead.`);
   return sources;
 }
 

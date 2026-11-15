@@ -13,10 +13,15 @@ beforeEach(() => {
 });
 
 describe('UX-05 exam scope', () => {
-  it('setting up the core exams creates zero projects', () => {
+  it('setting up the core exams puts them all in ONE project, CPA Study, made automatically', () => {
     setupAllCpaExams();
     expect(Object.keys(useCpa.getState().exams).sort()).toEqual(['AUD', 'FAR', 'REG']);
-    expect(useProjectStore.getState().projects).toHaveLength(0);
+    const projects = useProjectStore.getState().projects;
+    expect(projects).toHaveLength(1);
+    expect(projects[0].name).toBe('CPA Study');
+    expect(['FAR', 'AUD', 'REG'].every((c) => useCpa.getState().exams[c as 'FAR']?.projectId === projects[0].id)).toBe(true);
+    setupAllCpaExams(); // again: still one
+    expect(useProjectStore.getState().projects).toHaveLength(1);
   });
   it('never sets up the TCP discipline for the person', () => {
     setupAllCpaExams();
