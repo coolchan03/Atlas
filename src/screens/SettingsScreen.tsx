@@ -156,6 +156,7 @@ export const SettingsScreen: React.FC = () => {
                 { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
                 { icon: 'package', title: 'My models', desc: 'Delete models, move them to an SD card, add vision files', screen: 'MyModels' as const },
                 { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
+                { icon: 'activity', title: 'Self-check', desc: 'Test what works on this phone', screen: 'SelfCheck' as const },
                 { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
                 { icon: 'save', title: 'Backup & sync', desc: 'Back up and restore; sync with nearby devices', screen: 'Backup' as const },
                 { icon: 'users', title: 'Assistant permissions', desc: 'Review all requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },

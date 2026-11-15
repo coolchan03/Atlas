@@ -63,6 +63,7 @@ export type RootStackParamList = {
   MusicStudio: undefined;
   ReadAloud: undefined;
   VoiceLab: undefined;
+  SelfCheck: undefined;
   DrugReference: undefined;
   LearningReliability: undefined;
   Pins: undefined;
