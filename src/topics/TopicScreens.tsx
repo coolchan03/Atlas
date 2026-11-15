@@ -1,6 +1,6 @@
 import { courseRecoverable, useTrash } from '../trash/trash';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -361,12 +361,17 @@ function SquareHeader({ title, embedded, onBack }: { title: string; embedded: bo
 }
 
 /** The passages of the learner's own books a square was written from, folded away until asked for. */
-function CitedFold({ passages }: { passages: { source: string; text: string }[] }) {
+function CitedFold({ passages }: { passages: { source: string; url?: string; text: string }[] }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   if (!passages.length) return null;
+  const sources = passages.filter((p, i) => passages.findIndex((q) => q.source === p.source) === i);
   return (
     <View testID="square-cited">
+      <Text style={[styles.meta, { color: colors.textMuted }]}>Where this came from</Text>
+      {sources.map((p) => (p.url
+        ? <Text key={p.source} style={[styles.link, { color: colors.primary }]} accessibilityRole="link" onPress={() => Linking.openURL(p.url!)} testID="square-source-link">{p.source}</Text>
+        : <Text key={p.source} style={{ color: colors.textSecondary }}>{p.source}</Text>))}
       <TouchableOpacity onPress={() => setOpen((v) => !v)} accessibilityRole="button" testID="square-cited-toggle">
         <Text style={{ color: colors.primary }}>{open ? 'Hide' : 'Show'} where this came from ({passages.length} passage{passages.length === 1 ? '' : 's'} from your sources)</Text>
       </TouchableOpacity>
@@ -467,6 +472,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
 };
 
 const styles = StyleSheet.create({
+  link: { textDecorationLine: 'underline' },
   container: { flex: 1 },
   fill: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },

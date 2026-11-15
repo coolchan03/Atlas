@@ -10,7 +10,8 @@ import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters } from './chapters';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { enqueue } from './generationQueue';
-import { makeSource, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, type Candidate, type CourseSource } from './sources';
+import { makeSource, needsMoreInfo, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
+import { isOutlineDocument } from '../cpa/outline';
 
 const MAX_TRIES = 2;
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -53,14 +54,40 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
 }
 
 /** Passages from the shared documents of the course's project that match the square (none when there is no project or no documents). */
-async function projectExcerpts(projectId: string | undefined, query: string): Promise<{ source: string; text: string }[]> {
+async function projectExcerpts(projectId: string | undefined, query: string): Promise<Excerpt[]> {
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
     const found = await ragService.searchProject(projectId, query);
     // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
-    return (found?.chunks ?? []).filter((c: { content: string }) => !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string }) => ({ source: c.name, text: String(c.content).slice(0, 700) }));
+    return (found?.chunks ?? []).filter((c: { name: string; content: string }) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content))).slice(0, 3).map((c: { name: string; content: string }) => ({ source: c.name, text: String(c.content).slice(0, 700) }));
   } catch { return []; }
+}
+
+/** When the learner's own material says little on a square, a quick look online: the top results' pages, kept with their links. Nothing when off-grid or offline. */
+async function webExcerpts(query: string): Promise<Excerpt[]> {
+  try {
+    const { offGridOn } = require('../atlasTools/offGrid');
+    if (offGridOn()) return [];
+    const { searchWeb } = require('../services/tools/webSearchProviders');
+    const { braveSearch, readPage } = require('../services/tools/handlers');
+    const { results } = await searchWeb(query, braveSearch);
+    const out: Excerpt[] = [];
+    for (const r of results.filter((x: { url?: string }) => x.url && /^https?:/.test(x.url)).slice(0, 2)) {
+      let text = String(r.snippet || '');
+      try { text = String(await readPage(r.url, 1800)) || text; } catch { /* the snippet will do */ }
+      if (text.length >= 80) out.push({ source: String(r.title || r.url).slice(0, 80), url: r.url, text: text.slice(0, 900) });
+    }
+    return out;
+  } catch { return []; }
+}
+
+/** A lesson with the names of its sources taken out of the writing (they are shown as links). */
+function withoutSources(content: SquareContent, excerpts: Excerpt[]): SquareContent {
+  if (content.kind !== 'lesson' || !excerpts.length) return content;
+  const names = excerpts.map((e) => e.source);
+  const clean = (t: string) => withoutSourceMentions(t, names);
+  return { ...content, sections: content.sections.map((x) => ({ ...x, text: clean(x.text), example: x.example ? clean(x.example) : undefined })), keyPoints: content.keyPoints.map(clean) };
 }
 
 /**
@@ -98,16 +125,19 @@ async function writeSquare(courseId: string, key: string): Promise<SquareContent
     return made;
   }
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
-  const excerpts = [...await projectExcerpts(course.projectId, `${square.title} ${square.focus}`), ...relevantExcerpts(course.sources ?? [], `${square.title} ${square.focus}`)].slice(0, 5);
+  const query = `${square.title} ${square.focus}`;
+  let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 5);
+  if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = [...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)].slice(0, 5);
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
     bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '',
     excerpts,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
-  useTopics.getState().setContent(course.id, key, content);
+  const written = withoutSources(content, excerpts);
+  useTopics.getState().setContent(course.id, key, written);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
-  return content;
+  return written;
 }
 
 /** Asks the AI to mark a practice answer. */

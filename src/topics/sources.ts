@@ -18,6 +18,9 @@ export interface CourseSource {
   questionBank?: boolean;
 }
 
+/** A passage a square was written from: where it came from, a link when it is a web page, and the words. */
+export interface Excerpt { source: string; url?: string; text: string }
+
 export interface Candidate { title: string; snippet: string; url: string }
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'what', 'how', 'are', 'you', 'your', 'about', 'into', 'its', 'can', 'will', 'use', 'using']);
@@ -37,25 +40,25 @@ export function passages(text: string, size = 600): string[] {
 }
 
 /** The passages of all sources that best match what a square covers, within a character budget. */
-export function relevantExcerpts(sources: CourseSource[], query: string, maxChars = 1800): { source: string; text: string }[] {
+export function relevantExcerpts(sources: CourseSource[], query: string, maxChars = 1800): Excerpt[] {
   const want = new Set(words(query));
   if (!want.size) return [];
-  const scored: { source: string; text: string; score: number }[] = [];
+  const scored: Array<Excerpt & { score: number }> = [];
   for (const s of sources) {
     if (s.questionBank) continue; // a question bank is asked from, not read as a lesson
     for (const p of passages(s.text)) {
       const have = new Set(words(p));
       let shared = 0;
       want.forEach((w) => { if (have.has(w)) shared++; });
-      if (shared >= 2) scored.push({ source: s.title, text: p, score: shared / Math.sqrt(have.size + 1) });
+      if (shared >= 2) scored.push({ source: s.title, url: s.url, text: p, score: shared / Math.sqrt(have.size + 1) });
     }
   }
   scored.sort((a, b) => b.score - a.score);
-  const out: { source: string; text: string }[] = [];
+  const out: Excerpt[] = [];
   let used = 0;
   for (const c of scored) {
     if (used + c.text.length > maxChars) continue;
-    out.push({ source: c.source, text: c.text });
+    out.push({ source: c.source, url: c.url, text: c.text });
     used += c.text.length;
     if (out.length >= 4) break;
   }
@@ -123,3 +126,18 @@ export async function outlineSources(files: Array<{ path: string; name: string }
   }
   return out;
 }
+
+/** Takes a source named in the text out of a lesson ("[Intermediate Accounting]", "(Source: Pub 17)"): sources are shown as links, not in the reading. */
+export function withoutSourceMentions(text: string, names: string[]): string {
+  let out = text.replace(/\s*\((?:source|sources|from|see)\s*:[^)]{0,120}\)/gi, '').replace(/\s*\[(?:source|sources)\s*:[^\]]{0,120}\]/gi, '');
+  for (const name of names) {
+    const n = name.replace(/\.[A-Za-z0-9]{2,4}$/, '').trim();
+    if (n.length < 4) continue;
+    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`\\s*[\\[(]${esc}[^\\])]{0,40}[\\])]`, 'gi'), '');
+  }
+  return out.replace(/ +([.,;])/g, '$1');
+}
+
+/** Fewer than two passages from the learner's own material: the lesson is thin, so look online. */
+export const needsMoreInfo = (found: Excerpt[]): boolean => found.length < 2;

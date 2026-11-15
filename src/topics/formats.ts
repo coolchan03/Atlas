@@ -149,7 +149,7 @@ export type SquareContent =
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
   | { kind: 'dictation'; lang: string; sentences: string[] };
 
-export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
+export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; difficulty?: Difficulty }
 
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
@@ -181,7 +181,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and say which source in the text when you rely on one. Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${r.excerpts.map((e) => `[${e.source}] ${e.text}`).join('\n')}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 
@@ -195,6 +195,19 @@ export const standardsNote = (text: string): string => (ACCOUNTING.test(text)
   ? 'Accounting standards change, and a textbook can be older than the latest FASB update. Teach the rule as the excerpts give it. Where a rule is one that FASB has been changing (leases, revenue, credit losses, segment reporting, income taxes, crypto assets and so on), add a line starting "Check:" telling the learner to confirm it with the latest-standards check, because a newer standard overrules the book. Never state an ASU number or an effective date from memory.\n'
   : '');
 
+/** Text that keeps its paragraph breaks (str() squeezes everything onto one line): lines tidied, blank lines at most one, so a lesson can have space between paragraphs. */
+export const prose = (v: unknown, max = 1600): string => String(v ?? '').replace(/\r/g, '').split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
+
+/** An example that poses a problem must also give its answer. One that asks something and never answers it is left out of the lesson. */
+export function exampleIsComplete(example: string): boolean {
+  const poses = /\?|\b(calculate|compute|find|determine|what is|how much|how many)\b/i.test(example);
+  const answers = /=|→|\b(answer|solution|result|therefore|thus|so the|equals|is recorded|would be)\b/i.test(example);
+  return !poses || answers;
+}
+
+/** What a lesson's writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
+export const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
+
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
 /** Reads the AI's content for a square; null when it is not usable. */
@@ -202,7 +215,7 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
   const j = parseJsonLoose<any>(raw);
   if (!j) return null;
   if (format === 'lesson') {
-    const sections = list(j.sections).map((s) => ({ heading: str(s?.heading, 80), text: str(s?.text, 900), example: str(s?.example, 600) || undefined })).filter((s) => s.text);
+    const sections = list(j.sections).map((s) => ({ heading: str(s?.heading, 80), text: prose(s?.text, 1600), example: (() => { const e = prose(s?.example, 900); return e && exampleIsComplete(e) ? e : undefined; })() })).filter((s) => s.text);
     const keyPoints = list(j.keyPoints).map((k) => str(k, 200)).filter(Boolean).slice(0, 8);
     const commonMistakes = list(j.commonMistakes).map((m) => str(m, 240)).filter(Boolean).slice(0, 4);
     const check = j.quickCheck && str(j.quickCheck.q, 240) && str(j.quickCheck.a, 240) ? { q: str(j.quickCheck.q, 240), a: str(j.quickCheck.a, 240) } : undefined;

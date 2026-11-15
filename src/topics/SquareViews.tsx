@@ -32,21 +32,21 @@ export function LessonView({ content, onDone }: ViewProps<'lesson'>) {
       {content.sections.map((s, i) => (
         <View key={i} style={styles.gap}>
           {!!s.heading && <Text style={t.head}>{s.heading}</Text>}
-          <Text style={t.body}>{s.text}</Text>
-          {!!s.example && <Text style={[styles.example, t.card, { color: t.colors.text }]}>{s.example}</Text>}
+          <MarkdownText>{s.text}</MarkdownText>
+          {!!s.example && <View style={[styles.example, t.card]}><MarkdownText>{s.example}</MarkdownText></View>}
         </View>
       ))}
       {!!content.commonMistakes?.length && (
         <View style={[styles.box, t.card]} testID="lesson-mistakes">
           <Text style={t.head}>Common mistakes</Text>
-          {content.commonMistakes.map((k, i) => <Text key={i} style={t.body}>{'\u2022  '}{k}</Text>)}
+          <MarkdownText>{content.commonMistakes.map((k) => `- ${k}`).join('\n')}</MarkdownText>
         </View>
       )}
       {!!content.quickCheck && <QuickCheck q={content.quickCheck.q} a={content.quickCheck.a} />}
       {!!content.keyPoints.length && (
         <View style={[styles.box, t.card]}>
           <Text style={t.head}>Key points</Text>
-          {content.keyPoints.map((k, i) => <Text key={i} style={t.body}>{'•  '}{k}</Text>)}
+          <MarkdownText>{content.keyPoints.map((k) => `- ${k}`).join('\n')}</MarkdownText>
         </View>
       )}
       <Button title="Got it" onPress={() => onDone(3)} testID="lesson-done" />
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   flex: { flex: 1 },
   box: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
-  example: { borderWidth: 1, borderRadius: 8, padding: 10, fontFamily: 'monospace', fontSize: 14 },
+  example: { borderWidth: 1, borderRadius: 8, padding: 10 },
   flash: { borderWidth: 1, borderRadius: 14, minHeight: 160, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10 },
   center: { textAlign: 'center' },
   step: { borderWidth: 1, borderRadius: 10, padding: 12 },

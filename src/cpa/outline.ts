@@ -23,6 +23,8 @@ export const outlineToText = (areas: OutlineArea[]): string => areas.map((a) => 
  * `ask` is the model; it is only called when the text is not already in the shape parseOutline reads.
  */
 export async function outlineFromText(text: string, ask: (system: string, user: string) => Promise<string>): Promise<OutlineArea[]> {
+  // A textbook or study pack is not a blueprint: reading it as one would replace the exam's checklist with sentences from the book.
+  if (!looksLikeOutline(text)) return [];
   const direct = parseOutline(text);
   if (direct.length >= 2 && direct.reduce((n, a) => n + a.topics.length, 0) >= 6) return direct;
   const { parseJsonLoose } = require('../study/games/json');
@@ -33,5 +35,25 @@ export async function outlineFromText(text: string, ask: (system: string, user: 
     area: String(a?.area ?? '').trim().slice(0, 100),
     topics: (Array.isArray(a?.topics) ? a.topics : []).map((t: unknown) => String(t).trim().slice(0, 100)).filter(Boolean).slice(0, 40),
   })).filter((a: OutlineArea) => a.area && a.topics.length).slice(0, 20);
-  return areas.length ? areas : direct;
+  // The model may only name topics the file really contains, so it cannot write its own blueprint.
+  const have = new Set(significant(text));
+  const grounded = areas.map((a) => ({ ...a, topics: a.topics.filter((t) => { const w = significant(t); return !w.length || w.filter((x) => have.has(x)).length / w.length >= 0.6; }) })).filter((a) => a.topics.length);
+  return grounded.length ? grounded : direct;
 }
+
+/** A document that is the exam's outline or blueprint (by name): it lists what to study, so it is never used as lesson text. */
+export const isOutlineDocument = (name: string): boolean => /blueprint|content[\s_-]*(?:specification|outline)|exam[\s_-]*outline|syllabus/i.test(name);
+
+/**
+ * Whether a file is an outline (a list of areas and topics) and not the subject's own text. A blueprint names itself or is made of
+ * short lines; a textbook or study pack is prose, mostly lines ending in a full stop. Only an outline may replace the exam's checklist.
+ */
+export function looksLikeOutline(text: string): boolean {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 6) return true; // too short to be a book
+  const prose = lines.filter((l) => l.length > 60 && /[.!?]$/.test(l)).length / lines.length;
+  const named = /blueprint|content (?:specification|outline)|exam outline|syllabus/i.test(text.slice(0, 4000));
+  return named ? prose < 0.5 : prose < 0.2;
+}
+
+const significant = (t: string): string[] => (t.toLowerCase().match(/[a-z]{4,}/g) ?? []);

@@ -223,7 +223,7 @@ export const CpaExamScreen: React.FC = () => {
                   if (!file) return;
                   const text: string = await require('../services/documentService').documentService.textFromPicked(file.uri, file.name ?? 'outline.txt', 200000);
                   const areasFound = await outlineFromText(text, (s, u) => require('../study/engine').askModel(s, u));
-                  if (!areasFound.length) { Alert.alert('No topics found', 'Could not find areas and topics in that file.'); return; }
+                  if (!areasFound.length) { Alert.alert('That is not an outline', 'Atlas did not find a list of areas and topics in that file. If it is a textbook or study pack, add it to the exam\'s project instead: the checklist stays as it is.'); return; }
                   setOutline(outlineToText(areasFound)); // shown for you to check before it is used
                 } catch (e: any) { if (!/cancel/i.test(String(e?.message || e))) Alert.alert('Could not read that file', String(e?.message || e)); }
                 finally { setOutlineBusy(false); }
