@@ -18,6 +18,9 @@ interface S {
   /** What the first pages of a document showed it to be (a tax publication, bulletin, regulation or the Code, and its year), for files whose names say nothing. */
   tax: Record<string, TaxSource>;
   setTax: (name: string, found: TaxSource) => void;
+  /** What the person decided a document is for, over the default: lessons are taught from it, or lessons are only checked against it. */
+  roles: Record<string, 'teach' | 'reference'>;
+  setRole: (name: string, role: 'teach' | 'reference' | null) => void;
 }
 
 export const useOfficialDocs = create<S>()(
@@ -26,6 +29,8 @@ export const useOfficialDocs = create<S>()(
       names: [],
       refused: [],
       tax: {},
+      roles: {},
+      setRole: (name, role) => set((s) => { const next = { ...s.roles }; if (role) next[name] = role; else delete next[name]; return { roles: next }; }),
       setTax: (name, found) => set((s) => ({ tax: { ...s.tax, [name]: found } })),
       mark: (name) => set((s) => (s.names.includes(name) ? s : { names: [...s.names, name], refused: s.refused.filter((n) => n !== name) })),
       unmark: (name) => set((s) => ({ names: s.names.filter((n) => n !== name), refused: s.refused.includes(name) ? s.refused : [...s.refused, name] })),

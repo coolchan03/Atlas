@@ -4,6 +4,7 @@
  * exact source passage it came from ([1], [2] ... tap to read the passage).
  */
 import { ragService } from '../services/rag';
+import { askRemote } from './remoteAsk';
 import { runBackgroundJob } from '../services/llmJobQueue';
 import { knowledgeSource } from '../services/rag/knowledgeSource';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
@@ -68,6 +69,9 @@ const refs = (t: string) => [...new Set([...t.matchAll(/\[(\d{1,2})\]/g)].map((m
 export async function askModel(system: string, user: string): Promise<string> { return ask(system, user); }
 
 async function ask(system: string, user: string): Promise<string> {
+  // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
+  const remote = await askRemote(system, user);
+  if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   await callHook(HOOKS.ensureTextModel, null);
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {

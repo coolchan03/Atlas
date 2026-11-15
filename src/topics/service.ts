@@ -15,6 +15,9 @@ import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickP
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
 import { documentStanding } from '../standards/authority';
+import { unverifiedFigure } from './citations';
+import { isReference, isTeaching } from '../standards/docRoles';
+import { supersededEditions } from '../standards/taxSources';
 
 const MAX_TRIES = 2;
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -61,22 +64,36 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
 }
 
 /**
- * Passages from ALL the documents of the course's project that match the square: the best passage of each book (two at most from one), not
- * the top few overall, so one textbook cannot crowd out the others. Standards and the law come first, then textbooks, so a lesson is
- * written from every book and the standard is the one it follows where they differ.
+ * Passages from ALL the documents of the course's project that match the square. Teaching documents (textbooks, publications, study packs)
+ * give the best passage of each book, two at most from one, so no book crowds out the others. Reference documents (the Code, regulations,
+ * bulletins, standards) give their passages for the exact section the square is about, to check the lesson against, and are marked so the
+ * lesson is not written from raw statute text. An older edition of a work is left out when a newer one is in the project.
  */
 async function projectExcerpts(projectId: string | undefined, query: string): Promise<Excerpt[]> {
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
-    const found = await ragService.searchProject(projectId, query, { topK: 14 });
+    const docs: Array<{ name: string; enabled?: boolean }> = await ragService.getDocumentsByProject(projectId);
+    const old = supersededEditions(docs.filter((d) => d.enabled !== false).map((d) => d.name));
+    const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
     type Chunk = { name: string; content: string; position?: number; doc_id?: number };
-    // Passages that are mostly questions belong to a question bank, and the exam blueprint is a list of topics: neither is read as a lesson.
-    const usable: Chunk[] = (found?.chunks ?? []).filter((c: Chunk) => !isOutlineDocument(String(c.name)) && !looksLikeQuestions(String(c.content)));
-    const perDoc = new Map<string, number>();
-    const picked = usable.filter((c) => { const n = perDoc.get(c.name) ?? 0; perDoc.set(c.name, n + 1); return n < 2; });
-    const ranked = picked.map((c, i) => ({ c, i, st: documentStanding(String(c.name)) })).sort((a, b) => a.st.rank - b.st.rank || a.i - b.i);
-    return ranked.slice(0, 6).map(({ c, st }) => { const at = chunkPlace(String(c.content), c.position); return { source: c.name, docId: c.doc_id, where: at.where, rank: st.rank, label: st.label, text: at.text.slice(0, 600) }; });
+    const best = async (include: (n: string) => boolean, topK: number, perDocMax: number): Promise<Chunk[]> => {
+      const found = await ragService.searchProject(projectId, query, { topK, include });
+      // Passages that are mostly questions belong to a question bank: they are asked from, not read as a lesson.
+      const chunks: Chunk[] = (found?.chunks ?? []).filter((c: Chunk) => !looksLikeQuestions(String(c.content)));
+      const perDoc = new Map<string, number>();
+      return chunks.filter((c) => { const n = perDoc.get(c.name) ?? 0; perDoc.set(c.name, n + 1); return n < perDocMax; });
+    };
+    const excerpt = (c: Chunk, role: 'teach' | 'reference'): Excerpt => {
+      const at = chunkPlace(String(c.content), c.position);
+      const st = documentStanding(String(c.name));
+      return { source: c.name, docId: c.doc_id, where: at.where, rank: st.rank, label: st.label, role, text: at.text.slice(0, 600) };
+    };
+    const teach = (await best((n) => usable(n) && isTeaching(n), 14, 2)).map((c) => excerpt(c, 'teach')).sort((a, b) => (a.rank ?? 5) - (b.rank ?? 5));
+    const reference = (await best((n) => usable(n) && isReference(n), 8, 1)).slice(0, 2).map((c) => excerpt(c, 'reference'));
+    // A project with no teaching document (only the law, or only standards) is taught from what it has.
+    if (!teach.length) return reference.map((e) => ({ ...e, role: 'teach' as const }));
+    return [...teach.slice(0, 5), ...reference];
   } catch { return []; }
 }
 
@@ -98,8 +115,15 @@ async function webExcerpts(query: string): Promise<Excerpt[]> {
   } catch { return []; }
 }
 
+/** A quiz whose questions note a right answer that has a figure none of the passages show. */
+function withFigureChecks(content: Extract<SquareContent, { kind: 'quiz' }>, excerpts: Excerpt[], bank: string): SquareContent {
+  const evidence = `${excerpts.map((e) => e.text).join('\n')}\n${bank}`;
+  return { ...content, questions: content.questions.map((q) => { const check = unverifiedFigure(q, evidence); return check ? { ...q, check } : q; }) };
+}
+
 /** A lesson with the names of its sources taken out of the writing (they are shown as links). */
-function withoutSources(content: SquareContent, excerpts: Excerpt[]): SquareContent {
+function withoutSources(content: SquareContent, excerpts: Excerpt[], bank = ''): SquareContent {
+  if (content.kind === 'quiz') return withFigureChecks(content, excerpts, bank);
   if (content.kind !== 'lesson' || !excerpts.length) return content;
   const names = excerpts.map((e) => e.source);
   const clean = (t: string) => withoutSourceMentions(t, names);
@@ -151,15 +175,16 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   const query = `${square.title} ${square.focus}`;
   let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 6);
   if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = [...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)].slice(0, 5);
+  const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '';
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
-    bookQuestions: QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '',
+    bookQuestions: bank,
     excerpts,
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
-  const written = withoutSources(content, excerpts);
+  const written = withoutSources(content, excerpts, bank);
   useTopics.getState().setContent(course.id, key, written);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   return written;

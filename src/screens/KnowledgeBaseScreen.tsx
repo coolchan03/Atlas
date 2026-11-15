@@ -1,4 +1,5 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
+import { DocRoleLine } from '../components/DocRoleLine';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -203,6 +204,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
       <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.docSize}>{formatFileSize(item.size)}</Text>
+        <DocRoleLine name={item.name} names={kbDocs.map((d) => d.name)} />
       </View>
       <OfficialStandardButton name={item.name} />
       <Switch

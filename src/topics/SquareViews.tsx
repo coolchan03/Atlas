@@ -75,6 +75,7 @@ export function QuizView({ content, onDone }: ViewProps<'quiz'>) {
       {picked !== null && (
         <>
           {!!q.why && <Text style={t.meta} testID="quiz-why">{q.why}</Text>}
+          {!!q.check && <Text style={t.meta} testID="quiz-check">{q.check}</Text>}
           <Button title={last ? 'Finish' : 'Next'} testID="quiz-next"
             onPress={() => { if (last) onDone(starsForShare(right / content.questions.length), missed); else { setI(i + 1); setPicked(null); } }} />
         </>

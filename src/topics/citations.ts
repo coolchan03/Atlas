@@ -45,3 +45,19 @@ export function unbackedLines(content: SquareContent | null | undefined, passage
   }
   return out.slice(0, 4);
 }
+
+/** The figures in a text, as plain digits ("$1,250" and "1250" are the same; "7.5%" is 7.5). Single digits and years are left out: they are in nearly everything. */
+export function figuresIn(text: string): string[] {
+  return [...new Set((text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, '').replace(/\.0+$/, '')).filter((n) => n.length >= 2 && !/^(19|20)\d{2}$/.test(n)))];
+}
+
+/**
+ * A note for a quiz question whose right answer has a figure that the evidence (the passages the quiz was written from, and the question itself) does
+ * not show: the AI may have worked it out wrongly or made it up. Null when every figure is shown, or when there is no evidence to check against.
+ */
+export function unverifiedFigure(question: { q: string; options: string[]; answer: number }, evidence: string): string | null {
+  if (!evidence.trim()) return null;
+  const have = new Set(figuresIn(`${evidence}\n${question.q}\n${question.options.filter((_, i) => i !== question.answer).join(' ')}`));
+  const missing = figuresIn(question.options[question.answer] ?? '').filter((n) => !have.has(n));
+  return missing.length ? `Check ${missing.slice(0, 2).join(' and ')} against your sources: the AI worked it out, and none of your passages show it.` : null;
+}

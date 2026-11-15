@@ -1,4 +1,5 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
+import { DocRoleLine } from '../components/DocRoleLine';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -143,6 +144,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
               <View style={styles.kbDocInfo}>
                 <Text style={styles.kbDocName} numberOfLines={1}>{doc.name}</Text>
                 <Text style={styles.kbDocSize}>{formatFileSize(doc.size)}</Text>
+                <DocRoleLine name={doc.name} names={kbDocs.map((d) => d.name)} />
               </View>
               <OfficialStandardButton name={doc.name} size={14} />
               <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}

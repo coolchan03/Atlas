@@ -34,6 +34,10 @@ class RagDatabase {
   private db: DB | null = null;
   private ready = false;
 
+  /** Goes up whenever the stored text or embeddings change, so a cache of them knows when it is out of date. */
+  version = 0;
+  private bump(): void { this.version += 1; }
+
   async ensureReady(): Promise<void> {
     if (this.ready) return;
     try {
@@ -83,6 +87,7 @@ class RagDatabase {
   }
 
   insertDocument(doc: { projectId: string; name: string; path: string; size: number }): number {
+    this.bump();
     const db = this.getDb();
     const result = db.executeSync(
       'INSERT INTO rag_documents (project_id, name, path, size, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -93,6 +98,7 @@ class RagDatabase {
   }
 
   insertChunks(docId: number, chunks: Chunk[]): number[] {
+    this.bump();
     const db = this.getDb();
     const rowIds: number[] = [];
     db.executeSync('BEGIN');
@@ -124,6 +130,7 @@ class RagDatabase {
   }
 
   insertEmbeddingsBatch(entries: { chunkRowid: number; docId: number; embedding: number[] }[]): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('BEGIN');
     try {
@@ -193,6 +200,7 @@ class RagDatabase {
   }
 
   deleteDocument(docId: number): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('DELETE FROM rag_embeddings WHERE doc_id = ?', [docId]);
     db.executeSync('DELETE FROM rag_chunks WHERE doc_id = ?', [docId]);
@@ -218,8 +226,24 @@ class RagDatabase {
   }
 
   toggleEnabled(docId: number, enabled: boolean): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('UPDATE rag_documents SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, docId]);
+  }
+
+  /** Chunks of a project's documents that contain any of the strings, most useful first (a chunk that opens with it before one that only mentions it is decided by the caller). */
+  findChunksContaining(projectId: string, needles: string[], limit: number): RagSearchResult[] {
+    if (!needles.length) return [];
+    const db = this.getDb();
+    const like = needles.map(() => "c.content LIKE ? ESCAPE '\\'").join(' OR ');
+    const args = needles.map((n) => `%${n.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+    const result = db.executeSync(
+      `SELECT c.doc_id, d.name, c.content, c.position, 0 as score
+       FROM rag_chunks c JOIN rag_documents d ON c.doc_id = d.id
+       WHERE d.project_id = ? AND d.enabled = 1 AND (${like}) LIMIT ?`,
+      [projectId, ...args, limit],
+    );
+    return (result.rows ?? []) as unknown as RagSearchResult[];
   }
 
   getChunksByProject(projectId: string, topK: number = 5): RagSearchResult[] {
@@ -292,6 +316,7 @@ class RagDatabase {
   }
 
   deleteDocumentsByProject(projectId: string): void {
+    this.bump();
     const db = this.getDb();
     db.executeSync('DELETE FROM rag_embeddings WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
     db.executeSync('DELETE FROM rag_chunks WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
