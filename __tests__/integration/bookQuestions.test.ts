@@ -34,6 +34,7 @@ it('finds the textbook questions on a topic, with the book\'s answers, and not u
 
 it('writes a quiz square starting from the textbook questions when the course project has them', async () => {
   installRealSqlite();
+  require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true }); // the lesson square below must not look online
   const { ragService } = require('../../src/services/rag');
   const { useProjectStore } = require('../../src/stores/projectStore');
   const { squareContent } = require('../../src/topics/service');
