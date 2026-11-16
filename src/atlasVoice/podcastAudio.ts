@@ -184,7 +184,8 @@ export function speechSpan(samples: ArrayLike<number>, sampleRate: number): { of
 /** 'ended' (played through), 'stopped' (the listener stopped it) or 'failed' (the file could not be played). */
 type PlayResult = 'ended' | 'stopped' | 'failed';
 
-function playFile(path: string): Promise<PlayResult> {
+/** `whole` plays the file as it is: a tune has no silence to trim, and trimming could cut its quiet tail. */
+function playFile(path: string, whole = false): Promise<PlayResult> {
   const token = stopToken;
   return new Promise((resolve) => {
     let finished = false;
@@ -211,7 +212,7 @@ function playFile(path: string): Promise<PlayResult> {
       source = node;
       settleCurrent = finish;
       let span = { offset: 0, duration: buffer.duration as number };
-      try { span = speechSpan(buffer.getChannelData(0), buffer.sampleRate); } catch { /* play the whole file */ }
+      if (!whole) { try { span = speechSpan(buffer.getChannelData(0), buffer.sampleRate); } catch { /* play the whole file */ } }
       node.start(0, span.offset, span.duration);
     })().catch((e) => { logger.warn(`[POD] playback failed: ${e?.message ?? e}`); finish(token === stopToken ? 'failed' : 'stopped'); });
   });
@@ -257,8 +258,10 @@ export function setPodcastSpeed(x: number): void { speed = x > 0 ? x : 1; }
 
 export interface NativeEpisodeQueueOpts {
   from: number;
-  tunes?: { storyStarts: number[] };
+  tunes?: { storyStarts: number[]; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
   jingleVolume?: JingleVolume;
+  /** playback speed: a gap is made longer by this much so it still lasts the same time once played faster */
+  speed?: number;
 }
 
 /**
@@ -273,23 +276,30 @@ export async function nativeEpisodeQueue(
   opts: NativeEpisodeQueueOpts,
 ): Promise<{ paths: string[]; lineAtIndex: Map<number, number> } | null> {
   if (!renderable(items)) return null;
-  const { from, tunes, jingleVolume = 'normal' } = opts;
+  const { from, tunes, jingleVolume = 'normal', speed: playSpeed = 1 } = opts;
   const paths: string[] = [];
   const lineAtIndex = new Map<number, number>();
   const first = Math.max(0, from);
 
-  const addJingle = async (kind: JingleKind): Promise<void> => {
-    const p = `${root()}/_jingles/${kind}-${jingleVolume}-v2.wav`;
+  const addJingle = async (kind: JingleKind): Promise<void> => { paths.push(await ensureJingleFile(kind, jingleVolume)); };
+
+  /** A quiet file the length of the gap between stories, made once and kept. */
+  const addPause = async (seconds: number): Promise<void> => {
+    const secs = Math.max(1, Math.round(seconds * Math.max(0.5, playSpeed)));
+    const p = `${root()}/_jingles/pause-${secs}s-v1.wav`;
     if (!(await RNFS.exists(p))) {
       await RNFS.mkdir(`${root()}/_jingles`);
-      await RNFS.writeFile(p, toBase64(wavBytes(makeJingle(kind, undefined, JINGLE_PEAK[jingleVolume]))), 'base64');
+      await RNFS.writeFile(p, toBase64(wavBytes(new Int16Array(secs * 8000), 8000)), 'base64');
     }
     paths.push(p);
   };
 
   if (tunes && first === 0) await addJingle('intro');
   for (let i = first; i < items.length; i++) {
-    if (tunes && i > first && tunes.storyStarts.includes(i)) await addJingle('chime');
+    if (tunes && i > first && tunes.storyStarts.includes(i)) {
+      await addJingle('chime');
+      if (tunes.pauseSeconds) await addPause(tunes.pauseSeconds);
+    }
     const p = pathFor(key, i, items[i]);
     if (!(await RNFS.exists(p))) return null;
     lineAtIndex.set(paths.length, i);
@@ -298,6 +308,22 @@ export async function nativeEpisodeQueue(
   if (tunes) await addJingle('outro');
 
   return { paths, lineAtIndex };
+}
+
+/**
+ * The saved WAV of a tune, made again when it is missing or damaged (an empty or cut-short file from an interrupted write
+ * would otherwise be 'there' forever and the tune would never be heard).
+ */
+async function ensureJingleFile(kind: JingleKind, volume: JingleVolume): Promise<string> {
+  const path = `${root()}/_jingles/${kind}-${volume}-v2.wav`;
+  const bytes = wavBytes(makeJingle(kind, undefined, JINGLE_PEAK[volume]));
+  let ok = false;
+  try { ok = (await RNFS.exists(path)) && Number((await RNFS.stat(path)).size) >= bytes.length; } catch { ok = false; }
+  if (!ok) {
+    await RNFS.mkdir(`${root()}/_jingles`);
+    await RNFS.writeFile(path, toBase64(bytes), 'base64');
+  }
+  return path;
 }
 
 /** Stops whatever podcast line is playing from a file. */
@@ -319,15 +345,11 @@ export function stopPodcastAudio(): void {
 export async function playJingle(kind: JingleKind, volume: JingleVolume = 'normal'): Promise<boolean> {
   const token = stopToken;
   try {
-    const path = `${root()}/_jingles/${kind}-${volume}-v2.wav`;
-    if (!(await RNFS.exists(path))) {
-      await RNFS.mkdir(`${root()}/_jingles`);
-      await RNFS.writeFile(path, toBase64(wavBytes(makeJingle(kind, undefined, JINGLE_PEAK[volume]))), 'base64');
-    }
+    const path = await ensureJingleFile(kind, volume);
     if (token !== stopToken) return false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const limit = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), jingleSeconds(kind) * 1000 + 4000); });
-    const result = await Promise.race([playFile(path), limit]);
+    const result = await Promise.race([playFile(path, true), limit]);
     if (timer) clearTimeout(timer);
     if (result === 'timeout') {
       logger.warn(`[POD] jingle ${kind} did not finish in time: skipped`);

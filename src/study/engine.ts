@@ -443,6 +443,8 @@ async function writeOutlinedEpisode(
   let used = 0;
   let finished = false;
   const storyStarts: number[] = [];
+  /** The lines written for each outline item, so a short script can be deepened story by story. */
+  const segments: { item: number; lines: PodcastLine[] }[] = [];
   for (let i = 0; i < outline.length; i++) {
     if (opts.shouldStop?.() && lines.length >= 4) break;
     // Once the length is reached only the items marked `always` (a fun fact) are still written.
@@ -467,12 +469,37 @@ async function writeOutlinedEpisode(
     const written = withoutRepeats(parseLines(t, cfg.hosts).slice(0, n + 2), lines);
     if (lines.length && written.length) storyStarts.push(lines.length);
     lines.push(...written);
+    if (written.length) segments.push({ item: i, lines: written });
     if (!part.always) used++;
     if (reaches) finished = true;
     if (last) break;
   }
   opts.onItemsUsed?.(used);
   if (lines.length < 2) throw new Error('The model did not write the script in the expected format. Try again or use a bigger model.');
+  // Fewer stories than the length needs, or a model that wrote short: go back over the stories, in order, and add depth
+  // (background, who is affected, what to watch for, from the same sources) until the script reaches the length chosen.
+  if (opts.targetWords) {
+    for (let pass = 0; pass < 2 && wordCount() < opts.targetWords * 0.9; pass++) {
+      for (const seg of segments) {
+        if (opts.shouldStop?.() || wordCount() >= opts.targetWords * 0.95) break;
+        const part = outline[seg.item];
+        if (part.always) continue;
+        onStep(`Adding more detail to story ${segments.indexOf(seg) + 1}...`);
+        const missing = Math.max(2, Math.min(6, Math.ceil((opts.targetWords - wordCount()) / 20 / Math.max(1, segments.length))));
+        try {
+          const t = await ask(
+            'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. Never tell the listener what to feel or think. Never mention source numbers.',
+            `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${opts.castFor?.(seg.item) ?? cfg.cast}.\nThis item: ${part.topic}\nThe item was already covered with these lines:\n${seg.lines.map((l) => `${l.host}: ${l.text}`).join('\n')}\n\nGo deeper: write ${missing} MORE lines that continue straight on, adding the background, who is affected and what to watch for, using only details the sources give. Do not repeat or greet.${opts.rules ? `\n${opts.rules}` : ''}\nExactly this format:\n${cfg.fmt}`,
+          );
+          const more = withoutRepeats(parseLines(t, cfg.hosts).slice(0, missing + 1), lines);
+          if (more.length) seg.lines.push(...more);
+        } catch { /* the story keeps the lines it has */ }
+      }
+    }
+    // Put the script back together in order (the story starts move with the added lines).
+    lines.length = 0; storyStarts.length = 0;
+    for (const seg of segments) { if (lines.length) storyStarts.push(lines.length); lines.push(...seg.lines); }
+  }
   return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: all.slice(0, 60), podcast: lines, hosts: cfg.hosts, storyStarts };
 }
 

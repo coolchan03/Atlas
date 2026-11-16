@@ -3,7 +3,7 @@ export interface EpisodePlan {
   count: number;
   from: number;
   /** Tunes before, between stories and after the show. Left out for anything that is not a briefing. */
-  tunes?: { storyStarts: number[] };
+  tunes?: { storyStarts: number[]; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
 }
 
 export interface EpisodeHooks {
@@ -11,6 +11,8 @@ export interface EpisodeHooks {
   stopped: () => boolean;
   /** Plays a tune; false means playback was stopped while it played. */
   jingle: (kind: 'intro' | 'chime' | 'outro') => Promise<boolean>;
+  /** Waits (quietly) this many seconds; false means playback was stopped meanwhile. */
+  pause?: (seconds: number) => Promise<boolean>;
   /** The line about to play (to show it and remember the place). */
   onLine: (i: number) => void;
   /** Plays a line; false means playback was stopped or the line could not be played. */
@@ -26,6 +28,7 @@ export async function playEpisode(plan: EpisodePlan, hooks: EpisodeHooks): Promi
     if (hooks.stopped()) break;
     // A soft chime when the next story begins (not when playback starts or is moved to a line).
     if (plan.tunes && i > first && plan.tunes.storyStarts.includes(i) && !(await hooks.jingle('chime'))) break;
+    if (plan.tunes && i > first && plan.tunes.storyStarts.includes(i) && plan.tunes.pauseSeconds && hooks.pause && !(await hooks.pause(plan.tunes.pauseSeconds))) break;
     hooks.onLine(i);
     if (!(await hooks.line(i)) || hooks.stopped()) break;
     finished = i === plan.count - 1;

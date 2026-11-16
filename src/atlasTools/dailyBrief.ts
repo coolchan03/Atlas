@@ -11,7 +11,9 @@ import { Source, StudyResult, askModel, useStudyStore, writeEpisode } from '../s
 import { WORDS_PER_MINUTE, avoided, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
-import { readCalendarContext, calendarSummary } from './calendarBrief';
+/** The quiet beat after the chime before each story starts, so every story lands before the next. */
+export const STORY_PAUSE_SECONDS = 7;
+import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 
 interface BriefPrefs {
   interests: string[];
@@ -106,14 +108,18 @@ export function parseRss(xml: string): Headline[] {
 
 /** Fresh real headlines that fit one interest, from the first feed that has any (see newsSources). */
 async function headlines({ topic, interests, seen, want }: { topic: string; interests: string[]; seen: string[]; want: number }): Promise<Headline[]> {
+  const need = Math.max(6, want);
+  const found: Headline[] = [];
+  // The first feed with stories is not always enough for a long briefing: keep going through the feeds until there are enough.
   for (const f of feedsFor(topic)) {
     try {
       const fromSection = f.includes('/headlines/section/');
-      const items = onTopic(cleanHeadlines(parseRss(await fetchText(f)), Date.now(), seen), { interest: topic, interests, fromSection });
-      if (items.length) return items.slice(0, Math.max(6, want));
+      const items = onTopic(cleanHeadlines(parseRss(await fetchText(f)), Date.now(), [...seen, ...found.map((h) => h.title)]), { interest: topic, interests, fromSection });
+      found.push(...items.filter((h) => !found.some((x) => similarity(x.title, h.title) >= 0.5)));
+      if (found.length >= need) break;
     } catch { /* try the next feed */ }
   }
-  return [];
+  return found.slice(0, need);
 }
 
 /** A few of today's real headlines on a topic (for the language course's news square). */
@@ -229,17 +235,13 @@ export async function aiScreen(titles: string[], avoid: string[]): Promise<Set<n
  */
 async function gatherStories(o: { interests: string[]; minutes: number; deep: boolean; avoid: string[] }, onStep: (m: string) => void): Promise<{ outline: OutlineItem[]; stories: Picked[] }> {
   const { interests, minutes, deep, avoid } = o;
-  const perInterest: Headline[][] = [];
   const budget = storyBudget(minutes, deep);
-  const seen: string[] = [];
   const topics = interests.slice(0, 8);
-  for (const topic of topics) {
-    onStep(`Checking news: ${topic}...`);
-    const hs = (await headlines({ topic, interests, seen, want: Math.ceil((budget * 2) / topics.length) + 2 }))
-      .filter((h) => !avoided(h, avoid));
-    perInterest.push(hs);
-    hs.forEach((h) => seen.push(h.title));
-  }
+  onStep(`Checking the news (${topics.length} topic${topics.length === 1 ? '' : 's'})...`);
+  // Every topic's feeds are fetched at once; stories told twice are dropped below.
+  const perInterest: Headline[][] = (await Promise.all(topics.map((topic) =>
+    headlines({ topic, interests, seen: [], want: Math.ceil((budget * 2) / topics.length) + 2 }))))
+    .map((hs) => hs.filter((h) => !avoided(h, avoid)));
   if (avoid.length) {
     onStep('Checking the headlines against your topics to avoid...');
     const flat = perInterest.flatMap((list, interest) => list.map((h) => ({ interest, h })));
@@ -247,20 +249,27 @@ async function gatherStories(o: { interests: string[]; minutes: number; deep: bo
     const gone = new Set([...dropped].map((i) => flat[i].h));
     perInterest.forEach((list, k) => { perInterest[k] = list.filter((h) => !gone.has(h)); });
   }
-  const outline: OutlineItem[] = [];
-  const stories: Picked[] = [];
   // A few more than the length needs are read, so the script can keep going until it really reaches the length.
-  const want = Math.min(24, budget + 4);
-  for (const pick of pickStories(perInterest, Math.min(30, budget * 2))) {
-    if (stories.length >= want) break;
+  const want = Math.min(30, budget + 4);
+  const picked: Picked[] = [];
+  for (const pick of pickStories(perInterest, Math.min(40, budget * 2))) {
+    if (picked.length >= want) break;
     // The same event under another outlet's wording is one card, not two.
-    if (stories.some((x) => similarity(x.headline.title, pick.headline.title) >= 0.5 || (!!x.headline.url && !/news\.google\.com/.test(x.headline.url) && x.headline.url === pick.headline.url))) continue;
-    onStep(`Reading story ${stories.length + 1}: ${pick.headline.title.slice(0, 50)}...`);
-    const item = await storyItem({ h: pick.headline, interest: interests[pick.interest], deep, n: outline.length + 1 });
-    outline.push(item);
-    stories.push(pick);
+    if (picked.some((x) => similarity(x.headline.title, pick.headline.title) >= 0.5 || (!!x.headline.url && !/news\.google\.com/.test(x.headline.url) && x.headline.url === pick.headline.url))) continue;
+    picked.push(pick);
   }
-  return { outline, stories };
+  // Story details (a summary, optionally the article) are fetched a few at a time instead of one after another.
+  // Only the story number is shown: a headline would spoil the show.
+  const outline: OutlineItem[] = new Array(picked.length);
+  const BATCH = 5;
+  for (let from = 0; from < picked.length; from += BATCH) {
+    const batch = picked.slice(from, from + BATCH);
+    onStep(`Reading stories ${from + 1}-${from + batch.length} of ${picked.length}...`);
+    await Promise.all(batch.map(async (pick, k) => {
+      outline[from + k] = await storyItem({ h: pick.headline, interest: interests[pick.interest], deep, n: from + k + 1 });
+    }));
+  }
+  return { outline, stories: picked };
 }
 
 function offGridNow(): boolean { try { return require('./offGrid').offGridOn(); } catch { return false; } }
@@ -295,22 +304,27 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   // Read today's calendar events for flight/travel context (best-effort).
   let calendarNote = '';
   let calendarFlights: { raw: string; airline: string }[] = [];
+  let calendarCtx: CalendarContext | null = null;
   try {
     const calCtx = await readCalendarContext();
+    calendarCtx = calCtx;
     if (calCtx) { calendarNote = calendarSummary(calCtx); calendarFlights = calCtx.flights; }
   } catch { /* non-critical */ }
 
   // Fetch weather early so it can be mentioned in the briefing.
   let weatherLine = '';
+  let weatherSaid = '';
   if (!offline) {
     try {
-      const { fetchWeather, weatherSummary } = require('./weather');
+      const { fetchWeather, weatherSummary, weatherSpoken } = require('./weather');
       const { useMaps } = require('../atlasMaps/maps');
       const { currentUnits } = require('./units');
+      // The position is only kept once Maps has been opened, so read the phone's last known one first.
+      try { await require('../atlasMaps/locationNote').refreshLastFix(); } catch { /* use what is kept */ }
       const fix = useMaps.getState().lastFix;
       if (fix) {
         const w = await fetchWeather(fix.lat, fix.lon);
-        if (w) weatherLine = weatherSummary(w, undefined, currentUnits());
+        if (w) { weatherLine = weatherSummary(w, undefined, currentUnits()); weatherSaid = weatherSpoken(w, currentUnits()); }
       }
     } catch { /* weather is optional */ }
   }
@@ -368,13 +382,16 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     funFacts: false,
     outline,
     // Enough lines per story that the stories add up to the length the user picked.
-    linesPerItem: linesPerStory(p.minutes, storyBudget(p.minutes, p.deep)),
+    // Planned from the stories actually found: with fewer than the length needs, each one is told in more depth.
+    linesPerItem: linesPerStory(p.minutes, stories.length || storyBudget(p.minutes, p.deep), 12),
     targetWords: p.minutes * WORDS_PER_MINUTE,
     onItemsUsed: (count) => { usedStories = count; },
   }, onStep);
-  if (gotNews && r.podcast) r.podcast = [{ host: 'A', text: greetingLine() }, ...r.podcast];
-  // The greeting is now line 0, so every story start moves down one line.
-  if (gotNews && r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + 1);
+  // After the date come the weather and the day's calendar, as fixed lines (the model left them out when only asked).
+  const opening = [gotNews ? greetingLine() : '', weatherSaid, calendarSpoken(calendarCtx)].filter(Boolean);
+  if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
+  // The opening lines come first, so every story start moves down by that many lines.
+  if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
   r.minutes = Math.max(1, Math.round(spokenMinutes((r.podcast ?? []).map((l) => l.text))));
   r.headlines = stories.slice(0, usedStories).map(({ interest, headline: h }, i) => ({
     title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,

@@ -13,7 +13,7 @@ import * as nativePlayer from '../atlasVoice/nativeAudioPlayer';
 import { storyJumps, currentStory } from '../study/storyJumps';
 import { resumeLine } from '../study/listenPosition';
 import { playEpisode } from '../study/playEpisode';
-import { BRIEF_PROJECT, useBriefPrefs } from '../atlasTools/dailyBrief';
+import { BRIEF_PROJECT, STORY_PAUSE_SECONDS, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastStyle } from '../study/engine';
 import { briefingSummary, briefingTranscript, safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { deckSlides, savePptx } from '../study/pptx';
@@ -291,7 +291,8 @@ export const StudyScreen: React.FC = () => {
     const audioKey = source?.audioKey;
     const isBrief = !!audioKey && audioKey.startsWith(`${BRIEF_PROJECT}-`);
     setPodcastSpeed(isBrief ? prefs.speed ?? 1 : 1);
-    const tunes = isBrief && prefs.jingles !== false ? { storyStarts: source!.storyStarts } : undefined;
+    // Stories are told like cards: a chime, then a quiet beat so each one lands before the next starts.
+    const tunes = isBrief && prefs.jingles !== false ? { storyStarts: source!.storyStarts, pauseSeconds: STORY_PAUSE_SECONDS } : undefined;
     const isStopped = () => stopRef.current || playToken.current !== my;
     const onLine = (i: number) => {
       setPlaying(i); setResumeAt(i); setItemStart(Date.now());
@@ -302,7 +303,7 @@ export const StudyScreen: React.FC = () => {
       // continues even when the app is backgrounded (the JS AudioContext pauses then).
       let usedNative = false;
       if (Platform.OS === 'android' && audioKey && nativePlayer.isAvailable()) {
-        const queue = await nativeEpisodeQueue(audioKey, items, { from, tunes, jingleVolume: prefs.jingleVolume ?? 'normal' });
+        const queue = await nativeEpisodeQueue(audioKey, items, { from, tunes, jingleVolume: prefs.jingleVolume ?? 'normal', speed: isBrief ? prefs.speed ?? 1 : 1 });
         if (queue && !isStopped()) {
           usedNative = true;
           finished = await new Promise<boolean>((resolve) => {
@@ -330,6 +331,11 @@ export const StudyScreen: React.FC = () => {
         finished = await playEpisode({ count: items.length, from, tunes }, {
           stopped: isStopped,
           jingle: (kind) => playJingle(kind, prefs.jingleVolume ?? 'normal'),
+          pause: async (seconds) => {
+            const end = Date.now() + seconds * 1000;
+            while (Date.now() < end) { if (isStopped()) return false; await new Promise((r) => setTimeout(r, 200)); }
+            return !isStopped();
+          },
           onLine,
           line: (i) => (audioKey ? playLine(audioKey, items, i) : speakAndWait(items[i].text, { pitch: items[i].pitch, voice: items[i].voice || '' })),
         });

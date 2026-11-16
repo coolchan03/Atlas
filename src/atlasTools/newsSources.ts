@@ -95,8 +95,8 @@ export const storyBudget = (minutes: number, deep = true) =>
   Math.max(3, Math.min(30, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 60 : 40))));
 
 /** Script lines per story (about 20 spoken words each) so the stories add up to the chosen length. */
-export const linesPerStory = (minutes: number, stories: number) =>
-  Math.max(2, Math.min(8, Math.ceil((minutes * WORDS_PER_MINUTE) / Math.max(1, stories) / 20)));
+export const linesPerStory = (minutes: number, stories: number, cap = 8) =>
+  Math.max(2, Math.min(cap, Math.ceil((minutes * WORDS_PER_MINUTE) / Math.max(1, stories) / 20)));
 
 /** Estimated listening time of a script, in minutes. */
 export const spokenMinutes = (texts: string[]) =>

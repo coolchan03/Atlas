@@ -105,3 +105,15 @@ export function weatherSummary(w: WeatherData, cityName?: string, units: Units =
   ].filter(Boolean).join(', ');
   return `${parts}.`;
 }
+
+/** The weather as sentences to speak: sky, high and low, rain, wind and sun advice, then tomorrow in a clause. */
+export function weatherSpoken(w: WeatherData, units: Units = { imperial: false, temp: 'c' }): string {
+  const parts = [
+    `The weather today is ${w.description}, with a high of ${fmtTemp(w.tempMaxC, units.temp)} and a low of ${fmtTemp(w.tempMinC, units.temp)}.`,
+    w.precipProbPct > 10 ? `There is a ${w.precipProbPct}% chance of rain.` : '',
+    w.windKph > 20 ? `Wind could reach ${fmtWind(w.windKph, units.imperial)}.` : '',
+    w.uvMax >= 3 ? `UV is ${w.uvWarning.toLowerCase().replace(' uv', '')}: ${uvAdvice(w.uvMax).toLowerCase()}` : '',
+    w.tomorrow ? `Tomorrow looks ${w.tomorrow.description}, around ${fmtTemp(w.tomorrow.tempMaxC, units.temp)}.` : '',
+  ];
+  return parts.filter(Boolean).join(' ');
+}
