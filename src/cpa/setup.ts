@@ -71,6 +71,8 @@ export function setupCpaExam(code: ExamCode): string | undefined {
 /** The id of the folder an exam's family shares (the CPA Study project, for a CPA exam), or undefined when there is none yet. */
 function examFolderId(code: ExamCode): string | undefined {
   const name = examFolder(code).name;
+  const chosen = useCpa.getState().groupProjectId;
+  if (name === CPA_PROJECT_NAME && chosen && useProjectStore.getState().projects.some((p) => p.id === chosen)) return chosen; // the project the person chose to hold the CPA material
   return useProjectStore.getState().projects.find((p) => p.name === name || (name === CPA_PROJECT_NAME && CPA_PROJECT_NAMES.includes(p.name)))?.id;
 }
 

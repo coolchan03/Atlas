@@ -56,7 +56,9 @@ describe('topic courses: what the AI writes for a square', () => {
     expect(parseContent('practice', JSON.stringify(assignment))).toMatchObject({ kind: 'practice', task: expect.stringContaining('Write a function f') });
     // An assignment finished by pressing a button is not an assignment: it is rejected, so the AI is asked again.
     expect(parseContent('practice', JSON.stringify({ ...assignment, task: 'Read the lesson above carefully and then click Next when you are ready to continue to the following square.' }))).toBeNull();
-    expect(parseContent('practice', JSON.stringify({ task: 'Write a function', model: 'def f(): pass', rubric: ['defines f'] }))).toBeNull();
+    expect(parseContent('practice', JSON.stringify({ task: 'Write a function', model: 'def f(): pass', rubric: ['defines f'] }))).toBeNull(); // too little to be an assignment
+    // A short assignment is still an assignment when it has something to write and an answer to compare with.
+    expect(parseContent('practice', JSON.stringify({ task: 'Write a function that reverses a string.', model: 'def rev(s): return s[::-1]', rubric: ['returns the string reversed'] }))).toMatchObject({ kind: 'practice' });
     expect(parseContent('quiz', 'not json')).toBeNull();
   });
   it('reads a mark, keeps it between 0 and 100, and gives stars for a share', () => {

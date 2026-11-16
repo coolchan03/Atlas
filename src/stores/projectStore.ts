@@ -135,7 +135,7 @@ export const useProjectStore = create<ProjectState>()(
         // KB-tool injection). The project store owns "what happens on delete" (like RAG
         // cleanup above); chatStore owns the conversation mutation.
         require('./storeRefs').chatStoreRef().getState().unfileConversationsForProject(id);
-        // What was inside a deleted folder moves up to the folder around it (or to the top): deleting a folder never deletes what is in it.
+        // The projects inside a deleted folder move up to the folder around it (or to the top), and are not deleted. The documents kept in the folder itself go with it (the screen says so first).
         set((state) => ({
           projects: state.projects.filter((project) => project.id !== id).map((project) => (project.parentId === id ? { ...project, parentId: selected?.parentId } : project)),
         }));

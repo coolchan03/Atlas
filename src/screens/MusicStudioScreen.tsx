@@ -13,6 +13,7 @@ import type { MusicScore } from '../music/composition';
 import { saveInstrumental } from '../music/saveTrack';
 import { composeMusic } from '../music/composerAgent';
 import { SoundfontCard } from '../music/SoundfontCard';
+import { SPACING } from '../constants';
 
 const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
 const GROUPS: StyleGroup[] = ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'];
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   label: { fontWeight: '600' },
   small: { fontSize: 12 },
   centered: { alignSelf: 'center' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   statusText: { flex: 1 },
   end: { alignSelf: 'flex-end', marginTop: 6 },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },

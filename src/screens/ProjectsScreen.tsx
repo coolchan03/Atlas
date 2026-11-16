@@ -58,7 +58,9 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
   const handleDeleteProject = (project: Project) => {
     setAlertState(showAlert(
       'Delete Project',
-      `Delete "${project.name}"? This will not delete the chats associated with this project.`,
+      projects.some((p) => p.parentId === project.id)
+        ? `Delete "${project.name}"? It has projects inside it: they move up one level and keep their own documents, but the documents kept in "${project.name}" itself (which they use too) are deleted. Chats are not deleted.`
+        : `Delete "${project.name}"? This will not delete the chats associated with this project.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {

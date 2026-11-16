@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { useMusicLibrary } from './library';
-import { FREE_SOUNDFONT, downloadFreeSoundfont, installSoundfontFrom, removeSoundfont } from './soundfontFiles';
+import { FREE_SOUNDFONT, downloadFreeSoundfont, pickAndInstallSoundfont, removeSoundfont, setRealInstruments } from './soundfontFiles';
 
 const megabytes = (n: number): string => `${(n / 1048576).toFixed(1)} MB`;
 
@@ -18,15 +18,7 @@ export function SoundfontCard() {
     try { await job(); } catch (e) { Alert.alert('Could not add the instruments', String((e as Error)?.message || e)); } finally { setBusy(''); }
   };
   const download = () => run('Downloading...', () => downloadFreeSoundfont((share) => setBusy(`Downloading ${Math.round(share * 100)}%...`)));
-  const pick = () => run('Reading the file...', async () => {
-    const { pick: pickFile, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
-    const { resolvePickedFileUri } = require('../utils/resolvePickedFileUri');
-    try {
-      const [file] = await pickFile({ mode: 'open', allowMultiSelection: false });
-      if (!file) return;
-      await installSoundfontFrom(await resolvePickedFileUri(file.uri, file.name || 'instruments.sf2'), file.name || 'instruments');
-    } catch (e: any) { if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) throw e; }
-  });
+  const pick = () => run('Reading the file...', pickAndInstallSoundfont);
   const button = (label: string, onPress: () => void, testID: string) => (
     <TouchableOpacity onPress={onPress} disabled={!!busy} accessibilityRole="button" testID={testID} style={[styles.btn, { borderColor: colors.border }]}>
       <Text style={{ color: busy ? colors.textMuted : colors.primary }}>{label}</Text>
@@ -42,7 +34,7 @@ export function SoundfontCard() {
       <View style={styles.row}>
         {!sf && button(`Download free instruments (${FREE_SOUNDFONT.approxMB} MB)`, download, 'music-sf-download')}
         {button('Choose a SoundFont file (.sf2)', pick, 'music-sf-pick')}
-        {!!sf && button(on ? 'Use the built-in synthesiser' : 'Use the real instruments', () => useMusicLibrary.getState().setUseSoundfont(!on), 'music-sf-toggle')}
+        {!!sf && button(on ? 'Use the built-in synthesiser' : 'Use the real instruments', () => setRealInstruments(!on), 'music-sf-toggle')}
         {!!sf && button('Remove', removeSoundfont, 'music-sf-remove')}
       </View>
       {!sf && <Text style={[styles.small, { color: colors.textMuted }]}>The free set is TimGM6mb (GPL licence), a small General MIDI collection. Any .sf2 SoundFont works, and a bigger one sounds better. Tunes already made keep the sound they were made with.</Text>}

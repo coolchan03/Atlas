@@ -35,6 +35,18 @@ describe('chapters of one book stay separate', () => {
   });
 });
 
+describe('chapters with no title', () => {
+  it('keeps each book\'s untitled chapter apart (two books\' "Chapter 7" are not the same subject) and gives it no subject to match on', () => {
+    const a = { doc: 'Leases book.pdf', chapters: [{ number: 7, title: '' }, { number: 8, title: 'Inventory' }, { number: 9, title: 'Receivables' }] };
+    const b = { doc: 'Payroll book.pdf', chapters: [{ number: 7, title: '' }] };
+    const titles = mergeBooks([a, b]).map((t) => t.title);
+    expect(titles.filter((t) => /^Chapter 7 of /.test(t))).toHaveLength(2);
+    const { chapterSquares } = require('../../../src/topics/chapterSequence');
+    expect(chapterSquares('Chapter 7', 'Chapter 7', 'x')[0].topic).toBeUndefined();
+    expect(chapterSquares('Chapter 7: Leases', 'Chapter 7: Leases', 'x')[0].topic).toBe('Leases');
+  });
+});
+
 describe('a standard outranks the books', () => {
   it('ranks a FASB document and the Code above a textbook, and says so in the lesson prompt', () => {
     expect(documentStanding('ASC 842 Leases (FASB).pdf')).toMatchObject({ rank: 1, label: 'STANDARD' });

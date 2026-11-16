@@ -42,10 +42,12 @@ export function sampledNote(note: MusicNote, name: Voice, o: { samples: number; 
     wave = renderNote(active, { bank: 0, program, key: Math.round(note.pitch), velocity: 100, held, rate: o.rate, maxTail: name === 'pad' || name === 'warmpad' || name === 'glasspad' || name === 'choir' ? 1.5 : 0.8 });
   }
   if (!wave) return null;
-  // Recordings differ in loudness: each note is brought to a common level, then the score's own gain for the part is applied.
+  // Recordings differ in loudness, but only so far as to even them out: a very quiet note is lifted at most twice, a loud one is brought down to a common ceiling,
+  // and a drum is only kept from clipping, so a hat stays softer than a kick as it is on the recording. Then the score's own gain for the part is applied.
   let peak = 0;
   for (let i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i]));
-  const scale = peak > 0 ? (0.55 / peak) * gain : 0;
+  const drum = (note.role ?? 'melody') === 'perc';
+  const scale = peak > 0 ? (drum ? Math.min(1, 0.9 / peak) : Math.min(2, 0.55 / peak)) * gain : 0;
   for (let i = 0; i < wave.length; i++) wave[i] *= scale;
   return wave;
 }

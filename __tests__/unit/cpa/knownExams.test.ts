@@ -37,3 +37,13 @@ describe('every exam has a folder, made automatically', () => {
     expect(useCpa.getState().exams.CFA1?.topics.length).toBeGreaterThan(0); // the layout is already known
   });
 });
+
+describe('review fixes', () => {
+  it('moves exams on a CPA project the person chose themselves into projects inside it', () => {
+    const mine = useProjectStore.getState().createProject({ name: 'My Accounting', description: '', systemPrompt: '' });
+    useCpa.setState({ groupProjectId: mine.id, exams: { FAR: { projectId: mine.id, topics: [{ id: 'a::b', area: 'a', name: 'Leases', covered: false }] } } as any });
+    const id = setupCpaExam('FAR');
+    expect(id).not.toBe(mine.id);
+    expect(useProjectStore.getState().projects.find((p) => p.id === id)?.parentId).toBe(mine.id);
+  });
+});

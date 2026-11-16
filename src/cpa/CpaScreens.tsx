@@ -132,7 +132,7 @@ export const CpaExamScreen: React.FC = () => {
   useEffect(() => { if (projectId && docs) refineOutline(code).then((n) => { if (n) setMessage(`Added ${n} topic${n === 1 ? '' : 's'} from your documents to the outline.`); }); }, [projectId, docs, code]);
   useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsInScope(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
   // An exam set up before folders existed moves into its own project inside the folder the first time it is opened.
-  useEffect(() => { setupCpaExam(code); }, [code]);
+  useEffect(() => { if (useCpa.getState().exams[code]) setupCpaExam(code); }, [code]);
   if (!status.exam) return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={examLabel(code)} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>
   );

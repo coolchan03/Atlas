@@ -7,7 +7,7 @@ import { useMusicLibrary } from './library';
 import { hasSoundfont, loadSoundfontBytes, setActiveSoundfont } from './sampled';
 
 /** A small, free General MIDI SoundFont (TimGM6mb, GPL licence), downloaded only when the person asks. */
-export const FREE_SOUNDFONT = { url: 'https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2', name: 'TimGM6mb', approxMB: 6 };
+export const FREE_SOUNDFONT = { url: 'https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2', name: 'TimGM6mb', approxMB: 6, /** The size of the file as published: a download far from it is not this file (moved, replaced or cut short) and is refused. */ minBytes: 5_000_000, maxBytes: 7_500_000 };
 const MAX_BYTES = 150 * 1024 * 1024;
 const PIECE = 3 * 1024 * 1024; // a multiple of 3, so each piece is whole base64
 
@@ -52,13 +52,23 @@ async function checkFile(path: string): Promise<number> {
 
 const dir = () => `${RNFS.DocumentDirectoryPath}/soundfonts`;
 
-/** Keeps a picked file as the SoundFont in use. Checks it first, so a wrong file changes nothing. */
-export async function installSoundfontFrom(path: string, name: string): Promise<void> {
+/**
+ * Keeps a file as the SoundFont in use. It is checked first, then put beside the old one under a temporary name and swapped in only once
+ * it is all there, so a wrong file, a full disk or a lost connection leaves the working SoundFont as it was. `move` takes the file itself
+ * instead of copying it (for one just downloaded into the app's own folder).
+ */
+export async function installSoundfontFrom(path: string, name: string, o: { move?: boolean } = {}): Promise<void> {
   const bytes = await checkFile(path);
   if (bytes > MAX_BYTES) throw new Error('That file is too big to use (over 150 MB).');
   await RNFS.mkdir(dir());
   const to = `${dir()}/active.sf2`;
-  if (path !== to) { if (await RNFS.exists(to)) await RNFS.unlink(to); await RNFS.copyFile(path, to); }
+  const incoming = `${dir()}/incoming.sf2`;
+  try {
+    if (o.move) await RNFS.moveFile(path, incoming); else await RNFS.copyFile(path, incoming);
+    if (Number((await RNFS.stat(incoming)).size) !== bytes) throw new Error('The file was not copied completely. Try again.');
+    if (await RNFS.exists(to)) await RNFS.unlink(to);
+    await RNFS.moveFile(incoming, to);
+  } finally { await RNFS.unlink(incoming).catch(() => undefined); }
   setActiveSoundfont(null);
   useMusicLibrary.getState().setSoundfont({ name: name.replace(/\.sf2$/i, ''), path: to, bytes });
   useMusicLibrary.getState().setUseSoundfont(true);
@@ -72,9 +82,25 @@ export async function downloadFreeSoundfont(onProgress?: (share: number) => void
   const res = await job.promise;
   try {
     if (res.statusCode !== 200) throw new Error(`The download failed (server said ${res.statusCode}).`);
-    await installSoundfontFrom(tmp, FREE_SOUNDFONT.name);
+    const size = Number((await RNFS.stat(tmp)).size);
+    if (size < FREE_SOUNDFONT.minBytes || size > FREE_SOUNDFONT.maxBytes) throw new Error('The downloaded file is not the instruments that were expected (the address may have changed). Choose a SoundFont file yourself instead.');
+    await installSoundfontFrom(tmp, FREE_SOUNDFONT.name, { move: true });
   } finally { await RNFS.unlink(tmp).catch(() => undefined); }
 }
+
+/** The file picker, then install: for the "Choose a SoundFont file" button. Resolves quietly when the picker is closed. */
+export async function pickAndInstallSoundfont(): Promise<void> {
+  const { pick, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
+  const { resolvePickedFileUri } = require('../utils/resolvePickedFileUri');
+  try {
+    const [file] = await pick({ mode: 'open', allowMultiSelection: false });
+    if (!file) return;
+    await installSoundfontFrom(await resolvePickedFileUri(file.uri, file.name || 'instruments.sf2'), file.name || 'instruments');
+  } catch (e: any) { if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) throw e; }
+}
+
+/** Switch between the real instruments and the built-in synthesiser without removing the SoundFont. */
+export function setRealInstruments(on: boolean): void { useMusicLibrary.getState().setUseSoundfont(on); }
 
 export function removeSoundfont(): void {
   const sf = useMusicLibrary.getState().soundfont;

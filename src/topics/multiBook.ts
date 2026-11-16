@@ -23,9 +23,10 @@ export function mergeBooks(books: BookChapters[]): MergedTopic[] {
     let after = -1; // where the book's previous chapter landed, so a chapter only this book has goes beside it
     for (const c of book.chapters) {
       // A chapter whose title could not be found keeps its number, so no chapter of a book is dropped.
-      const title = c.title.trim() || `Chapter ${c.number}`;
+      const untitled = !c.title.trim();
+      const title = untitled ? `Chapter ${c.number} of ${book.doc.replace(/\.[A-Za-z0-9]{2,4}$/, '').slice(0, 30)}` : c.title.trim();
       if (title.length < 4 || SKIP.test(title)) continue;
-      const w = words(title);
+      const w = untitled ? new Set<string>() : words(title); // two books' untitled "Chapter 7" are not the same subject
       // Only a topic from ANOTHER book is the same subject: two chapters of one book are two units, however alike their titles.
       const at = topics.findIndex((t) => !t.docs.includes(book.doc) && same(w, keyOf(t)));
       if (at >= 0) {

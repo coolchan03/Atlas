@@ -210,7 +210,8 @@ export const whole = (v: unknown, max: number): string | null => { const t = str
 
 /** An assignment has to give real work: something to write, work out or explain, with a good answer to compare with. A task answered by pressing a button ("click next") is not one. */
 export function isRealAssignment(task: string, model: string, rubric: string[]): boolean {
-  return task.length >= 60 && model.length >= 60 && rubric.length >= 2 && !/\b(click|tap|press)\b[^.]{0,20}\b(next|continue|done|finish|ok)\b/i.test(task);
+  // Short is fine ("Translate this sentence", "Write a function that reverses a string"); a task answered by pressing a button, or with nothing to compare an answer to, is not.
+  return task.length >= 30 && model.length >= 10 && rubric.length >= 1 && !/\b(click|tap|press)\b[^.]{0,20}\b(next|continue|done|finish|ok)\b/i.test(task);
 }
 
 /** Text that keeps its paragraph breaks (str() squeezes everything onto one line): lines tidied, blank lines at most one, so a lesson can have space between paragraphs. */

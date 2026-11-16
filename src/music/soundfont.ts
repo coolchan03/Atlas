@@ -129,28 +129,46 @@ function envelopeOf(layer: { gens: Gens; pre: Gens }, req: NoteRequest): Envelop
   };
 }
 
-/** The volume at time t while the note is held: silent through the delay, a rise, a hold, then a fall to the sustain level (the fall is 100 dB over the decay time). */
-function heldLevel(t: number, e: Envelope): number {
-  if (t < e.delay) return 0;
-  if (t < e.delay + e.attack) return (t - e.delay) / e.attack;
-  if (t < e.delay + e.attack + e.hold) return 1;
-  return Math.max(e.sustain, 10 ** (-5 * (t - e.delay - e.attack - e.hold) / e.decay));
+/**
+ * The volume of the note sample by sample, with no power calculation per sample (this runs hundreds of thousands of times per note): silent
+ * through the delay, a rise, a hold, then a fall to the sustain level (100 dB over the decay time, a fixed step each sample), and after the
+ * note is let go a fall by the release time.
+ */
+class Level {
+  private level = 0; private decaying = true; private releasing = false;
+  private readonly dStep: number; private readonly rStep: number; private readonly n0: number; private readonly n1: number; private readonly n2: number;
+  constructor(private readonly e: Envelope, rate: number) {
+    this.dStep = 10 ** (-5 / (e.decay * rate)); this.rStep = 10 ** (-5 / (e.release * rate));
+    this.n0 = Math.round(e.delay * rate); this.n1 = this.n0 + Math.max(1, Math.round(e.attack * rate)); this.n2 = this.n1 + Math.round(e.hold * rate);
+  }
+  release(): void { this.releasing = true; }
+  /** True once a released note has faded to nothing. */
+  get done(): boolean { return this.releasing && this.level < 1e-4; }
+  next(i: number): number {
+    if (this.releasing) { this.level *= this.rStep; return this.level; }
+    if (i < this.n0) this.level = 0;
+    else if (i < this.n1) this.level = (i - this.n0) / (this.n1 - this.n0);
+    else if (i < this.n2) this.level = 1;
+    else if (this.decaying) { if (i === this.n2) this.level = 1; this.level *= this.dStep; if (this.level <= this.e.sustain) { this.level = this.e.sustain; this.decaying = false; } }
+    return this.level;
+  }
 }
 
 function mixLayer({ out, layer, req, data }: { out: Float32Array; layer: { sample: Sample; gens: Gens; pre: Gens }; req: NoteRequest; data: Int16Array }): void {
   const v = voicing(layer, req, data);
   const e = envelopeOf(layer, req);
-  const heldEnd = req.oneShot ? Infinity : req.held;
-  let pos = v.start; let level = 0; let releaseFrom = -1; let releaseAt = 0;
+  const level = new Level(e, req.rate);
+  const heldFrames = req.oneShot ? Infinity : Math.round(req.held * req.rate);
+  const maxRelease = Math.round(e.release * 1.5 * req.rate);
+  let pos = v.start; let releasedAt = -1;
   for (let i = 0; i < out.length; i++) {
-    const t = i / req.rate;
-    if (releaseFrom < 0 && t >= heldEnd) { releaseFrom = level; releaseAt = t; }
-    if (releaseFrom < 0) level = heldLevel(t, e);
-    else { level = releaseFrom * 10 ** (-5 * (t - releaseAt) / e.release); if (level < 1e-4 || t - releaseAt > e.release * 1.5) break; }
+    if (releasedAt < 0 && i >= heldFrames) { level.release(); releasedAt = i; }
+    const gain = level.next(i);
+    if (level.done || (releasedAt >= 0 && i - releasedAt > maxRelease)) break;
     if (pos >= v.end - 1 && !v.looping) break;
     const k = Math.floor(pos);
     const a = data[k] ?? 0; const b = data[k + 1] ?? a;
-    out[i] += (a + (b - a) * (pos - k)) * v.peak * level;
+    out[i] += (a + (b - a) * (pos - k)) * v.peak * gain;
     pos += v.step;
     if (v.looping && pos >= v.loopEnd) pos -= v.loopEnd - v.loopStart;
   }
