@@ -1,3 +1,4 @@
+import { wouldLoop } from './projectTree';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { protectedProjectStorage } from './protectedProjectStorage';
@@ -113,6 +114,7 @@ export const useProjectStore = create<ProjectState>()(
         }
         const selected = get().projects.find(p => p.id === id);
         if (selected?.pinVerifier && !isProtectedProjectUnlocked(id)) throw new Error('Unlock this project before editing it.');
+        if (updates.parentId && wouldLoop(get().projects, id, updates.parentId)) throw new Error('A folder cannot go inside itself or inside something it holds.');
         set((state) => ({
           projects: state.projects.map((project) =>
             project.id === id
@@ -133,8 +135,9 @@ export const useProjectStore = create<ProjectState>()(
         // KB-tool injection). The project store owns "what happens on delete" (like RAG
         // cleanup above); chatStore owns the conversation mutation.
         require('./storeRefs').chatStoreRef().getState().unfileConversationsForProject(id);
+        // What was inside a deleted folder moves up to the folder around it (or to the top): deleting a folder never deletes what is in it.
         set((state) => ({
-          projects: state.projects.filter((project) => project.id !== id),
+          projects: state.projects.filter((project) => project.id !== id).map((project) => (project.parentId === id ? { ...project, parentId: selected?.parentId } : project)),
         }));
       },
 

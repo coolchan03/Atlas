@@ -48,7 +48,7 @@ export async function bookChapters(projectId: string, skip: (docName: string) =>
   const { ragService } = require('../services/rag');
   const { looksLikeQuestions } = require('../study/bookQuestions');
   const out: BookChapters[] = [];
-  for (const doc of await ragService.getDocumentsByProject(projectId)) {
+  for (const doc of await ragService.getDocumentsInScope(projectId)) {
     if (!isEnabled(doc) || skip(String(doc.name))) continue;
     const text = (await ragService.getDocumentChunks(doc.id)).map((c: { content: string }) => String(c.content).replace(/^\(p\. \d+\)\s*/, '')).join('\n');
     if (looksLikeQuestions(text.slice(0, 4000))) continue;

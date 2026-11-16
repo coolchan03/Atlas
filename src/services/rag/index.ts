@@ -2,6 +2,7 @@ import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
 import { MAX_OCR_PAGES, canReadScans, pagedChunksWithScans } from './pageChunks';
 import { IndexStopped } from './indexControl';
+import { scopeOf } from './scope';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
@@ -279,6 +280,19 @@ class RagService {
     if (isProtectedProject(projectId)) return protectedVault.list(projectId);
     await this.ensureReady();
     return ragDatabase.getDocumentsByProject(projectId);
+  }
+
+  /**
+   * The documents a project can use: its own and those of the folders around it. For writing lessons, questions and checks; the list of what
+   * is in the project itself stays getDocumentsByProject. Each carries `fromFolder` when it belongs to a folder around the project.
+   */
+  async getDocumentsInScope(projectId: string) {
+    type Doc = Awaited<ReturnType<RagService['getDocumentsByProject']>>[number] & { fromFolder?: string };
+    const out: Doc[] = [];
+    for (const id of scopeOf(projectId)) {
+      for (const d of await this.getDocumentsByProject(id)) out.push(id === projectId ? d : { ...d, fromFolder: id });
+    }
+    return out;
   }
 
   /** How big a project's library is on this phone: passages per document and the space they and their search data take. Null for a protected project. */

@@ -8,7 +8,7 @@ export type RootStackParamList = {
   Chat: { conversationId?: string; projectId?: string; privateChat?: boolean; /** Text typed in the message box when the chat opens (a quick start). */ starter?: string };
   // Former ProjectsStack
   ProjectDetail: { projectId: string };
-  ProjectEdit: { projectId?: string };
+  ProjectEdit: { projectId?: string; /** A new project goes inside this folder. */ parentId?: string };
   AgentEdit: { agentId?: string; kind?: 'agent' | 'pal' };
   Learning: { agentId?: string } | undefined;
   TeachList: undefined;

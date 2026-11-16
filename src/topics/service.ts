@@ -44,7 +44,7 @@ export async function createCourse(request: CourseRequest, sources: CourseSource
 async function projectText(projectId: string): Promise<string> {
   const { ragService } = require('../services/rag');
   const parts: string[] = [];
-  for (const doc of await ragService.getDocumentsByProject(projectId)) {
+  for (const doc of await ragService.getDocumentsInScope(projectId)) {
     for (const chunk of await ragService.getDocumentChunks(doc.id)) parts.push(String(chunk.content));
   }
   return parts.join('\n');
@@ -89,7 +89,7 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
-    const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsByProject(projectId);
+    const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsInScope(projectId);
     const old = supersededEditions(docs.filter(isEnabled).map((d) => d.name));
     const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
     type Chunk = { name: string; content: string; position?: number; doc_id?: number };

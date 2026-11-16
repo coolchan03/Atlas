@@ -17,13 +17,14 @@ import { Fold } from '../components/Fold';
 import { CPA_EXAMS, EXAM_FIELDS, OTHER_EXAMS, examInfo, examLabel, type ExamCode } from './blueprints';
 import { addToPractice } from './importQuestions';
 import { outlineFromText, outlineToText, parseOutline } from './outline';
-import { describeEvidence, topicEvidence } from './progress';
+import { describeEvidence, projectIdsFor, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
 import { CORE_CPA_CODES, organizeCpaInOneProject, setupAllCpaExams, setupCpaExam, stampExamScope } from './setup';
 import { useCpa, type CpaTopic } from './store';
 import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
 import { refineOutline } from './refine';
+import { useProjectStore } from '../stores/projectStore';
 import { CoverageCard } from './CoverageCard';
 import { WeakBoardCard } from './WeakBoardCard';
 import { UpdatesCard } from './UpdatesCard';
@@ -39,7 +40,7 @@ function useExamStatus(code: ExamCode) {
     const list = Object.values(exercises);
     const rows = (exam?.topics ?? []).map((t) => ({ topic: t, evidence: topicEvidence(list, progress, { topic: t.name, projectId: exam?.projectId, examCode: code }) }));
     return { exam, rows, understood: rows.filter((r) => r.evidence.status === 'understood').length, covered: rows.filter((r) => r.topic.covered || boardCovers(board, r.topic.name)).length, board,
-      questions: list.filter((e) => e.examCode === code || (!e.examCode && !!exam?.projectId && e.projectId === exam.projectId)).length };
+      questions: list.filter((e) => e.examCode === code || (!e.examCode && !!e.projectId && projectIdsFor(exam?.projectId).includes(e.projectId))).length };
   }, [exam, exercises, progress, courses]);
 }
 
@@ -125,10 +126,13 @@ export const CpaExamScreen: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [outlineBusy, setOutlineBusy] = useState(false);
   const projectId = status.exam?.projectId;
+  const folderId = useProjectStore((s) => s.projects.find((p) => p.id === projectId)?.parentId);
   const groupProject = useCpa((s) => s.groupProjectId);
   // The outline starts rough and gets more detailed from the documents in the project: each time the documents change, chapters the checklist lacks are added.
   useEffect(() => { if (projectId && docs) refineOutline(code).then((n) => { if (n) setMessage(`Added ${n} topic${n === 1 ? '' : 's'} from your documents to the outline.`); }); }, [projectId, docs, code]);
-  useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsByProject(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
+  useEffect(() => { if (projectId) Promise.resolve(ragService.getDocumentsInScope(projectId)).then((d: unknown[]) => setDocs(d.length)).catch(() => setDocs(null)); }, [projectId, message]);
+  // An exam set up before folders existed moves into its own project inside the folder the first time it is opened.
+  useEffect(() => { setupCpaExam(code); }, [code]);
   if (!status.exam) return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}><ScreenHeader title={examLabel(code)} /><Text style={[styles.note, styles.body, { color: colors.textSecondary }]}>Set up the exams first, from CPA exam prep.</Text></SafeAreaView>
   );
@@ -158,12 +162,13 @@ export const CpaExamScreen: React.FC = () => {
 
         <Card style={styles.card}>
           <Text style={[styles.title, { color: colors.text }]}>Your materials</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>{!projectId ? 'Practice and the checklist work without a project. To keep textbooks and notes together for the tutor, organize your CPA study in one project (optional).' : docs === null ? 'Textbooks, notes, projects and study guides for this exam.' : `${docs} document${docs === 1 ? '' : 's'} in this project. The tutor answers from them.`}</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>{!projectId ? 'Practice and the checklist work without a project. To keep textbooks and notes together for the tutor, organize your CPA study in one project (optional).' : docs === null ? 'Textbooks, notes, projects and study guides for this exam.' : `${docs} document${docs === 1 ? '' : 's'} this exam can use (its own and those in its folder). The tutor answers from them.`}</Text>
           <View style={styles.row}>
             {projectId ? (<>
               <Button title="Add files" variant="outline" onPress={() => addDocs(() => pickAndAddFiles(projectId, setMessage))} testID="cpa-add-files" />
               <Button title="Add a folder" variant="outline" onPress={() => addDocs(() => pickAndAddFolder(projectId, setMessage))} testID="cpa-add-folder" />
               <Button title="Add a zip" variant="outline" onPress={() => addDocs(() => pickAndAddZip(projectId, setMessage))} testID="cpa-add-zip" />
+              {!!folderId && <Button title="Add files for every exam in the folder" variant="outline" onPress={() => addDocs(() => pickAndAddFiles(folderId, setMessage))} testID="cpa-add-shared" />}
               <Button title="Open the project" variant="ghost" onPress={() => navigation.navigate('ProjectDetail', { projectId })} />
             </>) : (
               <Button title="Organize CPA study in one project" variant="outline" testID="cpa-organize"

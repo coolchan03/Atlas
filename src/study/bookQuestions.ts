@@ -125,7 +125,7 @@ export async function projectQuestionBank(projectId: string | undefined): Promis
   if (!projectId) return [];
   try {
     const { ragService } = require('../services/rag');
-    const docs: Array<{ id: number; name: string; size?: number }> = await ragService.getDocumentsByProject(projectId);
+    const docs: Array<{ id: number; name: string; size?: number }> = await ragService.getDocumentsInScope(projectId);
     const stamp = docs.map((d) => `${d.id}:${d.size ?? ''}`).join(',');
     const kept = cache.get(projectId);
     if (kept && kept.stamp === stamp) return kept.bank;

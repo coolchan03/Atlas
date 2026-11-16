@@ -381,6 +381,8 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** The project this one is inside (a folder), when it is inside one. Its documents are searched along with this project's. */
+  parentId?: string;
   /** Answers from this project's books quote the passage and name the document, and say when something is not in the books. */
   citeBooks?: boolean;
   isPinned?: boolean;

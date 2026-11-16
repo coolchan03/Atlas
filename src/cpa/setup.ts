@@ -29,10 +29,21 @@ export function ensureCpaProject(): string {
 /** The folder (project) an exam's material lives in: CPA Study for every CPA exam; CFA Study, CMA Study or "<exam> Study" for the others. Made on first use, never twice. */
 export function ensureExamProject(code: ExamCode): string {
   const folder = examFolder(code);
-  if (folder.key === 'cpa') return ensureCpaProject();
+  const parentId = folder.key === 'cpa' ? ensureCpaProject() : ensureFolder(folder.name, code, folder.child ? `Shared by every exam inside it: the textbooks you add here are used by each of them.` : undefined);
+  if (!folder.child) return parentId;
+  // Exams that share a folder each get a project inside it, which also uses the folder's own documents.
   const projects = useProjectStore.getState();
-  return projects.projects.find((p) => p.name === folder.name)?.id ?? projects.createProject({
-    name: folder.name, description: `Your textbooks, notes and question banks for ${examLabel(code)}. Each exam keeps its own questions and scores.`,
+  return projects.projects.find((p) => p.parentId === parentId && p.name === folder.child)?.id ?? projects.createProject({
+    name: folder.child, description: `Your documents and questions for ${examLabel(code)}. It also uses the documents in ${folder.name}.`,
+    systemPrompt: tutorPrompt(code, examLabel(code)), icon: '#1D4ED8', parentId,
+  } as any).id;
+}
+
+/** A top-level project by name, made when it is not there. */
+function ensureFolder(name: string, code: ExamCode, description?: string): string {
+  const projects = useProjectStore.getState();
+  return projects.projects.find((p) => p.name === name)?.id ?? projects.createProject({
+    name, description: description ?? `Your textbooks, notes and question banks for ${examLabel(code)}. Each exam keeps its own questions and scores.`,
     systemPrompt: tutorPrompt(code, examLabel(code)), icon: '#1D4ED8',
   } as any).id;
 }
@@ -45,13 +56,22 @@ export function ensureExamProject(code: ExamCode): string {
 export function setupCpaExam(code: ExamCode): string | undefined {
   const store = useCpa.getState();
   const existing = store.exams[code];
-  const projectId = existing?.projectId ?? ensureExamProject(code);
+  // An exam on the old shared project moves to its own project inside that folder (the folder keeps the documents, and the exam still uses them).
+  // An exam that has a project of its own from before keeps it.
+  const wantsOwn = !existing?.projectId || existing.projectId === examFolderId(code);
+  const projectId = wantsOwn ? ensureExamProject(code) : existing!.projectId;
   if (existing?.topics?.length) {
-    if (projectId && !existing.projectId) store.setExam(code, { ...existing, projectId });
+    if (projectId !== existing.projectId) store.setExam(code, { ...existing, projectId });
     return projectId;
   }
   store.setExam(code, { ...existing, projectId, topics: defaultTopics(code) });
   return projectId;
+}
+
+/** The id of the folder an exam's family shares (the CPA Study project, for a CPA exam), or undefined when there is none yet. */
+function examFolderId(code: ExamCode): string | undefined {
+  const name = examFolder(code).name;
+  return useProjectStore.getState().projects.find((p) => p.name === name || (name === CPA_PROJECT_NAME && CPA_PROJECT_NAMES.includes(p.name)))?.id;
 }
 
 /** The three core CPA sections. The discipline (BAR, ISC or TCP) is the person's own choice and is never set up for them. */
@@ -69,7 +89,8 @@ export function organizeCpaInOneProject(existingProjectId?: string): string {
   const id = existingProjectId && projects.projects.some((p) => p.id === existingProjectId) ? existingProjectId : ensureCpaProject();
   const cpa = useCpa.getState();
   cpa.setGroupProject(id);
-  for (const [code, exam] of Object.entries(cpa.exams)) if (exam && !exam.projectId) cpa.setExam(code as ExamCode, { ...exam, projectId: id });
+  // An exam with no project of its own gets one inside the folder; one that has its own keeps it.
+  for (const [code, exam] of Object.entries(cpa.exams)) if (exam && !exam.projectId) cpa.setExam(code as ExamCode, { ...exam, projectId: ensureExamProject(code as ExamCode) });
   return id;
 }
 

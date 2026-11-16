@@ -4,6 +4,7 @@ import { embeddingService } from './embedding';
 import { cosineSimilarity } from './vectorMath';
 import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
+import { scopeOf } from './scope';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -59,8 +60,9 @@ class RetrievalService {
     try {
       // Chunks where the reference is a heading ("§ 179.") first, so a section's own text is not crowded out by the many chunks that only mention it.
       const needles = refs.flatMap((r) => r.needles);
-      const headings = ragDatabase.findChunksContaining(projectId, needles.map((n) => `${n}.`), 40);
-      const found = [...headings, ...ragDatabase.findChunksContaining(projectId, needles, 60)].filter((c, i, all) => all.findIndex((o) => o.doc_id === c.doc_id && o.position === c.position) === i).filter((c) => !include || include(c.name));
+      const ids = scopeOf(projectId);
+      const headings = ids.flatMap((id) => ragDatabase.findChunksContaining(id, needles.map((n) => `${n}.`), 40));
+      const found = [...headings, ...ids.flatMap((id) => ragDatabase.findChunksContaining(id, needles, 60))].filter((c, i, all) => all.findIndex((o) => o.doc_id === c.doc_id && o.position === c.position) === i).filter((c) => !include || include(c.name));
       return found.map((c) => ({ c, s: refScore(c.content, refs) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, Math.min(topK, 4)).map((x) => ({ ...x.c, score: 1 }));
     } catch { return []; }
   }
@@ -69,7 +71,8 @@ class RetrievalService {
     if (!query.trim()) return [];
 
     const source = knowledgeSource(projectId);
-    const stored = embeddingsOf(projectId, source).filter((e) => !include || include(e.name));
+    // The folders around the project are searched with it (the textbooks kept once for every exam inside a folder).
+    const stored = scopeOf(projectId).flatMap((id) => embeddingsOf(id, knowledgeSource(id))).filter((e) => !include || include(e.name));
     if (stored.length === 0 && include) return []; // nothing of the kind asked for (for example no reference documents): not the first chunks of something else
     if (stored.length === 0) {
       // Fallback: return first chunks if no embeddings exist yet

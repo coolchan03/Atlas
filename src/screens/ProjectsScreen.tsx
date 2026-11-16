@@ -23,6 +23,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
+import { listRows, type Row } from '../stores/projectTree';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 
 type NavigationProp = CompositeNavigationProp<
@@ -41,6 +42,9 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
   const projects = everyProject.filter((p) => p.course !== 'language');
   const { conversations } = useChatStore();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  // Folders (projects with projects inside) open and close with a tap, and show what is inside them.
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  const toggleFolder = (id: string) => setOpenFolders((s) => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   // Get chat count for a project
   const getChatCount = (projectId: string) => {
@@ -82,8 +86,10 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
     navigation.navigate('ProjectEdit', {});
   };
 
-  const renderProject = ({ item, index }: { item: Project; index: number }) => {
+  const renderProject = ({ item: row, index }: { item: Row<Project>; index: number }) => {
+    const item = row.project;
     const chatCount = getChatCount(item.id);
+    const inside = projects.filter((p) => p.parentId === item.id).length;
 
     return (
       <Swipeable
@@ -94,17 +100,19 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         <AnimatedListItem
           index={index}
           trigger={focusTrigger}
-          style={styles.projectItem}
-          onPress={() => handleProjectPress(item)}
+          style={[styles.projectItem, { marginLeft: row.depth * SPACING.lg }]}
+          onPress={() => (row.folder ? toggleFolder(item.id) : handleProjectPress(item))}
+          testID={`project-row-${item.id}`}
         >
           <View style={styles.projectIcon}>
             <Text style={styles.projectIconText}>
-              {item.pinVerifier ? 'L' : item.name.charAt(0).toUpperCase()}
+              {item.pinVerifier ? 'L' : row.folder ? '' : item.name.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.projectContent}>
             <View style={styles.projectNameRow}>
               <Text style={styles.projectName} numberOfLines={1}>{item.pinVerifier ? 'Locked project' : item.name}</Text>
+              {row.folder && <Icon name={row.open ? 'folder-minus' : 'folder-plus'} size={12} color={colors.textMuted} />}
               {!item.pinVerifier && (
                 <View style={styles.chatCountTag}>
                   <Icon name="message-circle" size={8} color={colors.textMuted} />
@@ -126,7 +134,11 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
             }}>
             <Icon name="star" size={16} color={item.isPinned ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
-          <Icon name="chevron-right" size={14} color={colors.textMuted} />
+          {row.folder ? (
+            <TouchableOpacity onPress={() => handleProjectPress(item)} hitSlop={10} accessibilityLabel={`Open ${item.name} itself (${inside} inside)`} testID={`open-folder-${item.id}`}>
+              <Icon name="chevron-right" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          ) : <Icon name="chevron-right" size={14} color={colors.textMuted} />}
         </AnimatedListItem>
       </Swipeable>
     );
@@ -175,9 +187,10 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         </View>
       ) : (
         <FlatList
-          data={[...projects].sort((a, b) => Number(!!b.isPinned) - Number(!!a.isPinned) || b.updatedAt.localeCompare(a.updatedAt))}
+          data={listRows(projects, openFolders, (a, b) => Number(!!b.isPinned) - Number(!!a.isPinned) || b.updatedAt.localeCompare(a.updatedAt))}
           renderItem={renderProject}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(row) => row.project.id}
+          extraData={openFolders}
           contentContainerStyle={[styles.list, wide.column]}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={Platform.OS !== 'android'}

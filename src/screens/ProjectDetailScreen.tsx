@@ -22,6 +22,7 @@ import { isProtectedProjectUnlocked } from '../stores/protectedProjectStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
+import { FolderContents } from './FolderContents';
 import { isTextDocument } from '../services/rag/textDocument';
 import { LanguageCourseCard } from '../language/LanguageCourseCard';
 import { ProjectPinGate } from '../components/ProjectPinGate';
@@ -229,6 +230,8 @@ export const ProjectDetailScreen: React.FC = () => {
         </View>
         <Icon name="chevron-right" size={18} color={colors.textMuted} />
       </TouchableOpacity>
+
+      <FolderContents projectId={projectId} onOpen={(id) => navigation.push('ProjectDetail', { projectId: id })} onNew={(parentId) => navigation.navigate('ProjectEdit', { parentId })} />
 
       <View style={styles.sectionsContainer}>
         {/* Knowledge Base Section */}

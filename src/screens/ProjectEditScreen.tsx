@@ -24,6 +24,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 import { ProjectPinGate } from '../components/ProjectPinGate';
+import { FolderPicker } from '../components/FolderPicker';
 import { protectProject, permanentlyUnprotectProject } from '../stores/protectedProjectStorage';
 import { PROJECT_TYPES, isStarterInstructions, projectType, type ProjectKind } from '../projects/projectTypes';
 const BACKGROUNDCOLOR_RGBA_0_0_0_0_5 = 'rgba(0,0,0,0.5)';
@@ -74,6 +75,8 @@ export const ProjectEditScreen: React.FC = () => {
   }, []);
 
   const [kind, setKind] = useState<ProjectKind>('general');
+  // The folder this project is inside (a new project can start inside one, from a folder's page).
+  const [parentId, setParentId] = useState<string | undefined>(route.params?.parentId);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -84,6 +87,7 @@ export const ProjectEditScreen: React.FC = () => {
   useEffect(() => {
     if (existingProject) {
       setKind(existingProject.kind ?? 'general');
+      setParentId(existingProject.parentId);
       setFormData({
         name: existingProject.name,
         description: existingProject.description,
@@ -119,6 +123,7 @@ export const ProjectEditScreen: React.FC = () => {
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
         kind,
+        parentId,
       });
     } else {
       createProject({
@@ -127,6 +132,7 @@ export const ProjectEditScreen: React.FC = () => {
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
         kind,
+        ...(parentId ? { parentId } : {}),
       });
     }
 
@@ -176,6 +182,13 @@ export const ProjectEditScreen: React.FC = () => {
                 ))}
               </View>
               <Text style={styles.hint}>{projectType(kind).hint}</Text>
+            </>
+          )}
+          {existingProject?.course !== 'language' && (
+            <>
+              <Text style={styles.label}>Inside folder</Text>
+              <FolderPicker projectId={projectId} value={parentId} onChange={setParentId} />
+              <Text style={styles.hint}>A project inside a folder also uses the folder's documents, so textbooks you add once are there for all of them.</Text>
             </>
           )}
           <Text style={styles.label}>Name *</Text>

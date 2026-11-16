@@ -19,7 +19,7 @@ const FOUND = 0.35;
 async function inDocuments(line: string, projectId: string): Promise<LineVerdict | null> {
   try {
     const { ragService } = require('../services/rag');
-    const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsByProject(projectId);
+    const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsInScope(projectId);
     const old = supersededEditions(docs.filter(isEnabled).map((d) => d.name));
     const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
     // The law and standards are asked first, then everything else.

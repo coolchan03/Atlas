@@ -20,14 +20,20 @@ describe('an exam that is named is already known', () => {
 
 describe('every exam has a folder, made automatically', () => {
   it('shares one folder per family and gives each other exam its own', () => {
-    expect(examFolder('FAR').name).toBe('CPA Study');
+    expect(examFolder('FAR')).toMatchObject({ name: 'CPA Study', child: 'FAR: Financial Accounting and Reporting' });
     expect(examFolder('CFA2').name).toBe('CFA Study');
     expect(examFolder('SERIES7').name).toBe('Series 7 Study');
     const cfa1 = setupCpaExam('CFA1');
-    expect(setupCpaExam('CFA2')).toBe(cfa1);
+    const cfa2 = setupCpaExam('CFA2');
     const bar = setupCpaExam('BAR');
-    expect(bar).not.toBe(cfa1);
-    expect(useProjectStore.getState().projects.map((p) => p.name).sort()).toEqual(['Bar exam Study', 'CFA Study']);
+    const projects = useProjectStore.getState().projects;
+    const folder = projects.find((p) => p.name === 'CFA Study')!;
+    // The CFA levels are each a project inside one CFA Study folder; the Bar exam is a project of its own.
+    expect(projects.find((p) => p.id === cfa1)?.parentId).toBe(folder.id);
+    expect(projects.find((p) => p.id === cfa2)?.parentId).toBe(folder.id);
+    expect(cfa1).not.toBe(cfa2);
+    expect(projects.find((p) => p.id === bar)).toMatchObject({ name: 'Bar exam Study' });
+    expect(projects.find((p) => p.id === bar)?.parentId).toBeUndefined();
     expect(useCpa.getState().exams.CFA1?.topics.length).toBeGreaterThan(0); // the layout is already known
   });
 });

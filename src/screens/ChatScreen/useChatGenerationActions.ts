@@ -361,7 +361,7 @@ export async function injectRagContext(projectId: string | undefined, query: str
   setTurnSources([]);
   if (!projectId) return prompt;
   try {
-    const docs = await ragService.getDocumentsByProject(projectId);
+    const docs = await ragService.getDocumentsInScope(projectId);
     const enabledDocs = docs.filter((d: import('../../services/rag').RagDocument) => d.enabled);
     if (enabledDocs.length === 0) return prompt;
     // Warm up embedding model in background (non-blocking)

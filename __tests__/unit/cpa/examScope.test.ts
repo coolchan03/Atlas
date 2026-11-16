@@ -16,12 +16,15 @@ describe('UX-05 exam scope', () => {
   it('setting up the core exams puts them all in ONE project, CPA Study, made automatically', () => {
     setupAllCpaExams();
     expect(Object.keys(useCpa.getState().exams).sort()).toEqual(['AUD', 'FAR', 'REG']);
+    // One CPA Study folder, with a project inside it for each exam.
     const projects = useProjectStore.getState().projects;
-    expect(projects).toHaveLength(1);
-    expect(projects[0].name).toBe('CPA Study');
-    expect(['FAR', 'AUD', 'REG'].every((c) => useCpa.getState().exams[c as 'FAR']?.projectId === projects[0].id)).toBe(true);
-    setupAllCpaExams(); // again: still one
-    expect(useProjectStore.getState().projects).toHaveLength(1);
+    const folder = projects.find((p) => p.name === 'CPA Study')!;
+    expect(projects.filter((p) => !p.parentId).map((p) => p.name)).toEqual(['CPA Study']);
+    const inside = projects.filter((p) => p.parentId === folder.id);
+    expect(inside.map((p) => p.name).sort()).toEqual(['AUD: Auditing and Attestation', 'FAR: Financial Accounting and Reporting', 'REG: Taxation and Regulation']);
+    expect(['FAR', 'AUD', 'REG'].every((c) => inside.some((p) => p.id === useCpa.getState().exams[c as 'FAR']?.projectId))).toBe(true);
+    setupAllCpaExams(); // again: nothing is made twice
+    expect(useProjectStore.getState().projects).toHaveLength(4);
   });
   it('never sets up the TCP discipline for the person', () => {
     setupAllCpaExams();
@@ -31,8 +34,8 @@ describe('UX-05 exam scope', () => {
     setupAllCpaExams();
     const id = organizeCpaInOneProject();
     organizeCpaInOneProject(id);
-    expect(useProjectStore.getState().projects).toHaveLength(1);
-    expect(['FAR', 'AUD', 'REG'].every((c) => useCpa.getState().exams[c as 'FAR']?.projectId === id)).toBe(true);
+    expect(useProjectStore.getState().projects.filter((p) => !p.parentId)).toHaveLength(1); // one folder
+    expect(['FAR', 'AUD', 'REG'].every((c) => useProjectStore.getState().projects.find((p) => p.id === useCpa.getState().exams[c as 'FAR']?.projectId)?.parentId === id)).toBe(true);
     addToPractice([q('Same text?')], { projectId: id, examCode: 'FAR' }, ['t']);
     addToPractice([q('Same text?')], { projectId: id, examCode: 'AUD' }, ['t']);
     const all = Object.values(useExerciseStore.getState().exercises);
@@ -63,6 +66,7 @@ describe('UX-05 exam scope', () => {
     setupCpaExam('AUD');
     const id = organizeCpaInOneProject();
     expect(useCpa.getState().exams.FAR?.projectId).toBe('legacy-far');
-    expect(useCpa.getState().exams.AUD?.projectId).toBe(id);
+    // AUD had none, so it gets its own project inside the shared folder; FAR keeps the one it had.
+    expect(useProjectStore.getState().projects.find((p) => p.id === useCpa.getState().exams.AUD?.projectId)?.parentId).toBe(id);
   });
 });

@@ -33,7 +33,7 @@ export async function coverageFor(code: ExamCode): Promise<TopicCoverage[]> {
   const exam = useCpa.getState().exams[code];
   if (!exam?.projectId) return [];
   const { ragService } = require('../services/rag');
-  const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsByProject(exam.projectId);
+  const docs: Array<{ name: string; enabled?: number | boolean }> = await ragService.getDocumentsInScope(exam.projectId);
   const old = supersededEditions(docs.filter(isEnabled).map((d) => d.name));
   const usable = (n: string) => !old.has(n) && !isOutlineDocument(n);
   const out: TopicCoverage[] = [];

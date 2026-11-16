@@ -55,3 +55,25 @@ it('a backup restore or append counts as a change, so a search never serves the 
   ragDatabase.restoreProjectDocuments(['p2'], [doc]);
   expect(ragDatabase.version).toBeGreaterThan(v1);
 });
+
+it('a project inside a folder searches the folder\'s documents too, and a sibling does not see them', async () => {
+  installRealSqlite();
+  const { ragService } = require('../../src/services/rag');
+  const { useProjectStore } = require('../../src/stores/projectStore');
+  const make = (name: string, parentId?: string) => useProjectStore.getState().createProject({ name, description: '', systemPrompt: '', ...(parentId ? { parentId } : {}) }).id;
+  const folder = make('CPA Study');
+  const far = make('FAR', folder);
+  const aud = make('AUD', folder);
+  const alone = make('Alone');
+  mockText = filler('Chapter 3. Shared textbook on expensing property.');
+  await ragService.indexDocument({ projectId: folder, filePath: '/in/Shared book.pdf', fileName: 'Shared book.pdf', fileSize: 100 });
+  mockText = filler('Chapter 1. FAR only notes on expensing property.');
+  await ragService.indexDocument({ projectId: far, filePath: '/in/FAR notes.pdf', fileName: 'FAR notes.pdf', fileSize: 100 });
+  const names = (r: { chunks: Array<{ name: string }> }) => new Set(r.chunks.map((c) => c.name));
+  expect(names(await ragService.searchProject(far, 'expensing property', { topK: 6 }))).toEqual(new Set(['Shared book.pdf', 'FAR notes.pdf']));
+  expect(names(await ragService.searchProject(aud, 'expensing property', { topK: 6 }))).toEqual(new Set(['Shared book.pdf']));
+  expect(names(await ragService.searchProject(alone, 'expensing property', { topK: 6 }))).toEqual(new Set());
+  const docs = await ragService.getDocumentsInScope(far);
+  expect(docs.map((d: { name: string; fromFolder?: string }) => [d.name, !!d.fromFolder]).sort()).toEqual([['FAR notes.pdf', false], ['Shared book.pdf', true]]);
+  expect((await ragService.getDocumentsByProject(far)).map((d: { name: string }) => d.name)).toEqual(['FAR notes.pdf']); // the project's own list is just its own
+});

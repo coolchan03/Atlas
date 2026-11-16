@@ -25,7 +25,7 @@ export function ExamMatchCard({ course: shown }: { course: Course }) {
     try {
       const { exercises, progress } = useExerciseStore.getState();
       const passages: string[] = [];
-      for (const doc of course.projectId ? await ragService.getDocumentsByProject(course.projectId) : []) {
+      for (const doc of course.projectId ? await ragService.getDocumentsInScope(course.projectId) : []) {
         for (const chunk of await ragService.getDocumentChunks(doc.id)) passages.push(String(chunk.content));
       }
       setRows(matchExam({ code: next, course, passages, exercises: Object.values(exercises), progress }));

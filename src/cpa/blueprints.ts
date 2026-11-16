@@ -140,11 +140,11 @@ export const examLabel = (code: ExamCode): string => EXAMS.find((e) => e.code ==
 export const examInfo = (code: ExamCode): ExamInfo => EXAMS.find((e) => e.code === code)!;
 
 /** The folder an exam's material lives in: every CPA exam shares "CPA Study", the CFA levels share "CFA Study", the CMA parts "CMA Study", any other exam has its own. */
-export function examFolder(code: ExamCode): { key: string; name: string } {
+export function examFolder(code: ExamCode): { key: string; name: string; /** The folder inside it that is this exam's own: set when several exams share the folder, so the folder holds one project per exam. */ child?: string } {
   const info = examInfo(code);
-  if (info.group === 'cpa') return { key: 'cpa', name: 'CPA Study' };
-  if (code.startsWith('CFA')) return { key: 'cfa', name: 'CFA Study' };
-  if (code.startsWith('CMA')) return { key: 'cma', name: 'CMA Study' };
+  if (info.group === 'cpa') return { key: 'cpa', name: 'CPA Study', child: `${info.short}: ${info.name}` };
+  if (code.startsWith('CFA')) return { key: 'cfa', name: 'CFA Study', child: info.label };
+  if (code.startsWith('CMA')) return { key: 'cma', name: 'CMA Study', child: info.label };
   return { key: code.toLowerCase(), name: `${info.label} Study` };
 }
 

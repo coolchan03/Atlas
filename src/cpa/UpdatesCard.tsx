@@ -24,7 +24,7 @@ export function UpdatesCard({ code }: { code: ExamCode }) {
     try {
       const { ragService } = require('../services/rag');
       // The books are the documents lessons are taught from; the law and standards are dated by their own editions and say nothing of how old the books are.
-      const docs: Array<{ name: string; enabled?: number | boolean }> = exam?.projectId ? await ragService.getDocumentsByProject(exam.projectId) : [];
+      const docs: Array<{ name: string; enabled?: number | boolean }> = exam?.projectId ? await ragService.getDocumentsInScope(exam.projectId) : [];
       const names = docs.filter(isEnabled).map((d) => d.name).filter(isTeaching);
       const fromNames = newestBookYear(names);
       const bookYear = fromNames ?? new Date().getFullYear() - 2;
