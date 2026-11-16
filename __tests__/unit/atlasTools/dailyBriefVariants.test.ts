@@ -16,8 +16,8 @@ jest.mock('../../../src/atlasTools/offlineLibrary', () => ({
 const mockOffGrid = { on: false };
 jest.mock('../../../src/atlasTools/offGrid', () => ({ offGridOn: () => mockOffGrid.on }));
 const mockCal: { ctx: unknown } = { ctx: null };
-jest.mock('../../../src/atlasTools/calendarBrief', () => ({ readCalendarContext: async () => mockCal.ctx, calendarSummary: () => 'You have a flight today.', fetchFlightStatus: async (f: string) => (f === 'UA1' ? 'On time' : null) }));
-jest.mock('../../../src/atlasTools/weather', () => ({ fetchWeather: async () => ({ ok: true }), weatherSummary: () => 'Sunny and 20 degrees.' }));
+jest.mock('../../../src/atlasTools/calendarBrief', () => ({ readCalendarContext: async () => mockCal.ctx, calendarSummary: () => 'You have a flight today.', calendarSpoken: () => 'On your calendar today: a flight.', fetchFlightStatus: async (f: string) => (f === 'UA1' ? 'On time' : null) }));
+jest.mock('../../../src/atlasTools/weather', () => ({ fetchWeather: async () => ({ ok: true }), weatherSummary: () => 'Sunny and 20 degrees.', weatherSpoken: () => 'The weather today is sunny.' }));
 
 import { makeBriefing, useBriefPrefs, expertCast, parseInterests, parseRss, greetingLine, latestHeadlines, aiScreen, todayKey, todaysBrief, briefings } from '../../../src/atlasTools/dailyBrief';
 
@@ -50,6 +50,9 @@ it('reads the article itself and the flight, weather and calendar when they are 
   const steps: string[] = [];
   const r = await makeBriefing((m) => steps.push(m), 2);
   expect(steps.some((s) => /Checking flight UA1/.test(s))).toBe(true);
+  // The weather and the day's calendar are said as fixed lines right after the greeting, and no step shows a headline.
+  expect(r.podcast!.slice(0, 3).map((l) => l.text)).toEqual([greetingLine(), 'The weather today is sunny.', 'On your calendar today: a flight.']);
+  expect(steps.some((s) => /Senate|Ceasefire/.test(s))).toBe(false);
   expect(r.headlines?.length).toBeGreaterThan(0);
   expect(todaysBrief()).toBeTruthy();
   expect(briefings().length).toBeGreaterThan(0);

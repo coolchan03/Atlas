@@ -449,7 +449,8 @@ async function writeOutlinedEpisode(
     if (opts.shouldStop?.() && lines.length >= 4) break;
     // Once the length is reached only the items marked `always` (a fun fact) are still written.
     if (finished && !outline[i].always) continue;
-    onStep(`Writing part ${i + 1} of ${outline.length}: ${outline[i].topic.slice(0, 60)}...`);
+    // Only the number: an outline item is often a headline, which would spoil the show.
+    onStep(`Writing part ${i + 1} of ${outline.length}...`);
     const part = outline[i];
     part.sources.forEach((x) => all.push(x));
     const n = itemLines(opts, part.sources);
