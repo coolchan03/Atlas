@@ -87,13 +87,18 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
     deleteGeneratedImage: jest.fn(),
   },
 }));
-jest.mock('../../../src/services/rag', () => ({
-  ragService: {
+jest.mock('../../../src/services/rag', () => {
+  const ragService: Record<string, jest.Mock> = {
     searchProject: jest.fn(() => Promise.resolve({ chunks: [], truncated: false })),
     getDocumentsByProject: jest.fn(() => Promise.resolve([])),
-  },
+  };
+  // The chat lists the documents a project can use: its own and its folder's (the same list, for a project in no folder).
+  ragService.getDocumentsInScope = jest.fn((id: string) => ragService.getDocumentsByProject(id));
+  return {
+  ragService,
   retrievalService: { formatForPrompt: jest.fn(() => '<knowledge_base>mock RAG context</knowledge_base>') },
-}));
+  };
+});
 jest.mock('../../../src/services/rag/embedding', () => ({
   embeddingService: {
     isLoaded: jest.fn(() => false),

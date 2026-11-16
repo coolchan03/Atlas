@@ -26,7 +26,7 @@ const PLAN = JSON.stringify({
   ] }],
 });
 const LESSON = JSON.stringify({ sections: [{ heading: 'Assets', text: 'Things the business owns.', example: 'Cash: 500' }], keyPoints: ['Assets = liabilities + equity'] });
-const PRACTICE = JSON.stringify({ task: 'Is a delivery van an asset or a liability?', hint: 'Who owns it?', model: 'An asset: the business owns it.', rubric: ['says asset'] });
+const PRACTICE = JSON.stringify({ task: 'Is a delivery van an asset or a liability? Explain your answer in two sentences, saying who owns it and what it will be used for.', hint: 'Who owns it?', model: 'An asset: the business owns the van and will use it to earn money, so it is something of value that the business controls.', rubric: ['says asset', 'says the business owns it'] });
 const GRADE = JSON.stringify({ score: 95, feedback: 'Right: the van is owned, so it is an asset.' });
 
 it('plans a course on any subject, then plays a lesson and a practice square the AI writes', async () => {
@@ -79,7 +79,7 @@ it('plans a course on any subject, then plays a lesson and a practice square the
   boundary.llama!.scriptCompletion({ text: PRACTICE });
   mockParams = { courseId: course.id, key: 's5' }; // the chapter's assignment square
   const practice = rtl.render(React.createElement(TopicSquareScreen));
-  expect(await practice.findByText('Is a delivery van an asset or a liability?', {}, { timeout: 8000 })).toBeTruthy();
+  expect(await practice.findByText(/^Is a delivery van an asset or a liability\?/, {}, { timeout: 8000 })).toBeTruthy();
   boundary.llama!.scriptCompletion({ text: GRADE });
   rtl.fireEvent.changeText(practice.getByTestId('practice-input'), 'An asset');
   rtl.fireEvent.press(practice.getByTestId('practice-check'));
