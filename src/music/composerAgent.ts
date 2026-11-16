@@ -8,6 +8,8 @@
 import { instrumentsForPrompt } from './catalog';
 import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
+import { seedFor } from './arrange';
+import { THEORY_PRIMER, conformScore, harmonyPlan, planText, type HarmonyPlan } from './theory';
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
 import type { MusicScore } from './types';
 
@@ -30,8 +32,10 @@ LOUDNESS: melody 0.45-0.7, chords and pads 0.2-0.4, bass 0.4-0.6, drums 0.3-0.8.
 INSTRUMENTS you may use (use the id):
 ${instrumentsForPrompt()}
 
+${THEORY_PRIMER}
+
 HOW TO WRITE IT
-- Pick a key and stay in it. Use a chord progression of 4 chords repeating (for example I-vi-IV-V), one chord per bar or two.
+- The request gives you the KEY, the scale and the chord of every bar: use them exactly. (With no plan, pick a key and stay in it, with a chord progression of 4 chords repeating.)
 - Give every part its job: a bass line on the chord roots, chords or a pad in the middle, a melody on top, and drums if the style needs a beat.
 - Use 3 to 6 different instruments. Choose them to fit the style and the mood the user asked for. Do not put everything on the piano.
 - Build it: start sparse, add instruments, bring the melody in, and end by thinning out. Repeat a short melody idea with small changes so it is memorable.
@@ -53,17 +57,22 @@ DRUM hat 0 0.4
 DRUM hat 0.5 0.3`;
 }
 
+/** "D Dorian" for the note. */
+const harmonyLabel = (plan: HarmonyPlan): string => planText(plan).split('.')[0].replace('KEY: ', '');
+
 export interface ComposeOptions { seconds?: number; /** Replaces the model call (tests, and callers that already hold a model). */ ask?: (system: string, user: string) => Promise<string>; style?: StyleMood }
 export interface Composed { score: MusicScore; via: 'composer' | 'built-in'; instruments: string; style: StyleMood; note: string }
 
 const clampSeconds = (s: number | undefined) => Math.max(20, Math.min(120, Math.round(s ?? 60)));
 
 /** What the agent is told about this request: the wanted style and mood in words, a tempo, a length in bars, and the instruments that suit it. */
-export function composerBrief(request: string, style: StyleMood, seconds: number): { text: string; bars: number; bpm: number } {
+export function composerBrief(request: string, style: StyleMood, seconds: number): { text: string; bars: number; bpm: number; plan: HarmonyPlan } {
   const spec = specFor(style);
-  const bars = Math.max(8, Math.min(32, Math.round((Math.min(seconds, 90) * spec.bpm) / 60 / 4)));
-  const text = `Request: ${request.trim().slice(0, 300) || 'background music'}\nStyle: ${styleLabel(style)}. Suggested tempo about ${spec.bpm} BPM. Instruments that suit it: ${instrumentsOf(style)}, and any others from the list that fit.\nWrite exactly ${bars} bars (${bars * 4} beats). Reply with the score lines only.`;
-  return { text, bars, bpm: spec.bpm };
+  const bars = Math.max(8, Math.min(32, Math.round((Math.min(seconds, 90) * spec.bpm) / 60 / spec.beatsPerBar)));
+  // The key, the scale and a chord for every bar are worked out here, so the model writes notes that fit instead of guessing a key.
+  const plan = harmonyPlan(spec, bars, seedFor(request, style));
+  const text = `Request: ${request.trim().slice(0, 300) || 'background music'}\nStyle: ${styleLabel(style)}. Tempo about ${spec.bpm} BPM. Instruments that suit it: ${instrumentsOf(style)}, and any others from the list that fit.\n${planText(plan)}\nWrite exactly ${bars} bars (${bars * spec.beatsPerBar} beats). Reply with the score lines only.`;
+  return { text, bars, bpm: spec.bpm, plan };
 }
 
 async function askModelDefault(system: string, user: string): Promise<string> {
@@ -82,8 +91,12 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
     try {
       const raw = await ask(composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${problem}). Write it again using only TITLE, BPM, NOTE and DRUM lines.` : brief.text);
       const report: AgentScoreReport = parseAgentScore(raw);
+      // What the model wrote is held to the plan: out-of-key notes, off-beat timings and a bass that misses the chord root are put right.
+      const fixed = conformScore(report.score, brief.plan);
+      report.score = fixed.score;
       const instruments = [...report.instruments, ...report.drums.map((d) => `${d} drum`)].join(', ');
-      return { score: report.score, via: 'composer', instruments, style, note: `Written by the composer with ${instruments}.` };
+      const total = Object.values(fixed.changed).reduce((a, b) => a + b, 0);
+      return { score: report.score, via: 'composer', instruments, style, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}.` };
     } catch (e: any) {
       problem = String(e?.message || e);
       if (/no model|could not be loaded|failed to load/i.test(problem)) break; // no point asking again

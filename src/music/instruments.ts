@@ -8,6 +8,7 @@
  * It is still synthesised, not sampled, so it will not fool anyone into thinking real players are in the room.
  */
 import type { Band, DrumKind, MusicNote, MusicRole, SoundPreset, Voice as VoiceName } from './types';
+import { sampledNote } from './sampled';
 
 const TAU = 2 * Math.PI;
 const NYQUIST_GUARD = 9000; // partials above this are left out so they cannot alias at the lowest sample rate used
@@ -296,6 +297,9 @@ export function noteWave(note: MusicNote, format: { samples: number; rate: numbe
   const out = new Float32Array(samples);
   const role = note.role ?? 'melody';
   if (role === 'perc') {
+    // Real drums from the installed SoundFont, when there is one.
+    const real = sampledNote(note, 'bass', { samples, rate });
+    if (real) return real;
     const kind = note.voice;
     if (isDrumKind(kind)) for (let i = 0; i < samples; i++) out[i] = drumByKind(kind, i, rate) * note.gain;
     else for (let i = 0; i < samples; i++) out[i] = drumSample(note.pitch, i, rate) * note.gain;
@@ -303,6 +307,9 @@ export function noteWave(note: MusicNote, format: { samples: number; rate: numbe
   }
   const hz = 440 * 2 ** ((note.pitch - 69) / 12);
   const name = isVoiceName(note.voice) ? note.voice : band?.[partOf(role)] ?? KIT[preset][partOf(role)];
+  // A real instrument from the installed SoundFont, when there is one for this voice: it brings its own attack and fade.
+  const real = sampledNote(note, name, { samples, rate });
+  if (real) return real;
   const raw = GENERATORS[name](hz, samples, rate);
   const { attack, release } = SHAPE[name];
   for (let i = 0; i < samples; i++) {

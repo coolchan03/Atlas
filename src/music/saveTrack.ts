@@ -6,9 +6,18 @@ import RNFS from 'react-native-fs';
 import { wavBytes, toBase64 } from '../atlasVoice/jingles';
 import { MUSIC_RATE, renderMusic, type MusicMood, type MusicScore } from './composition';
 import { useMusicLibrary, type InstrumentalTrack } from './library';
+import { prepareInstruments } from './soundfontFiles';
 
-export async function saveInstrumental(score: MusicScore, o: { mood: MusicMood; seconds: number; /** Who wrote it, kept in the score file. */ by?: string }): Promise<InstrumentalTrack> {
+/** Lets the screen repaint between the slow steps of making a track, so the person sees what is happening. */
+const breathe = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 30));
+
+export async function saveInstrumental(score: MusicScore, o: { mood: MusicMood; seconds: number; /** Who wrote it, kept in the score file. */ by?: string; /** Told what is being done, in words, as each step starts. */ onStep?: (message: string) => void }): Promise<InstrumentalTrack> {
+  const step = async (message: string) => { o.onStep?.(message); await breathe(); };
+  await step('Getting the instruments ready...');
+  const sound = await prepareInstruments();
+  await step(`Playing all ${score.notes.length} notes into a recording on ${sound.note} (a few seconds)...`);
   const pcm = renderMusic(score, { preset: 'band', seconds: o.seconds });
+  await step('Saving the recording to this phone...');
   const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
   await RNFS.mkdir(dir);
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

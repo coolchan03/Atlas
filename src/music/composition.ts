@@ -119,7 +119,7 @@ function mixNote(buffer: Float32Array, note: MusicNote, { bpm, preset, rate, loo
   let wave = made.get(key);
   if (!wave) { wave = noteWave(note, { samples, rate, preset, band }); made.set(key, wave); }
   for (let start = startInLoop; start < frames; start += loopFrames) {
-    const end = Math.min(samples, frames - start);
+    const end = Math.min(wave.length, frames - start); // a recorded note rings on a little after its length
     for (let i = 0; i < end; i++) buffer[start + i] += wave[i];
   }
 }

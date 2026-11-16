@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -12,6 +12,7 @@ import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
 import { saveInstrumental } from '../music/saveTrack';
 import { composeMusic } from '../music/composerAgent';
+import { SoundfontCard } from '../music/SoundfontCard';
 
 const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
 const GROUPS: StyleGroup[] = ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'];
@@ -30,20 +31,30 @@ export function MusicStudioScreen() {
   const [busy, setBusy] = useState(false);
   const [score, setScore] = useState<MusicScore | null>(null);
   const [selected, setSelected] = useState('');
+  // What the system is doing right now, in words, from the first tap until the sound is playing.
+  const [status, setStatus] = useState('');
+  const [position, setPosition] = useState(0);
   const tracks = useMusicLibrary((s) => s.tracks);
   const looping = useMusicLibrary((s) => s.loop);
   const volume = useMusicLibrary((s) => s.volume);
   const playback = useMusicPlayback();
   const activeTrack = tracks.find((t) => t.id === selected) || tracks.find((t) => t.id === playback.current?.id) || null;
   const playing = playback.playing;
+  useEffect(() => {
+    if (!playing) return undefined;
+    const timer = setInterval(() => setPosition(instrumentalPlayer.position()), 500);
+    return () => clearInterval(timer);
+  }, [playing]);
+  const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const play = async (track: InstrumentalTrack) => {
     try { await instrumentalPlayer.play(track); }
     catch (error: any) { Alert.alert('Playback failed', String(error?.message || error)); }
   };
   const saveScore = async (next: MusicScore, by?: string): Promise<void> => {
-    const track = await saveInstrumental(next, { mood, seconds: duration, by });
+    const track = await saveInstrumental(next, { mood, seconds: duration, by, onStep: setStatus });
     setSelected(track.id);
     setScore(next);
+    setStatus('Starting the player...');
     await play(track); // Crossfades if another track is playing; navigation does not stop it.
   };
   /** Makes a track: the tune for this style, energy and variant, played by the style's band. */
@@ -51,20 +62,23 @@ export function MusicStudioScreen() {
     if (busy) return;
     const useMood = next.mood ?? mood; const useVariant = next.variant ?? variant;
     setBusy(true);
+    setStatus(`Writing a ${STYLES[useMood].label} tune...`);
     try { await saveScore(composeStyled(prompt, useMood, { variant: useVariant, energy })); }
     catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setStatus(''); }
   };
   /** The hidden composer writes the tune with the on-phone AI and a long list of instruments; the built-in composer steps in if it cannot. */
   const askComposer = async () => {
     if (busy) return;
     setBusy(true);
+    setStatus('Asking the AI composer to write the score (this can take a minute or two)...');
     try {
       const composed = await composeMusic(`${prompt} ${STYLES[mood].label}`.trim(), { seconds: duration, style: mood });
+      setStatus(composed.via === 'composer' ? 'The composer wrote the score. Checking it against the key and chords...' : 'The AI could not write a usable score; using the built-in composer...');
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setStatus(''); }
   };
   const another = () => { setVariant(variant + 1); return make({ variant: variant + 1 }); };
   const surprise = () => {
@@ -139,10 +153,13 @@ export function MusicStudioScreen() {
             <Text style={{ color: colors.text }}>Surprise me</Text>
           </TouchableOpacity>
         </View>
+        {!!status && <View style={styles.statusRow} testID="music-status"><ActivityIndicator color={colors.primary} /><Text style={[styles.statusText, { color: colors.text }]}>{status}</Text></View>}
         {!!playback.error && <Text style={{ color: colors.error }} testID="music-playback-error">{playback.error}</Text>}
+        <SoundfontCard />
         <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-persistent-player">
           <Text style={[styles.title, { color: colors.text }]}>Now playing</Text>
           <Text style={{ color: colors.textSecondary }}>{playback.current?.title || 'Choose or create an instrumental'}</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]} testID="music-player-state">{playback.error ? 'Could not play it.' : playback.loading ?? (playing ? `Playing ${clock(position)} of ${clock(playback.current?.seconds ?? 0)}${playback.ducked ? ' (softened while Atlas speaks)' : ''}` : playback.paused ? `Paused at ${clock(position)}` : 'Stopped')}</Text>
           <Text style={[styles.small, { color: colors.textSecondary }]}>Music continues when you switch Atlas screens. It softens while Atlas speaks, and pauses when the app is backgrounded or a call interrupts audio.</Text>
           <View style={styles.options}>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={() => instrumentalPlayer.previous().catch((e) => Alert.alert('Playback', String(e)))} accessibilityLabel="Previous instrumental" testID="music-previous"><Icon name="skip-back" size={18} color={colors.primary} /></TouchableOpacity>
@@ -190,6 +207,8 @@ const styles = StyleSheet.create({
   label: { fontWeight: '600' },
   small: { fontSize: 12 },
   centered: { alignSelf: 'center' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusText: { flex: 1 },
   end: { alignSelf: 'flex-end', marginTop: 6 },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },
 });

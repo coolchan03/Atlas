@@ -10,17 +10,26 @@ export interface InstrumentalTrack {
   id: string; title: string; path: string; scorePath: string;
   mood: MusicMood; sound: SoundPreset; seconds: number; createdAt: string;
 }
+/** The SoundFont (real instrument recordings) the person added, kept in the app's folder. */
+export interface InstalledSoundfont { name: string; path: string; bytes: number }
 interface MusicLibraryState {
   tracks: InstrumentalTrack[];
   volume: number;
   loop: boolean;
+  soundfont: InstalledSoundfont | null;
+  /** Play on the real instruments when a SoundFont is installed. */
+  useSoundfont: boolean;
+  setSoundfont: (sf: InstalledSoundfont | null) => void;
+  setUseSoundfont: (on: boolean) => void;
   setVolume: (value: number) => void;
   setLoop: (value: boolean) => void;
   addTrack: (track: InstrumentalTrack) => void;
   removeTrack: (id: string) => void;
 }
 export const useMusicLibrary = create<MusicLibraryState>()(persist((set) => ({
-  tracks: [], volume: 0.45, loop: true,
+  tracks: [], volume: 0.45, loop: true, soundfont: null, useSoundfont: true,
+  setSoundfont: (soundfont) => set({ soundfont }),
+  setUseSoundfont: (useSoundfont) => set({ useSoundfont }),
   setVolume: (volume) => set({ volume: clampMusicVolume(volume) }),
   setLoop: (loop) => set({ loop }),
   addTrack: (track) => set((s) => ({ tracks: [track, ...s.tracks.filter((t) => t.id !== track.id)].slice(0, 250) })),
@@ -28,7 +37,7 @@ export const useMusicLibrary = create<MusicLibraryState>()(persist((set) => ({
 }), {
   name: 'atlas-instrumental-library-v1', version: 1,
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ tracks: s.tracks, volume: s.volume, loop: s.loop }),
+  partialize: (s) => ({ tracks: s.tracks, volume: s.volume, loop: s.loop, soundfont: s.soundfont, useSoundfont: s.useSoundfont }),
 }));
 
 /** Delete exactly the two files for this track after it has been stopped. Never traverse user-chosen paths. */

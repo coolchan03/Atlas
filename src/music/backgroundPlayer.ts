@@ -12,9 +12,11 @@ interface MusicPlaybackState {
   paused: boolean;
   error: string | null;
   ducked: boolean;
+  /** What the player is doing before the sound starts ("Opening the audio output..."), or null. */
+  loading: string | null;
 }
 export const useMusicPlayback = create<MusicPlaybackState>(() => ({
-  current: null, playing: false, paused: false, error: null, ducked: false,
+  current: null, playing: false, paused: false, error: null, ducked: false, loading: null,
 }));
 
 /** One persistent player per app runtime. Navigation never owns, closes or resets its audio graph. */
@@ -90,9 +92,11 @@ class InstrumentalBackgroundPlayer {
     this.setupObservers();
     const request = ++this.operation;
     try {
+      useMusicPlayback.setState({ loading: 'Opening the audio output...', error: null });
       const ctx = await this.ensureContext();
-      const decoded = this.currentPath === track.path && this.currentBuffer
-        ? this.currentBuffer : await ctx.decodeAudioData(track.path.startsWith('file://') ? track.path : `file://${track.path}`);
+      const cached = this.currentPath === track.path && this.currentBuffer;
+      if (!cached) useMusicPlayback.setState({ loading: `Reading the recording of "${track.title}"...` });
+      const decoded = cached ? this.currentBuffer : await ctx.decodeAudioData(track.path.startsWith('file://') ? track.path : `file://${track.path}`);
       if (request !== this.operation) return; // newer play/stop/pause won during decoding
       const next = ctx.createBufferSource();
       next.buffer = decoded;
@@ -127,11 +131,19 @@ class InstrumentalBackgroundPlayer {
           old.stop(now + fade + 0.02);
         } catch { try { old.stop(); } catch { /* ended */ } }
       }
-      useMusicPlayback.setState({ current: track, playing: true, paused: false, error: null });
+      useMusicPlayback.setState({ current: track, playing: true, paused: false, error: null, loading: null });
     } catch (error: any) {
-      if (request === this.operation) useMusicPlayback.setState({ error: String(error?.message || error) });
+      if (request === this.operation) useMusicPlayback.setState({ error: String(error?.message || error), loading: null });
       throw error;
     }
+  }
+
+  /** Seconds played so far, for the progress line. */
+  position(): number {
+    if (!this.source || !this.context) return this.pauseOffset;
+    const duration = this.currentBuffer?.duration ?? 0;
+    const t = this.context.currentTime - this.startedAt;
+    return duration > 0 && useMusicLibrary.getState().loop ? t % duration : Math.max(0, Math.min(duration || t, t));
   }
 
   pause(): void {
@@ -159,7 +171,7 @@ class InstrumentalBackgroundPlayer {
     this.source = null;
     this.gain = null;
     this.pauseOffset = 0;
-    useMusicPlayback.setState({ playing: false, paused: false });
+    useMusicPlayback.setState({ playing: false, paused: false, loading: null });
   }
 
   setVolume(volume: number): void { useMusicLibrary.getState().setVolume(clampMusicVolume(volume)); }
