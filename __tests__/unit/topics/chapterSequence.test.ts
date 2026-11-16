@@ -49,7 +49,7 @@ describe('deeper chapters and the exam minimum', () => {
   const { EXAMS } = require('../../../src/cpa/blueprints');
   const { defaultTopics } = require('../../../src/cpa/store');
 
-  it('adds extra practice before the chapter exam, up to fourteen squares, and stays at six by default', () => {
+  it('adds extra practice before the chapter exam, up to the most a chapter can have, and stays at six by default', () => {
     expect(chapterSquares('Leases', 'Area', 'for the exam')).toHaveLength(6);
     const ten = deepChapter({ name: 'Leases', unit: 'Area', about: 'for the exam' }, 10);
     expect(ten).toHaveLength(10);

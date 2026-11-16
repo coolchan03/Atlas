@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
-import type { CoursePlan, CourseRequest, PlannedSquare, SquareContent } from './formats';
+import { MAX_SQUARES, type CoursePlan, type CourseRequest, type PlannedSquare, type SquareContent } from './formats';
 import { difficultyFromLevel, type Difficulty } from '../study/difficulty';
 import { MAX_SOURCES, type CourseSource } from './sources';
 
@@ -61,6 +61,8 @@ interface TopicsState {
   /** Changes how detailed the readings are; readings not played yet are written again that way. */
   setReadingDepth: (id: string, depth: 'standard' | 'deep') => void;
   clearContent: (id: string, key: string) => void;
+  /** Adds one square of any kind (a game, a quiz, a match...) to the board, after the given square, in the same unit. Returns its key, or null when the board is full. */
+  addSquare: (id: string, afterKey: string, square: { format: PlannedSquare['format']; title: string; focus: string }) => string | null;
   /** When a square went badly: puts a lesson that explains it differently right after it, and (for a quiz, a task or the like) a second square of the same kind with new questions after that. Returns whether any were added. */
   addRemedial: (id: string, afterKey: string) => boolean;
   remove: (id: string) => void;
@@ -124,6 +126,22 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
       // The same kind of square again, with new questions, so what was explained is tried straight away.
       const again: PlannedSquare[] = base.format === 'lesson' || base.format === 'cards' ? [] : [{ key: `${afterKey}p`, format: base.format, title: `Extra practice: ${base.title}`.slice(0, 60), focus: `New questions, different from the first time, on: ${base.focus}`, unit: base.unit, remedial: true, ...(base.topic ? { topic: base.topic } : {}) }];
       return { ...c, squares: [...c.squares.slice(0, at + 1), lesson, ...again, ...c.squares.slice(at + 1)] };
+    }) }));
+    return added;
+  },
+  addSquare: (id, afterKey, square) => {
+    let added: string | null = null;
+    set((s) => ({ courses: s.courses.map((c) => {
+      if (c.id !== id || c.squares.length >= MAX_SQUARES) return c;
+      const at = Math.max(0, c.squares.findIndex((q) => q.key === afterKey));
+      const base = c.squares[at];
+      if (!base) return c;
+      let n = c.squares.reduce((m, q) => Math.max(m, Number(q.key.replace(/\D/g, '')) || 0), 0);
+      let key = `s${++n}`;
+      while (c.squares.some((q) => q.key === key)) key = `s${++n}`;
+      added = key;
+      const sq: PlannedSquare = { key, format: square.format, title: square.title.slice(0, 60), focus: square.focus, unit: base.unit, ...(base.topic ? { topic: base.topic } : {}) };
+      return { ...c, squares: [...c.squares.slice(0, at + 1), sq, ...c.squares.slice(at + 1)] };
     }) }));
     return added;
   },

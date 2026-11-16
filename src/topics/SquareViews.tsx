@@ -10,6 +10,15 @@ import { starsForShare, type SquareContent } from './formats';
 import { Answer } from '../components/ExerciseAnswer';
 import { PeriodicView } from './PeriodicView';
 import { check, useExerciseStore, type Verdict } from '../study/exercises';
+import { JournalEntryEditor, newJournalRows } from './JournalEntryEditor';
+import { isJournalTask, journalToText, type JournalRow } from './journal';
+import { stepFeedback } from './tryStep';
+import { ProjectLearningGame } from '../components/ProjectLearningGame';
+import { ProjectGame } from '../components/games/ProjectGame';
+import { GameFinishContext } from '../components/games/kit';
+import { buildCrossword, buildWordSearch } from '../study/learningGames';
+import { buildPairs } from '../study/games/logic';
+import type { StudyResult } from '../study/store';
 
 type Of<K extends SquareContent['kind']> = Extract<SquareContent, { kind: K }>;
 interface ViewProps<K extends SquareContent['kind']> { content: Of<K>; onDone: (stars: 1 | 2 | 3, missed?: number[]) => void }
@@ -189,9 +198,13 @@ export function PracticeView({ content, onDone }: ViewProps<'practice'>) {
   const [error, setError] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(false);
   const [hint, setHint] = useState(false);
+  // A journal entry is filled in as a table (account, debit, credit) rather than written out as a sentence.
+  const journal = !content.code && isJournalTask(content.task, content.model);
+  const [rows, setRows] = useState<JournalRow[]>(newJournalRows);
+  const given = journal ? journalToText(rows) : answer;
   const checkAnswer = async () => {
     setBusy(true); setError(null);
-    try { setResult(await gradeAnswer({ task: content.task, model: content.model, rubric: content.rubric, answer })); } catch (e: any) { setError(String(e?.message || e)); }
+    try { setResult(await gradeAnswer({ task: content.task, model: content.model, rubric: content.rubric, answer: given })); } catch (e: any) { setError(String(e?.message || e)); }
     setBusy(false);
   };
   const finished = !!result || skipped;
@@ -199,13 +212,15 @@ export function PracticeView({ content, onDone }: ViewProps<'practice'>) {
     <ScrollView contentContainerStyle={styles.gap} keyboardShouldPersistTaps="handled" testID="square-practice">
       <Text style={t.body}>{content.task}</Text>
       {!!content.hint && (hint ? <Text style={t.meta}>Hint: {content.hint}</Text> : <TouchableOpacity onPress={() => setHint(true)} testID="practice-hint"><Text style={{ color: t.colors.primary }}>Show a hint</Text></TouchableOpacity>)}
-      <TextInput value={answer} onChangeText={setAnswer} multiline editable={!finished} placeholder="Your answer" placeholderTextColor={t.colors.textMuted}
-        style={[styles.input, content.code && styles.code, { color: t.colors.text, borderColor: t.colors.border }]} testID="practice-input" autoCapitalize="none" autoCorrect={!content.code} />
+      {journal
+        ? <JournalEntryEditor rows={rows} onChange={setRows} texts={[content.task, content.model]} editable={!finished} />
+        : <TextInput value={answer} onChangeText={setAnswer} multiline editable={!finished} placeholder="Your answer" placeholderTextColor={t.colors.textMuted}
+          style={[styles.input, content.code && styles.code, { color: t.colors.text, borderColor: t.colors.border }]} testID="practice-input" autoCapitalize="none" autoCorrect={!content.code} />}
       {busy && <ActivityIndicator color={t.colors.primary} />}
       {!!error && <Text style={{ color: t.colors.error }} testID="practice-error">{error}</Text>}
       {!finished && (
         <>
-          <Button title="Check my answer" disabled={!answer.trim() || busy} onPress={checkAnswer} testID="practice-check" />
+          <Button title="Check my answer" disabled={!given.trim() || busy} onPress={checkAnswer} testID="practice-check" />
           <TouchableOpacity onPress={() => setSkipped(true)} testID="practice-skip"><Text style={t.meta}>Show a good answer instead</Text></TouchableOpacity>
         </>
       )}
@@ -258,25 +273,49 @@ export function NumericView({ content, onDone }: ViewProps<'numeric'>) {
   );
 }
 
-/** One problem solved a step at a time, each step with its reason. */
+/**
+ * One problem solved a step at a time. Before each step is shown the learner writes what they think it is (or says they are not sure),
+ * then sees the step with its reason and whether they had the main idea: it is a try-it-yourself, not a click-through.
+ */
 export function WorkedView({ content, onDone }: ViewProps<'worked'>) {
   const t = useText();
-  const [shown, setShown] = useState(1);
+  const [shown, setShown] = useState(0);
+  const [attempts, setAttempts] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
   const all = shown >= content.steps.length;
+  const reveal = (attempt: string) => { setAttempts([...attempts, attempt]); setDraft(''); setShown(shown + 1); };
+  const tried = content.steps.slice(0, shown).filter((x, i) => stepFeedback(attempts[i] ?? '', `${x.step} ${x.why ?? ''}`) === 'close').length;
   return (
-    <View style={styles.gap} testID="square-worked">
+    <ScrollView contentContainerStyle={styles.gap} keyboardShouldPersistTaps="handled" testID="square-worked">
       <Text style={t.head}>{content.problem}</Text>
-      {content.steps.slice(0, shown).map((x, i) => (
-        <View key={i} style={[styles.box, t.card]}>
-          <Text style={t.body}>{i + 1}. {x.step}</Text>
-          {!!x.why && <Text style={t.meta}>Why: {x.why}</Text>}
+      {content.steps.slice(0, shown).map((x, i) => {
+        const feedback = stepFeedback(attempts[i] ?? '', `${x.step} ${x.why ?? ''}`);
+        return (
+          <View key={i} style={[styles.box, t.card]}>
+            <Text style={t.body}>{i + 1}. {x.step}</Text>
+            {!!x.why && <Text style={t.meta}>Why: {x.why}</Text>}
+            {feedback !== 'skipped' && (
+              <Text style={[t.meta, feedback === 'close' && { color: t.colors.primary }]} testID={`worked-feedback-${i}`}>
+                {feedback === 'close' ? 'You had the main idea: ' : 'Compare with what you wrote: '}{attempts[i]}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+      {!all && (
+        <View style={[styles.box, t.card]} testID="worked-try">
+          <Text style={t.head}>Your turn: step {shown + 1} of {content.steps.length}</Text>
+          <Text style={t.meta}>{shown === 0 ? 'Look at the problem above. What is the first thing to do, and why?' : 'Using the steps so far, what comes next, and why?'}</Text>
+          <TextInput value={draft} onChangeText={setDraft} multiline placeholder="Write the step in your own words" placeholderTextColor={t.colors.textMuted}
+            style={[styles.input, styles.shortInput, { color: t.colors.text, borderColor: t.colors.border }]} testID="worked-input" />
+          <Button title="Check my step" disabled={draft.trim().length < 3} onPress={() => reveal(draft.trim())} testID="worked-check" />
+          <TouchableOpacity onPress={() => reveal('')} testID="worked-next"><Text style={{ color: t.colors.primary }}>I am not sure: show me the step</Text></TouchableOpacity>
         </View>
-      ))}
+      )}
       {all && !!content.takeaway && <Text style={t.body} testID="worked-takeaway">Remember: {content.takeaway}</Text>}
-      {all
-        ? <Button title="Got it" onPress={() => onDone(3)} testID="worked-done" />
-        : <Button title="Next step" onPress={() => setShown(shown + 1)} testID="worked-next" />}
-    </View>
+      {all && <Text style={t.meta} testID="worked-score">You had the main idea on {tried} of {content.steps.length} steps.</Text>}
+      {all && <Button title="Got it" onPress={() => onDone(starsForShare(0.65 + 0.35 * (tried / Math.max(1, content.steps.length))))} testID="worked-done" />}
+    </ScrollView>
   );
 }
 
@@ -501,6 +540,38 @@ export function DrillView({ content, onDone }: ViewProps<'drill'>) {
   );
 }
 
+/**
+ * A game played from the topic's terms: crossword, word search, word scramble, memory match or guess-the-term. They are the same games the
+ * project study tools have, so they play and score the same; the square finishes when the game does.
+ */
+export function TermsGameView({ content, onDone }: ViewProps<'terms'>) {
+  const t = useText();
+  const [score, setScore] = useState<{ score: number; max: number } | null>(null);
+  const activity = useMemo<StudyResult>(() => {
+    const terms = content.terms.map((x) => ({ answer: x.answer, clue: x.clue, src: [] as number[] }));
+    const base = { createdAt: 0, topic: '', sources: [], learningTerms: terms };
+    if (content.game === 'crossword') return { ...base, kind: 'crossword', crossword: buildCrossword(terms) };
+    if (content.game === 'wordsearch') return { ...base, kind: 'wordsearch', wordSearch: buildWordSearch(terms) };
+    const data = content.game === 'memory' ? { terms, cards: buildPairs(terms, Math.min(8, terms.length), 7) } : { terms };
+    return { ...base, kind: 'game', game: { type: content.game === 'memory' ? 'pairs' : content.game, data } };
+  }, [content]);
+  const noop = React.useCallback(() => undefined, []);
+  // One stable function, and no update when the result is unchanged: the games report from an effect, so a new function or a new object each time would loop.
+  const report = React.useCallback((s: number, m: number) => setScore((prev) => (prev && prev.score === s && prev.max === m ? prev : { score: s, max: m })), []);
+  return (
+    <ScrollView contentContainerStyle={styles.gap} keyboardShouldPersistTaps="handled" testID="square-terms">
+      <GameFinishContext.Provider value={report}>
+        {activity.kind === 'game'
+          ? <ProjectGame result={activity} projectId="course-games" onOpenSource={noop} />
+          : <ProjectLearningGame activity={activity} onOpenSource={noop} />}
+      </GameFinishContext.Provider>
+      {score
+        ? <Button title="Finish" onPress={() => onDone(starsForShare(score.max ? score.score / score.max : 1))} testID="terms-done" />
+        : <TouchableOpacity onPress={() => onDone(2)} testID="terms-skip"><Text style={t.meta}>Skip this game</Text></TouchableOpacity>}
+    </ScrollView>
+  );
+}
+
 export function SquareView({ content, onDone }: { content: SquareContent; onDone: (stars: 1 | 2 | 3) => void }) {
   switch (content.kind) {
     case 'lesson': return <LessonView content={content} onDone={onDone} />;
@@ -512,6 +583,7 @@ export function SquareView({ content, onDone }: { content: SquareContent; onDone
     case 'table': return <TableView content={content} onDone={onDone} />;
     case 'typed': return <TypedView content={content} onDone={onDone} />;
     case 'tablefill': return <TableFillView content={content} onDone={onDone} />;
+    case 'terms': return <TermsGameView content={content} onDone={onDone} />;
     case 'sort': return <SortView content={content} onDone={onDone} />;
     case 'dictation': return <DictationView content={content} onDone={onDone} />;
     case 'order': return <OrderView content={content} onDone={onDone} />;
@@ -531,6 +603,7 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   step: { borderWidth: 1, borderRadius: 10, padding: 12 },
   input: { borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 120, textAlignVertical: 'top' },
+  shortInput: { minHeight: 70 },
   code: { fontFamily: 'monospace', fontSize: 14 },
   tableRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   cell: { flex: 1, minWidth: 0, paddingVertical: 6 },

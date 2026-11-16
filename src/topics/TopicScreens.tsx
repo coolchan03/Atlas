@@ -41,9 +41,12 @@ const BOARD_KIND: Record<SquareFormat, SpaceKind> = {
   lesson: 'lesson', quiz: 'speed', cards: 'story', match: 'wordsearch', order: 'podcast', practice: 'call',
   fill: 'speed', truefalse: 'speed', scenario: 'call', numeric: 'crossword', worked: 'lesson', table: 'review',
   recall: 'story', fix: 'wordsearch', tablefill: 'crossword', sort: 'podcast', dictation: 'story', reading: 'review', predict: 'speed', drill: 'crossword', periodic: 'wordsearch',
+  crossword: 'crossword', wordsearch: 'wordsearch', scramble: 'speed', memory: 'review', hangman: 'story',
 };
 const iconOf = (format: SquareFormat) => FORMATS.find((f) => f.id === format)?.icon ?? 'circle';
 
+/** The kinds of square a learner can add to the board themselves (the ones the app makes in code are left out). */
+const ADDABLE: SquareFormat[] = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman', 'match', 'quiz', 'truefalse', 'fill', 'recall', 'sort', 'order', 'cards', 'scenario', 'practice', 'numeric'];
 const LEVELS = ['Complete beginner', 'Know a little', 'Intermediate', 'Advanced'];
 const SITTINGS = [5, 10, 15, 20];
 
@@ -347,6 +350,17 @@ export const TopicBoardScreen: React.FC = () => {
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
         <WriteNowPanel course={course} />
+        <Fold title="Add a game or activity to the board" testID="course-add-square">
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>It goes after the square you are on, in the same chapter, and is written when you reach it.</Text>
+          <View style={styles.chips}>
+            {ADDABLE.map((f) => {
+              const info = FORMATS.find((x) => x.id === f)!;
+              const here = course.squares[current];
+              return <Chip key={f} label={info.label} on={false} testID={`course-add-${f}`}
+                onPress={() => { if (here) useTopics.getState().addSquare(course.id, here.key, { format: f, title: `${info.label}: ${friendlyTitle(here.unit)}`, focus: `${info.label} on ${here.topic || friendlyTitle(here.unit)}` }); }} />;
+            })}
+          </View>
+        </Fold>
         {prep.courseId === course.id && !!prep.working && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}

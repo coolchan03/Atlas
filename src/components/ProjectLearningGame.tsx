@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme';
 import type { StudyResult, Source } from '../study/engine';
 import { matchWordSearch, normalizeLearningWord } from '../study/learningGames';
+import { GameFinishContext } from './games/kit';
 const OPACITY_0_5 = 0.5;
 const OPACITY_1 = 1;
 const COLOR_FFF = '#fff';
@@ -49,6 +50,11 @@ export function ProjectLearningGame({ activity, onOpenSource }: Props) {
   const [matchingScore, setMatchingScore] = useState(0);
   const [matchingPicked, setMatchingPicked] = useState<string | null>(null);
   const terms = activity.learningTerms || [];
+  // Whoever shows the puzzle (a course square) is told when every clue is solved or every round is played.
+  const report = useContext(GameFinishContext);
+  const total = activity.kind === 'crossword' ? activity.crossword?.entries.length ?? 0 : activity.kind === 'wordsearch' ? activity.wordSearch?.entries.length ?? 0 : Math.min(8, terms.length);
+  const progressNow = activity.kind === 'match' ? (matchIndex >= total ? matchingScore : -1) : solved.length;
+  useEffect(() => { if (report && total > 0 && (activity.kind === 'match' ? progressNow >= 0 : progressNow === total)) report(progressNow, total); }, [report, total, progressNow, activity.kind]);
   const sourceLinks = (nums: number[]) => (
     <View style={literalStyles.s1}>
       {nums.map(n => {
@@ -75,7 +81,7 @@ export function ProjectLearningGame({ activity, onOpenSource }: Props) {
       }
     });
     return <View>
-      {banner('Select a clue, type the answer, then check it. Every answer comes from a source passage.')}
+      {banner(activity.sources.length ? 'Select a clue, type the answer, then check it. Every answer comes from a source passage.' : 'Select a clue, type the answer, then check it.')}
       <View style={[literalStyles.s6, { width: cellSize * crossword.size }, literalStyles.s7]}>
         {crossword.cells.map((char, i) => {
           const row = Math.floor(i / crossword.size), col = i % crossword.size;
@@ -120,7 +126,7 @@ export function ProjectLearningGame({ activity, onOpenSource }: Props) {
       setFirstCell(null);
     };
     return <View>
-      {banner('Find words from the project passages. Tap a word’s first letter, then its last letter; either direction works.')}
+      {banner(`${activity.sources.length ? 'Find words from the project passages.' : 'Find the hidden words.'} Tap a word’s first letter, then its last letter; either direction works.`)}
       <View style={[literalStyles.s6, { width: cellSize * wordSearch.size }, literalStyles.s7]}>
         {wordSearch.cells.map((char, index) => <TouchableOpacity key={index} onPress={() => tap(index)} style={[{ width: cellSize, height: cellSize }, literalStyles.s16, { backgroundColor: foundIndices.has(index) ? BACKGROUNDCOLOR_22C55E44 : firstCell === index ? `${colors.primary}55` : colors.surface }]}>
           <Text style={[{ color: colors.text, fontSize: Math.max(11, cellSize - 7) }, literalStyles.s13]}>{char}</Text>

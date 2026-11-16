@@ -30,6 +30,12 @@ const literalStyles = StyleSheet.create({
 });
 
 
+/**
+ * Lets whoever shows a game (a course square, for one) hear when it is finished and how it went, without each game being changed:
+ * the games already end in `Finished` (or, for the word puzzles, in their own all-found state), which reports here.
+ */
+export const GameFinishContext = React.createContext<((score: number, max: number) => void) | null>(null);
+
 export interface GameProps {
   result: StudyResult;
   projectId: string;
@@ -122,6 +128,8 @@ export function useRecord(projectId: string) {
 
 export function Finished({ score, max, onAgain, note }: { score: number; max: number; onAgain?: () => void; note?: string }) {
   const colors = useGameColors();
+  const report = React.useContext(GameFinishContext);
+  React.useEffect(() => { report?.(score, max); }, [report, score, max]);
   const pct = max ? Math.round((score / max) * 100) : 0;
   return (
     <Card>

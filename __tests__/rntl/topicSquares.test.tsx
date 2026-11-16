@@ -16,15 +16,26 @@ describe('the other kinds of square', () => {
     fireEvent.press(view.getByTestId('numeric-done'));
     expect(done).toHaveBeenCalledWith(1);
   });
-  it('a worked example shows one step at a time, and the takeaway at the end', () => {
+  it('a worked example asks the learner to try each step first, then shows it, says how close they were and ends with the takeaway', () => {
     const done = jest.fn();
     const view = render(<SquareView onDone={done} content={{ kind: 'worked', problem: 'Solve x+2=5', steps: [{ step: 'Subtract 2 from both sides', why: 'undo +2' }, { step: 'x = 3', why: '' }], takeaway: 'Do the same to both sides' }} />);
-    expect(view.queryByText(/x = 3/)).toBeNull();
+    // Nothing is shown until the learner has had a go; the button is not a bare Next.
+    expect(view.queryByText(/Subtract 2 from both sides/)).toBeNull();
+    expect(view.getByTestId('worked-try')).toBeTruthy();
+    expect(view.getByTestId('worked-check').props.accessibilityState?.disabled).toBe(true);
+    fireEvent.changeText(view.getByTestId('worked-input'), 'subtract 2 from both sides to undo the plus');
+    fireEvent.press(view.getByTestId('worked-check'));
+    expect(view.getByText(/Subtract 2 from both sides/)).toBeTruthy();
+    expect(view.getByText(/You had the main idea/)).toBeTruthy();
+    // Not sure: the step is shown with no judgement of the learner.
     fireEvent.press(view.getByTestId('worked-next'));
     expect(view.getByText(/x = 3/)).toBeTruthy();
+    expect(view.queryByTestId('worked-feedback-1')).toBeNull();
+    expect(view.queryByTestId('worked-try')).toBeNull();
     expect(view.getByTestId('worked-takeaway')).toBeTruthy();
+    expect(view.getByTestId('worked-score')).toBeTruthy();
     fireEvent.press(view.getByTestId('worked-done'));
-    expect(done).toHaveBeenCalledWith(3);
+    expect(done).toHaveBeenCalledWith(2);
   });
   it('a table is drawn with the same copy buttons as a chat table', () => {
     const view = render(<SquareView onDone={jest.fn()} content={{ kind: 'table', title: 'Methods', markdown: '| A | B |\n| --- | --- |\n| 1 | 2 |' }} />);

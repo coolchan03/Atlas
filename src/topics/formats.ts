@@ -13,11 +13,22 @@ import type { Exercise } from '../study/exercises';
 import type { PeriodicQuestion } from '../study/periodicQuiz';
 
 export type SquareFormat = 'lesson' | 'quiz' | 'cards' | 'match' | 'order' | 'practice' | 'fill' | 'truefalse' | 'scenario' | 'numeric' | 'worked' | 'table'
-  | 'recall' | 'fix' | 'tablefill' | 'sort' | 'dictation' | 'reading' | 'predict' | 'drill' | 'periodic';
+  | 'recall' | 'fix' | 'tablefill' | 'sort' | 'dictation' | 'reading' | 'predict' | 'drill' | 'periodic'
+  | 'crossword' | 'wordsearch' | 'scramble' | 'memory' | 'hangman';
+
+/** The games a course can have as a square: each is played from a list of terms with a clue. */
+export const TERM_GAMES = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman'] as const;
+export type TermGame = (typeof TERM_GAMES)[number];
+export const isTermGame = (f: string): f is TermGame => (TERM_GAMES as readonly string[]).includes(f);
 const DRILL_TOPICS = Object.values(DRILL_LABELS).join(', ');
 export const FORMATS: { id: SquareFormat; label: string; icon: string; use: string }[] = [
   { id: 'drill', label: 'Exact drill', icon: 'cpu', use: `practice problems the app makes and marks itself with exact arithmetic, for ONLY these topics: ${DRILL_TOPICS}. Put the topic words in the title or focus. Use it for accounting, finance and statistics practice` },
   { id: 'periodic', label: 'Periodic table', icon: 'grid', use: 'a real periodic table the learner taps to answer: find an element by symbol, number, name, group and period, or family (halogen, noble gas...). The app makes and marks it. Use it in chemistry and science courses' },
+  { id: 'crossword', label: 'Crossword', icon: 'grid', use: 'a crossword made from the key terms of the topic, each with a clue: vocabulary, definitions, names, parts of a system, any subject with terms to learn' },
+  { id: 'wordsearch', label: 'Word search', icon: 'search', use: 'a word search hiding the key terms of the topic, found by their clues: a light way to learn the vocabulary' },
+  { id: 'scramble', label: 'Word scramble', icon: 'shuffle', use: 'key terms with their letters mixed up, unscrambled using a clue: spelling and recall of terms' },
+  { id: 'memory', label: 'Memory match', icon: 'copy', use: 'flip cards to find each term and its definition, like the matching games in flashcard apps: terms to meanings' },
+  { id: 'hangman', label: 'Guess the term', icon: 'type', use: 'guess a term letter by letter from its clue: vocabulary and definitions' },
   { id: 'lesson', label: 'Lesson', icon: 'book-open', use: 'a short explanation with sections, an example and key points: for new ideas, rules, worked examples, code to read' },
   { id: 'quiz', label: 'Quiz', icon: 'help-circle', use: 'multiple choice questions with a reason for each answer: to check understanding, scenarios, case studies' },
   { id: 'cards', label: 'Flashcards', icon: 'layers', use: 'terms and definitions, formulas, syntax, vocabulary: to memorise' },
@@ -147,7 +158,8 @@ export type SquareContent =
   | { kind: 'typed'; items: { prompt: string; answer: string; alternatives: string[]; why: string }[]; mode: 'recall' | 'fix' }
   | { kind: 'tablefill'; title: string; columns: string[]; rows: (string | null)[][]; answers: string[][]; why: string }
   | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
-  | { kind: 'dictation'; lang: string; sentences: string[] };
+  | { kind: 'dictation'; lang: string; sentences: string[] }
+  | { kind: 'terms'; game: TermGame; terms: { answer: string; clue: string }[] };
 
 export interface SquareRequest { courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; docId?: number; where?: string; rank?: number; label?: string; role?: 'teach' | 'reference'; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; /** Questions the learner got wrong earlier in this course: a quiz asks about the same ideas again in new words. */ retry?: string[]; /** How to rewrite a square the learner found unclear. */ rewrite?: string; difficulty?: Difficulty }
 
@@ -167,6 +179,11 @@ const SHAPES: Record<SquareFormat, string> = {
   worked: '{"problem": "the problem being solved", "steps": [{"step": "what is done", "why": "the reason"}], "takeaway": "the one thing to remember"}  (4 to 8 steps)',
   recall: '{"items": [{"prompt": "a definition, picture-in-words or question", "answer": "the term or short answer", "alternatives": ["other accepted answers"], "why": "optional note"}]}  (8 to 12 items, answers short)',
   fix: '{"items": [{"prompt": "the text with ONE mistake in it", "answer": "the corrected text", "why": "what was wrong"}]}  (6 to 8 items)',
+  crossword: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 14 terms; each answer is ONE word of 4 to 12 letters, letters only, no spaces or hyphens; the clue explains it in your own words)',
+  wordsearch: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 4 to 10 letters, letters only, no spaces or hyphens)',
+  scramble: '{"terms": [{"answer": "ONEWORD", "clue": "a hint that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 5 to 12 letters, letters only)',
+  memory: '{"terms": [{"answer": "term", "clue": "its short definition"}]}  (6 to 8 terms; the answer may be a short phrase)',
+  hangman: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 5 to 12 letters, letters only)',
   tablefill: '{"title": "...", "columns": ["Account", "Debit", "Credit"], "rows": [["Cash", "", "500"], ["Sales", "500", ""]], "blank": [[0, 1], [1, 2]], "why": "short explanation"}  (3 to 8 rows; "rows" holds the FULL correct table; "blank" lists [row, column] cells to hide for the learner, 3 to 8 of them, never the first column)',
   sort: '{"groups": ["Group A", "Group B"], "items": [{"text": "item", "group": 0}]}  (2 to 4 groups, 8 to 14 items, "group" is the index of the right group)',
   dictation: '{"lang": "en-US", "sentences": ["a sentence to be read aloud", "..."]}  (5 to 8 sentences of rising difficulty; "lang" is a BCP-47 code for the language spoken)',
@@ -283,6 +300,19 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
   if (format === 'order') {
     const steps = list(j.steps).map((s) => str(s, 200)).filter(Boolean);
     return steps.length >= 3 ? { kind: 'order', prompt: str(j.prompt, 200) || 'Put these in the right order.', steps: steps.slice(0, 8) } : null;
+  }
+  if (isTermGame(format)) {
+    const phrase = format === 'memory';
+    const seen = new Set<string>();
+    const terms = list(j.terms).map((x) => ({ answer: str(x?.answer, 40), clue: str(x?.clue, 200) })).map((x) => ({ ...x, answer: phrase ? x.answer : x.answer.replace(/[^A-Za-z]/g, '') })).filter((x) => {
+      const key = x.answer.toLowerCase();
+      const long = x.answer.length >= (format === 'scramble' || format === 'hangman' ? 5 : phrase ? 2 : 4) && x.answer.length <= (phrase ? 40 : 12);
+      // A clue that gives the answer away is no clue.
+      if (!x.answer || !x.clue || !long || seen.has(key) || x.clue.toLowerCase().includes(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return terms.length >= (phrase ? 4 : 5) ? { kind: 'terms', game: format, terms: terms.slice(0, 14) } : null;
   }
   if (format === 'recall' || format === 'fix') {
     const items = list(j.items).map((x) => ({ prompt: str(x?.prompt, 300), answer: str(x?.answer, 300), alternatives: list(x?.alternatives).map((a) => str(a, 200)).filter(Boolean).slice(0, 4), why: str(x?.why, 240) })).filter((x) => x.prompt && x.answer);

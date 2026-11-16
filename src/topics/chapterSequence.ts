@@ -13,8 +13,8 @@ const fit = (name: string, suffix: string): string => `${name.slice(0, Math.max(
 /** "Chapter 7: Leases" and "7 – Leases" are both about Leases. */
 export const subjectOf = (name: string): string => name.replace(/^(?:(?:chapter|unit|module|lesson|part)\s+(?:\d+|[ivxlc]+)|\d{1,3})\s*[:.\-–—·]?\s*/i, '').trim() || name;
 
-/** Extra practice a deeper chapter adds before its chapter exam, in this order. A chapter is 6 to 14 squares. */
-export const MAX_CHAPTER_SQUARES = 14;
+/** Extra practice a deeper chapter adds before its chapter exam, in this order (the word games last). A chapter is 6 to 18 squares. */
+export const MAX_CHAPTER_SQUARES = 18;
 function extraSquares(name: string, unit: string, about: string): Square[] {
   return [
     { format: 'truefalse', title: fit(name, ': true or false'), focus: `True or false statements on ${name} ${about}, including the common wrong beliefs`, unit },
@@ -25,6 +25,10 @@ function extraSquares(name: string, unit: string, about: string): Square[] {
     { format: 'match', title: fit(name, ': match'), focus: `Pairs to join for ${name} ${about}: terms to meanings, causes to effects`, unit },
     { format: 'sort', title: fit(name, ': sort'), focus: `Items of ${name} ${about} to sort into the right groups`, unit },
     { format: 'numeric', title: fit(name, ': calculations'), focus: `Calculation practice for ${name} ${about}, with the working shown`, unit },
+    { format: 'crossword', title: fit(name, ': crossword'), focus: `A crossword of the key terms of ${name} ${about}, each with a clue`, unit },
+    { format: 'wordsearch', title: fit(name, ': word search'), focus: `A word search hiding the key terms of ${name} ${about}`, unit },
+    { format: 'scramble', title: fit(name, ': word scramble'), focus: `Key terms of ${name} ${about} with their letters mixed up, each with a hint`, unit },
+    { format: 'memory', title: fit(name, ': memory match'), focus: `Flip cards to match each key term of ${name} ${about} with its definition`, unit },
   ];
 }
 

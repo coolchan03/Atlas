@@ -24,6 +24,7 @@ function body(c: SquareContent): string {
     case 'table': return `<h4>${esc(c.title)}</h4><pre>${esc(c.markdown)}</pre>`;
     case 'numeric': return `<p>${esc(c.task)}</p>${list(c.working)}<p class="ans">Answer: ${esc(c.answer)} ${esc(c.unit)}</p>`;
     case 'practice': return `<p>${esc(c.task)}</p><p class="ans">A good answer: ${esc(c.model)}</p>`;
+    case 'terms': return `<table>${c.terms.map((t) => `<tr><td>${esc(t.answer)}</td><td>${esc(t.clue)}</td></tr>`).join('')}</table>`;
     default: return '<p><i>Practice squares are played in Atlas.</i></p>';
   }
 }
