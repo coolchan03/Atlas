@@ -115,6 +115,19 @@ describe('MarkdownText', () => {
   });
 });
 
+describe('tables written as HTML by a model', () => {
+  const html = '<table>\n<tr><th>Asset</th><th>Depreciation</th></tr>\n<tr><td>Building<br>new</td><td><b>$70,000</b> ($100k - $30k)</td></tr></table>';
+  it('becomes a Markdown table with the first row as the header, and shows as a table', () => {
+    expect(preprocessMarkdown(`Intro\n${html}\nAfter`)).toBe('Intro\n\n\n| Asset | Depreciation |\n| --- | --- |\n| Building new | $70,000 ($100k - $30k) |\n\n\nAfter');
+    const view = render(<MarkdownText>{html}</MarkdownText>);
+    expect(view.queryByText(/<table>/)).toBeNull();
+    expect(view.getByTestId('copy-table-copy-table')).toBeTruthy();
+  });
+  it('leaves text without a table alone', () => {
+    expect(preprocessMarkdown('a < b and <i>x</i>')).toBe('a < b and <i>x</i>');
+  });
+});
+
 describe('tables written by a model', () => {
   const dashes = '| Account | Debit | Credit |\n| :\u2014 | :\u2014 | :\u2014 |\n| Revenue | $30,000 | to Fund Balance |';
 

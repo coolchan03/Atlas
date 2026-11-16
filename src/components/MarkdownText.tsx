@@ -14,7 +14,23 @@ import { useTablePrefs } from './tablePrefs';
  * Lookahead handles chains like 5*5*5*5 in a single pass.
  */
 export function preprocessMarkdown(text: string): string {
-  return fixTables(text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`));
+  return fixTables(htmlTablesToMarkdown(text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`)));
+}
+
+/**
+ * Models sometimes write a table as HTML (<table><tr><th>...), which shows as raw tags. Each such table becomes a Markdown table: the first row is
+ * the header, line breaks inside a cell become spaces, any other tag is dropped. Text with no <table> is returned as it was.
+ */
+export function htmlTablesToMarkdown(text: string): string {
+  if (!/<table/i.test(text)) return text;
+  return text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_all, inner: string) => {
+    const rows = [...inner.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((r) =>
+      [...r[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((c) => c[1].replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim()));
+    const cols = Math.max(0, ...rows.map((r) => r.length));
+    if (!rows.length || cols < 1) return '';
+    const line = (r: string[]) => `| ${Array.from({ length: cols }, (_, i) => r[i] ?? '').join(' | ')} |`;
+    return `\n\n${[line(rows[0]), line(Array(cols).fill('---')), ...rows.slice(1).map(line)].join('\n')}\n\n`;
+  });
 }
 
 const DASHES = '\\-\u2014\u2013\u2212\u2012\u2015';
