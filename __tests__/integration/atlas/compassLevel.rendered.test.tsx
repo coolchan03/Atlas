@@ -24,6 +24,29 @@ it('shows the level when asked, and the compass again after switching back', () 
   expect(view.queryByTestId('compass-level-view')).toBeNull();
 });
 
+it('swiping left goes to the level and swiping right comes back, while a short drag does nothing', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { CompassScreen } = require('../../../src/screens/CompassScreen');
+  const view = rtl.render(React.createElement(CompassScreen));
+  const drag = (dx: number, dy = 0) => {
+    const area = view.getByTestId('compass-swipe-area');
+    rtl.fireEvent(area, 'touchStart', { nativeEvent: { pageX: 300, pageY: 400 } });
+    rtl.fireEvent(area, 'touchEnd', { nativeEvent: { pageX: 300 + dx, pageY: 400 + dy } });
+  };
+  drag(-30);
+  expect(view.queryByTestId('compass-level-view')).toBeNull();
+  drag(-140, 12);
+  expect(view.getByTestId('compass-level-view')).toBeTruthy();
+  drag(-140); // already on the level: nothing further to the left
+  expect(view.getByTestId('compass-level-view')).toBeTruthy();
+  drag(150, 8);
+  expect(view.queryByTestId('compass-level-view')).toBeNull();
+  drag(-100, 260); // a vertical scroll is not a swipe
+  expect(view.queryByTestId('compass-level-view')).toBeNull();
+});
+
 it('the two circles overlap when the phone is flat and level, and line up at each quarter turn when it is upright', () => {
   installNativeBoundary({ fs: true });
   const { levelPose } = require('../../../src/atlasTools/levelMath');

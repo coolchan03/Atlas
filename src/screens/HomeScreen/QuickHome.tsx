@@ -9,13 +9,18 @@ import { useAppStore } from '../../stores/appStore';
 import { LoadModelSheet } from '../../components/LoadModelSheet';
 import { arrangeTiles, moveTile, toggleTile } from './homeTiles';
 import { ScreenBackground } from '../../components/ScreenBackground';
-import { HomeShortcutsCard } from './HomeShortcutsCard';
+import { HomeShortcutsCard, useShortcutLauncher } from './HomeShortcutsCard';
+import { useHomeShortcuts, widgetIcon, type HomeShortcut } from './homeShortcutStore';
 import { HomeSearch, HomeStudyCard } from './HomeStudyCard';
 import { TILE } from '../../theme/tilePalette';
 import { pick } from '../../utils/pick';
 
 type Props = { navigation: any; mode: LayoutMode };
-type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load'; optional?: boolean; tint: string; tintDark: string; color: [string, string] };
+type Destination = { key: string; label: string; hint: string; icon: string; tab?: string; screen?: string; action?: 'load'; optional?: boolean; /** A widget the person made: pressing it runs this instead of opening a screen. */ widget?: HomeShortcut; tint: string; tintDark: string; color: [string, string] };
+const WIDGET_COLORS = [TILE.sky, TILE.green, TILE.amber, TILE.violet, TILE.teal, TILE.rose, TILE.pink, TILE.cyan, TILE.red, TILE.blue];
+const WIDGET_HINT: Record<string, string> = { call: 'Starts a call', chat: 'Opens a chat', 'resume-last': 'Back to your last chat', 'resume-most': 'Back to your most-used chat', 'model-picker': 'Pick the AI model', 'music-studio': 'Music Studio', 'music-player': 'Your music', learning: 'Teach the AI', 'learning-status': 'Learning progress', 'daily-brief': 'Daily briefing', recorder: 'Recorder', compass: 'Compass', 'read-aloud': 'Read aloud', course: 'Opens a course', project: 'Opens a project', practice: 'Practice', review: 'Questions to review' };
+/** A widget the person made, shown as a tile like the built-in ones. */
+export const widgetTile = (w: HomeShortcut, index: number): Destination => ({ key: `widget-${w.id}`, label: w.title, hint: WIDGET_HINT[w.action || 'chat'] ?? 'Home widget', icon: widgetIcon(w), widget: w, ...WIDGET_COLORS[index % WIDGET_COLORS.length] });
 const destinations: Destination[] = [
   { key: 'chat', label: 'Chat', hint: 'Talk with your local AI', icon: 'message-circle', tab: 'ChatsTab', ...TILE.sky },
   { key: 'call', label: 'Call', hint: 'Talk hands-free with an agent you choose, using a model and project folder you choose', icon: 'phone', screen: 'CallSetup', ...TILE.sky },
@@ -61,12 +66,16 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   const updateSettings = useAppStore((st) => st.updateSettings);
   const [editing, setEditing] = React.useState(false);
   const [loadOpen, setLoadOpen] = React.useState(false);
+  const widgets = useHomeShortcuts((st) => st.shortcuts);
+  const { launch: launchWidget } = useShortcutLauncher(navigation);
   const keys = destinations.map((d) => d.key);
   // Tiles marked optional (the emergency tools) are off until the person turns them on under Customize.
   const prefs = { ...savedPrefs, hidden: savedPrefs?.hidden ?? destinations.filter((d) => d.optional).map((d) => d.key) };
   const byKey = (k: string) => destinations.find((d) => d.key === k)!;
   const shownKeys = arrangeTiles(keys, prefs, editing);
-  const items = (focus ? shownKeys.filter((k) => FOCUS.includes(k)) : shownKeys).map(byKey);
+  // Widgets the person made come after the built-in tiles, in the order they were added (they are changed and removed under "My home widgets").
+  const widgetItems = focus ? [] : widgets.map(widgetTile);
+  const items = [...(focus ? shownKeys.filter((k) => FOCUS.includes(k)) : shownKeys).map(byKey), ...widgetItems];
   const hiddenSet = new Set(prefs?.hidden ?? []);
   const save = (next: { order?: string[]; hidden?: string[] }) => updateSettings({ homeTiles: next });
   const fontSize = simple ? 21 : compact ? 16 : 18;
@@ -82,7 +91,8 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
     textAlign: tiles ? 'center' as const : 'flex-start' as const,
   };
   const go = (item: Destination) => {
-    if (item.action === 'load') setLoadOpen(true);
+    if (item.widget) void launchWidget(item.widget);
+    else if (item.action === 'load') setLoadOpen(true);
     else if (item.tab) navigation.navigate(item.tab);
     else if (item.screen) navigation.getParent()?.navigate(item.screen);
   };
@@ -96,7 +106,6 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
         </Text>
         <HomeSearch navigation={navigation} tiles={destinations.map((d) => ({ key: d.key, label: d.label, hint: d.hint }))} onTile={(k) => go(byKey(k))} />
         <HomeStudyCard navigation={navigation} />
-        <HomeShortcutsCard navigation={navigation} />
         <View style={[staticStyles.h4, { flexDirection: look.listDir, gap: look.listGap }]}>
           {items.map(item => {
             const accent = item.color[isDark ? 1 : 0];
@@ -113,7 +122,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
                   {!tiles && <Text style={[staticStyles.h8, { color: colors.textSecondary, fontSize: look.hint }]}>{item.hint}</Text>}
                 </View>
                 {!tiles && !editing && <Icon name="chevron-right" size={simple ? 23 : 19} color={colors.textMuted} />}
-                {editing && (
+                {editing && !item.widget && (
                   <View style={staticStyles.h9}>
                     <TouchableOpacity testID={'tile-up-' + item.key} accessibilityLabel={'Move ' + item.label + ' up'} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => save(moveTile(keys, prefs, { key: item.key, by: -1 }))}>
                       <Icon name="arrow-up" size={20} color={colors.textSecondary} />
@@ -138,6 +147,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
           </TouchableOpacity>
         )}
         {editing && <Text style={[staticStyles.h12, { color: colors.textMuted }]}>Use the arrows to move a tile and the eye to hide or show it.</Text>}
+        <HomeShortcutsCard navigation={navigation} />
         {(colorful || focus) && <Text style={[staticStyles.h13, { color: colors.textMuted }]}>
           Your models and conversations stay on your device.
         </Text>}

@@ -22,7 +22,7 @@ import { CHAT_TONES, type ChatTonePreset } from '../../services/chatTone';
 import { MusicPlayerWidget } from './MusicPlayerWidget';
 import { LearningReliabilityWidget } from './LearningReliabilityWidget';
 import { ReadAloudWidget } from './ReadAloudWidget';
-import { selectResumeConversation, shortcutDestination, useHomeShortcuts, type HomeShortcut, type HomeWidgetAction } from './homeShortcutStore';
+import { selectResumeConversation, shortcutDestination, useHomeShortcuts, widgetIcon, WIDGET_ICONS, type HomeShortcut, type HomeWidgetAction } from './homeShortcutStore';
 
 type Choice = { id: string; label: string };
 type Details = Omit<HomeShortcut, 'id'>;
@@ -82,25 +82,12 @@ async function loadCallModel(shortcut: HomeShortcut, resumedModel: string | unde
   if (shortcut.modelId && !shortcut.conversationId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
 }
 
-/** Home widgets are configured within Atlas; never create Android launcher tiles or shortcuts. */
-export function HomeShortcutsCard({ navigation }: { navigation: any }) {
-  const { colors } = useTheme();
-  const shortcuts = useHomeShortcuts((s) => s.shortcuts);
-  const { addShortcut, removeShortcut, updateShortcut } = useHomeShortcuts.getState();
-  const agents = useAgentStore((s) => s.agents);
-  const projects = useProjectStore((s) => s.projects);
-  const voices = useVoiceProfiles((s) => s.profiles);
-  const localModels = useAppStore((s) => s.downloadedModels);
-  const activeModelId = useAppStore((s) => s.activeModelId);
-  const conversations = useChatStore((s) => s.conversations);
-  const courses = useTopics((s) => s.courses);
-  const undo = useUndo();
-  useExerciseStore((s) => s.progress); // redraw the due count when answers change
-  const [open, setOpen] = useState(false);
+/**
+ * What tapping a home widget does: open its screen, course or project, resume a chat, or start a chat or call with its agent, model, project and voice.
+ * Shared by the widget tiles on the Home screen and the list where they are managed.
+ */
+export function useShortcutLauncher(navigation: any) {
   const [launchingId, setLaunchingId] = useState('');
-  const [draft, setDraft] = useState<Details>(initial);
-  const [editingId, setEditingId] = useState('');
-  const update = (change: Partial<Details>) => setDraft((d) => ({ ...d, ...change }));
   const openScreen = (screen: string, params?: Record<string, string>) => navigation.getParent()?.navigate(screen, params);
   const goToChat = (id: string, call: boolean) => {
     const chats = useChatStore.getState();
@@ -113,22 +100,6 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     } else useUiModeStore.getState().setInterfaceMode('chat');
     openScreen('Chat', { conversationId: id });
   };
-  const select = ({ caption, value, setter, choices }: { caption: string; value: string | undefined; setter: (id: string | undefined) => void; choices: Choice[] }) => (
-    <View style={styles.selector}>
-      <Text style={[styles.caption, { color: colors.textSecondary }]}>{caption}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {choices.map((choice) => {
-          const selected = (value || '') === choice.id;
-          return (
-            <TouchableOpacity key={`${caption}-${choice.id}`} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => setter(choice.id || undefined)}
-              style={[styles.chip, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.background }]}>
-              <Text style={{ color: selected ? colors.background : colors.text }}>{choice.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
   const openChatWidget = async (shortcut: HomeShortcut) => {
     const chats = useChatStore.getState();
     const app = useAppStore.getState();
@@ -176,6 +147,44 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
     } catch (error: any) { Alert.alert('Could not open widget', String(error?.message || error)); }
     finally { setLaunchingId(''); }
   };
+  return { launch, launchingId, openScreen };
+}
+
+/** Home widgets are configured within Atlas; never create Android launcher tiles or shortcuts. */
+export function HomeShortcutsCard({ navigation }: { navigation: any }) {
+  const { colors } = useTheme();
+  const shortcuts = useHomeShortcuts((s) => s.shortcuts);
+  const { addShortcut, removeShortcut, updateShortcut } = useHomeShortcuts.getState();
+  const agents = useAgentStore((s) => s.agents);
+  const projects = useProjectStore((s) => s.projects);
+  const voices = useVoiceProfiles((s) => s.profiles);
+  const localModels = useAppStore((s) => s.downloadedModels);
+  const activeModelId = useAppStore((s) => s.activeModelId);
+  const conversations = useChatStore((s) => s.conversations);
+  const courses = useTopics((s) => s.courses);
+  const undo = useUndo();
+  useExerciseStore((s) => s.progress); // redraw the due count when answers change
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Details>(initial);
+  const [editingId, setEditingId] = useState('');
+  const update = (change: Partial<Details>) => setDraft((d) => ({ ...d, ...change }));
+  const { launch, launchingId, openScreen } = useShortcutLauncher(navigation);
+  const select = ({ caption, value, setter, choices }: { caption: string; value: string | undefined; setter: (id: string | undefined) => void; choices: Choice[] }) => (
+    <View style={styles.selector}>
+      <Text style={[styles.caption, { color: colors.textSecondary }]}>{caption}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {choices.map((choice) => {
+          const selected = (value || '') === choice.id;
+          return (
+            <TouchableOpacity key={`${caption}-${choice.id}`} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => setter(choice.id || undefined)}
+              style={[styles.chip, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.background }]}>
+              <Text style={{ color: selected ? colors.background : colors.text }}>{choice.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
   const startEdit = (widget: HomeShortcut) => {
     const { id, ...rest } = widget;
     setDraft(rest); setEditingId(id); setOpen(true);
@@ -204,7 +213,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       </View>
       {!shortcuts.length && !open && (
-        <Text style={[styles.small, { color: colors.textSecondary }]}>Add as many call buttons as you like, each with its own agent, model, project and chat. Or resume a chat, or control instrumental music . Everything stays within Atlas.</Text>
+        <Text style={[styles.small, { color: colors.textSecondary }]}>Each widget you add appears as a tile in the list above, with the icon you pick. Make as many call buttons as you like, each with its own agent, model, project and chat, or resume a chat, or control music. Everything stays within Atlas.</Text>
       )}
       {shortcuts.map((widget) => {
         const agent = agents.find((a) => a.id === widget.agentId)?.name || 'Default assistant';
@@ -241,6 +250,20 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
         <View testID="home-shortcut-editor">
           <TextInput value={draft.title} onChangeText={(title) => update({ title })} placeholder="Widget name" placeholderTextColor={colors.textMuted}
             style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
+          <View style={styles.selector}>
+            <Text style={[styles.caption, { color: colors.textSecondary }]}>Icon on the home screen</Text>
+            <View style={styles.iconGrid} testID="widget-icons">
+              {WIDGET_ICONS.map((name) => {
+                const on = widgetIcon(draft) === name;
+                return (
+                  <TouchableOpacity key={name} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${name} icon`} testID={`widget-icon-${name}`} onPress={() => update({ icon: name })}
+                    style={[styles.iconChoice, { borderColor: on ? colors.primary : colors.border, backgroundColor: on ? colors.surfaceLight : colors.background }]}>
+                    <Icon name={name} size={20} color={on ? colors.primary : colors.textSecondary} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
           {select({ caption: 'Widget type', value: draft.action || 'call', choices: WIDGET_ACTIONS,
             setter: (action) => update({ action: (action || 'call') as HomeWidgetAction, conversationId: undefined }) })}
           {inChat(draft.action) && <>
@@ -284,5 +307,7 @@ const styles = StyleSheet.create({
   caption: { fontSize: 12, marginBottom: 5 },
   chips: { flexDirection: 'row', gap: 8, paddingBottom: 2 },
   chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  iconChoice: { borderWidth: 1, borderRadius: 10, width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   save: { borderWidth: 1, borderRadius: 8, paddingVertical: 12, marginTop: 14 },
 });

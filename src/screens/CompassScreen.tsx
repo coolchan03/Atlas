@@ -14,6 +14,7 @@ import { PressureCard } from './compass/PressureCard';
 import { useUnits } from '../atlasTools/units';
 import { SensorCards } from './compass/SensorCards';
 import { useCompassSensors } from './compass/useCompassSensors';
+import { swipeDirection } from './compass/swipe';
 const BACKDROP = '#000000';
 const INK_DIM = '#9A9A9A';
 const INK_FAINT = '#6B6B6B';
@@ -71,6 +72,18 @@ export const CompassScreen: React.FC = () => {
   const ink = night ? accent : DIAL_INK;
   const headerColors = { ...colors, background: BACKDROP, text: ink, textSecondary: INK_DIM, border: INK_FAINT };
   const dots = <PageDots levelMode={levelMode} ink={ink} onPick={setLevelMode} />;
+  // Swipe left for the level, right for the compass (the page dots and the button still work). Touches are only watched, so scrolling is not affected.
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
+  const swipe = {
+    onTouchStart: (e: any) => { touchStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; },
+    onTouchEnd: (e: any) => {
+      const from = touchStart.current; touchStart.current = null;
+      if (!from) return;
+      const way = swipeDirection(e.nativeEvent.pageX - from.x, e.nativeEvent.pageY - from.y);
+      if (way === 'left') setLevelMode(true);
+      else if (way === 'right') setLevelMode(false);
+    },
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -80,6 +93,7 @@ export const CompassScreen: React.FC = () => {
           <Text style={{ color: ink }}>{levelMode ? 'Compass' : 'Level'}</Text>
         </TouchableOpacity>
       } />
+      <View style={styles.screen} testID="compass-swipe-area" {...swipe}>
       {levelMode ? (
         <>
           <LevelView orientation={orientation} accel={sensors.accel} />
@@ -117,6 +131,7 @@ export const CompassScreen: React.FC = () => {
         <SensorCards colors={colors} sensors={sensors} />
       </ScrollView>
       )}
+      </View>
     </SafeAreaView>
   );
 };

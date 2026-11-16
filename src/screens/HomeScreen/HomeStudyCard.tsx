@@ -10,6 +10,8 @@ import { useCpa } from '../../cpa/store';
 import { examLabel } from '../../cpa/blueprints';
 import { useChatStore, useProjectStore } from '../../stores';
 import { addDailyReminder } from '../../atlasTools/deviceTools';
+import { swipeHandlers } from '../../utils/swipe';
+import { useHomeHidden } from './homeHidden';
 import { weakestTopic, continueTarget, nextExamLine, searchHome, type HomeHit, type HomeSearchSources } from './homeStudy';
 
 /** Pick up studying in one tap: the next square of the course you played last, what is due for review, and how the nearest exam is going. */
@@ -26,10 +28,16 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
   if (!target && !due && !exam && !weak) return null;
   const remind = () => { const until = Object.values(examState).map((e) => e?.examDate).filter(Boolean).sort()[0]; addDailyReminder('Study with Atlas', { until, description: 'Open Atlas and carry on with your course.' }).then((m) => Alert.alert('Reminder', m)).catch((e) => Alert.alert('Could not open the calendar', String(e?.message || e))); };
   const go = (screen: string, params?: object) => navigation.getParent()?.navigate(screen, params);
+  const hidden = useHomeHidden((st) => st.hidden.includes('continue-learning'));
+  const hideContinue = () => useHomeHidden.getState().hide('continue-learning');
+  // Press and hold, or swipe sideways, to get rid of the "Continue" suggestion.
+  const askHide = () => Alert.alert('Hide “Continue learning”?', 'It goes away from Home. A small link where it was brings it back.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Hide', onPress: hideContinue }]);
+  const swipeAway = React.useMemo(() => swipeHandlers(() => hideContinue()), []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="home-study">
-      {target && (
-        <TouchableOpacity style={styles.row} onPress={() => go('TopicSquare', { courseId: target.courseId, key: target.key })} testID="home-continue" accessibilityRole="button">
+      {target && !hidden && (
+        <TouchableOpacity style={styles.row} onPress={() => go('TopicSquare', { courseId: target.courseId, key: target.key })} onLongPress={askHide} delayLongPress={450} {...swipeAway}
+          testID="home-continue" accessibilityRole="button" accessibilityHint="Press and hold, or swipe sideways, to hide this">
           <Icon name="play" size={18} color={colors.primary} />
           <View style={styles.grow}>
             <Text style={[styles.title, { color: colors.text }]}>Continue: {target.squareTitle}</Text>
@@ -47,6 +55,11 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
         <TouchableOpacity style={styles.row} onPress={() => go('Practice', { ...(weak.projectId ? { projectId: weak.projectId } : {}), topic: weak.topic })} testID="home-weak" accessibilityRole="button">
           <Icon name="target" size={18} color={colors.primary} />
           <Text style={[styles.title, styles.grow, { color: colors.text }]}>Weakest topic: {weak.topic} ({weak.percent}% right)</Text>
+        </TouchableOpacity>
+      )}
+      {target && hidden && (
+        <TouchableOpacity onPress={() => useHomeHidden.getState().show('continue-learning')} testID="home-continue-show" accessibilityRole="button">
+          <Text style={[styles.small, { color: colors.textMuted }]}>Show “Continue learning” again</Text>
         </TouchableOpacity>
       )}
       {!!exam && <Text style={[styles.small, { color: colors.textSecondary }]} testID="home-exam-line">{exam}</Text>}

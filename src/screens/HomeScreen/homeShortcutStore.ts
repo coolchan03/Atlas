@@ -13,6 +13,8 @@ export type HomeWidgetAction =
 export interface HomeShortcut {
   id: string;
   title: string;
+  /** The Feather icon the widget's tile shows; missing means the one that suits its action. */
+  icon?: string;
   action?: HomeWidgetAction;
   agentId?: string;
   projectId?: string;
@@ -47,3 +49,13 @@ export const useHomeShortcuts = create<State>()(persist((set) => ({
 
 export { isWidgetSafeChat, shortcutDestination, selectResumeConversation } from './homeShortcutPolicy';
 export type { ResumableConversation } from './homeShortcutPolicy';
+
+/** The icon a widget's tile starts with, by what it does. */
+export const DEFAULT_WIDGET_ICON: Record<HomeWidgetAction, string> = {
+  chat: 'message-circle', call: 'phone', 'resume-last': 'rotate-ccw', 'resume-most': 'star', 'model-picker': 'zap', 'music-studio': 'music', 'music-player': 'music',
+  learning: 'trending-up', 'learning-status': 'bar-chart-2', 'daily-brief': 'sun', recorder: 'mic', compass: 'compass', 'read-aloud': 'volume-2',
+  course: 'grid', project: 'folder', practice: 'check-square', review: 'repeat',
+};
+/** Icons a person can give their widget. */
+export const WIDGET_ICONS = ['phone', 'message-circle', 'music', 'headphones', 'book', 'book-open', 'sun', 'moon', 'mic', 'compass', 'map', 'folder', 'star', 'heart', 'zap', 'coffee', 'home', 'briefcase', 'camera', 'globe', 'smile', 'bell', 'bookmark', 'calendar', 'clock', 'target', 'users', 'edit-3', 'film', 'gift'] as const;
+export const widgetIcon = (w: Pick<HomeShortcut, 'icon' | 'action'>): string => w.icon || DEFAULT_WIDGET_ICON[w.action || 'chat'] || 'circle';

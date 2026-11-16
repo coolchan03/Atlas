@@ -8,6 +8,9 @@ import { continueInfo } from '../../../language/continueInfo';
 import { BRIEF_PROJECT, todayKey } from '../../../atlasTools/dailyBrief';
 import { useStudyStore } from '../../../study/engine';
 import { useSchedule } from '../../../schedule/store';
+import { Alert, Text as RNText, TouchableOpacity } from 'react-native';
+import { swipeHandlers } from '../../../utils/swipe';
+import { useHomeHidden } from '../homeHidden';
 
 /**
  * "Pick up where you left off" for the two things Home does not already resume: your next Learn square and today's
@@ -21,8 +24,14 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
   const tasks = useSchedule((st) => st.tasks);
   const ready = React.useMemo(() => tasks.filter((t) => !!t.lastChatId && t.resultSeen === false), [tasks]);
   const briefing = useStudyStore((s) => (s.saved[BRIEF_PROJECT] ?? []).find((r) => todayKey(new Date(r.createdAt)) === todayKey()));
-  const row = ({ icon, title, meta, onPress, testID }: { icon: string; title: string; meta: string; onPress: () => void; testID: string }) => (
-    <AnimatedPressable key={testID} style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={onPress} hapticType="selection" testID={testID}>
+  const hidden = useHomeHidden((st) => st.hidden.includes('continue-learning'));
+  const hideLearning = () => useHomeHidden.getState().hide('continue-learning');
+  const swipeAway = React.useMemo(() => swipeHandlers(() => hideLearning()), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const askHide = () => Alert.alert('Hide “Continue learning”?', 'It goes away from Home. A small link where it was brings it back.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Hide', onPress: hideLearning }]);
+  const row = ({ icon, title, meta, onPress, testID, dismissible }: { icon: string; title: string; meta: string; onPress: () => void; testID: string; dismissible?: boolean }) => (
+    <View key={testID} {...(dismissible ? swipeAway : {})}>
+    <AnimatedPressable style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={onPress} hapticType="selection" testID={testID}
+      onLongPress={dismissible ? askHide : undefined}>
       <Icon name={icon} size={18} color={colors.primary} />
       <View style={styles.text}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
@@ -30,10 +39,16 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
       </View>
       <Icon name="chevron-right" size={16} color={colors.textMuted} />
     </AnimatedPressable>
+    </View>
   );
   return (
     <View style={styles.wrap} testID="home-continue">
-      {!!next && row({ icon: 'book', title: `Continue ${next.language}: ${next.title}`, meta: 'Next square on your board', onPress: () => navigation.navigate('Language'), testID: 'home-continue-learn' })}
+      {!!next && !hidden && row({ icon: 'book', title: `Continue ${next.language}: ${next.title}`, meta: 'Next square on your board. Press and hold, or swipe, to hide', onPress: () => navigation.navigate('Language'), testID: 'home-continue-learn', dismissible: true })}
+      {!!next && hidden && (
+        <TouchableOpacity onPress={() => useHomeHidden.getState().show('continue-learning')} testID="home-continue-learn-show" accessibilityRole="button">
+          <RNText style={[styles.meta, { color: colors.textMuted }]}>Show “Continue learning” again</RNText>
+        </TouchableOpacity>
+      )}
       {ready.map((t) => row({
         icon: 'clock', title: `${t.name} is ready`, meta: 'Scheduled answer. Tap to read it.', testID: `home-scheduled-${t.id}`,
         onPress: () => { useSchedule.getState().update(t.id, { resultSeen: true }); navigation.navigate('Chat', { conversationId: t.lastChatId }); },
