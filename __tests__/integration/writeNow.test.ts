@@ -33,6 +33,7 @@ it('writes the next few squares now, and lists the chapters with how many are wr
   expect(Object.keys(get().content).sort()).toEqual(['a1', 'a2', 'a3', 'b1']);
   expect(prepare.unitsOf(get())).toEqual([{ unit: 'Chapter 1: Alpha', total: 3, written: 3 }, { unit: 'Chapter 2: Beta', total: 3, written: 1 }]);
   expect(prepare.useBatch.getState()).toMatchObject({ total: 4, done: 4, failed: [] });
+  expect(mockAsked).toHaveLength(4); // one request to the AI for each square
 });
 
 it('writes a whole chapter on request, and skips a square that cannot be written instead of stopping', async () => {
