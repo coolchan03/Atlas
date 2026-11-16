@@ -216,7 +216,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
   {
     id: 'draft_message', name: 'draft_message', displayName: 'Draft text or email',
-    description: 'Open the Messages or Email app with a message already written, or the phone app with a number ready, for the user to send or call themselves. Nothing is sent or dialled by Atlas. Use when the user asks to text, email or call someone.', icon: 'send',
+    description: 'Open the Messages or Email app with a message already written, or the phone app with a number ready, for the user to send or call themselves. Nothing is sent or dialled by Atlas. Use ONLY when the user asks to text, email or call a particular person or number. Never use it to answer a question, to tell the user something, or to write something for the user to read here in the chat: answer in the chat instead.', icon: 'send',
     parameters: {
       kind: { type: 'string', description: 'text, email or call', enum: ['text', 'email', 'call'], required: true },
       body: { type: 'string', description: 'The message (not needed for a call)' },

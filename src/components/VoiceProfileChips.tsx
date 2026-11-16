@@ -20,7 +20,8 @@ export function VoiceProfileChips({ value, onChange, colors }: {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={literalStyles.s1} testID="voice-profile-chips">
       {items.map((p) => {
-        const on = p.id === value;
+        // A profile with no id of its own must never match an unset choice (that lit several chips at once).
+        const on = p.id ? p.id === value : value === '';
         return (
           <TouchableOpacity
             key={p.id || 'app'}

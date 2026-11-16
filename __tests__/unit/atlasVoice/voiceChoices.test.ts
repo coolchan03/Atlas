@@ -23,3 +23,21 @@ it('saves a voice that was never saved when it is picked, and reuses a saved one
   expect(added[0]).toMatchObject({ name: 'Kokoro Echo', voiceId: 'kokoro-v1-en', sid: 12 });
   expect(profileIdFor({ key: 'p', label: 'x', group: 'saved', profile: { id: 'p9' } as any }, add)).toBe('p9');
 });
+
+import { repairProfiles } from '../../../src/atlasVoice/profiles';
+
+describe('choosing a voice highlights only that voice', () => {
+  const profile = (id: any, name: string): any => ({ id, name, voiceId: 'v', sid: 0, rate: 1, createdAt: '' });
+
+  it('gives a saved voice with no id, or a repeated id, its own id', () => {
+    const fixed = repairProfiles([profile('a', 'One'), profile(undefined, 'Two'), profile('a', 'Three'), profile('', 'Four')]);
+    expect(fixed.map((p) => p.name)).toEqual(['One', 'Two', 'Three', 'Four']);
+    expect(new Set(fixed.map((p) => p.id)).size).toBe(4);
+    expect(fixed[0].id).toBe('a');
+  });
+
+  it('leaves healthy profiles exactly as they are', () => {
+    const ok = [profile('a', 'One'), profile('b', 'Two')];
+    expect(repairProfiles(ok)).toEqual(ok);
+  });
+});

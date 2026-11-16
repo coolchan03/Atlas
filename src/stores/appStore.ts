@@ -78,6 +78,8 @@ type AppSettings = {
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[]; studyToolsAdded?: boolean;
   thinkingEnabled: boolean;
+  /** Name new chats with the AI after the first answer (on unless this is false). */
+  autoNameChats?: boolean;
   /** Atlas: how much to think when thinking is on. */
   thinkingLevel?: 'low' | 'medium' | 'high';
   inferenceBackend: InferenceBackend;

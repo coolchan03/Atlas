@@ -9,6 +9,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { defaultPresentationSlides, PRESENTATION_TEMPLATES, SLIDE_LAYOUTS, slideHasBullets, cleanPresentationSlides,
   type PresentationSlide, type PresentationStyleId } from '../services/presentationTemplates';
+import { SlidePreview } from '../components/SlidePreview';
+import { templateFonts } from '../services/presentationPreview';
 import { exportPresentation, sharePresentation, type ExportedPresentation, type PresentationFormat } from '../services/presentationExport';
 
 const DRAFT_KEY = 'atlas-presentation-draft-v1';
@@ -30,6 +32,7 @@ export const PresentationScreen: React.FC = () => {
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState<PresentationFormat | null>(null);
   const [lastExport, setLastExport] = useState<ExportedPresentation | null>(null);
+  const [previewWidth, setPreviewWidth] = useState(320);
   const template = PRESENTATION_TEMPLATES.find(t => t.id === styleId) ?? PRESENTATION_TEMPLATES[0];
   const slide = slides[Math.min(active, slides.length - 1)];
 
@@ -139,6 +142,8 @@ export const PresentationScreen: React.FC = () => {
                   <View style={[staticStyles.h14, { backgroundColor: '#' + t.secondary }]} />
                 </View>
                 <Text style={[staticStyles.h15, { color: colors.text }]}>{t.name}</Text>
+                <Text testID={'presentation-font-' + t.id} style={{ color: colors.text, fontSize: 18, ...templateFonts(t).heading }}>Aa Bb 123</Text>
+                <Text style={[staticStyles.h16, { color: colors.textMuted }]}>{t.headingFont && t.headingFont !== t.font ? t.headingFont + ' + ' + t.font : t.font}</Text>
                 <Text style={[staticStyles.h16, { color: colors.textMuted }]}>{t.description}</Text>
               </TouchableOpacity>
             ))}
@@ -156,13 +161,8 @@ export const PresentationScreen: React.FC = () => {
           </ScrollView>
         </View>
         <View style={[staticStyles.h18, { borderColor: colors.border }]}>
-          <View testID="presentation-slide-preview" style={[staticStyles.h19, { aspectRatio: 16/9, backgroundColor: '#' + template.background }]}>
-            {slide.layout !== 'bullets' && <View style={[staticStyles.h20, { backgroundColor: '#' + template.accent }]} />}
-            <Text numberOfLines={3} style={[staticStyles.h21, { fontSize: pick(slide.layout === 'bullets', 21, 25), color: '#' + template.foreground }]}>{slide.title || 'Your title'}</Text>
-            {!!slide.subtitle && <Text numberOfLines={2} style={[staticStyles.h22, { color: '#' + template.secondary }]}>{slide.subtitle}</Text>}
-            {slide.layout === 'bullets' && <View style={[staticStyles.h23, { backgroundColor: '#' + template.panel }]}>
-              {slide.bullets.slice(0, 6).map((b,i) => <Text key={i} numberOfLines={1} style={[staticStyles.h24, { color: '#' + template.foreground }]}>{'\u2022'}  {b}</Text>)}
-            </View>}
+          <View testID="presentation-slide-preview" onLayout={(e) => setPreviewWidth(Math.round(e.nativeEvent.layout.width))} style={staticStyles.h19}>
+            <SlidePreview slide={slide} template={template} width={previewWidth} testID="presentation-slide-render" />
           </View>
         </View>
         <View style={staticStyles.h25}>
@@ -228,7 +228,7 @@ const staticStyles = StyleSheet.create({
   h16: { fontSize: 11 },
   h17: { paddingHorizontal: 13, paddingVertical: 10, borderRadius: 8, borderWidth: 1 },
   h18: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  h19: { padding: 23, justifyContent: 'center' },
+  h19: { alignItems: 'stretch' },
   h20: { height: 6, width: '65%', marginBottom: 18 },
   h21: { fontWeight: '700' },
   h22: { marginTop: 8, fontSize: 14 },

@@ -31,11 +31,11 @@ export function VoicePicker({ value, onPick, defaultLabel, testID }: { value: st
     <View testID={testID}>
       <View style={styles.chips}>
         {chip('none', defaultLabel, { selected: !value, onPress: () => onPick(undefined) })}
-        {top.map((c) => chip(c.key, c.label, { selected: !!c.profile && c.profile.id === value, onPress: () => pick(c) }))}
+        {top.map((c) => chip(c.key, c.label, { selected: !!value && c.profile?.id === value, onPress: () => pick(c) }))}
       </View>
       {more.length > 0 && (
         <Fold title={`More voices (${more.length})`} testID={`${testID}-more`}>
-          <View style={styles.chips}>{more.map((c) => chip(c.key, c.label, { selected: !!c.profile && c.profile.id === value, onPress: () => pick(c) }))}</View>
+          <View style={styles.chips}>{more.map((c) => chip(c.key, c.label, { selected: !!value && c.profile?.id === value, onPress: () => pick(c) }))}</View>
         </Fold>
       )}
     </View>

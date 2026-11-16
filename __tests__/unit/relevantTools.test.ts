@@ -25,3 +25,13 @@ describe('sending only the tools a message needs', () => {
     expect(relevantTools('write me a poem about the sea', ALL).length).toBeLessThan(ALL.length / 2);
   });
 });
+
+describe('the draft text or email tool is only offered when the person means to reach someone', () => {
+  const offered = (m: string) => relevantTools(m, ['draft_message']).includes('draft_message');
+  it('is offered for texting, emailing or calling a person', () => {
+    for (const m of ['text my wife that I am running late', 'email Sam the report', 'send a message to the landlord', 'tell him I am late', 'call mum', 'reply to Dana', 'draft an email to my boss']) expect(offered(m)).toBe(true);
+  });
+  it('is not offered when the person is asking the assistant to answer or tell them something', () => {
+    for (const m of ['tell me something interesting', 'tell me about volcanoes', 'can you tell me what a fund is', 'text me the steps here', 'message me back with the answer', 'what is the message of this poem', 'tell us a story', 'Tell Me something fun', 'Message me back', 'explain how to call a function in Python']) expect(offered(m)).toBe(false);
+  });
+});

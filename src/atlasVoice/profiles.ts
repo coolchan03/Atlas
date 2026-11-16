@@ -60,7 +60,20 @@ export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set, get) 
   name: 'atlas-voice-profiles',
   storage: createJSONStorage(() => AsyncStorage),
   partialize: (s) => ({ profiles: s.profiles }),
+  // Saved voices from older versions are made whole: each has its own id (two with the same or no id were highlighted together).
+  merge: (saved, current) => ({ ...current, profiles: repairProfiles((saved as Partial<VoiceProfilesState> | undefined)?.profiles ?? current.profiles) }),
 }));
+
+/** Profiles with a missing or repeated id get a new one, so each voice is chosen and highlighted on its own. */
+export function repairProfiles(profiles: VoiceProfile[]): VoiceProfile[] {
+  const seen = new Set<string>();
+  return profiles.map((p) => {
+    if (p.id && !seen.has(p.id)) { seen.add(p.id); return p; }
+    const id = generateId();
+    seen.add(id);
+    return { ...p, id };
+  });
+}
 
 /** The voice profile of the agent answering in this conversation, if it has one. */
 export function profileForConversation(conversationId: string | null | undefined): VoiceProfile | null {

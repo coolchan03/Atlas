@@ -6,6 +6,17 @@
  */
 const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|today|tonight|now|current|price|cost|score|weather|forecast|search|look up|find out|google|http|www\.|\.com)\b/i;
 
+/**
+ * Whether a message means to reach another person: "text my wife", "email Sam", "send a message to...", "tell him I am late", "call mum", "reply to Dana".
+ * Not "tell me something", "text me the steps", "message me back" or "how to call a function": those ask the assistant to answer in the chat.
+ */
+const WHO = String.raw`(?![Mm]e\b|[Uu]s\b|[Yy]ou\b|[Ii]t\b|[Bb]ack\b)(?:my|mum|mom|dad|him|her|them|his|their|our|the (?:landlord|doctor|dentist|school|office|boss|team|plumber|bank)|\d|\+|[A-Z][a-z]+)`;
+const REACH_VERB = new RegExp(String.raw`\b(?:[Tt]ext|[Ss][Mm][Ss]|[Ee]-?mail|[Mm]essage|[Dd][Mm]|[Cc]all|[Pp]hone|[Dd]ial|[Rr]ing|[Tt]ell|[Rr]eply to|[Rr]espond to)\s+${WHO}`);
+const SEND_MESSAGE = /\b(?:send|write|draft)\s+(?:a |an |my |the )?(?:quick |short )?(?:text|sms|e-?mail|message)\b/i;
+export function reachesSomeone(message: string): boolean {
+  return SEND_MESSAGE.test(message) || REACH_VERB.test(message);
+}
+
 const TRIGGERS: Record<string, RegExp> = {
   web_search: ASKS_FACT,
   read_url: /\b(http|www\.|\.com|\.org|link|url|article|page|website|site)\b/i,
@@ -34,7 +45,7 @@ const TRIGGERS: Record<string, RegExp> = {
   map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
   remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
   schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
-  draft_message: /\b(text|sms|email|e-mail|message|reply|send|write to|tell|call|phone|dial|ring)\b/i,
+  draft_message: { test: reachesSomeone } as RegExp,
 };
 
 /** Tools worth sending with this message. `used` are tool names already used in the chat. */

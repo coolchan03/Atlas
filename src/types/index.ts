@@ -252,6 +252,8 @@ export interface Message {
 export interface Conversation {
   id: string;
   title: string;
+  /** True while the title is only the start of the first message (not renamed by the person, not named by the AI yet): the AI may name it. */
+  titleAuto?: boolean;
   modelId: string;
   messages: Message[];
   createdAt: string;

@@ -131,6 +131,7 @@ interface ChatState {
   setConversationArchived: (conversationId: string, archived: boolean) => void;
   setConversationPinned: (conversationId: string, pinned: boolean) => void;
   renameConversation: (conversationId: string, title: string) => void;
+  setAutoTitle: (conversationId: string, title: string) => void;
   setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
   setConversationAgent: (conversationId: string, agentId: string | null) => void;
   setConversationVoiceProfile: (conversationId: string, voiceProfileId: string | undefined) => void;
@@ -250,7 +251,14 @@ export const useChatStore = create<ChatState>()(
         const clean = title.trim().slice(0, 100);
         if (!clean) return;
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
-          (conv) => ({ ...conv, title: clean, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+          (conv) => ({ ...conv, title: clean, titleAuto: false, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      /** The AI's name for a chat. Applies only while the title is still the automatic one, so a name the person typed meanwhile is never replaced. */
+      setAutoTitle: (conversationId, title) => {
+        const clean = title.trim().slice(0, 60);
+        if (!clean) return;
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => (conv.titleAuto ? { ...conv, title: clean, titleAuto: false } : conv)) }));
       },
       setConversationArchived: (conversationId, archived) => {
         set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
@@ -305,6 +313,7 @@ export const useChatStore = create<ChatState>()(
                   messages: [...conv.messages, message],
                   updatedAt: nextUpdatedAt(conv.updatedAt),
                   title: deriveTitle(conv.title, messageData.role, messageData.content),
+                  ...(conv.title === 'New Conversation' && messageData.role === 'user' ? { titleAuto: true } : {}),
                 }
               : conv
           ),
@@ -428,6 +437,8 @@ export const useChatStore = create<ChatState>()(
             generationTimeMs,
             generationMeta,
           });
+          // After the first answer there is enough to name the chat by what it is about.
+          try { require('../services/autoChatTitle').maybeNameChat(conversationId); } catch { /* naming is optional */ }
         }
         set({
           streamingMessage: '',
