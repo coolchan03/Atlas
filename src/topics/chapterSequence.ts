@@ -50,7 +50,7 @@ export function deepChapter(chapter: Chapter, size: number): Square[] {
 }
 
 /** The six squares of a chapter called `name`, in the order they are played. `about` says what it is for ("for the FAR exam (Area)"). */
-export const chapterSquares = (name: string, unit: string, about: string, topic?: string): Square[] => deepChapter({ name, unit, about, topic }, CHAPTER_SQUARES);
+export const chapterSquares = (name: string, unit: string, about: string): Square[] => deepChapter({ name, unit, about }, CHAPTER_SQUARES);
 
 function baseSquares(name: string, unit: string, about: string): Square[] {
   return [

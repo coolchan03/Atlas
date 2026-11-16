@@ -142,7 +142,7 @@ export const PresentationScreen: React.FC = () => {
                   <View style={[staticStyles.h14, { backgroundColor: '#' + t.secondary }]} />
                 </View>
                 <Text style={[staticStyles.h15, { color: colors.text }]}>{t.name}</Text>
-                <Text testID={'presentation-font-' + t.id} style={{ color: colors.text, fontSize: 18, ...templateFonts(t).heading }}>Aa Bb 123</Text>
+                <Text testID={'presentation-font-' + t.id} style={[staticStyles.fontSample, { color: colors.text }, templateFonts(t).heading]}>Aa Bb 123</Text>
                 <Text style={[staticStyles.h16, { color: colors.textMuted }]}>{t.headingFont && t.headingFont !== t.font ? t.headingFont + ' + ' + t.font : t.font}</Text>
                 <Text style={[staticStyles.h16, { color: colors.textMuted }]}>{t.description}</Text>
               </TouchableOpacity>
@@ -229,11 +229,7 @@ const staticStyles = StyleSheet.create({
   h17: { paddingHorizontal: 13, paddingVertical: 10, borderRadius: 8, borderWidth: 1 },
   h18: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
   h19: { alignItems: 'stretch' },
-  h20: { height: 6, width: '65%', marginBottom: 18 },
-  h21: { fontWeight: '700' },
-  h22: { marginTop: 8, fontSize: 14 },
-  h23: { marginTop: 12, borderRadius: 9, padding: 12, gap: 5 },
-  h24: { fontSize: 12 },
+  fontSample: { fontSize: 18 },
   h25: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   h26: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   h27: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

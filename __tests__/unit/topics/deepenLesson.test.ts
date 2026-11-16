@@ -11,7 +11,7 @@ beforeEach(() => mockAsk.mockReset());
 
 it('writes every section out at length, keeping headings, examples and key points', async () => {
   mockAsk.mockResolvedValue(LONG);
-  const out: any = await deepenLesson(course, '1 – Cash', lesson, []);
+  const out: any = await deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] });
   expect(mockAsk).toHaveBeenCalledTimes(2);
   expect(out.sections.map((s: any) => s.heading)).toEqual(['Cash', 'Debts']);
   expect(out.sections[0].text.length).toBeGreaterThan(400);
@@ -23,7 +23,7 @@ it('writes every section out at length, keeping headings, examples and key point
 
 it('keeps the short version of a section the model could not lengthen, or failed on', async () => {
   mockAsk.mockResolvedValueOnce('Too short.').mockRejectedValueOnce(new Error('out of memory'));
-  const out: any = await deepenLesson(course, '1 – Cash', lesson, []);
+  const out: any = await deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] });
   expect(out.sections.map((s: any) => s.text)).toEqual(['Cash is money.', 'Debts are owed.']);
 });
 

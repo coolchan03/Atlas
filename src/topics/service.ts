@@ -225,7 +225,7 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   const written = withoutSources(
     // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
-    content.kind === 'lesson' && shouldDeepen(course, square, rewrite) ? await deepenLesson(course, square.title, content, excerpts) : content,
+    content.kind === 'lesson' && shouldDeepen(course, square, rewrite) ? await deepenLesson(course, content, { title: square.title, excerpts }) : content,
     excerpts, bank);
   useTopics.getState().setContent(course.id, key, written);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
@@ -240,7 +240,8 @@ export const shouldDeepen = (course: Pick<Course, 'readingDepth'>, square: { rem
  * A reading written in depth: each section of the first pass is written out again as full textbook paragraphs. A section the model cannot
  * deepen (an empty or far shorter answer, or an error) keeps what it had, so the reading is never worse than the short one.
  */
-export async function deepenLesson(course: Course, title: string, lesson: Extract<SquareContent, { kind: 'lesson' }>, excerpts: Excerpt[]): Promise<SquareContent> {
+export async function deepenLesson(course: Course, lesson: Extract<SquareContent, { kind: 'lesson' }>, about: { title: string; excerpts: Excerpt[] }): Promise<SquareContent> {
+  const { title, excerpts } = about;
   const passages = excerpts.map((e) => e.text).join('\n').slice(0, 1800);
   const sections = [];
   for (const [i, section] of lesson.sections.slice(0, 8).entries()) {

@@ -22,6 +22,7 @@ import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
+import { AddSquarePanel, ReadingDepthChips, WritingNotice } from './BoardExtras';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
 import { WriteNowPanel } from './WriteNowPanel';
@@ -45,8 +46,6 @@ const BOARD_KIND: Record<SquareFormat, SpaceKind> = {
 };
 const iconOf = (format: SquareFormat) => FORMATS.find((f) => f.id === format)?.icon ?? 'circle';
 
-/** The kinds of square a learner can add to the board themselves (the ones the app makes in code are left out). */
-const ADDABLE: SquareFormat[] = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman', 'match', 'quiz', 'truefalse', 'fill', 'recall', 'sort', 'order', 'cards', 'scenario', 'practice', 'numeric'];
 const LEVELS = ['Complete beginner', 'Know a little', 'Intermediate', 'Advanced'];
 const SITTINGS = [5, 10, 15, 20];
 
@@ -340,27 +339,13 @@ export const TopicBoardScreen: React.FC = () => {
         <View style={styles.chips} testID="course-difficulty">
           {DIFFICULTIES.map((d) => <Chip key={d.id} label={d.label} on={(course.difficulty ?? 'beginner') === d.id} onPress={() => useTopics.getState().setDifficulty(course.id, d.id)} testID={`course-difficulty-${d.id}`} />)}
         </View>
-        <Text style={[styles.meta, { color: colors.textSecondary }]}>How detailed the readings are</Text>
-        <View style={styles.chips} testID="course-depth">
-          <Chip label="In depth" on={(course.readingDepth ?? 'deep') === 'deep'} onPress={() => useTopics.getState().setReadingDepth(course.id, 'deep')} testID="course-depth-deep" />
-          <Chip label="Short" on={course.readingDepth === 'standard'} onPress={() => useTopics.getState().setReadingDepth(course.id, 'standard')} testID="course-depth-standard" />
-        </View>
+        <ReadingDepthChips course={course} />
         <Text style={[styles.meta, { color: colors.textSecondary }]}>Write the next lessons ahead</Text>
         <View style={styles.chips} testID="course-ahead">
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
         <WriteNowPanel course={course} />
-        <Fold title="Add a game or activity to the board" testID="course-add-square">
-          <Text style={[styles.meta, { color: colors.textSecondary }]}>It goes after the square you are on, in the same chapter, and is written when you reach it.</Text>
-          <View style={styles.chips}>
-            {ADDABLE.map((f) => {
-              const info = FORMATS.find((x) => x.id === f)!;
-              const here = course.squares[current];
-              return <Chip key={f} label={info.label} on={false} testID={`course-add-${f}`}
-                onPress={() => { if (here) useTopics.getState().addSquare(course.id, here.key, { format: f, title: `${info.label}: ${friendlyTitle(here.unit)}`, focus: `${info.label} on ${here.topic || friendlyTitle(here.unit)}` }); }} />;
-            })}
-          </View>
-        </Fold>
+        <AddSquarePanel course={course} currentKey={spaces[current]?.key} />
         {prep.courseId === course.id && !!prep.working && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}
@@ -421,8 +406,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
     squareContent(course, key).then(setContent).catch((e) => setError(String(e?.message || e)));
   }, [course, key]);
   React.useEffect(() => { if (!content) load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // The square keeps being written when this screen is left, and is saved on the board as soon as it is done: pick it up from there
-  // even when the request that started here is no longer the one that finishes.
+  // The square keeps being written when this screen is left and is saved on the board when done: pick it up from there.
   const saved = course?.content[key];
   React.useEffect(() => { if (!content && saved) setContent(saved); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -489,8 +473,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
         ) : (
           <View style={styles.gap}>
             <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">Writing this square...</Text></View>
-            <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-writing-leave">This can take a minute. You do not have to wait here: it keeps writing in the background and is saved on the board when it is ready.</Text>
-            {!props.embedded && <Button title="Back to the board" variant="outline" onPress={() => navigation.goBack()} testID="square-leave" />}
+            <WritingNotice embedded={!!props.embedded} onLeave={() => navigation.goBack()} />
           </View>
         )}
       </ScrollView>

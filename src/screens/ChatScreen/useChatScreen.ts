@@ -21,6 +21,7 @@ import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, han
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
+import { useNameChatOnLeave } from './useNameChatOnLeave';
 import { saveReportToProject } from '../../services/researchReportStorage';
 import { saveImageToGallery } from './useSaveImage';
 import { needsVisionRepair } from '../../utils/visionRepair';
@@ -131,19 +132,12 @@ export const useChatScreen = () => {
   // Stop TTS when navigating away, app backgrounded, or screen locked.
   // No-op without the voice feature.
   useEffect(() => {
-    // On leaving the chat, once the AI is free, the chat is given a name by what it is about (see autoChatTitle).
-    const nameLater = () => {
-      const id = useChatStore.getState().activeConversationId;
-      if (id) setTimeout(() => { try { require('../../services/autoChatTitle').nameChatsInBackground({ only: id, quietMs: 0 }); } catch { /* naming is optional */ } }, 2500);
-    };
     const unsubBlur = navigation.addListener('blur', () => {
       callHook(HOOKS.audioStop);
-      nameLater();
     });
     // beforeRemove fires on back button — more reliable than blur for native-stack
     const unsubRemove = navigation.addListener('beforeRemove', () => {
       callHook(HOOKS.audioStop);
-      nameLater();
     });
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') {
@@ -154,7 +148,7 @@ export const useChatScreen = () => {
     });
     return () => { unsubBlur(); unsubRemove(); appStateSub.remove(); };
   }, [navigation]);
-  const modelLoadStartTimeRef = useRef<number | null>(null);
+  const modelLoadStartTimeRef = useRef<number | null>(null); useNameChatOnLeave(navigation);
   const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
   // Always-current genDeps for the queue drain (avoids a stale-closure capture).
   const genDepsRef = useRef<any>(null);

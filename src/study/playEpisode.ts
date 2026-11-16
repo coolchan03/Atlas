@@ -26,13 +26,18 @@ export async function playEpisode(plan: EpisodePlan, hooks: EpisodeHooks): Promi
   let finished = false;
   for (let i = first; i < plan.count; i++) {
     if (hooks.stopped()) break;
-    // A soft chime when the next story begins (not when playback starts or is moved to a line).
-    if (plan.tunes && i > first && plan.tunes.storyStarts.includes(i) && !(await hooks.jingle('chime'))) break;
-    if (plan.tunes && i > first && plan.tunes.storyStarts.includes(i) && plan.tunes.pauseSeconds && hooks.pause && !(await hooks.pause(plan.tunes.pauseSeconds))) break;
+    // A soft chime, then a quiet beat, when the next story begins (not when playback starts or is moved to a line).
+    if (plan.tunes && i > first && plan.tunes.storyStarts.includes(i) && !(await storyBreak(plan.tunes, hooks))) break;
     hooks.onLine(i);
     if (!(await hooks.line(i)) || hooks.stopped()) break;
     finished = i === plan.count - 1;
   }
   if (finished && plan.tunes && !hooks.stopped()) await hooks.jingle('outro');
   return finished;
+}
+
+/** The chime and the quiet beat between two stories. False when playback was stopped during either. */
+async function storyBreak(tunes: NonNullable<EpisodePlan['tunes']>, hooks: EpisodeHooks): Promise<boolean> {
+  if (!(await hooks.jingle('chime'))) return false;
+  return !tunes.pauseSeconds || !hooks.pause || (await hooks.pause(tunes.pauseSeconds));
 }

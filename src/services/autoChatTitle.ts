@@ -57,7 +57,10 @@ export async function maybeNameChat(conversationId: string, ask?: (system: strin
     const run = ask ?? ((system: string, text: string) => require('../study/engine').askModel(system, text));
     const title = parseChatTitle(await run(prompt.system, prompt.user));
     if (!title) return null;
-    useChatStore.getState().setAutoTitle(conversationId, title);
+    // Only while the title is still the automatic one, so a name the person typed meanwhile is never replaced.
+    useChatStore.setState((state: { conversations: Conversation[] }) => ({
+      conversations: state.conversations.map((c) => (c.id === conversationId && c.titleAuto ? { ...c, title: title.slice(0, 60), titleAuto: false } : c)),
+    }));
     return useChatStore.getState().conversations.find((c: Conversation) => c.id === conversationId)?.title === title ? title : null;
   } catch { return null; }
   finally { inFlight.delete(conversationId); }

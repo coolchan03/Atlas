@@ -8,7 +8,7 @@ import { continueInfo } from '../../../language/continueInfo';
 import { BRIEF_PROJECT, todayKey } from '../../../atlasTools/dailyBrief';
 import { useStudyStore } from '../../../study/engine';
 import { useSchedule } from '../../../schedule/store';
-import { Alert, Text as RNText, TouchableOpacity } from 'react-native';
+import { Alert, TouchableOpacity } from 'react-native';
 import { swipeHandlers } from '../../../utils/swipe';
 import { useHomeHidden } from '../homeHidden';
 
@@ -46,7 +46,7 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
       {!!next && !hidden && row({ icon: 'book', title: `Continue ${next.language}: ${next.title}`, meta: 'Next square on your board. Press and hold, or swipe, to hide', onPress: () => navigation.navigate('Language'), testID: 'home-continue-learn', dismissible: true })}
       {!!next && hidden && (
         <TouchableOpacity onPress={() => useHomeHidden.getState().show('continue-learning')} testID="home-continue-learn-show" accessibilityRole="button">
-          <RNText style={[styles.meta, { color: colors.textMuted }]}>Show “Continue learning” again</RNText>
+          <Text style={[styles.meta, { color: colors.textMuted }]}>Show “Continue learning” again</Text>
         </TouchableOpacity>
       )}
       {ready.map((t) => row({

@@ -38,6 +38,13 @@ const literalStyles = StyleSheet.create({
 
 type Props = { activity: StudyResult; onOpenSource: (source: Source) => void };
 
+/** How far a puzzle is: its size, and how many are right once it is finished (-1 while it is still being played). */
+function puzzleProgress(activity: StudyResult, now: { solved: number; matchIndex: number; matchingScore: number }): { total: number; done: number } {
+  if (activity.kind === 'match') { const total = Math.min(8, (activity.learningTerms || []).length); return { total, done: now.matchIndex >= total ? now.matchingScore : -1 }; }
+  const total = (activity.kind === 'crossword' ? activity.crossword?.entries.length : activity.wordSearch?.entries.length) ?? 0;
+  return { total, done: now.solved === total ? now.solved : -1 };
+}
+
 export function ProjectLearningGame({ activity, onOpenSource }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
@@ -52,9 +59,8 @@ export function ProjectLearningGame({ activity, onOpenSource }: Props) {
   const terms = activity.learningTerms || [];
   // Whoever shows the puzzle (a course square) is told when every clue is solved or every round is played.
   const report = useContext(GameFinishContext);
-  const total = activity.kind === 'crossword' ? activity.crossword?.entries.length ?? 0 : activity.kind === 'wordsearch' ? activity.wordSearch?.entries.length ?? 0 : Math.min(8, terms.length);
-  const progressNow = activity.kind === 'match' ? (matchIndex >= total ? matchingScore : -1) : solved.length;
-  useEffect(() => { if (report && total > 0 && (activity.kind === 'match' ? progressNow >= 0 : progressNow === total)) report(progressNow, total); }, [report, total, progressNow, activity.kind]);
+  const { total, done } = puzzleProgress(activity, { solved: solved.length, matchIndex, matchingScore });
+  useEffect(() => { if (report && total > 0 && done >= 0) report(done, total); }, [report, total, done]);
   const sourceLinks = (nums: number[]) => (
     <View style={literalStyles.s1}>
       {nums.map(n => {

@@ -30,11 +30,9 @@ function titleBelow(lines: string[], from: number): string {
 export function findChapters(text: string): Chapter[] {
   const lines = text.replace(/\r/g, '').split('\n');
   const heads: Array<{ number: number; title: string; at: number }> = [];
-  const starts: number[] = []; // the character offset of each line, to take a chapter's first words from
   let offset = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    starts.push(offset);
     const m = HEADING.exec(line);
     if (m && line.length < 140) {
       let title = m[3].trim().replace(/\.{2,}.*$/, '').replace(/\s+\d+$/, '').trim();
@@ -91,7 +89,7 @@ export function parseSubjects(raw: string, count: number): string[] | null {
 }
 
 import { MAX_SQUARES, type CoursePlan, type PlannedSquare } from './formats';
-import { CHAPTER_SQUARES, chapterSquares } from './chapterSequence';
+import { CHAPTER_SQUARES, deepChapter } from './chapterSequence';
 
 /** "7 – Leases": the number, then what the chapter is mainly about (not the book's long heading). */
 export const chapterName = (c: Chapter): string => {
@@ -113,6 +111,8 @@ export function chapterPlan(chapters: Chapter[], book: string, manyBooks = false
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
   // The unit is named for what the chapter is mainly about ("7 – Leases"), not just its number; passages are still matched on the book's full heading.
-  for (const c of used) chapterSquares(chapterName(c), chapterName(c), manyBooks ? 'from all the textbooks in the project' : 'of the textbook', c.title || undefined).forEach(add);
+  const about = manyBooks ? 'from all the textbooks in the project' : 'of the textbook';
+  // Passages and questions are matched on the book's full heading (`topic`), while the board shows the short name.
+  for (const c of used) deepChapter({ name: chapterName(c), unit: chapterName(c), about, topic: c.title || undefined }, CHAPTER_SQUARES).forEach(add);
   return { title: book, summary: manyBooks ? 'Every chapter of every textbook, with the same subject in different books made one unit: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.' : 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
 }

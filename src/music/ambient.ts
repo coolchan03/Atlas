@@ -60,7 +60,7 @@ const wobble = (t: number, periods: number[], phases: number[]): number =>
   0.5 + 0.5 * periods.reduce((s, p, k) => s + Math.sin((2 * Math.PI * t) / p + phases[k]) / periods.length, 0);
 
 /** The raw sound before the ends are blended. */
-function raw(kind: AmbientKind, n: number, rate: number, r: () => number): Float32Array {
+function raw({ kind, n, rate, r }: { kind: AmbientKind; n: number; rate: number; r: () => number }): Float32Array {
   switch (kind) {
     case 'white': return white(n, r);
     case 'pink': return pink(n, r);
@@ -104,7 +104,7 @@ export function makeAmbient(kind: AmbientKind, seconds: number, o: { seed?: numb
   const n = Math.max(rate, Math.round(seconds * rate));
   const fade = Math.min(Math.floor(rate * 2), Math.floor(n / 4));
   // Made a little longer; the end is faded out while the extra, laid over the start, fades in, so the join cannot be heard.
-  const x = raw(kind, n + fade, rate, rng(o.seed ?? Math.floor(Math.random() * 2 ** 31)));
+  const x = raw({ kind, n: n + fade, rate, r: rng(o.seed ?? Math.floor(Math.random() * 2 ** 31)) });
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) out[i] = x[i];
   for (let i = 0; i < fade; i++) { const w = i / fade; out[i] = out[i] * w + x[n + i] * (1 - w); }

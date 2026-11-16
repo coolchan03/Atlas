@@ -41,7 +41,7 @@ export function JournalEntryEditor({ rows, onChange, texts, editable = true }: {
             {options.map((a) => (
               <TouchableOpacity key={a} onPress={() => set(focus, { account: a })} accessibilityRole="button" accessibilityLabel={`Use ${a}`} testID={`journal-pick-${a}`}
                 style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-                <Text style={{ color: colors.text, fontSize: 13 }}>{a}</Text>
+                <Text style={[styles.chipText, { color: colors.text }]}>{a}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -68,4 +68,5 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
+  chipText: { fontSize: 13 },
 });

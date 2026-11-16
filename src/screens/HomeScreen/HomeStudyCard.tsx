@@ -25,14 +25,14 @@ export function HomeStudyCard({ navigation }: { navigation: any }) {
   const progress = useExerciseStore((st) => st.progress);
   const weak = useMemo(() => weakestTopic(Object.values(exercises), progress), [exercises, progress]);
   const exam = useMemo(() => nextExamLine(Object.entries(examState).map(([code, e]) => ({ label: examLabel(code as any), examDate: e?.examDate, remaining: (e?.topics ?? []).filter((t) => !t.covered).length })).filter((e) => e.examDate)), [examState]);
+  // Press and hold, or swipe sideways, to get rid of the "Continue" suggestion. (Hooks come before the early return below.)
+  const hidden = useHomeHidden((st) => st.hidden.includes('continue-learning'));
+  const hideContinue = () => useHomeHidden.getState().hide('continue-learning');
+  const askHide = () => Alert.alert('Hide “Continue learning”?', 'It goes away from Home. A small link where it was brings it back.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Hide', onPress: hideContinue }]);
+  const swipeAway = React.useMemo(() => swipeHandlers(() => useHomeHidden.getState().hide('continue-learning')), []);
   if (!target && !due && !exam && !weak) return null;
   const remind = () => { const until = Object.values(examState).map((e) => e?.examDate).filter(Boolean).sort()[0]; addDailyReminder('Study with Atlas', { until, description: 'Open Atlas and carry on with your course.' }).then((m) => Alert.alert('Reminder', m)).catch((e) => Alert.alert('Could not open the calendar', String(e?.message || e))); };
   const go = (screen: string, params?: object) => navigation.getParent()?.navigate(screen, params);
-  const hidden = useHomeHidden((st) => st.hidden.includes('continue-learning'));
-  const hideContinue = () => useHomeHidden.getState().hide('continue-learning');
-  // Press and hold, or swipe sideways, to get rid of the "Continue" suggestion.
-  const askHide = () => Alert.alert('Hide “Continue learning”?', 'It goes away from Home. A small link where it was brings it back.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Hide', onPress: hideContinue }]);
-  const swipeAway = React.useMemo(() => swipeHandlers(() => hideContinue()), []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="home-study">
       {target && !hidden && (
