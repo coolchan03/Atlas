@@ -22,6 +22,8 @@ function course() {
     ...[1, 2, 3].map((i) => ({ key: `b${i}`, format: 'lesson', title: `Beta ${i}`, focus: `about beta ${i}`, unit: 'Chapter 2: Beta' })),
   ];
   const id = useTopics.getState().add({ topic: 'T', goal: '', level: 'Complete beginner', how: '', minutes: 10 }, { title: 'T', summary: '', style: '', theme: '', squares });
+  // These tests count the model's calls, one per lesson: the short reading is one call (the in-depth reading is tested in deepenLesson.test).
+  useTopics.getState().setReadingDepth(id, 'standard');
   return { id, useTopics, prepare: require('../../src/topics/prepare') };
 }
 

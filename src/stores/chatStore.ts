@@ -437,8 +437,6 @@ export const useChatStore = create<ChatState>()(
             generationTimeMs,
             generationMeta,
           });
-          // After the first answer there is enough to name the chat by what it is about.
-          try { require('../services/autoChatTitle').maybeNameChat(conversationId); } catch { /* naming is optional */ }
         }
         set({
           streamingMessage: '',

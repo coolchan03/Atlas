@@ -131,12 +131,19 @@ export const useChatScreen = () => {
   // Stop TTS when navigating away, app backgrounded, or screen locked.
   // No-op without the voice feature.
   useEffect(() => {
+    // On leaving the chat, once the AI is free, the chat is given a name by what it is about (see autoChatTitle).
+    const nameLater = () => {
+      const id = useChatStore.getState().activeConversationId;
+      if (id) setTimeout(() => { try { require('../../services/autoChatTitle').nameChatsInBackground({ only: id, quietMs: 0 }); } catch { /* naming is optional */ } }, 2500);
+    };
     const unsubBlur = navigation.addListener('blur', () => {
       callHook(HOOKS.audioStop);
+      nameLater();
     });
     // beforeRemove fires on back button — more reliable than blur for native-stack
     const unsubRemove = navigation.addListener('beforeRemove', () => {
       callHook(HOOKS.audioStop);
+      nameLater();
     });
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') {

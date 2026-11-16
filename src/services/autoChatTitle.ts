@@ -32,12 +32,23 @@ export function canNameChat(conv: Conversation | undefined, autoName: boolean): 
 
 const inFlight = new Set<string>();
 
+/** A model is ready to answer without loading anything (the one on the phone, or a server's): a name is never worth loading a model or freeing memory for. */
+function modelReady(): boolean {
+  try {
+    const { llmService } = require('./llm');
+    const { useRemoteServerStore } = require('../stores/remoteServerStore');
+    return !!llmService.isModelLoaded() || !!useRemoteServerStore.getState().activeRemoteTextModelId;
+  } catch { return false; }
+}
+const generating = (): boolean => { try { return !!require('./llm').llmService.isCurrentlyGenerating(); } catch { return false; } };
+
 /** Names the chat in the background, then returns the title it set (or null). Safe to call after every answer: it does nothing unless the chat can be named. */
 export async function maybeNameChat(conversationId: string, ask?: (system: string, user: string) => Promise<string>): Promise<string | null> {
   const { useChatStore } = require('../stores/chatStore');
   const { useAppStore } = require('../stores/appStore');
   const conv: Conversation | undefined = useChatStore.getState().conversations.find((c: Conversation) => c.id === conversationId);
   if (inFlight.has(conversationId) || !canNameChat(conv, useAppStore.getState().settings?.autoNameChats !== false)) return null;
+  if (!ask && (!modelReady() || generating())) return null; // only when the AI is free: a name must never get in the way of a reply
   inFlight.add(conversationId);
   try {
     const user = conv!.messages.find((m) => m.role === 'user')!.content;
@@ -50,4 +61,24 @@ export async function maybeNameChat(conversationId: string, ask?: (system: strin
     return useChatStore.getState().conversations.find((c: Conversation) => c.id === conversationId)?.title === title ? title : null;
   } catch { return null; }
   finally { inFlight.delete(conversationId); }
+}
+
+/**
+ * Names the chats that can be named, one at a time, when the person is not waiting on the AI: on leaving a chat, and when the chat list opens.
+ * Not straight after a reply: the next message may be on its way, and one model cannot do two things at once. Stops as soon as a reply starts.
+ * `only` limits it to one chat (the one just left); `quietMs` skips chats touched very recently (they are probably still being used).
+ */
+export async function nameChatsInBackground(o: { only?: string; limit?: number; quietMs?: number; /** Replaces the model call (tests). */ ask?: (system: string, user: string) => Promise<string> } = {}): Promise<number> {
+  const { useChatStore } = require('../stores/chatStore');
+  const { limit = 3, quietMs = 15_000 } = o;
+  const now = Date.now();
+  const candidates: Conversation[] = (useChatStore.getState().conversations as Conversation[])
+    .filter((c) => (!o.only || c.id === o.only) && c.titleAuto && now - (Date.parse(c.updatedAt) || 0) >= quietMs)
+    .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+  let named = 0;
+  for (const c of candidates) {
+    if (named >= limit || generating()) break;
+    if (await maybeNameChat(c.id, o.ask)) named++;
+  }
+  return named;
 }

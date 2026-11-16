@@ -1,4 +1,4 @@
-import { canNameChat, chatTitleMessages, maybeNameChat, parseChatTitle } from '../../src/services/autoChatTitle';
+import { canNameChat, chatTitleMessages, maybeNameChat, nameChatsInBackground, parseChatTitle } from '../../src/services/autoChatTitle';
 import { useChatStore } from '../../src/stores/chatStore';
 import { useAppStore } from '../../src/stores/appStore';
 
@@ -76,5 +76,41 @@ describe('naming a chat', () => {
     const id = useChatStore.getState().createConversation('m');
     useChatStore.getState().addMessage(id, { role: 'user', content: 'Plan my week' } as any);
     expect(useChatStore.getState().conversations.find((c) => c.id === id)).toMatchObject({ title: 'Plan my week', titleAuto: true });
+  });
+});
+
+describe('when chats get named', () => {
+  const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const make = (id: string, minutesAgo: number, over: Record<string, unknown> = {}) => conv({ id, updatedAt: at(minutesAgo), ...over });
+  beforeEach(() => useAppStore.getState().updateSettings({ autoNameChats: true }));
+
+  it('names the older chats, newest first, up to the limit, and leaves one touched a moment ago alone', async () => {
+    useChatStore.setState({ conversations: [make('a', 60), make('b', 30), make('c', 10), make('d', 5), make('fresh', 0.05)] } as any);
+    const asked: string[] = [];
+    const named = await nameChatsInBackground({ limit: 3, ask: async (_s, u) => { asked.push(u); return `Name ${asked.length}`; } });
+    expect(named).toBe(3);
+    const titles = Object.fromEntries(useChatStore.getState().conversations.map((c) => [c.id, c.title]));
+    expect(titles).toMatchObject({ d: 'Name 1', c: 'Name 2', b: 'Name 3', a: 'How do I bake' });
+    expect(titles.fresh).toBe('How do I bake');
+  });
+
+  it('names just the chat that was left, even a moment after it was used', async () => {
+    useChatStore.setState({ conversations: [make('a', 60), make('left', 0.01)] } as any);
+    expect(await nameChatsInBackground({ only: 'left', quietMs: 0, ask: async () => 'Left chat name' })).toBe(1);
+    expect(useChatStore.getState().conversations.map((c) => c.title)).toEqual(['How do I bake', 'Left chat name']);
+  });
+
+  it('does nothing while a reply is being written, and never loads a model or frees memory for a name', async () => {
+    useChatStore.setState({ conversations: [make('a', 60)] } as any);
+    const { llmService } = require('../../src/services/llm');
+    const busy = jest.spyOn(llmService, 'isCurrentlyGenerating').mockReturnValue(true);
+    const ask = jest.fn(async () => 'x');
+    expect(await nameChatsInBackground({ ask })).toBe(0);
+    expect(ask).not.toHaveBeenCalled();
+    busy.mockReturnValue(false);
+    jest.spyOn(llmService, 'isModelLoaded').mockReturnValue(false);
+    // No model is ready and none is passed in: nothing is asked and nothing is loaded.
+    expect(await maybeNameChat('a')).toBeNull();
+    busy.mockRestore();
   });
 });

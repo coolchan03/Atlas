@@ -16,6 +16,7 @@ import {
 } from './palettes';
 import type { ThemeShadows } from './palettes';
 import { applyAppearanceColors, applyTypography, shapeOf, type Appearance, type SkinShape } from './appearance';
+import { sanitizeChanged } from './colorSafety';
 
 
 export interface Theme {
@@ -42,7 +43,9 @@ function shapeWith(appearance?: Appearance): SkinShape {
 
 export function getTheme(mode: 'light' | 'dark', appearance?: Appearance): Theme {
   const isDark = mode === 'dark';
-  const themed = applyAppearanceColors(isDark ? COLORS_DARK : COLORS_LIGHT, isDark, appearance);
+  const base = isDark ? COLORS_DARK : COLORS_LIGHT;
+  // Whatever the appearance changed is checked: a colour that is not a usable hex colour never reaches a screen.
+  const themed = sanitizeChanged(applyAppearanceColors(base, isDark, appearance), base);
   const bg = appearance?.backgroundImage;
   const colors = bg ? { ...themed, background: 'transparent' } : themed;
   const shadows = isDark ? SHADOWS_DARK : SHADOWS_LIGHT;

@@ -39,6 +39,8 @@ function course(squares = 5) {
     squares: Array.from({ length: squares }, (_, i) => ({ key: `s${i + 1}`, format: 'lesson', title: `Lesson ${i + 1}`, focus: `about ${i + 1}`, unit: 'U' })),
   };
   const id = useTopics.getState().add({ topic: 'T', goal: '', level: 'Complete beginner', how: '', minutes: 10 }, plan);
+  // These tests count the model's calls, one per lesson: the short reading is one call (the in-depth reading is tested in deepenLesson.test).
+  useTopics.getState().setReadingDepth(id, 'standard');
   return { id, useTopics, prepare: require('../../src/topics/prepare'), service: require('../../src/topics/service') };
 }
 

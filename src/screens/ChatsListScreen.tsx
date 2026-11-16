@@ -57,6 +57,8 @@ export const ChatsListScreen: React.FC = () => {
   const [vaultPin, setVaultPin] = useState('');
   const [vaultError, setVaultError] = useState('');
   useEffect(() => onProtectedChatsRelocked(() => setVaultOpen(false)), [setVaultOpen]);
+  // Chats still titled by the start of their first message get a real name when the list is opened (only while the AI is free).
+  useEffect(() => { try { void require('../services/autoChatTitle').nameChatsInBackground(); } catch { /* naming is optional */ } }, [focusTrigger]);
   /** Opens the hidden vault: unlocks every locked chat that uses this PIN. */
   const openVault = async () => {
     const wait = await pinWaitRemaining('chat');

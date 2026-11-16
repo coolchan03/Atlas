@@ -1,3 +1,4 @@
+import { withAlpha } from '../theme/colorSafety';
 import React, { useState } from 'react';
 import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -55,7 +56,7 @@ export function HelpSheet({ visible, onClose, context }: { visible: boolean; onC
 }
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
-  backdrop: { flex: 1, justifyContent: 'flex-end' as const, backgroundColor: `${colors.background}99` },
+  backdrop: { flex: 1, justifyContent: 'flex-end' as const, backgroundColor: withAlpha(colors.background, 0.6) },
   sheet: { backgroundColor: colors.surface, padding: SPACING.lg, gap: SPACING.md, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '80%' as const },
   head: { flexDirection: 'row' as const, alignItems: 'center' as const },
   title: { ...TYPOGRAPHY.h3, flex: 1, color: colors.text },
