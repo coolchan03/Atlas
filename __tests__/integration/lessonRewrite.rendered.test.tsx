@@ -24,6 +24,7 @@ it('writes the lesson again, simpler, and shows the new one', async () => {
   const { TopicSquareScreen } = require('../../src/topics/TopicScreens');
   const plan = { title: 'C', summary: '', style: '', theme: '', squares: [{ key: 's1', format: 'lesson', title: 'Leases', focus: 'about leases', unit: 'U' }] };
   (global as any).__courseId = useTopics.getState().add({ topic: 'T', goal: '', level: 'Complete beginner', how: '', minutes: 10 }, plan);
+  useTopics.getState().setReadingDepth((global as any).__courseId, 'standard'); // one model call per lesson, which is what these scripted answers are for
   const view = rtl.render(React.createElement(TopicSquareScreen));
   await rtl.waitFor(() => expect(view.getByText('Version 1 of the lesson.')).toBeTruthy());
   rtl.fireEvent.press(view.getByTestId('square-rewrite-simpler'));

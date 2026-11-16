@@ -27,6 +27,8 @@ export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-drug-labels': 'FDA drug labels seen on this phone: public text that is looked up again when needed',
   'atlas-backup-reminder': 'when this phone last reminded about a backup',
   'atlas-pane-ratios': 'how this phone or tablet splits its screen',
+  'atlas-table-fit': 'whether tables are fitted to this phone\'s screen width or scrolled sideways',
+  'atlas-home-hidden': 'which Home suggestions were swiped away on this phone',
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
   'atlas-tasks': 'running and failed jobs of this phone, which cannot continue on another phone',
   'atlas-model-speed': 'measured speed of this phone\'s models',

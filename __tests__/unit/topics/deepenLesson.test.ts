@@ -1,7 +1,7 @@
 const mockAsk = jest.fn();
 jest.mock('../../../src/study/engine', () => ({ ...jest.requireActual('../../../src/study/engine'), askModel: (...a: unknown[]) => mockAsk(...a) }));
 
-import { deepenLesson } from '../../../src/topics/service';
+import { deepenLesson, shouldDeepen } from '../../../src/topics/service';
 
 const course: any = { title: 'Accounting', topic: 'Accounting', difficulty: 'beginner' };
 const lesson: any = { kind: 'lesson', sections: [{ heading: 'Cash', text: 'Cash is money.', example: 'Cash: 500' }, { heading: 'Debts', text: 'Debts are owed.' }], keyPoints: ['k'] };
@@ -25,4 +25,14 @@ it('keeps the short version of a section the model could not lengthen, or failed
   mockAsk.mockResolvedValueOnce('Too short.').mockRejectedValueOnce(new Error('out of memory'));
   const out: any = await deepenLesson(course, '1 – Cash', lesson, []);
   expect(out.sections.map((s: any) => s.text)).toEqual(['Cash is money.', 'Debts are owed.']);
+});
+
+describe('when a reading is written in depth', () => {
+  it('by default and when asked for, but not for a rewrite, an "Another look" lesson, or a course set to short', () => {
+    expect(shouldDeepen({}, {})).toBe(true);
+    expect(shouldDeepen({ readingDepth: 'deep' }, {})).toBe(true);
+    expect(shouldDeepen({ readingDepth: 'standard' }, {})).toBe(false);
+    expect(shouldDeepen({}, {}, 'shorter')).toBe(false);
+    expect(shouldDeepen({}, { remedial: true })).toBe(false);
+  });
 });

@@ -20,6 +20,7 @@ it('writes ahead as the board opens, shows which lesson, and the choice turns it
   const { useTopics } = require('../../src/topics/store');
   const plan = { title: 'Course', summary: '', style: '', theme: '', squares: [1, 2, 3, 4].map((i) => ({ key: `s${i}`, format: 'lesson', title: `Lesson ${i}`, focus: `about ${i}`, unit: 'U' })) };
   const id = useTopics.getState().add({ topic: 'T', goal: '', level: 'Complete beginner', how: '', minutes: 10 }, plan);
+  useTopics.getState().setReadingDepth(id, 'standard'); // one model call per lesson, which is what these scripted answers are for
   (global as any).__courseId = id;
   const { TopicBoardScreen } = require('../../src/topics/TopicScreens');
   const view = rtl.render(React.createElement(TopicBoardScreen));

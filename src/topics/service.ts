@@ -224,12 +224,17 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
   const written = withoutSources(
-    content.kind === 'lesson' && (course.readingDepth ?? 'deep') === 'deep' ? await deepenLesson(course, square.title, content, excerpts) : content,
+    // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
+    content.kind === 'lesson' && shouldDeepen(course, square, rewrite) ? await deepenLesson(course, square.title, content, excerpts) : content,
     excerpts, bank);
   useTopics.getState().setContent(course.id, key, written);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   return written;
 }
+
+/** Whether a reading is written in depth: when the course says so, and not for a rewrite (shorter, simpler, another example) or an "Another look" lesson, which were asked to be less or plainer. */
+export const shouldDeepen = (course: Pick<Course, 'readingDepth'>, square: { remedial?: boolean }, rewrite?: unknown): boolean =>
+  (course.readingDepth ?? 'deep') === 'deep' && !rewrite && !square.remedial;
 
 /**
  * A reading written in depth: each section of the first pass is written out again as full textbook paragraphs. A section the model cannot
