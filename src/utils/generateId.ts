@@ -28,5 +28,6 @@ export function generateRandomSeed(): number {
     return a[0] % 2147483647;
   }
   // Fallback for environments without crypto API
-  return Math.floor(((Date.now() * 9301 + 49297) % 233280) / 233280 * 2147483647); // NOSONAR
+  // Not derived from the clock: seeds asked for in the same millisecond (a batch of images) would be identical.
+  return Math.floor(Math.random() * 2147483647); // NOSONAR
 }

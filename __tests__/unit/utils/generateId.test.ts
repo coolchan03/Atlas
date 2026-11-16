@@ -112,3 +112,14 @@ describe('without Web Crypto (Hermes on Android)', () => {
     } finally { now.mockRestore(); (global as any).crypto = original; }
   });
 });
+
+describe('random seeds without Web Crypto', () => {
+  it('differ even when asked for in the same millisecond', () => {
+    const original = (global as any).crypto;
+    (global as any).crypto = undefined;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      expect(new Set(Array.from({ length: 50 }, () => generateRandomSeed())).size).toBeGreaterThan(45);
+    } finally { now.mockRestore(); (global as any).crypto = original; }
+  });
+});
