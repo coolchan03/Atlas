@@ -69,7 +69,7 @@ export function subjectAdvice(topic: string): string {
 }
 export const FORMAT_IDS = FORMATS.map((f) => f.id);
 
-export interface PlannedSquare { key: string; format: SquareFormat; title: string; focus: string; unit: string; checkpoint?: boolean; remedial?: boolean }
+export interface PlannedSquare { key: string; format: SquareFormat; title: string; focus: string; unit: string; checkpoint?: boolean; remedial?: boolean; /** The subject alone ("Leases"), without the words every square of a chapter shares ("chapter exam", "quiz"): what passages and textbook questions are matched on. */ topic?: string }
 export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
 
 /** The longest board: 60 chapters of six squares each, and the checks between them. */
@@ -159,7 +159,7 @@ const SHAPES: Record<SquareFormat, string> = {
   cards: '{"cards": [{"front": "term or question", "back": "short definition or answer"}]}  (8 to 14 cards)',
   match: '{"pairs": [{"left": "...", "right": "..."}]}  (5 or 6 pairs, every left and every right different)',
   order: '{"prompt": "what to put in order", "steps": ["first step", "second step", "..."]}  (4 to 7 steps, listed in the CORRECT order)',
-  practice: '{"task": "what the learner must do, self-contained", "hint": "a nudge (optional)", "model": "a good answer", "rubric": ["what a good answer must include"], "code": true if the answer is code}',
+  practice: '{"task": "a real assignment: something to explain, work out, compare or write in their own words or numbers (at least two sentences of answer), self-contained, and never something finished by pressing Next", "hint": "a nudge (optional)", "model": "a good answer", "rubric": ["what a good answer must include"], "code": true if the answer is code}',
   fill: '{"questions": [{"q": "a sentence, formula or code line with ____ where the gap is", "options": ["A", "B", "C"], "answer": 0, "why": "..."}]}  (6 to 8 items, "answer" is the index of the right option)',
   truefalse: '{"questions": [{"q": "a statement", "options": ["True", "False"], "answer": 0, "why": "the reason it is true or false"}]}  (6 to 8 statements; "answer" is 0 for True or 1 for False; about half false)',
   scenario: '{"questions": [{"q": "a short situation, then the decision to make", "options": ["choice 1", "choice 2", "choice 3"], "answer": 0, "why": "why that is the best choice"}]}  (3 to 5 different situations)',
@@ -181,7 +181,7 @@ export function contentMessages(r: SquareRequest) {
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
 ${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
-${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${authorityNote(r.excerpts)}${r.excerpts.map((e) => `[${e.source}${e.role === 'reference' ? ` (REFERENCE: ${e.label ?? 'standard'})` : e.label && e.label !== 'textbook' ? ` (${e.label})` : ''}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${r.square.format === 'practice' ? ASSIGNMENT_NOTE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${authorityNote(r.excerpts)}${r.excerpts.map((e) => `[${e.source}${e.role === 'reference' ? ` (REFERENCE: ${e.label ?? 'standard'})` : e.label && e.label !== 'textbook' ? ` (${e.label})` : ''}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };
 }
 
@@ -195,6 +195,24 @@ export const standardsNote = (text: string): string => (ACCOUNTING.test(text)
   ? 'Accounting standards change, and a textbook can be older than the latest FASB update. Teach the rule as the excerpts give it. Where a rule is one that FASB has been changing (leases, revenue, credit losses, segment reporting, income taxes, crypto assets and so on), add a line starting "Check:" telling the learner to confirm it with the latest-standards check, because a newer standard overrules the book. Never state an ASU number or an effective date from memory.\n'
   : '');
 
+/** Text cut only where a sentence or a word ends, never in the middle of one, with "..." when something was left off. */
+export function tidy(v: unknown, max: number): string {
+  const t = str(v, 100000);
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const sentence = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+  if (sentence > max * 0.5) return cut.slice(0, sentence + 1);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 1)).trim()}...`;
+}
+
+/** Text that must be whole to make sense (a question, an answer choice): null when it is longer than allowed, so the caller drops it instead of showing it cut off. */
+export const whole = (v: unknown, max: number): string | null => { const t = str(v, 100000); return t && t.length <= max ? t : null; };
+
+/** An assignment has to give real work: something to write, work out or explain, with a good answer to compare with. A task answered by pressing a button ("click next") is not one. */
+export function isRealAssignment(task: string, model: string, rubric: string[]): boolean {
+  return task.length >= 60 && model.length >= 60 && rubric.length >= 2 && !/\b(click|tap|press)\b[^.]{0,20}\b(next|continue|done|finish|ok)\b/i.test(task);
+}
+
 /** Text that keeps its paragraph breaks (str() squeezes everything onto one line): lines tidied, blank lines at most one, so a lesson can have space between paragraphs. */
 export const prose = (v: unknown, max = 1600): string => String(v ?? '').replace(/\r/g, '').split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
 
@@ -205,7 +223,10 @@ export function exampleIsComplete(example: string): boolean {
   return !poses || answers;
 }
 
-/** What a lesson's writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
+/** What an assignment must be: work the learner does, with a good answer to compare with, and what a good answer includes. */
+export const ASSIGNMENT_NOTE = 'This is an ASSIGNMENT: real work for the learner to do in their own words or numbers (explain, calculate, compare, write or analyse something from this topic), with a model answer of several sentences and at least two things a good answer must include. Never a task that is done by pressing Next or Continue, and never a question that only needs one word.\n';
+
+/** What a lesson\'s writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
 export const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Use a Markdown table (a header row, a |---|---| row, then the rows, each on its own line) for anything with columns: comparisons, schedules, amortisation or depreciation tables, rate and threshold lists, and journal entries. Write a journal entry as a table with the columns Account | Debit | Credit, the debit line first, the credit line after it with "to" before the account name (for example "to Revenue"), and a short date or description line above it. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
 
 /** When passages come from several books, and some are a standard or the law: combine what the books agree on, and let the standard win where it differs. */
@@ -235,16 +256,18 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
   }
   if (format === 'quiz' || format === 'fill' || format === 'truefalse' || format === 'scenario' || format === 'reading' || format === 'predict') {
     const questions = list(j.questions).map((q) => {
-      const options = list(q?.options).map((o) => str(o, 160)).filter(Boolean).slice(0, 5);
+      // A question or a choice that is too long is dropped whole: a quiz must never show one cut off in the middle.
+      const raw = list(q?.options).slice(0, 5).map((o) => whole(o, 400));
+      const options = raw.filter((o): o is string => !!o);
       const answer = Number(q?.answer);
-      return { q: str(q?.q, 300), options, answer, why: str(q?.why, 300) };
-    }).filter((q) => q.q && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length);
+      return { q: whole(q?.q, 900) ?? '', options, answer, why: tidy(q?.why, 900), whole: raw.every(Boolean) };
+    }).filter((q) => q.whole && q.q && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length).map(({ whole: _w, ...q }) => q);
     const passage = format === 'reading' ? str(j.passage, 2000) : '';
     if (format === 'reading' && !passage) return null;
     return questions.length >= 2 ? { kind: 'quiz', questions: questions.slice(0, 10), ...(passage ? { passage } : {}) } : null;
   }
   if (format === 'cards') {
-    const cards = list(j.cards).map((c) => ({ front: str(c?.front, 160), back: str(c?.back, 300) })).filter((c) => c.front && c.back);
+    const cards = list(j.cards).map((c) => ({ front: whole(c?.front, 400) ?? '', back: tidy(c?.back, 700) })).filter((c) => c.front && c.back);
     return cards.length >= 3 ? { kind: 'cards', cards: cards.slice(0, 16) } : null;
   }
   if (format === 'match') {
@@ -283,19 +306,19 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
     return sentences.length >= 3 ? { kind: 'dictation', lang: /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(String(j.lang)) ? String(j.lang) : 'en-US', sentences } : null;
   }
   if (format === 'numeric') {
-    const task = str(j.task, 700);
+    const task = tidy(j.task, 1400);
     const answer = Number(j.answer);
     if (!task || !Number.isFinite(answer)) return null;
     const tolerance = Number.isFinite(Number(j.tolerance)) && Number(j.tolerance) >= 0 ? Number(j.tolerance) : Math.abs(answer) * 0.01;
     // The AI also writes the sum as a plain expression; the app works it out itself. If the two disagree, the app's number is used.
     let checked = false; let final = answer;
     try { const computed = evalExpression(String(j.expression ?? '')); checked = true; if (Math.abs(computed - answer) > Math.max(tolerance, Math.abs(computed) * 0.001)) final = Math.round(computed * 1e6) / 1e6; } catch { /* no usable expression: the answer is the AI's own and is labelled so */ }
-    return { kind: 'numeric', task, answer: final, tolerance, unit: str(j.unit, 20), working: list(j.working).map((w) => str(w, 300)).filter(Boolean).slice(0, 10), checked };
+    return { kind: 'numeric', task, answer: final, tolerance, unit: str(j.unit, 20), working: list(j.working).map((w) => tidy(w, 600)).filter(Boolean).slice(0, 10), checked };
   }
   if (format === 'worked') {
-    const steps = list(j.steps).map((x) => ({ step: str(x?.step, 400), why: str(x?.why, 300) })).filter((x) => x.step);
-    const problem = str(j.problem, 500);
-    return problem && steps.length >= 2 ? { kind: 'worked', problem, steps: steps.slice(0, 10), takeaway: str(j.takeaway, 300) } : null;
+    const steps = list(j.steps).map((x) => ({ step: tidy(x?.step, 800), why: tidy(x?.why, 600) })).filter((x) => x.step);
+    const problem = tidy(j.problem, 1000);
+    return problem && steps.length >= 2 ? { kind: 'worked', problem, steps: steps.slice(0, 10), takeaway: tidy(j.takeaway, 600) } : null;
   }
   if (format === 'table') {
     const columns = list(j.columns).map((c) => str(c, 40)).filter(Boolean).slice(0, 5);
@@ -304,9 +327,12 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
     const line = (cells: string[]) => `| ${cells.join(' | ')} |`;
     return { kind: 'table', title: str(j.title, 80), markdown: [line(columns), line(columns.map(() => '---')), ...rows.map(line)].join('\n') };
   }
-  const task = str(j.task, 700);
-  if (!task) return null;
-  return { kind: 'practice', task, hint: str(j.hint, 300) || undefined, model: str(j.model, 1200), rubric: list(j.rubric).map((r) => str(r, 200)).filter(Boolean).slice(0, 6), code: j.code === true || undefined };
+  const task = tidy(j.task, 1400);
+  const model = tidy(j.model, 2400);
+  const rubric = list(j.rubric).map((r) => tidy(r, 400)).filter(Boolean).slice(0, 6);
+  // Not a real assignment (for example "click next"): unusable, so the AI is asked again.
+  if (!isRealAssignment(task, model, rubric)) return null;
+  return { kind: 'practice', task, hint: tidy(j.hint, 600) || undefined, model, rubric, code: j.code === true || undefined };
 }
 
 export function gradeMessages({ task, model, rubric, answer }: { task: string; model: string; rubric: string[]; answer: string }) {

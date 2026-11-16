@@ -67,3 +67,34 @@ describe('the exam blueprint', () => {
     expect(areas.flatMap((a) => a.topics)).not.toContain('Quantum accounting');
   });
 });
+
+describe('quiz questions are never cut off', () => {
+  it('keeps a long question whole, drops one too long to show, and cuts an explanation only at the end of a sentence', () => {
+    const long = `${'Which of the following best describes the treatment of a lessee that enters a lease with a term of twelve months or less and no purchase option, '.repeat(2)}under ASC 842?`;
+    const tooLong = 'x '.repeat(600);
+    const why = `${'This sentence explains the answer in detail. '.repeat(30)}`;
+    const quiz: any = parseContent('quiz', JSON.stringify({ questions: [
+      { q: long, options: ['A short-term lease exemption may be elected', 'Always recognise a lease liability'], answer: 0, why },
+      { q: 'Too long option?', options: [tooLong, 'b'], answer: 1, why: 'x' },
+      { q: 'Second good question?', options: ['a', 'b'], answer: 0, why: 'ok' },
+    ] }));
+    expect(quiz.questions.map((q: any) => q.q)).toEqual([long, 'Second good question?']);
+    expect(quiz.questions[0].why.endsWith('.')).toBe(true);
+    expect(quiz.questions[0].why.length).toBeLessThanOrEqual(900);
+  });
+});
+
+describe('a chapter exam is matched on its subject, not on the words every exam shares', () => {
+  it('does not pick a question about something else because it says "exam" or "questions"', () => {
+    const { questionsOn } = require('../../../src/study/bookQuestions');
+    const { subjectOf } = require('../../../src/topics/chapterSequence');
+    const bank = [
+      { question: 'Which exam questions would you ask about a harder mixed review of the chapter on inventory costing?', source: 'b' },
+      { question: 'Under ASC 842 a lessee records a right-of-use asset and a lease liability. Which two items?', source: 'b' },
+    ];
+    expect(subjectOf('Chapter 7: Leases')).toBe('Leases');
+    expect(questionsOn(bank, subjectOf('Chapter 7: Leases')).map((q: any) => q.question)).toEqual([bank[1].question]);
+    // The words every chapter exam shares match nothing by themselves, so a chapter on receivables does not get the inventory question.
+    expect(questionsOn(bank, 'The chapter exam for Receivables: harder mixed questions across everything in the chapter, like a real exam')).toEqual([]);
+  });
+});

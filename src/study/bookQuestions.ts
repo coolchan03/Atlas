@@ -99,14 +99,16 @@ export function isQuestionBankText(text: string, minimum = 10, share = 0.25): bo
 /** True when one passage is mostly questions, so it is not read as teaching material. */
 export const looksLikeQuestions = (chunk: string): boolean => isQuestionBankText(chunk, 3, 0.4);
 
-const STOP = new Set(['and', 'the', 'for', 'with', 'of', 'to', 'in', 'on', 'a', 'an', 'basics', 'other', 'select', 'what', 'which', 'how', 'that', 'this', 'from']);
+// Words that say nothing about a subject (every chapter has a quiz, an exam, questions) must not make an unrelated question match.
+const STOP = new Set(['and', 'the', 'for', 'with', 'of', 'to', 'in', 'on', 'a', 'an', 'basics', 'other', 'select', 'what', 'which', 'how', 'that', 'this', 'from', 'chapter', 'exam', 'quiz', 'questions', 'question', 'harder', 'mixed', 'everything', 'real', 'like', 'assignment', 'task', 'learner', 'textbook', 'book', 'read', 'ideas', 'order', 'taught', 'rules', 'examples', 'mistakes', 'people', 'make', 'each', 'checks', 'idea', 'reading', 'terms', 'key', 'definitions', 'worked', 'example', 'solved', 'step', 'reason', 'across', 'model', 'answer', 'compared', 'their', 'own', 'words', 'does', 'about', 'following']);
 const stems = (t: string) => [...new Set((t.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w) => !STOP.has(w)).map((w) => w.slice(0, 5)))];
 
 /** The questions on a topic: the ones that mention at least two of its key words (one, for a one-word topic), those with a printed answer first. */
 export function questionsOn(bank: BookQuestion[], topic: string, limit = 6): BookQuestion[] {
   const want = stems(topic);
   if (!want.length) return [];
-  const need = Math.min(2, want.length);
+  // Most of the subject's words must be in the question: two words alone match too much ("asset" and "cost" are in half of any accounting bank).
+  const need = want.length <= 2 ? want.length : Math.max(2, Math.ceil(want.length * 0.6));
   const seen = new Set<string>();
   return bank.filter((q) => {
     const have = new Set(stems(q.question));

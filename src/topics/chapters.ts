@@ -16,14 +16,28 @@ const toNumber = (token: string): number => {
 
 const MIN_BODY = 1200; // a chapter has at least this much text after its heading; a contents-page entry does not
 
+/** The chapter's title on a line after its number: the first short line without a full stop (a title is not a sentence), within the next few lines. */
+function titleBelow(lines: string[], from: number): string {
+  for (let i = from; i < Math.min(lines.length, from + 4); i++) {
+    const t = lines[i].replace(/^\s*\(p\. \d+\)\s*/, '').trim();
+    if (!t) continue;
+    if (HEADING.test(t) || t.length < 3 || t.length > 90 || /[.!?]$/.test(t) || /^\d+$/.test(t)) return '';
+    return t.replace(/\.{2,}.*$/, '').replace(/\s+\d+$/, '').trim();
+  }
+  return '';
+}
+
 export function findChapters(text: string): Chapter[] {
   const lines = text.replace(/\r/g, '').split('\n');
   const heads: Array<{ number: number; title: string; at: number }> = [];
   let offset = 0;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const m = HEADING.exec(line);
     if (m && line.length < 140) {
-      const title = m[3].trim().replace(/\.{2,}.*$/, '').replace(/\s+\d+$/, '').trim();
+      let title = m[3].trim().replace(/\.{2,}.*$/, '').replace(/\s+\d+$/, '').trim();
+      // Many books put the title on the line after "Chapter 7": take it from there.
+      if (!title) title = titleBelow(lines, i + 1);
       heads.push({ number: toNumber(m[2]), title, at: offset });
     }
     offset += line.length + 1;
@@ -47,6 +61,7 @@ export function chapterPlan(chapters: Chapter[], book: string, manyBooks = false
   const used = chapters.slice(0, Math.floor(MAX_SQUARES / CHAPTER_SQUARES));
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
-  for (const c of used) chapterSquares(chapterName(c), `Chapter ${c.number}`, manyBooks ? 'from all the textbooks in the project' : 'of the textbook').forEach(add);
+  // The unit is named for what the chapter covers ("Chapter 7: Leases"), not just its number.
+  for (const c of used) chapterSquares(chapterName(c), chapterName(c), manyBooks ? 'from all the textbooks in the project' : 'of the textbook').forEach(add);
   return { title: book, summary: manyBooks ? 'Every chapter of every textbook, with the same subject in different books made one unit: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.' : 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
 }

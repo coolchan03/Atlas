@@ -52,7 +52,11 @@ describe('topic courses: what the AI writes for a square', () => {
     const match = parseContent('match', JSON.stringify({ pairs: [{ left: 'a', right: '1' }, { left: 'a', right: '2' }, { left: 'b', right: '3' }, { left: 'c', right: '4' }] }));
     expect(match && match.kind === 'match' && match.pairs.map((p) => p.left)).toEqual(['a', 'b', 'c']);
     expect(parseContent('order', JSON.stringify({ prompt: 'p', steps: ['1', '2', '3'] }))).toMatchObject({ kind: 'order', steps: ['1', '2', '3'] });
-    expect(parseContent('practice', JSON.stringify({ task: 'Write a function', model: 'def f(): pass', rubric: ['defines f'] }))).toMatchObject({ kind: 'practice', task: 'Write a function' });
+    const assignment = { task: 'Write a function f that returns the sum of the squares of a list of numbers, and explain in two sentences why you chose a loop or a comprehension.', model: 'def f(xs): return sum(x * x for x in xs). A comprehension is short and clear, and a loop would also work but takes more lines.', rubric: ['defines f', 'sums squares', 'explains the choice'] };
+    expect(parseContent('practice', JSON.stringify(assignment))).toMatchObject({ kind: 'practice', task: expect.stringContaining('Write a function f') });
+    // An assignment finished by pressing a button is not an assignment: it is rejected, so the AI is asked again.
+    expect(parseContent('practice', JSON.stringify({ ...assignment, task: 'Read the lesson above carefully and then click Next when you are ready to continue to the following square.' }))).toBeNull();
+    expect(parseContent('practice', JSON.stringify({ task: 'Write a function', model: 'def f(): pass', rubric: ['defines f'] }))).toBeNull();
     expect(parseContent('quiz', 'not json')).toBeNull();
   });
   it('reads a mark, keeps it between 0 and 100, and gives stars for a share', () => {

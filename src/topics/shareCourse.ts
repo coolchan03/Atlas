@@ -56,7 +56,7 @@ export function parseCourseFile(raw: string): SharedCourse {
   try { json = JSON.parse(raw); } catch { throw new Error('That is not an Atlas course file.'); }
   if (json?.atlasCourse !== 1 || !Array.isArray(json.squares)) throw new Error('That is not an Atlas course file.');
   const squares: PlannedSquare[] = json.squares.slice(0, MAX_SQUARES).filter((s: any) => s && typeof s.key === 'string' && /^[\w-]{1,20}$/.test(s.key) && FORMAT_IDS.includes(s.format) && text(s.title, 80))
-    .map((s: any) => ({ key: s.key, format: s.format, title: text(s.title, 60), focus: text(s.focus, 240) || text(s.title, 60), unit: text(s.unit, 80) || 'Course', ...(s.checkpoint ? { checkpoint: true } : {}), ...(s.remedial ? { remedial: true } : {}) }));
+    .map((s: any) => ({ key: s.key, format: s.format, title: text(s.title, 60), focus: text(s.focus, 240) || text(s.title, 60), unit: text(s.unit, 80) || 'Course', ...(s.checkpoint ? { checkpoint: true } : {}), ...(s.remedial ? { remedial: true } : {}), ...(s.topic ? { topic: text(s.topic, 80) } : {}) }));
   if (squares.length < 2) throw new Error('That course has no squares in it.');
   const keys = new Set(squares.map((s) => s.key));
   const content: Record<string, SquareContent> = {};

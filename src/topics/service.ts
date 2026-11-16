@@ -173,6 +173,9 @@ export function squareContent(course: Course, key: string, opts: { background?: 
   return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), opts.background ? 0 : 1);
 }
 
+/** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
+const subjectQuery = (sq: { topic?: string; title: string; focus: string }): string => sq.topic || `${sq.title} ${sq.focus}`;
+
 async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Promise<SquareContent> {
   // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
@@ -185,7 +188,7 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   const before = course.squares.slice(0, index).map((s) => s.title);
   // An exact drill is made by the app in code (no AI, so the answers cannot be wrong). If no drill fits the words, it becomes a calculation square.
   if (square.format === 'drill') {
-    const kind = drillFor(`${square.title} ${square.focus}`);
+    const kind = drillFor(subjectQuery(square));
     if (kind) {
       const made: SquareContent = { kind: 'drill', exercises: makeDrillSet(5, Date.now() % 100000, [kind]) };
       useTopics.getState().setContent(course.id, key, made);
@@ -198,10 +201,10 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     return made;
   }
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
-  const query = `${square.title} ${square.focus}`;
+  const query = subjectQuery(square);
   let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 6);
   if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = [...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)].slice(0, 5);
-  const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], `${square.title} ${square.focus}`)) : '';
+  const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], subjectQuery(square))) : '';
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,

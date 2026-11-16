@@ -22,7 +22,8 @@ export function mergeBooks(books: BookChapters[]): MergedTopic[] {
   ordered.forEach((book, bookIndex) => {
     let after = -1; // where the book's previous chapter landed, so a chapter only this book has goes beside it
     for (const c of book.chapters) {
-      const title = c.title.trim();
+      // A chapter whose title could not be found keeps its number, so no chapter of a book is dropped.
+      const title = c.title.trim() || `Chapter ${c.number}`;
       if (title.length < 4 || SKIP.test(title)) continue;
       const w = words(title);
       // Only a topic from ANOTHER book is the same subject: two chapters of one book are two units, however alike their titles.

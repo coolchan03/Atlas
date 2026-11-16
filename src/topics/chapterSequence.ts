@@ -10,6 +10,9 @@ type Square = Omit<PlannedSquare, 'key'>;
 
 const fit = (name: string, suffix: string): string => `${name.slice(0, Math.max(8, 60 - suffix.length))}${suffix}`;
 
+/** "Chapter 7: Leases" is about Leases. */
+export const subjectOf = (name: string): string => name.replace(/^(?:chapter|unit|module|lesson|part)\s+(?:\d+|[ivxlc]+)\s*[:.\-–—]?\s*/i, '').trim() || name;
+
 /** Extra practice a deeper chapter adds before its chapter exam, in this order. A chapter is 6 to 14 squares. */
 export const MAX_CHAPTER_SQUARES = 14;
 function extraSquares(name: string, unit: string, about: string): Square[] {
@@ -36,7 +39,8 @@ export function deepChapter(chapter: Chapter, size: number): Square[] {
   const { name, unit, about } = chapter;
   const six = baseSquares(name, unit, about);
   const extra = extraSquares(name, unit, about).slice(0, Math.max(0, Math.min(MAX_CHAPTER_SQUARES, size) - CHAPTER_SQUARES));
-  return [...six.slice(0, -1), ...extra, six[six.length - 1]];
+  // Every square knows the subject it is about, so a chapter exam is matched on "Leases" and not on the words every exam shares.
+  return [...six.slice(0, -1), ...extra, six[six.length - 1]].map((sq) => ({ ...sq, topic: subjectOf(name) }));
 }
 
 /** The six squares of a chapter called `name`, in the order they are played. `about` says what it is for ("for the FAR exam (Area)"). */
