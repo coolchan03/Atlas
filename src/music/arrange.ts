@@ -136,6 +136,38 @@ function tuneNotes({ spec, tonic, seed }: Key, bar: number): MusicNote[] {
   return out;
 }
 
+// ---------------------------------------------------------------- extra players
+/**
+ * The players beyond the trio. Each is written on its own instrument: an answer repeats the start of the bar's tune a little lower in the
+ * rest of the next bar (call and response), a swell holds the chord's third softly for a whole bar, and a sparkle sounds the chord's top
+ * note high up on the first beat of every other bar.
+ */
+function extraNotes({ spec, tonic, seed }: Key, bar: number): MusicNote[] {
+  if (!spec.extras?.length) return [];
+  const degree = degreeAt(spec, bar);
+  const base = bar * spec.beatsPerBar;
+  const n = spec.beatsPerBar;
+  const phraseBar = bar % 4;
+  const lifted = lift(bar);
+  const out: MusicNote[] = [];
+  for (const { voice, kind } of spec.extras) {
+    if (kind === 'swell') {
+      out.push({ ...note(stepPitch(spec, tonic, degree + 2) + 12, base, n - 0.1, 0.11 * lifted, 'pad'), voice });
+    } else if (kind === 'sparkle') {
+      if (bar % 2 === 0) out.push({ ...note(stepPitch(spec, tonic, degree + (seed % 2 ? 4 : 2)) + 36, base, n / 2, 0.13 * lifted, 'melody'), voice });
+    } else if (phraseBar % 2 === 1) {
+      // Answer: two or three chord tones in the second half of the bar, after the tune has said its piece.
+      const motif = motifFor(seed + (bar >= A_BARS ? 3 : 0));
+      const count = n === 3 ? 2 : 3;
+      for (let i = 0; i < count; i++) {
+        const step = spec.chord[Math.abs(motif[i % motif.length]) % spec.chord.length];
+        out.push({ ...note(stepPitch(spec, tonic, degree + step) + 12, base + n / 2 + (i * (n / 2)) / count, (n / 2 / count) * 0.9, 0.17 * lifted, 'melody'), voice });
+      }
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- drums
 function drumNotes({ spec, seed }: Key, bar: number): MusicNote[] {
   if (spec.perc === 'none') return [];
@@ -163,6 +195,6 @@ function drumNotes({ spec, seed }: Key, bar: number): MusicNote[] {
 export function composeFromSpec(spec: StyleSpec, seed: number): MusicNote[] {
   const key: Key = { spec, tonic: 48 + (seed % 5), seed };
   const notes: MusicNote[] = [];
-  for (let bar = 0; bar < BARS; bar++) notes.push(...chordNotes(key, bar), ...bassNotes(key, bar), ...tuneNotes(key, bar), ...drumNotes(key, bar));
+  for (let bar = 0; bar < BARS; bar++) notes.push(...chordNotes(key, bar), ...bassNotes(key, bar), ...tuneNotes(key, bar), ...extraNotes(key, bar), ...drumNotes(key, bar));
   return notes;
 }

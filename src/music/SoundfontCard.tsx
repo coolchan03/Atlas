@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { useMusicLibrary } from './library';
-import { FREE_SOUNDFONT, downloadFreeSoundfont, pickAndInstallSoundfont, removeSoundfont, setRealInstruments } from './soundfontFiles';
+import { SOUNDFONT_CHOICES, downloadSoundfont, pickAndInstallSoundfont, removeSoundfont, setRealInstruments } from './soundfontFiles';
 
 const megabytes = (n: number): string => `${(n / 1048576).toFixed(1)} MB`;
 
@@ -17,7 +17,7 @@ export function SoundfontCard() {
     setBusy(what);
     try { await job(); } catch (e) { Alert.alert('Could not add the instruments', String((e as Error)?.message || e)); } finally { setBusy(''); }
   };
-  const download = () => run('Downloading...', () => downloadFreeSoundfont((share) => setBusy(`Downloading ${Math.round(share * 100)}%...`)));
+  const download = (choice: (typeof SOUNDFONT_CHOICES)[number]) => run('Downloading...', () => downloadSoundfont(choice, (share) => setBusy(`Downloading ${choice.name} ${Math.round(share * 100)}%...`)));
   const pick = () => run('Reading the file...', pickAndInstallSoundfont);
   const button = (label: string, onPress: () => void, testID: string) => (
     <TouchableOpacity onPress={onPress} disabled={!!busy} accessibilityRole="button" testID={testID} style={[styles.btn, { borderColor: colors.border }]}>
@@ -32,12 +32,21 @@ export function SoundfontCard() {
       </Text>
       {!!busy && <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textSecondary }}>{busy}</Text></View>}
       <View style={styles.row}>
-        {!sf && button(`Download free instruments (${FREE_SOUNDFONT.approxMB} MB)`, download, 'music-sf-download')}
         {button('Choose a SoundFont file (.sf2)', pick, 'music-sf-pick')}
         {!!sf && button(on ? 'Use the built-in synthesiser' : 'Use the real instruments', () => setRealInstruments(!on), 'music-sf-toggle')}
         {!!sf && button('Remove', removeSoundfont, 'music-sf-remove')}
       </View>
-      {!sf && <Text style={[styles.small, { color: colors.textMuted }]}>The free set is TimGM6mb (GPL licence), a small General MIDI collection. Any .sf2 SoundFont works, and a bigger one sounds better. Tunes already made keep the sound they were made with.</Text>}
+      <Text style={[styles.label, { color: colors.text }]}>{sf ? 'Switch to another set' : 'Download free instruments'}</Text>
+      {SOUNDFONT_CHOICES.map((c) => (
+        <View key={c.id} style={styles.choice}>
+          <View style={styles.grow}>
+            <Text style={{ color: colors.text }}>{c.name} ({c.approxMB} MB){sf?.name === c.name ? ' · in use' : ''}</Text>
+            <Text style={[styles.small, { color: colors.textMuted }]}>{c.note}</Text>
+          </View>
+          {button(sf?.name === c.name ? 'Installed' : 'Download', () => download(c), c.id === 'timgm6mb' ? 'music-sf-download' : `music-sf-download-${c.id}`)}
+        </View>
+      ))}
+      <Text style={[styles.small, { color: colors.textMuted }]}>Any .sf2 SoundFont works too, and a bigger one sounds better. Tunes already made keep the sound they were made with. The AI composer plays on these instruments as well.</Text>
     </View>
   );
 }
@@ -48,4 +57,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACING.sm },
   btn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   small: { ...TYPOGRAPHY.bodySmall },
+  label: { fontWeight: '600' },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  grow: { flex: 1 },
 });

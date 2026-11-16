@@ -26,6 +26,8 @@ export function styleFromText(text: string): StyleMood | null {
 export const POPULAR: StyleMood[] = ['focus', 'jazz', 'lofi', 'classical', 'film', 'spa', 'rain', 'blues', 'bossa', 'electro', 'rock', 'campfire'];
 
 const VOICE_WORDS = { piano: 'piano', epiano: 'electric piano', pluck: 'plucked guitar', driven: 'rock guitar', organ: 'organ', bell: 'bells', saw: 'synth', pad: 'warm pads', bass: 'bass', sine: 'soft tone' } as const;
+/** Names for the extra players' instruments that are not in the list above. */
+const EXTRA_WORDS: Record<string, string> = { sax: 'saxophone', vibes: 'vibraphone', trumpet: 'muted trumpet', flute: 'flute', cello: 'cello', violin: 'violin', horn: 'French horn', harp: 'harp', harmonica: 'harmonica', banjo: 'banjo', accordion: 'accordion', clarinet: 'clarinet', musicbox: 'music box', glock: 'glockenspiel', choir: 'choir', marimba: 'marimba', steeldrum: 'steel drum', synthpluck: 'synth pluck', glasspad: 'glass pad', warmpad: 'warm pad' };
 const PERC_WORDS = { none: '', soft: 'soft drums', four: 'four-on-the-floor drums', swing: 'swing drums', sleigh: 'sleigh bells', industrial: 'industrial drums', backbeat: 'backbeat drums', offbeat: 'offbeat drums' } as const;
 
 /** In plain words, which instruments play in a style: "piano, bass, swing drums". */
@@ -33,8 +35,10 @@ export function instrumentsOf(mood: StyleMood): string {
   const spec = specFor(mood);
   const band = spec.band ?? { melody: 'piano', pad: 'pad', bass: 'bass' };
   const names = [...new Set([band.melody, band.pad, band.bass].map((v) => VOICE_WORDS[v as keyof typeof VOICE_WORDS] ?? v))];
+  const extras = (spec.extras ?? []).map((e) => VOICE_WORDS[e.voice as keyof typeof VOICE_WORDS] ?? EXTRA_WORDS[e.voice] ?? e.voice);
   const drums = PERC_WORDS[spec.perc];
-  return [...names, ...(drums ? [drums] : [])].join(', ');
+  const all: string[] = [...new Set<string>([...names, ...extras])];
+  return (drums ? [...all, drums] : all).join(', ');
 }
 
 export const styleLabel = (mood: StyleMood): string => STYLES[mood].label;

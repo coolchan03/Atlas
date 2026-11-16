@@ -10,9 +10,10 @@ import { shareItem } from '../utils/shareItem';
 import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } from '../music/styles';
 import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
-import { saveInstrumental } from '../music/saveTrack';
+import { saveAmbient, saveInstrumental } from '../music/saveTrack';
 import { composeMusic } from '../music/composerAgent';
 import { SoundfontCard } from '../music/SoundfontCard';
+import { AMBIENT, type AmbientKind } from '../music/ambient';
 import { SPACING } from '../constants';
 
 const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
@@ -81,6 +82,19 @@ export function MusicStudioScreen() {
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
+  /** Makes a background sound (white noise, rain...) and plays it on a loop. */
+  const makeAmbientTrack = async (kind: AmbientKind) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const track = await saveAmbient(kind, 90, setStatus);
+      setSelected(track.id);
+      useMusicLibrary.getState().setLoop(true);
+      setStatus('Starting the player...');
+      await play(track);
+    } catch (error: any) { Alert.alert('Could not make the sound', String(error?.message || error)); }
+    finally { setBusy(false); setStatus(''); }
+  };
   const another = () => { setVariant(variant + 1); return make({ variant: variant + 1 }); };
   const surprise = () => {
     const pick = POPULAR[Math.floor(Math.random() * POPULAR.length)];
@@ -125,10 +139,12 @@ export function MusicStudioScreen() {
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={{ color: colors.textSecondary }}>Say what you want, pick a style, and a small band plays an original tune. Nothing is sent anywhere.</Text>
+        <Text style={{ color: colors.textSecondary }}>Tell the AI composer what to write, pick a style, and a small band plays an original tune. Everything stays on this phone.</Text>
+        <Text style={[styles.label, { color: colors.text }]}>What should the AI composer write?</Text>
         <TextInput value={prompt} onChangeText={describe} multiline maxLength={200} testID="music-prompt"
-          placeholder="Optional: a rainy day jazz cafe" placeholderTextColor={colors.textMuted}
+          placeholder="e.g. a rainy day jazz cafe, slow, with piano, upright bass and a saxophone" placeholderTextColor={colors.textMuted}
           style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
+        <Text style={[styles.small, { color: colors.textSecondary }]}>Your words guide the style, the mood and which instruments it picks. Leave it empty and the composer chooses for you.</Text>
         <Text style={[styles.label, { color: colors.text }]}>Style</Text>
         {chips(POPULAR.map((id) => ({ id, label: STYLES[id].label })), mood, (id: StyleMood) => { setMood(id); setVariant(0); })}
         <TouchableOpacity onPress={() => setMore((v) => !v)} accessibilityRole="button" testID="music-more-styles"><Text style={{ color: colors.primary }}>{more ? 'Fewer styles' : `More styles (${ALL_STYLES.length - POPULAR.length})`}</Text></TouchableOpacity>
@@ -144,11 +160,11 @@ export function MusicStudioScreen() {
         <Text style={[styles.label, { color: colors.text }]}>Length</Text>
         {chips(DURATIONS.map((n) => ({ id: n, label: `${n} seconds` })), duration, setDuration)}
         <View style={styles.options}>
-          <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, styles.grow, { borderColor: colors.primary }]}>
-            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Make music</Text>}
+          <TouchableOpacity onPress={askComposer} disabled={busy} testID="music-ai-composer" style={[styles.action, styles.grow, { borderColor: colors.primary }]}>
+            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compose with AI</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={askComposer} disabled={busy} testID="music-ai-composer" style={[styles.action, { borderColor: colors.border }]}>
-            <Text style={{ color: colors.text }}>Ask the AI composer</Text>
+          <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.text }}>Quick tune (no AI)</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={surprise} disabled={busy} testID="music-surprise" style={[styles.action, { borderColor: colors.border }]}>
             <Text style={{ color: colors.text }}>Surprise me</Text>
@@ -156,6 +172,19 @@ export function MusicStudioScreen() {
         </View>
         {!!status && <View style={styles.statusRow} testID="music-status"><ActivityIndicator color={colors.primary} /><Text style={[styles.statusText, { color: colors.text }]}>{status}</Text></View>}
         {!!playback.error && <Text style={{ color: colors.error }} testID="music-playback-error">{playback.error}</Text>}
+        <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-ambient">
+          <Text style={[styles.title, { color: colors.text }]}>Background sounds</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]}>Not music: steady sounds for focus, sleep or covering noise. They loop without a break, play like any track, and are saved in your list.</Text>
+          <View style={styles.options}>
+            {AMBIENT.map((a) => (
+              <TouchableOpacity key={a.id} onPress={() => makeAmbientTrack(a.id)} disabled={busy} accessibilityLabel={`Make ${a.label}`} testID={`music-ambient-${a.id}`}
+                style={[styles.option, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <Text style={{ color: colors.text }}>{a.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={[styles.small, { color: colors.textMuted }]}>{AMBIENT.map((a) => `${a.label}: ${a.note}`).join(' ')}</Text>
+        </View>
         <SoundfontCard />
         <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-persistent-player">
           <Text style={[styles.title, { color: colors.text }]}>Now playing</Text>

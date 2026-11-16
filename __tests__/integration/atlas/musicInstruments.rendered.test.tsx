@@ -42,5 +42,7 @@ it('says the sound is synthetic until real instruments are added, then which one
   expect(view.getByTestId('music-instruments-state').props.children).toMatch(/Real instruments: TimGM6mb \(5\.7 MB\)/);
   rtl.fireEvent.press(view.getByTestId('music-sf-toggle'));
   expect(view.getByTestId('music-instruments-state').props.children).toMatch(/installed but switched off/);
-  expect(view.queryByTestId('music-sf-download')).toBeNull();
+  // The sets stay on offer once one is installed, so another can be switched to.
+  expect(view.getByTestId('music-sf-download-generaluser')).toBeTruthy();
+  expect(view.getByTestId('music-sf-download-fluidr3')).toBeTruthy();
 });

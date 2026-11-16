@@ -72,7 +72,11 @@ async function ask(system: string, user: string): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   const remote = await askRemote(system, user);
   if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  await callHook(HOOKS.ensureTextModel, null);
+  try { await callHook(HOOKS.ensureTextModel, null); } catch (error) {
+    // The usual load can fail while speech or image models hold the memory (a chat frees it first, which is why starting
+    // a chat used to make this work). Free the memory and load the model once before giving up.
+    try { await require('../atlasTools/models').forceLoadTextModel(); } catch { throw error; }
+  }
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {
   const out: string = await llmService.generateResponse(

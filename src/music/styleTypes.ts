@@ -1,5 +1,9 @@
 import type { SoundPreset, Voice } from './types';
 
+/** What an extra player does: answers the melody, holds a soft swell under it, or adds a high sparkle on the first beat of every other bar. */
+export type ExtraKind = 'answer' | 'swell' | 'sparkle';
+export interface Extra { voice: Voice; kind: ExtraKind }
+
 export type StyleGroup = 'Moods and genres' | 'Eras and genres' | 'Seasons and holidays' | 'Places and settings';
 
 export type Bass = 'root' | 'walk' | 'pulse' | 'drone';
@@ -33,6 +37,8 @@ export interface StyleSpec {
   comp?: Comp;
   /** The instrument for each part. Left out, all three come from `sound`. */
   band?: Partial<Record<'melody' | 'pad' | 'bass', Voice>>;
+  /** More players beyond melody, chords and bass, so the band is not just a trio. */
+  extras?: Extra[];
   /** Chords for bars 9 to 16 (the B section). Left out, the first eight are played in the other order. */
   progressionB?: number[];
 }

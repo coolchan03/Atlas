@@ -7,6 +7,7 @@ import { wavBytes, toBase64 } from '../atlasVoice/jingles';
 import { MUSIC_RATE, renderMusic, type MusicMood, type MusicScore } from './composition';
 import { useMusicLibrary, type InstrumentalTrack } from './library';
 import { prepareInstruments } from './soundfontFiles';
+import { AMBIENT, AMBIENT_RATE, makeAmbient, type AmbientKind } from './ambient';
 
 /** Lets the screen repaint between the slow steps of making a track, so the person sees what is happening. */
 const breathe = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 30));
@@ -32,6 +33,30 @@ export async function saveInstrumental(score: MusicScore, o: { mood: MusicMood; 
     throw error;
   }
   const track: InstrumentalTrack = { id, title: score.title, path, scorePath, mood: o.mood, sound: 'band', seconds: o.seconds, createdAt: new Date().toISOString() };
+  useMusicLibrary.getState().addTrack(track);
+  return track;
+}
+
+/** Makes a background sound (white noise, rain...) and keeps it in the same library as the tunes, so it plays, loops and is shared the same way. */
+export async function saveAmbient(kind: AmbientKind, seconds: number, onStep?: (message: string) => void): Promise<InstrumentalTrack> {
+  const label = AMBIENT.find((a) => a.id === kind)?.label ?? kind;
+  onStep?.(`Making ${label.toLowerCase()} (${seconds} seconds)...`);
+  await breathe();
+  const pcm = makeAmbient(kind, seconds);
+  const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
+  await RNFS.mkdir(dir);
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const path = `${dir}/instrumental-${id}.wav`;
+  const scorePath = `${dir}/instrumental-${id}.json`;
+  try {
+    await RNFS.writeFile(path, toBase64(wavBytes(pcm, AMBIENT_RATE)), 'base64');
+    await RNFS.writeFile(scorePath, JSON.stringify({ title: label, ambient: kind, duration: seconds }, null, 2), 'utf8');
+  } catch (error) {
+    await RNFS.unlink(path).catch(() => undefined);
+    await RNFS.unlink(scorePath).catch(() => undefined);
+    throw error;
+  }
+  const track: InstrumentalTrack = { id, title: label, path, scorePath, mood: 'ambient' as MusicMood, sound: 'band', seconds, createdAt: new Date().toISOString() };
   useMusicLibrary.getState().addTrack(track);
   return track;
 }

@@ -35,11 +35,28 @@ it('picks the style from your words, says jazz has a piano, and makes a track an
   const { rtl, view, library } = open();
   library.setState({ tracks: [] });
   rtl.fireEvent.changeText(view.getByTestId('music-prompt'), 'a rainy day jazz cafe');
-  expect(view.getByTestId('music-plays').props.children.join('')).toMatch(/Jazz plays: piano, bass, swing drums/);
+  expect(view.getByTestId('music-plays').props.children.join('')).toMatch(/Jazz plays: piano, bass, saxophone, vibraphone, muted trumpet, swing drums/);
   rtl.fireEvent.press(view.getByText('30 seconds'));
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-quick')); });
   await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(1), { timeout: 20000 });
   expect(library.getState().tracks[0]).toMatchObject({ mood: 'jazz', sound: 'band', seconds: 30 });
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-another')); });
   await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(2), { timeout: 20000 });
+}, 60000);
+
+it('the top box is the instruction to the AI composer, with one clear AI button and a no-AI quick tune', () => {
+  const { view } = open();
+  expect(view.getByText('What should the AI composer write?')).toBeTruthy();
+  expect(view.getByText('Compose with AI')).toBeTruthy();
+  expect(view.getByText('Quick tune (no AI)')).toBeTruthy();
+  expect(view.queryByText('Ask the AI composer')).toBeNull();
+});
+
+it('makes a looping background sound such as white noise and plays it', async () => {
+  const { rtl, view, library } = open();
+  library.setState({ tracks: [], loop: false });
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-ambient-white')); });
+  await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(1), { timeout: 30000 });
+  expect(library.getState().tracks[0]).toMatchObject({ title: 'White noise', mood: 'ambient', seconds: 90 });
+  expect(library.getState().loop).toBe(true);
 }, 60000);

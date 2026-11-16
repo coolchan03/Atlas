@@ -4,7 +4,8 @@
  * no famous melody is used, only the feel (bells for Christmas, a slow waltz for winter, and so on).
  */
 import { composeFromSpec, seedFor } from './arrange';
-import type { StyleGroup, StyleSpec } from './styleTypes';
+import type { Extra, StyleGroup, StyleSpec } from './styleTypes';
+import { randomTitle } from './titles';
 import type { MusicNote } from './types';
 
 export type { StyleGroup, StyleSpec };
@@ -111,8 +112,41 @@ const BAND: Partial<Record<StyleMood, StyleSpec['band']>> = {
   march: { melody: 'organ', pad: 'organ', bass: 'bass' }, carnival: { melody: 'bell', pad: 'organ', bass: 'bass' }, tavern: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, shanty: { melody: 'pluck', pad: 'organ', bass: 'bass' },
 };
 
-/** The style with its chord pattern and band filled in. */
-export const specFor = (mood: StyleMood): StyleSpec => ({ ...STYLES[mood], comp: STYLES[mood].comp ?? COMP[mood], band: STYLES[mood].band ?? BAND[mood] });
+/** Extra players for each style: the jazz band, for one, has a saxophone answering the piano, a vibraphone and a muted trumpet, not just piano, bass and drums. */
+const x = (voice: Extra['voice'], kind: Extra['kind']): Extra => ({ voice, kind });
+const EXTRAS: Partial<Record<StyleMood, Extra[]>> = {
+  jazz: [x('sax', 'answer'), x('vibes', 'sparkle'), x('trumpet', 'swell')],
+  noir: [x('sax', 'answer'), x('vibes', 'sparkle'), x('cello', 'swell')],
+  bossa: [x('flute', 'answer'), x('vibes', 'sparkle'), x('cello', 'swell')],
+  blues: [x('harmonica', 'answer'), x('organ', 'swell')],
+  lofi: [x('vibes', 'sparkle'), x('flute', 'answer'), x('warmpad', 'swell')],
+  focus: [x('harp', 'sparkle'), x('cello', 'swell')],
+  film: [x('violin', 'answer'), x('horn', 'swell'), x('glock', 'sparkle')],
+  classical: [x('violin', 'answer'), x('flute', 'sparkle'), x('cello', 'swell')],
+  spa: [x('flute', 'answer'), x('harp', 'sparkle'), x('choir', 'swell')],
+  rain: [x('musicbox', 'sparkle'), x('cello', 'swell')],
+  space: [x('glasspad', 'swell'), x('bell', 'sparkle')],
+  electro: [x('synthpluck', 'sparkle'), x('glasspad', 'swell')],
+  rock: [x('organ', 'swell'), x('driven', 'answer')],
+  campfire: [x('harmonica', 'answer'), x('banjo', 'sparkle')],
+  country: [x('banjo', 'answer'), x('harmonica', 'sparkle')],
+  western: [x('harmonica', 'answer'), x('horn', 'swell')],
+  christmas: [x('glock', 'sparkle'), x('choir', 'swell'), x('harp', 'answer')],
+  winter: [x('musicbox', 'sparkle'), x('choir', 'swell')],
+  tiki: [x('steeldrum', 'answer'), x('marimba', 'sparkle')],
+  frenchcafe: [x('accordion', 'answer'), x('clarinet', 'sparkle')],
+  italian: [x('accordion', 'swell'), x('violin', 'answer')],
+  twenties: [x('clarinet', 'answer'), x('trumpet', 'sparkle')],
+  funk: [x('trumpet', 'answer'), x('sax', 'sparkle')],
+  disco: [x('violin', 'swell'), x('trumpet', 'sparkle')],
+  reggae: [x('sax', 'answer'), x('horn', 'swell')],
+  lullaby: [x('musicbox', 'sparkle'), x('harp', 'swell')],
+  vaporwave: [x('sax', 'answer'), x('glasspad', 'swell')],
+  eerie: [x('choir', 'swell'), x('glock', 'sparkle')],
+};
+
+/** The style with its chord pattern, band and extra players filled in. */
+export const specFor = (mood: StyleMood): StyleSpec => ({ ...STYLES[mood], comp: STYLES[mood].comp ?? COMP[mood], band: STYLES[mood].band ?? BAND[mood], extras: STYLES[mood].extras ?? EXTRAS[mood] });
 
 /** A seeded 16-bar tune in one of the styles above, with the band it was written for. The same prompt always makes the same tune. */
 export type Energy = 'calm' | 'medium' | 'lively';
@@ -122,10 +156,11 @@ const ENERGY: Record<Energy, { tempo: number; density: number }> = { calm: { tem
  * A seeded 16-bar tune in one of the styles above, with the band it was written for. The same prompt always makes the same tune;
  * a different `variant` makes another tune in the same style, and `energy` slows or speeds the tempo and thins or fills the melody.
  */
-export function composeStyled(prompt: string, mood: StyleMood, opts: { variant?: number; energy?: Energy } = {}): { title: string; bpm: number; notes: MusicNote[]; band?: StyleSpec['band'] } {
-  const { variant = 0, energy = 'medium' } = opts;
+export function composeStyled(prompt: string, mood: StyleMood, opts: { variant?: number; energy?: Energy; /** Random numbers for the title (a test passes a fixed one). */ random?: () => number } = {}): { title: string; bpm: number; notes: MusicNote[]; band?: StyleSpec['band'] } {
+  const { variant = 0, energy = 'medium', random } = opts;
   const base = specFor(mood);
   const spec = { ...base, bpm: Math.max(60, Math.min(165, Math.round(base.bpm * ENERGY[energy].tempo))), density: Math.max(1, base.density + ENERGY[energy].density) };
-  const label = prompt.trim().replace(/[\r\n]+/g, ' ').slice(0, 56) || spec.label;
+  // With words from the person the title is theirs; with none, each tune gets a fresh made-up title for its style.
+  const label = prompt.trim().replace(/[\r\n]+/g, ' ').slice(0, 56) || randomTitle(mood, spec.group, random);
   return { title: `${label} (${spec.label})`, bpm: spec.bpm, notes: composeFromSpec(spec, seedFor(variant ? `${prompt}#${variant}` : prompt, mood)), band: spec.band };
 }

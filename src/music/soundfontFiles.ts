@@ -8,6 +8,17 @@ import { hasSoundfont, loadSoundfontBytes, setActiveSoundfont } from './sampled'
 
 /** A small, free General MIDI SoundFont (TimGM6mb, GPL licence), downloaded only when the person asks. */
 export const FREE_SOUNDFONT = { url: 'https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2', name: 'TimGM6mb', approxMB: 6, /** The size of the file as published: a download far from it is not this file (moved, replaced or cut short) and is refused. */ minBytes: 5_000_000, maxBytes: 7_500_000 };
+/**
+ * Free General MIDI SoundFonts the person can download, smallest first. A bigger set has more lifelike recordings but takes more
+ * space and memory while a tune is made (the whole file is read), so each says what it costs. Sizes are those of the published
+ * files: a download far from them is not that file (moved, replaced or cut short) and is refused.
+ */
+export interface SoundfontChoice { id: string; name: string; url: string; approxMB: number; minBytes: number; maxBytes: number; note: string }
+export const SOUNDFONT_CHOICES: SoundfontChoice[] = [
+  { id: 'timgm6mb', name: FREE_SOUNDFONT.name, url: FREE_SOUNDFONT.url, approxMB: FREE_SOUNDFONT.approxMB, minBytes: FREE_SOUNDFONT.minBytes, maxBytes: FREE_SOUNDFONT.maxBytes, note: 'Small and quick. Good for trying real instruments (GPL licence).' },
+  { id: 'generaluser', name: 'GeneralUser GS', url: 'https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/GeneralUser-GS.sf2', approxMB: 32, minBytes: 30_000_000, maxBytes: 36_000_000, note: 'Recommended: far more natural pianos, guitars, strings, horns and drums (free to use).' },
+  { id: 'fluidr3', name: 'FluidR3 GM', url: 'https://github.com/pianobooster/fluid-soundfont/releases/download/v3.1/FluidR3_GM.sf2', approxMB: 148, minBytes: 140_000_000, maxBytes: 152_000_000, note: 'Largest and richest (MIT licence). Needs about 150 MB of free space and memory; best on a phone with plenty of RAM.' },
+];
 const MAX_BYTES = 150 * 1024 * 1024;
 const PIECE = 3 * 1024 * 1024; // a multiple of 3, so each piece is whole base64
 
@@ -74,17 +85,20 @@ export async function installSoundfontFrom(path: string, name: string, o: { move
   useMusicLibrary.getState().setUseSoundfont(true);
 }
 
-/** Downloads the free SoundFont and keeps it. `onProgress` gets 0 to 1. */
-export async function downloadFreeSoundfont(onProgress?: (share: number) => void): Promise<void> {
+/** Downloads the small free SoundFont and keeps it. `onProgress` gets 0 to 1. */
+export const downloadFreeSoundfont = (onProgress?: (share: number) => void): Promise<void> => downloadSoundfont(SOUNDFONT_CHOICES[0], onProgress);
+
+/** Downloads one of the SoundFonts above and keeps it as the one in use. `onProgress` gets 0 to 1. */
+export async function downloadSoundfont(choice: SoundfontChoice, onProgress?: (share: number) => void): Promise<void> {
   await RNFS.mkdir(dir());
   const tmp = `${dir()}/download.sf2`;
-  const job = RNFS.downloadFile({ fromUrl: FREE_SOUNDFONT.url, toFile: tmp, progressInterval: 400, progress: (p) => onProgress?.(p.contentLength > 0 ? p.bytesWritten / p.contentLength : 0) });
+  const job = RNFS.downloadFile({ fromUrl: choice.url, toFile: tmp, progressInterval: 400, progress: (p) => onProgress?.(p.contentLength > 0 ? p.bytesWritten / p.contentLength : 0) });
   const res = await job.promise;
   try {
     if (res.statusCode !== 200) throw new Error(`The download failed (server said ${res.statusCode}).`);
     const size = Number((await RNFS.stat(tmp)).size);
-    if (size < FREE_SOUNDFONT.minBytes || size > FREE_SOUNDFONT.maxBytes) throw new Error('The downloaded file is not the instruments that were expected (the address may have changed). Choose a SoundFont file yourself instead.');
-    await installSoundfontFrom(tmp, FREE_SOUNDFONT.name, { move: true });
+    if (size < choice.minBytes || size > choice.maxBytes) throw new Error('The downloaded file is not the instruments that were expected (the address may have changed). Choose a SoundFont file yourself instead.');
+    await installSoundfontFrom(tmp, choice.name, { move: true });
   } finally { await RNFS.unlink(tmp).catch(() => undefined); }
 }
 
