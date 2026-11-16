@@ -5,9 +5,9 @@
 import { askModel } from '../study/engine';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
-import { contentMessages, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
+import { contentMessages, deepenMessages, prose, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
-import { chapterPlan, findChapters } from './chapters';
+import { chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { enqueue } from './generationQueue';
@@ -61,7 +61,17 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
   // Books whose chapters could not be told apart: fall back to the chapters found in the project's text as a whole.
   const chapters = topics.length >= 3 ? asChapters(topics) : findChapters(await projectText(projectId));
   if (chapters.length < 3) return null;
-  return useTopics.getState().add(request, chapterPlan(chapters, request.topic, books.length > 1), { sources, projectId });
+  return useTopics.getState().add(request, chapterPlan(await withSubjects(chapters), request.topic, books.length > 1), { sources, projectId });
+}
+
+/** Each chapter with what it is mainly about ("Cash", "Liabilities"): named by the AI from the heading and the first lines, or cut from the heading when it cannot be asked. */
+export async function withSubjects(chapters: Chapter[]): Promise<Chapter[]> {
+  let names: string[] | null = null;
+  try {
+    const prompt = subjectPrompt(chapters);
+    names = parseSubjects(await askModel(prompt.system, prompt.user), chapters.length);
+  } catch { /* the headings alone have to do */ }
+  return chapters.map((c, i) => ({ ...c, subject: names?.[i] && names[i].length >= 2 ? names[i] : shortSubject(c.title) }));
 }
 
 /** The passages that the given passages point to by section number, one pointer each, not repeating any passage already held. */
@@ -213,10 +223,32 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
-  const written = withoutSources(content, excerpts, bank);
+  const written = withoutSources(
+    content.kind === 'lesson' && (course.readingDepth ?? 'deep') === 'deep' ? await deepenLesson(course, square.title, content, excerpts) : content,
+    excerpts, bank);
   useTopics.getState().setContent(course.id, key, written);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   return written;
+}
+
+/**
+ * A reading written in depth: each section of the first pass is written out again as full textbook paragraphs. A section the model cannot
+ * deepen (an empty or far shorter answer, or an error) keeps what it had, so the reading is never worse than the short one.
+ */
+export async function deepenLesson(course: Course, title: string, lesson: Extract<SquareContent, { kind: 'lesson' }>, excerpts: Excerpt[]): Promise<SquareContent> {
+  const passages = excerpts.map((e) => e.text).join('\n').slice(0, 1800);
+  const sections = [];
+  for (const [i, section] of lesson.sections.slice(0, 8).entries()) {
+    try {
+      const prompt = deepenMessages({
+        courseTitle: course.title, topic: course.topic, squareTitle: title, heading: section.heading, text: section.text, example: section.example,
+        others: lesson.sections.filter((_, k) => k !== i).map((x) => x.heading).filter(Boolean), excerpts: passages, difficulty: course.difficulty,
+      });
+      const longer = prose(await askModel(prompt.system, prompt.user), 5000);
+      sections.push(longer.length >= section.text.length * 1.3 && longer.length > 400 ? { ...section, text: longer } : section);
+    } catch { sections.push(section); }
+  }
+  return { ...lesson, sections: [...sections, ...lesson.sections.slice(8)] };
 }
 
 /** Asks the AI to mark a practice answer. */

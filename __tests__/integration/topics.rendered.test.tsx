@@ -149,8 +149,10 @@ it('writes a square from the learner\'s own sources, and a bad result adds a les
   rtl.fireEvent.press(screen.getByTestId('quiz-next'));
   expect(await screen.findByTestId('square-remedial')).toBeTruthy();
   const course = useTopics.getState().courses[0];
-  expect(course.squares.map((s: any) => s.key)).toEqual(['s1', 's1r', 's2']);
+  // The lesson that explains it another way, then the same kind of square again with new questions.
+  expect(course.squares.map((s: any) => s.key)).toEqual(['s1', 's1r', 's1p', 's2']);
   expect(course.squares[1]).toMatchObject({ format: 'lesson', remedial: true });
+  expect(course.squares[2]).toMatchObject({ format: course.squares[0].format, remedial: true, title: expect.stringMatching(/^Extra practice/) });
   expect(course.progress.s1.stars).toBe(1);
   jest.restoreAllMocks();
 }, 60000);

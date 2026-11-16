@@ -6,6 +6,7 @@ import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { tableRows, tableToMarkdown, tableToTsv } from './markdownTable';
+import { useTablePrefs } from './tablePrefs';
 
 /**
  * Escape asterisks used as multiplication operators (digit*digit) so
@@ -13,7 +14,38 @@ import { tableRows, tableToMarkdown, tableToTsv } from './markdownTable';
  * Lookahead handles chains like 5*5*5*5 in a single pass.
  */
 export function preprocessMarkdown(text: string): string {
-  return text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`);
+  return fixTables(text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`));
+}
+
+const DASHES = '\\-\u2014\u2013\u2212\u2012\u2015';
+const SEPARATOR_CELL = new RegExp(`^\\s*:?[${DASHES}]+:?\\s*$`);
+const isTableLine = (line: string) => line.trim().startsWith('|') || (line.includes('|') && line.trim().endsWith('|'));
+
+/**
+ * Models often write the divider row of a table with long dashes ("| :— | :— |"), which is not a table to the parser, so the raw
+ * bars show. Those dividers are rewritten with ordinary hyphens (keeping any alignment colons), and a table that follows a line of
+ * text with no blank line between is given one, so it is read as a table.
+ */
+export function fixTables(text: string): string {
+  if (!text.includes('|')) return text;
+  const lines = text.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+    const divider = line.includes('|') && cells.length >= 1 && cells.every((c) => SEPARATOR_CELL.test(c)) && /[\u2014\u2013\u2212\u2012\u2015-]/.test(line);
+    if (divider) {
+      const indent = line.match(/^\s*/)?.[0] ?? '';
+      const fixed = `${indent}| ${cells.map((c) => `${c.trim().startsWith(':') ? ':' : ''}---${c.trim().endsWith(':') ? ':' : ''}`).join(' | ')} |`;
+      // The header row above it starts the table: a blank line before it, unless the text above is already part of the table.
+      const header = out.length - 1;
+      if (header >= 0 && isTableLine(out[header]) && header >= 1 && out[header - 1].trim() !== '' && !isTableLine(out[header - 1])) out.splice(header, 0, '');
+      out.push(fixed);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 /** Custom link rule — renders as inline Text so it wraps correctly inside list items */
@@ -67,7 +99,7 @@ const selectableRules = {
 };
 
 /** Small copy actions under a table or code block. */
-function CopyActions({ actions, testID }: { actions: { label: string; text: () => string }[]; testID: string }) {
+function CopyActions({ actions, testID, extra }: { actions: { label: string; text: () => string }[]; testID: string; extra?: React.ReactNode }) {
   const { colors } = useTheme();
   const [done, setDone] = React.useState<string | null>(null);
   return (
@@ -78,6 +110,7 @@ function CopyActions({ actions, testID }: { actions: { label: string; text: () =
           <Text style={[copyStyles.label, { color: done === a.label ? colors.primary : colors.textMuted }]}>{done === a.label ? 'Copied' : a.label}</Text>
         </TouchableOpacity>
       ))}
+      {extra}
     </View>
   );
 }
@@ -91,21 +124,38 @@ const markdownLayout = StyleSheet.create({
   codeScroll: { marginVertical: SPACING.sm },
   codeText: { marginVertical: 0 },
   table: { minWidth: '100%' },
+  fitTable: { width: '100%' },
 });
 
-const copyRules = {
-  table: (node: any, children: any, ...[, styles]: any[]) => (
+/** A table: even columns that fit the screen's width, or a wide table that scrolls sideways. The choice is remembered. */
+function TableBlock({ node, styles, children }: { node: any; styles: any; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const fit = useTablePrefs((s) => s.fit);
+  const setFit = useTablePrefs((s) => s.setFit);
+  const toggle = (
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={fit ? 'Show wide table' : 'Fit table to screen'} testID="table-fit-toggle" onPress={() => setFit(!fit)}>
+      <Text style={[copyStyles.label, { color: colors.primary }]}>{fit ? 'Wide view' : 'Fit to screen'}</Text>
+    </TouchableOpacity>
+  );
+  return (
     <View key={node.key}>
-      {/* A wide table scrolls sideways instead of running off the screen or squashing its columns. */}
-      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
-        <View style={[styles._VIEW_SAFE_table, markdownLayout.table]}>{children}</View>
-      </ScrollView>
-      <CopyActions testID="copy-table" actions={[
+      {fit
+        ? <View style={[styles._VIEW_SAFE_table, markdownLayout.fitTable]}>{children}</View>
+        : (
+          <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
+            <View style={[styles._VIEW_SAFE_table, markdownLayout.table]}>{children}</View>
+          </ScrollView>
+        )}
+      <CopyActions testID="copy-table" extra={toggle} actions={[
         { label: 'Copy table', text: () => tableToTsv(tableRows(node)) },
         { label: 'Copy as Markdown', text: () => tableToMarkdown(tableRows(node)) },
       ]} />
     </View>
-  ),
+  );
+}
+
+const copyRules = {
+  table: (node: any, children: any, ...[, styles]: any[]) => <TableBlock key={node.key} node={node} styles={styles}>{children}</TableBlock>,
 };
 
 interface MarkdownTextProps {
@@ -115,9 +165,10 @@ interface MarkdownTextProps {
 
 export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   const { colors } = useTheme();
+  const fit = useTablePrefs((s) => s.fit);
   const markdownStyles = useMemo(
-    () => createMarkdownStyles(colors, dimmed),
-    [colors, dimmed],
+    () => createMarkdownStyles(colors, dimmed, fit),
+    [colors, dimmed, fit],
   );
 
   const handleLinkPress = useCallback((url: string) => {
@@ -138,7 +189,7 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   );
 }
 
-function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean) {
+function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean, fit = true) {
   const textColor = dimmed ? colors.textSecondary : colors.text;
 
   return {
@@ -243,16 +294,17 @@ function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean) {
     thead: {
       backgroundColor: colors.surfaceLight,
     },
+    // Fit to screen: every column the same width, the text wrapped and a little smaller. Wide view: a readable width each, scrolled sideways.
     th: {
-      minWidth: 96,
-      padding: SPACING.sm,
+      ...(fit ? { flex: 1, flexBasis: 0, minWidth: 0, fontSize: 13 } : { minWidth: 110 }),
+      padding: fit ? SPACING.xs + 2 : SPACING.sm,
       borderWidth: 0.5,
       borderColor: colors.border,
       fontWeight: '600' as const,
     },
     td: {
-      minWidth: 96,
-      padding: SPACING.sm,
+      ...(fit ? { flex: 1, flexBasis: 0, minWidth: 0, fontSize: 13 } : { minWidth: 110 }),
+      padding: fit ? SPACING.xs + 2 : SPACING.sm,
       borderWidth: 0.5,
       borderColor: colors.border,
     },

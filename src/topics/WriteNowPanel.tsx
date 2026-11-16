@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
+import { friendlyTitle } from './chapters';
 import { missingAll, missingInUnit, nextMissing, unitsOf, useBatch, writeNow } from './prepare';
 import type { Course } from './store';
 
@@ -38,7 +39,7 @@ export function WriteNowPanel({ course }: { course: Course }) {
           <Text style={[styles.head, { color: colors.textSecondary }]}>Or one chapter or topic</Text>
           {units.map((u) => (
             <View key={u.unit} style={styles.unit}>
-              <Text style={[styles.unitName, { color: colors.text }]} numberOfLines={1}>{u.unit}</Text>
+              <Text style={[styles.unitName, { color: colors.text }]} numberOfLines={1}>{friendlyTitle(u.unit)}</Text>
               <Text style={{ color: colors.textMuted }}>{u.written}/{u.total}</Text>
               {link({ label: u.written === u.total ? 'Written' : 'Write all', onPress: () => void writeNow(course.id, missingInUnit(course, u.unit), u.unit), testID: `write-unit-${u.unit}`, disabled: u.written === u.total })}
             </View>

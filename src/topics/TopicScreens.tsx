@@ -12,6 +12,7 @@ import { Board } from '../language/Board';
 import type { Space, SpaceKind } from '../language/board';
 import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } from './formats';
 import { courseProgress, useTopics, type Course } from './store';
+import { friendlyTitle } from './chapters';
 import { createChapterCourse, createCourse, findSources, squareContent, type Rewrite } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
@@ -321,7 +322,7 @@ export const TopicBoardScreen: React.FC = () => {
   if (!course) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Course" onBack={() => navigation.goBack()} /></SafeAreaView>;
 
   const done = (key: string) => !!course.progress[key];
-  const spaces: Space[] = course.squares.map((s) => ({ key: s.key, kind: s.checkpoint ? 'checkpoint' : BOARD_KIND[s.format], title: s.title, icon: iconOf(s.format) }));
+  const spaces: Space[] = course.squares.map((s) => ({ key: s.key, kind: s.checkpoint ? 'checkpoint' : BOARD_KIND[s.format], title: friendlyTitle(s.title), icon: iconOf(s.format) }));
   const current = Math.max(0, spaces.findIndex((s) => !done(s.key)));
   const open = (i: number) => i === 0 || done(spaces[i - 1].key) || done(spaces[i].key);
   const p = courseProgress(course);
@@ -336,13 +337,18 @@ export const TopicBoardScreen: React.FC = () => {
         <View style={styles.chips} testID="course-difficulty">
           {DIFFICULTIES.map((d) => <Chip key={d.id} label={d.label} on={(course.difficulty ?? 'beginner') === d.id} onPress={() => useTopics.getState().setDifficulty(course.id, d.id)} testID={`course-difficulty-${d.id}`} />)}
         </View>
+        <Text style={[styles.meta, { color: colors.textSecondary }]}>How detailed the readings are</Text>
+        <View style={styles.chips} testID="course-depth">
+          <Chip label="In depth" on={(course.readingDepth ?? 'deep') === 'deep'} onPress={() => useTopics.getState().setReadingDepth(course.id, 'deep')} testID="course-depth-deep" />
+          <Chip label="Short" on={course.readingDepth === 'standard'} onPress={() => useTopics.getState().setReadingDepth(course.id, 'standard')} testID="course-depth-standard" />
+        </View>
         <Text style={[styles.meta, { color: colors.textSecondary }]}>Write the next lessons ahead</Text>
         <View style={styles.chips} testID="course-ahead">
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
         <WriteNowPanel course={course} />
         {prep.courseId === course.id && !!prep.working && (
-          <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson'}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
+          <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}
         {prep.courseId === course.id && !prep.working && !!prep.error && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-error">Could not write ahead ({prep.error}). Each lesson is written when you open it.</Text>
@@ -401,6 +407,10 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
     squareContent(course, key).then(setContent).catch((e) => setError(String(e?.message || e)));
   }, [course, key]);
   React.useEffect(() => { if (!content) load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The square keeps being written when this screen is left, and is saved on the board as soon as it is done: pick it up from there
+  // even when the request that started here is no longer the one that finishes.
+  const saved = course?.content[key];
+  React.useEffect(() => { if (!content && saved) setContent(saved); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!course || !square) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Square" onBack={() => navigation.goBack()} /></SafeAreaView>;
   // A square that went badly gets a lesson right after it that explains the same thing another way.
@@ -430,14 +440,14 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
   const cruising = square.format === 'lesson' && results.length === 2 && results.every((n) => n === 3);
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <SquareHeader title={square.title} embedded={!!props.embedded} onBack={() => navigation.goBack()} />
+      <SquareHeader title={friendlyTitle(square.title)} embedded={!!props.embedded} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.meta, { color: colors.textMuted }]}>{FORMATS.find((f) => f.id === square.format)?.label} · {square.unit}</Text>
+        <Text style={[styles.meta, { color: colors.textMuted }]}>{FORMATS.find((f) => f.id === square.format)?.label} · {friendlyTitle(square.unit)}</Text>
         {stars !== null ? (
           <View style={[styles.card, { borderColor: colors.primary, backgroundColor: colors.surface }]} testID="square-finished">
             <Text style={[styles.name, { color: colors.text }]}>{'★'.repeat(stars)}{'☆'.repeat(3 - stars)}</Text>
-            <Text style={[styles.meta, { color: colors.textSecondary }]}>{next ? `Next: ${next.title}` : 'You finished the course.'}</Text>
-            {addedRemedial && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-remedial">That was a hard one, so a lesson that explains it another way comes next.</Text>}
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>{next ? `Next: ${friendlyTitle(next.title)}` : 'You finished the course.'}</Text>
+            {addedRemedial && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-remedial">That was a hard one, so two squares were added: a lesson that explains it another way, then new questions to try it again.</Text>}
             {square.format !== 'lesson' && <Button title="Try new questions" variant="ghost" onPress={again} testID="square-again" />}
             {next && <Button title="Next square" onPress={() => (props.onNext ? props.onNext(next.key) : navigation.replace('TopicSquare', { courseId, key: next.key }))} testID="square-next" />}
             {!props.embedded && <Button title="Back to the board" variant="outline" onPress={() => navigation.goBack()} testID="square-board" />}
@@ -463,7 +473,11 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
             <Button title="Try again" onPress={load} testID="square-retry" />
           </View>
         ) : (
-          <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">Writing this square...</Text></View>
+          <View style={styles.gap}>
+            <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">Writing this square...</Text></View>
+            <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-writing-leave">This can take a minute. You do not have to wait here: it keeps writing in the background and is saved on the board when it is ready.</Text>
+            {!props.embedded && <Button title="Back to the board" variant="outline" onPress={() => navigation.goBack()} testID="square-leave" />}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>

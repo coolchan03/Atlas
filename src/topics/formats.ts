@@ -154,7 +154,7 @@ export interface SquareRequest { courseTitle: string; topic: string; level: stri
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
   periodic: '{}  (made by the app, not written by the AI)',
-  lesson: '{"sections": [{"heading": "...", "text": "plain explanation, 2-5 sentences, may use short code or numbers", "example": "a worked example or code (optional)"}], "commonMistakes": ["a mistake learners make here and how to avoid it"], "quickCheck": {"q": "one question to test yourself", "a": "its answer"}, "keyPoints": ["..."]}  (3 to 5 sections, 2 or 3 common mistakes, 3 to 6 key points)',
+  lesson: '{"sections": [{"heading": "...", "text": "plain explanation, 2-5 sentences, may use short code or numbers", "example": "a worked example or code (optional)"}], "commonMistakes": ["a mistake learners make here and how to avoid it"], "quickCheck": {"q": "one question to test yourself", "a": "its answer"}, "keyPoints": ["..."]}  (4 to 7 sections that together cover the whole topic, 2 or 3 common mistakes, 3 to 6 key points)',
   quiz: '{"questions": [{"q": "...", "options": ["A", "B", "C", "D"], "answer": 0, "why": "one sentence on why that answer is right"}]}  (5 to 8 questions, "answer" is the index of the right option, vary where it is)',
   cards: '{"cards": [{"front": "term or question", "back": "short definition or answer"}]}  (8 to 14 cards)',
   match: '{"pairs": [{"left": "...", "right": "..."}]}  (5 or 6 pairs, every left and every right different)',
@@ -249,7 +249,7 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
   const j = parseJsonLoose<any>(raw);
   if (!j) return null;
   if (format === 'lesson') {
-    const sections = list(j.sections).map((s) => ({ heading: str(s?.heading, 80), text: prose(s?.text, 1600), example: (() => { const e = prose(s?.example, 900); return e && exampleIsComplete(e) ? e : undefined; })() })).filter((s) => s.text);
+    const sections = list(j.sections).map((s) => ({ heading: str(s?.heading, 80), text: prose(s?.text, 4500), example: (() => { const e = prose(s?.example, 1800); return e && exampleIsComplete(e) ? e : undefined; })() })).filter((s) => s.text);
     const keyPoints = list(j.keyPoints).map((k) => str(k, 200)).filter(Boolean).slice(0, 8);
     const commonMistakes = list(j.commonMistakes).map((m) => str(m, 240)).filter(Boolean).slice(0, 4);
     const check = j.quickCheck && str(j.quickCheck.q, 240) && str(j.quickCheck.a, 240) ? { q: str(j.quickCheck.q, 240), a: str(j.quickCheck.a, 240) } : undefined;
@@ -352,3 +352,22 @@ export function parseGrade(raw: string): { score: number; feedback: string } | n
 
 /** Stars (1 to 3) for a score between 0 and 1: finishing always earns one. */
 export const starsForShare = (share: number): 1 | 2 | 3 => (share >= 0.9 ? 3 : share >= 0.65 ? 2 : 1);
+
+
+/**
+ * The second pass of a reading written in depth: one section at a time is written out as full textbook paragraphs (what it is, why, how it works,
+ * the cases and exceptions), from the same passages. The first pass plans what the sections are; this is what makes the reading long.
+ */
+export function deepenMessages(r: { courseTitle: string; topic: string; squareTitle: string; heading: string; text: string; example?: string; others: string[]; excerpts?: string; difficulty?: Difficulty }): { system: string; user: string } {
+  return {
+    system: 'You are an excellent textbook author. You write clear, accurate, in-depth teaching text. Reply with ONLY the section text, no title, no JSON.',
+    user: `Course: ${r.courseTitle} (${r.topic}). Reading: "${r.squareTitle}".
+${difficultyNote(r.difficulty)}The other sections of this reading are: ${r.others.join('; ') || '(none)'}. Do not repeat them.
+
+Section: "${r.heading}"
+What the section says now:
+${r.text}${r.example ? `\n\nIts example (kept as it is; do not include it):\n${r.example}` : ''}
+${r.excerpts ? `\nUse these passages from the learner's own sources for the facts they cover, and do not name the source:\n${r.excerpts}\n` : ''}
+Write this section again IN DEPTH, as it would appear in a textbook: 4 to 7 paragraphs, each of 3 to 5 sentences, separated by a blank line. Explain what each idea is, why it matters, how it works step by step, the rules and the exceptions, and how it connects to the other ideas. Define every term the first time it appears and put it in **double asterisks**. Use "- " lines or a Markdown table where a list or comparison is clearer. Say only what is true; do not invent figures, dates or quotations, and never name a book, document or website.`,
+  };
+}

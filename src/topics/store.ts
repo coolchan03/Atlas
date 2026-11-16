@@ -29,6 +29,8 @@ export interface Course {
   difficulty?: Difficulty;
   /** How many of the next lessons are written ahead of time while you play (0 turns it off). Missing means the default. */
   prepareAhead?: number;
+  /** How long and detailed the readings are: 'deep' (the default) writes each section as full textbook paragraphs, 'standard' keeps it short. */
+  readingDepth?: 'standard' | 'deep';
 }
 
 export interface SharedCourse {
@@ -56,8 +58,10 @@ interface TopicsState {
   setDifficulty: (id: string, difficulty: Difficulty) => void;
   /** Sets how many of the next lessons are written ahead of time. */
   setPrepareAhead: (id: string, count: number) => void;
+  /** Changes how detailed the readings are; readings not played yet are written again that way. */
+  setReadingDepth: (id: string, depth: 'standard' | 'deep') => void;
   clearContent: (id: string, key: string) => void;
-  /** Puts a lesson that explains a square again, differently, right after it. Returns whether one was added. */
+  /** When a square went badly: puts a lesson that explains it differently right after it, and (for a quiz, a task or the like) a second square of the same kind with new questions after that. Returns whether any were added. */
   addRemedial: (id: string, afterKey: string) => boolean;
   remove: (id: string) => void;
   setContent: (id: string, key: string, content: SquareContent) => void;
@@ -114,13 +118,18 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
       const at = c.squares.findIndex((q) => q.key === afterKey);
       const base = c.squares[at];
       const key = `${afterKey}r`;
-      if (!base || base.remedial || c.squares.some((q) => q.key === key) || c.squares.filter((q) => q.remedial).length >= 6) return c;
+      if (!base || base.remedial || c.squares.some((q) => q.key === key) || c.squares.filter((q) => q.remedial).length >= 12) return c;
       added = true;
-      const extra: PlannedSquare = { key, format: 'lesson', title: `Another look: ${base.title}`.slice(0, 60), focus: `Explain again, differently: ${base.focus}`, unit: base.unit, remedial: true };
-      return { ...c, squares: [...c.squares.slice(0, at + 1), extra, ...c.squares.slice(at + 1)] };
+      const lesson: PlannedSquare = { key, format: 'lesson', title: `Another look: ${base.title}`.slice(0, 60), focus: `Explain again, differently: ${base.focus}`, unit: base.unit, remedial: true, ...(base.topic ? { topic: base.topic } : {}) };
+      // The same kind of square again, with new questions, so what was explained is tried straight away.
+      const again: PlannedSquare[] = base.format === 'lesson' || base.format === 'cards' ? [] : [{ key: `${afterKey}p`, format: base.format, title: `Extra practice: ${base.title}`.slice(0, 60), focus: `New questions, different from the first time, on: ${base.focus}`, unit: base.unit, remedial: true, ...(base.topic ? { topic: base.topic } : {}) }];
+      return { ...c, squares: [...c.squares.slice(0, at + 1), lesson, ...again, ...c.squares.slice(at + 1)] };
     }) }));
     return added;
   },
+  setReadingDepth: (id, depth) => set((s) => ({ courses: s.courses.map((c) => (c.id !== id || (c.readingDepth ?? 'deep') === depth ? c : {
+    ...c, readingDepth: depth, content: Object.fromEntries(Object.entries(c.content).filter(([key]) => !!c.progress[key] || c.squares.find((q) => q.key === key)?.format !== 'lesson')),
+  })) })),
   setPrepareAhead: (id, count) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, prepareAhead: Math.max(0, Math.min(20, Math.round(count))) } : c)) })),
   setContent: (id, key, content) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, content: { ...c.content, [key]: content } } : c)) })),
   complete: (id, key, stars) => set((s) => ({

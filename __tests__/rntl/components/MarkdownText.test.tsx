@@ -115,6 +115,28 @@ describe('MarkdownText', () => {
   });
 });
 
+describe('tables written by a model', () => {
+  const dashes = '| Account | Debit | Credit |\n| :\u2014 | :\u2014 | :\u2014 |\n| Revenue | $30,000 | to Fund Balance |';
+
+  it('rewrites long-dash divider rows so the parser sees a table, keeping alignment colons', () => {
+    expect(preprocessMarkdown(dashes)).toBe('| Account | Debit | Credit |\n| :--- | :--- | :--- |\n| Revenue | $30,000 | to Fund Balance |');
+    expect(preprocessMarkdown('| a | b |\n| -: | :-: |\n| 1 | 2 |')).toContain('| ---: | :---: |');
+  });
+
+  it('leaves a normal table alone', () => {
+    const t = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+    expect(preprocessMarkdown(t)).toBe(t);
+  });
+
+  it('puts a blank line between a sentence and the table that follows it', () => {
+    expect(preprocessMarkdown('Close revenues:\n| a | b |\n| --- | --- |\n| 1 | 2 |')).toBe('Close revenues:\n\n| a | b |\n| --- | --- |\n| 1 | 2 |');
+  });
+
+  it('does not touch text that only mentions a pipe', () => {
+    expect(preprocessMarkdown('use a | b to choose')).toBe('use a | b to choose');
+  });
+});
+
 describe('preprocessMarkdown', () => {
   it('escapes digit*digit patterns', () => {
     expect(preprocessMarkdown('5*5')).toBe(String.raw`5\*5`);
@@ -148,5 +170,19 @@ describe('preprocessMarkdown', () => {
     fireEvent.press(view.getByTestId('copy-code-copy-code'));
     expect(set).toHaveBeenLastCalledWith('const x = 42;');
     set.mockRestore();
+  });
+
+  it('shows a table fitted to the screen by default, with a toggle to a wide scrolling view, and remembers the choice', () => {
+    const { useTablePrefs } = require('../../../src/components/tablePrefs');
+    useTablePrefs.setState({ fit: true });
+    const view = render(<MarkdownText>{'| A | B | C |\n| :\u2014 | :\u2014 | :\u2014 |\n| 1 | 2 | 3 |'}</MarkdownText>);
+    // The long-dash divider still makes a table, and in the fitted view there is no sideways scroller.
+    expect(view.getByText('Copy table')).toBeTruthy();
+    expect(view.UNSAFE_queryAllByType(require('react-native').ScrollView)).toHaveLength(0);
+    expect(view.getByText('Wide view')).toBeTruthy();
+    fireEvent.press(view.getByTestId('table-fit-toggle'));
+    expect(useTablePrefs.getState().fit).toBe(false);
+    expect(view.getByText('Fit to screen')).toBeTruthy();
+    expect(view.UNSAFE_queryAllByType(require('react-native').ScrollView)).toHaveLength(1);
   });
 });

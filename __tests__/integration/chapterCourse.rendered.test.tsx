@@ -24,7 +24,7 @@ it('makes one unit per chapter with six squares (reading, key terms, worked exam
   const { useTopics } = require('../../src/topics/store');
   const { TopicsScreen } = require('../../src/topics/TopicScreens');
   const project = useProjectStore.getState().createProject({ name: 'FAR book', description: '', systemPrompt: '', icon: '#10B981' });
-  const text = ['Contents', 'Chapter 1: Leases .... 3', 'Chapter 2: Bonds .... 40', 'Chapter 3: Revenue .... 90', chapter(1, 'Leases'), chapter(2, 'Bonds'), chapter(3, 'Revenue')].join('\n');
+  const text = ['Contents', '1 – Leases .... 3', '2 – Bonds .... 40', '3 – Revenue .... 90', chapter(1, 'Leases'), chapter(2, 'Bonds'), chapter(3, 'Revenue')].join('\n');
   await ragService.appendProjectDocuments([{ projectId: project.id, name: 'FAR.pdf', path: '/x', size: 10, enabled: true, createdAt: '2026-01-01', chunks: text.split('\n').map((content, position) => ({ content, position })) }]);
   mockParams = { projectId: project.id };
   useTopics.setState({ courses: [] });
@@ -36,7 +36,7 @@ it('makes one unit per chapter with six squares (reading, key terms, worked exam
   await rtl.waitFor(() => expect(useTopics.getState().courses).toHaveLength(1));
   const course = useTopics.getState().courses[0];
   const per = (name: string) => [name, `${name}: key terms`, `${name}: worked example`, `${name}: quiz`, `${name}: assignment`, `${name}: chapter exam`];
-  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([...per('Chapter 1: Leases'), ...per('Chapter 2: Bonds'), ...per('Chapter 3: Revenue')]);
+  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([...per('1 – Leases'), ...per('2 – Bonds'), ...per('3 – Revenue')]);
   expect(course.squares.map((s: { format: string }) => s.format).slice(0, 6)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'quiz']);
   expect(course.squares.filter((s: { checkpoint?: boolean }) => s.checkpoint)).toHaveLength(3);
   expect(course.projectId).toBe(project.id);
