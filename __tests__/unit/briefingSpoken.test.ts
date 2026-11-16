@@ -52,3 +52,19 @@ describe('a quiet beat between stories', () => {
     expect(log).toEqual(['line0', 'line1']);
   });
 });
+
+describe('the opening and closing tunes', () => {
+  const run = async (from: number, tunes: any) => {
+    const log: string[] = [];
+    await playEpisode({ count: 3, from, tunes }, { stopped: () => false, jingle: async (k) => { log.push(k); return true; }, onLine: (i) => log.push(`line${i}`), line: async () => true });
+    return log;
+  };
+  it('plays the opening tune from the start, and the closing tune when the show ends', async () => {
+    expect(await run(0, { storyStarts: [] })).toEqual(['intro', 'line0', 'line1', 'line2', 'outro']);
+  });
+  it('plays the opening tune when carrying on from where you left off, if asked, and not when skipping within the show', async () => {
+    expect(await run(2, { storyStarts: [], intro: true })).toEqual(['intro', 'line2', 'outro']);
+    expect(await run(2, { storyStarts: [], intro: false })).toEqual(['line2', 'outro']);
+    expect(await run(2, { storyStarts: [] })).toEqual(['line2', 'outro']);
+  });
+});

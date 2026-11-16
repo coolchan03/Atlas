@@ -3,7 +3,7 @@ export interface EpisodePlan {
   count: number;
   from: number;
   /** Tunes before, between stories and after the show. Left out for anything that is not a briefing. */
-  tunes?: { storyStarts: number[]; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
+  tunes?: { storyStarts: number[]; /** play the opening tune even when starting part-way (resuming); left out, only a start from line 0 has it */ intro?: boolean; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
 }
 
 export interface EpisodeHooks {
@@ -22,7 +22,7 @@ export interface EpisodeHooks {
 /** Plays the lines of an episode in order. Resolves true when the last line finished. */
 export async function playEpisode(plan: EpisodePlan, hooks: EpisodeHooks): Promise<boolean> {
   const first = Math.max(0, plan.from);
-  if (plan.tunes && first === 0 && !(await hooks.jingle('intro'))) return false;
+  if (plan.tunes && (plan.tunes.intro ?? first === 0) && !(await hooks.jingle('intro'))) return false;
   let finished = false;
   for (let i = first; i < plan.count; i++) {
     if (hooks.stopped()) break;

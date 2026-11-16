@@ -292,7 +292,8 @@ export const StudyScreen: React.FC = () => {
     const isBrief = !!audioKey && audioKey.startsWith(`${BRIEF_PROJECT}-`);
     setPodcastSpeed(isBrief ? prefs.speed ?? 1 : 1);
     // Stories are told like cards: a chime, then a quiet beat so each one lands before the next starts.
-    const tunes = isBrief && prefs.jingles !== false ? { storyStarts: source!.storyStarts, pauseSeconds: STORY_PAUSE_SECONDS } : undefined;
+    // The opening tune plays whenever the show is started from stopped (including carrying on where you left off), not when you skip within it.
+    const tunes = isBrief && prefs.jingles !== false ? { storyStarts: source!.storyStarts, pauseSeconds: STORY_PAUSE_SECONDS, intro: playing === null } : undefined;
     const isStopped = () => stopRef.current || playToken.current !== my;
     const onLine = (i: number) => {
       setPlaying(i); setResumeAt(i); setItemStart(Date.now());
@@ -320,7 +321,8 @@ export const StudyScreen: React.FC = () => {
               if (lineIdx !== undefined) onLine(lineIdx);
             });
             const unF = nativePlayer.onFinished(() => settle(true));
-            const unE = nativePlayer.onError(() => settle(false));
+            // A tune that cannot be played is skipped by the native player, which carries on: it must not end the show.
+            const unE = nativePlayer.onError((message) => { if (/_jingles/.test(message)) return; settle(false); });
             // Poll isStopped() so the native service halts when the user taps stop.
             const poll = setInterval(() => { if (isStopped()) { nativePlayer.stop(); settle(false); } }, 500);
             nativePlayer.play(queue.paths, { startIndex: 0, speed: isBrief ? prefs.speed ?? 1 : 1 });

@@ -100,3 +100,15 @@ describe('generateRandomSeed', () => {
     });
   });
 });
+describe('without Web Crypto (Hermes on Android)', () => {
+  it('never repeats an id, even for thousands made in the same millisecond', () => {
+    const original = (global as any).crypto;
+    (global as any).crypto = undefined;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const ids = new Set(Array.from({ length: 5000 }, () => generateId()));
+      expect(ids.size).toBe(5000);
+      for (const id of ids) expect(id).toMatch(/^\d+-[a-z0-9]+$/);
+    } finally { now.mockRestore(); (global as any).crypto = original; }
+  });
+});

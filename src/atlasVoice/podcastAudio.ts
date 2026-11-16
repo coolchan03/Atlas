@@ -258,7 +258,7 @@ export function setPodcastSpeed(x: number): void { speed = x > 0 ? x : 1; }
 
 export interface NativeEpisodeQueueOpts {
   from: number;
-  tunes?: { storyStarts: number[]; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
+  tunes?: { storyStarts: number[]; /** play the opening tune even when starting part-way (resuming) */ intro?: boolean; /** quiet gap after the chime before each story, in seconds */ pauseSeconds?: number };
   jingleVolume?: JingleVolume;
   /** playback speed: a gap is made longer by this much so it still lasts the same time once played faster */
   speed?: number;
@@ -294,7 +294,7 @@ export async function nativeEpisodeQueue(
     paths.push(p);
   };
 
-  if (tunes && first === 0) await addJingle('intro');
+  if (tunes && (tunes.intro ?? first === 0)) await addJingle('intro');
   for (let i = first; i < items.length; i++) {
     if (tunes && i > first && tunes.storyStarts.includes(i)) {
       await addJingle('chime');
@@ -306,6 +306,7 @@ export async function nativeEpisodeQueue(
     paths.push(p);
   }
   if (tunes) await addJingle('outro');
+  logger.log(`[POD] queue of ${paths.length} files from line ${first}: intro ${!!tunes && (tunes.intro ?? first === 0)}, outro ${!!tunes}, story pause ${tunes?.pauseSeconds ?? 0}s`);
 
   return { paths, lineAtIndex };
 }

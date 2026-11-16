@@ -3,6 +3,7 @@
  * with a Date.now()-based fallback for environments where the Web Crypto
  * API is not exposed (e.g. older Hermes builds on Android).
  */
+let sequence = 0;
 export function generateId(): string {
   let random: string;
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -10,9 +11,9 @@ export function generateId(): string {
     crypto.getRandomValues(array);
     random = array[0].toString(36);
   } else {
-    // Fallback: combine high-resolution timer bits with a counter.
-    // Not cryptographically secure, but sufficient for local IDs.
-    random = ((Date.now() * 9301 + 49297) % 233280).toString(36); // NOSONAR
+    // Fallback (Hermes on Android has no Web Crypto): random bits plus a counter that never repeats, so two ids made in the same
+    // millisecond (a loop adding voices, messages or widgets) can never be the same. Not cryptographically secure, but fine for local IDs.
+    random = `${Math.floor(Math.random() * 2 ** 30).toString(36)}${(sequence++).toString(36)}`; // NOSONAR
   }
   return `${Date.now()}-${random}`;
 }

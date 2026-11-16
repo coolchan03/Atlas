@@ -41,3 +41,19 @@ describe('choosing a voice highlights only that voice', () => {
     expect(repairProfiles(ok)).toEqual(ok);
   });
 });
+
+describe('voices added in one go each get their own id', () => {
+  it('ready-made voices added together never share an id, so choosing one highlights only that one', () => {
+    const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+    const original = (global as any).crypto;
+    (global as any).crypto = undefined; // Hermes on Android has no Web Crypto: the old fallback made the same id inside one millisecond
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      useVoiceProfiles.setState({ profiles: [] });
+      const added = useVoiceProfiles.getState().addPresets(Array.from({ length: 12 }, (_, i) => ({ name: `Voice ${i}`, voiceId: 'kokoro', sid: i, rate: 1 })));
+      expect(added).toBe(12);
+      const ids = useVoiceProfiles.getState().profiles.map((p: any) => p.id);
+      expect(new Set(ids).size).toBe(12);
+    } finally { now.mockRestore(); (global as any).crypto = original; }
+  });
+});

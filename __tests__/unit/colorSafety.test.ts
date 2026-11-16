@@ -37,5 +37,9 @@ describe('a theme with odd colours still draws', () => {
     expect(dark.border).toBe(COLORS_DARK.border);
     // Every colour the app adds two digits to is a valid hex colour, so `${colors.primary}44` is always a colour.
     for (const k of ['primary', 'surface', 'background', 'border', 'success', 'warning', 'info'] as const) expect(`${light[k]}`).toMatch(HEX6);
+    // The proof that matters: React Native can read the see-through shades the app makes from them (a bad colour is what crashed a screen).
+    const normalize = require('@react-native/normalize-colors');
+    for (const k of ['primary', 'surface', 'border', 'text'] as const) { expect(normalize(`${light[k]}44`)).not.toBeNull(); expect(normalize(`${dark[k]}80`)).not.toBeNull(); }
+    expect(normalize('#abc44')).toBeNull(); // what the unsafe colour used to make
   });
 });
