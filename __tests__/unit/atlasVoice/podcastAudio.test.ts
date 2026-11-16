@@ -12,6 +12,7 @@ jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/cache',
   exists: jest.fn(async (p: string) => mockFiles.has(p)),
   mkdir: jest.fn(async () => undefined),
+  stat: jest.fn(async () => ({ size: 1000000 })),
   readDir: jest.fn(async () => Array.from({ length: 9 }, (_, i) => ({
     path: `/cache/podcast-audio/ep${i}`, isDirectory: () => true, mtime: new Date(1000 * i),
   }))),
