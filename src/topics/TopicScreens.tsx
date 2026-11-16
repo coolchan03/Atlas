@@ -23,6 +23,7 @@ import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
+import { WriteNowPanel } from './WriteNowPanel';
 import { matchExam, type ExamCode } from '../cpa/blueprints';
 import { setupCpaExam } from '../cpa/setup';
 import { ensureExamCourse } from '../cpa/course';
@@ -339,6 +340,7 @@ export const TopicBoardScreen: React.FC = () => {
         <View style={styles.chips} testID="course-ahead">
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
+        <WriteNowPanel course={course} />
         {prep.courseId === course.id && !!prep.working && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson'}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}

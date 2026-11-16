@@ -16,6 +16,10 @@ it('shows each source with its page, opens the passage with the quoted sentence 
   const view = rtl.render(React.createElement(React.Fragment, null,
     React.createElement(RewriteRow, { show: true, onPick: (h: string) => picked.push(h) }),
     React.createElement(CitedFold, { passages, content: lesson })));
+  // Sources are one quiet line until asked for.
+  expect(view.queryByText('Intermediate Accounting, page 214')).toBeNull();
+  expect(view.getByText('Sources (2)')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('square-sources-toggle'));
   expect(view.getByText('Intermediate Accounting, page 214')).toBeTruthy();
   expect(view.getByText('Leases explained')).toBeTruthy();
   expect(view.getByTestId('square-unbacked')).toBeTruthy();

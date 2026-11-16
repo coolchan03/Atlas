@@ -19,6 +19,7 @@ interface Passage { source: string; url?: string; docId?: number; where?: string
 export function CitedFold({ passages, content, projectId }: { passages: Passage[]; content?: SquareContent | null; projectId?: string }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(false);
   const [page, setPage] = useState<{ key: string; text: string } | null>(null);
   const [verdicts, setVerdicts] = useState<LineVerdict[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -38,7 +39,11 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
   };
   return (
     <View testID="square-cited" style={styles.gap}>
-      <Text style={[styles.meta, { color: colors.textMuted }]}>Where this came from</Text>
+      {/* Sources are there when wanted, and out of the way otherwise: one quiet line. */}
+      <TouchableOpacity onPress={() => setShown((v) => !v)} accessibilityRole="button" accessibilityState={{ expanded: shown }} testID="square-sources-toggle">
+        <Text style={[styles.meta, { color: colors.textMuted }]}>{shown ? 'Hide sources' : `Sources (${sources.length})`}</Text>
+      </TouchableOpacity>
+      {shown && <>
       {sources.map((p) => (p.url
         ? <Text key={label(p)} style={[styles.link, { color: colors.primary }]} accessibilityRole="link" onPress={() => Linking.openURL(p.url!)} testID="square-source-link">{label(p)}</Text>
         : <Text key={label(p)} style={[styles.link, { color: colors.primary }]} accessibilityRole="button" onPress={() => openPage(p)} testID="square-source-open">{label(p)}</Text>))}
@@ -74,6 +79,7 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
           </View>
         );
       })}
+      </>}
     </View>
   );
 }

@@ -257,10 +257,10 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
   if (format === 'quiz' || format === 'fill' || format === 'truefalse' || format === 'scenario' || format === 'reading' || format === 'predict') {
     const questions = list(j.questions).map((q) => {
       // A question or a choice that is too long is dropped whole: a quiz must never show one cut off in the middle.
-      const raw = list(q?.options).slice(0, 5).map((o) => whole(o, 400));
-      const options = raw.filter((o): o is string => !!o);
+      const choices = list(q?.options).slice(0, 5).map((o) => whole(o, 400));
+      const options = choices.filter((o): o is string => !!o);
       const answer = Number(q?.answer);
-      return { q: whole(q?.q, 900) ?? '', options, answer, why: tidy(q?.why, 900), whole: raw.every(Boolean) };
+      return { q: whole(q?.q, 900) ?? '', options, answer, why: tidy(q?.why, 900), whole: choices.every(Boolean) };
     }).filter((q) => q.whole && q.q && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length).map(({ whole: _w, ...q }) => q);
     const passage = format === 'reading' ? str(j.passage, 2000) : '';
     if (format === 'reading' && !passage) return null;

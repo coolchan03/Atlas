@@ -52,3 +52,74 @@ export async function prepareAhead(courseId: string): Promise<void> {
     if (usePrepare.getState().working) usePrepare.setState({ working: '' });
   }
 }
+
+// ------------------------------------------------------------------ write now
+/** The squares of a course still to be written (not played, not made in code, no content yet), in board order. */
+const missing = (course: Course): string[] => course.squares.filter((s) => !course.content[s.key] && !MADE_IN_CODE.includes(s.format)).map((s) => s.key);
+
+/** The next `count` squares that still need writing, from the first one not played yet. */
+export function nextMissing(course: Course, count: number): string[] {
+  const todo = new Set(missing(course));
+  return course.squares.filter((s) => !course.progress[s.key] && todo.has(s.key)).slice(0, Math.max(0, count)).map((s) => s.key);
+}
+
+/** Every square of one chapter (unit) that still needs writing. */
+export function missingInUnit(course: Course, unit: string): string[] {
+  const todo = new Set(missing(course));
+  return course.squares.filter((s) => s.unit === unit && todo.has(s.key)).map((s) => s.key);
+}
+
+/** Every square of the course that still needs writing. */
+export const missingAll = (course: Course): string[] => missing(course);
+
+/** The chapters of a course, in board order, with how many squares each has and how many are written. */
+export function unitsOf(course: Course): Array<{ unit: string; total: number; written: number }> {
+  const out: Array<{ unit: string; total: number; written: number }> = [];
+  for (const s of course.squares) {
+    if (MADE_IN_CODE.includes(s.format)) continue;
+    let u = out.find((x) => x.unit === s.unit);
+    if (!u) { u = { unit: s.unit, total: 0, written: 0 }; out.push(u); }
+    u.total += 1;
+    if (course.content[s.key]) u.written += 1;
+  }
+  return out;
+}
+
+interface BatchState { courseId: string; label: string; total: number; done: number; working: string; failed: string[] }
+/** What "write now" is doing, for the board: which square, how many are done, and which ones failed (and why the first one did). */
+export const useBatch = create<BatchState & { error: string }>(() => ({ courseId: '', label: '', total: 0, done: 0, working: '', failed: [], error: '' }));
+
+let batchRunning = false;
+
+/**
+ * Writes the given squares one after another, now (not when the person reaches them). A square that fails is tried once more and then
+ * skipped, so one bad answer from the model does not stop the rest; the failures are listed when it finishes. Returns how many were written.
+ */
+export async function writeNow(courseId: string, keys: string[], label: string): Promise<number> {
+  if (batchRunning || !keys.length) return 0;
+  batchRunning = true;
+  useBatch.setState({ courseId, label, total: keys.length, done: 0, working: '', failed: [], error: '' });
+  let written = 0;
+  try {
+    for (const key of keys) {
+      const course = useTopics.getState().courses.find((c) => c.id === courseId);
+      if (!course) break;
+      if (course.content[key]) { useBatch.setState((s) => ({ done: s.done + 1 })); continue; }
+      // A square someone is waiting for goes first.
+      while (personWaiting()) await new Promise((r) => setTimeout(r, 1000));
+      useBatch.setState({ working: key });
+      let ok = false;
+      let reason = '';
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        try { await squareContent(useTopics.getState().courses.find((c) => c.id === courseId) ?? course, key, { background: true }); ok = true; }
+        catch (e) { reason = String((e as Error)?.message || e); }
+      }
+      if (ok) written += 1; else useBatch.setState((s) => ({ failed: [...s.failed, key], error: s.error || reason }));
+      useBatch.setState((s) => ({ done: s.done + 1 }));
+    }
+  } finally {
+    batchRunning = false;
+    useBatch.setState({ working: '' });
+  }
+  return written;
+}
