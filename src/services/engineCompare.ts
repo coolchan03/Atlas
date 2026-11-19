@@ -13,6 +13,8 @@ export interface EngineHandle {
   /** Peak extra memory in MB while it was loaded (0 when the phone does not report it). */
   peakRamMB: () => Promise<number>;
   unload: () => Promise<void>;
+  /** What this engine can do, when it differs from the setup's (a candidate that lacks tools or vision says so here). */
+  features?: EngineRun['features'];
 }
 export interface Setup { device: string; model: string; quant: string; contextLength: number; features: EngineRun['features']; licenceOk: boolean; integrationDays?: number }
 
@@ -37,7 +39,7 @@ export async function measureEngine(handle: EngineHandle, setup: Setup, plan: { 
   return {
     engine: handle.engine, device: setup.device, model: setup.model, quant: setup.quant, contextLength: setup.contextLength,
     prefillTps: median(prefill), decodeTps: median(decode), coldLoadSec, firstTokenSec: median(first), peakRamMB: peak, runs: decode.length,
-    features: setup.features, licenceOk: setup.licenceOk, integrationDays: setup.integrationDays,
+    features: handle.features ?? setup.features, licenceOk: setup.licenceOk, integrationDays: setup.integrationDays,
   };
 }
 

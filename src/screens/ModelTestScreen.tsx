@@ -11,7 +11,8 @@ import { vulkanEngine, describeVulkanStatus } from '../services/vulkanEngine';
 import { describeOffload } from '../services/gpuOffload';
 import { liteRTService } from '../services/litert';
 import { hardwareService } from '../services/hardware';
-import type { Message } from '../types';
+import type { LlamaDownloadedModel, Message } from '../types';
+import { EngineCompareCard } from '../components/EngineCompareCard';
 import { useSpeedStats, estimateReply, fmtSec, speedHealthLabel } from '../atlasTools/speed';
 import { localUniqueId } from '../utils/uniqueId';
 import { ImageModelTestScreen } from './ImageModelTestScreen';
@@ -344,6 +345,7 @@ const TextModelTestScreen: React.FC = () => {
                 {!!vulkanResult && <Text style={[{ color: colors.textSecondary }, literalStyles.s8]}>{vulkanResult}</Text>}
               </View>
             )}
+            {model.engine === 'llama' && !running && <EngineCompareCard model={model as LlamaDownloadedModel} />}
             {steps.map((s) => {
               const [name, color] = icon(s.status);
               return (
