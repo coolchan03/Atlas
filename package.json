@@ -104,7 +104,10 @@
   },
   "op-sqlite": {},
   "overrides": {
-    "react": "19.2.0"
+    "react": "19.2.0",
+    "markdown-it": "^14.1.1",
+    "linkify-it": "^5.0.0",
+    "xmldom": "npm:@xmldom/xmldom@^0.8.13"
   },
   "allowScripts": {
     "llama.rn@0.13.0-rc.9": true
