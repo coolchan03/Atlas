@@ -3,6 +3,9 @@ name: Atlas Core Audit
 on:
   pull_request:
   workflow_dispatch:
+  # Nightly run on the default branch (06:15 UTC) so a dependency or toolchain break shows up the next morning.
+  schedule:
+    - cron: '15 6 * * *'
   # Every push to a working branch runs the type check and the whole test suite, so a break is seen at once
   # (the APK build is started by hand and runs the same checks, but only when someone asks for it).
   push:

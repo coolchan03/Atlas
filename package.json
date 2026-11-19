@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.209",
+  "version": "0.0.210",
   "private": true,
   "scripts": {
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
@@ -70,9 +70,9 @@
     "@babel/preset-env": "^7.25.3",
     "@babel/runtime": "^7.25.0",
     "@jest/globals": "^30.4.1",
-    "@react-native-community/cli": "20.0.0",
-    "@react-native-community/cli-platform-android": "20.0.0",
-    "@react-native-community/cli-platform-ios": "20.0.0",
+    "@react-native-community/cli": "20.2.0",
+    "@react-native-community/cli-platform-android": "20.2.0",
+    "@react-native-community/cli-platform-ios": "20.2.0",
     "@react-native/babel-preset": "0.83.1",
     "@react-native/eslint-config": "0.83.1",
     "@react-native/metro-config": "0.83.1",

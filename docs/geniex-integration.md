@@ -1,5 +1,7 @@
 # GenieX (Qualcomm) integration status
 
+**Status: parked.** GenieX is text-only (no tools, vision or MTP), runs on two chips, and adds 89 MB. It is not in the shipped APK and gets no further work until Qualcomm adds those features. What remains is the flag-gated trial (`-PatlasGeniex=true` / the `geniex_trial` workflow input) so it can be measured later. The default build carries only the do-nothing stub.
+
 ## What GenieX is
 Qualcomm's open on-device runtime: llama.cpp plus the Qualcomm AI Runtime, running GGUF models on the CPU, Adreno GPU or Hexagon NPU, and pre-compiled Qualcomm AI Hub bundles on the NPU. Android artifact: `com.qualcomm.qti:geniex-android:0.10.0` on Maven Central. Status: developer preview.
 
