@@ -85,6 +85,11 @@ export function shouldSuggestTuning(o: { modelId: string | null | undefined; spe
 
 const THINK_MULT: Record<string, number> = { low: 1.6, medium: 2.5, high: 4 };
 
+/** Who says which backend the model is running on. The text engine registers itself (this file must not import it: that would be a cycle). */
+let backendProvider: (() => string | undefined) | null = null;
+export const setBackendProvider = (fn: (() => string | undefined) | null): void => { backendProvider = fn; };
+const currentBackend = (): string | undefined => { try { return backendProvider?.() || undefined; } catch { return undefined; } };
+
 /** Record a finished generation for the model that's in use now. Never throws. */
 export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens?: number; outLen?: number }): void {
   try {
@@ -96,8 +101,7 @@ export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens
     const st = useAppStore.getState().settings as any;
     const mult = st?.thinkingEnabled ? THINK_MULT[st.thinkingLevel || 'medium'] ?? 1 : 1;
     const outLen = s.outLen ? s.outLen / mult : undefined;
-    let backend: string | undefined;
-    try { backend = String(require('../services/llm').llmService.getSelectedBackend?.() ?? '') || undefined; } catch { /* backend unknown */ }
+    const backend = currentBackend();
     useSpeedStats.getState().record(id, { decode: s.decode, prefill, outLen, backend });
   } catch { /* stats are best-effort */ }
 }

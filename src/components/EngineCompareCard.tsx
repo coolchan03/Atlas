@@ -3,51 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { useTheme } from '../theme';
-import { activeModelService } from '../services/activeModelService';
-import { hardwareService } from '../services/hardware';
-import { llmService } from '../services/llm';
-import { generateGeniex, geniexStatus, geniexUsable, loadGeniex, unloadGeniex } from '../services/geniexEngine';
-import { measureEngine, roundsNeeded, type EngineHandle } from '../services/engineCompare';
+import { geniexStatus, geniexUsable } from '../services/geniexEngine';
+import { COMPARE_PROMPTS, geniexHandle, llamaHandle } from '../services/engineHandles';
+import { measureEngine, roundsNeeded } from '../services/engineCompare';
 import { compareEngines, type Comparison, type EngineRun } from '../services/engineBenchmark';
-import type { LlamaDownloadedModel as DownloadedModel, Message } from '../types';
-import { localUniqueId } from '../utils/uniqueId';
+import type { LlamaDownloadedModel as DownloadedModel } from '../types';
 
-const PROMPTS = ['Write one short paragraph about rivers.', 'Explain in two sentences why the sky is blue.', 'List three tips for sleeping well.'];
-const MAX_TOKENS = 96;
-const roughTokens = (text: string) => Math.ceil(text.length / 3.6);
-const msg = (content: string): Message => ({ id: localUniqueId('cmp'), role: 'user', content, timestamp: Date.now() });
-
-/** llama.rn, on whatever backend it is set to use, through the same load path as chat. */
-function llamaHandle(model: DownloadedModel): EngineHandle {
-  return {
-    engine: 'llama.rn',
-    features: { vision: !!model.mmProjPath, tools: true, mtp: false, qLegacy: true },
-    load: async () => { await activeModelService.unloadAllModels(true); const t = Date.now(); await activeModelService.loadTextModel(model.id); return (Date.now() - t) / 1000; },
-    reply: async (prompt) => {
-      await llmService.generateWithMaxTokens([msg(prompt)], MAX_TOKENS);
-      const st = llmService.getPerformanceStats();
-      const ttft = st.lastTimeToFirstToken || 0;
-      return { ttftSec: ttft, decodeTps: st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0, prefillTps: ttft > 0 ? roughTokens(prompt) / ttft : 0 };
-    },
-    peakRamMB: async () => (await hardwareService.getProcessMemory())?.footprintMB ?? 0,
-    unload: async () => { await activeModelService.unloadAllModels(true); },
-  };
-}
-
-/** GenieX, with only what the bridge provides today: text. It does not yet do vision, tools or speculative decoding, and says so. */
-function geniexHandle(model: DownloadedModel): EngineHandle {
-  return {
-    engine: 'GenieX',
-    features: { vision: false, tools: false, mtp: false, qLegacy: true },
-    load: async () => { const t = Date.now(); await loadGeniex(model.filePath, { contextLength: 4096, npu: true }); return (Date.now() - t) / 1000; },
-    reply: async (prompt) => {
-      const r = await generateGeniex([{ role: 'user', content: prompt }], { maxTokens: MAX_TOKENS });
-      return { ttftSec: r.timings.ttftMs / 1000, decodeTps: r.timings.decodeTps, prefillTps: r.timings.prefillTps };
-    },
-    peakRamMB: async () => (await hardwareService.getProcessMemory())?.footprintMB ?? 0,
-    unload: unloadGeniex,
-  };
-}
+const PROMPTS = COMPARE_PROMPTS;
 
 const fmt = (r: EngineRun) => `${r.engine}: writes ${r.decodeTps.toFixed(1)} per second, first words after ${r.firstTokenSec.toFixed(2)} s, loads in ${r.coldLoadSec.toFixed(1)} s, ${Math.round(r.peakRamMB)} MB (${r.runs} replies)`;
 

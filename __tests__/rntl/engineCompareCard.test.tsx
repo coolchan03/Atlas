@@ -10,6 +10,7 @@ jest.mock('../../src/services/geniexEngine', () => ({
 jest.mock('../../src/services/activeModelService', () => ({ activeModelService: { unloadAllModels: jest.fn(async () => ({})), loadTextModel: jest.fn(async () => undefined) } }));
 jest.mock('../../src/services/llm', () => ({ llmService: { generateWithMaxTokens: jest.fn(async () => 'x'), getPerformanceStats: () => ({ lastTimeToFirstToken: 1, lastDecodeTokensPerSecond: 10, lastTokensPerSecond: 10 }) } }));
 jest.mock('../../src/services/hardware', () => ({ hardwareService: { getProcessMemory: async () => ({ footprintMB: 2000 }) } }));
+jest.mock('react-native-device-info', () => ({ __esModule: true, default: { getModel: () => 'Test phone' } }));
 
 import { EngineCompareCard } from '../../src/components/EngineCompareCard';
 

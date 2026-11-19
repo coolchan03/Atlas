@@ -3,6 +3,7 @@ import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers } from './gpuOffload';
+import { fastestBackend, setBackendProvider, useSpeedStats } from '../atlasTools/speed';
 import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './acceleratorSelection';
 import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
@@ -213,7 +214,6 @@ class LLMService {
         candidates.push(INFERENCE_BACKENDS.CPU);
         // Measured speed on this phone beats a guess: the backend that wrote fastest for this model in real runs goes first.
         try {
-          const { useSpeedStats, fastestBackend } = require('../atlasTools/speed');
           const id = useAppStore.getState().activeModelId;
           if (id) candidates = preferMeasured(candidates, fastestBackend(useSpeedStats.getState().byConfig, id)?.backend);
         } catch { /* no speed history: keep the default order */ }
@@ -848,3 +848,4 @@ class LLMService {
   getPerformanceStats(): LLMPerformanceStats { return { ...this.performanceStats }; }
 }
 export const llmService = new LLMService();
+setBackendProvider(() => llmService.getSelectedBackend());
