@@ -8,7 +8,7 @@ import {
   Animated,
   Easing,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
   Platform,
   Keyboard,
 } from 'react-native';
@@ -16,7 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './AppSheet.styles';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+/** On a wide window (a tablet, an unfolded phone) the sheet stays this wide and centered instead of stretching across the screen. */
+export const SHEET_MAX_WIDTH = 640;
 
 export interface AppSheetProps {
   visible: boolean;
@@ -38,12 +39,12 @@ export interface AppSheetProps {
   children: React.ReactNode;
 }
 
-function resolveSnapPoint(snap: string | number): number {
+export function resolveSnapPoint(snap: string | number, windowHeight: number): number {
   if (typeof snap === 'number') return snap;
   if (typeof snap === 'string' && snap.endsWith('%')) {
-    return (Number.parseFloat(snap) / 100) * SCREEN_HEIGHT;
+    return (Number.parseFloat(snap) / 100) * windowHeight;
   }
-  return SCREEN_HEIGHT * 0.5;
+  return windowHeight * 0.5;
 }
 
 function createSheetPanResponder({
@@ -51,7 +52,9 @@ function createSheetPanResponder({
   backdropOpacity,
   setModalVisible,
   onCloseRef,
+  heightRef,
 }: {
+  heightRef: React.MutableRefObject<number>;
   translateY: Animated.Value;
   backdropOpacity: Animated.Value;
   setModalVisible: (v: boolean) => void;
@@ -69,7 +72,7 @@ function createSheetPanResponder({
       if (dy > 80 || vy > 0.5) {
         Animated.parallel([
           Animated.timing(translateY, {
-            toValue: SCREEN_HEIGHT,
+            toValue: heightRef.current,
             duration: 150,
             useNativeDriver: true,
           }),
@@ -111,10 +114,14 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const { elevation: elevationTokens } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { bottom: bottomInset } = useSafeAreaInsets();
+  // The window as it is NOW: it changes when the phone is rotated or unfolded, so it is read on every render, not once at start-up.
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const heightRef = useRef(windowHeight);
+  heightRef.current = windowHeight;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const translateY = useRef(new Animated.Value(windowHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   // Keep onClose ref current for PanResponder
@@ -132,22 +139,22 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // to route to the backdrop and close the sheet before any button was tapped.
   //
   // Starts TRUE: when the modal first renders the sheet is still off-screen
-  // (translateY=SCREEN_HEIGHT) so there is nothing to guard against.
+  // (translateY = window height) so there is nothing to guard against.
   // animateIn() sets it to false, then back to true on completion.
   const backdropEnabled = useRef(true);
 
   // Calculate sheet max height from largest snap point
   const sheetMaxHeight = enableDynamicSizing
-    ? SCREEN_HEIGHT * 0.85
+    ? windowHeight * 0.85
     : resolveSnapPoint(
-      snapPoints?.[snapPoints.length - 1] || '50%',
+      snapPoints?.[snapPoints.length - 1] || '50%', windowHeight,
     );
 
   const levelTokens = elevationTokens[elevation];
 
   // Animate in — use timing (not spring) so the .start() callback fires at a
   // guaranteed time. A spring only calls its callback when displacement <
-  // restDisplacementThreshold (0.001px); from SCREEN_HEIGHT that can take
+  // restDisplacementThreshold (0.001px); from the full window height that can take
   // 1–2 s, leaving backdropEnabled=false the whole time and silently eating
   // every tap that lands even slightly outside a button's hit area.
   const animateIn = useCallback(() => {
@@ -175,7 +182,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       backdropEnabled.current = false;
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: SCREEN_HEIGHT,
+          toValue: heightRef.current,
           duration: 200,
           useNativeDriver: true,
         }),
@@ -265,7 +272,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Swipe-to-dismiss on handle
   const panResponder = useRef(
-    createSheetPanResponder({ translateY, backdropOpacity, setModalVisible, onCloseRef }),
+    createSheetPanResponder({ translateY, backdropOpacity, setModalVisible, onCloseRef, heightRef }),
   ).current;
 
   if (!modalVisible && !visible) {
@@ -297,8 +304,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
             styles.sheet,
             {
               ...(enableDynamicSizing
-                ? { maxHeight: SCREEN_HEIGHT * 0.85 - keyboardHeight }
+                ? { maxHeight: windowHeight * 0.85 - keyboardHeight }
                 : { height: sheetMaxHeight - keyboardHeight }),
+              ...(windowWidth > SHEET_MAX_WIDTH ? { width: SHEET_MAX_WIDTH, alignSelf: 'center' as const } : null),
               backgroundColor: levelTokens.backgroundColor,
               borderTopLeftRadius: levelTokens.borderRadius,
               borderTopRightRadius: levelTokens.borderRadius,

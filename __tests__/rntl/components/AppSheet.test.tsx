@@ -934,3 +934,16 @@ describe('AppSheet', () => {
     });
   });
 });
+
+describe('AppSheet follows the current window (rotation, unfolding, tablets)', () => {
+  const { resolveSnapPoint, SHEET_MAX_WIDTH } = require('../../../src/components/AppSheet');
+  it('computes snap points from the window height it is given, not the height at start-up', () => {
+    expect(resolveSnapPoint('50%', 800)).toBe(400);
+    expect(resolveSnapPoint('50%', 1600)).toBe(800);
+    expect(resolveSnapPoint(300, 1600)).toBe(300);
+    expect(resolveSnapPoint('bogus', 1000)).toBe(500);
+  });
+  it('stays a readable width on a wide window', () => {
+    expect(SHEET_MAX_WIDTH).toBeLessThan(840); // narrower than a tablet window, so it is centered rather than stretched
+  });
+});
