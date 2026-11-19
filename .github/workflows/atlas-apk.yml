@@ -341,16 +341,19 @@ jobs:
           path: out/*.apk
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
-          retention-days: 1
+          retention-days: 3
       - name: Publish release (stable branch, or a manual run with publish ticked)
         if: inputs.minify_trial != true && inputs.qnn_chip == '' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node scripts/release/latest-notes.cjs > release-notes.md
-          gh release create atlas-${{ github.run_number }} out/*.apk --latest \
+          if ! gh release create atlas-${{ github.run_number }} out/*.apk --latest \
             --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
-            --notes-file release-notes.md
+            --notes-file release-notes.md; then
+            echo "::error title=Release not created::The APK was built, signed and checked, and is saved as the build file Atlas-apk on this run (kept 3 days). Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Fix: Settings > Actions > General > Workflow permissions > Read and write permissions, then re-run this workflow with publish ticked."
+            exit 1
+          fi
       - name: Save the image engines for the next build
         if: always() && steps.sdcli.outputs.cache-hit != 'true' && hashFiles('android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so') != ''
         uses: actions/cache/save@v5

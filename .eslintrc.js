@@ -75,6 +75,40 @@ module.exports = {
   },
   overrides: [
     {
+      // Code that does bit arithmetic on purpose (random number generators, hashes, byte and ZIP parsing, MIDI and audio sample
+      // packing). The rule exists to catch a mistyped `&&`; here every use is a real mask or shift.
+      files: [
+        'src/atlasVoice/jingles.ts',
+        'src/atlasVoice/readAloud.ts',
+        'src/knowledge/storage.ts',
+        'src/language/lessons.ts',
+        'src/learning/masteryStore.ts',
+        'src/learning/trainingExport.ts',
+        'src/learning/zipDirectory.ts',
+        'src/music/ambient.ts',
+        'src/music/arrange.ts',
+        'src/music/composition.ts',
+        'src/music/editor.ts',
+        'src/music/instruments.ts',
+        'src/music/soundfont.ts',
+        'src/music/soundfontFiles.ts',
+        'src/music/titles.ts',
+        'src/screens/MapsScreen.tsx',
+        'src/services/authService.ts',
+        'src/services/tools/randomTool.ts',
+        'src/services/tools/urlSafety.ts',
+        'src/stores/agentStore.ts',
+        'src/study/drills.ts',
+        'src/study/engine.ts',
+        'src/study/exercises.ts',
+        'src/study/games/logic.ts',
+        'src/study/mathTools.ts',
+        'src/study/periodicQuiz.ts',
+        'src/theme/colorSafety.ts',
+      ],
+      rules: { 'no-bitwise': 'off' },
+    },
+    {
       // Relax structural rules in test files — large test suites and helpers are acceptable
       files: ['__tests__/**/*', '*.test.ts', '*.test.tsx', 'jest.setup.ts'],
       rules: {
