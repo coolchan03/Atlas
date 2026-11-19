@@ -24,6 +24,7 @@ jobs:
   apk:
     permissions:
       contents: write
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -60,7 +61,26 @@ jobs:
       - name: TypeScript gate
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Core regression gate
-        run: ./node_modules/.bin/jest --ci --maxWorkers=3 --coverage=false --silent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The same full Jest run already happens in "Atlas Core Audit" on every push. When that workflow finished green for EXACTLY this
+          # commit (same SHA, same workflow file), its result is the gate; otherwise (not run, still running too long, failed) it is run here.
+          set -uo pipefail
+          audit() { gh run list -R "$GITHUB_REPOSITORY" --workflow atlas-core-audit.yml --commit "$GITHUB_SHA" --json databaseId,status,conclusion --limit 10; }
+          reuse=""
+          pending="$(audit | jq -r '[.[] | select(.status != "completed")][0].databaseId // empty')"
+          if [ -n "$pending" ]; then
+            echo "Core Audit run $pending is still going for this commit: waiting for it (up to 25 minutes)."
+            timeout 1500 gh run watch "$pending" -R "$GITHUB_REPOSITORY" --exit-status --interval 30 >/dev/null 2>&1 || true
+          fi
+          reuse="$(audit | jq -r '[.[] | select(.status == "completed" and .conclusion == "success")][0].databaseId // empty')"
+          if [ -n "$reuse" ]; then
+            echo "::notice title=Core regression gate::Reusing the green Atlas Core Audit run $reuse for commit $GITHUB_SHA (same commit, same full Jest run)."
+            exit 0
+          fi
+          echo "No green Core Audit run for this commit: running the full Jest suite here."
+          ./node_modules/.bin/jest --ci --maxWorkers=3 --coverage=false --silent
       - name: Checkout pinned public llama.kt sources
         run: |
           set -euo pipefail
@@ -220,7 +240,7 @@ jobs:
           OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleRelease -PatlasGeniex=${{ inputs.geniex_trial == true && 'true' || 'false' }} -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
+          ./gradlew assembleRelease --profile -PatlasGeniex=${{ inputs.geniex_trial == true && 'true' || 'false' }} -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
@@ -254,6 +274,30 @@ jobs:
             exit 1
           fi
           echo "::notice title=Signing verified::APK certificate matches configured GitHub release key"
+      - name: Verify release identity (version, version code, package)
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          AAPT2="$(ls "$ANDROID_SDK_ROOT"/build-tools/*/aapt2 | sort -V | tail -1)"
+          badging="$("$AAPT2" dump badging "$APK")"
+          echo "$badging" | grep -m1 "^package:"
+          package="$(echo "$badging" | sed -nE "s/^package: name='([^']+)'.*/\1/p")"
+          code="$(echo "$badging" | sed -nE "s/^package:.* versionCode='([0-9]+)'.*/\1/p")"
+          name="$(echo "$badging" | sed -nE "s/^package:.* versionName='([^']+)'.*/\1/p")"
+          want_name="$(node -p "require('./package.json').version")"
+          want_code=$((1804544309 + ${{ github.run_number }}))
+          [ "$package" = "ai.offgridmobile.atlas" ] || { echo "::error::Unexpected package $package"; exit 1; }
+          case "$name" in "$want_name"*) ;; *) echo "::error::versionName $name does not start with package.json version $want_name"; exit 1;; esac
+          [ "$code" = "$want_code" ] || { echo "::error::versionCode $code, expected $want_code"; exit 1; }
+          echo "::notice title=Release identity::$package $name (versionCode $code) built from $GITHUB_SHA"
+      - name: Upload Gradle task timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-profile-${{ github.run_number }}
+          path: android/build/reports/profile/
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Rename APK
         run: |
           mkdir -p out
