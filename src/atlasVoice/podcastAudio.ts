@@ -63,7 +63,7 @@ function pump(): void {
   if (rendering) return;
   const next = queued.shift();
   if (!next) {
-    if (borrowedVoice) { borrowedVoice = false; restoreSavedVoice().catch(() => undefined); }
+    if (borrowedVoice) { borrowedVoice = false; logger.log('[POD] render queue empty: putting your saved voice back'); restoreSavedVoice().catch(() => undefined); }
     return;
   }
   rendering = true;
@@ -102,10 +102,12 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
         const profile = profileForKey(items[i].voice, useVoiceProfiles.getState().profiles);
         if (profile) {
           borrowedVoice = true;
+          logger.log(`[POD] line ${i}: borrowing voice ${profile.voiceId}#${profile.sid} for a host`);
           await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
         } else if (borrowedVoice) {
           // A line in an ordinary voice must not be made by the engine a profile left loaded.
           borrowedVoice = false;
+          logger.log(`[POD] line ${i}: ordinary voice after a borrowed one: putting your saved voice back first`);
           await restoreSavedVoice();
         }
         const out = await synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch });
