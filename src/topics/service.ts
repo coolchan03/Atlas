@@ -82,7 +82,7 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
   // Books whose chapters could not be told apart: fall back to the chapters found in the project's text as a whole.
   const chapters = topics.length >= 3 ? asChapters(topics) : findChapters(await projectText(projectId));
   if (chapters.length < 3) return null;
-  return useTopics.getState().add(request, chapterPlan(await withSubjects(chapters), request.topic, books.length > 1), { sources, projectId });
+  return useTopics.getState().add(request, chapterPlan(await withSubjects(chapters), request.topic, books.length > 1), { sources, projectId, bookChapters: topics.flatMap((t) => t.members) });
 }
 
 /** Each chapter with what it is mainly about ("Cash", "Liabilities"): named by the AI from the heading and the first lines, or cut from the heading when it cannot be asked. */

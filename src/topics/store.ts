@@ -21,6 +21,8 @@ export interface Course {
   lastPlayedAt?: number;
   /** The learner's own material (pages found online, notes, files) the squares are written from. */
   sources: CourseSource[];
+  /** Every chapter of every textbook the course was planned from (book, number, title), kept whatever unit it was grouped under, so coverage by book can be shown. */
+  bookChapters?: Array<{ doc: string; number: number; title: string }>;
   /** The project this course belongs to: its shared documents are material for the squares, and its chats are where the tutor talks. */
   projectId?: string;
   /** Per square: the passages from the learner's own books and sources it was written from, so they can check it. */
@@ -44,7 +46,7 @@ export interface SharedCourse {
 
 interface TopicsState {
   courses: Course[];
-  add: (request: CourseRequest, plan: CoursePlan, origin?: { sources?: CourseSource[]; projectId?: string }) => string;
+  add: (request: CourseRequest, plan: CoursePlan, origin?: { sources?: CourseSource[]; projectId?: string; bookChapters?: Course['bookChapters'] }) => string;
   /** A course opened from a file someone sent: its squares and content, with no progress and no project. */
   addShared: (shared: SharedCourse, projectId?: string) => string;
   addSources: (id: string, sources: CourseSource[]) => void;
@@ -73,11 +75,12 @@ interface TopicsState {
 export const useTopics = create<TopicsState>()(persist((set) => ({
   courses: [],
   add: (request, plan, origin = {}) => {
-    const { sources = [], projectId } = origin;
+    const { sources = [], projectId, bookChapters } = origin;
     const id = localUniqueId('course');
     const course: Course = {
       id, topic: request.topic, title: plan.title, summary: plan.summary, style: plan.style, theme: plan.theme, request,
       squares: plan.squares, content: {}, progress: {}, createdAt: Date.now(), sources, projectId, difficulty: difficultyFromLevel(request.level),
+      ...(bookChapters?.length ? { bookChapters } : {}),
     };
     set((s) => ({ courses: [course, ...s.courses] }));
     return id;

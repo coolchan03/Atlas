@@ -86,3 +86,12 @@ describe('every book chapter stays identifiable', () => {
     expect(topics.find((t) => /leases?$/i.test(t.title))?.docs).toHaveLength(2);
   });
 });
+
+describe('a course remembers the chapters of every book', () => {
+  it('keeps bookChapters on the saved course', () => {
+    const { useTopics } = require('../../../src/topics/store');
+    const members = [{ doc: 'A.pdf', number: 1, title: 'Leases' }, { doc: 'B.pdf', number: 4, title: 'Leases' }];
+    const id = useTopics.getState().add({ topic: 'T', goal: '', level: 'Complete beginner', how: '', minutes: 10 }, { title: 'T', summary: '', style: '', theme: '', squares: [] }, { bookChapters: members });
+    expect(useTopics.getState().courses.find((c: { id: string }) => c.id === id).bookChapters).toEqual(members);
+  });
+});
