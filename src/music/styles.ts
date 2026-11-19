@@ -4,11 +4,11 @@
  * no famous melody is used, only the feel (bells for Christmas, a slow waltz for winter, and so on).
  */
 import { composeFromSpec, seedFor } from './arrange';
-import type { Extra, StyleGroup, StyleSpec } from './styleTypes';
+import type { Extra, StyleSpec } from './styleTypes';
 import { randomTitle } from './titles';
 import type { MusicNote } from './types';
 
-export type { StyleGroup, StyleSpec };
+export type { StyleSpec };
 
 export type StyleMood =
   | 'focus' | 'film' | 'electro' | 'jazz' | 'vaporwave' | 'eerie' | 'bossa' | 'lofi' | 'noir' | 'space' | 'rain' | 'spa' | 'campfire' | 'chiptune' | 'western'

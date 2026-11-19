@@ -27,7 +27,7 @@ const choose = (rtl: any, view: any, select: string, option: string) => { rtl.fi
 it('has a Style drop-down with every style, and no instrument or AI clutter beside the panel', () => {
   const { rtl, view } = open();
   rtl.fireEvent.press(view.getByTestId('music-style'));
-  for (const id of ['focus', 'jazz', 'lofi', 'classical', 'cinematic', 'halloween', '1920s']) expect(view.queryByTestId(`music-style-${id}`)).not.toBeNull();
+  for (const id of ['focus', 'jazz', 'lofi', 'classical', 'film', 'halloween', 'twenties']) expect(view.queryByTestId(`music-style-${id}`)).not.toBeNull();
   expect(view.queryByText('Instrument sound')).toBeNull();
   expect(view.queryByText('Compose with local AI')).toBeNull();
 });

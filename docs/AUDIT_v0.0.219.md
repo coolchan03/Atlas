@@ -26,3 +26,14 @@ Method: an independent review pass over the whole diff `2cae6f70..HEAD` (the cod
 - The Word file is a minimal hand-written .docx; it is tested for structure, not opened in Word here.
 - A reminder made from a sentence runs as an AI prompt when it fires (the scheduled-task design), so the notification text is the task name and the AI's sentence appears when opened.
 - Publishing has failed with a 403 from the workflow token on every run so far; see the run page for the result of the newest build.
+
+# Addendum: 0.0.220 (self-review; not independent)
+
+Changes: Music Studio rebuilt (`MakePanel`, `TrackList`, `Select`, `SwipeRow`), AI-named tunes, background music with media controls (`musicControls.ts`, `mediaOwner.ts`, a Kotlin foreground service), swipe and hold options on lists, Home customize changes, call-launch statuses and the call log.
+
+Checked: all gates (types, lint, knip, dependency check, version check, full Jest). A rendered or unit test covers each new behaviour (the hold sheet deleting nothing by itself, the swipe buttons, drop-downs including multi-select instruments, background and ownership of the media notification, call-launch statuses, Home customize).
+
+Not verified, and the most likely places for a bug on a phone:
+- **The Kotlin foreground service** compiles only in CI and has never run: whether Android lets it start, whether music continues after the app is closed from the recent apps, whether the notification appears on Android 13+ without the notification permission.
+- **Calls**: reported as not transcribing and not speaking. Not reproduced or fixed: nothing in the code points to one cause. What was added: plain statuses, a Call log, and the tts trace. The log from a failed call is what is needed next.
+- Pressing and holding rows now needs a tap on a sheet button; any other list that still deletes on hold was not changed (maps waypoints already open an options list).

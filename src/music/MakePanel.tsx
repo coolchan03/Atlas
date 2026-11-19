@@ -9,7 +9,7 @@ import { AMBIENT, type AmbientKind } from './ambient';
 import { instrumentsOf } from './simple';
 
 export type Maker = 'ai' | 'quick' | 'noise';
-export type SoundChoice = 'synth' | 'soundfont';
+type SoundChoice = 'synth' | 'soundfont';
 
 const MAKERS: SelectOption[] = [
   { id: 'ai', label: 'AI composer', hint: 'Writes a score on your phone; takes a minute or two' },
@@ -27,7 +27,7 @@ export interface MakeChoices {
 }
 
 /** What the "Make it" button says for each way of making music. */
-export const makeLabel = (maker: Maker): string => (maker === 'ai' ? 'Compose with AI' : maker === 'quick' ? 'Make a quick tune' : 'Make the sound');
+const makeLabel = (maker: Maker): string => (maker === 'ai' ? 'Compose with AI' : maker === 'quick' ? 'Make a quick tune' : 'Make the sound');
 
 /**
  * The one place to say what to make: what it should be like (words), and drop-downs for the style, how lively, how long, who makes it,
