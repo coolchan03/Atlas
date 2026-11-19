@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- Persistent app store keeps migration/default settings in one versioned schema. */
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';

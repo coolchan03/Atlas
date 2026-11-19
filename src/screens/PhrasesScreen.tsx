@@ -75,7 +75,7 @@ export const PhrasesScreen: React.FC = () => {
     AsyncStorage.getItem(LAST_LANG).then((v) => { if (v && PHRASE_LANGUAGES.some((l) => l.code === v)) setCode(v); }).catch(() => undefined);
     onMissingLanguage(() => Alert.alert('Voice not installed', `Your phone has no ${langRef.current.name} voice yet. Settings > Text-to-speech > install voice data for ${langRef.current.name} (download it while you have internet).`));
     return () => { onMissingLanguage(null); stop(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickLang = (c: string) => { setCode(c); AsyncStorage.setItem(LAST_LANG, c).catch(() => undefined); };
 

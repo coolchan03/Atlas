@@ -35,10 +35,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   );
 
   useEffect(() => {
-    const unsubscribe = imageGenerationService.subscribe((state) => {
+    return imageGenerationService.subscribe((state) => {
       setImageGenState(state);
     });
-    return unsubscribe;
   }, []);
 
   useEffect(() => {

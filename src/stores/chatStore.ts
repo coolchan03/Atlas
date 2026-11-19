@@ -172,7 +172,7 @@ export const useChatStore = create<ChatState>()(
       isThinking: false,
 
       // Preserve the existing four-argument API until chat callers migrate to options.
-      // eslint-disable-next-line max-params
+
       createConversation: (modelId, title, projectId, privateChat = false) => {
         const protectedProject = !!projectId && !!require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier;
         if (protectedProject && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {

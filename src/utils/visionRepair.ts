@@ -43,8 +43,7 @@ export function needsVisionRepair(
 
   // Last-resort fallback for older/incomplete records.
   if (looksLikeVisionByName(model)) {
-    if (catalogFile !== undefined && !catalogFile.mmProjFile) return false;
-    return true;
+    return !(catalogFile !== undefined && !catalogFile.mmProjFile);
   }
 
   return false;

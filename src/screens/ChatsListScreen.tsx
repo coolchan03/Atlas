@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- Existing protected-chat vault, search, and folder list share access-control state. */
+
 import React, { useState, useEffect } from 'react';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity, Platform, Modal, TextInput, StyleSheet } from 'react-native';
@@ -179,9 +179,9 @@ export const ChatsListScreen: React.FC = () => {
       return 'Yesterday';
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: 'short' });
-    } 
+    }
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    
+
   };
 
 

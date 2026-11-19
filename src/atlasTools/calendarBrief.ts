@@ -52,7 +52,7 @@ export function parseFlight(title: string, startDate: string): CalendarFlight | 
 export async function readCalendarContext(): Promise<CalendarContext | null> {
   try {
     // react-native-calendar-events may export via default or as a plain object.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const mod = require('react-native-calendar-events');
     const RNCalendarEvents = mod.default ?? mod;
     const status: string = await RNCalendarEvents.requestPermissions(true);
@@ -99,7 +99,7 @@ export async function readCalendarContext(): Promise<CalendarContext | null> {
  * Returns null if the device is offline or both sources are unreachable.
  */
 export async function fetchFlightStatus(flightNumber: string): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { readPage } = require('../services/tools/handlers');
   const id = flightNumber.toUpperCase().replace(/\s+/g, '');
   const urls = [

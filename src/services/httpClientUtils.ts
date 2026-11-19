@@ -103,11 +103,7 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
     }
 
     // .local (mDNS/Bonjour)
-    if (hostname.endsWith('.local')) {
-      return true;
-    }
-
-    return false;
+    return hostname.endsWith('.local');
   } catch {
     // Invalid URL - be conservative
     return false;

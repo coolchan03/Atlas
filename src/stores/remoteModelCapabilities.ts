@@ -223,8 +223,7 @@ function deltaHasThinking(delta: Record<string, unknown>): boolean {
   }
   if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) return true;
   if (typeof delta.reasoning === 'string' && delta.reasoning.length > 0) return true;
-  if (typeof delta.thinking === 'string' && delta.thinking.length > 0) return true;
-  return false;
+  return typeof delta.thinking === 'string' && delta.thinking.length > 0;
 }
 
 async function probeLmStudioThinking(endpoint: string, modelId: string, apiKey?: string): Promise<boolean> {

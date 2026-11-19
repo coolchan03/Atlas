@@ -116,10 +116,7 @@ function isUnknownLike(value: string): boolean {
 }
 
 function shouldSkipSuspiciousRecoveredTextModel(author: string, quantization: string): boolean {
-  if (isUnknownLike(author) || isUnknownLike(quantization)) {
-    return true;
-  }
-  return false;
+  return isUnknownLike(author) || isUnknownLike(quantization);
 }
 
 export interface ScanImageModelsOpts {

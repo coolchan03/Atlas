@@ -45,7 +45,7 @@ export const useSpeedStats = create<SpeedState>()(persist((set) => ({
         outLen: sane(s.outLen, 32768) && s.outLen >= 16 ? ema(c.outLen, s.outLen, 0.25) : c.outLen,
         samples: c.samples + 1,
       };
-    }; // eslint-disable-line complexity
+    };
     const byConfig = s.backend ? { ...st.byConfig, [configKey(modelId, s.backend)]: fold(st.byConfig[configKey(modelId, s.backend)]) } : st.byConfig;
     return { byModel: { ...st.byModel, [modelId]: fold(st.byModel[modelId]) }, byConfig };
   }),

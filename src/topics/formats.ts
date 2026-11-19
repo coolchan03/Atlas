@@ -235,7 +235,7 @@ export const prose = (v: unknown, max = 1600): string => String(v ?? '').replace
 /** An example that poses a problem must also give its answer. One that asks something and never answers it is left out of the lesson. */
 export function exampleIsComplete(example: string): boolean {
   const poses = /\?|\b(calculate|compute|find|determine|what is|how much|how many)\b/i.test(example);
-  const answers = /=|→|\b(answer|solution|result|therefore|thus|so the|equals|is recorded|would be)\b/i.test(example);
+  const answers = /[=]|→|\b(answer|solution|result|therefore|thus|so the|equals|is recorded|would be)\b/i.test(example);
   return !poses || answers;
 }
 

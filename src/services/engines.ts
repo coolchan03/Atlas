@@ -258,8 +258,8 @@ export function isRemoteTextModelActive(): boolean {
   const { activeServerId } = useRemoteServerStore.getState();
   if (!activeServerId) return false;
   if (!providerRegistry.hasProvider(activeServerId)) return false;
-  if (llmService.isModelLoaded() || liteRTService.isModelLoaded()) return false; // any loaded local model wins over a remote server
-  return true;
+  // any loaded local model wins over a remote server
+  return !(llmService.isModelLoaded() || liteRTService.isModelLoaded());
 }
 
 /**

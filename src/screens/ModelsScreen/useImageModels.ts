@@ -169,8 +169,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
       if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
       if (!matchesSdVersionFilter(m.name, sdVersionFilter)) return false;
       if (downloadedImageModels.some(d => d.id === m.id)) return false;
-      if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
-      return true;
+      return !(query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query));
     });
     if (!showRecommendedOnly) filtered.sort((a, b) => a.displayName.localeCompare(b.displayName));
     return filtered;

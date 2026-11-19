@@ -4,7 +4,7 @@ export interface OutlineArea { area: string; topics: string[] }
 export function parseOutline(text: string): OutlineArea[] {
   const areas: OutlineArea[] = [];
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/^[\s\-*•\d.)]+/, (m) => (/^\s*\d+[.)]\s/.test(m) ? '' : m.replace(/[\-*•]/g, ''))).trim();
+    const line = raw.replace(/^[\s\-*•\d.)]+/, (m) => (/^\s*\d+[.)]\s/.test(m) ? '' : m.replace(/[*•-]/g, ''))).trim();
     if (!line) continue;
     const heading = /:\s*$/.test(line) || /^#+\s/.test(raw.trim()) || /^\s*[IVX]+\.\s/.test(raw);
     const name = line.replace(/^#+\s*/, '').replace(/:\s*$/, '').replace(/^[IVX]+\.\s*/, '').trim().slice(0, 100);

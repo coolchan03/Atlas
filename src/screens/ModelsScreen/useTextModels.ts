@@ -86,8 +86,7 @@ function computeFilteredResults(
       }
     }
     const filesWithSize = (model.files || []).filter(f => f.size > 0);
-    if (filesWithSize.length > 0 && !filesWithSize.some(f => !fileExceedsBudget(f.size, ramGB))) return false;
-    return true;
+    return !(filesWithSize.length > 0 && !filesWithSize.some(f => !fileExceedsBudget(f.size, ramGB)));
   });
   return filtered.map(model => {
     const type = getModelType(model);

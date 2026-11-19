@@ -90,7 +90,7 @@ export function computePendingSettings(
 }
 
 // Chat hook lifecycle is already large; extract independent concerns in a separate refactor.
-// eslint-disable-next-line max-lines-per-function
+
 export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();

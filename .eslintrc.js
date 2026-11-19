@@ -65,6 +65,8 @@ module.exports = {
     //  - the rest are `warn` (already tripped on legacy core; burn-down in docs/GAPS_BACKLOG.md,
     //    ratchet each back to `error` as its count hits zero).
     'sonarjs/no-duplicate-string': 'off',
+    // `void promise();` is the deliberate fire-and-forget marker the floating-promise rule expects.
+    'no-void': ['warn', { allowAsStatement: true }],
     'sonarjs/prefer-single-boolean-return': 'warn',
     'sonarjs/no-nested-template-literals': 'warn',
     'sonarjs/no-collapsible-if': 'warn',

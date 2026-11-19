@@ -73,7 +73,7 @@ function ManualImage({ src, alt, width, onZoom }: { src: string; alt: string; wi
 function NotesBox({ id, colors }: { id: string; colors: any }) {
   const [text, setText] = useState(() => useSurvivalStore.getState().notes[id] || '');
   const save = () => useSurvivalStore.getState().setNote(id, text);
-  React.useEffect(() => () => { useSurvivalStore.getState().setNote(id, textRef.current); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => () => { useSurvivalStore.getState().setNote(id, textRef.current); }, [id]);
   const textRef = useRef(text);
   textRef.current = text;
   return (

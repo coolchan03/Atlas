@@ -26,7 +26,7 @@ export const ContinueCard: React.FC<{ navigation: any }> = ({ navigation }) => {
   const briefing = useStudyStore((s) => (s.saved[BRIEF_PROJECT] ?? []).find((r) => todayKey(new Date(r.createdAt)) === todayKey()));
   const hidden = useHomeHidden((st) => st.hidden.includes('continue-learning'));
   const hideLearning = () => useHomeHidden.getState().hide('continue-learning');
-  const swipeAway = React.useMemo(() => swipeHandlers(() => hideLearning()), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const swipeAway = React.useMemo(() => swipeHandlers(() => hideLearning()), []);
   const askHide = () => Alert.alert('Hide “Continue learning”?', 'It goes away from Home. A small link where it was brings it back.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Hide', onPress: hideLearning }]);
   const row = ({ icon, title, meta, onPress, testID, dismissible }: { icon: string; title: string; meta: string; onPress: () => void; testID: string; dismissible?: boolean }) => (
     <View key={testID} {...(dismissible ? swipeAway : {})}>

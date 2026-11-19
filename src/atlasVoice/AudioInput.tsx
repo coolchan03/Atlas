@@ -146,7 +146,7 @@ export function AtlasAudioInput(props: any) {
       .then(() => { if (bargeIn.current !== detector) audioRecorderService.cancelRecording(); }) // answer already over
       .catch(() => { if (bargeIn.current === detector) bargeIn.current = null; });
     return endBargeIn;
-  }, [speakingKey, handsFree, muted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [speakingKey, handsFree, muted]);
 
   // Reset the silence detector at the start of every recording. If the microphone reports no
   // loudness (some phones, or the phone's own recognizer which ends turns itself), say so.
@@ -183,7 +183,7 @@ export function AtlasAudioInput(props: any) {
       check = setTimeout(() => { if (!latest.current.isRecording) setFailedStarts((n) => n + 1); }, START_CHECK_MS);
     }, LISTEN_DELAY_MS);
     return () => { clearTimeout(start); if (check) clearTimeout(check); };
-  }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]); // eslint-disable-line react-hooks/exhaustive-deps -- reads the rest live through refs
+  }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]);
 
   // Every change of what the call is doing is logged with how long the last stage took, plus the events that explain a stall
   // (an error from the recorder or speech engine, a muted or paused call), so a failed call can be read back afterwards.

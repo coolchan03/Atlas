@@ -20,6 +20,5 @@ export function detectToolCallingCapability(modelId: string): boolean {
   ];
   const lower = modelId.toLowerCase();
   if (patterns.some(p => lower.includes(p))) return true;
-  if (lower.includes('tool') || lower.includes('function')) return true;
-  return false;
+  return lower.includes('tool') || lower.includes('function');
 }

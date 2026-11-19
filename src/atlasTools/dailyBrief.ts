@@ -350,7 +350,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
 
   // Fetch live flight status for any flights detected in the calendar (best-effort).
   if (!offline && calendarFlights.length) {
-    const { fetchFlightStatus } = require('./calendarBrief'); // eslint-disable-line @typescript-eslint/no-require-imports
+    const { fetchFlightStatus } = require('./calendarBrief');
     for (const flight of calendarFlights) {
       onStep(`Checking flight ${flight.raw} status...`);
       try {

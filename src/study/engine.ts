@@ -222,7 +222,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
     const quiz: QuizItem[] = blocks.map((b) => {
       const q = b.match(/^\s*Q(?:uestion)?\s*\d*\s*[:.)]\s*(.+)/im)?.[1]?.trim();
       const opts = ['A', 'B', 'C', 'D'].map((L) => b.match(new RegExp(`^\\s*\\(?${L}\\s*[).:\\-–]\\s*(.+)$`, 'mi'))?.[1]?.trim()).filter(Boolean) as string[];
-      const letter = (b.match(/ANSWER\s*[:\-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase();
+      const letter = (b.match(/ANSWER\s*[:-]?\s*(?:option\s*)?\(?([A-D])\b/i)?.[1] || '').toUpperCase();
       const ans = letter ? 'ABCD'.indexOf(letter) : -1; // no answer letter must never count as A
       // Reject partial/ambiguous options instead of accepting an answer that
       // points outside the parsed choices (common with small local models).
@@ -252,7 +252,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
   }
   // slides (narrated, like a short explainer video)
   const t = await ask(`You make short explainer slideshows. ${GROUND}`, `${S}${about}Make 6 slides. For each slide, exactly:\nTITLE: ...\n- bullet\n- bullet\n- bullet\nSAY: one or two spoken sentences explaining the slide\nSRC: number\n(blank line between slides)`);
-  const slides: Slide[] = tidy(t).split(/\n(?=\s*(?:#+\s*)?(?:Slide\s*\d+\s*[:.\-]?\s*)?TITLE\s*:)/i).map((b) => {
+  const slides: Slide[] = tidy(t).split(/\n(?=\s*(?:#+\s*)?(?:Slide\s*\d+\s*[:.-]?\s*)?TITLE\s*:)/i).map((b) => {
     const title = b.match(/TITLE:\s*(.+)/i)?.[1]?.trim();
     if (!title) return null;
     const bullets = b.split('\n').filter((l) => /^\s*[-*•]\s+/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).slice(0, 5);
