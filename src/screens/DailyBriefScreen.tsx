@@ -147,7 +147,7 @@ export const DailyBriefScreen: React.FC = () => {
           ) : (
             <View style={styles.actions}>
               {today && <Button title="Listen to today's briefing" onPress={() => open(today.createdAt)} icon={<Icon name="play" size={16} color={colors.background} />} testID="brief-listen" />}
-              {today && <Button title="Read as newspaper" variant="outline" onPress={() => navigation.getParent()?.navigate('BriefingPaper', { createdAt: today.createdAt })} icon={<Icon name="file-text" size={16} color={colors.primary} />} testID="brief-read" />}
+              {today && <Button title="Read as newspaper" variant="outline" onPress={() => navigation.navigate('BriefingPaper', { createdAt: today.createdAt })} icon={<Icon name="file-text" size={16} color={colors.primary} />} testID="brief-read" />}
               <Button
                 title={today ? 'Make a fresh one' : "Make today's briefing"}
                 variant={today ? 'outline' : 'primary'}

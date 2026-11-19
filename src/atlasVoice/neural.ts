@@ -344,6 +344,18 @@ export function hostVoices(available: { name: string }[]): string[] {
   return auto.map((v, i) => (usable(st.podcastVoices?.[i]) ? st.podcastVoices[i] : v));
 }
 
+/**
+ * The voice the person picked for host number `index` (0 = A), when it is still there: a voice on the phone or a saved voice profile
+ * (including a cloned one). Unlike hostVoices this does not need the phone's own engine to offer several voices, so a pick made in the
+ * host picker is used even when the loaded voice model has only one speaker. Undefined when nothing was picked or the pick is gone.
+ */
+export function pickedHostVoice(index: number, available: { name: string }[]): string | undefined {
+  const pick = useAtlasVoiceStore.getState().podcastVoices?.[index];
+  if (!pick) return undefined;
+  if (isProfileKey(pick)) return profileForKey(pick, useVoiceProfiles.getState().profiles) ? pick : undefined;
+  return available.some((v) => v.name === pick) ? pick : undefined;
+}
+
 /** The three voices the hosts start with, before the person picks or adds any. */
 export const defaultHostVoices = (available: { name: string }[]): string[] => automaticHostVoices(available);
 

@@ -9,7 +9,7 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { canPreRender, speakAndWait, synthesizeLineToFile } from './tts';
-import { hostVoices, loadVoiceForSpeech, restoreSavedVoice } from './neural';
+import { hostVoices, loadVoiceForSpeech, pickedHostVoice, restoreSavedVoice } from './neural';
 import { useVoiceProfiles } from './profiles';
 import { profileCacheKey, profileForKey } from './hostVoiceKeys';
 import { makeJingle, wavBytes, toBase64, jingleSeconds, JINGLE_PEAK, type JingleKind, type JingleVolume } from './jingles';
@@ -34,6 +34,9 @@ const pathFor = (key: string, i: number, line: CastLine) => {
 /** The voice and pitch for each host: chosen or automatic voices, or pitch alone with one voice. */
 export function castLine(host: string, hosts: number, voices: { name: string }[]): { voice: string; pitch: number } {
   const i = host === 'A' ? 0 : host === 'B' ? 1 : 2;
+  // A voice the person picked for this host (a saved or cloned voice too) is used whatever the loaded engine offers.
+  const picked = pickedHostVoice(i, voices);
+  if (picked) return { voice: picked, pitch: 1 };
   if (voices.length >= 2) { const names = hostVoices(voices); return { voice: names[i % names.length], pitch: 1 }; }
   return { voice: '', pitch: hosts === 1 ? 1 : [1.12, 0.86, 1.0][i] };
 }

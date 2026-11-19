@@ -67,3 +67,21 @@ it('does not reuse an old file for a profile whose recording changed', async () 
   await settle();
   expect(mockEvents.filter((e) => e.startsWith('render'))).toEqual(['render "Same words." voice=""']);
 });
+
+describe('a host voice the person picked', () => {
+  it('is used even when the loaded voice engine offers only one voice, and a deleted pick falls back to the automatic cast', () => {
+    {
+      const { castLine } = require('../../../src/atlasVoice/podcastAudio');
+      const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+      const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
+      const { profileKey } = require('../../../src/atlasVoice/hostVoiceKeys');
+      const made = useVoiceProfiles.getState().addProfile({ name: 'My voice', voiceId: 'pocket', sid: 0, rate: 1, referenceId: 'ref1' });
+      useAtlasVoiceStore.getState().setPodcastVoices([profileKey(made.id), '', '']);
+      expect(castLine('A', 2, [{ name: 'only' }])).toEqual({ voice: profileKey(made.id), pitch: 1 });
+      expect(castLine('B', 2, [{ name: 'only' }])).toEqual({ voice: '', pitch: 0.86 }); // no pick for B: pitch only
+      useVoiceProfiles.getState().removeProfile?.(made.id);
+      useVoiceProfiles.setState({ profiles: [] });
+      expect(castLine('A', 2, [{ name: 'only' }])).toEqual({ voice: '', pitch: 1.12 });
+    }
+  });
+});

@@ -16,7 +16,7 @@ function load(opts: Opts = {}) {
   jest.doMock('../../../src/atlasVoice/tts', () => ({ canPreRender: () => opts.canPreRender !== false, speakAndWait, synthesizeLineToFile: synth }));
   const loadVoiceForSpeech = jest.fn(async () => undefined);
   const restoreSavedVoice = jest.fn(async () => undefined);
-  jest.doMock('../../../src/atlasVoice/neural', () => ({ hostVoices: (v: { name: string }[]) => v.map((x) => x.name), loadVoiceForSpeech, restoreSavedVoice }));
+  jest.doMock('../../../src/atlasVoice/neural', () => ({ hostVoices: (v: { name: string }[]) => v.map((x) => x.name), pickedHostVoice: () => undefined, loadVoiceForSpeech, restoreSavedVoice }));
   jest.doMock('../../../src/services/audioSessionManager', () => ({ audioSessionManager: { ensurePlayback: async () => undefined } }));
   const sources: any[] = [];
   const contexts: any[] = [];
