@@ -7,11 +7,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type NudgeId = 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'reviewsDue' | 'weeklyDigest' | 'lastWorked';
+export type NudgeId = 'homeStudy' | 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'reviewsDue' | 'weeklyDigest' | 'lastWorked';
 
 export interface NudgeInfo { id: NudgeId; group: 'Reminders and tips' | 'Daily briefing lines'; label: string; hint: string }
 
 export const NUDGES: NudgeInfo[] = [
+  { id: 'homeStudy', group: 'Reminders and tips', label: 'Study and reminders card on Home', hint: 'The card at the top of Home with what to study next, what is due and the exam countdown.' },
   { id: 'backupReminder', group: 'Reminders and tips', label: 'Back-up reminder', hint: 'A card on Home when it has been a while since your last backup.' },
   { id: 'speedTips', group: 'Reminders and tips', label: 'Speed tips in chat', hint: 'The line offering a speed test, or a fix when replies are slow.' },
   { id: 'statusNotices', group: 'Reminders and tips', label: 'Back-to-full-speed notices', hint: 'A short message when low-battery mode or the heat guard turns on or off.' },

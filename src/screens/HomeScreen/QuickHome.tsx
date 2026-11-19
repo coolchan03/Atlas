@@ -10,6 +10,8 @@ import { LoadModelSheet } from '../../components/LoadModelSheet';
 import { arrangeTiles, moveTile, toggleTile } from './homeTiles';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { HomeShortcutsCard, useShortcutLauncher } from './HomeShortcutsCard';
+import { useCallLaunch } from './callLaunch';
+import { useNudges } from '../../atlasTools/nudges';
 import { useHomeShortcuts, widgetIcon, type HomeShortcut } from './homeShortcutStore';
 import { HomeSearch, HomeStudyCard } from './HomeStudyCard';
 import { TILE } from '../../theme/tilePalette';
@@ -67,7 +69,10 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   const [editing, setEditing] = React.useState(false);
   const [loadOpen, setLoadOpen] = React.useState(false);
   const widgets = useHomeShortcuts((st) => st.shortcuts);
-  const { launch: launchWidget } = useShortcutLauncher(navigation);
+  const { launch: launchWidget, launchingId } = useShortcutLauncher(navigation);
+  const launchStatus = useCallLaunch((st) => st.status);
+  const showStudy = useNudges((st) => st.homeStudy);
+  const setNudge = useNudges((st) => st.setNudge);
   const keys = destinations.map((d) => d.key);
   // Tiles marked optional (the emergency tools) are off until the person turns them on under Customize.
   const prefs = { ...savedPrefs, hidden: savedPrefs?.hidden ?? destinations.filter((d) => d.optional).map((d) => d.key) };
@@ -105,7 +110,15 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
           {focus ? 'What do you want to do?' : simple ? 'What would you like to do?' : compact ? 'Quick access' : 'Choose something to explore'}
         </Text>
         <HomeSearch navigation={navigation} tiles={destinations.map((d) => ({ key: d.key, label: d.label, hint: d.hint }))} onTile={(k) => go(byKey(k))} />
-        <HomeStudyCard navigation={navigation} />
+        {/* The study and reminders card can be hidden for good; while customizing, a switch brings it back. */}
+        {showStudy && <HomeStudyCard navigation={navigation} />}
+        {editing && (
+          <TouchableOpacity testID="home-study-toggle" accessibilityRole="switch" accessibilityState={{ checked: showStudy }} accessibilityLabel={showStudy ? 'Hide the study and reminders card' : 'Show the study and reminders card'}
+            onPress={() => setNudge('homeStudy', !showStudy)} style={staticStyles.h15}>
+            <Icon name={showStudy ? 'eye' : 'eye-off'} size={18} color={colors.primary} />
+            <Text style={{ color: colors.primary }}>{showStudy ? 'Hide the study and reminders card' : 'Show the study and reminders card'}</Text>
+          </TouchableOpacity>
+        )}
         <View style={[staticStyles.h4, { flexDirection: look.listDir, gap: look.listGap }]}>
           {items.map(item => {
             const accent = item.color[isDark ? 1 : 0];
@@ -119,7 +132,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
                 </View>
                 <View style={{ flex: look.textFlex, alignItems: look.textAlign }}>
                   <Text style={[staticStyles.h7, { fontSize, color: colors.text }]}>{item.label}</Text>
-                  {!tiles && <Text style={[staticStyles.h8, { color: colors.textSecondary, fontSize: look.hint }]}>{item.hint}</Text>}
+                  {(!tiles || (item.widget && launchingId === item.widget.id)) && <Text style={[staticStyles.h8, { color: colors.textSecondary, fontSize: look.hint }]} testID={item.widget && launchingId === item.widget.id ? 'widget-launch-status' : undefined}>{item.widget && launchingId === item.widget.id ? (launchStatus ?? 'Starting...') : item.hint}</Text>}
                 </View>
                 {!tiles && !editing && <Icon name="chevron-right" size={simple ? 23 : 19} color={colors.textMuted} />}
                 {editing && !item.widget && (
@@ -147,7 +160,8 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
           </TouchableOpacity>
         )}
         {editing && <Text style={[staticStyles.h12, { color: colors.textMuted }]}>Use the arrows to move a tile and the eye to hide or show it.</Text>}
-        <HomeShortcutsCard navigation={navigation} />
+        {/* Adding, editing and removing widgets is part of customizing; the widgets themselves are the tiles above. */}
+        {editing && <HomeShortcutsCard navigation={navigation} />}
         {(colorful || focus) && <Text style={[staticStyles.h13, { color: colors.textMuted }]}>
           Your models and conversations stay on your device.
         </Text>}
@@ -174,4 +188,5 @@ const staticStyles = StyleSheet.create({
   h12: { textAlign: 'center', marginTop: 4 },
   h13: { marginTop: 20, textAlign: 'center' },
   h14: { paddingBottom: 44 },
+  h15: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
 });

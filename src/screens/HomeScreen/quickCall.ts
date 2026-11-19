@@ -4,7 +4,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useUiModeStore } from '../../stores/uiModeStore';
-import { activeModelService } from '../../services/activeModelService';
+import { clearCallLaunch, prepareCallModel } from './callLaunch';
 import { instrumentalPlayer } from '../../music/backgroundPlayer';
 import { useAtlasVoiceStore } from '../../atlasVoice/store';
 import { ttsAvailable } from '../../atlasVoice/tts';
@@ -27,7 +27,7 @@ export async function startCall(navigate: (screen: string, params: { conversatio
   const modelId = choice.modelId || app.activeModelId || app.downloadedModels[0]?.id;
   if (!modelId) { Alert.alert('Choose a model', 'Download or load a model first, then you can call.'); return false; }
   try {
-    await activeModelService.loadTextModel(modelId);
+    await prepareCallModel(modelId);
     // A model chosen for this call must not be shadowed by a remote model that was active before.
     if (choice.modelId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
     const chats = useChatStore.getState();
@@ -41,5 +41,5 @@ export async function startCall(navigate: (screen: string, params: { conversatio
     useUiModeStore.getState().setInterfaceMode('audio');
     navigate('Chat', { conversationId: id });
     return true;
-  } catch (e: any) { Alert.alert('Could not start the call', String(e?.message || e)); return false; }
+  } catch (e: any) { Alert.alert('Could not start the call', String(e?.message || e)); return false; } finally { clearCallLaunch(); }
 }

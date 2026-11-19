@@ -19,7 +19,7 @@ const CASES: Array<[string, string, string, P, number]> = [
   ['Sensors', '../../../src/sensors/SensorsScreen', 'SensorsScreen', {}, 60],
   ['Agents', '../../../src/screens/AgentsScreen', 'AgentsScreen', {}, 80],
   ['Compass', '../../../src/screens/CompassScreen', 'CompassScreen', {}, 60],
-  ['MusicStudio', '../../../src/screens/MusicStudioScreen', 'MusicStudioScreen', {}, 80],
+  ['MusicStudio', '../../../src/screens/MusicStudioScreen', 'MusicStudioScreen', {}, 40],
   ['DailyBrief', '../../../src/screens/DailyBriefScreen', 'DailyBriefScreen', {}, 80],
   ['Schedule', '../../../src/schedule/ScheduleScreen', 'ScheduleScreen', {}, 80],
   ['Language', '../../../src/language/LanguageScreen', 'LanguageScreen', {}, 80],

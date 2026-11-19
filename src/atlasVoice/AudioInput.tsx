@@ -12,8 +12,11 @@ import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
+import { Alert } from 'react-native';
 import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, type CallPhase } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
+import { callTrace } from './callLifecycle';
+import { shareItem } from '../utils/shareItem';
 import logger from '../utils/logger';
 
 
@@ -28,7 +31,7 @@ export function formatCallTime(seconds: number): string {
 /** Status line and talk-button icon for the call screen, highest-priority state last. */
 export function callStatus(p: {
   handsFree: boolean; muted: boolean; isModelLoading?: boolean; isRecording?: boolean; isTranscribing?: boolean;
-  isGenerating?: boolean; speakingKey: string | null; callerName: string;
+  isGenerating?: boolean; speakingKey: string | null; callerName: string; /** false: nothing on this phone can write down speech. */ voiceAvailable?: boolean;
 }): { status: string; icon: string } {
   if (p.speakingKey) return { status: `${p.callerName} is speaking... talk or tap to interrupt`, icon: 'volume-x' };
   if (p.isGenerating) return { status: 'Thinking... tap to stop', icon: 'pause' };
@@ -36,6 +39,7 @@ export function callStatus(p: {
   if (p.isRecording) return { status: 'Listening... it answers when you stop talking', icon: 'square' };
   if (p.isModelLoading) return { status: 'Loading speech model...', icon: 'mic' };
   if (p.muted) return { status: 'Muted', icon: 'mic' };
+  if (p.voiceAvailable === false) return { status: 'Nothing on this phone can write down speech yet. Download a speech model (Whisper) in Models, then call again.', icon: 'mic' };
   return { status: p.handsFree ? 'Tap to talk. It listens again after each answer.' : 'Tap to talk.', icon: 'mic' };
 }
 
@@ -229,8 +233,14 @@ export function AtlasAudioInput(props: any) {
     onStartRecording?.();
   };
 
-  const { status, icon } = callStatus({ handsFree, muted, isModelLoading, isRecording, isTranscribing, isGenerating, speakingKey, callerName });
+  const { status, icon } = callStatus({ handsFree, muted, isModelLoading, isRecording, isTranscribing, isGenerating, speakingKey, callerName, voiceAvailable });
   const busy = isTranscribing || isModelLoading;
+  // What the call has been doing, in plain lines (the same lines the Debug Logs screen holds), so a call that will not listen or speak can be explained.
+  const showCallLog = () => {
+    const lines = callTrace();
+    const text = lines.length ? lines.join('\n') : 'Nothing has been recorded for this call yet.';
+    Alert.alert('What this call has done', text.slice(-1200), [{ text: 'Close', style: 'cancel' }, { text: 'Share', onPress: () => { void shareItem({ title: 'Atlas call log', text }); } }]);
+  };
   const initial = callerName.trim().charAt(0).toUpperCase() || 'A';
 
   const roundButton = (opts: { icon: string; label: string; active?: boolean; onPress: () => void; testID: string }) => (
@@ -260,6 +270,7 @@ export function AtlasAudioInput(props: any) {
           <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{callerName}</Text>
           <Text style={[styles.timer, { color: colors.textSecondary }]} testID="voice-call-timer">{formatCallTime(elapsed)}</Text>
           <Text style={[styles.status, { color: colors.textSecondary }]}>{note ?? (error ? String(error) : status)}</Text>
+          <TouchableOpacity onPress={showCallLog} accessibilityLabel="Show what this call has done" testID="voice-call-log"><Text style={[styles.timing, { color: colors.primary }]}>Call log</Text></TouchableOpacity>
           {!!timing && <Text style={[styles.timing, { color: colors.textMuted }]} testID="voice-call-timing">{timing}</Text>}
           {!!partialResult && isRecording && (
             <Text style={[styles.caption, { color: colors.text }]} numberOfLines={3}>{partialResult}</Text>

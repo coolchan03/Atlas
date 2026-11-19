@@ -3,6 +3,7 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
 import { markSpeechStarted, markSpeechFinished, clearSpeechActivity } from '../music/speechActivity';
+import { noteCallTrace } from './callLifecycle';
 
 /**
  * Thin wrapper over the AtlasTts native module (Android's built-in text-to-speech).
@@ -84,6 +85,7 @@ export function speak(text: string, messageId?: string, rate?: number): void {
   Native.setRate(rate ?? s.rate).catch(() => undefined);
   Native.speak(text, key).catch((err: unknown) => {
     logger.error('[AtlasTts] speak failed', err);
+    noteCallTrace(`[CALL-TTS] the voice could not speak: ${String((err as Error)?.message ?? err)}`);
     // An earlier failed utterance must not clear a newer active one.
     if (useAtlasVoiceStore.getState().speakingKey === key) {
       useAtlasVoiceStore.getState().setSpeaking(null);
@@ -105,8 +107,8 @@ export function beginSpeechStream(messageId: string, rate?: number): { key: stri
   Native.setRate(rate ?? s.rate).catch(() => undefined);
   const clear = () => { if (useAtlasVoiceStore.getState().speakingKey === key) useAtlasVoiceStore.getState().setSpeaking(null); };
   const started = Native.speakStreamStart(key)
-    .then((ok: boolean) => { if (!ok) clear(); return !!ok; })
-    .catch(() => { clear(); return false; });
+    .then((ok: boolean) => { if (!ok) { clear(); noteCallTrace('[CALL-TTS] the voice cannot speak while the answer is written; it will speak the whole answer at the end'); } return !!ok; })
+    .catch((err: unknown) => { clear(); noteCallTrace(`[CALL-TTS] the voice could not start: ${String((err as Error)?.message ?? err)}`); return false; });
   return { key, started };
 }
 

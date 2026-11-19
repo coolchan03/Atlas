@@ -12,7 +12,7 @@ import { dueCount } from '../../topics/review';
 import { useExerciseStore } from '../../study/exercises';
 import { useTopics } from '../../topics/store';
 import { useUiModeStore } from '../../stores/uiModeStore';
-import { activeModelService } from '../../services/activeModelService';
+import { clearCallLaunch, prepareCallModel, useCallLaunch } from './callLaunch';
 import { instrumentalPlayer } from '../../music/backgroundPlayer';
 import { useAtlasVoiceStore } from '../../atlasVoice/store';
 import { ttsAvailable } from '../../atlasVoice/tts';
@@ -77,7 +77,7 @@ function launchProblem(
 /** One tap means the model this call uses is loaded before the call opens (a resumed chat keeps its own model). */
 async function loadCallModel(shortcut: HomeShortcut, resumedModel: string | undefined, fallback: string) {
   const loadId = shortcut.modelId || resumedModel || fallback;
-  if (loadId) await activeModelService.loadTextModel(loadId);
+  if (loadId) await prepareCallModel(loadId, shortcut.id);
   // An explicitly chosen on-device model must not be shadowed by a previously active remote model.
   if (shortcut.modelId && !shortcut.conversationId) useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
 }
@@ -145,7 +145,7 @@ export function useShortcutLauncher(navigation: any) {
       }
       await openChatWidget(shortcut);
     } catch (error: any) { Alert.alert('Could not open widget', String(error?.message || error)); }
-    finally { setLaunchingId(''); }
+    finally { setLaunchingId(''); clearCallLaunch(); }
   };
   return { launch, launchingId, openScreen };
 }
@@ -169,6 +169,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
   const [editingId, setEditingId] = useState('');
   const update = (change: Partial<Details>) => setDraft((d) => ({ ...d, ...change }));
   const { launch, launchingId, openScreen } = useShortcutLauncher(navigation);
+  const launchStatus = useCallLaunch((s) => s.status);
   const select = ({ caption, value, setter, choices }: { caption: string; value: string | undefined; setter: (id: string | undefined) => void; choices: Choice[] }) => (
     <View style={styles.selector}>
       <Text style={[styles.caption, { color: colors.textSecondary }]}>{caption}</Text>
@@ -226,7 +227,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
           <View key={widget.id} style={[styles.savedRow, { borderTopColor: colors.border }]}>
             <View style={styles.flex}>
               <TouchableOpacity accessibilityRole="button" onPress={() => launch(widget)} testID={`launch-shortcut-${widget.id}`}>
-                <Text style={[styles.widgetTitle, { color: colors.text }]}>{widget.title}{launchingId === widget.id ? ' · Loading model…' : ''}</Text>
+                <Text style={[styles.widgetTitle, { color: colors.text }]}>{widget.title}{launchingId === widget.id ? ` · ${launchStatus ?? 'Starting...'}` : ''}</Text>
                 <Text style={[styles.small, { color: colors.textSecondary }]}>{inChat(widget.action)
                   ? [widget.action === 'call' ? 'Call' : 'Chat', agent, localModels.find((m) => m.id === widget.modelId)?.name, projects.find((p) => p.id === widget.projectId)?.name,
                     widget.conversationId ? (conversations.find((c) => c.id === widget.conversationId)?.title.slice(0, 22) ?? 'chat removed') : undefined, voice].filter(Boolean).join(' · ')

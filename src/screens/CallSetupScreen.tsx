@@ -13,6 +13,7 @@ import { VoicePicker } from '../atlasVoice/VoicePicker';
 import { useHomeShortcuts } from './HomeScreen/homeShortcutStore';
 import { useCallPrefs } from './HomeScreen/callPrefs';
 import { callTitle, startCall, type CallChoice } from './HomeScreen/quickCall';
+import { useCallLaunch } from './HomeScreen/callLaunch';
 
 interface Option { id: string; label: string }
 
@@ -46,6 +47,7 @@ export const CallSetupScreen: React.FC = () => {
   const addShortcut = useHomeShortcuts((s) => s.addShortcut);
   const [choice, setChoice] = useState<CallChoice>(last);
   const [busy, setBusy] = useState(false);
+  const launchStatus = useCallLaunch((s) => s.status);
   const set = (patch: Partial<CallChoice>) => setChoice((c) => ({ ...c, ...patch }));
   const agentName = choice.agentId ? agents.find((a) => a.id === choice.agentId)?.name : undefined;
 
@@ -77,6 +79,7 @@ export const CallSetupScreen: React.FC = () => {
           <VoicePicker testID="call-voice-pick" value={choice.voiceProfileId} onPick={(id) => set({ voiceProfileId: id })} defaultLabel="Agent's voice" />
         </View>
         <Button title={agentName ? `Call ${agentName}` : 'Call'} onPress={call} disabled={busy} testID="call-start" />
+        {!!launchStatus && <Text style={[styles.hint, { color: colors.textSecondary }]} testID="call-launch-status">{launchStatus}</Text>}
         <Button title="Save as a one-tap Home button" variant="outline" onPress={save} testID="call-save" />
       </ScrollView>
     </SafeAreaView>

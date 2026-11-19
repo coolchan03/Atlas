@@ -55,7 +55,10 @@ it('a widget the person makes is a tile in the list like Music Studio, with the 
   const navigation = { navigate: jest.fn(), getParent: () => ({ navigate: parentNavigate }) };
   const view = render(<QuickHomeScreen navigation={navigation} mode="simple" />);
   const tile = view.getByTestId('quick-home-widget-w1');
-  expect(view.getAllByText('Morning news').length).toBe(2); // the tile, and its row under "My home widgets" where it is edited or removed
+  expect(view.getAllByText('Morning news').length).toBe(1); // only the tile: its row under "My home widgets" (edit, remove) appears when Customize is pressed
+  fireEvent.press(view.getByTestId('home-customize'));
+  expect(view.getAllByText('Morning news').length).toBe(2);
+  fireEvent.press(view.getByTestId('home-customize'));
   // The built-in tiles and the widget tiles are in one list; the widgets come after them.
   const all = view.getAllByTestId(/^quick-home-/).map((n: any) => n.props.testID);
   expect(all.indexOf('quick-home-widget-w1')).toBeGreaterThan(all.indexOf('quick-home-settings'));
