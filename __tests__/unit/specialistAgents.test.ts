@@ -9,7 +9,7 @@ const agent = (id: string) => DEFAULT_AGENTS.find((a) => a.id === id)!;
 describe('specialist agents and the skills they work with', () => {
   it('every specialist names skills that exist in the library', () => {
     const names = new Set(SKILL_LIBRARY.map((s) => s.name));
-    for (const id of ['accountant', 'repair-helper', 'home-chef', 'paperwork-reader', 'meeting-secretary']) {
+    for (const id of ['accountant', 'repair-helper', 'home-chef', 'paperwork-reader']) {
       expect(agent(id).skills?.length).toBeGreaterThan(0);
       for (const skill of agent(id).skills!) expect(names.has(skill)).toBe(true);
     }

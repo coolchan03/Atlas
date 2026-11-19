@@ -36,6 +36,8 @@ export interface Agent {
   voiceProfileId?: string;
   /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
   enabledTools?: string[];
+  /** A specialist: kept out of the chat and Home pickers, listed under Specialists on the Agents screen. Only agents whose prompt really changes the answers (safety facts, citing exact words) are shipped this way. */
+  hidden?: boolean;
   /** 'pal' = a character to talk to or role-play with (Friend, Jake). Unset = a working agent, except the two pals Atlas ships. */
   kind?: 'agent' | 'pal';
   /** A project folder whose documents this agent uses in every new chat (a chat that is already in a project keeps its own). */
@@ -53,6 +55,9 @@ const now = () => new Date().toISOString();
 const SHIPPED_PALS = ['friend', 'jock-boyfriend'];
 /** Pals are characters for role-play and company; agents are for getting work done. */
 export const isPal = (a: Pick<Agent, 'id' | 'kind'>): boolean => (a.kind ? a.kind === 'pal' : SHIPPED_PALS.includes(a.id));
+
+/** Specialists are kept out of the chat and Home pickers. */
+export const isHiddenAgent = (a: Pick<Agent, 'id' | 'hidden'>): boolean => !!a.hidden || a.id === 'talk' || a.id === 'field-id';
 
 export const DEFAULT_AGENTS: Agent[] = [
   {
@@ -115,7 +120,7 @@ BUILT-IN IDENTIFICATION BASICS (always available):
   },
   {
     id: 'phone-assistant',
-    name: 'Phone Assistant',
+    name: 'Assistant',
     description: 'Works with your files, calendar and documents; builds web pages; remembers things you tell it',
     systemPrompt: `You are a private assistant running entirely on the user's phone. You can use tools to work with their files, documents and calendar.
 - Use tools when they help: list_files / read_file to look, write_file to create or edit documents (markdown, text, html, csv), create_web_page to build websites, open_file to show results, calendar_events / add_calendar_event for plans, remember for facts the user wants kept.
@@ -153,16 +158,8 @@ BUILT-IN IDENTIFICATION BASICS (always available):
     updatedAt: now(),
   },
   {
-    id: 'teacher',
-    name: 'Teacher',
-    description: 'Patient tutor who teaches step by step and checks understanding',
-    systemPrompt: `You are a patient, knowledgeable personal teacher. Start by identifying the learner's goal and current knowledge. Teach in short, clear steps with concrete examples, then ask one quick check-for-understanding question. Adapt difficulty based on the learner's response. Do not simply give the answer to a practice problem unless asked; offer hints and explanations. Correct errors clearly without shaming. Be accurate and acknowledge uncertainty.`,
-    temperature: 0.5,
-    createdAt: now(),
-    updatedAt: now(),
-  },
-  {
     id: 'accountant',
+    hidden: true,
     name: 'Accountant',
     description: 'Turns bank statements into a categorized CSV and proves every transaction is included',
     systemPrompt: `You are a careful bookkeeper running privately on the user's phone. You turn bank statements into clean tables and CSV files, ask about transactions you cannot categorize instead of guessing, and always check the arithmetic with the calculator tool before saying the books balance. Money is exact: never round, never skip a line, never invent a transaction. You also read bills and warranties and set reminders. You are not a licensed accountant or tax adviser: for tax or legal questions say so and suggest one. For a version where plain code proves the totals, the user can open Multi-step helpers on the Home screen.`,
@@ -185,9 +182,10 @@ BUILT-IN IDENTIFICATION BASICS (always available):
   },
   {
     id: 'home-chef',
+    hidden: true,
     name: 'Home Chef',
     description: 'Plans dinner from what you have, for your group, and respects what you cannot eat',
-    systemPrompt: `You are a friendly home cook running privately on the user's phone. You plan simple dinners from the ingredients the user has, scale amounts for their group, work to the time they have, and never include a food they said they cannot or will not eat. Say what extra they would need to buy.`,
+    systemPrompt: `You are a friendly home cook running privately on the user's phone. You plan simple dinners from the ingredients the user has, scale amounts for their group, work to the time they have, and never include a food they said they cannot or will not eat. Say what extra they would need to buy. Food safety is part of every recipe: cook poultry (chicken, turkey) to 165 F (74 C), ground meat to 160 F (71 C), pork, beef, veal and lamb steaks and chops to 145 F (63 C) with a 3 minute rest, fish to 145 F (63 C), eggs and leftovers to 165 F (74 C); use a thermometer in the thickest part, keep raw meat apart from ready foods, wash hands and boards after raw meat, chill leftovers within 2 hours (1 hour above 90 F / 32 C) and eat them within 3 to 4 days. Name the allergens in a dish (milk, egg, fish, shellfish, tree nuts, peanuts, wheat, soy, sesame) when you suggest it. Rice, beans and meat left out too long are not safe to reheat.`,
     skills: ['dinner-from-what-i-have'],
     enabledTools: ['calculator', 'remember'],
     temperature: 0.6,
@@ -196,23 +194,13 @@ BUILT-IN IDENTIFICATION BASICS (always available):
   },
   {
     id: 'paperwork-reader',
+    hidden: true,
     name: 'Paperwork Reader',
     description: 'Explains letters, notices, contracts and bills in plain words, with the exact wording behind every point',
     systemPrompt: `You help people understand paperwork: letters, notices, labels, bills, leases and contracts. You explain in plain words, say what to do and by when, and back every point with the exact words from the document. If you cannot find words to support a point, you leave it out. You are not a lawyer: for legal, tax or medical decisions say who to ask.`,
     skills: ['explain-this-letter', 'contract-reader', 'bill-and-warranty-reminders'],
     enabledTools: ['read_file', 'calculator', 'calendar_events', 'add_calendar_event', 'remember'],
     temperature: 0.2,
-    createdAt: now(),
-    updatedAt: now(),
-  },
-  {
-    id: 'meeting-secretary',
-    name: 'Meeting Secretary',
-    description: 'Turns meeting notes or transcripts into a summary, action items and reminders',
-    systemPrompt: `You are a meeting secretary running privately on the user's phone. You turn transcripts and rough notes into a short summary, decisions, action items with owners and dates, and open questions. You only use what was said, never invent owners or dates, and you add calendar events only after the user says yes.`,
-    skills: ['meeting-followups'],
-    enabledTools: ['read_file', 'write_file', 'open_file', 'calendar_events', 'add_calendar_event', 'remember'],
-    temperature: 0.3,
     createdAt: now(),
     updatedAt: now(),
   },
@@ -236,14 +224,6 @@ PERSONALITY: Polite, caring, confident, playful, slightly teasing, respectful an
 VOICE: Speak like an actual laid-back guy, not a caricature. Natural bro-slang such as dude, man, or babe is fine when it fits; don't repeat pet names or exaggerated enthusiasm. Most replies are short, conversational and specific to what {{name}} just said. You can casually reference a workout, watching a game, or hanging out with the boys without inventing precise real-time sporting results. Ask occasional genuine questions. Keep romantic affection clear, respectful and low-key. If asked directly, acknowledge you're an AI portraying Jake rather than claiming an actual physical relationship.
 EXAMPLES OF STYLE (vary the words naturally): "Hey babe, how'd your day go? You doing alright?" "No way, dude. Tell me what happened—I'm listening." "That sounds rough, man. Want to talk it through, or just hang out for a bit?"`,
     temperature: 0.9,
-    createdAt: now(),
-    updatedAt: now(),
-  },
-  {
-    id: 'assistant',
-    name: 'Assistant',
-    description: 'General helpful assistant',
-    systemPrompt: "You are a helpful AI assistant running locally on the user's device. Be concise and accurate.",
     createdAt: now(),
     updatedAt: now(),
   },
@@ -337,10 +317,18 @@ export const useAgentStore = create<AgentState>()(
         const p = (persisted || {}) as Partial<AgentState>;
         const agents: Agent[] = Array.isArray(p.agents) ? p.agents : current.agents;
         const seen: string[] = Array.isArray(p.seenDefaults) ? p.seenDefaults : agents.map((a) => a.id);
+        // Shipped agents that were dropped (Teacher, the plain Assistant, Meeting Secretary) go away unless the person changed them.
+        const DROPPED: Record<string, number> = { teacher: 0, assistant: 0, 'meeting-secretary': 0 };
+        for (const id of Object.keys(DROPPED)) {
+          const old = agents.find((a) => a.id === id);
+          if (old && !old.lessons && !old.memories?.length && Math.abs(Date.parse(old.updatedAt) - Date.parse(old.createdAt)) < 1000) agents.splice(agents.indexOf(old), 1);
+        }
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
         // Built-in prompt updates (only if the user never edited that agent's prompt).
         const fid = DEFAULT_AGENTS.find((d) => d.id === 'field-id')!;
         for (const a of agents) {
+          if (a.id === 'phone-assistant' && a.name === 'Phone Assistant') a.name = 'Assistant';
+          if (['accountant', 'home-chef', 'paperwork-reader'].includes(a.id) && a.hidden === undefined) a.hidden = true;
           // Agents that already use the calculator also get the other exact study tools (they are only sent when a message needs them).
           if (Array.isArray(a.enabledTools) && a.enabledTools.includes('calculator')) for (const t of ['study_math', 'science_data', 'study_helpers']) if (!a.enabledTools.includes(t)) a.enabledTools = [...a.enabledTools, t];
           // Older Field ID prompts allowed an EDIBLE verdict from a photo; replace them.

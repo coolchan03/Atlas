@@ -3,7 +3,7 @@ import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { useChatStore } from '../../stores';
-import { useAgentStore } from '../../stores/agentStore';
+import { isHiddenAgent, useAgentStore } from '../../stores/agentStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useVoiceProfiles } from '../../atlasVoice/profiles';
 import { CHAT_TONES, type ChatTonePreset } from '../../services/chatTone';
@@ -43,7 +43,7 @@ export const ChatPickers: React.FC<{ conv: Conversation }> = ({ conv }) => {
   return (
     <>
       <ChipPicker title="Agent for this chat" active={conv.agentId || ''} onChoose={(id) => setConversationAgent(conv.id, id || null)}
-        options={[{ id: '', label: 'Default' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))]} />
+        options={[{ id: '', label: 'Default' }, ...agents.filter((a) => !isHiddenAgent(a)).map((a) => ({ id: a.id, label: a.name }))]} />
       <ChipPicker title="Project" active={conv.projectId || ''} onChoose={moveToProject}
         options={[{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))]} />
       <ChipPicker title="Voice for this chat" active={conv.voiceProfileId || ''} onChoose={(id) => setConversationVoiceProfile(conv.id, id || undefined)}

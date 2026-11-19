@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
-import { isPal, useAgentStore, Agent } from '../stores/agentStore';
+import { isHiddenAgent, isPal, useAgentStore, Agent } from '../stores/agentStore';
 
 /** Agents and pals: personas with their own system prompts. Agents get work done; pals are characters to talk or role-play with. Tap the circle to make one active. */
 export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
@@ -20,7 +20,8 @@ export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fals
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
   const byName = (a: Agent, b: Agent) => a.name.localeCompare(b.name);
   const sections = [
-    { title: 'Agents', hint: 'Get work done', data: agents.filter((a) => !isPal(a) && a.id !== 'field-id' && a.id !== 'talk').sort(byName) },
+    { title: 'Agents', hint: 'Get work done', data: agents.filter((a) => !isPal(a) && !isHiddenAgent(a)).sort(byName) },
+    { title: 'Specialists', hint: 'Used by multi-step helpers; their prompts hold facts such as food safety temperatures', data: agents.filter((a) => !isPal(a) && isHiddenAgent(a) && a.id !== 'talk' && a.id !== 'field-id').sort(byName) },
     { title: 'Pals', hint: 'Characters to talk or role-play with', data: agents.filter(isPal).sort(byName) },
   ];
 
@@ -67,7 +68,7 @@ export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fals
             <Text style={styles.sectionHint}>{section.hint}</Text>
           </View>
         )}
-        renderSectionFooter={({ section }) => (section.data.length ? null : <Text style={styles.sectionHint}>None yet. Use the + button above.</Text>)}
+        renderSectionFooter={({ section }) => (section.data.length || section.title === 'Specialists' ? null : <Text style={styles.sectionHint}>None yet. Use the + button above.</Text>)}
         contentContainerStyle={[styles.list, wide.column]} />
     </SafeAreaView>
   );

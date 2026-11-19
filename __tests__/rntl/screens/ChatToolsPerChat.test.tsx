@@ -49,7 +49,7 @@ it('changes the tools of one chat only', () => {
 it("starts an agent's chat from that agent's tools", () => {
   mockParams = { conversationId: 'phone' };
   const screen = render(<ToolsScreen />);
-  expect(screen.getByText(/Using Phone Assistant's default tools/)).toBeTruthy();
+  expect(screen.getByText(/Using Assistant's default tools/)).toBeTruthy();
   expect(toolsForConversation(conv('phone'))).toContain('add_calendar_event');
   expect(toolsForConversation(conv('phone'))).not.toContain('web_search');
 });

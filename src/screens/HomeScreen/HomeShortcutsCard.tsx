@@ -5,7 +5,7 @@ import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores/appStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
-import { useAgentStore } from '../../stores/agentStore';
+import { isHiddenAgent, useAgentStore } from '../../stores/agentStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { UndoRow, useUndo } from '../../components/UndoRow';
 import { dueCount } from '../../topics/review';
@@ -271,7 +271,7 @@ export function HomeShortcutsCard({ navigation }: { navigation: any }) {
             {inChat(draft.action) && select({ caption: draft.action === 'call' ? 'Chat to call in' : 'Chat to open', value: draft.conversationId, setter: (conversationId) => update({ conversationId }), choices: [{ id: '', label: draft.action === 'call' ? 'New chat each time' : 'New chat' }, ...summaries] })}
             {draft.action === 'call' && <Text style={[styles.small, { color: colors.textSecondary }]}>Starts a hands-free call with this agent, model, project and chat. Make as many call buttons as you want. You can hang up and return to the conversation later.</Text>}
             {select({ caption: 'Agent', value: draft.agentId, setter: (agentId) => update({ agentId }),
-              choices: [{ id: '', label: 'Default agent' }, ...agents.filter((a) => a.id !== 'talk' && a.id !== 'field-id').map((a) => ({ id: a.id, label: a.name }))] })}
+              choices: [{ id: '', label: 'Default agent' }, ...agents.filter((a) => !isHiddenAgent(a)).map((a) => ({ id: a.id, label: a.name }))] })}
             {select({ caption: 'Project', value: draft.projectId, setter: (projectId) => update({ projectId }), choices: [{ id: '', label: 'None' }, ...projects.map((p) => ({ id: p.id, label: p.name }))] })}
             {select({ caption: 'Text model', value: draft.modelId, setter: (modelId) => update({ modelId }),
               choices: [{ id: '', label: `Current model${activeModelId ? '' : ' (none loaded)'}` }, ...localModels.map((m) => ({ id: m.id, label: m.name }))] })}
