@@ -20,34 +20,44 @@ export interface ModelSpeed {
 
 interface SpeedState {
   byModel: Record<string, ModelSpeed>;
-  record: (modelId: string, s: { decode?: number; prefill?: number; outLen?: number }) => void;
+  /** The same measurements kept apart by the backend that produced them ("modelId|htp"), so a CPU run is never averaged with an NPU run. */
+  byConfig: Record<string, ModelSpeed>;
+  record: (modelId: string, s: { decode?: number; prefill?: number; outLen?: number; backend?: string }) => void;
   forget: (modelId: string) => void;
 }
+
+/** The key for one model on one backend. */
+export const configKey = (modelId: string, backend: string): string => `${modelId}|${backend.toLowerCase()}`;
 
 const ema = (old: number, v: number, a: number) => (old > 0 ? old * (1 - a) + v * a : v);
 const sane = (v: number | undefined, max: number): v is number => typeof v === 'number' && isFinite(v) && v > 0 && v < max;
 
 export const useSpeedStats = create<SpeedState>()(persist((set) => ({
   byModel: {},
+  byConfig: {},
   record: (modelId, s) => set((st) => {
     if (!modelId) return st;
-    const cur: ModelSpeed = st.byModel[modelId] ?? { decode: 0, prefill: 0, outLen: 0, samples: 0 };
-    const next: ModelSpeed = {
-      decode: sane(s.decode, 2000) ? ema(cur.decode, s.decode, 0.35) : cur.decode,
-      prefill: sane(s.prefill, 50000) ? ema(cur.prefill, s.prefill, 0.35) : cur.prefill,
-      outLen: sane(s.outLen, 32768) && s.outLen >= 16 ? ema(cur.outLen, s.outLen, 0.25) : cur.outLen,
-      samples: cur.samples + 1,
-    };
-    return { byModel: { ...st.byModel, [modelId]: next } };
+    const fold = (cur: ModelSpeed | undefined): ModelSpeed => {
+      const c = cur ?? { decode: 0, prefill: 0, outLen: 0, samples: 0 };
+      return {
+        decode: sane(s.decode, 2000) ? ema(c.decode, s.decode, 0.35) : c.decode,
+        prefill: sane(s.prefill, 50000) ? ema(c.prefill, s.prefill, 0.35) : c.prefill,
+        outLen: sane(s.outLen, 32768) && s.outLen >= 16 ? ema(c.outLen, s.outLen, 0.25) : c.outLen,
+        samples: c.samples + 1,
+      };
+    }; // eslint-disable-line complexity
+    const byConfig = s.backend ? { ...st.byConfig, [configKey(modelId, s.backend)]: fold(st.byConfig[configKey(modelId, s.backend)]) } : st.byConfig;
+    return { byModel: { ...st.byModel, [modelId]: fold(st.byModel[modelId]) }, byConfig };
   }),
   forget: (modelId) => set((st) => {
     const { [modelId]: _drop, ...rest } = st.byModel;
-    return { byModel: rest };
+    const byConfig = Object.fromEntries(Object.entries(st.byConfig).filter(([k]) => !k.startsWith(`${modelId}|`)));
+    return { byModel: rest, byConfig };
   }),
 }), {
   name: 'atlas-model-speed',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ byModel: s.byModel }),
+  partialize: (s) => ({ byModel: s.byModel, byConfig: s.byConfig }),
 }));
 
 /** Models whose settings were tuned with "Find the best settings" (so the slow-reply hint stops suggesting it). */
@@ -86,8 +96,19 @@ export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens
     const st = useAppStore.getState().settings as any;
     const mult = st?.thinkingEnabled ? THINK_MULT[st.thinkingLevel || 'medium'] ?? 1 : 1;
     const outLen = s.outLen ? s.outLen / mult : undefined;
-    useSpeedStats.getState().record(id, { decode: s.decode, prefill, outLen });
+    let backend: string | undefined;
+    try { backend = String(require('../services/llm').llmService.getSelectedBackend?.() ?? '') || undefined; } catch { /* backend unknown */ }
+    useSpeedStats.getState().record(id, { decode: s.decode, prefill, outLen, backend });
   } catch { /* stats are best-effort */ }
+}
+
+/** The backend that measured fastest for a model (writing speed), only when at least two backends each have `minSamples` real runs. Never a pooled guess. */
+export function fastestBackend(byConfig: Record<string, ModelSpeed>, modelId: string, minSamples = 3): { backend: string; decode: number } | null {
+  const rows = Object.entries(byConfig)
+    .filter(([k, v]) => k.startsWith(`${modelId}|`) && v.samples >= minSamples && v.decode > 0)
+    .map(([k, v]) => ({ backend: k.slice(modelId.length + 1), decode: v.decode }));
+  if (rows.length < 2) return null;
+  return rows.sort((a, b) => b.decode - a.decode)[0];
 }
 
 /** Rough token count for text (no model needed). */
