@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
+import { SwipeRow } from '../components/SwipeRow';
 import { useTheme, useThemedStyles } from '../theme';
 import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
@@ -329,20 +330,18 @@ export const DailyBriefScreen: React.FC = () => {
         </Card>
 
         {list.length > 0 && (
-          <Card title="Earlier briefings" subtitle="Press and hold one to delete it.">
+          <Card title="Earlier briefings" subtitle="Swipe one sideways, or press and hold it, for delete.">
             {list.map((r) => (
-              <TouchableOpacity key={r.createdAt} onPress={() => open(r.createdAt)} onLongPress={() => confirmDelete(r)}
-                style={[styles.headline, styles.earlier]} testID={`brief-${r.createdAt}`}>
-                <Icon name="radio" size={18} color={colors.primary} />
-                <View style={styles.headlineText}>
-                  <Text style={styles.body}>{r.title}</Text>
-                  <Text style={styles.meta}>{[new Date(r.createdAt).toLocaleString(), r.minutes && `about ${r.minutes} min`].filter(Boolean).join(' · ')}</Text>
+              <SwipeRow key={r.createdAt} title={r.title} testID={`brief-${r.createdAt}`} onPress={() => open(r.createdAt)}
+                actions={[{ id: 'delete', label: 'Delete', icon: 'trash-2', destructive: true, onPress: () => confirmDelete(r) }, { id: 'listen', label: 'Listen', icon: 'play', onPress: () => open(r.createdAt) }]}>
+                <View style={[styles.headline, styles.earlier]}>
+                  <Icon name="radio" size={18} color={colors.primary} />
+                  <View style={styles.headlineText}>
+                    <Text style={styles.body}>{r.title}</Text>
+                    <Text style={styles.meta}>{[new Date(r.createdAt).toLocaleString(), r.minutes && `about ${r.minutes} min`].filter(Boolean).join(' · ')}</Text>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => confirmDelete(r)} accessibilityLabel="Delete briefing" style={styles.deleteButton}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Icon name="trash-2" size={22} color={colors.textMuted} />
-                </TouchableOpacity>
-              </TouchableOpacity>
+              </SwipeRow>
             ))}
           </Card>
         )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -8,8 +8,8 @@ import { useTheme } from '../theme';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
 import { shareItem } from '../utils/shareItem';
-import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } from '../music/styles';
-import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
+import { STYLES, composeStyled, type Energy, type StyleMood } from '../music/styles';
+import { POPULAR, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
 import { saveAmbient, saveInstrumental } from '../music/saveTrack';
 import { composeContinuation, composeMusic, composeVariation } from '../music/composerAgent';
@@ -19,13 +19,11 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { fromBase64 } from '../music/soundfontFiles';
 import { fromMidi } from '../music/midiImport';
 import { SoundfontCard } from '../music/SoundfontCard';
+import { MakePanel, type MakeChoices, type Maker } from '../music/MakePanel';
+import { TrackList } from '../music/TrackList';
 import { AMBIENT, type AmbientKind } from '../music/ambient';
 import { SPACING } from '../constants';
 
-const ENERGIES: Array<{ id: Energy; label: string }> = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
-const GROUPS: StyleGroup[] = ['Moods and genres', 'Eras and genres', 'Seasons and holidays', 'Places and settings'];
-const ALL_STYLES = Object.keys(STYLES) as StyleMood[];
-const DURATIONS = [30, 60, 90] as const;
 
 /** Music Studio makes original instrumental music in a chosen style, played by a small band, entirely on the phone. */
 export function MusicStudioScreen() {
@@ -36,7 +34,9 @@ export function MusicStudioScreen() {
   const [energy, setEnergy] = useState<Energy>('medium');
   const [duration, setDuration] = useState<number>(60);
   const [variant, setVariant] = useState(0);
-  const [more, setMore] = useState(false);
+  const [maker, setMaker] = useState<Maker>('ai');
+  const [instruments, setInstruments] = useState<string[]>([]);
+  const [noise, setNoise] = useState<AmbientKind>(AMBIENT[0].id);
   const [busy, setBusy] = useState(false);
   const [score, setScore] = useState<MusicScore | null>(null);
   const [selected, setSelected] = useState('');
@@ -82,7 +82,7 @@ export function MusicStudioScreen() {
     setBusy(true);
     setStatus('Asking the AI composer to write the score (this can take a minute or two)...');
     try {
-      const composed = await composeMusic(`${prompt} ${STYLES[mood].label}`.trim(), { seconds: duration, style: mood });
+      const composed = await composeMusic(`${prompt} ${STYLES[mood].label}`.trim(), { seconds: duration, style: mood, instruments });
       setStatus(composed.via === 'composer' ? 'The composer wrote the score. Checking it against the key and chords...' : 'The AI could not write a usable score; using the built-in composer...');
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
@@ -175,110 +175,76 @@ export function MusicStudioScreen() {
       if (selected === track.id) setSelected('');
     } },
   ]);
-  const option = (active: boolean) => ({
-    borderColor: active ? colors.primary : colors.border,
-    backgroundColor: active ? colors.primary : colors.surface,
-  });
-  const chips = <T extends string | number>(values: Array<{ id: T; label: string }>, current: T, change: (value: T) => void) => (
-    <View style={styles.options}>{values.map((v) => (
-      <TouchableOpacity key={String(v.id)} onPress={() => change(v.id)} disabled={busy} accessibilityRole="radio"
-        accessibilityState={{ selected: v.id === current }} style={[styles.option, option(v.id === current)]}>
-        <Text style={{ color: v.id === current ? colors.background : colors.text }}>{v.label}</Text>
-      </TouchableOpacity>
-    ))}</View>
-  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const useSoundfont = useMusicLibrary((st) => st.useSoundfont);
+  const soundfont = useMusicLibrary((st) => st.soundfont);
+  const background = useMusicLibrary((st) => st.background);
+  const choices: MakeChoices = { prompt, mood, energy, seconds: duration, maker, instruments, noise, sound: useSoundfont && soundfont ? 'soundfont' : 'synth' };
+  const change = (patch: Partial<MakeChoices>) => {
+    if (patch.prompt !== undefined) describe(patch.prompt);
+    if (patch.mood !== undefined) { setMood(patch.mood); setVariant(0); }
+    if (patch.energy !== undefined) setEnergy(patch.energy);
+    if (patch.seconds !== undefined) setDuration(patch.seconds);
+    if (patch.maker !== undefined) setMaker(patch.maker);
+    if (patch.instruments !== undefined) setInstruments(patch.instruments);
+    if (patch.noise !== undefined) setNoise(patch.noise);
+    if (patch.sound !== undefined) useMusicLibrary.getState().setUseSoundfont(patch.sound === 'soundfont');
+  };
+  const makeIt = () => (maker === 'ai' ? askComposer() : maker === 'quick' ? make() : makeAmbientTrack(noise));
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={{ color: colors.textSecondary }}>Tell the AI composer what to write, pick a style, and a small band plays an original tune. Everything stays on this phone.</Text>
-        <Text style={[styles.label, { color: colors.text }]}>What should the AI composer write?</Text>
-        <TextInput value={prompt} onChangeText={describe} multiline maxLength={200} testID="music-prompt"
-          placeholder="e.g. a rainy day jazz cafe, slow, with piano, upright bass and a saxophone" placeholderTextColor={colors.textMuted}
-          style={[styles.input, { color: colors.text, borderColor: colors.border }]} />
-        <Text style={[styles.small, { color: colors.textSecondary }]}>Your words guide the style, the mood and which instruments it picks. Leave it empty and the composer chooses for you.</Text>
-        <Text style={[styles.label, { color: colors.text }]}>Style</Text>
-        {chips(POPULAR.map((id) => ({ id, label: STYLES[id].label })), mood, (id: StyleMood) => { setMood(id); setVariant(0); })}
-        <TouchableOpacity onPress={() => setMore((v) => !v)} accessibilityRole="button" testID="music-more-styles"><Text style={{ color: colors.primary }}>{more ? 'Fewer styles' : `More styles (${ALL_STYLES.length - POPULAR.length})`}</Text></TouchableOpacity>
-        {more && GROUPS.map((group) => (
-          <View key={group}>
-            <Text style={[styles.small, { color: colors.textSecondary }]}>{group}</Text>
-            {chips(ALL_STYLES.filter((id) => STYLES[id].group === group && !POPULAR.includes(id)).map((id) => ({ id, label: STYLES[id].label })), mood, (id: StyleMood) => { setMood(id); setVariant(0); })}
-          </View>
-        ))}
-        <Text style={[styles.small, { color: colors.textSecondary }]} testID="music-plays">{STYLES[mood].label} plays: {instrumentsOf(mood)}.</Text>
-        <Text style={[styles.label, { color: colors.text }]}>How lively</Text>
-        {chips(ENERGIES, energy, setEnergy)}
-        <Text style={[styles.label, { color: colors.text }]}>Length</Text>
-        {chips(DURATIONS.map((n) => ({ id: n, label: `${n} seconds` })), duration, setDuration)}
-        <View style={styles.options}>
-          <TouchableOpacity onPress={askComposer} disabled={busy} testID="music-ai-composer" style={[styles.action, styles.grow, { borderColor: colors.primary }]}>
-            {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compose with AI</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, { borderColor: colors.border }]}>
-            <Text style={{ color: colors.text }}>Quick tune (no AI)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { void importMidi(); }} disabled={busy} testID="music-import-midi" accessibilityLabel="Import a MIDI file" style={[styles.action, { borderColor: colors.border }]}>
-            <Text style={{ color: colors.text }}>Import MIDI</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={surprise} disabled={busy} testID="music-surprise" style={[styles.action, { borderColor: colors.border }]}>
-            <Text style={{ color: colors.text }}>Surprise me</Text>
-          </TouchableOpacity>
-        </View>
+        <MakePanel choices={choices} onChange={change} soundfontName={soundfont?.name} busy={busy} onMake={makeIt} onSurprise={surprise} onImport={() => { void importMidi(); }} />
         {!!status && <View style={styles.statusRow} testID="music-status"><ActivityIndicator color={colors.primary} /><Text style={[styles.statusText, { color: colors.text }]}>{status}</Text></View>}
         {!!playback.error && <Text style={{ color: colors.error }} testID="music-playback-error">{playback.error}</Text>}
-        <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-ambient">
-          <Text style={[styles.title, { color: colors.text }]}>Background sounds</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>Not music: steady sounds for focus, sleep or covering noise. They loop without a break, play like any track, and are saved in your list.</Text>
-          <View style={styles.options}>
-            {AMBIENT.map((a) => (
-              <TouchableOpacity key={a.id} onPress={() => makeAmbientTrack(a.id)} disabled={busy} accessibilityLabel={`Make ${a.label}`} testID={`music-ambient-${a.id}`}
-                style={[styles.option, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-                <Text style={{ color: colors.text }}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={[styles.small, { color: colors.textMuted }]}>{AMBIENT.map((a) => `${a.label}: ${a.note}`).join(' ')}</Text>
-        </View>
-        <SoundfontCard />
+
         <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-persistent-player">
           <Text style={[styles.title, { color: colors.text }]}>Now playing</Text>
-          <Text style={{ color: colors.textSecondary }}>{playback.current?.title || 'Choose or create an instrumental'}</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]} testID="music-player-state">{playback.error ? 'Could not play it.' : playback.loading ?? (playing ? `Playing ${clock(position)} of ${clock(playback.current?.seconds ?? 0)}${playback.ducked ? ' (softened while Atlas speaks)' : ''}` : playback.paused ? `Paused at ${clock(position)}` : 'Stopped')}</Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>Music continues when you switch Atlas screens. It softens while Atlas speaks, and pauses when the app is backgrounded or a call interrupts audio.</Text>
+          <Text style={{ color: colors.textSecondary }}>{playback.current?.title || 'Choose or make a track'}</Text>
+          <Text style={[styles.small, { color: colors.textSecondary }]} testID="music-player-state">{playback.error ? 'Could not play it.' : playback.loading ?? (playing ? `Playing ${clock(position)} of ${clock(playback.current?.seconds ?? 0)}` : playback.paused ? 'Paused' : 'Stopped')}</Text>
           <View style={styles.options}>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={() => instrumentalPlayer.previous().catch((e) => Alert.alert('Playback', String(e)))} accessibilityLabel="Previous instrumental" testID="music-previous"><Icon name="skip-back" size={18} color={colors.primary} /></TouchableOpacity>
-            <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={togglePlayer} disabled={!activeTrack} accessibilityLabel={playing ? 'Pause instrumental' : 'Play instrumental'} testID="music-preview"><Icon name={playing ? 'pause' : 'play'} size={18} color={colors.primary} /></TouchableOpacity>
+            <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={togglePlayer} disabled={!activeTrack} accessibilityLabel={playing ? 'Pause instrumental' : 'Play instrumental'} testID="music-play-pause"><Icon name={playing ? 'pause' : 'play'} size={18} color={colors.primary} /></TouchableOpacity>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={() => instrumentalPlayer.next().catch((e) => Alert.alert('Playback', String(e)))} accessibilityLabel="Next instrumental" testID="music-next"><Icon name="skip-forward" size={18} color={colors.primary} /></TouchableOpacity>
             <TouchableOpacity style={[styles.action, { borderColor: colors.primary }]} onPress={() => instrumentalPlayer.stop()} accessibilityLabel="Stop instrumental" testID="music-stop"><Icon name="square" size={18} color={colors.primary} /></TouchableOpacity>
           </View>
-          <View style={styles.options}>
-            <TouchableOpacity style={styles.option} onPress={() => changeVolume(-0.1)} accessibilityLabel="Lower music volume" testID="music-volume-down"><Icon name="volume-1" size={18} color={colors.text} /></TouchableOpacity>
-            <Text style={[styles.centered, { color: colors.text }]}>Volume {Math.round(volume * 100)}%</Text>
-            <TouchableOpacity style={styles.option} onPress={() => changeVolume(0.1)} accessibilityLabel="Raise music volume" testID="music-volume-up"><Icon name="volume-2" size={18} color={colors.text} /></TouchableOpacity>
-            <TouchableOpacity onPress={() => instrumentalPlayer.setLoop(!looping)} accessibilityRole="checkbox" accessibilityState={{ checked: looping }} style={styles.option} testID="music-loop-toggle"><Text style={{ color: colors.text }}>{looping ? 'Loop: on' : 'Loop: off'}</Text></TouchableOpacity>
-          </View>
         </View>
+
         {!!score && <View style={[styles.result, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="music-result">
           <Text style={[styles.title, { color: colors.text }]}>{score.title}</Text>
-          <Text style={{ color: colors.textSecondary }}>{score.bpm} BPM · {duration} seconds · saved on this phone</Text>
+          <Text style={{ color: colors.textSecondary }}>{Math.round(score.bpm)} BPM · saved on this phone</Text>
           <TouchableOpacity onPress={another} disabled={busy} testID="music-another" style={[styles.action, { borderColor: colors.primary }]}><Text style={{ color: colors.primary }}>Make another version</Text></TouchableOpacity>
         </View>}
-        <Text style={[styles.title, { color: colors.text }]}>My instrumentals ({tracks.length})</Text>
-        {!tracks.length && <Text style={{ color: colors.textSecondary }}>Create a track to build your offline playlist.</Text>}
-        {tracks.map((track) => (
-          <View key={track.id} style={[styles.result, { backgroundColor: colors.surface, borderColor: activeTrack?.id === track.id ? colors.primary : colors.border }]}>
-            <TouchableOpacity accessibilityRole="button" onPress={() => { setSelected(track.id); play(track); }} testID={`music-track-${track.id}`}>
-              <Text style={[styles.label, { color: colors.text }]}>{track.title}</Text>
-              <Text style={[styles.small, { color: colors.textSecondary }]}>{STYLES[track.mood as StyleMood]?.label ?? track.mood} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { void shareItem({ title: track.title, file: track.path }); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
-            {!!track.scorePath && <TouchableOpacity accessibilityLabel={`Edit notes of ${track.title}`} testID={`music-edit-${track.id}`} onPress={() => navigation.navigate('ScoreEditor', { scorePath: track.scorePath })} style={styles.end}><Text style={{ color: colors.primary }}>Edit notes</Text></TouchableOpacity>}
-            {!!track.scorePath && track.mood !== 'ambient' && <TouchableOpacity accessibilityLabel={`Make a variation of ${track.title}`} testID={`music-variation-${track.id}`} onPress={() => { void makeVariation(track); }} disabled={busy} style={styles.end}><Text style={{ color: colors.primary }}>Variation</Text></TouchableOpacity>}
-            {!!track.scorePath && track.mood !== 'ambient' && <TouchableOpacity accessibilityLabel={`Continue ${track.title}`} testID={`music-continue-${track.id}`} onPress={() => { void extendTune(track); }} disabled={busy} style={styles.end}><Text style={{ color: colors.primary }}>Continue</Text></TouchableOpacity>}
-            <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
+
+        <Text style={[styles.title, { color: colors.text }]}>My tracks ({tracks.length})</Text>
+        <Text style={[styles.small, { color: colors.textMuted }]}>Tap to play. Swipe a track sideways, or press and hold it, for delete, share, edit notes, variation and continue.</Text>
+        <TrackList tracks={tracks} activeId={activeTrack?.id} playingId={playback.playing ? playback.current?.id : undefined} busy={busy}
+          onPlay={(t) => { setSelected(t.id); void play(t); }} onShare={(t) => { void shareItem({ title: t.title, file: t.path }); }}
+          onEdit={(t) => navigation.navigate('ScoreEditor', { scorePath: t.scorePath })} onVariation={(t) => { void makeVariation(t); }} onContinue={(t) => { void extendTune(t); }} onDelete={remove} />
+
+        <TouchableOpacity onPress={() => setSettingsOpen((v) => !v)} accessibilityRole="button" testID="music-settings-toggle" style={styles.settingsToggle}>
+          <Text style={[styles.title, { color: colors.text }]}>Sound and playback</Text>
+          <Icon name={settingsOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        {settingsOpen && (
+          <View style={styles.settings} testID="music-settings">
+            <View style={styles.switchRow}>
+              <View style={styles.flex}><Text style={{ color: colors.text }}>Keep playing in the background</Text><Text style={[styles.small, { color: colors.textMuted }]}>The music goes on when you leave Atlas or close it, with controls in the phone's media player.</Text></View>
+              <Switch value={background} onValueChange={(on) => useMusicLibrary.getState().setBackground(on)} accessibilityLabel="Keep playing in the background" testID="music-background-toggle" />
+            </View>
+            <View style={styles.switchRow}>
+              <Text style={[styles.flex, { color: colors.text }]}>Repeat the track</Text>
+              <Switch value={looping} onValueChange={(on) => instrumentalPlayer.setLoop(on)} accessibilityLabel="Repeat the track" testID="music-loop-toggle" />
+            </View>
+            <View style={styles.switchRow}>
+              <Text style={[styles.flex, { color: colors.text }]}>Volume {Math.round(volume * 100)}%</Text>
+              <TouchableOpacity style={styles.option} onPress={() => changeVolume(-0.1)} accessibilityLabel="Lower music volume" testID="music-volume-down"><Icon name="volume-1" size={18} color={colors.text} /></TouchableOpacity>
+              <TouchableOpacity style={styles.option} onPress={() => changeVolume(0.1)} accessibilityLabel="Raise music volume" testID="music-volume-up"><Icon name="volume-2" size={18} color={colors.text} /></TouchableOpacity>
+            </View>
+            <SoundfontCard />
           </View>
-        ))}
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -287,16 +253,15 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   title: { fontSize: 18, fontWeight: '700' },
   body: { padding: 16, gap: 12, paddingBottom: 48 },
-  input: { minHeight: 95, borderWidth: 1, borderRadius: 10, padding: 10, textAlignVertical: 'top' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   option: { borderWidth: 1, borderRadius: 18, padding: 10 },
-  grow: { flexGrow: 1 },
   action: { borderWidth: 1, borderRadius: 10, padding: 12, alignItems: 'center', marginVertical: 3 },
-  label: { fontWeight: '600' },
   small: { fontSize: 12 },
-  centered: { alignSelf: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   statusText: { flex: 1 },
-  end: { alignSelf: 'flex-end', marginTop: 6 },
   result: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 7 },
+  flex: { flex: 1 },
+  settingsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.md },
+  settings: { gap: SPACING.md },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
 });

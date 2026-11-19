@@ -37,7 +37,7 @@ export function SwipeRow({ actions, title, onPress, children, testID }: { action
         </Pressable>
       </Swipeable>
       <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSheet(false)} testID="row-sheet-backdrop">
+        <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={() => setSheet(false)} testID="row-sheet-backdrop">
           <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
             {!!title && <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>{title}</Text>}
             {actions.map((a) => (
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'stretch' },
   action: { minWidth: 72, paddingHorizontal: SPACING.md, alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
   actionText: { ...TYPOGRAPHY.meta },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { padding: SPACING.lg, paddingBottom: SPACING.xl, borderTopLeftRadius: SPACING.lg, borderTopRightRadius: SPACING.lg, gap: SPACING.xs },
   title: { ...TYPOGRAPHY.body, marginBottom: SPACING.sm },
   sheetRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md },

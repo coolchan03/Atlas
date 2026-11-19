@@ -14,7 +14,7 @@ import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } fr
 import { courseProgress, useTopics, type Course } from './store';
 import { friendlyTitle } from './chapters';
 import { createChapterCourse, createCourse, findSources, squareContent, type Rewrite } from './service';
-import { importCourseFile, shareCourseFile } from './courseFiles';
+import { importCourseFile, saveStudyGuide, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
 import { ProjectChips } from '../components/ProjectChips';
@@ -25,13 +25,13 @@ import { Fold } from '../components/Fold';
 import { AddSquarePanel, ExpandingNote, ReadingDepthChips, useDeepening, WritingNotice, WritingStatus } from './BoardExtras';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
+import { SwipeRow } from '../components/SwipeRow';
 import { WriteNowPanel } from './WriteNowPanel';
 import { matchExam, type ExamCode } from '../cpa/blueprints';
 import { setupCpaExam } from '../cpa/setup';
 import { ensureExamCourse } from '../cpa/course';
 import { AHEAD_CHOICES, aheadFor, prepareAhead, usePrepare } from './prepare';
 import { keepMissed } from './review';
-import { saveStudyGuide } from './courseFiles';
 import { useLayoutClass } from '../hooks/useLayoutClass';
 import { ResizableSplit } from '../components/ResizableSplit';
 import { useOffGrid } from '../atlasTools/offGrid';
@@ -171,12 +171,13 @@ export const TopicsScreen: React.FC = () => {
         {courses.map((c) => {
           const p = courseProgress(c);
           return (
-            <TouchableOpacity key={c.id} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
-              onPress={() => navigation.navigate('TopicBoard', { courseId: c.id })} onLongPress={() => confirmDelete(c)} testID={`course-${c.id}`}>
-              <Text style={[styles.name, { color: colors.text }]}>{c.title}</Text>
-              <Text style={[styles.meta, { color: colors.textSecondary }]}>{c.summary || c.topic}</Text>
-              <Text style={[styles.meta, { color: colors.textMuted }]}>{p.done} of {p.total} squares · hold to delete</Text>
-            </TouchableOpacity>
+            <SwipeRow key={c.id} title={c.title} testID={`course-${c.id}`} onPress={() => navigation.navigate('TopicBoard', { courseId: c.id })}
+              actions={[{ id: 'delete', label: 'Delete', icon: 'trash-2', destructive: true, onPress: () => confirmDelete(c) }]}>
+              <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <Text style={[styles.name, { color: colors.text }]}>{c.title}</Text><Text style={[styles.meta, { color: colors.textSecondary }]}>{c.summary || c.topic}</Text>
+                <Text style={[styles.meta, { color: colors.textMuted }]}>{p.done} of {p.total} squares · swipe or hold for options</Text>
+              </View>
+            </SwipeRow>
           );
         })}
         {!courses.length && !form && <Text style={[styles.meta, { color: colors.textMuted }]} testID="topics-empty">No courses yet.</Text>}
@@ -222,7 +223,6 @@ export const TopicsScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
-
 
 /** The material a course is written from: pages the AI found online, pasted notes, text files. */
 function SourcesCard({ course }: { course: Course }) {

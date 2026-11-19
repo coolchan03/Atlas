@@ -22,7 +22,7 @@ export function Select({ label, options, value, values, multiple, onChange, onTo
   return (
     <>
       <TouchableOpacity onPress={() => setOpen(true)} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${label}: ${current}`} accessibilityState={{ disabled: !!disabled }} testID={testID}
-        style={[styles.field, { borderColor: colors.border, backgroundColor: colors.surface, opacity: disabled ? 0.5 : 1 }]}>
+        style={[styles.field, { borderColor: colors.border, backgroundColor: colors.surface }, disabled && styles.disabled]}>
         <View style={styles.fieldText}>
           <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
           <Text style={[styles.fieldValue, { color: colors.text }]} numberOfLines={1}>{current}</Text>
@@ -30,7 +30,7 @@ export function Select({ label, options, value, values, multiple, onChange, onTo
         <Icon name="chevron-down" size={16} color={colors.textMuted} />
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={() => setOpen(false)}>
           <View style={[styles.sheet, { backgroundColor: colors.surface }]} onStartShouldSetResponder={() => true}>
             <Text style={[styles.sheetTitle, { color: colors.text }]}>{label}</Text>
             <ScrollView style={styles.list}>
@@ -60,7 +60,8 @@ const styles = StyleSheet.create({
   fieldText: { flex: 1 },
   fieldLabel: { ...TYPOGRAPHY.meta },
   fieldValue: { ...TYPOGRAPHY.body },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: SPACING.xl },
+  backdrop: { flex: 1, justifyContent: 'center', padding: SPACING.xl },
+  disabled: { opacity: 0.5 },
   sheet: { borderRadius: SPACING.md, padding: SPACING.lg, maxHeight: '80%' },
   sheetTitle: { ...TYPOGRAPHY.body, marginBottom: SPACING.sm },
   list: { flexGrow: 0 },

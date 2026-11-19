@@ -50,7 +50,7 @@ it('shows a failure in place instead of a blocking alert', async () => {
   await waitFor(() => expect(screen.getByText('Could not reach the news')).toBeTruthy());
 });
 
-it('adds topics to avoid, and deletes an earlier briefing by pressing and holding it', () => {
+it('adds topics to avoid, and deletes an earlier briefing from the options that holding it opens (holding alone deletes nothing)', () => {
   const { useBriefPrefs } = require('../../../src/atlasTools/dailyBrief');
   const { Alert } = require('react-native');
   useBriefPrefs.setState({ avoid: [] });
@@ -61,7 +61,10 @@ it('adds topics to avoid, and deletes an earlier briefing by pressing and holdin
   fireEvent.press(screen.getByTestId('brief-avoid-add'));
   expect(useBriefPrefs.getState().avoid).toEqual(['sports', 'celebrity gossip']);
   fireEvent(screen.getByTestId('brief-5'), 'longPress');
-  expect(alert).toHaveBeenCalledWith('Delete this briefing?', 'Old briefing', expect.any(Array));
+  expect(alert).not.toHaveBeenCalled();
+  expect(useStudyStore.getState().saved[BRIEF_PROJECT]).toHaveLength(1);
+  fireEvent.press(screen.getByTestId('sheet-action-delete'));
+  expect(alert).toHaveBeenCalledWith('Delete this briefing?', 'Old briefing', expect.any(Array)); // still asks before deleting
   expect(useStudyStore.getState().saved[BRIEF_PROJECT]).toEqual([]);
   alert.mockRestore();
 });

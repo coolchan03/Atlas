@@ -1,6 +1,6 @@
 /**
- * Music Studio is simple: say what you want (optional), pick a style, how lively and how long, press Make music. The style is picked
- * from your words, the page says which instruments play (jazz has a piano), and Another version makes a different tune.
+ * Music Studio: one panel with drop-downs (who makes it, style, how lively, how long, the sound, the instruments) and one button. The style is
+ * picked from your words, the page says which instruments play (jazz has a piano), and Another version makes a different tune.
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
@@ -20,15 +20,16 @@ function open() {
   return { rtl, view: rtl.render(React.createElement(MusicStudioScreen)), library: require('../../../src/music/library').useMusicLibrary };
 }
 
-it('shows a short list of styles first, the rest under More styles, and no instrument or AI options', () => {
+
+/** Opens a drop-down and picks one option. */
+const choose = (rtl: any, view: any, select: string, option: string) => { rtl.fireEvent.press(view.getByTestId(select)); rtl.fireEvent.press(view.getByTestId(`${select}-${option}`)); };
+
+it('has a Style drop-down with every style, and no instrument or AI clutter beside the panel', () => {
   const { rtl, view } = open();
-  for (const label of ['Focus', 'Jazz', 'Lo-fi chill', 'Classical', 'Cinematic']) expect(view.getByText(label)).toBeTruthy();
-  expect(view.queryByText('Halloween')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('music-style'));
+  for (const id of ['focus', 'jazz', 'lofi', 'classical', 'cinematic', 'halloween', '1920s']) expect(view.queryByTestId(`music-style-${id}`)).not.toBeNull();
   expect(view.queryByText('Instrument sound')).toBeNull();
   expect(view.queryByText('Compose with local AI')).toBeNull();
-  rtl.fireEvent.press(view.getByTestId('music-more-styles'));
-  for (const title of ['Eras and genres', 'Seasons and holidays', 'Places and settings']) expect(view.getByText(title)).toBeTruthy();
-  for (const label of ['Halloween', 'Cinco de Mayo', 'Italian restaurant', '1920s']) expect(view.getByText(label)).toBeTruthy();
 });
 
 it('picks the style from your words, says jazz has a piano, and makes a track and another version', async () => {
@@ -36,7 +37,8 @@ it('picks the style from your words, says jazz has a piano, and makes a track an
   library.setState({ tracks: [] });
   rtl.fireEvent.changeText(view.getByTestId('music-prompt'), 'a rainy day jazz cafe');
   expect(view.getByTestId('music-plays').props.children.join('')).toMatch(/Jazz plays: piano, bass, saxophone, vibraphone, muted trumpet, swing drums/);
-  rtl.fireEvent.press(view.getByText('30 seconds'));
+  choose(rtl, view, 'music-maker', 'quick');
+  choose(rtl, view, 'music-length', '30');
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-quick')); });
   await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(1), { timeout: 20000 });
   expect(library.getState().tracks[0]).toMatchObject({ mood: 'jazz', sound: 'band', seconds: 30 });
@@ -44,18 +46,35 @@ it('picks the style from your words, says jazz has a piano, and makes a track an
   await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(2), { timeout: 20000 });
 }, 60000);
 
-it('the top box is the instruction to the AI composer, with one clear AI button and a no-AI quick tune', () => {
-  const { view } = open();
+it('starts as the AI composer with one clear button, and the Made by drop-down offers a no-AI quick tune and background noise', () => {
+  const { rtl, view } = open();
   expect(view.getByText('What should the AI composer write?')).toBeTruthy();
   expect(view.getByText('Compose with AI')).toBeTruthy();
-  expect(view.getByText('Quick tune (no AI)')).toBeTruthy();
   expect(view.queryByText('Ask the AI composer')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('music-maker'));
+  expect(view.getByText('Quick tune (no AI)')).toBeTruthy();
+  expect(view.getByText('Background noise')).toBeTruthy();
 });
 
-it('makes a looping background sound such as white noise and plays it', async () => {
+it('lets the instruments be chosen for the AI composer, and puts the choice in what the composer is told', () => {
+  const { rtl, view } = open();
+  expect(view.getByText('Let the composer choose')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('music-instruments'));
+  rtl.fireEvent.press(view.getByTestId('music-instruments-flute'));
+  rtl.fireEvent.press(view.getByTestId('music-instruments-cello'));
+  rtl.fireEvent.press(view.getByTestId('music-instruments-done'));
+  expect(view.getByText('Flute, Cello')).toBeTruthy();
+  const { composerBrief } = require('../../../src/music/composerAgent');
+  expect(composerBrief('x', 'focus', { seconds: 60, instruments: ['flute', 'cello'] }).text).toContain('The person chose these instruments: Flute, Cello.');
+});
+
+it('switches to a list of noises with "Background noise", and makes a looping sound such as white noise and plays it', async () => {
   const { rtl, view, library } = open();
   library.setState({ tracks: [], loop: false });
-  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-ambient-white')); });
+  choose(rtl, view, 'music-maker', 'noise');
+  expect(view.queryByTestId('music-prompt')).toBeNull(); // no words, style or instruments for a noise
+  choose(rtl, view, 'music-noise', 'white');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-noise-make')); });
   await rtl.waitFor(() => expect(library.getState().tracks).toHaveLength(1), { timeout: 30000 });
   expect(library.getState().tracks[0]).toMatchObject({ title: 'White noise', mood: 'ambient', seconds: 90 });
   expect(library.getState().loop).toBe(true);

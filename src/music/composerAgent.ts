@@ -5,7 +5,7 @@
  * What it writes is checked line by line (agentScore.ts); if it cannot produce a playable tune the built-in composer makes one, so a
  * request for music always ends in music. This is a specialist prompt, not a separately trained model.
  */
-import { instrumentsForPrompt } from './catalog';
+import { instrumentById, instrumentsForPrompt } from './catalog';
 import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
 import { seedFor } from './arrange';
@@ -62,18 +62,27 @@ DRUM hat 0.5 0.3`;
 /** "D Dorian" for the note. */
 const harmonyLabel = (plan: HarmonyPlan): string => planText(plan).split('.')[0].replace('KEY: ', '');
 
-export interface ComposeOptions { seconds?: number; /** Replaces the model call (tests, and callers that already hold a model). */ ask?: (system: string, user: string) => Promise<string>; style?: StyleMood }
+export interface ComposeOptions { seconds?: number; /** Instrument ids the person chose; the composer uses these (and drums only if the style needs them). */ instruments?: string[]; /** Replaces the model call (tests, and callers that already hold a model). */ ask?: (system: string, user: string) => Promise<string>; style?: StyleMood }
 export interface Composed { score: MusicScore; via: 'composer' | 'built-in'; instruments: string; style: StyleMood; note: string }
 
 const clampSeconds = (s: number | undefined) => Math.max(20, Math.min(120, Math.round(s ?? 60)));
 
+/** The instruments sentence of the brief: the person's choice when there is one, else what suits the style. */
+function instrumentLine(style: StyleMood, chosen: string[]): string {
+  const labels = chosen.map((id) => instrumentById(id)?.label).filter((l): l is string => !!l);
+  if (labels.length) return `The person chose these instruments: ${labels.join(', ')}. Use all of them and no other pitched instrument; drums only if the style needs a beat.`;
+  return `Instruments that suit it: ${instrumentsOf(style)}, and any others from the list that fit.`;
+}
+
 /** What the agent is told about this request: the wanted style and mood in words, a tempo, a length in bars, and the instruments that suit it. */
-export function composerBrief(request: string, style: StyleMood, seconds: number): { text: string; bars: number; bpm: number; plan: HarmonyPlan } {
+export function composerBrief(request: string, style: StyleMood, length: number | { seconds: number; instruments?: string[] }): { text: string; bars: number; bpm: number; plan: HarmonyPlan } {
+  const seconds = typeof length === 'number' ? length : length.seconds;
+  const chosen = { instruments: typeof length === 'number' ? [] : length.instruments };
   const spec = specFor(style);
   const bars = Math.max(8, Math.min(32, Math.round((Math.min(seconds, 90) * spec.bpm) / 60 / spec.beatsPerBar)));
   // The key, the scale and a chord for every bar are worked out here, so the model writes notes that fit instead of guessing a key.
   const plan = harmonyPlan(spec, bars, seedFor(request, style));
-  const text = `Request: ${request.trim().slice(0, 300) || 'background music'}\nStyle: ${styleLabel(style)}. Tempo about ${spec.bpm} BPM. Instruments that suit it: ${instrumentsOf(style)}, and any others from the list that fit.\n${planText(plan)}\nWrite exactly ${bars} bars (${bars * spec.beatsPerBar} beats). Reply with the score lines only.`;
+  const text = `Request: ${request.trim().slice(0, 300) || 'background music'}\nStyle: ${styleLabel(style)}. Tempo about ${spec.bpm} BPM. ${instrumentLine(style, chosen.instruments ?? [])}\n${planText(plan)}\nWrite exactly ${bars} bars (${bars * spec.beatsPerBar} beats). Reply with the score lines only.`;
   return { text, bars, bpm: spec.bpm, plan };
 }
 
@@ -152,7 +161,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
 export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
   const seconds = clampSeconds(options.seconds);
   const style = options.style ?? styleFromText(request) ?? 'focus';
-  const brief = composerBrief(request, style, seconds);
+  const brief = composerBrief(request, style, { seconds, instruments: options.instruments });
   try {
     const ask = options.ask ?? askModelDefault;
     const written = await writeScore(brief, ask);

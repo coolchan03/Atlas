@@ -20,9 +20,19 @@ it('offers a variation of a tune only, and saves the new tune next to the origin
   const track = (id: string, title: string, mood: string) => ({ id, title, path: `${dir}/instrumental-${id}.wav`, scorePath: `${dir}/instrumental-${id}.json`, mood, sound: 'band', seconds: 30, createdAt: new Date().toISOString() });
   useMusicLibrary.setState({ tracks: [track('a', 'Tune A', 'jazz'), track('r', 'Rain', 'ambient')] });
   const view = rtl.render(React.createElement(MusicStudioScreen));
-  expect(view.getByTestId('music-variation-a')).toBeTruthy();
-  expect(view.queryByTestId('music-variation-r')).toBeNull();
-  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-variation-a')); });
+  // Press and hold a tune: a sheet lists what can be done with it, as buttons (nothing happens by holding alone).
+  rtl.fireEvent(view.getByTestId('music-track-a'), 'longPress');
+  expect(view.getByTestId('sheet-action-variation')).toBeTruthy();
+  expect(view.getByTestId('sheet-action-continue')).toBeTruthy();
+  expect(view.getByTestId('sheet-action-delete')).toBeTruthy();
+  rtl.act(() => { rtl.fireEvent.press(view.getByTestId('sheet-cancel')); });
+  rtl.fireEvent(view.getByTestId('music-track-r'), 'longPress');
+  expect(view.queryByTestId('sheet-action-variation')).toBeNull(); // a background sound cannot be varied
+  expect(view.getByTestId('sheet-action-delete')).toBeTruthy();
+  rtl.act(() => { rtl.fireEvent.press(view.getByTestId('sheet-cancel')); });
+  expect(useMusicLibrary.getState().tracks).toHaveLength(2);
+  rtl.fireEvent(view.getByTestId('music-track-a'), 'longPress');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('sheet-action-variation')); });
   await rtl.waitFor(() => expect(useMusicLibrary.getState().tracks.length).toBe(3), { timeout: 30000 });
   expect(useMusicLibrary.getState().tracks.some((t: { title: string }) => /variation|jazz/i.test(t.title) || t.title !== 'Tune A' && t.title !== 'Rain')).toBe(true);
   expect(alert).toHaveBeenCalledWith('Made with the built-in composer', expect.stringContaining('could not write a variation'));
@@ -43,7 +53,8 @@ it('offers Continue and Import MIDI, and says why a tune could not be continued'
   useMusicLibrary.setState({ tracks: [{ id: 'long', title: 'Long', path: `${dir}/instrumental-long.wav`, scorePath: `${dir}/instrumental-long.json`, mood: 'jazz', sound: 'band', seconds: 30, createdAt: new Date().toISOString() }] });
   const view = rtl.render(React.createElement(MusicStudioScreen));
   expect(view.getByTestId('music-import-midi')).toBeTruthy();
-  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-continue-long')); });
+  rtl.fireEvent(view.getByTestId('music-track-long'), 'longPress');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('sheet-action-continue')); });
   await rtl.waitFor(() => expect(alert).toHaveBeenCalledWith('Could not extend the tune', expect.stringContaining('already as long')));
   expect(useMusicLibrary.getState().tracks).toHaveLength(1);
 }, 60000);

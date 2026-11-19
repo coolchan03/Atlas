@@ -17,7 +17,9 @@ it('shows each step while a track is made, and what the player is doing', async 
   jest.spyOn(instrumentalPlayer, 'play').mockImplementation(async () => { useMusicPlayback.setState({ loading: 'Reading the recording of "x"...' }); await hold; useMusicPlayback.setState({ loading: null, playing: true }); });
   const view = rtl.render(React.createElement(MusicStudioScreen));
   expect(view.getByTestId('music-player-state').props.children).toBe('Stopped');
-  rtl.fireEvent.press(view.getByText('30 seconds'));
+  const choose = (select: string, option: string) => { rtl.fireEvent.press(view.getByTestId(select)); rtl.fireEvent.press(view.getByTestId(`${select}-${option}`)); };
+  choose('music-maker', 'quick');
+  choose('music-length', '30');
   const seen = new Set<string>();
   const watch = setInterval(() => { try { const t = view.getByTestId('music-status'); seen.add(JSON.stringify(t.findByType(require('react-native').Text).props.children)); } catch { /* not showing */ } }, 5);
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-quick')); });

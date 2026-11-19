@@ -30,6 +30,8 @@ import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { activeModelService, llmService, remoteServerManager } from '../services';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { ChatSwipeActions } from '../chats/ChatSwipeActions';
 import { buildChatListRows, type ChatListRow } from './chatListGrouping';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { DuplicateChatsBanner } from '../chats/DuplicateChatsBanner';
@@ -190,6 +192,7 @@ export const ChatsListScreen: React.FC = () => {
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
+      <Swipeable overshootRight={false} renderRightActions={() => <ChatSwipeActions chat={item} index={index} onDelete={chatOptions.confirmDelete} onMore={chatOptions.open} />}>
         <AnimatedListItem
           index={index}
           trigger={focusTrigger}
@@ -219,6 +222,7 @@ export const ChatsListScreen: React.FC = () => {
           {!!item.isPinned && <Icon name="star" size={15} color={colors.primary} />}
           <Icon name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedListItem>
+      </Swipeable>
     );
   };
 
