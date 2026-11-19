@@ -56,6 +56,7 @@ Regenerate with `node scripts/route-matrix.cjs`; rows you filled in are kept.
 | RemoteServers | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Rubric | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Schedule | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| ScoreEditor | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Search | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | SecuritySettings | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | SelfCheck | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
