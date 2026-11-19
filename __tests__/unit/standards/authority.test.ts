@@ -79,7 +79,6 @@ describe('documents added under a standard\'s name', () => {
 });
 
 describe('official URL matching by parsed host', () => {
-  const { isOfficialUrl, hostOf } = require('../../../src/standards/authority');
   it('accepts the real sites and their subdomains', () => {
     expect(isOfficialUrl('https://www.irs.gov/pub/irs-pdf/p535.pdf')).toBe(true);
     expect(isOfficialUrl('https://asc.fasb.org:443/topic')).toBe(true);
