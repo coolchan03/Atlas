@@ -505,7 +505,7 @@ async function writeOutlinedEpisode(
     lines.length = 0; storyStarts.length = 0;
     for (const seg of segments) { if (lines.length) storyStarts.push(lines.length); lines.push(...seg.lines); }
   }
-  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: all.slice(0, 60), podcast: lines, hosts: cfg.hosts, storyStarts };
+  return { kind: 'podcast', createdAt: Date.now(), topic: opts.prompt, title, sources: all.slice(0, 60), podcast: lines, hosts: cfg.hosts, storyStarts, storyItems: segments.map((s) => s.item) };
 }
 
 export async function writeEpisode(sources: Source[], opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {

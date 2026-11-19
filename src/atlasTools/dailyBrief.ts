@@ -405,6 +405,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.
   if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
+  r.storyFirstLine = opening.length;
   r.minutes = Math.max(1, Math.round(spokenMinutes((r.podcast ?? []).map((l) => l.text))));
   r.headlines = stories.slice(0, usedStories).map(({ interest, headline: h }, i) => ({
     title: h.title, source: h.source, date: h.date, interest: interests[interest], url: outline[i]?.sources[0]?.url || h.url,

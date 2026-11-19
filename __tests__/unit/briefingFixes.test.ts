@@ -42,3 +42,12 @@ describe('stories with only a headline', () => {
     expect(HEADLINE_ONLY_NOTE).toMatch(/Do not add facts/);
   });
 });
+
+describe('story chips', () => {
+  it('names each chip for its own headline when a story wrote no lines, and starts the first after the opening lines', () => {
+    const { storyJumps } = require('../../src/study/storyJumps');
+    const headlines = [{ title: 'A' }, { title: 'B' }, { title: 'C' }];
+    const chips = storyJumps({ storyStarts: [9], storyItems: [0, 2], storyFirstLine: 5, headlines });
+    expect(chips).toEqual([{ line: 5, label: 'A' }, { line: 9, label: 'C' }]);
+  });
+});

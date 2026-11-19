@@ -27,6 +27,10 @@ export interface StudyResult {
   podcast?: PodcastLine[];
   /** Line numbers where the second and later stories of a news briefing start (for the chime between stories). */
   storyStarts?: number[];
+  /** For each story that has lines (in order), which outline item it came from, so a story's chip is named for its own headline even when another story wrote nothing. */
+  storyItems?: number[];
+  /** The line where the first story starts (after the greeting, weather and day lines). */
+  storyFirstLine?: number;
   hosts?: number;
   slides?: Slide[];
   learningTerms?: LearningTerm[];

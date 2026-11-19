@@ -515,7 +515,9 @@ export const StudyScreen: React.FC = () => {
                 if (!jumps.length) return null;
                 const now = currentStory(jumps, playing ?? resumeAt);
                 return (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={jumpStyles.row} testID="story-jumps">
+                  <>
+                  <Text style={[jumpStyles.count, { color: colors.textMuted }]} testID="story-jump-count">{jumps.length} stories. Swipe the row to see them all.</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator style={jumpStyles.row} testID="story-jumps">
                     {jumps.map((j, k) => (
                       <TouchableOpacity key={`${j.line}-${j.label}`} testID={`story-jump-${k}`} accessibilityRole="button" accessibilityLabel={`Play story ${k + 1}: ${j.label}`}
                         onPress={() => play(v.podcast!.map((x) => ({ text: x.text, ...castVoice(x.host, v.hosts ?? 2) })), j.line, { audioKey: `${projectId}-${v.createdAt}`, storyStarts: v.storyStarts ?? [] })}
@@ -524,6 +526,7 @@ export const StudyScreen: React.FC = () => {
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                  </>
                 );
               })()}
               {v.podcast.map((l, i) => (
@@ -802,4 +805,4 @@ const MediaBar: React.FC<{
   );
 };
 
-const jumpStyles = StyleSheet.create({ row: { marginBottom: 10 }, chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, marginRight: 8 }, text: { fontSize: 13 } });
+const jumpStyles = StyleSheet.create({ row: { marginBottom: 10 }, count: { fontSize: 12, marginBottom: 4 }, chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, marginRight: 8 }, text: { fontSize: 13 } });

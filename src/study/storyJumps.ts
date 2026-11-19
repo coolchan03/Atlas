@@ -6,12 +6,16 @@ export interface StoryJump { label: string; line: number }
 
 const short = (t: string) => (t.length > 26 ? `${t.slice(0, 25).trimEnd()}…` : t);
 
-export function storyJumps(r: { storyStarts?: number[]; headlines?: Array<{ title: string }> }): StoryJump[] {
+export function storyJumps(r: { storyStarts?: number[]; storyItems?: number[]; storyFirstLine?: number; headlines?: Array<{ title: string }> }): StoryJump[] {
   const later = r.storyStarts ?? [];
   if (!later.length) return [];
-  const first = r.headlines?.length ? 1 : 0;
+  const first = r.storyFirstLine ?? (r.headlines?.length ? 1 : 0);
   const lines = [first, ...later];
-  return lines.map((line, i) => ({ line, label: r.headlines?.[i]?.title ? short(r.headlines[i].title) : `Part ${i + 1}` }));
+  // A story that wrote no lines leaves no chip, and the chips after it keep their own headlines (not the one before).
+  return lines.map((line, i) => {
+    const headline = r.headlines?.[r.storyItems?.[i] ?? i]?.title;
+    return { line, label: headline ? short(headline) : `Part ${i + 1}` };
+  });
 }
 
 /** Which chip is playing now: the last story that starts at or before this line. */
