@@ -12,7 +12,7 @@ import { HEADLINE_ONLY_NOTE, WORDS_PER_MINUTE, avoided, isThinDetail, cleanHeadl
 
 export const BRIEF_PROJECT = 'daily-brief';
 /** The quiet beat after the chime before each story starts, so every story lands before the next. */
-export const STORY_PAUSE_SECONDS = 7;
+export const STORY_PAUSE_SECONDS = 3;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 import { daySpoken } from './dayBrief';
 import { packForTomorrow, reviewsDueSpoken, streakLine, weeklyDigest } from './dayExtras';

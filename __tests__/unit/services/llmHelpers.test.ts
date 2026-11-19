@@ -715,7 +715,7 @@ describe('backendForcesF16Cache / effectiveCacheType (single source)', () => {
     expect(effectiveCacheType(INFERENCE_BACKENDS.OPENCL, 'q4_0')).toBe('f16');
     expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, 'q8_0')).toBe('q8_0');
     expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, 'q4_0')).toBe('q4_0');
-    expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, undefined)).toBe('q8_0');
+    expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, undefined)).toBe('q4_0');
   });
 
   it('buildModelParams cache_type matches effectiveCacheType for the same inputs', () => {

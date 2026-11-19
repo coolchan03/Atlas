@@ -118,10 +118,10 @@ describe('buildModelParams — OpenCL backend branch', () => {
     expect(params.nGpuLayers).toBe(0);
   });
 
-  it('defaults cacheType to q8_0 when flash attn is effective and none provided', () => {
+  it('defaults cacheType to q4_0 when flash attn is effective and none provided', () => {
     const params = buildModelParams('/model.gguf', {});
-    // flash defaults to 'auto' (effective) → q8_0 cache
-    expect((params.baseParams as any).cache_type_k).toBe('q8_0');
+    // flash defaults to 'auto' (effective) → q4_0 cache
+    expect((params.baseParams as any).cache_type_k).toBe('q4_0');
   });
 
   it('uses f16 cache when flash attn explicitly off', () => {

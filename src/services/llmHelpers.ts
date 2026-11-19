@@ -87,7 +87,7 @@ export function modelForcesF16Cache(modelPath: string | undefined): boolean {
 
 /** The KV cache type that will ACTUALLY be used, after backend (and model family) coercion to f16. */
 export function effectiveCacheType(backend: string | undefined, requested: string | undefined, modelPath?: string): string {
-  return backendForcesF16Cache(backend) || modelForcesF16Cache(modelPath) ? 'f16' : (requested || 'q8_0');
+  return backendForcesF16Cache(backend) || modelForcesF16Cache(modelPath) ? 'f16' : (requested || 'q4_0');
 }
 
 export function buildModelParams(
@@ -107,7 +107,7 @@ export function buildModelParams(
   const gpuEnabled = backend ? backend !== INFERENCE_BACKENDS.CPU : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
   const isFlashAttnEffective = flash_attn_type !== 'off';
-  const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
+  const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q4_0' : 'f16');
   // OpenCL init on affected Adreno devices can fail when cache_type_k/v are passed.
   // effectiveCacheType coerces OpenCL/HTP to f16 (single source shared with the UI).
   const cacheType = effectiveCacheType(backend, requestedCache, modelPath);

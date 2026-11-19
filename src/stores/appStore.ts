@@ -272,7 +272,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   flashAttn: true,
   aggressiveModelLoading: false,
   modelLoadingMode: 'balanced',
-  cacheType: 'q8_0' as CacheType,
+  cacheType: 'q4_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base', ...STUDY_TOOL_IDS],
   thinkingEnabled: false,

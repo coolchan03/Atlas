@@ -18,8 +18,8 @@ export function useTextGenerationAdvanced() {
   const { settings, updateSettings } = useAppStore();
 
   const isFlashAttnOn = settings?.flashAttn ?? true;
-  const isQuantizedCache = (settings?.cacheType ?? 'q8_0') !== 'f16';
-  const currentCacheType: CacheType = settings?.cacheType ?? 'q8_0';
+  const isQuantizedCache = (settings?.cacheType ?? 'q4_0') !== 'f16';
+  const currentCacheType: CacheType = settings?.cacheType ?? 'q4_0';
   const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, GPU_LAYERS_MAX);
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const isGpuEnabled = (settings?.inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
