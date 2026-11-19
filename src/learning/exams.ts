@@ -305,3 +305,15 @@ export function improvementSummary(history: ExamResult[]): string {
   if (delta > 0) return `With sources and stored memory the answers were right ${pct(memory.metrics.accuracy)} of the time, against ${pct(base.metrics.accuracy)} for the model alone (${Math.round(delta * 100)} points better on ${memory.metrics.total} questions).`;
   return `No measured improvement: ${pct(memory.metrics.accuracy)} with sources and stored memory against ${pct(base.metrics.accuracy)} for the model alone.`;
 }
+
+/** What to retest next: the questions the newest run (of the current scoring version) got wrong, with why. Empty when nothing was missed. */
+export function retestNote(history: ExamResult[]): string {
+  const latest = history.find((r) => r.version === BENCHMARK_VERSION);
+  if (!latest) return history.length ? 'Earlier results used older scoring rules, so they are not compared. Run the exam again.' : '';
+  const missed = latest.metrics.items.filter((i) => !i.correct && i.reason !== 'invalid-key' && i.reason !== 'inference-failure');
+  const ungraded = latest.metrics.ungraded ?? 0;
+  const parts: string[] = [];
+  if (missed.length) parts.push(`${missed.length} question${missed.length === 1 ? '' : 's'} missed in the last "${EXAM_MODE_LABEL[latest.mode]}" run: run the exam again to retest ${missed.length === 1 ? 'it' : 'them'}.`);
+  if (ungraded) parts.push(`${ungraded} could not be graded (answer key or model problem), so they say nothing about what was learned.`);
+  return parts.join(' ');
+}

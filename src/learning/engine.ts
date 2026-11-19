@@ -25,7 +25,7 @@ import { activeModelService } from '../services/activeModelService';
 import { ragService } from '../services/rag';
 import { useAppStore } from '../stores/appStore';
 import { Agent, agentPromptWithLessons } from '../stores/agentStore';
-import { learningAgent, setLessons } from './agents';
+import { isNoAgent, learningAgent, setLessons } from './agents';
 import { useLearningStore, newItem, BankItem, LearnConfig, LearnReport, ReportSource, PerAgent } from './store';
 import type { Message } from '../types';
 import logger from '../utils/logger';
@@ -43,6 +43,7 @@ import { conflictReason, isStandaloneClaim, rankClaims, recallScore } from './cl
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { buildWorkingContext } from './workingContext';
+import { approvedCards, loadCards } from './knowledgeCards';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -502,13 +503,14 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
 const EXAM_SYSTEM = 'You answer exam questions. Be accurate and brief: 2 to 4 plain sentences. If you are not sure, say so.';
 
 /** Answers an exam question in one mode: the model alone, with searched sources, or with sources and the notes stored so far. */
-function examAnswerer(cfg: LearnConfig): Answerer {
+function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
   return async (item, mode) => {
     if (mode === 'baseline') return { text: await ask(EXAM_SYSTEM, `QUESTION: ${item.question}`, 'learner'), sourceCount: 0 };
     const { text: sources, list } = await research(cfg, item.question);
-    const known = mode === 'memory' ? safely(() => learningKnowledgeDb.knownClaims(cfg.topic), []).filter((k) => k.status === 'verified') : []; // only notes the person reviewed and verified count as evidence; unreviewed candidates do not
+    // Only reviewed and approved knowledge (from both the claims ledger and the reviewed findings), and only cards that have a source on file.
+    const known = mode === 'memory' ? approvedCards(await loadCards(cfg.topic, subjectId && !isNoAgent(subjectId) ? subjectId : undefined)) : [];
     // Only the approved notes that bear on this question, within a small budget, from this subject's topic; dropped after the answer.
-    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ ...k, topic: cfg.topic })), budgetTokens: 600 });
+    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic, source: k.source })), budgetTokens: 600 });
     const notes = working.usedNotes;
     const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
@@ -531,7 +533,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
     const results: ExamMetrics[] = [];
     for (const mode of EXAM_MODES) {
       onStatus(`Exam: ${mode}...`);
-      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg), previousFailures: exams.lastFailures(mode) });
+      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode) });
       const memoryMB = (await require('../services/hardware').hardwareService.getProcessMemory?.().catch(() => null))?.footprintMB;
       const counts = safely(() => learningKnowledgeDb.getReliabilitySnapshot().counts, null);
       exams.saveResult(mode, { ...metrics, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });

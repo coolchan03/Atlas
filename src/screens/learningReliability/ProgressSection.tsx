@@ -5,7 +5,9 @@ import { useTheme } from '../../theme';
 import { learningKnowledgeDb, type OpenContradiction } from '../../learning/knowledgeDb';
 import { MasteryStore, type MasterySummary } from '../../learning/masteryStore';
 import { exams } from '../../learning/engine';
-import { improvementSummary } from '../../learning/exams';
+import { improvementSummary, retestNote } from '../../learning/exams';
+import { loadAllCards, summarizeCards, type CardSummary } from '../../learning/knowledgeCards';
+import { useLearningStore } from '../../learning/store';
 import { sectionStyles as s } from './sectionStyles';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -16,12 +18,13 @@ interface Progress {
   rate: { verified: number; hours: number; perHour: number };
   conflicts: OpenContradiction[];
   improvement: string;
+  retest: string;
 }
 
 function load(): Progress {
   return {
     mastery: mastery.summary(null), rate: learningKnowledgeDb.verificationRate(),
-    conflicts: learningKnowledgeDb.openContradictions(5), improvement: improvementSummary(exams.history(40)),
+    conflicts: learningKnowledgeDb.openContradictions(5), improvement: improvementSummary(exams.history(40)), retest: retestNote(exams.history(40)),
   };
 }
 
@@ -30,8 +33,11 @@ export const ProgressSection: React.FC<{ refreshKey: number; onChanged: () => vo
   const { colors } = useTheme();
   const [data, setData] = useState<Progress | null>(null);
   const [problem, setProblem] = useState('');
+  const [cards, setCards] = useState<CardSummary | null>(null);
   useFocusEffect(useCallback(() => {
     try { setData(load()); setProblem(''); } catch (e: any) { setProblem(String(e?.message || e)); }
+    const subjects = Object.entries(useLearningStore.getState().config).map(([agentId, c]) => ({ agentId, topic: (c as { topic?: string })?.topic ?? '' }));
+    loadAllCards(subjects).then((all) => setCards(summarizeCards(all))).catch(() => setCards(null));
   }, [refreshKey])); // eslint-disable-line react-hooks/exhaustive-deps
   const resolve = (c: OpenContradiction) => Alert.alert('Mark this conflict as resolved?', 'Do this after you reviewed both claims below. It records that you settled it.', [
     { text: 'Cancel', style: 'cancel' },
@@ -48,6 +54,10 @@ export const ProgressSection: React.FC<{ refreshKey: number; onChanged: () => vo
           {data.rate.verified ? ` You verified ${data.rate.verified} claims, about ${per(data.rate.perHour)} per hour since learning began.` : ' No claim has been verified by you yet.'}
         </Text>
         <Text style={[s.note, { color: colors.textSecondary }]} testID="learning-improvement">{data.improvement}</Text>
+        {!!cards && <Text style={[s.note, { color: colors.textSecondary }]} testID="learning-cards">
+          {cards.total ? `Knowledge cards: ${cards.verified} checked, ${cards.candidate + cards.needsReview} not yet reviewed, ${cards.disputed} disputed (${cards.fromClaims} from learning, ${cards.fromFindings} from reviewed documents).${cards.withoutEvidence ? ` ${cards.withoutEvidence} have no source passage on file, so they are never used as evidence.` : ''}` : 'No knowledge cards yet: nothing has been learned and stored for these subjects.'}
+        </Text>}
+        {!!data.retest && <Text style={[s.note, { color: colors.textSecondary }]} testID="learning-retest">{data.retest}</Text>}
         <Text style={[s.small, { color: colors.textMuted }]}>Model weights: unchanged. Atlas has not trained any model. What it learned is stored as claims in a database, which is what the numbers above measure.</Text>
       </View>
       {data.conflicts.map((c) => (

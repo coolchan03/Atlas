@@ -118,3 +118,19 @@ describe('claiming improvement only when it was measured', () => {
     expect(improvementSummary([result('memory', 0.8)])).toContain('Run the exam');
   });
 });
+
+describe('what to retest', () => {
+  const run = (version: string, items: any[], ungraded = 0): ExamResult => ({ id: 'r', version, mode: 'memory', at: '2026-01-01', metrics: { total: items.length, ungraded, correct: items.filter((i) => i.correct).length, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items } as ExamMetrics });
+  it('names the missed questions of the newest run and the ones that could not be graded', () => {
+    const { retestNote } = require('../../../src/learning/exams');
+    const note = retestNote([run(BENCHMARK_VERSION, [{ id: 'a', correct: false, reason: 'wrong-answer' }, { id: 'b', correct: true, reason: 'correct' }, { id: 'c', correct: false, reason: 'inference-failure' }], 1)]);
+    expect(note).toContain('1 question missed');
+    expect(note).toContain('1 could not be graded');
+  });
+  it('says nothing when everything passed, and will not compare older scoring rules', () => {
+    const { retestNote } = require('../../../src/learning/exams');
+    expect(retestNote([run(BENCHMARK_VERSION, [{ id: 'a', correct: true, reason: 'correct' }])])).toBe('');
+    expect(retestNote([run('1', [{ id: 'a', correct: false }])])).toContain('older scoring rules');
+    expect(retestNote([])).toBe('');
+  });
+});
