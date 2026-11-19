@@ -25,6 +25,8 @@ import { HTP_ENABLED } from '../config/featureFlags';
  */
 const FLAGSHIP_8GEN2 = new Set([8550, 8650, 8735, 8750, 8845, 8850]);
 const FLAGSHIP_8GEN1 = new Set([8450, 8475]);
+/** Other Snapdragon chips with a Hexagon NPU new enough (V68 or later) for the bundled QNN libraries. A chip that is not in any of the three lists is NOT assumed to have one. */
+const NPU_CAPABLE_OTHER = new Set([7325, 7450, 7475, 7550, 7675, 8350, 8535, 8635]);
 /** ARM part ids of the small power-saving cores: Cortex-A53, A35, A55, A510 and A520. */
 const LITTLE_CORE_PARTS = new Set(['0xd03', '0xd04', '0xd05', '0xd46', '0xd80']);
 
@@ -393,7 +395,7 @@ class HardwareService {
     const num = Number.parseInt(smMatch[1], 10);
     if (FLAGSHIP_8GEN2.has(num)) return '8gen2';
     if (FLAGSHIP_8GEN1.has(num)) return '8gen1';
-    return 'min';
+    return NPU_CAPABLE_OTHER.has(num) ? 'min' : undefined; // an unknown or older chip (870, 750G, 695) gets no NPU recommendation
   }
   private getIosImageRec(chip: SoCInfo['appleChip'], ramGB: number): ImageModelRecommendation {
     const coreml = 'coreml';

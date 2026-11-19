@@ -863,13 +863,10 @@ describe('HardwareService', () => {
         ['SM8635-AB', 'min', 'Snapdragon 8s Gen 3'],
         ['SM8535-AB', 'min', 'Snapdragon 8s Gen 2'],
         ['SM8350-AC', 'min', 'Snapdragon 888'],
-        ['SM8250-AB', 'min', 'Snapdragon 870'],
         ['SM7450-AB', 'min', 'Snapdragon 7 Gen 1'],
         ['SM7475-AB', 'min', 'Snapdragon 7+ Gen 2'],
         ['SM7550-AB', 'min', 'Snapdragon 7 Gen 3'],
         ['SM7675-AB', 'min', 'Snapdragon 7+ Gen 3'],
-        ['SM7225-AB', 'min', 'Snapdragon 750G'],
-        ['SM6375-AB', 'min', 'Snapdragon 695'],
       ] as const)(
         'returns %s variant for %s (%s)',
         async (socModel, expected, _desc) => {
@@ -879,6 +876,13 @@ describe('HardwareService', () => {
           expect(soc.hasNPU).toBe(true);
         },
       );
+
+      it.each(['SM8250-AB', 'SM7225-AB', 'SM6375-AB', 'SM9999'])('does not assume an NPU for %s (older or unknown Snapdragon)', async (socModel) => {
+        await setupQualcommWithSoC(socModel);
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBeUndefined();
+        expect(soc.hasNPU).toBe(false);
+      });
     });
 
     it('caches SoC info after first call', async () => {
