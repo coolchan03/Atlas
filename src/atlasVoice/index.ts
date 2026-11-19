@@ -69,9 +69,7 @@ export function registerAtlasVoice(): void {
   registerHook(HOOKS.audioStop, () => stop());
   // Call mode: speak the reply sentence by sentence while it is still being written.
   registerHook(HOOKS.audioOnStreamingToken, (answerSoFar: string) => {
-    // A custom agent voice must be loaded first, so avoid streaming the global voice.
-    const id = useChatStore.getState().activeConversationId;
-    if (profileForConversation(id)) return;
+    // An agent's own voice is loaded before its stream begins (streamSpeech.ts), so it streams like the global voice.
     onStreamToken(answerSoFar);
   });
   registerHook(HOOKS.audioOnStreamingEnd, (conversationId: string) => {

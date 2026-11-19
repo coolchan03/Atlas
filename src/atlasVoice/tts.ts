@@ -96,13 +96,13 @@ export function speak(text: string, messageId?: string, rate?: number): void {
  * key, or null when this phone cannot (its own voice engine): the whole reply is spoken at the end then.
  * `started` settles false if the voice refuses, and the speaking state is cleared.
  */
-export function beginSpeechStream(messageId: string): { key: string; started: Promise<boolean> } | null {
+export function beginSpeechStream(messageId: string, rate?: number): { key: string; started: Promise<boolean> } | null {
   if (!ttsAvailable() || !Native.speakStreamStart) return null;
   ensureListeners();
   const key = `${messageId}~${++counter}`;
   const s = useAtlasVoiceStore.getState();
   s.setSpeaking(key, messageId);
-  Native.setRate(s.rate).catch(() => undefined);
+  Native.setRate(rate ?? s.rate).catch(() => undefined);
   const clear = () => { if (useAtlasVoiceStore.getState().speakingKey === key) useAtlasVoiceStore.getState().setSpeaking(null); };
   const started = Native.speakStreamStart(key)
     .then((ok: boolean) => { if (!ok) clear(); return !!ok; })
@@ -120,7 +120,12 @@ export function endSpeechStream(): void {
   if (ttsAvailable()) Native.speakStreamEnd?.().catch(() => undefined);
 }
 
+/** Counts hard stops, so work that waits (a voice being loaded) can tell the person stopped the voice meanwhile. */
+let stopCount = 0;
+export const stopsSoFar = (): number => stopCount;
+
 export function stop(): void {
+  stopCount += 1;
   clearSpeechActivity(); // Always restore music level on hard stop.
   if (!ttsAvailable()) return;
   useAtlasVoiceStore.getState().setSpeaking(null);

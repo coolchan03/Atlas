@@ -83,3 +83,50 @@ it('finds where complete sentences end, and starts a long first sentence at a co
   const long = `${'word '.repeat(12)}and then some more words, ${'filler '.repeat(14)}`;
   expect(sentenceEnd(long, 0)).toBeGreaterThan(40);
 });
+
+
+describe('an agent with its own voice streams too', () => {
+  const profile = { id: 'p', voiceId: 'sherpa-onnx-pocket-tts-x', sid: 0, referenceId: 'ref1', steps: 3, rate: 1.1 };
+  const withProfile = (loadImpl: () => Promise<void>) => {
+    jest.doMock('../../../src/atlasVoice/profiles', () => ({ profileForConversation: () => profile }));
+    jest.doMock('../../../src/atlasVoice/neural', () => ({ loadVoiceForSpeech: jest.fn(loadImpl), restoreSavedVoice: jest.fn(async () => undefined) }));
+    return setup();
+  };
+
+  it('loads the agent voice first, then starts the stream and speaks what was written meanwhile', async () => {
+    const { stream } = withProfile(async () => undefined);
+    stream.onStreamToken('Hello there. How are you? ');
+    stream.onStreamToken('Hello there. How are you? Fine. ');
+    await flush(); await flush();
+    expect(require('../../../src/atlasVoice/neural').loadVoiceForSpeech).toHaveBeenCalledWith('sherpa-onnx-pocket-tts-x', 0, { referenceId: 'ref1', steps: 3 });
+    expect(native.speakStreamStart).toHaveBeenCalledTimes(1);
+    expect(native.setRate).toHaveBeenCalledWith(1.1);
+    expect(native.speakStreamAppend.mock.calls.map((c: any[]) => c[0].trim()).join(' ')).toContain('Hello there.');
+    expect(stream.finishStreamSpeech('c1', jest.fn())).toBe(true);
+  });
+
+  it('speaks the whole reply the old way when the agent voice cannot be loaded', async () => {
+    const { stream } = withProfile(async () => { throw new Error('no voice'); });
+    stream.onStreamToken('One sentence here. Another follows. ');
+    await flush();
+    const whole = jest.fn();
+    expect(stream.finishStreamSpeech('c1', whole)).toBe(true);
+    await flush(); await flush();
+    expect(native.speakStreamStart).not.toHaveBeenCalled();
+    expect(whole).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing when the person stopped the voice while the agent voice was loading', async () => {
+    let release!: () => void;
+    const { stream } = withProfile(() => new Promise<void>((r) => { release = r; }));
+    stream.onStreamToken('A sentence is written. ');
+    require('../../../src/atlasVoice/tts').stop(); // barge-in during the load
+    release();
+    await flush(); await flush();
+    const whole = jest.fn();
+    expect(stream.finishStreamSpeech('c1', whole)).toBe(true);
+    await flush(); await flush();
+    expect(native.speakStreamStart).not.toHaveBeenCalled();
+    expect(whole).not.toHaveBeenCalled();
+  });
+});
