@@ -37,6 +37,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.m2/repository/org/robolectric
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-
       - name: Install JS dependencies
@@ -56,14 +57,16 @@ jobs:
           # A dependency outage (Maven Central HTTP 429, connection reset) is retried with a growing wait and reported as an outage;
           # a test or compile failure is never retried and fails at once.
           export GRADLE_OPTS="-Dorg.gradle.internal.repository.max.retries=6 -Dorg.gradle.internal.repository.initial.backoff=3000 ${GRADLE_OPTS:-}"
-          outage='HTTP 429|Too Many Requests|Could not (resolve|GET|HEAD)|Connection (reset|timed out)|Read timed out|Received status code 5[0-9][0-9]'
+          outage='HTTP 429|Too Many Requests|Could not (resolve|GET|HEAD)|Connection (reset|timed out)|Read timed out|Received status code 5[0-9][0-9]|MavenArtifactFetcher'
           for attempt in 1 2 3 4; do
             set +e
             ./gradlew :app:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle-test.log
             code=${PIPESTATUS[0]}
             set -e
             [ "$code" -eq 0 ] && exit 0
-            if grep -Eq "$outage" ../gradle-test.log && ! grep -Eq 'FAILED$|AssertionError|^e: ' ../gradle-test.log; then
+            # Robolectric downloads its Android jar from Maven Central by itself: when that fails every test fails with an AssertionError
+            # inside MavenArtifactFetcher, which is an outage, not a test result (the next push passed).
+            if grep -Eq "$outage" ../gradle-test.log && { grep -q MavenArtifactFetcher ../gradle-test.log || ! grep -Eq 'FAILED$|AssertionError|^e: ' ../gradle-test.log; }; then
               echo "::warning::Attempt $attempt: dependency download problem (not a test failure). Retrying after a wait."
               sleep $((attempt * 60))
               continue

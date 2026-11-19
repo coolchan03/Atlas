@@ -15,7 +15,7 @@ export interface WeatherData {
   description: string;
   uvWarning: string;
   /** Tomorrow's data when available. */
-  tomorrow?: { tempMaxC: number; tempMinC: number; uvMax: number; description: string };
+  tomorrow?: { tempMaxC: number; tempMinC: number; uvMax: number; description: string; precipProbPct?: number };
 }
 
 export function wmoDescription(code: number): string {
@@ -84,6 +84,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
         tempMinC: Math.round(d.temperature_2m_min[1] ?? 10),
         uvMax: Math.round(tmUv * 10) / 10,
         description: wmoDescription(tmCode),
+        precipProbPct: d.precipitation_probability_max[1] ?? 0,
       } : undefined,
     };
   } catch {

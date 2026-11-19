@@ -4,6 +4,7 @@
  * Silently returns null if permission is denied or the module is unavailable.
  */
 
+import { specialDays } from './dayExtras';
 const AIRLINES: Record<string, string> = {
   AA: 'American', UA: 'United', DL: 'Delta', WN: 'Southwest', B6: 'JetBlue',
   AS: 'Alaska', F9: 'Frontier', NK: 'Spirit', G4: 'Allegiant', AC: 'Air Canada',
@@ -136,13 +137,17 @@ export function calendarSummary(ctx: CalendarContext): string {
  * up to six, so the briefing always covers the day's plans instead of leaving it to the model to remember.
  */
 export function calendarSpoken(ctx: CalendarContext | null | undefined): string {
-  const events = ctx?.today ?? [];
-  if (!events.length) return '';
+  const all = ctx?.today ?? [];
+  if (!all.length) return '';
+  // Birthdays and anniversaries are said first as themselves; the other events are listed.
+  const { said: special, rest } = specialDays(all.map((e) => e.title));
+  const events = all.filter((e) => rest.includes(e.title));
+  if (!events.length) return special;
   const say = (e: NonNullable<CalendarContext['today']>[number]) => (e.start && !e.allDay
     ? `${e.title} at ${e.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
     : e.title);
   const shown = events.slice(0, 6).map(say);
   const more = events.length > 6 ? `, and ${events.length - 6} more` : '';
   const list = shown.length > 1 ? `${shown.slice(0, -1).join(', ')}, and ${shown[shown.length - 1]}` : shown[0];
-  return `On your calendar today: ${list}${more}.`;
+  return `${special ? `${special} ` : ''}On your calendar today: ${list}${more}.`;
 }

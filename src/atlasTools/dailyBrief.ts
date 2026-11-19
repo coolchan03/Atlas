@@ -15,6 +15,7 @@ export const BRIEF_PROJECT = 'daily-brief';
 export const STORY_PAUSE_SECONDS = 7;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 import { daySpoken } from './dayBrief';
+import { lastWorkedOn, packForTomorrow, streakSpoken, weeklyDigest } from './dayExtras';
 
 interface BriefPrefs {
   interests: string[];
@@ -318,6 +319,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   // Fetch weather early so it can be mentioned in the briefing.
   let weatherLine = '';
   let weatherSaid = '';
+  let packSaid = '';
   if (!offline) {
     try {
       const { fetchWeather, weatherSummary, weatherSpoken } = require('./weather');
@@ -328,7 +330,10 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
       const fix = useMaps.getState().lastFix;
       if (fix) {
         const w = await fetchWeather(fix.lat, fix.lon);
-        if (w) { weatherLine = weatherSummary(w, undefined, currentUnits()); weatherSaid = weatherSpoken(w, currentUnits()); }
+        if (w) {
+          weatherLine = weatherSummary(w, undefined, currentUnits()); weatherSaid = weatherSpoken(w, currentUnits());
+          packSaid = packForTomorrow({ today: w, tomorrow: w.tomorrow, units: currentUnits(), hour: new Date().getHours() });
+        }
       }
     } catch { /* weather is optional */ }
   }
@@ -392,7 +397,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     onItemsUsed: (count) => { usedStories = count; },
   }, onStep);
   // After the date come the weather, the day's calendar and the day's scheduled tasks, as fixed lines (the model left them out when only asked).
-  const opening = [gotNews ? greetingLine() : '', weatherSaid, calendarSpoken(calendarCtx), yourDay()].filter(Boolean);
+  const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx), yourDay()].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.
   if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
@@ -405,14 +410,36 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   return r;
 }
 
-/** The spoken "your day" line: scheduled tasks later today and a low-battery heads-up. Best-effort: never stops the briefing. */
+/**
+ * The spoken "your day" lines: scheduled tasks later today and a low-battery heads-up, a study streak, a Monday digest of last week, and
+ * where you were last. Best-effort: never stops the briefing. Private material (incognito or locked chats, protected projects) is left out.
+ */
 function yourDay(): string {
+  const now = Date.now();
+  const parts: string[] = [];
   try {
     const { useSchedule } = require('../schedule/store');
     const { useLowPower } = require('./lowPowerState');
     const power = useLowPower.getState();
-    return daySpoken({ tasks: useSchedule.getState().tasks, now: Date.now(), batteryPercent: power.battery, charging: power.charging });
-  } catch { return ''; }
+    parts.push(daySpoken({ tasks: useSchedule.getState().tasks, now, batteryPercent: power.battery, charging: power.charging }));
+  } catch { /* no schedule */ }
+  try {
+    const saved: Record<string, StudyResult[]> = useStudyStore.getState().saved;
+    const { useProjectStore } = require('../stores/projectStore');
+    const name = (id: string): string => useProjectStore.getState().getProject?.(id)?.name ?? 'your notes';
+    const items = Object.entries(saved).filter(([project]) => project !== BRIEF_PROJECT)
+      .flatMap(([project, results]) => results.map((r) => ({ at: r.createdAt, project: name(project) })));
+    parts.push(streakSpoken(items.map((i) => i.at), now), weeklyDigest(items, now));
+  } catch { /* no study history */ }
+  try {
+    const { useChatStore } = require('../stores/chatStore');
+    const { useProjectStore } = require('../stores/projectStore');
+    const chats = useChatStore.getState().conversations
+      .filter((c: any) => !c.isPrivate && !c.pinVerifier && !(c.projectId && useProjectStore.getState().getProject?.(c.projectId)?.pinVerifier))
+      .map((c: any) => ({ title: c.title, updatedAt: c.updatedAt, messages: Array.isArray(c.messages) ? c.messages.length : 0 }));
+    parts.push(lastWorkedOn(chats, now));
+  } catch { /* no chats */ }
+  return parts.filter(Boolean).join(' ');
 }
 
 /** Saves the briefing's audio in the background now, so it starts at once and plays without gaps. */

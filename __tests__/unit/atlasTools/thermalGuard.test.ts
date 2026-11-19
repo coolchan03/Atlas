@@ -44,3 +44,23 @@ describe('heat guard', () => {
     delete (NativeModules as any).AtlasDevice;
   });
 });
+
+describe('telling the person', () => {
+  it('says so when the guard turns on and when it turns off, but not while it stays the same or is switched off', () => {
+    jest.resetModules();
+    const toasts: string[] = [];
+    jest.doMock('../../../src/utils/toast', () => ({ showToast: (m: string) => toasts.push(m) }));
+    const { recordThermal } = require('../../../src/atlasTools/thermal');
+    const { useThermal: thermal } = require('../../../src/atlasTools/thermalState');
+    const { useLowPower: low } = require('../../../src/atlasTools/lowPowerState');
+    thermal.setState({ level: null, hot: false });
+    low.setState({ heatGuard: true });
+    recordThermal(4); recordThermal(4);
+    expect(toasts).toEqual(['The phone is hot: keeping answers short until it cools.']);
+    recordThermal(0);
+    expect(toasts[1]).toBe('The phone has cooled: back to full speed.');
+    low.setState({ heatGuard: false });
+    recordThermal(4); recordThermal(0);
+    expect(toasts).toHaveLength(2);
+  });
+});
