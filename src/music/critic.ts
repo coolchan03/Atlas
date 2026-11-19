@@ -6,7 +6,7 @@
  * the two is kept. `finishScore` then does the two things a score always needs and a small model forgets: it ends on the tonic, and it
  * fades in and out.
  */
-import type { HarmonyPlan } from './theory';
+import { RANGE, intoRange, type HarmonyPlan } from './theory';
 import type { MusicNote, MusicScore } from './types';
 
 const mod12 = (n: number): number => ((n % 12) + 12) % 12;
@@ -23,6 +23,24 @@ export interface Critique {
 /** The melody's shape in a bar as the steps between its notes, so a repeated idea matches even when it starts on another note. */
 function contourOf(notes: MusicNote[]): string {
   return notes.slice(1).map((n, i) => Math.sign(n.pitch - notes[i].pitch)).join('');
+}
+
+/** Each thing a teacher would mark down, as [points lost, what to tell the model], worst first. */
+function findIssues(m: Critique['stats'] & { melodyCount: number; bars: number; instruments: number }): Array<[number, string]> {
+  const out: Array<[number, string]> = [];
+  if (!m.melodyCount) out.push([60, 'There is no melody. Write a melody on top of the chords.']);
+  else {
+    if (m.barsWithMelody < Math.ceil(m.bars * 0.7)) out.push([18, `The melody is in only ${m.barsWithMelody} of ${m.bars} bars. Give the melody something in almost every bar, with small rests.`]);
+    if (m.stepwise < 0.5) out.push([14, 'The melody leaps too much. Move mostly by step (one scale note up or down) and turn back after a leap.']);
+    if (m.motifReturn < 0.2) out.push([14, 'No short idea comes back. Write a motif of 3 to 5 notes in bar 1 and repeat it, changed a little, in later bars.']);
+    else if (m.motifReturn > 0.85) out.push([8, 'The melody repeats itself every bar. Change the idea in every second phrase.']);
+    if (m.distinctLengths < 3) out.push([10, 'Every note has the same length. Mix long and short notes and add rests.']);
+    if (m.range < 7) out.push([8, 'The melody stays in a very small range. Let it rise toward the middle of the tune and settle at the end.']);
+  }
+  if (!m.hasBass) out.push([12, 'There is no bass. Add a bass playing the root of each bar\'s chord on its first beat.']);
+  if (!m.hasHarmony) out.push([10, 'There are no chords. Add a pad or chord instrument playing the notes of each bar\'s chord.']);
+  if (m.instruments < 3) out.push([8, 'Use at least 3 different instruments: a bass, chords and a melody on different sounds.']);
+  return out.sort((a, b) => b[0] - a[0]);
 }
 
 export function critiqueScore(score: MusicScore, plan: HarmonyPlan): Critique {
@@ -57,25 +75,10 @@ export function critiqueScore(score: MusicScore, plan: HarmonyPlan): Critique {
   const hasBass = bass.length >= Math.ceil(bars / 2);
   const hasHarmony = pad.length >= Math.ceil(bars / 2) || bass.length >= bars; // chords may be played by the bass line in sparse styles
 
-  const issues: Array<[number, string]> = [];
-  let points = 100;
-  const lose = (n: number, text: string) => { points -= n; issues.push([n, text]); };
-  if (!melody.length) lose(60, 'There is no melody. Write a melody on top of the chords.');
-  else {
-    if (barsWithMelody < Math.ceil(bars * 0.7)) lose(18, `The melody is in only ${barsWithMelody} of ${bars} bars. Give the melody something in almost every bar, with small rests.`);
-    if (stepwise < 0.5) lose(14, 'The melody leaps too much. Move mostly by step (one scale note up or down) and turn back after a leap.');
-    if (motifReturn < 0.2) lose(14, 'No short idea comes back. Write a motif of 3 to 5 notes in bar 1 and repeat it, changed a little, in later bars.');
-    else if (motifReturn > 0.85) lose(8, 'The melody repeats itself every bar. Change the idea in every second phrase.');
-    if (distinctLengths < 3) lose(10, 'Every note has the same length. Mix long and short notes and add rests.');
-    if (range < 7) lose(8, 'The melody stays in a very small range. Let it rise toward the middle of the tune and settle at the end.');
-  }
-  if (!hasBass) lose(12, 'There is no bass. Add a bass playing the root of each bar\'s chord on its first beat.');
-  if (!hasHarmony) lose(10, 'There are no chords. Add a pad or chord instrument playing the notes of each bar\'s chord.');
-  const instruments = new Set(score.notes.map((n) => String(n.voice ?? n.role)));
-  if (instruments.size < 3) lose(8, 'Use at least 3 different instruments: a bass, chords and a melody on different sounds.');
-
-  issues.sort((a, b) => b[0] - a[0]);
-  return { score: Math.max(0, points), issues: issues.map(([, t]) => t), stats: { barsWithMelody, stepwise, motifReturn, distinctLengths, range, hasBass, hasHarmony } };
+  const stats = { barsWithMelody, stepwise, motifReturn, distinctLengths, range, hasBass, hasHarmony };
+  const instruments = new Set(score.notes.map((n) => String(n.voice ?? n.role))).size;
+  const found = findIssues({ melodyCount: melody.length, bars, instruments, ...stats });
+  return { score: Math.max(0, 100 - found.reduce((n, [lost]) => n + lost, 0)), issues: found.map(([, text]) => text), stats };
 }
 
 /** Below this the tune is sent back once with the list of issues. */
@@ -102,7 +105,8 @@ export function finishScore(score: MusicScore, plan: HarmonyPlan): MusicScore {
   const notes = score.notes.map((n): MusicNote => {
     let { pitch, length } = n;
     if (n === lastMelody || n === lastBass) {
-      pitch = toTonic(pitch);
+      // The home note nearest to the last note, kept inside the range its part is written for.
+      pitch = intoRange(toTonic(pitch), RANGE[n === lastBass ? 'bass' : 'melody']);
       length = Math.max(length, Math.min(4, end - n.beat));
     }
     let gain = n.gain;

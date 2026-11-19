@@ -69,6 +69,8 @@ describe('finishing a tune', () => {
     expect(first.gain).toBeLessThan(orig.gain);
     const lastBar = done.notes.find((n) => n.beat >= (plan.bars.length - 1) * bpb && n.role === 'pad')!;
     expect(lastBar.gain).toBeLessThan(0.25);
+    expect(lastBass.pitch).toBeGreaterThanOrEqual(28);
+    expect(lastBass.pitch).toBeLessThanOrEqual(60);
     expect(tune.notes[0].gain).toBe(0.5); // the original is not changed
   });
 });

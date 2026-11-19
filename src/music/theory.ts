@@ -76,7 +76,7 @@ export const THEORY_PRIMER = `MUSIC THEORY TO FOLLOW
 - Build: start with fewer instruments, add one every 4 bars, and thin out in the last 2 bars. Louder where it is fuller, softer at the start and end.`;
 
 // ------------------------------------------------------------------ correcting a written score
-const RANGE: Record<'melody' | 'pad' | 'bass', [number, number]> = { melody: [57, 91], pad: [48, 84], bass: [28, 60] };
+export const RANGE: Record<'melody' | 'pad' | 'bass', [number, number]> = { melody: [57, 91], pad: [48, 84], bass: [28, 60] };
 const roleOf = (n: MusicNote): 'melody' | 'pad' | 'bass' => (n.role === 'bass' ? 'bass' : n.role === 'pad' ? 'pad' : 'melody');
 
 /** The pitch nearest to `pitch` whose pitch class is in `allowed` (ties go down). */
@@ -93,7 +93,7 @@ function nearest(pitch: number, allowed: number[]): number {
 }
 
 /** Moves a pitch by octaves into a range, keeping its pitch class. */
-function intoRange(pitch: number, [lo, hi]: [number, number]): number {
+export function intoRange(pitch: number, [lo, hi]: [number, number]): number {
   let p = pitch;
   while (p < lo) p += 12;
   while (p > hi) p -= 12;

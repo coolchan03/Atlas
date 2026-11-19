@@ -49,7 +49,7 @@ export function pickBest(results: TuneResult[]): TuneResult | null {
 }
 
 /** The NPU and GPU backends worth timing for this model on this phone (the same rule Automatic uses to choose). */
-export async function availableAccelerators(model: { filePath: string; mmProjPath?: string }): Promise<TextAccelerator[]> {
+async function availableAccelerators(model: { filePath: string; mmProjPath?: string }): Promise<TextAccelerator[]> {
   try {
     const [acceleration, vulkanFound, slowGpu] = await Promise.all([hardwareService.getAccelerationCapability(), vulkanEngine.isAvailable(), vulkanEngine.isSlowTextGpu()]);
     return acceleratorCandidates({ npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan: vulkanFound && !slowGpu }, model.filePath, !!model.mmProjPath);

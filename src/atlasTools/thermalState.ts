@@ -12,8 +12,8 @@ interface ThermalState {
 }
 
 /** Hot from SEVERE up; cool again only at LIGHT or below, so a phone hovering near the line does not flip answers on and off. */
-export const HOT_AT = 3;
-export const COOL_AT = 1;
+const HOT_AT = 3;
+const COOL_AT = 1;
 
 export const nextHot = (wasHot: boolean, level: number): boolean => (wasHot ? level > COOL_AT : level >= HOT_AT);
 

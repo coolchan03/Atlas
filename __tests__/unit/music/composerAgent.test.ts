@@ -78,7 +78,7 @@ describe('asking the composer', () => {
 
   it('uses the composer\'s score, and sends a weak one back once with what is wrong before keeping the better', async () => {
     // This fixture plays the same bar four times: playable, but the listening check marks it down.
-    const ask = jest.fn(async () => goodScore());
+    const ask = jest.fn(async (_system: string, _user: string) => goodScore());
     const out = await composeMusic('rainy window', { ask });
     expect(out.via).toBe('composer');
     expect(out.instruments).toContain('Flute');

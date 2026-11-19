@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
 
-function portableCrypto() {
+export function portableCrypto() {
   const mod = NativeModules.AtlasDevice;
   if (Platform.OS !== 'android' || !mod?.encryptPortableBackup || !mod?.decryptPortableBackup) {
     throw new Error('Portable encrypted backups require the updated Android Atlas build.');
@@ -144,7 +144,8 @@ export async function exportBackup(password?: string): Promise<string | null> {
   }
 }
 
-async function readPortableBackup(password?: string): Promise<{ data: any; encrypted: boolean } | null> {
+/** Lets the person pick a backup file, checks its size and decrypts it when it is encrypted. Null when nothing was picked. */
+export async function pickBackupText(password?: string): Promise<{ text: string; encrypted: boolean } | null> {
   const files = await pick({ mode: 'open', type: [types.json, types.plainText, types.allFiles], allowMultiSelection: false });
   if (!files?.length) return null;
   const local = await resolvePickedFileUri(files[0].uri, files[0].name || 'backup.json');
@@ -157,12 +158,17 @@ async function readPortableBackup(password?: string): Promise<{ data: any; encry
   const encrypted = text.startsWith('atlasbackup:v1:');
   if (encrypted && !password) throw new Error('This encrypted backup requires its password.');
   if (!encrypted && password) throw new Error('Selected backup is not encrypted.');
-  const decoded = encrypted ? await portableCrypto().decryptPortableBackup(text, password!) : text;
-  const data = JSON.parse(decoded);
+  return { text: encrypted ? await portableCrypto().decryptPortableBackup(text, password!) : text, encrypted };
+}
+
+async function readPortableBackup(password?: string): Promise<{ data: any; encrypted: boolean } | null> {
+  const picked = await pickBackupText(password);
+  if (!picked) return null;
+  const data = JSON.parse(picked.text);
   if (data?.format !== MAGIC || ![1, 2].includes(data.version) || !data.items ||
       typeof data.items !== 'object' || Array.isArray(data.items))
     throw new Error('This is not a supported Atlas backup file.');
-  return { data, encrypted };
+  return { data, encrypted: picked.encrypted };
 }
 
 /** Adds this phone's protected projects / locked chats that the restored list does not have. */

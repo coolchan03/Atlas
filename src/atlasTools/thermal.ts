@@ -1,8 +1,6 @@
 import { NativeModules } from 'react-native';
 import { levelFromBatteryTemp, thermalHot, useThermal } from './thermalState';
 
-export { useThermal };
-
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /** One reading: Android's thermal status, else the battery temperature. Anything unreadable leaves the last level alone. */

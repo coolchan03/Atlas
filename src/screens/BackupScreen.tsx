@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { lockedChatsNotOpen, exportBackup, importBackup, checkBackup } from '../atlasTools/backup';
+import { exportProject, exportableProjects, importProject } from '../atlasTools/projectExport';
 import { lastBackupText, useBackupReminder } from '../atlasTools/backupReminder';
 import { NearbySyncSettings } from '../components/settings/NearbySyncSettings';
 import { useTheme, useThemedStyles } from '../theme';
@@ -15,9 +16,23 @@ export const BackupScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const lastBackupAt = useBackupReminder((s) => s.lastBackupAt);
-  const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | 'check' | null>(null);
+  const [backupPasswordAction, setBackupPasswordAction] = useState<'export' | 'import' | 'check' | 'exportProject' | 'importProject' | null>(null);
+  const [pickingProject, setPickingProject] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+
+  const runProjectBackup = async () => {
+    if (backupPasswordAction === 'exportProject' && projectId) {
+      const name = await exportProject(projectId, backupPassword);
+      if (name) Alert.alert('Project saved', `Saved as ${name}. Restore it on any phone from Backup & sync, under Restore one project.`);
+      setProjectId(null);
+    } else {
+      const r = await importProject(backupPassword);
+      if (r) Alert.alert('Project restored', `${r.name}: ${r.chats} chat${r.chats === 1 ? '' : 's'} and ${r.documents} document${r.documents === 1 ? '' : 's'} added. Nothing else on this phone changed.`);
+    }
+    setBackupPassword(''); setBackupPasswordAction(null);
+  };
 
   const runEncryptedBackup = async () => {
     if (backupPassword.length < 12) { Alert.alert('Password too short', 'Use at least 12 characters. A forgotten password cannot be recovered.'); return; }
@@ -27,6 +42,10 @@ export const BackupScreen: React.FC = () => {
         const report = await checkBackup(backupPassword);
         if (report) Alert.alert('Backup checked', report);
         setBackupPassword(''); setBackupPasswordAction(null);
+        return;
+      }
+      if (backupPasswordAction === 'exportProject' || backupPasswordAction === 'importProject') {
+        await runProjectBackup();
         return;
       }
       const result = backupPasswordAction === 'export'
@@ -93,6 +112,27 @@ export const BackupScreen: React.FC = () => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.navItem} testID="backup-project-export" onPress={() => {
+            if (!exportableProjects().length) { Alert.alert('No project to back up', 'Create a project first. PIN-protected projects are only in the full encrypted backup.'); return; }
+            setPickingProject(true);
+          }}>
+            <View style={styles.navItemIcon}><Icon name="folder" size={16} color={colors.textSecondary} /></View>
+            <View style={styles.navItemContent}>
+              <Text style={styles.navItemTitle}>Back up one project</Text>
+              <Text style={styles.navItemDesc}>Its settings, chats and documents in one password-protected file</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} testID="backup-project-import" onPress={() => { setBackupPassword(''); setBackupPasswordAction('importProject'); }}>
+            <View style={styles.navItemIcon}><Icon name="folder-plus" size={16} color={colors.textSecondary} /></View>
+            <View style={styles.navItemContent}>
+              <Text style={styles.navItemTitle}>Restore one project</Text>
+              <Text style={styles.navItemDesc}>Adds a project file to this phone; nothing else changes</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.navItem} testID="backup-check" onPress={() => {
             Alert.alert('Check a backup file', 'Say what is inside a backup without restoring it, so you know it works before you need it.', [
               { text: 'Cancel', style: 'cancel' },
@@ -136,10 +176,27 @@ export const BackupScreen: React.FC = () => {
         <NearbySyncSettings />
       </ScrollView>
 
+      <Modal visible={pickingProject} transparent animationType="fade" onRequestClose={() => setPickingProject(false)}>
+        <View style={styles.backupBackdrop}>
+          <View style={styles.backupSheet}>
+            <Text style={styles.backupTitle}>Which project?</Text>
+            <ScrollView style={styles.projectList}>
+              {exportableProjects().map((p) => (
+                <TouchableOpacity key={p.id} style={styles.navItem} accessibilityLabel={`Back up ${p.name}`}
+                  onPress={() => { setPickingProject(false); setProjectId(p.id); setBackupPassword(''); setBackupPasswordAction('exportProject'); }}>
+                  <View style={styles.navItemContent}><Text style={styles.navItemTitle}>{p.name}</Text></View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setPickingProject(false)}><Text style={{ color: colors.text }}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={backupPasswordAction !== null} transparent animationType="fade" onRequestClose={() => { if (!backupBusy) { setBackupPasswordAction(null); setBackupPassword(''); } }}>
         <View style={styles.backupBackdrop}>
           <View style={styles.backupSheet}>
-            <Text style={styles.backupTitle}>{backupPasswordAction === 'export' ? 'Protect your backup' : backupPasswordAction === 'check' ? 'Password to check the backup' : 'Unlock encrypted backup'}</Text>
+            <Text style={styles.backupTitle}>{backupPasswordAction === 'export' || backupPasswordAction === 'exportProject' ? 'Protect your backup' : backupPasswordAction === 'check' ? 'Password to check the backup' : 'Unlock encrypted backup'}</Text>
             <Text style={{ color: colors.textSecondary }}>Use a password of at least 12 characters and keep it safe. Encrypted backups include chats (PIN-locked chats stay locked), project knowledge-base files and searchable text (up to 25 MB of project files), agents and settings. Protected projects are included only if they are unlocked when you back up: they stay sealed with their own PIN and open on a new phone with that PIN. Locked protected projects and downloaded models are not included. Restoring never deletes a protected project or locked chat that is only on this phone.</Text>
             <TextInput placeholder="Backup password" placeholderTextColor={colors.textMuted} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} autoCapitalize="none" autoCorrect={false} style={styles.backupInput} />
             <View style={styles.backupActions}>
@@ -176,6 +233,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   navItemDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
   backupBackdrop: { flex: 1, justifyContent: 'center' as const, padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' },
   backupSheet: { backgroundColor: colors.surface, borderRadius: 14, padding: 20, gap: 14 },
+  projectList: { maxHeight: 320 },
   backupTitle: { color: colors.text, fontSize: 18, fontWeight: '600' as const },
   backupInput: { color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 8 },
   backupActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const, gap: 18 },
