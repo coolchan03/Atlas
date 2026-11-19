@@ -91,6 +91,15 @@ interface BatchState { courseId: string; label: string; total: number; done: num
 export const useBatch = create<BatchState & { error: string }>(() => ({ courseId: '', label: '', total: 0, done: 0, working: '', failed: [], error: '' }));
 
 let batchRunning = false;
+let batchCancelled = false;
+
+/** Stops "write now" after the square being written is stopped: nothing more is started, and what is already written stays. */
+export function cancelWriteNow(): void {
+  if (!batchRunning) return;
+  batchCancelled = true;
+  const { courseId, working } = useBatch.getState();
+  if (working) { try { require('./service').stopWriting(courseId, working); } catch { /* it finishes on its own */ } }
+}
 
 /**
  * Writes the given squares one after another, now (not when the person reaches them). A square that fails is tried once more and then
@@ -99,10 +108,12 @@ let batchRunning = false;
 export async function writeNow(courseId: string, keys: string[], label: string): Promise<number> {
   if (batchRunning || !keys.length) return 0;
   batchRunning = true;
+  batchCancelled = false;
   useBatch.setState({ courseId, label, total: keys.length, done: 0, working: '', failed: [], error: '' });
   let written = 0;
   try {
     for (const key of keys) {
+      if (batchCancelled) break;
       const course = useTopics.getState().courses.find((c) => c.id === courseId);
       if (!course) break;
       if (course.content[key]) { useBatch.setState((s) => ({ done: s.done + 1 })); continue; }
@@ -115,6 +126,7 @@ export async function writeNow(courseId: string, keys: string[], label: string):
         try { await squareContent(useTopics.getState().courses.find((c) => c.id === courseId) ?? course, key, { background: true }); ok = true; }
         catch (e) { reason = String((e as Error)?.message || e); }
       }
+      if (batchCancelled) break;
       if (ok) written += 1; else useBatch.setState((s) => ({ failed: [...s.failed, key], error: s.error || reason }));
       useBatch.setState((s) => ({ done: s.done + 1 }));
     }

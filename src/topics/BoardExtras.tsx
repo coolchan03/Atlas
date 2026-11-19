@@ -4,6 +4,8 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
 import { Fold } from '../components/Fold';
+import { Select } from '../components/Select';
+import { unitsOf } from './prepare';
 import { friendlyTitle } from './chapters';
 import { FORMATS, type SquareFormat } from './formats';
 import { useTopics, type Course } from './store';
@@ -59,20 +61,29 @@ export function CoverageFold({ course }: { course: Course }) {
   );
 }
 
-/** Add a game or any other kind of square after the one the learner is on, in the same chapter. */
+/** Add a game or any other kind of square: after the one you are on, or at the end of any chapter or topic of the board. */
 export function AddSquarePanel({ course, currentKey }: { course: Course; currentKey: string | undefined }) {
   const { colors } = useTheme();
+  const [where, setWhere] = useState('here');
+  const [added, setAdded] = useState('');
   const here = course.squares.find((q) => q.key === currentKey);
+  const units = unitsOf(course);
+  const target = where === 'here' ? here : [...course.squares].reverse().find((q) => q.unit === where && !q.checkpoint) ?? [...course.squares].reverse().find((q) => q.unit === where);
+  const place = where === 'here' ? 'after the square you are on' : `at the end of ${friendlyTitle(where)}`;
+  const add = (f: SquareFormat) => {
+    const info = FORMATS.find((x) => x.id === f)!;
+    if (!target) return;
+    const key = useTopics.getState().addSquare(course.id, target.key, { format: f, title: `${info.label}: ${friendlyTitle(target.unit)}`, focus: `${info.label} on ${target.topic || friendlyTitle(target.unit)}` });
+    setAdded(key ? `Added "${info.label}" ${place}. It is on the board now and is written when you reach it.` : 'The board is full, so nothing was added.');
+  };
   return (
     <Fold title="Add a game or activity to the board" testID="course-add-square">
-      <Text style={[styles.meta, { color: colors.textSecondary }]}>It goes after the square you are on, in the same chapter, and is written when you reach it.</Text>
+      <Select label="Where it goes" value={where} onChange={setWhere} testID="course-add-where"
+        options={[{ id: 'here', label: 'After the square I am on' }, ...units.map((u) => ({ id: u.unit, label: `End of ${friendlyTitle(u.unit)}` }))]} />
       <View style={styles.chips}>
-        {ADDABLE.map((f) => {
-          const info = FORMATS.find((x) => x.id === f)!;
-          return <Chip key={f} label={info.label} on={false} testID={`course-add-${f}`}
-            onPress={() => { if (here) useTopics.getState().addSquare(course.id, here.key, { format: f, title: `${info.label}: ${friendlyTitle(here.unit)}`, focus: `${info.label} on ${here.topic || friendlyTitle(here.unit)}` }); }} />;
-        })}
+        {ADDABLE.map((f) => <Chip key={f} label={FORMATS.find((x) => x.id === f)!.label} on={false} testID={`course-add-${f}`} onPress={() => add(f)} />)}
       </View>
+      {!!added && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-add-done">{added}</Text>}
     </Fold>
   );
 }
