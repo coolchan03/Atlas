@@ -104,7 +104,7 @@ android {
         def atlasBaseVersionCode = 1804544309
         versionCode project.hasProperty('atlasVersionCode') ? project.property('atlasVersionCode').toInteger() : atlasBaseVersionCode + (project.hasProperty('atlasBuild') ? project.property('atlasBuild').toInteger() : 0)
         // CI passes -PatlasBuild=<run number>, so the version shown in the app says which build it is.
-        versionName "0.0.211" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
+        versionName "0.0.212" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
     }
     signingConfigs {
         debug {
@@ -182,6 +182,14 @@ android {
         }
     }
     androidResources {
+        // Lean build for one chip (-PatlasQnnChip=V79): leave the other NPU generations out of the APK.
+        // Default off, so published builds keep every generation. A lean build only runs the NPU on that chip.
+        def leanChip = project.findProperty('atlasQnnChip')
+        if (leanChip) {
+            def others = ['V68', 'V69', 'V73', 'V75', 'V79', 'V81'].findAll { it != leanChip }
+            ignoreAssetsPattern = (['!.svn', '!.git', '!.ds_store', '!*.scc', '.*', '<dir>_*', '!CVS', '!thumbs.db', '!picasa.ini', '!*~'] +
+                others.collect { "libQnnHtp${it}*".toString() }).join(':')
+        }
         // Atlas has no translated screens; keep library strings in English only (resources.arsc shrinks).
         localeFilters += ['en']
         // Model files must be copied byte-for-byte, not compressed.

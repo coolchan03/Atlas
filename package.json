@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.211",
+  "version": "0.0.212",
   "private": true,
   "scripts": {
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
@@ -92,6 +92,7 @@
     "js-yaml": "4.3.2",
     "knip": "^6.25.0",
     "memfs": "^4.64.0",
+    "metro": "0.83.3",
     "prettier": "2.8.8",
     "react-dom": "19.2.0",
     "react-test-renderer": "19.2.0",

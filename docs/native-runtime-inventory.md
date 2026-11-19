@@ -39,3 +39,6 @@ What this shows, not decides:
 - Vector icon fonts limited to Feather and MaterialIcons (the only two used in `src`): about 3.9 MB.
 - `localeFilters = ['en']` and `META-INF/*.version`, `DebugProbesKt.bin` excluded.
 - Not done (needs a delivery path or has a speed cost): per-chip QNN libraries (about 50 MB for the five chip generations, only one is used on a phone) would need a download on first use; older CPU-feature builds of llama.rn would slow some phones.
+
+## Lean build for one chip
+Run `Build Atlas APK` with `qnn_chip` set to V68, V69, V73, V75, V79 or V81 (Razr Ultra 2025: V79). The other generations' `libQnnHtp*` files are left out of the APK through the asset ignore pattern, and the run checks that. Expected saving: about 40 MB compressed. Such a build is uploaded as a workflow file only, and its NPU only works on that chip generation.

@@ -15,6 +15,10 @@ on:
         description: 'GenieX trial: add Qualcomm GenieX (Snapdragon 8 Elite only, +89 MB). Uploaded as a workflow file only, never published (see docs/geniex-integration.md)'
         type: boolean
         default: false
+      qnn_chip:
+        description: 'Lean build for one chip: keep only that NPU generation (V68, V69, V73, V75, V79 or V81; Razr Ultra 2025 = V79). Uploaded as a workflow file only, never published (see docs/native-runtime-inventory.md)'
+        type: string
+        default: ''
       publish:
         description: 'Publish the signed APK on the Releases page (only after every check passes)'
         type: boolean
@@ -258,7 +262,7 @@ jobs:
           OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleRelease --profile -PatlasGeniex=${{ inputs.geniex_trial == true && 'true' || 'false' }} -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
+          ./gradlew assembleRelease --profile -PatlasGeniex=${{ inputs.geniex_trial == true && 'true' || 'false' }} -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasQnnChip=${{ inputs.qnn_chip }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
@@ -308,6 +312,14 @@ jobs:
           case "$name" in "$want_name"*) ;; *) echo "::error::versionName $name does not start with package.json version $want_name"; exit 1;; esac
           [ "$code" = "$want_code" ] || { echo "::error::versionCode $code, expected $want_code"; exit 1; }
           echo "::notice title=Release identity::$package $name (versionCode $code) built from $GITHUB_SHA"
+      - name: Verify the lean build holds only one NPU generation
+        if: inputs.qnn_chip != ''
+        run: |
+          set -euo pipefail
+          unzip -l android/app/build/outputs/apk/release/app-release.apk | awk '{print $4}' | grep 'assets/qnnlibs/libQnnHtpV' > /tmp/qnn.txt
+          test -s /tmp/qnn.txt
+          if grep -v "libQnnHtp${{ inputs.qnn_chip }}" /tmp/qnn.txt; then echo "::error::another NPU generation is still in the APK"; exit 1; fi
+          cat /tmp/qnn.txt
       - name: Upload Gradle task timings
         if: always()
         uses: actions/upload-artifact@v4
@@ -319,17 +331,17 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.geniex_trial == true && '-GENIEX-TRIAL-NOT-FOR-RELEASE-') || '-' }}${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.geniex_trial == true && '-GENIEX-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         with:
           # A shrunk trial build gets its own name so the official-publish workflow (which takes Atlas-apk) can never pick it up.
-          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.geniex_trial == true && 'Atlas-apk-GENIEX-TRIAL') || 'Atlas-apk' }}
+          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.geniex_trial == true && 'Atlas-apk-GENIEX-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || 'Atlas-apk' }}
           path: out/*.apk
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
           retention-days: 1
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: inputs.minify_trial != true && inputs.geniex_trial != true && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
+        if: inputs.minify_trial != true && inputs.geniex_trial != true && inputs.qnn_chip == '' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

@@ -3,7 +3,7 @@
  * Simple modal showing captured debug logs with copy and clear options
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,10 @@ interface DebugLogsScreenProps {
 export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClose }) => {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { logs, clearLogs } = useDebugLogsStore();
+  const { logs: allLogs, clearLogs } = useDebugLogsStore();
+  const [level, setLevel] = useState<'all' | 'warn' | 'error'>('all');
+  // 'warn' shows warnings and errors; 'error' only errors.
+  const logs = allLogs.filter(l => level === 'all' || l.level === 'error' || (level === 'warn' && l.level === 'warn'));
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -39,8 +42,8 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
     });
   };
 
-  const getLogColor = (level: string) => {
-    switch (level) {
+  const getLogColor = (logLevel: string) => {
+    switch (logLevel) {
       case 'error':
         return theme.colors.error;
       case 'warn':
@@ -78,11 +81,21 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Debug Logs</Text>
-            <Text style={styles.subtitle}>{logs.length} entries</Text>
+            <Text style={styles.subtitle}>{logs.length} entries{level === 'all' ? '' : ` (of ${allLogs.length})`}</Text>
           </View>
           <TouchableOpacity accessibilityLabel="Close" onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Icon name="x" size={24} color={theme.colors.text} />
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.actionBar}>
+          {(['all', 'warn', 'error'] as const).map(l => (
+            <TouchableOpacity key={l} accessibilityLabel={`Show ${l === 'all' ? 'all logs' : l === 'warn' ? 'warnings and errors' : 'errors only'}`} accessibilityState={{ selected: level === l }} style={styles.actionButton} onPress={() => setLevel(l)}>
+              <Text style={[styles.actionButtonText, level !== l && { color: theme.colors.textSecondary }]}>
+                {l === 'all' ? 'All' : l === 'warn' ? 'Warnings' : 'Errors'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Action Buttons */}
