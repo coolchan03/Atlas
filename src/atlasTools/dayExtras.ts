@@ -66,12 +66,3 @@ export function weeklyDigest(items: Array<{ at: number; project: string }>, now:
   const days = new Set(week.map((i) => dayKey(i.at))).size;
   return `Last week you made ${week.length} study item${week.length === 1 ? '' : 's'} on ${days} day${days === 1 ? '' : 's'}${counts.size > 1 ? `, most of them in ${top} (${topCount})` : ` in ${top}`}.`;
 }
-
-/** "Last time you were working on 'Leases'." The newest chat from the last 3 days, if it has messages. */
-export function lastWorkedOn(chats: Array<{ title: string; updatedAt: string; messages: number }>, now: number): string {
-  const newest = [...chats].filter((c) => c.messages > 0 && c.title.trim()).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
-  if (!newest) return '';
-  const age = now - Date.parse(newest.updatedAt);
-  if (Number.isNaN(age) || age < 0 || age > 3 * DAY) return '';
-  return `Last time you were working on ${newest.title.trim().slice(0, 60)}.`;
-}

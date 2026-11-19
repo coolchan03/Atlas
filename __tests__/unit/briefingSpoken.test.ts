@@ -13,6 +13,14 @@ describe('spoken weather and calendar', () => {
     expect(t).toMatch(/weather today is rain/);
     expect(t).toMatch(/40% chance of rain/);
     expect(t).toMatch(/Tomorrow looks partly cloudy/);
+    expect(t).toMatch(/highest UV index today is 6, which is high/);
+    expect(t).toMatch(/umbrella/);
+  });
+
+  it('gives friendly advice for cold and hot days', () => {
+    const calm = { ...w, precipProbPct: 0 };
+    expect(weatherSpoken({ ...calm, tempMaxC: 10 }, { imperial: false, temp: 'c' })).toMatch(/wear a sweater/);
+    expect(weatherSpoken({ ...calm, tempMaxC: 35, uvMax: 1 }, { imperial: false, temp: 'c' })).toMatch(/turn up the AC.*\n?|no sun protection/);
   });
 
   it('reads the day\'s events with times, and nothing when the day is empty', () => {

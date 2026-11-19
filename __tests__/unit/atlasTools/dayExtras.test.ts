@@ -1,4 +1,4 @@
-import { lastWorkedOn, packForTomorrow, reviewsDueSpoken, specialDays, streakLine, weeklyDigest } from '../../../src/atlasTools/dayExtras';
+import { packForTomorrow, reviewsDueSpoken, specialDays, streakLine, weeklyDigest } from '../../../src/atlasTools/dayExtras';
 
 const C = { imperial: false, temp: 'c' as const };
 const F = { imperial: true, temp: 'f' as const };
@@ -49,15 +49,5 @@ describe('weekly digest', () => {
     expect(weeklyDigest(items, monday + DAY)).toBe('');
     expect(weeklyDigest([], monday)).toBe('');
     expect(weeklyDigest([{ at: monday - DAY, project: 'FAR' }], monday)).toBe('Last week you made 1 study item on 1 day in FAR.');
-  });
-});
-
-describe('where you were last', () => {
-  const now = noon(2026, 10, 19);
-  const chat = (title: string, agoDays: number, messages = 2) => ({ title, updatedAt: new Date(now - agoDays * DAY).toISOString(), messages });
-  it('names the newest chat from the last 3 days that has messages', () => {
-    expect(lastWorkedOn([chat('Old', 2), chat('Leases', 0.5), chat('Empty', 0.1, 0)], now)).toBe('Last time you were working on Leases.');
-    expect(lastWorkedOn([chat('Stale', 5)], now)).toBe('');
-    expect(lastWorkedOn([], now)).toBe('');
   });
 });

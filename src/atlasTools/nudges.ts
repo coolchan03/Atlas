@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type NudgeId = 'homeStudy' | 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'reviewsDue' | 'weeklyDigest' | 'lastWorked';
+export type NudgeId = 'homeStudy' | 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'reviewsDue' | 'weeklyDigest';
 
 export interface NudgeInfo { id: NudgeId; group: 'Reminders and tips' | 'Daily briefing lines'; label: string; hint: string }
 
@@ -22,7 +22,6 @@ export const NUDGES: NudgeInfo[] = [
   { id: 'studyStreak', group: 'Daily briefing lines', label: 'Study streak', hint: 'Your study streak, from three days on.' },
   { id: 'reviewsDue', group: 'Daily briefing lines', label: 'Review cards due', hint: 'How many review cards are due, and in which projects. Also shown as a card on Home.' },
   { id: 'weeklyDigest', group: 'Daily briefing lines', label: 'Monday digest', hint: 'What you made last week, and in which project.' },
-  { id: 'lastWorked', group: 'Daily briefing lines', label: 'Where you were last', hint: 'The chat you were in most recently (never private or locked ones).' },
 ];
 
 type Flags = Record<NudgeId, boolean>;

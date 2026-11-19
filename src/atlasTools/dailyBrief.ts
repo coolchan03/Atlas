@@ -15,7 +15,7 @@ export const BRIEF_PROJECT = 'daily-brief';
 export const STORY_PAUSE_SECONDS = 7;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 import { daySpoken } from './dayBrief';
-import { lastWorkedOn, packForTomorrow, reviewsDueSpoken, streakLine, weeklyDigest } from './dayExtras';
+import { packForTomorrow, reviewsDueSpoken, streakLine, weeklyDigest } from './dayExtras';
 import { nudgeOn } from './nudges';
 
 interface BriefPrefs {
@@ -288,13 +288,14 @@ async function wantedInterests(all: string[], avoid: string[]): Promise<string[]
   return wanted.length ? wanted : ['world news'];
 }
 
-const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with brief transitions like "Next..." or "Also..." or "In other news...". Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
+const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with brief transitions like "Next..." or "Also..." or "In other news...". Speak as a reporter relaying the news: attribute each story to its outlet in the third person ("According to Reuters...", "The BBC reports..."), never say "I" or "we" about what happened, and never read a headline out as if it were your own words or in quotation marks. Give every story its own two to four sentences of detail, never just the headline. Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
 
 /** The opening line, made here so the date is always said first (the model was leaving it out or putting it mid-show). */
 export function greetingLine(now = new Date()): string {
   const part = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
   const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  return `Good ${part}. Today is ${date}, and this is your briefing.`;
+  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `Good ${part}. Today is ${date}, and it is ${time}. This is your briefing.`;
 }
 /** Rules every part of the briefing must follow. */
 const briefingRules = (avoid: string[], gotNews: boolean): string | undefined =>
@@ -414,8 +415,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
 }
 
 /**
- * The spoken "your day" lines: scheduled tasks later today and a low-battery heads-up, a study streak, a Monday digest of last week, and
- * where you were last. Best-effort: never stops the briefing. Private material (incognito or locked chats, protected projects) is left out.
+ * The spoken "your day" lines: scheduled tasks later today and a low-battery heads-up, a study streak, and a Monday digest of last week. Best-effort: never stops the briefing. Private material (incognito or locked chats, protected projects) is left out.
  */
 function yourDay(when: 'today' | 'tomorrow' = 'today'): string {
   const now = Date.now();
@@ -438,14 +438,6 @@ function yourDay(when: 'today' | 'tomorrow' = 'today'): string {
     if (nudgeOn('reviewsDue')) parts.push(reviewsDueSpoken(progress.dueItems(null, now, 1000).filter((d: { projectId: string }) => open(d.projectId)).map((d: { projectId: string }) => ({ project: name(d.projectId) }))));
     if (nudgeOn('weeklyDigest')) parts.push(weeklyDigest(items, now));
   } catch { /* no study history */ }
-  try {
-    const { useChatStore } = require('../stores/chatStore');
-    const { useProjectStore } = require('../stores/projectStore');
-    const chats = useChatStore.getState().conversations
-      .filter((c: any) => !c.isPrivate && !c.pinVerifier && !(c.projectId && useProjectStore.getState().getProject?.(c.projectId)?.pinVerifier))
-      .map((c: any) => ({ title: c.title, updatedAt: c.updatedAt, messages: Array.isArray(c.messages) ? c.messages.length : 0 }));
-    if (nudgeOn('lastWorked')) parts.push(lastWorkedOn(chats, now));
-  } catch { /* no chats */ }
   return parts.filter(Boolean).join(' ');
 }
 
