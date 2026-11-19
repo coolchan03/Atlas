@@ -39,14 +39,14 @@ describe('a Word document from text', () => {
 describe('a lesson as text', () => {
   const lesson = { kind: 'lesson', sections: [{ heading: 'Why', text: 'Because.', example: 'Rent is $100.' }, { text: 'No heading.' }], commonMistakes: ['Mixing up terms'], quickCheck: { q: 'What?', a: 'That.' }, keyPoints: ['One', 'Two'] } as never;
   it('lists the sections, example, mistakes, quick check and key points', () => {
-    const md = lessonMarkdown('Leases', lesson);
-    expect(md.startsWith('# Leases')).toBe(true);
+    const md = lessonMarkdown(lesson);
+    expect(md.startsWith('## Why')).toBe(true);
     expect(md).toContain('## Why');
     expect(md).toContain('**Example**\nRent is $100.');
     expect(md).toContain('## Common mistakes\n- Mixing up terms');
     expect(md).toContain('**Answer:** That.');
     expect(md).toContain('## Key points\n- One\n- Two');
-    expect(lessonMarkdown('x', null)).toBe('');
-    expect(lessonMarkdown('x', { kind: 'quiz' } as never)).toBe('');
+    expect(lessonMarkdown(null)).toBe('');
+    expect(lessonMarkdown({ kind: 'quiz' } as never)).toBe('');
   });
 });

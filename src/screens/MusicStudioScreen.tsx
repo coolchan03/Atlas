@@ -129,7 +129,7 @@ export function MusicStudioScreen() {
       if (!Array.isArray(saved?.notes) || !saved.notes.length) throw new Error('This track has no notes to vary (background sounds cannot be varied).');
       const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
       const composed = await composeVariation(saved as MusicScore, { mood: style, seconds: track.seconds });
-      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
+      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer', secondsOf(composed.score));
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
     } catch (error: any) { Alert.alert('Could not make a variation', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }

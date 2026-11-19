@@ -5,6 +5,7 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores/projectStore';
 import { useNudges } from '../atlasTools/nudges';
 import { dueItems, useStudyProgress } from '../study/progress';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 /** One line on Home when review cards are due in any project: how many, where, and a button to the busiest project's review. */
 export const ReviewDueCard: React.FC<{ onOpen: (projectId: string) => void }> = ({ onOpen }) => {
@@ -39,8 +40,8 @@ export const ReviewDueCard: React.FC<{ onOpen: (projectId: string) => void }> = 
 };
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10, alignItems: 'center' },
-  text: { flex: 1, gap: 2 },
-  title: { fontSize: 15, fontWeight: '400' },
-  meta: { fontSize: 12 },
+  card: { flexDirection: 'row', gap: SPACING.md, padding: SPACING.lg, borderRadius: SPACING.md, borderWidth: 1, marginBottom: SPACING.md, alignItems: 'center' },
+  text: { flex: 1, gap: SPACING.xs / 2 },
+  title: { ...TYPOGRAPHY.body },
+  meta: { ...TYPOGRAPHY.bodySmall },
 });

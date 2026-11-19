@@ -101,7 +101,7 @@ export function RewriteRow({ show, onPick, content, title }: { show: boolean; on
   const reading = useReadAloud((s) => s.status === 'reading' && s.title === title);
   if (!show) return null;
   const saveWord = async () => {
-    try { await shareItem({ title: title ?? 'Lesson', file: await writeDocx(title ?? 'Lesson', lessonMarkdown(title ?? 'Lesson', content)) }); }
+    try { await shareItem({ title: title ?? 'Lesson', file: await writeDocx(title ?? 'Lesson', lessonMarkdown(content)) }); }
     catch (e: any) { Alert.alert('Could not save the Word document', String(e?.message || e)); }
   };
   const toggle = () => { if (reading) readAloud.stop(); else { readAloud.load(spokenLesson(content), title ?? 'Lesson'); readAloud.play(); } };

@@ -85,9 +85,9 @@ export function supportOf(line: string, text: string): number {
 }
 
 /** A lesson as markdown text, for saving as a Word document: each section with its heading and example, common mistakes, a quick check, key points. */
-export function lessonMarkdown(title: string, content: SquareContent | null | undefined): string {
+export function lessonMarkdown(content: SquareContent | null | undefined): string {
   if (!content || content.kind !== 'lesson') return '';
-  const lines: string[] = [`# ${title}`, ''];
+  const lines: string[] = []; // the Word document puts the title on top by itself
   for (const s of content.sections) {
     if (s.heading) lines.push(`## ${s.heading}`);
     lines.push(s.text, '');

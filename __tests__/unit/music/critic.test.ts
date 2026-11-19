@@ -103,4 +103,11 @@ describe('reading the plan back from a finished tune', () => {
   it('gives nothing for a tune with no pitched notes', () => {
     expect(inferPlan({ title: 't', bpm: 90, notes: [{ pitch: 48, beat: 0, length: 0.2, gain: 0.5, role: 'perc', voice: 'kick' }] })).toBeNull();
   });
+
+  it('leaves the first bar at full loudness when told the section joins a tune already playing', () => {
+    const tune = goodTune();
+    const orig = tune.notes.find((n) => n.beat === 0 && n.role === 'melody')!;
+    expect(finishScore(tune, plan, { fadeIn: false }).notes.find((n) => n.beat === 0 && n.role === 'melody')!.gain).toBe(orig.gain);
+    expect(finishScore(tune, plan).notes.find((n) => n.beat === 0 && n.role === 'melody')!.gain).toBeLessThan(orig.gain);
+  });
 });

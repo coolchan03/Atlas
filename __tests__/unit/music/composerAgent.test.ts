@@ -203,4 +203,13 @@ describe('continuing a saved tune', () => {
     await expect(composeContinuation(long, { ask: async () => goodScore() })).rejects.toThrow(/already as long/);
     await expect(composeContinuation(original(), { ask: async () => 'no' })).rejects.toThrow();
   });
+
+  it('keeps only the asked-for bars, so a model that writes too much cannot push the tune past the track limit', async () => {
+    const { composeContinuation: extend } = require('../../../src/music/composerAgent');
+    // asked for 4 bars (16 beats) but returns notes out to beat 60
+    const greedy = `${goodScore()}${Array.from({ length: 12 }, (_, i) => `NOTE E5 ${20 + i * 3} 2 0.5 flute`).join('\n')}\n`;
+    const out = await extend(original(), { ask: async () => greedy });
+    const ends = out.score.notes.map((n: { beat: number; length: number }) => n.beat + n.length);
+    expect(Math.max(...ends)).toBeLessThanOrEqual(32 + 1e-6); // 4 original bars + 4 new bars = 32 beats
+  });
 });

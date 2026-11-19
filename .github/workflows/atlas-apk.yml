@@ -36,8 +36,8 @@ on:
 # A newer trial build on the same branch replaces an older one still running (one APK is about 250 MB of the free 500 MB of saved build files).
 # A build that publishes is never cancelled by a newer one: it waits its turn.
 concurrency:
-  group: atlas-apk-${{ github.ref }}-${{ inputs.publish == true && 'publish' || 'trial' }}
-  cancel-in-progress: ${{ inputs.publish != true }}
+  group: atlas-apk-${{ github.ref }}-${{ (inputs.publish == true || github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets') && 'publish' || 'trial' }}
+  cancel-in-progress: ${{ !(inputs.publish == true || github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets') }}
 
 jobs:
   apk:
@@ -365,7 +365,7 @@ jobs:
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
           retention-days: 3
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: inputs.minify_trial != true && inputs.qnn_chip == '' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
+        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

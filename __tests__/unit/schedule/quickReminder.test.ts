@@ -35,4 +35,15 @@ describe('a reminder from one sentence', () => {
     expect(parseReminder('tomorrow at 9am', NOW)).toMatchObject({ ok: false, error: expect.stringContaining('what') });
     expect(parseReminder('x at 25:00', NOW)).toMatchObject({ ok: false });
   });
+
+  it('reads "tonight at 10" and "tomorrow evening at 6" as evening times, not morning ones', () => {
+    const night = new Date(2026, 10, 19, 21, 0).getTime();
+    const r = ok('remind me to lock up tonight at 10', night);
+    expect(r.hour).toBe(22);
+    expect(when(r.onceAt)).toBe('Thu 19, 22:00');
+    expect(ok('call Sam tomorrow evening at 6', night).hour).toBe(18);
+    expect(ok('call Sam this afternoon at 3', NOW - 6 * 36e5).hour).toBe(15);
+    expect(ok('lock up tonight at 10pm', night).hour).toBe(22);
+    expect(ok('run tomorrow morning at 7', night).hour).toBe(7);
+  });
 });

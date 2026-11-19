@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '../theme';
 import { NUDGES, useNudges } from '../atlasTools/nudges';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 /** Settings card: a switch for every reminder, tip, notice and extra briefing line. */
 export function NudgesCard() {
@@ -29,11 +30,11 @@ export function NudgesCard() {
 }
 
 const st = StyleSheet.create({
-  card: { borderRadius: 10, padding: 14, marginBottom: 14 },
-  group: { marginBottom: 6 },
-  h: { fontSize: 15, fontWeight: '400', marginBottom: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  card: { borderRadius: SPACING.sm, padding: SPACING.lg, marginBottom: SPACING.lg },
+  group: { marginBottom: SPACING.xs },
+  h: { ...TYPOGRAPHY.body, marginBottom: SPACING.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.xs },
   text: { flex: 1 },
-  label: { fontSize: 14 },
-  hint: { fontSize: 12, lineHeight: 16, marginTop: 2 },
+  label: { ...TYPOGRAPHY.body },
+  hint: { ...TYPOGRAPHY.bodySmall, marginTop: SPACING.xs / 2 },
 });

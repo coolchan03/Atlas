@@ -93,7 +93,7 @@ interface Written { score: MusicScore; instruments: string; note: string }
  * The composer's whole pass for one brief: ask (twice if the first score is unusable), put the notes in key, listen to the result and
  * send a weak tune back once, then end it on the home note with fades. Throws the last problem when no usable score came back.
  */
-async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (system: string, user: string) => Promise<string>): Promise<Written> {
+async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (system: string, user: string) => Promise<string>, finish: { fadeIn?: boolean } = {}): Promise<Written> {
   let problem = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -113,7 +113,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
           if (secondCritique.score > critique.score) { report = { ...second, score: secondFixed.score }; fixed = secondFixed; critique = secondCritique; rewrote = true; }
         } catch { /* keep the first tune */ }
       }
-      report.score = finishScore(report.score, brief.plan);
+      report.score = finishScore(report.score, brief.plan, finish);
       const instruments = [...report.instruments, ...report.drums.map((d) => `${d} drum`)].join(', ');
       const total = Object.values(fixed.changed).reduce((a, b) => a + b, 0);
       return { score: report.score, instruments, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
@@ -173,8 +173,11 @@ export async function composeContinuation(original: MusicScore, options: Compose
   if (extra < 4) throw new Error('This tune is already as long as a track can be (32 bars). Make a variation instead.');
   const section: HarmonyPlan = { ...plan, bars: plan.bars.slice(0, extra) };
   const text = continuationBrief(original, plan, extra);
-  const written = await writeScore({ text, plan: section }, options.ask ?? askModelDefault);
-  const added = written.score.notes.map((n) => ({ ...n, beat: n.beat + origBeats }));
+  // No fade-in for the new section: it joins a tune that is already playing.
+  const written = await writeScore({ text, plan: section }, options.ask ?? askModelDefault, { fadeIn: false });
+  // Keep only what falls inside the asked-for bars (a model that writes more would push the tune past the track limit).
+  const sectionBeats = extra * plan.beatsPerBar;
+  const added = written.score.notes.filter((n) => n.beat < sectionBeats).map((n) => ({ ...n, beat: n.beat + origBeats, length: Math.min(n.length, sectionBeats - n.beat) }));
   const score: MusicScore = { ...original, title: `${original.title} (extended)`, notes: [...original.notes, ...added] };
   return { score, via: 'composer', instruments: written.instruments, style, note: `Extended "${original.title}" by ${extra} bars. ${written.note}` };
 }

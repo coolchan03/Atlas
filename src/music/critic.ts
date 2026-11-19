@@ -93,7 +93,7 @@ export function rewriteRequest(brief: string, c: Critique): string {
  * Two finishing touches, both done in code: the last melody note and the last bass note land on the tonic and are held to the end of the
  * tune, and the loudness fades in over the first bar and out over the last two. Returns a new score.
  */
-export function finishScore(score: MusicScore, plan: HarmonyPlan): MusicScore {
+export function finishScore(score: MusicScore, plan: HarmonyPlan, options: { fadeIn?: boolean } = {}): MusicScore {
   const bpb = plan.beatsPerBar;
   const end = plan.bars.length * bpb;
   const lastMelody = melodyOf(score).at(-1);
@@ -110,7 +110,7 @@ export function finishScore(score: MusicScore, plan: HarmonyPlan): MusicScore {
       length = Math.max(length, Math.min(4, end - n.beat));
     }
     let gain = n.gain;
-    if (n.beat < bpb) gain *= 0.8;
+    if (n.beat < bpb && options.fadeIn !== false) gain *= 0.8;
     else if (n.beat >= end - bpb * 2) gain *= n.beat >= end - bpb ? 0.65 : 0.85;
     return { ...n, pitch, length, gain: Math.max(0.05, Math.min(1, Math.round(gain * 100) / 100)) };
   });

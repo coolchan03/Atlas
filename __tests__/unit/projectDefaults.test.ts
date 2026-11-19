@@ -48,4 +48,15 @@ describe('project defaults, in the app', () => {
     expect(inP).not.toBe(inQ);
     expect(activeAgentOverrides().maxTokens).toBeUndefined();
   });
+
+  it('uses the chat\'s own agent for sampling, and never lets a short project raise an agent\'s smaller limit', () => {
+    const { useProjectStore, useChatStore, useAgentStore, activeAgentOverrides } = setup();
+    const terse = { id: 'terse', name: 'Terse', description: '', systemPrompt: 'Be brief.', maxTokens: 64, temperature: 0.2 };
+    useAgentStore.setState({ agents: [...useAgentStore.getState().agents, terse], activeAgentId: null });
+    useProjectStore.setState({ projects: [project('p', { defaultAgentId: 'terse', answerLength: 'short' })] });
+    useChatStore.getState().createConversation('m', undefined, 'p');
+    const ov = activeAgentOverrides();
+    expect(ov.temperature).toBe(0.2); // from the project's default agent, though no agent is active globally
+    expect(ov.maxTokens).toBe(64); // the agent's own limit stays below the project's 256
+  });
 });

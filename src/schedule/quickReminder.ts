@@ -25,6 +25,8 @@ function clock(text: string): { hour: number; minute: number; rest: string } | n
   const minute = Number(m[2] ?? m[5] ?? 0);
   const ap = (m[3] ?? '').toLowerCase().replace(/\./g, '');
   if (ap) { hour %= 12; if (ap === 'pm') hour += 12; }
+  // "tonight at 10", "this evening at 7": a bare hour 1 to 11 with an evening word means the evening.
+  else if (hour >= 1 && hour < 12 && /\b(tonight|evening|afternoon)\b/i.test(text)) hour += 12;
   if (hour > 23 || minute > 59) return null;
   return { hour, minute, rest: text.replace(m[0], ' ') };
 }

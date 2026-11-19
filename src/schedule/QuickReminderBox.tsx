@@ -5,6 +5,7 @@ import { describeTiming } from './due';
 import { parseReminder } from './quickReminder';
 import { useSchedule } from './store';
 import { askForNotifications } from './alarms';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 /** One line to make a reminder: "call Mom tomorrow at 9am", "stretch every weekday at 8", "check the oven in 20 minutes". No AI is used to read it. */
 export const QuickReminderBox: React.FC = () => {
@@ -36,9 +37,9 @@ export const QuickReminderBox: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  box: { gap: 6 },
-  row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  input: { flex: 1, borderWidth: 1, borderRadius: 8, padding: 10 },
-  button: { borderRadius: 8, paddingHorizontal: 16, paddingVertical: 11 },
-  note: { fontSize: 13 },
+  box: { gap: SPACING.xs },
+  row: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
+  input: { ...TYPOGRAPHY.body, flex: 1, borderWidth: 1, borderRadius: SPACING.sm, padding: SPACING.md },
+  button: { borderRadius: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
+  note: { ...TYPOGRAPHY.bodySmall },
 });

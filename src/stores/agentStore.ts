@@ -406,20 +406,22 @@ export function agentPromptWithLessons(agent: Agent): string {
   return p;
 }
 
-/** The answer cap of the project the open chat belongs to (undefined: none). Reads the two stores through storeRefs, which has no imports of its own. */
-function currentProjectAnswerCap(): number | undefined {
+/** The open chat: its own agent (if it picked one) and the answer cap of its project. Read through storeRefs, which has no imports of its own. */
+function openChatSettings(): { agentId?: string; cap?: number } {
   try {
     const refs = require('./storeRefs');
     const chat = refs.chatStoreRef().getState();
     const open = chat.conversations.find((c: { id: string }) => c.id === chat.activeConversationId);
-    return answerCapFor(open?.projectId ? refs.projectStoreRef().getState().getProject(open.projectId) : undefined);
-  } catch { return undefined; }
+    return { agentId: open?.agentId || undefined, cap: answerCapFor(open?.projectId ? refs.projectStoreRef().getState().getProject(open.projectId) : undefined) };
+  } catch { return {}; }
 }
 
 /** Sampling overrides of the active agent (only the ones it sets). */
 export function activeAgentOverrides(): { temperature?: number; topP?: number; maxTokens?: number; repeatPenalty?: number } {
   const { activeAgentId, agents } = useAgentStore.getState();
-  const a = agents.find((x) => x.id === activeAgentId);
+  // The chat's own agent wins, as in the system prompt (agentPrompt.ts), so a project's default agent also sets the sampling.
+  const chatSettings = openChatSettings();
+  const a = agents.find((x) => x.id === (chatSettings.agentId || activeAgentId));
   const o: any = {};
   // Low-battery mode caps answer length for every agent.
   if (lowPowerActive()) {
@@ -428,8 +430,8 @@ export function activeAgentOverrides(): { temperature?: number; topP?: number; m
     o.maxTokens = Math.min(base, cap);
   }
   // A project set to short answers caps the chats inside it.
-  const projectCap = currentProjectAnswerCap();
-  if (projectCap !== undefined) o.maxTokens = Math.min(o.maxTokens ?? projectCap, projectCap);
+  const projectCap = chatSettings.cap;
+  if (projectCap !== undefined) o.maxTokens = Math.min(o.maxTokens ?? a?.maxTokens ?? projectCap, projectCap);
   if (!a) {
     if (require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio') o.maxTokens = Math.min(o.maxTokens ?? 96, 96);
     return o;
