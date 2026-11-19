@@ -68,6 +68,8 @@ interface TopicsState {
   /** When a square went badly: puts a lesson that explains it differently right after it, and (for a quiz, a task or the like) a second square of the same kind with new questions after that. Returns whether any were added. */
   addRemedial: (id: string, afterKey: string) => boolean;
   remove: (id: string) => void;
+  /** Records every chapter of every book found in the course's project (for coverage views). */
+  setBookChapters: (id: string, chapters: NonNullable<Course['bookChapters']>) => void;
   setContent: (id: string, key: string, content: SquareContent) => void;
   complete: (id: string, key: string, stars: number) => void;
 }
@@ -86,6 +88,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     return id;
   },
   remove: (id) => set((s) => ({ courses: s.courses.filter((c) => c.id !== id) })),
+  setBookChapters: (id, chapters) => set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, bookChapters: chapters } : c)) })),
   addShared: (shared, projectId) => {
     const id = localUniqueId('course');
     const course: Course = {

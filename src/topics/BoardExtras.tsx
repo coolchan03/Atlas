@@ -8,6 +8,8 @@ import { FORMATS, type SquareFormat } from './formats';
 import { useTopics, type Course } from './store';
 import { phaseOf, subscribe } from './generationQueue';
 import { stopWriting } from './service';
+import { coverageView, STATE_LABEL } from './coverageView';
+import { useCpa } from '../cpa/store';
 
 /** The kinds of square a learner can add to the board themselves (the ones the app makes in code are left out). */
 const ADDABLE: SquareFormat[] = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman', 'match', 'quiz', 'truefalse', 'fill', 'recall', 'sort', 'order', 'cards', 'scenario', 'practice', 'numeric'];
@@ -33,7 +35,26 @@ export function ReadingDepthChips({ course }: { course: Course }) {
         <Chip label="In depth" on={(course.readingDepth ?? 'deep') === 'deep'} onPress={() => set('deep')} testID="course-depth-deep" />
         <Chip label="Short" on={course.readingDepth === 'standard'} onPress={() => set('standard')} testID="course-depth-standard" />
       </View>
+      <CoverageFold course={course} />
     </>
+  );
+}
+
+/** What the course covers: the books and chapters it came from, how far each unit is taught, and (for an exam course) which exam objectives no book matches. */
+export function CoverageFold({ course }: { course: Course }) {
+  const { colors } = useTheme();
+  const exam = useCpa((s) => Object.values(s.exams).find((e) => e?.courseId === course.id));
+  const view = coverageView(course, (exam?.topics ?? []).map((t) => ({ id: t.id, name: t.name, area: t.area })));
+  if (!course.bookChapters?.length && !view.objectives.length) return null;
+  const line = (text: string, key: string, color = colors.textSecondary) => <Text key={key} style={[styles.meta, { color }]}>{text}</Text>;
+  return (
+    <Fold title="What this course covers" testID="course-coverage">
+      {view.books.map((b) => line(`${b.doc}: ${b.chapters} chapters kept`, `b:${b.doc}`))}
+      {view.units.map((u) => line(`${u.unit}: ${STATE_LABEL[u.state]} (${u.written} of ${u.total} written)`, `u:${u.unit}`))}
+      {view.objectives.map((o, i) => line(o, `o:${i}`, o.endsWith('matches this') ? colors.error : colors.textSecondary))}
+      {!!view.unmatched.length && line(`Chapters that match no exam objective (kept as their own units): ${view.unmatched.join('; ')}`, 'unmatched')}
+      {view.caveats.map((c, i) => line(c, `c:${i}`, colors.textMuted))}
+    </Fold>
   );
 }
 

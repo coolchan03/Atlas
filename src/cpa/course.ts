@@ -9,6 +9,7 @@ import { CHAPTER_SQUARES, MAX_CHAPTER_SQUARES, deepChapter } from '../topics/cha
 import { MAX_SQUARES } from '../topics/formats';
 import { examInfo, examLabel, type ExamCode } from './blueprints';
 import { useCpa, type CpaTopic } from './store';
+import { isOutlineDocument } from './outline';
 
 
 /** The board for an exam's topics. Areas become units; every topic is a chapter of six squares, and each area ends with a review exam. */
@@ -47,6 +48,16 @@ function carryOver(old: Course, newId: string): void {
   }
 }
 
+/** Finds every chapter of every textbook in the exam's project and keeps it on the course, so the board can show what each book covers. Best effort: no books, or a failure, leaves the board as it was. */
+function noteBookChapters(courseId: string, projectId: string): void {
+  Promise.resolve().then(async () => {
+    const { bookChapters } = require('../topics/multiBook');
+    const books = await bookChapters(projectId, isOutlineDocument);
+    const chapters = (books as Array<{ doc: string; chapters: Array<{ number: number; title: string }> }>).flatMap((b) => b.chapters.map((c) => ({ doc: b.doc, number: c.number, title: c.title })));
+    if (chapters.length) useTopics.getState().setBookChapters(courseId, chapters);
+  }).catch(() => undefined);
+}
+
 /** The exam's course id, making the course on first use (or again if it was deleted). Null when the exam is not set up. */
 export function ensureExamCourse(code: ExamCode, fresh = false): string | null {
   const exam = useCpa.getState().exams[code];
@@ -61,6 +72,7 @@ export function ensureExamCourse(code: ExamCode, fresh = false): string | null {
     examPlan(code, exam.topics), { projectId: exam.projectId });
   if (before) carryOver(before, id);
   useCpa.getState().setCourse(code, id);
+  if (exam.projectId) noteBookChapters(id, exam.projectId);
   return id;
 }
 
