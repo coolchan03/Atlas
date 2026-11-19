@@ -1,10 +1,12 @@
 /**
  * Safe first step of importing a ZIP of textbooks and question banks: unpack into a scratch folder, check it, and list EVERY file with
  * what Atlas will do with it, so nothing is dropped silently. Nothing is added to a project here; the person reviews the list first.
- * Bounds are checked on what was unpacked (a bomb is removed straight away); the scratch folder is always removed afterwards.
+ * The zip's own list of files is read first and the limits are checked BEFORE anything is unpacked (and again on what was unpacked, as a
+ * backstop); a zip with paths that leave the folder is refused whole. The scratch folder is always removed afterwards.
  */
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
+import { readZipDirectory } from './zipDirectory';
 
 export const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
 export const MAX_ENTRIES = 5000;
@@ -50,10 +52,21 @@ export function boundsProblems(zipBytes: number, files: Array<{ size: number }>)
   return problems;
 }
 
+/** Refusal reasons for a zip, from its list of files alone (nothing unpacked yet). Pure. */
+export function directoryProblems(zipBytes: number, entries: Array<{ name: string; size: number }>): string[] {
+  const problems = boundsProblems(zipBytes, entries);
+  if (entries.some((e) => classifyEntry(e.name.replace(/\/$/, '') || '.', Math.max(1, e.size)).kind === 'unsafe')) problems.push('Some files have paths that try to leave the folder.');
+  return problems;
+}
+
 /** Unpacks and lists. Throws with the reasons when the zip is refused; the scratch folder never outlives a refusal. */
-export async function stageZip(zipPath: string, scratchRoot = RNFS.CachesDirectoryPath): Promise<StagedZip> {
+export async function stageZip(zipPath: string, scratchRoot = RNFS.CachesDirectoryPath, list: typeof readZipDirectory = readZipDirectory): Promise<StagedZip> {
   const zipBytes = Number((await RNFS.stat(zipPath)).size) || 0;
   if (zipBytes > MAX_ZIP_BYTES) throw new Error('That zip is larger than 1 GB. Split it into smaller zips.');
+  // Look at the zip's own list of files first: a bomb or a path that leaves the folder is refused before anything is written.
+  const listed = await list(zipPath, zipBytes, MAX_ENTRIES);
+  const early = directoryProblems(zipBytes, listed);
+  if (early.length) throw new Error(`This zip was not opened. ${early.join(' ')}`);
   const dir = `${scratchRoot}/zip-import-${Date.now().toString(36)}`;
   await RNFS.mkdir(dir);
   try {

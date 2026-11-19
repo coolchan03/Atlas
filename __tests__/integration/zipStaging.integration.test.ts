@@ -11,7 +11,9 @@ describe('stageZip (real unpack into a scratch folder, nothing added)', () => {
       'Book/ch1.pdf': b64('pdf text '.repeat(40)), 'FAR questions.csv': b64('q,a\n1,2\n'), 'x/y.bin': b64('binary'), 'notes.zip': b64('PK'),
     } }), 'utf8');
     const { stageZip, discardStage, summarizeStage } = require('../../src/learning/zipStaging');
-    const staged = await stageZip('/in/course.zip', RNFS.CachesDirectoryPath);
+    // The harness's fake zip is JSON, so its list of files is given directly (the real directory reader is tested in zipDirectory.test).
+    const list = async () => [{ name: 'Book/ch1.pdf', compressed: 10, size: 360 }, { name: 'FAR questions.csv', compressed: 5, size: 8 }];
+    const staged = await stageZip('/in/course.zip', RNFS.CachesDirectoryPath, list);
     expect(staged.entries.map((e: any) => `${e.name}:${e.kind}`).sort()).toEqual(['Book/ch1.pdf:document', 'FAR questions.csv:questions', 'notes.zip:archive', 'x/y.bin:unsupported']);
     expect(summarizeStage(staged)).toMatch(/^4 files in the zip/);
     await discardStage(staged);
