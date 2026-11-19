@@ -80,3 +80,15 @@ describe('background jobs are not held to chat limits', () => {
     expect(activeAgentOverrides().maxTokens).toBeDefined(); // and the limit is back afterwards, even after a failed job
   });
 });
+
+it('a chat reply being written is never background work, even while a job is open', async () => {
+  const { asBackground, inBackgroundWork, setChatProbe } = require('../../src/services/backgroundWork');
+  let chatting = false;
+  setChatProbe(() => chatting);
+  await asBackground(async () => {
+    expect(inBackgroundWork()).toBe(true);
+    chatting = true;
+    expect(inBackgroundWork()).toBe(false);
+  });
+  setChatProbe(() => false);
+});

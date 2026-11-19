@@ -6,9 +6,10 @@
  */
 let depth = 0;
 /** A chat reply that is being written right now is never treated as background work, even while a job is open between its model calls. */
-function chatIsGenerating(): boolean {
-  try { return !!require('./generationService').generationService.getState().isGenerating; } catch { return false; }
-}
+let chatProbe: () => boolean = () => false;
+/** The chat generator says here whether a chat reply is being written (this file imports nothing, so there is no import cycle). */
+export const setChatProbe = (probe: () => boolean): void => { chatProbe = probe; };
+const chatIsGenerating = (): boolean => { try { return chatProbe(); } catch { return false; } };
 export const inBackgroundWork = (): boolean => depth > 0 && !chatIsGenerating();
 export async function asBackground<T>(job: () => Promise<T>): Promise<T> {
   depth += 1;

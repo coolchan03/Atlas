@@ -1,4 +1,5 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
+import { setChatProbe } from './backgroundWork';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { stopAllTextEngines } from './engines';
@@ -436,3 +437,4 @@ class GenerationService {
 }
 
 export const generationService = new GenerationService();
+setChatProbe(() => generationService.getState().isGenerating);
