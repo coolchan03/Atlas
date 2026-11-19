@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
@@ -87,11 +87,21 @@ export function WritingNotice({ embedded, onLeave }: { embedded: boolean; onLeav
   );
 }
 
-/** Re-renders when the lesson queue changes, and says whether this square's deeper rewrite is still being written. */
-export function useDeepening(courseId: string, key: string): boolean {
+/**
+ * Re-renders when the lesson queue changes, and says whether this square's deeper rewrite is still being written. When that rewrite is
+ * finished and saved, the open lesson is switched to it (it would otherwise keep showing the short draft until the screen is reopened).
+ */
+export function useDeepening(o: { courseId: string; key: string; saved: unknown; content: unknown; adopt: (next: any) => void }): boolean {
+  const { courseId, key, saved, content, adopt } = o;
   const [, bump] = useState(0);
   useEffect(() => subscribe(() => bump((n) => n + 1)), []);
-  return phaseOf(`${courseId}:${key}:deepen`) !== undefined;
+  const expanding = phaseOf(`${courseId}:${key}:deepen`) !== undefined;
+  const was = useRef(false);
+  useEffect(() => {
+    if (was.current && !expanding && saved && saved !== content) adopt(saved);
+    was.current = expanding;
+  }, [expanding, saved]); // eslint-disable-line react-hooks/exhaustive-deps -- only a change of these should switch the lesson
+  return expanding;
 }
 
 /** A saved lesson that is ready to read while its in-depth version is still being written in the background. */

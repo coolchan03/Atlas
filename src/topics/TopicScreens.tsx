@@ -399,7 +399,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
   const [error, setError] = useState<string | null>(null);
   const [stars, setStars] = useState<number | null>(null);
   const [addedRemedial, setAddedRemedial] = useState(false);
-  const expanding = useDeepening(courseId, key);
+  const expanding = useDeepening({ courseId, key, saved: course?.content[key], content, adopt: setContent });
   const load = React.useCallback(() => {
     if (!course) return;
     setError(null);
