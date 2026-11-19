@@ -297,6 +297,19 @@ class AtlasDeviceModule(private val ctx: ReactApplicationContext) : ReactContext
         } catch (e: Exception) { promise.resolve(-999.0) }
     }
 
+    /**
+     * Android's own heat level (PowerManager thermal status): 0 none, 1 light, 2 moderate, 3 severe, 4 critical, 5 emergency, 6 shutdown.
+     * Resolves -1 where the phone does not report it (before Android 10), so the caller can fall back to the battery temperature.
+     */
+    @ReactMethod
+    fun getThermalStatus(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) { promise.resolve(-1); return }
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            promise.resolve(pm.currentThermalStatus)
+        } catch (e: Exception) { promise.resolve(-1) }
+    }
+
     @ReactMethod fun addListener(eventName: String) {}
     @ReactMethod fun removeListeners(count: Int) {}
 

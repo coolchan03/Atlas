@@ -4,10 +4,12 @@
  * A service on purpose: it reads half the stores, so it cannot live inside one of them.
  */
 import { useAgentStore, agentPromptWithLessons } from '../stores/agentStore';
-import { lowPowerActive, LOW_POWER_NOTE } from '../atlasTools/lowPowerState';
+import { lowPowerActive, heatLimited, batteryLimited, LOW_POWER_NOTE, HEAT_NOTE } from '../atlasTools/lowPowerState';
 
 function lowPowerNote(): string {
-  return lowPowerActive() ? `\n\n${LOW_POWER_NOTE}` : '';
+  if (!lowPowerActive()) return '';
+  // The battery reason wins when both apply; either way the answer is held short.
+  return `\n\n${heatLimited() && !batteryLimited() ? HEAT_NOTE : LOW_POWER_NOTE}`;
 }
 
 /** The system prompt for a chat: the active agent's, plus project notes underneath. */

@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { useLowPower, checkBatteryNow, batteryModel } from '../atlasTools/lowPower';
+import { useThermal } from '../atlasTools/thermalState';
 import { useAppStore } from '../stores/appStore';
 import { ModelChips } from './ModelChips';
 const COLOR_FFF = '#fff';
@@ -14,11 +15,22 @@ const literalStyles = StyleSheet.create({
 export function LowPowerCard() {
   const { colors } = useTheme();
   const s = useLowPower();
+  const hot = useThermal((x) => x.hot);
   const models = useAppStore((x) => x.downloadedModels);
   const best = s.enabled && !s.modelId ? batteryModel() : null;
   const bestName = best ? models.find((m) => m.id === best.id)?.name : null;
   return (
     <View style={[st.card, { backgroundColor: colors.surface }]}>
+      <View style={[st.row, st.gap]}>
+        <View style={literalStyles.s1}>
+          <Text style={[st.h, { color: colors.text }]}>Heat guard</Text>
+          <Text style={[st.p, { color: colors.textSecondary }]}>
+            When the phone gets hot, answers are kept short until it cools, which lets it cool faster.
+            {hot && s.heatGuard ? '  ACTIVE NOW: the phone is hot.' : ''}
+          </Text>
+        </View>
+        <Switch value={s.heatGuard} onValueChange={(v) => s.set({ heatGuard: v })} accessibilityLabel="Heat guard" />
+      </View>
       <View style={st.row}>
         <View style={literalStyles.s1}>
           <Text style={[st.h, { color: colors.text }]}>Low-battery mode</Text>
@@ -65,6 +77,7 @@ export function LowPowerCard() {
 const st = StyleSheet.create({
   card: { borderRadius: 10, padding: 14, marginBottom: 14 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  gap: { marginBottom: 14 },
   h: { fontSize: 15, fontWeight: '600' },
   p: { fontSize: 13, lineHeight: 18, marginTop: 4 },
   label: { fontSize: 12, marginTop: 12, marginBottom: 6, textTransform: 'uppercase' },
