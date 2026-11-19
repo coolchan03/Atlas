@@ -210,7 +210,7 @@ export const FlashAttentionToggle: React.FC = () => {
 
 export const KvCacheTypeToggle: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { isFlashAttnOn, cacheDisabled, displayCacheType, handleCacheTypeChange } = useTextGenerationAdvanced();
+  const { isFlashAttnOn, gpuForcesF16, displayCacheType, handleCacheTypeChange } = useTextGenerationAdvanced();
   return (
     <SegmentedRow<CacheType>
       label="KV Cache Type"
@@ -219,8 +219,10 @@ export const KvCacheTypeToggle: React.FC = () => {
       current={displayCacheType}
       onSelect={handleCacheTypeChange}
       testIdFor={(ct) => `cache-type-${ct}-button`}
-      isDisabled={(ct) => cacheDisabled && ct !== 'f16'}
     >
+      {gpuForcesF16 && displayCacheType !== 'f16' && (
+        <Text style={styles.warning}>Your choice is saved. The current GPU backend runs an f16 cache, so {displayCacheType} applies when you use the CPU. Gemma 3n and Gemma 4 models always use f16 (they crash with a smaller cache).</Text>
+      )}
       {!isFlashAttnOn && (
         <Text style={styles.warning}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
