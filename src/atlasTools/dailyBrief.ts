@@ -16,6 +16,7 @@ export const STORY_PAUSE_SECONDS = 7;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 import { daySpoken } from './dayBrief';
 import { lastWorkedOn, packForTomorrow, streakSpoken, weeklyDigest } from './dayExtras';
+import { nudgeOn } from './nudges';
 
 interface BriefPrefs {
   interests: string[];
@@ -332,7 +333,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
         const w = await fetchWeather(fix.lat, fix.lon);
         if (w) {
           weatherLine = weatherSummary(w, undefined, currentUnits()); weatherSaid = weatherSpoken(w, currentUnits());
-          packSaid = packForTomorrow({ today: w, tomorrow: w.tomorrow, units: currentUnits(), hour: new Date().getHours() });
+          if (nudgeOn('packTomorrow')) packSaid = packForTomorrow({ today: w, tomorrow: w.tomorrow, units: currentUnits(), hour: new Date().getHours() });
         }
       }
     } catch { /* weather is optional */ }
@@ -397,7 +398,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     onItemsUsed: (count) => { usedStories = count; },
   }, onStep);
   // After the date come the weather, the day's calendar and the day's scheduled tasks, as fixed lines (the model left them out when only asked).
-  const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx), yourDay()].filter(Boolean);
+  const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays') }), yourDay()].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.
   if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
@@ -421,7 +422,7 @@ function yourDay(): string {
     const { useSchedule } = require('../schedule/store');
     const { useLowPower } = require('./lowPowerState');
     const power = useLowPower.getState();
-    parts.push(daySpoken({ tasks: useSchedule.getState().tasks, now, batteryPercent: power.battery, charging: power.charging }));
+    if (nudgeOn('yourDay')) parts.push(daySpoken({ tasks: useSchedule.getState().tasks, now, batteryPercent: power.battery, charging: power.charging }));
   } catch { /* no schedule */ }
   try {
     const saved: Record<string, StudyResult[]> = useStudyStore.getState().saved;
@@ -429,7 +430,8 @@ function yourDay(): string {
     const name = (id: string): string => useProjectStore.getState().getProject?.(id)?.name ?? 'your notes';
     const items = Object.entries(saved).filter(([project]) => project !== BRIEF_PROJECT)
       .flatMap(([project, results]) => results.map((r) => ({ at: r.createdAt, project: name(project) })));
-    parts.push(streakSpoken(items.map((i) => i.at), now), weeklyDigest(items, now));
+    if (nudgeOn('studyStreak')) parts.push(streakSpoken(items.map((i) => i.at), now));
+    if (nudgeOn('weeklyDigest')) parts.push(weeklyDigest(items, now));
   } catch { /* no study history */ }
   try {
     const { useChatStore } = require('../stores/chatStore');
@@ -437,7 +439,7 @@ function yourDay(): string {
     const chats = useChatStore.getState().conversations
       .filter((c: any) => !c.isPrivate && !c.pinVerifier && !(c.projectId && useProjectStore.getState().getProject?.(c.projectId)?.pinVerifier))
       .map((c: any) => ({ title: c.title, updatedAt: c.updatedAt, messages: Array.isArray(c.messages) ? c.messages.length : 0 }));
-    parts.push(lastWorkedOn(chats, now));
+    if (nudgeOn('lastWorked')) parts.push(lastWorkedOn(chats, now));
   } catch { /* no chats */ }
   return parts.filter(Boolean).join(' ');
 }

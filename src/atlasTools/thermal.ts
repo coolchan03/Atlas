@@ -2,6 +2,7 @@ import { NativeModules } from 'react-native';
 import { levelFromBatteryTemp, thermalHot, useThermal } from './thermalState';
 import { useLowPower } from './lowPowerState';
 import { showToast } from '../utils/toast';
+import { nudgeOn } from './nudges';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -10,7 +11,7 @@ export function recordThermal(level: number): void {
   const was = thermalHot();
   useThermal.getState().set(level);
   const now = thermalHot();
-  if (was === now || !useLowPower.getState().heatGuard) return;
+  if (was === now || !useLowPower.getState().heatGuard || !nudgeOn('statusNotices')) return;
   showToast(now ? 'The phone is hot: keeping answers short until it cools.' : 'The phone has cooled: back to full speed.');
 }
 

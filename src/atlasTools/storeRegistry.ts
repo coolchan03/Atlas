@@ -20,6 +20,7 @@ const STORES: Record<string, () => any> = {
   'atlas-off-grid': () => require('./offGrid').useOffGrid,
   'atlas-offline-library': () => require('./offlineLibrary').useOfflineLibrary,
   'atlas-low-power': () => require('./lowPower').useLowPower,
+  'atlas-nudges': () => require('./nudges').useNudges,
   'atlas-learning': () => require('../learning/store').useLearningStore,
   'atlas-study': () => require('../study/engine').useStudyStore,
   'atlas-study-progress': () => require('../study/progress').useStudyProgress,

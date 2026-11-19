@@ -136,11 +136,11 @@ export function calendarSummary(ctx: CalendarContext): string {
  * What is on the calendar today, as sentences to speak ('' when nothing is). Events are named with their start times,
  * up to six, so the briefing always covers the day's plans instead of leaving it to the model to remember.
  */
-export function calendarSpoken(ctx: CalendarContext | null | undefined): string {
+export function calendarSpoken(ctx: CalendarContext | null | undefined, opts: { birthdays?: boolean } = {}): string {
   const all = ctx?.today ?? [];
   if (!all.length) return '';
   // Birthdays and anniversaries are said first as themselves; the other events are listed.
-  const { said: special, rest } = specialDays(all.map((e) => e.title));
+  const { said: special, rest } = opts.birthdays === false ? { said: '', rest: all.map((e) => e.title) } : specialDays(all.map((e) => e.title));
   const events = all.filter((e) => rest.includes(e.title));
   if (!events.length) return special;
   const say = (e: NonNullable<CalendarContext['today']>[number]) => (e.start && !e.allDay

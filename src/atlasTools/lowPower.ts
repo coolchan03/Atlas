@@ -1,5 +1,6 @@
 import { useLowPower, lowPowerEnabled } from './lowPowerState';
 import { showToast } from '../utils/toast';
+import { nudgeOn } from './nudges';
 
 export { useLowPower };
 
@@ -42,7 +43,7 @@ async function check(): Promise<void> {
       if (target && target !== prev) { s.set({ switchedTo: target }); switchToModelInBackground(target); }
     } else if (s.active && (charging || pct > s.threshold + 5)) {
       s.set({ active: false });
-      showToast(charging ? 'Plugged in: back to full speed.' : 'Battery recovered: back to full speed.');
+      if (nudgeOn('statusNotices')) showToast(charging ? 'Plugged in: back to full speed.' : 'Battery recovered: back to full speed.');
       const to = useLowPower.getState().switchedTo;
       s.set({ switchedTo: '' });
       if (s.prevModelId && to && s.prevModelId !== to) switchToModelInBackground(s.prevModelId);

@@ -3,11 +3,13 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { backupDue, lastBackupText, useBackupReminder } from '../atlasTools/backupReminder';
+import { useNudges } from '../atlasTools/nudges';
 
 /** On Home when it has been a while since the last backup: go to the backup buttons in Settings, or ask again in a week. */
 export const BackupReminderCard: React.FC<{ onOpenSettings: () => void }> = ({ onOpenSettings }) => {
   const { colors } = useTheme();
-  const due = useBackupReminder((s) => backupDue(s));
+  const wanted = useNudges((s) => s.backupReminder);
+  const due = useBackupReminder((s) => backupDue(s)) && wanted;
   const last = useBackupReminder((s) => s.lastBackupAt);
   if (!due) return null;
   return (

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LowPowerCard } from '../components/LowPowerCard';
+import { NudgesCard } from '../components/NudgesCard';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
   StyleSheet, View,
@@ -195,6 +196,9 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Atlas: low-battery mode */}
         <LowPowerCard />
+
+        {/* Reminders, tips and the extra lines of the daily briefing */}
+        <NudgesCard />
 
         {/* About */}
         <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>

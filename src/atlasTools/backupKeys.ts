@@ -7,7 +7,7 @@ export const RESTORABLE_STORE_KEYS = new Set([
   // Saved map places, Survival Manual notes, library list and app preferences.
   // (Secret fields are stripped by stripSensitiveFields; API keys live in the Keychain.)
   'atlas-maps', 'atlas-survival-manual', 'atlas-offline-library', 'atlas-off-grid',
-  'atlas-chat-prefs', 'atlas-daily-brief', 'atlas-low-power', 'remote-servers',
+  'atlas-chat-prefs', 'atlas-daily-brief', 'atlas-low-power', 'atlas-nudges', 'remote-servers',
   'atlas-study-progress', 'atlas-checklists', 'atlas-skills', 'atlas-schedule', 'atlas-topics', 'atlas-pins',
   // Language course: levels, stars, streak, written lessons, saved words and review schedule.
   'atlas-language',

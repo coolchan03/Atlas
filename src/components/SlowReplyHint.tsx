@@ -5,6 +5,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useAppStore } from '../stores/appStore';
 import { useChatStore } from '../stores/chatStore';
+import { useNudges } from '../atlasTools/nudges';
 import { shouldOfferFirstTest, shouldSuggestTuning, useSlowHint, useSpeedStats, useTuned } from '../atlasTools/speed';
 import { slowCause, type SlowCause } from '../atlasTools/slowCause';
 import { hardwareService } from '../services/hardware';
@@ -23,7 +24,9 @@ export const SlowReplyHint: React.FC = () => {
   const speed = useSpeedStats((s) => (modelId ? s.byModel[modelId] : undefined));
   const tuned = useTuned((s) => !!(modelId && s.at[modelId]));
   const dismissed = useSlowHint((s) => !!(modelId && s.off[modelId]));
-  const busy = useChatStore((s) => s.isStreaming || s.isThinking);
+  const writing = useChatStore((s) => s.isStreaming || s.isThinking);
+  const tipsOn = useNudges((s) => s.speedTips);
+  const busy = writing || !tipsOn; // while a reply is being written, or when tips are switched off, nothing is offered
   const threads = useAppStore((s) => s.settings.nThreads ?? 0);
   const backend = useAppStore((s) => s.settings.inferenceBackend);
   const [cause, setCause] = useState<SlowCause | null>(null);
