@@ -712,6 +712,10 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
     generationService.enqueueMessage({ id: nextMsgId(), conversationId: targetConversationId, text, attachments, messageText, imageMode });
     return;
   }
+  // "Work through steps": a short plan run step by step. No plan, or an error, falls through to the ordinary send.
+  if (useAppStore.getState().settings.workThroughSteps && !attachments?.length && imageMode !== 'force') {
+    try { if (await require('../../services/stepChat').runStepsInChat(targetConversationId, text)) return; } catch (e) { logger.warn('[STEPS] failed, sending normally', e); }
+  }
   await dispatchGenerationFn(deps, { text, attachments, conversationId: targetConversationId, imageMode }, startGeneration);
 }
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'setResearchStatus'>): Promise<void> {

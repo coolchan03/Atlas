@@ -78,6 +78,8 @@ type AppSettings = {
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[]; studyToolsAdded?: boolean;
   thinkingEnabled: boolean;
+  /** Chat "Work through steps": a short plan is made and run step by step (see services/stepRunner.ts). Off by default. */
+  workThroughSteps?: boolean;
   /** Name new chats with the AI after the first answer (on unless this is false). */
   autoNameChats?: boolean;
   /** Atlas: how much to think when thinking is on. */
@@ -274,6 +276,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base', ...STUDY_TOOL_IDS],
   thinkingEnabled: false,
+  workThroughSteps: false,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,

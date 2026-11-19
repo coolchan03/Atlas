@@ -170,6 +170,19 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                 </TouchableOpacity>
               )}
 
+              <TouchableOpacity
+                testID="quick-steps-toggle"
+                style={popoverStyles.row}
+                accessibilityLabel="Work through steps"
+                onPress={() => { triggerHaptic('impactLight'); updateSettings({ workThroughSteps: !settings.workThroughSteps }); }}
+              >
+                <Icon name="list" size={16} color={settings.workThroughSteps ? colors.primary : colors.textMuted} />
+                <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Work through steps</Text>
+                <View style={[popoverStyles.badge, { backgroundColor: settings.workThroughSteps ? colors.primary : colors.textMuted }]}>
+                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{settings.workThroughSteps ? 'On' : 'Off'}</Text>
+                </View>
+              </TouchableOpacity>
+
               {AudioRow && <AudioRow styles={popoverStyles} onClose={onClose} />}
 
               <TouchableOpacity
