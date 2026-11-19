@@ -5,7 +5,7 @@
 import { DRUM_KINDS } from './instruments';
 import type { DrumKind, Voice } from './types';
 
-export type Family = 'keys' | 'strings' | 'woodwind' | 'brass' | 'plucked' | 'tuned percussion' | 'synth' | 'voice';
+type Family = 'keys' | 'strings' | 'woodwind' | 'brass' | 'plucked' | 'tuned percussion' | 'synth' | 'voice';
 export interface InstrumentInfo { id: Voice; label: string; family: Family; /** Comfortable range, as note names. */ range: [string, string]; /** What it usually does in a band. */ part: 'melody' | 'harmony' | 'bass' }
 
 export const INSTRUMENTS: InstrumentInfo[] = [

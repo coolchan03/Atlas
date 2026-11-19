@@ -25,22 +25,22 @@ export interface PortableClaim extends Header {
   uncertainty?: string | null;
   citations: Array<Record<string, unknown>>;
 }
-export interface PortableContradiction extends Header {
+interface PortableContradiction extends Header {
   recordType: 'contradiction'; claimA: string; claimB: string; reason: string; detectedAt: string; resolvedAt?: string | null; resolution?: string | null;
 }
-export interface PortableHistory extends Header {
+interface PortableHistory extends Header {
   recordType: 'claim_history'; claimId: string; oldStatus: ClaimStatus; newStatus: ClaimStatus; actor: string; reason: string; at: string;
 }
-export interface PortableExperience extends Header {
+interface PortableExperience extends Header {
   recordType: 'experience'; topic: string; attempt: string; outcome: string; correction?: string | null; createdAt: string;
 }
-export interface PortableProcedure extends Header {
+interface PortableProcedure extends Header {
   recordType: 'procedure'; topic: string; method: string; status: string; provenance: string; createdAt: string; updatedAt: string;
 }
-export interface PortableExamResult extends Header {
+interface PortableExamResult extends Header {
   recordType: 'exam_result'; benchmarkVersion: string; mode: string; metrics: Record<string, unknown>; createdAt: string;
 }
-export interface PortableMastery extends Header {
+interface PortableMastery extends Header {
   recordType: 'mastery'; subjectId: string; topic: string; question: string; strength: number; streak: number; attempts: number;
   lastAt?: string | null; nextReview: string; lastOutcome?: string | null;
 }

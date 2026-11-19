@@ -29,7 +29,7 @@ const BASELINE = 'atlas-sync-list-baseline-v1';
 /** Chats, projects and agents have their own record-by-record merge (merge.ts). */
 const OWN_MERGE = new Set(['local-llm-chat-storage', 'local-llm-project-storage', 'atlas-agent-storage']);
 
-export interface StoreEntry {
+interface StoreEntry {
   value: string; changedAt: number;
   /** App settings: when each setting last changed, so each one goes to its newest choice. */
   fields?: Record<string, number>;

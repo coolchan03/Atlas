@@ -7,7 +7,7 @@ import type { Memory } from './review';
 import { fromFourLevels, type LevelId } from './teaching';
 import type { ExerciseKind, Pace } from './pace';
 
-export interface UnitProgress { stars: number; lessons: number }
+interface UnitProgress { stars: number; lessons: number }
 
 /** A lesson left part-way, so it carries on where the learner stopped. */
 export interface SavedLesson {

@@ -3,11 +3,11 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 
-export type LearnEventKind = 'bank' | 'appeal' | 'question' | 'report' | 'judge' | 'manager' | 'info' | 'error';
+type LearnEventKind = 'bank' | 'appeal' | 'question' | 'report' | 'judge' | 'manager' | 'info' | 'error';
 export interface LearnEvent { id: string; at: number; kind: LearnEventKind; agentId: string; title: string; body: string }
 
 /** keep = what it learns is saved into the agent (lessons + knowledge). session = practice only, nothing changes unless you tap "Keep". */
-export type LearnMode = 'keep' | 'session';
+type LearnMode = 'keep' | 'session';
 
 export interface LearnConfig {
   /** The task / subject the agent should become good at. */
@@ -79,8 +79,8 @@ export interface LearnReport {
   gates?: { facts: 'pass' | 'fail' | 'unknown'; citations: 'pass' | 'fail' | 'unknown' };
 }
 
-export interface PendingReport { itemId: string; q: string; report: string; sources: string }
-export interface LearnedNote { q: string; answer: string; at: number; score?: number }
+interface PendingReport { itemId: string; q: string; report: string; sources: string }
+interface LearnedNote { q: string; answer: string; at: number; score?: number }
 
 export interface PerAgent {
   round: number;
@@ -122,7 +122,7 @@ export const defaultLearnConfig = (): LearnConfig => ({
 });
 
 /** A subject the AI studies on its own: its own topic, question bank, reports and lessons. */
-export interface Expert { id: string; name: string }
+interface Expert { id: string; name: string }
 
 interface LearningState {
   /** Subjects beyond the general one (taxes, law, psychology...). Each keeps its own learning, so one expert never blurs into another. */

@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 
 export const TRASH_DAYS = 7;
-export type TrashKind = 'chat' | 'course';
+type TrashKind = 'chat' | 'course';
 export interface TrashItem { id: string; kind: TrashKind; title: string; /** The original id, used to refuse a duplicate restore. */ originalId: string; deletedAt: number; payload: unknown }
 
 interface State {

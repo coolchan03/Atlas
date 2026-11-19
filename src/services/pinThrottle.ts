@@ -10,7 +10,7 @@ const FREE_ATTEMPTS = 5;
 const BASE_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 60 * 60_000;
 
-export interface ThrottleState { failures: number; lockedUntil: number }
+interface ThrottleState { failures: number; lockedUntil: number }
 const EMPTY: ThrottleState = { failures: 0, lockedUntil: 0 };
 
 const cache = new Map<string, ThrottleState>();

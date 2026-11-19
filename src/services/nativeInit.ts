@@ -18,7 +18,7 @@
  */
 import logger from '../utils/logger';
 
-export type InitPhase = 'loading-weights' | 'gpu-setup';
+type InitPhase = 'loading-weights' | 'gpu-setup';
 
 export interface InitTrace {
   startedAt: number;

@@ -50,7 +50,7 @@ export const repair: Workflow<RepairCtx> = {
 };
 
 // ------------------------------------------------------------------ cooking
-export interface Recipe { name: string; minutes: number; uses: string[]; missing: string[] }
+interface Recipe { name: string; minutes: number; uses: string[]; missing: string[] }
 export interface CookCtx {
   items: string[]; diners: number; avoid: string; minutes: number;
   ideas?: Recipe[]; chosen?: string; ingredients?: Array<{ item: string; amount: string }>; steps?: string[]; toBuy?: string[]; note?: string;

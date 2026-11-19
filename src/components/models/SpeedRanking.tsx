@@ -13,7 +13,7 @@ const literalStyles = StyleSheet.create({
 });
 
 
-export interface RankedModel { id: string; name: string; decode: number; prefill: number }
+interface RankedModel { id: string; name: string; decode: number; prefill: number }
 
 /** Measured models only, fastest writer first. */
 export function rankModelsBySpeed(models: Array<{ id: string; name: string }>, speeds: Record<string, ModelSpeed>): RankedModel[] {

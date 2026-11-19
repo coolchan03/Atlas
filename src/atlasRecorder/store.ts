@@ -42,7 +42,7 @@ export const useRecordings = create<RecordingsState>()(persist((): RecordingsSta
   }),
 }));
 
-export type RecorderPhase = 'idle' | 'recording' | 'processing';
+type RecorderPhase = 'idle' | 'recording' | 'processing';
 
 interface LiveState {
   phase: RecorderPhase;

@@ -5,7 +5,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import type { AlertButton } from './CustomAlert';
 
-export interface CenteredAlertProps {
+interface CenteredAlertProps {
   visible: boolean;
   title: string;
   message?: string;

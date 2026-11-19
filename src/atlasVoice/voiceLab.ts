@@ -11,11 +11,11 @@ import { readVoiceProfile } from './readAloud';
  */
 const Native: any = NativeModules.AtlasTts;
 
-export interface LabStats {
+interface LabStats {
   samples: number; seconds: number; peak: number; rms: number; clippedPercent: number;
   leadSilenceMs: number; trailSilenceMs: number; longestGapMs: number; bursts: number; noiseFloorDb: number;
 }
-export interface LabRun { label: string; steps: number; millis: number; audioRate: number; engineRate: number; path: string; stats?: LabStats; error?: string }
+interface LabRun { label: string; steps: number; millis: number; audioRate: number; engineRate: number; path: string; stats?: LabStats; error?: string }
 export interface LabReport { referenceRate: number; reference?: LabStats; folder: string; runs: LabRun[] }
 
 export const labAvailable = (): boolean => Platform.OS === 'android' && !!Native?.voiceLab;

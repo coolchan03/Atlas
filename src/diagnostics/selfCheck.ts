@@ -3,8 +3,8 @@
  * A check that throws or takes too long is a fail with that reason, so one broken piece cannot hide the rest. The checks are plain
  * functions, so the runner is tested without a phone and the screen only shows results.
  */
-export type CheckStatus = 'pass' | 'fail' | 'skip';
-export interface CheckOutcome { status: CheckStatus; detail: string }
+type CheckStatus = 'pass' | 'fail' | 'skip';
+interface CheckOutcome { status: CheckStatus; detail: string }
 export interface Check { id: string; name: string; run: () => Promise<CheckOutcome>; /** For a check that loads a model, which can take a minute on a slow phone. */ timeoutMs?: number }
 export interface CheckResult extends CheckOutcome { id: string; name: string; ms: number }
 

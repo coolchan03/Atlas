@@ -16,7 +16,7 @@ import {
   type Correction, type Scenario, type Turn,
 } from './phoneCall';
 
-export type CallPhase = 'ringing' | 'speaking' | 'thinking' | 'listening' | 'transcribing' | 'idle' | 'ended';
+type CallPhase = 'ringing' | 'speaking' | 'thinking' | 'listening' | 'transcribing' | 'idle' | 'ended';
 
 export interface CallState {
   phase: CallPhase;

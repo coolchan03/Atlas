@@ -4,7 +4,7 @@
  * not authority on their own; textbooks come last and go out of date. Within one of these, the newest edition is the one that applies.
  * Atlas reads all of this from a document's name (and, for a standard, its first pages), so nothing has to be tagged by hand. Pure.
  */
-export type TaxKind = 'statute' | 'regulation' | 'bulletin' | 'publication' | 'textbook';
+type TaxKind = 'statute' | 'regulation' | 'bulletin' | 'publication' | 'textbook';
 export interface TaxSource {
   kind: TaxKind;
   /** 1 is the highest authority. */

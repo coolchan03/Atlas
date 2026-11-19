@@ -21,7 +21,7 @@ const ROOT = () => `${RNFS.DocumentDirectoryPath}/atlas-project-files`;
 const safeId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id);
 const safeName = (name: unknown): name is string => typeof name === 'string' && name.length > 0 && name.length <= 200 && name !== '.' && name !== '..' && !/[\\/\x00-\x1f:]/.test(name);
 
-export interface DocMeta { projectId: string; name: string; size: number; enabled: boolean; createdAt: string; /** SHA-256 of the file's bytes: two revisions with the same name and length are different documents. */ sha256?: string }
+interface DocMeta { projectId: string; name: string; size: number; enabled: boolean; createdAt: string; /** SHA-256 of the file's bytes: two revisions with the same name and length are different documents. */ sha256?: string }
 export interface DocTextBatch { kind: 'doctext'; key: string; index: number; total: number; chunks: { content: string; position: number }[] }
 export interface DocFileChunk { kind: 'docfile'; key: string; meta: DocMeta; index: number; total: number; data: string; checksum?: string }
 
@@ -55,7 +55,7 @@ export async function docsOnPhone(projectIds: string[]): Promise<string[]> {
 export const isLarge = (size: number): boolean => size > INLINE_BYTES;
 
 /** Sends each document the other phone lacks: its text first, then the file. Returns how many documents were sent. */
-export interface DocProgress { name: string; doc: number; docs: number; piece: number; pieces: number }
+interface DocProgress { name: string; doc: number; docs: number; piece: number; pieces: number }
 export interface DocSendIo { send: (piece: DocTextBatch | DocFileChunk) => Promise<void>; report?: (p: DocProgress) => void }
 
 export async function sendMissingDocs(projectIds: string[], theirs: string[] | undefined, io: DocSendIo): Promise<number> {

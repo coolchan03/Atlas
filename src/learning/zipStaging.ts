@@ -14,7 +14,7 @@ export const MAX_UNPACKED_BYTES = 3 * 1024 * 1024 * 1024;
 export const MAX_RATIO = 200;
 
 export type EntryKind = 'document' | 'questions' | 'archive' | 'unsupported' | 'unsafe';
-export interface StagedEntry { name: string; path: string; size: number; kind: EntryKind; reason: string }
+interface StagedEntry { name: string; path: string; size: number; kind: EntryKind; reason: string }
 export interface StagedZip { dir: string; entries: StagedEntry[]; counts: Record<EntryKind, number> }
 
 const DOCUMENT = /\.(pdf|epub|docx?|pptx?|xlsx?|odt|odp|ods|rtf|md|markdown|txt|html?)$/i;

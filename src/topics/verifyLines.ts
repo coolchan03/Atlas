@@ -10,7 +10,7 @@ import { isOutlineDocument } from '../cpa/outline';
 import { supersededEditions } from '../standards/taxSources';
 import { officialPages, type Hit, type Search } from '../standards/lookup';
 
-export type VerdictStatus = 'backed' | 'found-online' | 'unverified' | 'offline';
+type VerdictStatus = 'backed' | 'found-online' | 'unverified' | 'offline';
 export interface LineVerdict { line: string; status: VerdictStatus; source?: string; where?: string; url?: string }
 
 const BACKED = 0.45;

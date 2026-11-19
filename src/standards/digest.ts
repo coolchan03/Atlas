@@ -6,7 +6,7 @@
 import { asuNumbers, hostOf } from './authority';
 import { officialPages, type Search } from './lookup';
 
-export interface DigestItem { title: string; url: string; host: string; snippet: string; year: number; topic: string }
+interface DigestItem { title: string; url: string; host: string; snippet: string; year: number; topic: string }
 export interface Digest { items: DigestItem[]; searched: number; failed: number; offline: boolean }
 
 /** The year a page is about: the newest year in its title, snippet or address, or the year of an ASU number ("2023-01"). 0 when it shows none. */

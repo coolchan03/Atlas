@@ -6,7 +6,7 @@
 export type SearchKind = 'screen' | 'chat' | 'project' | 'model';
 export interface SearchHit { kind: SearchKind; id: string; title: string; detail?: string; route: string; params?: object; icon: string; score: number }
 
-export interface Destination { title: string; route: string; params?: object; icon: string; keywords: string }
+interface Destination { title: string; route: string; params?: object; icon: string; keywords: string }
 
 /** Screens and settings pages, with the words people use for them. */
 export const DESTINATIONS: Destination[] = [

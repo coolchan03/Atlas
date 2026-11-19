@@ -46,7 +46,7 @@ const utf8Bytes = (text: string): number => unescape(encodeURIComponent(text)).l
 const jsonl = (rows: unknown[]) => (rows.length ? `${rows.map((r) => JSON.stringify(r)).join('\n')}\n` : '');
 
 // ================================================================== export
-export interface ExportScope { kind: 'all' | 'agents' | 'subjects' | 'since'; agentIds?: string[]; topicIds?: string[]; since?: string }
+interface ExportScope { kind: 'all' | 'agents' | 'subjects' | 'since'; agentIds?: string[]; topicIds?: string[]; since?: string }
 export interface ExportOptions { scope: ExportScope; includeOriginals?: boolean; appVersion?: string; /** An automatic backup: not recorded as an export, so "changes since the last export" keeps meaning what you last saved yourself. */ quiet?: boolean }
 export interface ExportResult { path: string; manifest: ExportManifest }
 export interface TransferEntry { kind: 'export' | 'import'; id: string; at: string; path?: string; counts: Record<string, number>; note?: string }
@@ -170,7 +170,7 @@ export async function createExport(opts: ExportOptions): Promise<ExportResult> {
 }
 
 // ================================================================== import
-export interface ImportIssue { where: string; problem: string }
+interface ImportIssue { where: string; problem: string }
 export interface ImportReport {
   importId: string;
   exportId: string;

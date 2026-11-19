@@ -77,7 +77,7 @@ export function checkSupport(claim: string, passages: string[]): SupportCheck {
   return { supported: missingNumbers.length === 0 && overlap >= MIN_OVERLAP, missingNumbers, overlap };
 }
 
-export type Relation = 'new' | 'duplicate' | 'contradicts';
+type Relation = 'new' | 'duplicate' | 'contradicts';
 export interface Comparison { relation: Relation; matchId?: string; reason?: string }
 
 const DUPLICATE_AT = 0.85;

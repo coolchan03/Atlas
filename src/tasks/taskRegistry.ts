@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 
 export type TaskType = 'import' | 'zip' | 'index' | 'transcribe' | 'audio' | 'download' | 'learning' | 'other';
-export type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
+type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
 export interface Task {
   id: string; type: TaskType; title: string;
   /** Shown instead of a private project or chat name when that item is protected. */

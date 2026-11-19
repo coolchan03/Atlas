@@ -11,7 +11,7 @@ export interface SftExample {
   /** Where the example came from, so it can be traced and withdrawn. */
   provenance: { claimId: string; reportId: string; sources: string[]; verifiedBy: string };
 }
-export type Split = 'train' | 'validation' | 'test';
+type Split = 'train' | 'validation' | 'test';
 export interface TrainingManifest {
   format: 'atlas-training-jsonl';
   schemaVersion: 1;

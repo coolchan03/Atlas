@@ -1,16 +1,16 @@
 import type { SoundPreset, Voice } from './types';
 
 /** What an extra player does: answers the melody, holds a soft swell under it, or adds a high sparkle on the first beat of every other bar. */
-export type ExtraKind = 'answer' | 'swell' | 'sparkle';
+type ExtraKind = 'answer' | 'swell' | 'sparkle';
 export interface Extra { voice: Voice; kind: ExtraKind }
 
 export type StyleGroup = 'Moods and genres' | 'Eras and genres' | 'Seasons and holidays' | 'Places and settings';
 
-export type Bass = 'root' | 'walk' | 'pulse' | 'drone';
+type Bass = 'root' | 'walk' | 'pulse' | 'drone';
 /** How the chords are played: held, on the off-beat, in stabs, as eighths, in an arpeggio, oom-pah, a jig, an Alberti figure, a swung comp, a strum or a bossa pattern. */
 export type Comp = 'sustain' | 'offbeat' | 'stabs' | 'eighths' | 'arp' | 'oompah' | 'jig' | 'alberti' | 'swingcomp' | 'strum' | 'bossa';
-export type Perc = 'none' | 'soft' | 'four' | 'swing' | 'sleigh' | 'industrial' | 'backbeat' | 'offbeat';
-export type Tune = 'arp' | 'walk' | 'sparse';
+type Perc = 'none' | 'soft' | 'four' | 'swing' | 'sleigh' | 'industrial' | 'backbeat' | 'offbeat';
+type Tune = 'arp' | 'walk' | 'sparse';
 
 export interface StyleSpec {
   label: string;

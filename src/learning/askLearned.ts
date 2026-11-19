@@ -11,7 +11,7 @@ import { useLearningStore } from './store';
 const RELEVANT = 0.3;
 const LABEL: Record<string, string> = { verified: 'checked by you', candidate: 'learned, not yet reviewed', disputed: 'DISPUTED: sources disagree', needs_review: 'needs review' };
 
-export interface LearnedHit { id: string; claim: string; status: string; score: number; topic: string; years: number[] }
+interface LearnedHit { id: string; claim: string; status: string; score: number; topic: string; years: number[] }
 
 /**
  * Rules change by year (a tax rule, a limit, a price). A question that names a year prefers the claims for that year and sets aside

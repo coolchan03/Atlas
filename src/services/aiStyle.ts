@@ -7,7 +7,7 @@ export type AiLength = 'brief' | 'balanced' | 'detailed';
 export type AiTone = 'friendly' | 'neutral' | 'formal' | 'playful' | 'direct';
 export type AiLevel = 'simple' | 'normal' | 'expert';
 
-export type AiEmoji = 'never' | 'sometimes' | 'often';
+type AiEmoji = 'never' | 'sometimes' | 'often';
 
 export interface AiStyle {
   length?: AiLength;

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Home suggestions the person has swiped or long-pressed away. They stay away until switched back on from the small link where they were. */
-export type HiddenHome = 'continue-learning';
+type HiddenHome = 'continue-learning';
 interface State { hidden: HiddenHome[]; hide: (key: HiddenHome) => void; show: (key: HiddenHome) => void }
 export const useHomeHidden = create<State>()(persist((set) => ({
   hidden: [],

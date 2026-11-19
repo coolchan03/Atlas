@@ -7,9 +7,9 @@
 import { NativeModules } from 'react-native';
 import { bearingDeg, compassName, distanceM, fmtDistance, installedMaps, useMaps } from './maps';
 
-export interface MapEntry { path: string; name: string; sizeBytes?: number; source: 'downloaded' | 'from your files' }
-export interface MapBounds { minLat: number; minLon: number; maxLat: number; maxLon: number; mapDate?: number }
-export interface MapPlace { name: string; kind: string; lat: number; lon: number; distanceM: number }
+interface MapEntry { path: string; name: string; sizeBytes?: number; source: 'downloaded' | 'from your files' }
+interface MapBounds { minLat: number; minLon: number; maxLat: number; maxLon: number; mapDate?: number }
+interface MapPlace { name: string; kind: string; lat: number; lon: number; distanceM: number }
 
 const bounds = new Map<string, Promise<MapBounds | null>>();
 const native = (): any => NativeModules.AtlasDevice;
@@ -60,7 +60,7 @@ export function formatPlaces(places: MapPlace[], from: { lat: number; lon: numbe
   return places.map((p) => `${p.name} (${p.kind}), ${kmText(p.distanceM, imperial)} ${compassName(bearingDeg(from, p))}, at ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`).join('\n');
 }
 
-export interface PlaceSearch { query?: string; lat?: number; lon?: number; radiusKm?: number; limit?: number }
+interface PlaceSearch { query?: string; lat?: number; lon?: number; radiusKm?: number; limit?: number }
 
 /** Named places near a point from the offline map that covers it. Defaults to the user's last GPS position. */
 export async function placesNear(search: PlaceSearch = {}): Promise<string> {

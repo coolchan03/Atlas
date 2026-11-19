@@ -6,7 +6,7 @@
 import { CITY_ROWS, COUNTRY_NAMES } from './cities';
 import { bearingDeg, compassName, distanceM } from './maps';
 
-export interface City { name: string; cc: string; lat: number; lon: number; thousands: number }
+interface City { name: string; cc: string; lat: number; lon: number; thousands: number }
 export interface NearCity { city: City; km: number; direction: string }
 
 let cities: City[] | null = null;

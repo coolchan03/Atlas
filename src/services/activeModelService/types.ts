@@ -29,8 +29,8 @@ export interface ActiveModelInfo {
   };
 }
 
-export type TextRuntimeState = 'none' | 'selected' | 'loading' | 'loaded' | 'evicted';
-export type TextRuntimeBackend = 'CPU' | 'GPU' | 'NPU' | 'Unknown';
+type TextRuntimeState = 'none' | 'selected' | 'loading' | 'loaded' | 'evicted';
+type TextRuntimeBackend = 'CPU' | 'GPU' | 'NPU' | 'Unknown';
 
 /** Actual local text-model runtime state. This describes residency/native reality,
  * not the user's requested backend setting. */

@@ -2,7 +2,7 @@
 import { ragService } from './rag';
 import { useProjectStore } from '../stores/projectStore';
 
-export type OfflineResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType: 'project document' };
+type OfflineResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType: 'project document' };
 export type OfflineResearchBrief = { context: string; sources: OfflineResearchSource[] };
 export type OfflineResearchOptions = { projectId?: string; contextLength?: number; depth?: 'quick' | 'deep'; onStatus?: (s: string | null) => void };
 

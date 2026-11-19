@@ -14,7 +14,7 @@ export const MAP_SERVERS = [
 ];
 export const mapsDir = () => `${require('../atlasTools/storage').bigFilesBase()}/maps`;
 
-export interface Waypoint { id: string; name: string; lat: number; lon: number; createdAt: number }
+interface Waypoint { id: string; name: string; lat: number; lon: number; createdAt: number }
 export interface GpsFix { lat: number; lon: number; accuracy: number; altitude: number; speed: number; time: number }
 
 interface MapsState {

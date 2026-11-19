@@ -23,7 +23,7 @@ export interface ExamItem { id: string; subjectId: string; topic: string; questi
  * could not fairly judge it, and those items are left out of the accuracy.
  */
 export type ExamReason = 'correct' | 'wrong-answer' | 'outdated' | 'empty-answer' | 'no-sources' | 'no-approved-memory' | 'invalid-key' | 'inference-failure';
-export interface ItemResult {
+interface ItemResult {
   id: string; correct: boolean; score: number; outdated: boolean; seconds: number;
   /** Absent in results saved by benchmark version 1. */
   reason?: ExamReason;
@@ -145,7 +145,7 @@ export function scoreAnswer(answer: string, expected: Expected): Score {
 /** An answer key a person can have saved but nothing can be graded against: no facts, or only blank wordings. */
 export const isUsableKey = (expected: Expected | undefined): boolean => !!expected && Array.isArray(expected.facts) && expected.facts.length > 0 && expected.facts.every((alts) => Array.isArray(alts) && alts.some((w) => String(w).trim()));
 
-export interface Answered {
+interface Answered {
   text: string;
   /** The numbered sources the model was given (none for the model alone). */
   sourceCount: number;

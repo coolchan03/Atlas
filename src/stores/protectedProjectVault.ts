@@ -12,7 +12,7 @@ import type { RagDocument } from '../services/rag/database';
  * Nothing about its documents is written to rag.db or AsyncStorage. The decrypted copy lives in
  * memory only while the project is unlocked and is dropped when it re-locks.
  */
-export interface VaultChunk { content: string; position: number; embedding: number[] }
+interface VaultChunk { content: string; position: number; embedding: number[] }
 export interface VaultDoc {
   id: number; name: string; path: string; size: number; createdAt: string; enabled: number; chunks: VaultChunk[];
   /** Exact text of a note written in Atlas (chunks alone drop spacing and overlap long paragraphs). */

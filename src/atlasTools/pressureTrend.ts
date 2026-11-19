@@ -10,7 +10,7 @@ const HOUR = 3_600_000;
 export const heightFromPressure = (hpa: number, seaLevelHpa = 1013.25): number => 44330 * (1 - (hpa / seaLevelHpa) ** (1 / 5.255));
 export const seaLevelPressure = (hpa: number, heightM: number): number => hpa / (1 - heightM / 44330) ** 5.255;
 
-export type TrendLabel = 'rising fast' | 'rising' | 'steady' | 'falling' | 'falling fast' | 'falling very fast';
+type TrendLabel = 'rising fast' | 'rising' | 'steady' | 'falling' | 'falling fast' | 'falling very fast';
 export interface Trend {
   label: TrendLabel;
   /** Change over three hours, in hPa. Negative is falling. */

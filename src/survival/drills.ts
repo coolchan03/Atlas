@@ -3,8 +3,8 @@
  * emergency cards (each choice names the card it comes from). No model at play
  * time, so the advice cannot drift from the cards.
  */
-export interface DrillChoice { text: string; next: string | null; good: boolean; why: string; card: string }
-export interface DrillNode { text: string; choices: DrillChoice[] }
+interface DrillChoice { text: string; next: string | null; good: boolean; why: string; card: string }
+interface DrillNode { text: string; choices: DrillChoice[] }
 export interface Drill { id: string; title: string; icon: string; start: string; nodes: Record<string, DrillNode> }
 
 export const DRILLS: Drill[] = [

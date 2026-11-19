@@ -6,7 +6,7 @@ import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower'
 import { buildOfflineProjectResearch } from './offlineProjectResearch';
 
 type ResearchStatus = (status: string | null) => void;
-export type ResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType?: 'webpage' | 'search snippet' | 'project document' };
+type ResearchSource = { id: number; title: string; url: string; excerpt: string; evidenceType?: 'webpage' | 'search snippet' | 'project document' };
 export type ResearchBrief = { context: string; sources: ResearchSource[] };
 let activeRun = 0;
 

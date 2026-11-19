@@ -17,7 +17,7 @@ const FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 /** Tonics that sit well for a small ensemble, and whether they are spelled with flats. */
 const KEYS: Array<{ pc: number; flats: boolean }> = [{ pc: 0, flats: false }, { pc: 2, flats: false }, { pc: 5, flats: true }, { pc: 7, flats: false }, { pc: 9, flats: false }, { pc: 10, flats: true }, { pc: 3, flats: true }];
 
-export interface BarPlan { bar: number; degree: number; root: number; /** Pitch classes of the chord, root first. */ tones: number[]; name: string }
+interface BarPlan { bar: number; degree: number; root: number; /** Pitch classes of the chord, root first. */ tones: number[]; name: string }
 export interface HarmonyPlan { tonic: number; flats: boolean; scale: number[]; scaleName: string; bars: BarPlan[]; beatsPerBar: number }
 
 const SCALE_NAMES: Array<[string, number[]]> = [

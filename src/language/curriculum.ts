@@ -8,7 +8,7 @@
 import { PHRASES_EN } from '../phrases/data';
 import type { LevelId } from './teaching';
 
-export type UnitKind = 'vocab' | 'grammar' | 'theme';
+type UnitKind = 'vocab' | 'grammar' | 'theme';
 
 export interface Unit {
   id: string; title: string; icon: string; level: LevelId; kind: UnitKind;

@@ -12,7 +12,7 @@ import { isProfileKey, profileForKey } from './hostVoiceKeys';
 const Native: any = NativeModules.AtlasTts;
 const BASE = 'https://github.com/coolchan03/Atlas/releases/download/atlas-voices/';
 
-export interface NeuralSpeaker {
+interface NeuralSpeaker {
   sid: number; name: string; female: boolean; accent: string;
   /** A tuned variant of another speaker: the model's own speaker id and a depth (1 = as recorded). */
   base?: number; depth?: number;

@@ -9,7 +9,7 @@ import { scopeIds } from '../stores/projectTree';
 export const UNDERSTOOD_MIN_QUESTIONS = 5;
 export const UNDERSTOOD_SHARE = 0.8;
 
-export type Understanding = 'not-checked' | 'needs-work' | 'understood';
+type Understanding = 'not-checked' | 'needs-work' | 'understood';
 export interface Evidence { questions: number; rightLast: number; status: Understanding }
 
 /** A project and the folders around it: older questions kept in the folder (before each exam had its own project) still count for the exams inside it. */

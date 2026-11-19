@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
 
-export interface SavedQuestion { id: string; courseId: string; text: string; at: number }
+interface SavedQuestion { id: string; courseId: string; text: string; at: number }
 interface State {
   questions: SavedQuestion[];
   add: (courseId: string, text: string) => boolean;

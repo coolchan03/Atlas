@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAboutMe } from './aboutMeStore';
 import type { Conversation } from '../types';
 
-export interface MemoryCandidate { id: string; fact: string; source: 'therapy' | 'preferences'; createdAt: number }
+interface MemoryCandidate { id: string; fact: string; source: 'therapy' | 'preferences'; createdAt: number }
 interface AutoMemoryState {
   enabled: boolean;
   therapyReview: boolean;

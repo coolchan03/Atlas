@@ -7,8 +7,8 @@
  */
 import type { Finding, FindingStatus } from '../knowledge/schema';
 
-export type CardStatus = 'verified' | 'candidate' | 'disputed' | 'needs_review';
-export type CardOrigin = 'claim' | 'finding';
+type CardStatus = 'verified' | 'candidate' | 'disputed' | 'needs_review';
+type CardOrigin = 'claim' | 'finding';
 
 export interface KnowledgeCard {
   /** Stable: the record's own id, prefixed by its store. */

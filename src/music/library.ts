@@ -11,7 +11,7 @@ export interface InstrumentalTrack {
   mood: MusicMood; sound: SoundPreset; seconds: number; createdAt: string;
 }
 /** The SoundFont (real instrument recordings) the person added, kept in the app's folder. */
-export interface InstalledSoundfont { name: string; path: string; bytes: number }
+interface InstalledSoundfont { name: string; path: string; bytes: number }
 interface MusicLibraryState {
   tracks: InstrumentalTrack[];
   volume: number;

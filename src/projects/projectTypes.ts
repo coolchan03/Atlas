@@ -4,7 +4,7 @@
  */
 export type ProjectKind = 'general' | 'school' | 'work';
 
-export interface QuickStart { label: string; icon: string; prompt: string }
+interface QuickStart { label: string; icon: string; prompt: string }
 export interface ProjectTypeDef { id: ProjectKind; name: string; icon: string; hint: string; instructions: string; starts: QuickStart[] }
 
 export const PROJECT_TYPES: ProjectTypeDef[] = [

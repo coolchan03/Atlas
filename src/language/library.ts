@@ -9,7 +9,7 @@ import { boardFor } from './board';
 import type { Listening } from './listening';
 import type { LevelId } from './teaching';
 
-export type Genre = 'fairy' | 'fable' | 'daily' | 'chat' | 'travel' | 'news-fake' | 'news-history' | 'news-real';
+type Genre = 'fairy' | 'fable' | 'daily' | 'chat' | 'travel' | 'news-fake' | 'news-history' | 'news-real';
 
 export interface Premade {
   id: string;

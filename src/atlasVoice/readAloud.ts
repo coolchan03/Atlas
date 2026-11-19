@@ -85,7 +85,7 @@ interface ReaderState {
   preparing: boolean;
 }
 /** What a piece being spoken can tell the reader: whether the person has already stopped it, and which stage it has reached. */
-export interface SpeakControl { cancelled: () => boolean; phase: (p: 'loading' | 'generating') => void }
+interface SpeakControl { cancelled: () => boolean; phase: (p: 'loading' | 'generating') => void }
 interface Deps {
   speak: (text: string, control: SpeakControl) => Promise<boolean>;
   stopSpeaking: () => void;

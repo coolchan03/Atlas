@@ -11,7 +11,7 @@ import { AppState } from 'react-native';
 import logger from '../utils/logger';
 import { localUniqueId } from '../utils/uniqueId';
 
-export interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
+interface ExerciseSource { doc: string; page?: number; section?: string; quote: string }
 interface Base { id: string; topic?: string; /** How hard it is (beginner, moderate or hard), when it was written or kept at a chosen level. */ level?: Difficulty; /** The project (for example one CPA exam) the question belongs to; unset questions show everywhere. */ projectId?: string; /** The exam (for example FAR or AUD) the question belongs to. Exams are kept apart by this code, even when they share one project or have none. */ examCode?: string; prompt: string; explain?: string; source?: ExerciseSource }
 export type TableRow = { label: string; options?: string[]; account?: string; amount?: number; group?: string };
 export type Exercise = Base & (

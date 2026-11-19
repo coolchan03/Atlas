@@ -1,6 +1,6 @@
 /** Pure, source-linked educational puzzle layouts. Nothing is generated from invented facts. */
 export interface LearningTerm { answer: string; clue: string; src: number[] }
-export interface CrosswordEntry extends LearningTerm { id: number; row: number; col: number; direction: 'across' | 'down'; number: number }
+interface CrosswordEntry extends LearningTerm { id: number; row: number; col: number; direction: 'across' | 'down'; number: number }
 export interface Crossword { size: number; cells: string[]; entries: CrosswordEntry[] }
 export interface WordSearchEntry extends LearningTerm { id: number; row: number; col: number; dr: number; dc: number }
 export interface WordSearch { size: number; cells: string[]; entries: WordSearchEntry[] }

@@ -2,7 +2,7 @@
  * Turns a raw failure into something a person can act on: what failed, the likely cause (only when it can be told from the message),
  * a safe next step, and whether trying the same thing again can help. Also makes diagnostics safe to share. Pure.
  */
-export type ErrorKind = 'permission' | 'offline' | 'corrupt-file' | 'unsupported-file' | 'memory' | 'backend' | 'checksum' | 'storage' | 'cancelled' | 'unknown';
+type ErrorKind = 'permission' | 'offline' | 'corrupt-file' | 'unsupported-file' | 'memory' | 'backend' | 'checksum' | 'storage' | 'cancelled' | 'unknown';
 export interface ErrorExplanation { kind: ErrorKind; what: string; cause?: string; next: string; /** True only when the same step is safe and likely to work if repeated. */ retryable: boolean }
 
 const RULES: Array<{ kind: ErrorKind; test: RegExp; cause: string; next: string; retryable: boolean }> = [

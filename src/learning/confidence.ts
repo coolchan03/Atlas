@@ -4,7 +4,7 @@
  */
 import type { ClaimStatus } from './evidenceGate';
 
-export type ConfidenceState = 'verified' | 'source-backed' | 'unreviewed' | 'conflicting' | 'no-evidence' | 'retired';
+type ConfidenceState = 'verified' | 'source-backed' | 'unreviewed' | 'conflicting' | 'no-evidence' | 'retired';
 export interface ConfidenceInfo { state: ConfidenceState; label: string; detail: string }
 
 export function confidenceOf(c: { status: ClaimStatus; sourcePassages: number; citations: number }): ConfidenceInfo {

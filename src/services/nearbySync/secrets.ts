@@ -13,7 +13,7 @@ const STAMPS = 'atlas-sync-secret-stamps-v1';
 const SEARCH = ['exa', 'parallel', 'tavily'] as const;
 const ID = /^[\w.-]{1,160}$/;
 
-export interface SecretEntry { key: string; changedAt: number }
+interface SecretEntry { key: string; changedAt: number }
 export type SecretSnapshot = Record<string, SecretEntry>;
 type Stamps = Record<string, { hash: string; changedAt: number }>;
 

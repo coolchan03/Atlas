@@ -8,8 +8,8 @@ import type { Course } from './store';
 import { mapObjectives, describeMap, type Objective } from '../cpa/chapterMap';
 
 export type UnitState = 'not-written' | 'written' | 'tested';
-export interface UnitCoverage { unit: string; total: number; written: number; state: UnitState }
-export interface BookLine { doc: string; chapters: number }
+interface UnitCoverage { unit: string; total: number; written: number; state: UnitState }
+interface BookLine { doc: string; chapters: number }
 export interface CoverageView {
   books: BookLine[];
   units: UnitCoverage[];

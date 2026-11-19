@@ -11,7 +11,7 @@ export type VulkanSamplingSettings = {
  * native_load_failed, sdk_unsupported) is a build/OS problem; no_vulkan_device is
  * the hardware/driver. Never infer either from the chipset name.
  */
-export type VulkanRuntimeState =
+type VulkanRuntimeState =
   'ok' | 'not_packaged' | 'native_load_failed' | 'sdk_unsupported' | 'no_vulkan_device' | 'probe_failed';
 export type VulkanRuntimeStatus = {
   status: VulkanRuntimeState; packaged: boolean; message: string; devices: Backend[]; sdkInt?: number;

@@ -18,8 +18,8 @@ import { describeFileVerdict, judgeFile } from './knownModelFiles';
 import { describeAgainstExpected, resolveExpected, type Expected } from './expectedChecksum';
 import logger from '../utils/logger';
 
-export interface SweepSetting { label: string; backend: 'cpu' | 'opencl'; gpuLayers: number; flashAttn: boolean; cpuRepack?: boolean; nBatch?: number; mtp?: boolean }
-export interface SweepStep { setting: SweepSetting; ok: boolean; loadSeconds: number; error?: string; check?: OutputCheck; note?: string; scan?: string[] }
+interface SweepSetting { label: string; backend: 'cpu' | 'opencl'; gpuLayers: number; flashAttn: boolean; cpuRepack?: boolean; nBatch?: number; mtp?: boolean }
+interface SweepStep { setting: SweepSetting; ok: boolean; loadSeconds: number; error?: string; check?: OutputCheck; note?: string; scan?: string[] }
 export interface SweepResult { steps: SweepStep[]; files: string[]; vision?: { ok: boolean; reply: string; error?: string }; report: string; best?: SweepSetting }
 
 export const DEFAULT_SWEEP_LAYERS = [24, 16, 8];

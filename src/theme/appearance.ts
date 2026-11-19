@@ -13,7 +13,7 @@ export type AccentId = 'amber' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal'
 export type FontId = 'atlas' | 'sans' | 'serif' | 'mono' | 'pixel' | 'condensed' | 'light' | 'medium' | 'casual';
 export type TextSizeId = 'small' | 'normal' | 'large' | 'xlarge';
 export type LayoutMode = 'standard' | 'simple' | 'compact' | 'colorful' | 'grid' | 'focus';
-export type Density = 'comfortable' | 'compact' | 'spacious';
+type Density = 'comfortable' | 'compact' | 'spacious';
 /** How chat messages look: Clean = replies as plain text across the page with a bubble only for your own messages (like ChatGPT and Claude); Bubbles = every message in a box. */
 export type ChatLayout = 'clean' | 'bubbles' | MessageLook;
 export const CHAT_LAYOUTS: Array<{ id: ChatLayout; name: string; hint: string }> = [

@@ -1,5 +1,5 @@
 /** Deterministic pure Minesweeper helpers; UI chooses a random mine seed. */
-export interface MineCell { mine: boolean; nearby: number; revealed: boolean; flagged: boolean }
+interface MineCell { mine: boolean; nearby: number; revealed: boolean; flagged: boolean }
 export type MineGrid = MineCell[];
 
 export function newMineGrid(size = 6, mines = 7, random: () => number = Math.random): MineGrid {

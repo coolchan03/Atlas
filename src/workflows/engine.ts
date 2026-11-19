@@ -9,7 +9,7 @@
  * holds no screen code; a screen shows `waiting` and sends the person's answers back.
  */
 export interface Question { id: string; text: string; options?: string[]; answer?: string }
-export type Step<C> =
+type Step<C> =
   | { kind: 'code'; id: string; title: string; run: (ctx: C) => Partial<C> | Promise<Partial<C>> }
   | { kind: 'model'; id: string; title: string; run: (ctx: C, ask: Ask) => Partial<C> | Promise<Partial<C>> }
   | { kind: 'ask'; id: string; title: string; questions: (ctx: C) => Question[]; apply: (ctx: C, answers: Record<string, string>) => Partial<C> }
@@ -20,7 +20,7 @@ export interface Deps<C> { ask: Ask; save?: (r: Run<C>) => void }
 /** One extra thing a job asks for before it starts: a few choices, or a line of text. */
 export interface InputField { id: string; label: string; options?: string[]; placeholder?: string }
 /** What a job asks the person for, and how that becomes the starting state of a run. */
-export interface WorkflowInput<C> {
+interface WorkflowInput<C> {
   help: string;
   placeholder?: string;
   /** Shortest text worth starting with. */
@@ -32,8 +32,8 @@ export interface WorkflowInput<C> {
 }
 export interface Workflow<C> { id: string; title: string; summary: string; input: WorkflowInput<C>; steps: Step<C>[] }
 
-export type RunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'cancelled';
-export interface Waiting { kind: 'ask' | 'confirm'; stepId: string; title: string; questions?: Question[]; summary?: string }
+type RunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'cancelled';
+interface Waiting { kind: 'ask' | 'confirm'; stepId: string; title: string; questions?: Question[]; summary?: string }
 export interface Run<C> {
   id: string;
   workflowId: string;

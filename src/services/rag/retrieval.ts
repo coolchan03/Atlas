@@ -33,7 +33,7 @@ interface SearchResult {
 const LEXICAL_POOL = 3000;
 
 /** Options for a search: how many passages, and which documents to look in (by name). */
-export interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
+interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
 
 /** The stored embeddings of a project, kept in memory until a document is added, removed or switched, so a lesson (many searches in a row) does not read and decode every one each time. Not kept for a protected project, nor for a very large one. */
 const embeddingCache = new Map<string, { version: number; stored: ReturnType<typeof ragDatabase.getEmbeddingsByProject> }>();

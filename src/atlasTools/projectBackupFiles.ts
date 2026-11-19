@@ -12,7 +12,7 @@ export interface ProjectBackupFile {
   base64: string;
   chunks: { content: string; position: number }[];
 }
-export type RestoredProjectFile = Omit<ProjectBackupFile, 'base64'> & { path: string };
+type RestoredProjectFile = Omit<ProjectBackupFile, 'base64'> & { path: string };
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const ROOT = () => `${RNFS.DocumentDirectoryPath}/atlas-project-files`;
 const safeProjectId = (id: string) => /^[A-Za-z0-9_-]{1,128}$/.test(id);

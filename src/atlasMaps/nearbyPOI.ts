@@ -6,7 +6,7 @@
 import { bearingDeg, compassName, distanceM, useMaps } from './maps';
 import { useAppStore } from '../stores/appStore';
 
-export interface POI { name: string; kind: string; distanceM: number; direction: string }
+interface POI { name: string; kind: string; distanceM: number; direction: string }
 
 function kindOf(tags: Record<string, string>): string {
   if (tags.aeroway === 'aerodrome') return 'airport';

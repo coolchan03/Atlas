@@ -7,7 +7,7 @@ import { activeModelService } from '../../services/activeModelService';
 import { validateImageSupportFormat } from '../../utils/imageSupportFormat';
 
 export type ImageSupport = NonNullable<ONNXImageModel['supportFiles']>[number];
-export type ImageSupportKind = ImageSupport['kind'];
+type ImageSupportKind = ImageSupport['kind'];
 
 function chooseKind(name: string): Promise<ImageSupportKind | null> {
   const filename = name.toLowerCase();

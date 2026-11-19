@@ -264,7 +264,7 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
 
 
 // ---------------------------------------------------------------- podcast episodes
-export type PodcastLength = 'short' | 'medium' | 'long';
+type PodcastLength = 'short' | 'medium' | 'long';
 export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner' | 'news';
 export interface PodcastOptions {
   prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string;

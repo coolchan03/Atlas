@@ -11,7 +11,7 @@ import { SpeechCancelled, listenWithSystemSpeech, systemSpeechStatus, type Syste
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from '../atlasVoice/endOfSpeech';
 import logger from '../utils/logger';
 
-export type ListenEngine = 'whisper' | 'system';
+type ListenEngine = 'whisper' | 'system';
 export interface Listening extends SystemSpeechSession { engine: ListenEngine }
 export interface ListenOptions {
   /** The AI model must stay loaded (a call needs it to answer); otherwise it may be freed to make room for Whisper. */
