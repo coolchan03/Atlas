@@ -1,3 +1,4 @@
+import { randomNumber, rollDice } from './randomTool';
 import { Platform } from 'react-native';
 import { runStudyTool } from '../../study/studyTools';
 import DeviceInfo from 'react-native-device-info';
@@ -42,6 +43,10 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'calculator':
       return handleCalculator(call.arguments.expression);
+    case 'random_number':
+      return randomNumber(call.arguments as Record<string, unknown>);
+    case 'roll_dice':
+      return rollDice(call.arguments as Record<string, unknown>);
     case 'find_image':
     case 'study_helpers':
     case 'study_math':

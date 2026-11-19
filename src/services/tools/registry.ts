@@ -31,6 +31,33 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'random_number',
+    name: 'random_number',
+    displayName: 'Random number',
+    description: 'Draw truly random whole numbers on the phone (never invent random numbers yourself). Give min and max (default 1 to 100), optional count (1 to 1000) and unique=true for numbers that are all different. Add seed only for a repeatable test.',
+    icon: 'shuffle',
+    parameters: {
+      min: { type: 'string', description: 'Smallest whole number (default 1)' },
+      max: { type: 'string', description: 'Largest whole number (default 100)' },
+      count: { type: 'string', description: 'How many numbers (default 1)' },
+      unique: { type: 'string', description: 'true for numbers that are all different' },
+      seed: { type: 'string', description: 'Whole number for a reproducible test draw (not random)' },
+    },
+  },
+  {
+    id: 'roll_dice',
+    name: 'roll_dice',
+    displayName: 'Roll dice',
+    description: 'Roll dice on the phone and report each roll and the total (never make up dice results). sides 2 to 1000 (default 6), count 1 to 100 dice (default 1), optional modifier to add. Add seed only for a repeatable test.',
+    icon: 'box',
+    parameters: {
+      sides: { type: 'string', description: 'Sides per die (default 6)' },
+      count: { type: 'string', description: 'Number of dice (default 1)' },
+      modifier: { type: 'string', description: 'Whole number added to the total' },
+      seed: { type: 'string', description: 'Whole number for a reproducible test roll (not random)' },
+    },
+  },
+  {
     id: 'study_math',
     name: 'study_math',
     displayName: 'Study maths',
