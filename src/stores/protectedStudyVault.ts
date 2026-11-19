@@ -13,7 +13,7 @@ import logger from '../utils/logger';
  */
 const dir = () => `${RNFS.DocumentDirectoryPath}/atlas-protected-docs`;
 const safe = (projectId: string) => projectId.replace(/[^A-Za-z0-9_-]/g, '_');
-export const studyVaultPath = (projectId: string) => `${dir()}/${safe(projectId)}.study`;
+const studyVaultPath = (projectId: string) => `${dir()}/${safe(projectId)}.study`;
 const itemId = (projectId: string) => `${safe(projectId)}-study`;
 
 const native = () => {

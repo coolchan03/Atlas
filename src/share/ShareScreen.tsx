@@ -8,7 +8,7 @@ import { useAppStore, useChatStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 
 /** What Atlas can do with text another app shared (or that was selected and sent with "Ask Atlas"). Each choice opens a chat with the request typed. */
-export const SHARE_ACTIONS: { id: string; label: string; icon: string; prompt: (text: string) => string }[] = [
+const SHARE_ACTIONS: { id: string; label: string; icon: string; prompt: (text: string) => string }[] = [
   { id: 'ask', label: 'Ask about it', icon: 'message-circle', prompt: (t) => `${t}\n\n` },
   { id: 'summarize', label: 'Summarize', icon: 'align-left', prompt: (t) => `Summarize this:\n\n${t}` },
   { id: 'explain', label: 'Explain simply', icon: 'help-circle', prompt: (t) => `Explain this in simple words:\n\n${t}` },

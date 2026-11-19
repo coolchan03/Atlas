@@ -48,7 +48,7 @@ export type SensorGroup = 'motion' | 'environment' | 'orientation' | 'activity' 
 export interface SensorMeta { group: SensorGroup; icon: string; /** Full scale of one axis, for sensors that report x, y and z. */ scale?: number }
 
 /** Where each sensor sits on the screen, its icon, and (for x/y/z sensors) how big a full bar is. */
-export const SENSOR_META: Record<number, SensorMeta> = {
+const SENSOR_META: Record<number, SensorMeta> = {
   1: { group: 'motion', icon: 'move', scale: 20 }, 4: { group: 'motion', icon: 'rotate-cw', scale: 8 }, 9: { group: 'motion', icon: 'arrow-down', scale: 10 },
   10: { group: 'motion', icon: 'wind', scale: 10 }, 2: { group: 'orientation', icon: 'compass' }, 11: { group: 'orientation', icon: 'navigation', scale: 1 },
   15: { group: 'orientation', icon: 'rotate-ccw', scale: 1 }, 20: { group: 'orientation', icon: 'compass', scale: 1 },
@@ -60,7 +60,7 @@ export const SENSOR_META: Record<number, SensorMeta> = {
 const OTHER: SensorMeta = { group: 'other', icon: 'cpu' };
 export const metaOf = (type: number): SensorMeta => SENSOR_META[type] ?? OTHER;
 
-export const SENSOR_GROUPS: Array<{ id: SensorGroup; label: string }> = [
+const SENSOR_GROUPS: Array<{ id: SensorGroup; label: string }> = [
   { id: 'environment', label: 'Around you' }, { id: 'motion', label: 'Motion' }, { id: 'orientation', label: 'Direction' },
   { id: 'activity', label: 'Activity' }, { id: 'other', label: 'Other sensors' },
 ];

@@ -7,7 +7,7 @@ import RNFS from 'react-native-fs';
 import { isErrorWithCode, errorCodes, saveDocuments } from '@react-native-documents/picker';
 import type { Source, StudyResult } from './engine';
 
-export const MIME_MARKDOWN = 'text/markdown';
+const MIME_MARKDOWN = 'text/markdown';
 export const MIME_PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 /** A file name that is safe on every file system and short enough to read. */

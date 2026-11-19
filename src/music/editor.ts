@@ -6,8 +6,8 @@
 import type { DrumKind, MusicNote, MusicRole, MusicScore, Voice } from './types';
 
 export const GRID = 0.25; // a sixteenth note
-export const MIN_PITCH = 24;
-export const MAX_PITCH = 108;
+const MIN_PITCH = 24;
+const MAX_PITCH = 108;
 export const MAX_NOTES = 2000;
 export const MAX_BEATS = 128;
 const MAX_BPM = 240;

@@ -104,7 +104,7 @@ interface Deps {
 }
 
 /** A short key for a text: its length and a hash of its start and end, so the same document is recognised when it is opened again. */
-export function textKey(text: string): string {
+function textKey(text: string): string {
   const sample = `${text.slice(0, 2000)}${text.slice(-2000)}`;
   let h = 2166136261;
   for (let i = 0; i < sample.length; i++) { h ^= sample.charCodeAt(i); h = Math.imul(h, 16777619); }

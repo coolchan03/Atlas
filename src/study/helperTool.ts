@@ -7,7 +7,7 @@ import { matrixMarkdown, referenceListApa, type Paper } from './literature';
 const json = (v: unknown, what: string): any => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { throw new Error(`${what} must be valid JSON.`); } };
 
 /** Reading statistics for a passage: counts, Flesch reading ease, grade level and the words used most. */
-export function textStats(text: string) {
+function textStats(text: string) {
   const words = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
   const sentences = Math.max(1, (text.match(/[.!?]+(\s|$)/g) ?? []).length);
   if (!words.length) throw new Error('Give some text to measure.');

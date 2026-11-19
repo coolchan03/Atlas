@@ -21,7 +21,7 @@ export function projectForSubject(subject: string): string {
 }
 
 /** Every file under `dir` that Atlas can read, one level of folders at a time (the Converted folder is skipped: it only holds copies). */
-export async function listReadableFiles(dir: string): Promise<Array<{ path: string; name: string; size: number }>> {
+async function listReadableFiles(dir: string): Promise<Array<{ path: string; name: string; size: number }>> {
   const out: Array<{ path: string; name: string; size: number }> = [];
   for (const e of await RNFS.readDir(dir)) {
     if (e.isDirectory()) { if (e.name !== FOLDER_SKIP) out.push(...(await listReadableFiles(e.path))); }

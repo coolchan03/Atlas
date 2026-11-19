@@ -55,7 +55,7 @@ const unionById = <T,>(a: T[] = [], b: T[] = [], id: (x: T) => string): T[] => {
  * One course from both phones: the newer copy's own fields, every written square from either, the best stars per
  * square, the squares of whichever copy has more (extra lessons added after a bad score), and the union of sources.
  */
-export function mergeCourse(newer: Obj, older: Obj): Obj {
+function mergeCourse(newer: Obj, older: Obj): Obj {
   const squares = unionById<Obj>(newer.squares, older.squares, (q) => q.key);
   const order = (newer.squares ?? []).length >= (older.squares ?? []).length ? newer.squares : older.squares;
   const rank = new Map<string, number>((order ?? []).map((q: Obj, i: number) => [q.key, i]));

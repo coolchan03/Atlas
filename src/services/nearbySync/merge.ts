@@ -28,7 +28,7 @@ export interface SyncSnapshot {
 
 /** Ciphertext sealed with the item's own PIN, so it opens on any phone (never this phone's Keystore). */
 const PORTABLE = 'atlasbackup:v1:';
-export const portableLocked = (item: { pinVerifier?: string; protectedBlob?: string }) =>
+const portableLocked = (item: { pinVerifier?: string; protectedBlob?: string }) =>
   Boolean(item.pinVerifier && typeof item.protectedBlob === 'string' && item.protectedBlob.startsWith(PORTABLE));
 
 /**

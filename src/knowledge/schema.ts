@@ -17,15 +17,15 @@ export const SCHEMA_VERSION = '1.0';
 export const SOURCE_APP = 'atlas';
 
 export type FindingStatus = 'provisional' | 'needs-review' | 'approved' | 'rejected' | 'conflicted' | 'superseded';
-export const FINDING_STATUSES: FindingStatus[] = ['provisional', 'needs-review', 'approved', 'rejected', 'conflicted', 'superseded'];
+const FINDING_STATUSES: FindingStatus[] = ['provisional', 'needs-review', 'approved', 'rejected', 'conflicted', 'superseded'];
 
 /** observed = said by the source; inferred = the model's own reasoning from it; verified = independently checked. */
 export type Basis = 'observed' | 'inferred' | 'verified';
-export const BASES: Basis[] = ['observed', 'inferred', 'verified'];
+const BASES: Basis[] = ['observed', 'inferred', 'verified'];
 
 export type ReviewDecision = 'approved' | 'rejected' | 'needs-review' | 'deferred';
 export type ReviewState = 'pending' | ReviewDecision;
-export const REVIEW_DECISIONS: ReviewDecision[] = ['approved', 'rejected', 'needs-review', 'deferred'];
+const REVIEW_DECISIONS: ReviewDecision[] = ['approved', 'rejected', 'needs-review', 'deferred'];
 export type ReviewerRole = 'judge' | 'manager';
 
 export interface EvidenceRef {

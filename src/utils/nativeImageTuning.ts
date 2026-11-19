@@ -7,12 +7,12 @@ export type ImageSettings = { imageSteps?: number; imageWidth?: number; imageHei
 export const isDirectSDXL = (model: ImageIdentity): boolean =>
   model?.backend === 'sdcpp' && model?.nativeImageFamily === 'sdxl';
 
-export const isModernImageModel = (model: ImageIdentity): boolean =>
+const isModernImageModel = (model: ImageIdentity): boolean =>
   model?.backend === 'sdcpp' && ['sdxl', 'z_image', 'anima', 'chroma'].includes(model.nativeImageFamily || '');
 
 const isTurbo = (model: ImageIdentity) => model?.nativeImageVariant === 'turbo';
 
-export function recommendedImageGuidance(model: ImageIdentity): number {
+function recommendedImageGuidance(model: ImageIdentity): number {
   if (model?.backend !== 'sdcpp') return DEFAULT_IMAGE_GUIDANCE;
   const family = model.nativeImageFamily;
   if (family === 'flux' || (isTurbo(model) && ['z_image', 'anima'].includes(family || ''))) return 1;

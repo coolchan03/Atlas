@@ -11,7 +11,7 @@ const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 export const pitchName = (p: number): string => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
 const STEPS_PER_BAR = 4 / GRID;
 /** Bars shown: the tune's own, plus one empty bar to add to, up to eight. */
-export const barsShown = (score: MusicScore): number => Math.min(8, barCount(score) + 1);
+const barsShown = (score: MusicScore): number => Math.min(8, barCount(score) + 1);
 
 export function PianoRoll({ score, role, top, rows, onTap }: { score: MusicScore; role: MusicRole; top: number; rows: number; onTap: (pitch: number, beat: number) => void }) {
   const { colors } = useTheme();

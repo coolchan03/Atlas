@@ -9,7 +9,7 @@ import { nearbySync } from '../services/nearbySync';
 import type { Conversation } from '../types';
 import { chatRecoverable, useTrash } from '../trash/trash';
 
-export const UNDO_MS = 8000;
+const UNDO_MS = 8000;
 
 interface Pending { conversation: Conversation; timer: ReturnType<typeof setTimeout> }
 let pending: Pending | null = null;

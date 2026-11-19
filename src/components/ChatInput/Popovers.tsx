@@ -24,7 +24,7 @@ const clampPopoverRight = (anchorX: number): number => {
 
 const SHADOW_COLOR = '#000';
 
-export const popoverStyles = StyleSheet.create({
+const popoverStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',

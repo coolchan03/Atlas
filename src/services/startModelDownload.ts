@@ -30,7 +30,7 @@ export interface StartModelDownloadOpts {
  * already shared; this collapses the last duplicated wrapper around it.
  */
 const GB = 1024 * 1024 * 1024;
-export async function assertFreeSpace(bytes: number | undefined): Promise<void> {
+async function assertFreeSpace(bytes: number | undefined): Promise<void> {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return;
   let free = 0;
   try { free = Number((await require('react-native-fs').getFSInfo())?.freeSpace) || 0; } catch { return; }

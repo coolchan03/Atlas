@@ -23,7 +23,7 @@ export interface ListenOptions {
 }
 
 /** Whisper's language code for a course language ("es-ES" -> "es"). */
-export const whisperLanguage = (code: string): string => code.split('-')[0].toLowerCase();
+const whisperLanguage = (code: string): string => code.split('-')[0].toLowerCase();
 
 const isMulti = (id: string | null | undefined) => !!id && WHISPER_MODELS.find((m) => m.id === id)?.lang === 'multi';
 
@@ -35,7 +35,7 @@ function multilingualId(): string | null {
 }
 
 /** True when a Whisper model that understands more than English (the ".en" models do not) is on the phone. */
-export function hasMultilingualWhisper(): boolean {
+function hasMultilingualWhisper(): boolean {
   return multilingualId() !== null;
 }
 

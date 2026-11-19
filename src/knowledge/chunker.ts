@@ -13,7 +13,7 @@ import { SCHEMA_VERSION, type ChunkRecord } from './schema';
 import { sha256Text } from './storage';
 
 export interface ChunkerOptions { targetTokens: number; maxTokens: number; minTokens: number; overlapTokens: number }
-export const DEFAULT_CHUNKER: ChunkerOptions = { targetTokens: 700, maxTokens: 1000, minTokens: 150, overlapTokens: 70 };
+const DEFAULT_CHUNKER: ChunkerOptions = { targetTokens: 700, maxTokens: 1000, minTokens: 150, overlapTokens: 70 };
 const CHARS_PER_TOKEN = 4;
 export const approxTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);
 
@@ -22,7 +22,7 @@ const HEADING = [
   /^\d{1,2}(\.\d{1,2}){0,3}\s+[A-Z][^.!?]{2,80}$/,
   /^[A-Z][A-Z0-9 ,:&'-]{3,80}$/,
 ];
-export const isHeading = (line: string): boolean => {
+const isHeading = (line: string): boolean => {
   const t = line.trim();
   return t.length >= 3 && t.length <= 90 && HEADING.some((r) => r.test(t)) && /[A-Za-z]{3}/.test(t);
 };
@@ -33,7 +33,7 @@ const isColumnLine = (line: string): boolean => /\t|\|/.test(line) || /\S {2,}\S
 interface Block { text: string; page: number; heading?: boolean; table?: boolean }
 
 /** Breaks one page into blocks: headings alone, tables whole, other text by paragraph. */
-export function pageBlocks(page: number, text: string): Block[] {
+function pageBlocks(page: number, text: string): Block[] {
   const lines = text.replace(/\r/g, '').split('\n');
   const blocks: Block[] = [];
   let para: string[] = [];

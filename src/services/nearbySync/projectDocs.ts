@@ -10,10 +10,10 @@ import { sha256 } from 'js-sha256';
 import { ragService } from '../rag';
 import { useProjectStore } from '../../stores/projectStore';
 
-export const DOC_CHUNK_BYTES = 4 * 1024 * 1024;
+const DOC_CHUNK_BYTES = 4 * 1024 * 1024;
 /** Documents up to this size and in total travel inside the sync message as before; bigger ones are streamed. */
 export const INLINE_BYTES = 8 * 1024 * 1024;
-export const MAX_DOC_BYTES = 600 * 1024 * 1024;
+const MAX_DOC_BYTES = 600 * 1024 * 1024;
 const TEXT_BATCH_CHARS = 400_000;
 const MAX_TEXT_CHUNKS = 200_000;
 const DIGEST = /^[a-f0-9]{64}$/;

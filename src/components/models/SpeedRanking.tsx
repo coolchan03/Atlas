@@ -16,7 +16,7 @@ const literalStyles = StyleSheet.create({
 interface RankedModel { id: string; name: string; decode: number; prefill: number }
 
 /** Measured models only, fastest writer first. */
-export function rankModelsBySpeed(models: Array<{ id: string; name: string }>, speeds: Record<string, ModelSpeed>): RankedModel[] {
+function rankModelsBySpeed(models: Array<{ id: string; name: string }>, speeds: Record<string, ModelSpeed>): RankedModel[] {
   return models
     .map(m => ({ id: m.id, name: m.name, decode: speeds[m.id]?.decode ?? 0, prefill: speeds[m.id]?.prefill ?? 0 }))
     .filter(m => m.decode > 0)

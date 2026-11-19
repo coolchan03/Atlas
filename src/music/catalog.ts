@@ -46,7 +46,7 @@ export const INSTRUMENTS: InstrumentInfo[] = [
   { id: 'sine', label: 'Sine tone', family: 'synth', range: ['C2', 'C6'], part: 'melody' },
 ];
 
-export const DRUM_LABELS: Record<DrumKind, string> = {
+const DRUM_LABELS: Record<DrumKind, string> = {
   kick: 'bass drum', snare: 'snare', hat: 'closed hi-hat', openhat: 'open hi-hat', clap: 'hand clap', tom: 'tom', rim: 'rim click', cowbell: 'cowbell', shaker: 'shaker', crash: 'crash cymbal',
 };
 

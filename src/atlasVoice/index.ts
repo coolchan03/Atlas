@@ -14,7 +14,7 @@ import { AtlasVoicePanel } from './VoicePanel';
 import logger from '../utils/logger';
 
 /** Voice mode is a phone call: talk like a person on the phone, not like a document. */
-export const VOICE_CALL_STYLE = [
+const VOICE_CALL_STYLE = [
   'PHONE CALL MODE. You are talking to the user on a phone call, and every word you write is read aloud.',
   'Keep it super simple: short sentences, everyday words a ten-year-old knows, no jargon.',
   'Answer in one or two sentences. Only say more if the user asks for details, and even then stay under five sentences.',

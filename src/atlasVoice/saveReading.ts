@@ -12,7 +12,7 @@ export const MAX_SAVE_CHARS = 20_000;
 export interface SavedReading { path: string; savedChars: number; totalChars: number }
 
 /** The text that fits one file: whole sentences up to the limit. */
-export function textForFile(text: string): string {
+function textForFile(text: string): string {
   const clean = cleanForReading(text);
   if (clean.length <= MAX_SAVE_CHARS) return clean;
   const cut = clean.slice(0, MAX_SAVE_CHARS);

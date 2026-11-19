@@ -56,7 +56,7 @@ export const P = {
 };
 
 /** Two characters of an id/hash pick the shard. Ids made here start with hex, so shards spread evenly. */
-export const shardOf = (id: string): string => {
+const shardOf = (id: string): string => {
   return (`${id.replace(/[^0-9a-f]/gi, '')  }00`).slice(0, 2).toLowerCase();
 };
 

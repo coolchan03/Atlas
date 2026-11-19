@@ -75,7 +75,7 @@ export const useSlowHint = create<HintState>()(persist((set) => ({
 }), { name: 'atlas-slow-hint', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ off: s.off }) }));
 
 /** Below this writing speed (tokens per second) answers are a real wait. */
-export const SLOW_TPS = 3;
+const SLOW_TPS = 3;
 
 /** True when chat should suggest finding better settings: a local model that is slow on at least two replies, not tuned or dismissed yet. */
 export function shouldSuggestTuning(o: { modelId: string | null | undefined; speed: ModelSpeed | undefined; tuned: boolean; dismissed: boolean }): boolean {

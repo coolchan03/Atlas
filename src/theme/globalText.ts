@@ -71,7 +71,7 @@ function reactNativeTextModules(): any[] {
  * version Text and TextInput are plain function components (ref arrives as a prop), so the
  * wrapper just renders the original with an adjusted style and re-renders on a change.
  */
-export function withTextAppearance<P extends { style?: unknown }>(Original: React.ComponentType<P>): React.ComponentType<P> {
+function withTextAppearance<P extends { style?: unknown }>(Original: React.ComponentType<P>): React.ComponentType<P> {
   const Wrapped = function TextWithAppearance(props: P) {
     const a = useSyncExternalStore(subscribe, snapshot);
     const nested = !!React.useContext(ancestorContext());

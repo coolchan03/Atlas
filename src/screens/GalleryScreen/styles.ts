@@ -2,7 +2,7 @@ import { StyleSheet, Dimensions } from 'react-native';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 
-export const COLUMN_COUNT = 3;
+const COLUMN_COUNT = 3;
 const GRID_SPACING = 4;
 const TARGET_CELL = 130;
 /** Columns for the window as it is now: 3 on a phone in portrait, more on a wider window (landscape, unfolded, tablet) so pictures keep a sensible size. */

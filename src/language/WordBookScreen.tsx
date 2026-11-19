@@ -14,7 +14,7 @@ type Sort = 'az' | 'due';
 const DAY = 864e5;
 
 /** "Due now", "Due tomorrow", "Due in 4 days", or "Not practised yet". */
-export function dueText(due: number | null, now = Date.now()): string {
+function dueText(due: number | null, now = Date.now()): string {
   if (due === null) return 'Not practised yet';
   const days = Math.ceil((due - now) / DAY);
   if (days <= 0) return 'Due now';

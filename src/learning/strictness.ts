@@ -13,7 +13,7 @@ export const STRICTNESS_OPTIONS: Array<{ id: Strictness; label: string; hint: st
 ];
 
 export interface Thresholds { gateMin: number; unsupportedShare: number; invalidShare: number; trustVerdict: boolean }
-export const THRESHOLDS: Record<Strictness, Thresholds> = {
+const THRESHOLDS: Record<Strictness, Thresholds> = {
   strict: { gateMin: 6, unsupportedShare: 0, invalidShare: 0, trustVerdict: false },
   balanced: { gateMin: 5, unsupportedShare: 0.4, invalidShare: 0.5, trustVerdict: false },
   lenient: { gateMin: 3, unsupportedShare: 0.6, invalidShare: 0.8, trustVerdict: true },

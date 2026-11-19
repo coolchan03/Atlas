@@ -23,7 +23,7 @@ interface State {
 }
 
 const idFor = (area: string, name: string) => `${area}::${name}`.toLowerCase();
-export const topicsFrom = (areas: OutlineArea[], keep: CpaTopic[] = []): CpaTopic[] =>
+const topicsFrom = (areas: OutlineArea[], keep: CpaTopic[] = []): CpaTopic[] =>
   areas.flatMap((a) => a.topics.map((name) => ({ id: idFor(a.area, name), area: a.area, name, covered: keep.some((k) => k.name.toLowerCase() === name.toLowerCase() && k.covered) })));
 
 export const useCpa = create<State>()(persist((set) => {

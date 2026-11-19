@@ -28,8 +28,8 @@ export interface Task {
 }
 
 /** Jobs that need a lot of memory never run together. Other types may run alongside one of these. */
-export const HEAVY_TYPES: TaskType[] = ['zip', 'index', 'audio', 'transcribe'];
-export const MAX_HEAVY_AT_ONCE = 1;
+const HEAVY_TYPES: TaskType[] = ['zip', 'index', 'audio', 'transcribe'];
+const MAX_HEAVY_AT_ONCE = 1;
 const ACTIVE: TaskStatus[] = ['queued', 'running'];
 
 interface State {

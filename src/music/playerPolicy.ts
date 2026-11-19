@@ -1,7 +1,7 @@
 /** Pure policies for original instrumental music playing beneath speech. */
-export const MIN_MUSIC_VOLUME = 0;
-export const MAX_MUSIC_VOLUME = 1;
-export const SPEECH_DUCK_FACTOR = 0.2;
+const MIN_MUSIC_VOLUME = 0;
+const MAX_MUSIC_VOLUME = 1;
+const SPEECH_DUCK_FACTOR = 0.2;
 export const CROSSFADE_SECONDS = 0.7;
 export function clampMusicVolume(volume: number): number {
   return Number.isFinite(volume) ? Math.max(MIN_MUSIC_VOLUME, Math.min(MAX_MUSIC_VOLUME, volume)) : 0.45;

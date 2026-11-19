@@ -6,7 +6,7 @@
  * Work is bounded: a job that runs longer than its limit is abandoned (its `onAbort` stops the model) and the next job starts, and a job
  * can be cancelled while queued or running. A late result from an abandoned job is ignored, so it can never release the slot twice.
  */
-export const DEFAULT_JOB_LIMIT_MS = 8 * 60 * 1000;
+const DEFAULT_JOB_LIMIT_MS = 8 * 60 * 1000;
 
 export type JobPhase = 'waiting' | 'writing';
 /** Given to the work so an abandoned job can see it and stop: after a Stop or a time-out it must not call the model again or save anything. */

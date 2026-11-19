@@ -21,7 +21,7 @@ import { currentModelName, modelAsker, type Ask } from './model';
 import { P, readJson, readJsonl, stateIndex, terms, writeJson } from './storage';
 import type { Basis, ChunkRecord, CycleReport } from './schema';
 
-export const BATCH_CHUNKS = 3;
+const BATCH_CHUNKS = 3;
 const MAX_FINDINGS_PER_CHUNK = 3;
 
 export interface StudyProgress { sourceId: string; agentId: string; phase: 'extracting' | 'chunking' | 'studying' | 'finishing'; chunksStudied: number; chunksTotal: number; findings: number; pages?: number }

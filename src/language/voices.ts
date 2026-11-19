@@ -8,7 +8,7 @@ import { listVoices, speakIn } from '../atlasVoice/tts';
 const cache = new Map<string, Promise<string[]>>();
 
 /** Names of the offline voices for a language, best quality first (empty when the phone has only one or none). */
-export function voicesFor(code: string): Promise<string[]> {
+function voicesFor(code: string): Promise<string[]> {
   let found = cache.get(code);
   if (!found) {
     found = listVoices(code.split('-')[0])

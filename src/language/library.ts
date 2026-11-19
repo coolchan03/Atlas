@@ -21,7 +21,7 @@ export interface Premade {
   outline: string;
 }
 
-export const GENRES: { genre: Genre; kind: Listening['kind']; title: string; icon: string }[] = [
+const GENRES: { genre: Genre; kind: Listening['kind']; title: string; icon: string }[] = [
   { genre: 'fairy', kind: 'story', title: 'Fairy tales', icon: 'feather' },
   { genre: 'fable', kind: 'story', title: 'Fables', icon: 'sunrise' },
   { genre: 'daily', kind: 'story', title: 'Funny everyday moments', icon: 'smile' },

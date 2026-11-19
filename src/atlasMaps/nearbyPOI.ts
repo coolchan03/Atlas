@@ -29,7 +29,7 @@ out center 20;`;
 }
 
 /** Queries the Overpass API for POIs near a coordinate. Returns [] on any error or timeout. */
-export async function fetchNearbyPOI(lat: number, lon: number, radiusM = 15000): Promise<POI[]> {
+async function fetchNearbyPOI(lat: number, lon: number, radiusM = 15000): Promise<POI[]> {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 8500);
   try {
@@ -65,7 +65,7 @@ export async function fetchNearbyPOI(lat: number, lon: number, radiusM = 15000):
 const kmText = (m: number) => m < 10000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
 
 /** Formats a list of POIs into a short AI-context sentence. Returns '' for empty input. */
-export function formatPOINote(pois: POI[]): string {
+function formatPOINote(pois: POI[]): string {
   if (!pois.length) return '';
   return `Nearby places: ${pois.map((p) => `${p.name} ${p.kind} (${kmText(p.distanceM)} ${p.direction})`).join(', ')}.`;
 }

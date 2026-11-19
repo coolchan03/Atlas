@@ -14,7 +14,7 @@ export interface Dimensions {
 export type GateState = 'pass' | 'fail' | 'unknown';
 
 /** Below this score a gate dimension fails. */
-export const GATE_MIN = 6;
+const GATE_MIN = 6;
 /** The overall score and the verdict must agree: PASS at least this, FAIL no more than this. */
 const PASS_MIN = 6;
 const FAIL_MAX = 7;

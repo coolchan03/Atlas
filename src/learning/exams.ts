@@ -147,7 +147,7 @@ export function scoreAnswer(answer: string, expected: Expected): Score {
 }
 
 /** An answer key a person can have saved but nothing can be graded against: no facts, or only blank wordings. */
-export const isUsableKey = (expected: Expected | undefined): boolean => !!expected && Array.isArray(expected.facts) && expected.facts.length > 0 && expected.facts.every((alts) => Array.isArray(alts) && alts.some((w) => String(w).trim()));
+const isUsableKey = (expected: Expected | undefined): boolean => !!expected && Array.isArray(expected.facts) && expected.facts.length > 0 && expected.facts.every((alts) => Array.isArray(alts) && alts.some((w) => String(w).trim()));
 
 interface Answered {
   text: string;

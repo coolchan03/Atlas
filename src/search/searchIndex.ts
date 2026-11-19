@@ -9,7 +9,7 @@ export interface SearchHit { kind: SearchKind; id: string; title: string; detail
 interface Destination { title: string; route: string; params?: object; icon: string; keywords: string }
 
 /** Screens and settings pages, with the words people use for them. */
-export const DESTINATIONS: Destination[] = [
+const DESTINATIONS: Destination[] = [
   { title: 'Learn a language', route: 'Language', icon: 'book', keywords: 'lessons spanish french german course board words vocabulary' },
   { title: 'Practice call (language)', route: 'Call', icon: 'phone', keywords: 'speak talk conversation language practice call' },
   { title: 'Word book', route: 'WordBook', icon: 'bookmark', keywords: 'saved words vocabulary language' },

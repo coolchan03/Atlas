@@ -24,7 +24,7 @@ export function mentions(topic: string, text: string): boolean {
 
 type InBooks = 'found' | 'thin' | 'missing';
 /** Each passage reduced to its key-word stems once, so many topics can be checked against thousands of passages quickly. */
-export const indexPassages = (passages: string[]): Set<string>[] => passages.map((p) => new Set(stems(p)));
+const indexPassages = (passages: string[]): Set<string>[] => passages.map((p) => new Set(stems(p)));
 /** Two or more passages that mention the topic: found. One: thin. None: missing. Every passage is read (a keyword scan, so it works before any search index exists). */
 export const coverage = (topic: string, index: Set<string>[]): InBooks => {
   const want = stems(topic);
@@ -37,7 +37,7 @@ export const coverage = (topic: string, index: Set<string>[]): InBooks => {
 export interface MatchRow { area: string; topic: string; inBooks: InBooks; taught: 'played' | 'planned' | 'none'; evidence: Evidence }
 
 /** The course's square about this topic, if any. */
-export const squareAbout = (course: Course, topic: string) => course.squares.find((s) => s.format !== 'quiz' && mentions(topic, `${s.title} ${s.focus}`));
+const squareAbout = (course: Course, topic: string) => course.squares.find((s) => s.format !== 'quiz' && mentions(topic, `${s.title} ${s.focus}`));
 
 export function matchExam(args: {
   code: ExamCode; course: Course; passages: string[]; exercises: Exercise[]; progress: Record<string, Progress>;

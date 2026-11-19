@@ -5,7 +5,7 @@ import { bookQuestionsPrompt, projectQuestionBank, questionsOn } from './bookQue
 import { exercisePrompt, groundExercises, readExercises, useExerciseStore, type Exercise, type SourceChunk } from './exercises';
 
 export interface PracticeResult { added: number; dropped: number; reasons: string[] }
-export const ALL_KINDS: Exercise['kind'][] = ['mcq', 'truefalse', 'fill', 'calc', 'order', 'match', 'table', 'short', 'testlet'];
+const ALL_KINDS: Exercise['kind'][] = ['mcq', 'truefalse', 'fill', 'calc', 'order', 'match', 'table', 'short', 'testlet'];
 
 export async function generatePractice(projectId: string, topic: string, opts: { kinds?: Exercise['kind'][]; count?: number; level?: Difficulty; examCode?: string } = {}): Promise<PracticeResult> {
   const kinds = opts.kinds ?? ALL_KINDS; const count = opts.count ?? 8;

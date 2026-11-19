@@ -17,7 +17,7 @@ export type SquareFormat = 'lesson' | 'quiz' | 'cards' | 'match' | 'order' | 'pr
   | 'crossword' | 'wordsearch' | 'scramble' | 'memory' | 'hangman';
 
 /** The games a course can have as a square: each is played from a list of terms with a clue. */
-export const TERM_GAMES = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman'] as const;
+const TERM_GAMES = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman'] as const;
 export type TermGame = (typeof TERM_GAMES)[number];
 export const isTermGame = (f: string): f is TermGame => (TERM_GAMES as readonly string[]).includes(f);
 const DRILL_TOPICS = Object.values(DRILL_LABELS).join(', ');
@@ -226,7 +226,7 @@ export function tidy(v: unknown, max: number): string {
 export const whole = (v: unknown, max: number): string | null => { const t = str(v, 100000); return t && t.length <= max ? t : null; };
 
 /** An assignment has to give real work: something to write, work out or explain, with a good answer to compare with. A task answered by pressing a button ("click next") is not one. */
-export function isRealAssignment(task: string, model: string, rubric: string[]): boolean {
+function isRealAssignment(task: string, model: string, rubric: string[]): boolean {
   // Short is fine ("Translate this sentence", "Write a function that reverses a string"); a task answered by pressing a button, or with nothing to compare an answer to, is not.
   return task.length >= 30 && model.length >= 10 && rubric.length >= 1 && !/\b(click|tap|press)\b[^.]{0,20}\b(next|continue|done|finish|ok)\b/i.test(task);
 }
@@ -242,10 +242,10 @@ export function exampleIsComplete(example: string): boolean {
 }
 
 /** What an assignment must be: work the learner does, with a good answer to compare with, and what a good answer includes. */
-export const ASSIGNMENT_NOTE = 'This is an ASSIGNMENT: real work for the learner to do in their own words or numbers (explain, calculate, compare, write or analyse something from this topic), with a model answer of several sentences and at least two things a good answer must include. Never a task that is done by pressing Next or Continue, and never a question that only needs one word.\n';
+const ASSIGNMENT_NOTE = 'This is an ASSIGNMENT: real work for the learner to do in their own words or numbers (explain, calculate, compare, write or analyse something from this topic), with a model answer of several sentences and at least two things a good answer must include. Never a task that is done by pressing Next or Continue, and never a question that only needs one word.\n';
 
 /** What a lesson\'s writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
-export const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Use a Markdown table (a header row, a |---|---| row, then the rows, each on its own line) for anything with columns: comparisons, schedules, amortisation or depreciation tables, rate and threshold lists, and journal entries. Write a journal entry as a table with the columns Account | Debit | Credit, the debit line first, the credit line after it with "to" before the account name (for example "to Revenue"), and a short date or description line above it. Never write HTML (no <table>, <br> or other tags): tables are Markdown only. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
+const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Use a Markdown table (a header row, a |---|---| row, then the rows, each on its own line) for anything with columns: comparisons, schedules, amortisation or depreciation tables, rate and threshold lists, and journal entries. Write a journal entry as a table with the columns Account | Debit | Credit, the debit line first, the credit line after it with "to" before the account name (for example "to Revenue"), and a short date or description line above it. Never write HTML (no <table>, <br> or other tags): tables are Markdown only. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
 
 /** When passages come from several books, and some are a standard or the law: combine what the books agree on, and let the standard win where it differs. */
 export function authorityNote(excerpts: Array<{ source: string; rank?: number; role?: string }> | undefined): string {

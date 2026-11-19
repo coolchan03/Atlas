@@ -23,7 +23,7 @@ export interface Space {
 }
 
 /** Lessons between special spaces. */
-export const SPECIAL_EVERY = 2;
+const SPECIAL_EVERY = 2;
 /** Lessons between exams: a test of everything since the last one (70% to pass). */
 export const EXAM_EVERY = 8;
 /** Lessons between practice phone calls: the AI plays someone in the situation of the lesson before. */
@@ -39,7 +39,7 @@ const SPECIALS: { kind: SpaceKind; title: string; icon: string }[] = [
 ];
 
 /** Harder topics take two lessons so each sitting stays about the same length. */
-export const partsFor = (u: Unit) =>
+const partsFor = (u: Unit) =>
   (u.kind === 'grammar' || (u.kind === 'theme' && u.level >= 4) || u.items.length > 10 ? 2 : 1);
 
 export const lessonKey = (unitId: string, part: number) => (part > 1 ? `${unitId}:${part}` : unitId);

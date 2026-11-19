@@ -34,7 +34,7 @@ function useText() {
   };
 }
 
-export function LessonView({ content, onDone }: ViewProps<'lesson'>) {
+function LessonView({ content, onDone }: ViewProps<'lesson'>) {
   const t = useText();
   return (
     <View style={styles.gap} testID="square-lesson">
@@ -63,7 +63,7 @@ export function LessonView({ content, onDone }: ViewProps<'lesson'>) {
   );
 }
 
-export function QuizView({ content, onDone }: ViewProps<'quiz'>) {
+function QuizView({ content, onDone }: ViewProps<'quiz'>) {
   const t = useText();
   const [i, setI] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
@@ -93,7 +93,7 @@ export function QuizView({ content, onDone }: ViewProps<'quiz'>) {
   );
 }
 
-export function CardsView({ content, onDone }: ViewProps<'cards'>) {
+function CardsView({ content, onDone }: ViewProps<'cards'>) {
   const t = useText();
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -121,7 +121,7 @@ export function CardsView({ content, onDone }: ViewProps<'cards'>) {
   );
 }
 
-export function MatchView({ content, onDone }: ViewProps<'match'>) {
+function MatchView({ content, onDone }: ViewProps<'match'>) {
   const t = useText();
   const rights = useMemo(() => shuffle(content.pairs.map((_, n) => n), 7), [content]);
   const [left, setLeft] = useState<number | null>(null);
@@ -156,7 +156,7 @@ export function MatchView({ content, onDone }: ViewProps<'match'>) {
   );
 }
 
-export function OrderView({ content, onDone }: ViewProps<'order'>) {
+function OrderView({ content, onDone }: ViewProps<'order'>) {
   const t = useText();
   const shown = useMemo(() => shuffle(content.steps.map((_, n) => n), 11), [content]);
   const [chosen, setChosen] = useState<number[]>([]);
@@ -190,7 +190,7 @@ export function OrderView({ content, onDone }: ViewProps<'order'>) {
   );
 }
 
-export function PracticeView({ content, onDone }: ViewProps<'practice'>) {
+function PracticeView({ content, onDone }: ViewProps<'practice'>) {
   const t = useText();
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -236,7 +236,7 @@ export function PracticeView({ content, onDone }: ViewProps<'practice'>) {
 }
 
 /** A problem with a number for an answer: type it, see if it is within the tolerance, then read the working. */
-export function NumericView({ content, onDone }: ViewProps<'numeric'>) {
+function NumericView({ content, onDone }: ViewProps<'numeric'>) {
   const t = useText();
   const [typed, setTyped] = useState('');
   const [tries, setTries] = useState(0);
@@ -277,7 +277,7 @@ export function NumericView({ content, onDone }: ViewProps<'numeric'>) {
  * One problem solved a step at a time. Before each step is shown the learner writes what they think it is (or says they are not sure),
  * then sees the step with its reason and whether they had the main idea: it is a try-it-yourself, not a click-through.
  */
-export function WorkedView({ content, onDone }: ViewProps<'worked'>) {
+function WorkedView({ content, onDone }: ViewProps<'worked'>) {
   const t = useText();
   const [shown, setShown] = useState(0);
   const [attempts, setAttempts] = useState<string[]>([]);
@@ -320,7 +320,7 @@ export function WorkedView({ content, onDone }: ViewProps<'worked'>) {
 }
 
 /** A reference table, drawn like a chat table so it can be copied the same way. */
-export function TableView({ content, onDone }: ViewProps<'table'>) {
+function TableView({ content, onDone }: ViewProps<'table'>) {
   const t = useText();
   return (
     <View style={styles.gap} testID="square-table">
@@ -346,7 +346,7 @@ function QuickCheck({ q, a }: { q: string; a: string }) {
 }
 
 /** Lower case, no punctuation, one space between words: how typed answers are compared. */
-export const normalizeAnswer = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\u0400-\u04ff\u4e00-\u9fff\u3040-\u30ff ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const normalizeAnswer = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\u0400-\u04ff\u4e00-\u9fff\u3040-\u30ff ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** True when a typed answer is the answer (or an accepted alternative): same words, ignoring case, accents and punctuation, one slip allowed in longer answers. */
 export function answersMatch(typed: string, answer: string, alternatives: string[] = []): boolean {
@@ -360,7 +360,7 @@ export function answersMatch(typed: string, answer: string, alternatives: string
 }
 
 /** Type the answer (or the corrected text) for each item, one at a time. */
-export function TypedView({ content, onDone }: ViewProps<'typed'>) {
+function TypedView({ content, onDone }: ViewProps<'typed'>) {
   const t = useText();
   const [i, setI] = useState(0);
   const [typed, setTyped] = useState('');
@@ -393,7 +393,7 @@ export function TypedView({ content, onDone }: ViewProps<'typed'>) {
 }
 
 /** A table with blank cells: type into each, then check them all. */
-export function TableFillView({ content, onDone }: ViewProps<'tablefill'>) {
+function TableFillView({ content, onDone }: ViewProps<'tablefill'>) {
   const t = useText();
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
@@ -435,7 +435,7 @@ export function TableFillView({ content, onDone }: ViewProps<'tablefill'>) {
 }
 
 /** Sort items into groups: tap an item, then its group. */
-export function SortView({ content, onDone }: ViewProps<'sort'>) {
+function SortView({ content, onDone }: ViewProps<'sort'>) {
   const t = useText();
   const [placed, setPlaced] = useState<Record<number, number>>({});
   const [chosen, setChosen] = useState<number | null>(null);
@@ -468,7 +468,7 @@ export function SortView({ content, onDone }: ViewProps<'sort'>) {
 }
 
 /** Hear a sentence read aloud and type it. */
-export function DictationView({ content, onDone }: ViewProps<'dictation'>) {
+function DictationView({ content, onDone }: ViewProps<'dictation'>) {
   const t = useText();
   const [i, setI] = useState(0);
   const [typed, setTyped] = useState('');
@@ -507,7 +507,7 @@ export function DictationView({ content, onDone }: ViewProps<'dictation'>) {
  * Exact drills: made and marked by the app, so the answer key is always right. Typed answers are kept as you go and finished questions
  * are remembered, so leaving the square and coming back picks up where you were. Results also feed the Practice review.
  */
-export function DrillView({ content, onDone }: ViewProps<'drill'>) {
+function DrillView({ content, onDone }: ViewProps<'drill'>) {
   const t = useText();
   const { progress, saveDraft, record, addSet, freshen } = useExerciseStore();
   const [firstOpen] = useState(() => {
@@ -544,7 +544,7 @@ export function DrillView({ content, onDone }: ViewProps<'drill'>) {
  * A game played from the topic's terms: crossword, word search, word scramble, memory match or guess-the-term. They are the same games the
  * project study tools have, so they play and score the same; the square finishes when the game does.
  */
-export function TermsGameView({ content, onDone }: ViewProps<'terms'>) {
+function TermsGameView({ content, onDone }: ViewProps<'terms'>) {
   const t = useText();
   const [score, setScore] = useState<{ score: number; max: number } | null>(null);
   const activity = useMemo<StudyResult>(() => {

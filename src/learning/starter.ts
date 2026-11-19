@@ -5,7 +5,7 @@ import { useAgentStore } from '../stores/agentStore';
 import { ATLAS_CARDS } from './atlasCards';
 import { SURVIVAL_CHAPTERS } from '../survival/content';
 
-export const ATLAS_PROJECT_NAME = 'Atlas - Emergency';
+const ATLAS_PROJECT_NAME = 'Atlas - Emergency';
 
 /**
  * Creates the "Atlas - Emergency" project, puts the built-in emergency cards in its

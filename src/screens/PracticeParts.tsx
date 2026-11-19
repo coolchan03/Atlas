@@ -19,7 +19,7 @@ const literalStyles = StyleSheet.create({
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /** One drill type per button, so a single topic can be practised on its own. */
-export const DrillPicker: React.FC<{ kinds: DrillKind[]; onPick: (k: DrillKind) => void; colors: Colors }> = ({ kinds, onPick, colors }) => (
+const DrillPicker: React.FC<{ kinds: DrillKind[]; onPick: (k: DrillKind) => void; colors: Colors }> = ({ kinds, onPick, colors }) => (
   <View style={st.wrap} testID="drill-picker">
     {kinds.map((k) => (
       <TouchableOpacity key={k} testID={`drill-${k}`} onPress={() => onPick(k)} style={[st.pill, { borderColor: colors.border }]}>
@@ -93,7 +93,7 @@ export const Flashcards: React.FC<{ cards: Exercise[]; onGotIt: (id: string) => 
 };
 
 /** A note on why a question was missed; kept with the question and shown when it comes back. */
-export const WhyWrong: React.FC<{ value?: string; onChange: (t: string) => void; colors: Colors }> = ({ value, onChange, colors }) => (
+const WhyWrong: React.FC<{ value?: string; onChange: (t: string) => void; colors: Colors }> = ({ value, onChange, colors }) => (
   <TextInput testID="why-wrong" value={value ?? ''} onChangeText={onChange} placeholder="Why did I get this wrong? (a note for next time)" placeholderTextColor={colors.textMuted} multiline style={[st.input, st.top10, [{ borderColor: colors.border, color: colors.text }, literalStyles.s1]]} />
 );
 

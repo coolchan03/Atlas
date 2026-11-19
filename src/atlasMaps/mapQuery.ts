@@ -14,10 +14,10 @@ interface MapPlace { name: string; kind: string; lat: number; lon: number; dista
 const bounds = new Map<string, Promise<MapBounds | null>>();
 const native = (): any => NativeModules.AtlasDevice;
 
-export const nativeMapsAvailable = (): boolean => !!native()?.mapPlaces && !!native()?.mapInfo;
+const nativeMapsAvailable = (): boolean => !!native()?.mapPlaces && !!native()?.mapInfo;
 
 /** Every map file on the phone: the ones downloaded in Atlas and the ones picked from the phone's files. */
-export async function mapsOnPhone(): Promise<MapEntry[]> {
+async function mapsOnPhone(): Promise<MapEntry[]> {
   const out: MapEntry[] = [];
   try { for (const m of await installedMaps()) out.push({ path: m.path, name: m.name, sizeBytes: m.size, source: 'downloaded' }); } catch { /* none yet */ }
   for (const e of useMaps.getState().external) out.push({ path: e.uri, name: e.name, source: 'from your files' });
@@ -25,7 +25,7 @@ export async function mapsOnPhone(): Promise<MapEntry[]> {
 }
 
 /** Where a map covers; null when the file cannot be read. Remembered, so the file is opened once. */
-export function boundsOf(path: string): Promise<MapBounds | null> {
+function boundsOf(path: string): Promise<MapBounds | null> {
   let known = bounds.get(path);
   if (!known) {
     known = Promise.resolve(native()?.mapInfo?.(path)).then((b: MapBounds | undefined) => b ?? null).catch(() => null);
@@ -56,7 +56,7 @@ export async function describeMaps(): Promise<string> {
 }
 
 /** Words for a list of places: "Name (kind), 1.2 km NE". */
-export function formatPlaces(places: MapPlace[], from: { lat: number; lon: number }, imperial: boolean): string {
+function formatPlaces(places: MapPlace[], from: { lat: number; lon: number }, imperial: boolean): string {
   return places.map((p) => `${p.name} (${p.kind}), ${kmText(p.distanceM, imperial)} ${compassName(bearingDeg(from, p))}, at ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`).join('\n');
 }
 

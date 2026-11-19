@@ -28,7 +28,7 @@ export function cancelVideoExport(): void {
 }
 
 /** Text a slide speaks: same as playback in the app. */
-export const slideSpeech = (s: VideoSlide): string => `${s.title}. ${s.narration}`;
+const slideSpeech = (s: VideoSlide): string => `${s.title}. ${s.narration}`;
 
 export async function exportSlidesVideo(
   title: string,

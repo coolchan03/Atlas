@@ -40,9 +40,9 @@ export interface InitWindows {
   hardCapMs: number;
 }
 
-export const DEFAULT_INIT_WINDOWS: InitWindows = { stallMs: 45_000, setupMs: 90_000, hardCapMs: 300_000 };
+const DEFAULT_INIT_WINDOWS: InitWindows = { stallMs: 45_000, setupMs: 90_000, hardCapMs: 300_000 };
 /** How long the next load waits for an abandoned one to finish before refusing to start. */
-export const ABANDONED_SETTLE_MS = 120_000;
+const ABANDONED_SETTLE_MS = 120_000;
 
 export function startInitTrace(now: number = Date.now()): InitTrace {
   return { startedAt: now, phase: 'loading-weights', percent: 0, movedAt: now, samples: [] };
@@ -60,7 +60,7 @@ export function recordInitProgress(trace: InitTrace, percent: number, now: numbe
 }
 
 /** Which window ran out, or null while the load is still within its limits. */
-export function initVerdict(trace: InitTrace, windows: InitWindows, now: number): { windowMs: number; reason: string } | null {
+function initVerdict(trace: InitTrace, windows: InitWindows, now: number): { windowMs: number; reason: string } | null {
   const total = now - trace.startedAt;
   if (total >= windows.hardCapMs) return { windowMs: windows.hardCapMs, reason: `${seconds(total)} in total with the load still unfinished (hard limit)` };
   const quiet = now - trace.movedAt;

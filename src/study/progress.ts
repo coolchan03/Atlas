@@ -63,7 +63,7 @@ interface ProgressState {
 /** One thing to remember: what is asked, the answer, and the numbered sources it came from. */
 export interface StudyCard { prompt: string; answer: string; src?: number[] }
 
-export const itemKey = (projectId: string, answer: string, prompt: string) =>
+const itemKey = (projectId: string, answer: string, prompt: string) =>
   `${projectId}:${answer.trim().toLowerCase().slice(0, 60)}:${prompt.trim().toLowerCase().slice(0, 40)}`;
 
 export const useStudyProgress = create<ProgressState>()(

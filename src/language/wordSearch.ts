@@ -51,7 +51,7 @@ export function buildLangWordSearch(items: Item[], { size = 10, max = 8, seed = 
  * The cells of a straight line (row, column or diagonal) from one tapped letter to another,
  * or null when the two are not in line.
  */
-export function lineCells([a, b]: [number, number], size: number): number[] | null {
+function lineCells([a, b]: [number, number], size: number): number[] | null {
   const [r0, c0, r1, c1] = [Math.floor(a / size), a % size, Math.floor(b / size), b % size];
   const dr = Math.sign(r1 - r0), dc = Math.sign(c1 - c0);
   const n = Math.max(Math.abs(r1 - r0), Math.abs(c1 - c0));

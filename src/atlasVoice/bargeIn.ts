@@ -9,7 +9,7 @@
  */
 export type BargeInOptions = { minRms: number; ratio: number; sustain: number; history: number; warmup: number };
 
-export const DEFAULT_BARGE_IN: BargeInOptions = { minRms: 0.06, ratio: 2.5, sustain: 3, history: 20, warmup: 3 };
+const DEFAULT_BARGE_IN: BargeInOptions = { minRms: 0.06, ratio: 2.5, sustain: 3, history: 20, warmup: 3 };
 
 export class BargeInDetector {
   private recent: number[] = [];

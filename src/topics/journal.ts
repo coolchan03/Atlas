@@ -6,7 +6,7 @@
 export interface JournalRow { account: string; debit: string; credit: string }
 
 /** Accounts offered when the task names none, grouped as a chart of accounts would be. */
-export const STANDARD_ACCOUNTS = [
+const STANDARD_ACCOUNTS = [
   'Cash', 'Accounts Receivable', 'Allowance for Doubtful Accounts', 'Inventory', 'Prepaid Expenses', 'Supplies', 'Notes Receivable', 'Investments',
   'Land', 'Buildings', 'Equipment', 'Vehicles', 'Furniture', 'Accumulated Depreciation', 'Intangible Assets',
   'Accounts Payable', 'Notes Payable', 'Wages Payable', 'Interest Payable', 'Taxes Payable', 'Unearned Revenue', 'Bonds Payable', 'Lease Liability',

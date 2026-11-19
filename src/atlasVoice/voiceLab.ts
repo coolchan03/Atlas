@@ -24,7 +24,7 @@ export const LAB_STEPS = [2, 3, 5];
 
 const SYLLABLE_VOWELS = /[aeiouy]+/gi;
 /** A rough count of syllables, to compare with how many separate bursts of sound a recording has. */
-export const roughSyllables = (text: string): number => Math.max(1, (text.toLowerCase().match(SYLLABLE_VOWELS) ?? []).length);
+const roughSyllables = (text: string): number => Math.max(1, (text.toLowerCase().match(SYLLABLE_VOWELS) ?? []).length);
 
 /** Loads the Read aloud voice (waiting for the engine to be ready with its recording), then runs the lab. */
 export async function runVoiceLab(text: string, steps: number[]): Promise<{ report: LabReport; voice: string }> {

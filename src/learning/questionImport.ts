@@ -27,7 +27,7 @@ const CHUNK = 6000;
 const text = (v: unknown, max = 400): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 /** Questions from the AI's reply, kept only when they have a question and an answer, and a multiple-choice answer that is one of its options. */
-export function readNormalized(reply: string): NormalizedQuestion[] {
+function readNormalized(reply: string): NormalizedQuestion[] {
   const json = extractJson(reply) as { questions?: unknown } | unknown[] | null;
   const list = Array.isArray(json) ? json : (json as { questions?: unknown } | null)?.questions;
   if (!Array.isArray(list)) return [];

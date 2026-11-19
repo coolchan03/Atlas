@@ -25,10 +25,10 @@ import { supersededEditions } from '../standards/taxSources';
 
 const MAX_TRIES = 2;
 /** The most one model call may take. A call that hangs is stopped (the native model is told to stop), and the lesson fails with a message instead of staying on "Writing...". */
-export const CALL_LIMIT_MS = 4 * 60 * 1000;
+const CALL_LIMIT_MS = 4 * 60 * 1000;
 /** The most one section's deepening may take, and all of a lesson's deepening together. A section that runs out keeps its short text. */
-export const SECTION_LIMIT_MS = 90 * 1000;
-export const EXPAND_LIMIT_MS = 6 * 60 * 1000;
+const SECTION_LIMIT_MS = 90 * 1000;
+const EXPAND_LIMIT_MS = 6 * 60 * 1000;
 
 /** Tells the phone's model to stop, so a call abandoned after its time limit does not leave the engine busy for the next lesson. */
 async function stopModel(): Promise<void> {
@@ -36,7 +36,7 @@ async function stopModel(): Promise<void> {
 }
 
 /** One model call that gives up after `ms`: the model is stopped and the call fails. */
-export async function askBounded(system: string, user: string, ms = CALL_LIMIT_MS): Promise<string> {
+async function askBounded(system: string, user: string, ms = CALL_LIMIT_MS): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<never>((_, reject) => {
     timer = setTimeout(() => { void stopModel(); reject(new Error('The AI took too long to answer and was stopped.')); }, ms);
@@ -90,7 +90,7 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
 }
 
 /** Each chapter with what it is mainly about ("Cash", "Liabilities"): named by the AI from the heading and the first lines, or cut from the heading when it cannot be asked. */
-export async function withSubjects(chapters: Chapter[]): Promise<Chapter[]> {
+async function withSubjects(chapters: Chapter[]): Promise<Chapter[]> {
   let names: string[] | null = null;
   try {
     const prompt = subjectPrompt(chapters);

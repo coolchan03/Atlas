@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 
 /** Counts quick taps in a row: after `count` taps, each within `windowMs` of the one before, `onOpen` runs and the count starts again. Pure of any screen. */
-export function createSecretTaps(rule: { count: number; windowMs: number }, onOpen: () => void, now: () => number = Date.now) {
+function createSecretTaps(rule: { count: number; windowMs: number }, onOpen: () => void, now: () => number = Date.now) {
   const { count, windowMs } = rule;
   let taps = 0;
   let last = 0;

@@ -13,7 +13,7 @@ const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|to
 const WHO = String.raw`(?![Mm]e\b|[Uu]s\b|[Yy]ou\b|[Ii]t\b|[Bb]ack\b)(?:my|mum|mom|dad|him|her|them|his|their|our|the (?:landlord|doctor|dentist|school|office|boss|team|plumber|bank)|\d|\+|[A-Z][a-z]+)`;
 const REACH_VERB = new RegExp(String.raw`\b(?:[Tt]ext|[Ss][Mm][Ss]|[Ee]-?mail|[Mm]essage|[Dd][Mm]|[Cc]all|[Pp]hone|[Dd]ial|[Rr]ing|[Tt]ell|[Rr]eply to|[Rr]espond to)\s+${WHO}`);
 const SEND_MESSAGE = /\b(?:send|write|draft)\s+(?:a |an |my |the )?(?:quick |short )?(?:text|sms|e-?mail|message)\b/i;
-export function reachesSomeone(message: string): boolean {
+function reachesSomeone(message: string): boolean {
   return SEND_MESSAGE.test(message) || REACH_VERB.test(message);
 }
 

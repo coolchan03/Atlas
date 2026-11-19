@@ -23,7 +23,7 @@ function yearAdjusted(score: number, asked: number[], claimYears: number[]): num
 }
 
 /** The topics the learning cycle has studied (every agent's task), without repeats. */
-export function learnedTopics(): string[] {
+function learnedTopics(): string[] {
   const topics = Object.values(useLearningStore.getState().config).map((c) => (c?.topic ?? '').trim()).filter(Boolean);
   return [...new Set(topics)];
 }

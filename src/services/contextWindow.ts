@@ -17,8 +17,8 @@ export type ContextWindowResult<T> = {
 };
 
 /** Smallest and largest reply the automatic length will choose. */
-export const AUTO_MIN_REPLY_TOKENS = 1024;
-export const AUTO_MAX_REPLY_TOKENS = 8192;
+const AUTO_MIN_REPLY_TOKENS = 1024;
+const AUTO_MAX_REPLY_TOKENS = 8192;
 
 /**
  * How long a reply may be when the length is automatic: as much of the memory window as the prompt guard will keep

@@ -8,9 +8,9 @@ import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { readZipDirectory } from './zipDirectory';
 
-export const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
+const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
 export const MAX_ENTRIES = 5000;
-export const MAX_UNPACKED_BYTES = 3 * 1024 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 3 * 1024 * 1024 * 1024;
 export const MAX_RATIO = 200;
 
 export type EntryKind = 'document' | 'questions' | 'archive' | 'unsupported' | 'unsafe';

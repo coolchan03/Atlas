@@ -8,7 +8,7 @@ import { useTopics, type Course } from './store';
  * background (a lesson you open yourself always goes first), and a failure just stops it quietly: the lesson is then written when
  * you open it, as before.
  */
-export const DEFAULT_AHEAD = 2;
+const DEFAULT_AHEAD = 2;
 export const AHEAD_CHOICES = [0, 1, 2, 3, 5, 8, 10, 15, 20];
 /** Squares the app makes itself, instantly and with no AI: nothing to write ahead. */
 const MADE_IN_CODE = ['drill', 'periodic'];

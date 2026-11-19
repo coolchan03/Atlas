@@ -10,7 +10,7 @@ export type ExerciseKind =
 export const LESSON_SECONDS = 5 * 60;
 
 /** Typical seconds per exercise, before the learner's own pace is known. */
-export const TYPICAL_SECONDS: Record<ExerciseKind, number> = {
+const TYPICAL_SECONDS: Record<ExerciseKind, number> = {
   choose: 12, meaning: 12, truefalse: 12, listen: 15, blank: 18, scramble: 20,
   build: 30, hear: 30, speak: 20, type: 35, dictation: 35, match: 40,
 };

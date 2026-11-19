@@ -74,7 +74,7 @@ export async function loadFailed(engine: Engine, modelId: string): Promise<numbe
 }
 
 /** On app start: if the last load never finished (the app was closed by the phone), go back. */
-export async function recoverAfterCrash(): Promise<string | null> {
+async function recoverAfterCrash(): Promise<string | null> {
   try {
     const raw = await AsyncStorage.getItem(PENDING);
     if (!raw) return null;

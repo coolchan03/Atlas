@@ -7,8 +7,8 @@ import { useWindowDimensions } from 'react-native';
  * portrait whenever its window is at least 840dp wide).
  */
 export type LayoutClass = 'compact' | 'medium' | 'expanded';
-export const MEDIUM_MIN_WIDTH = 600;
-export const EXPANDED_MIN_WIDTH = 840;
+const MEDIUM_MIN_WIDTH = 600;
+const EXPANDED_MIN_WIDTH = 840;
 
 export function layoutClassFor(width: number): LayoutClass {
   if (width >= EXPANDED_MIN_WIDTH) return 'expanded';

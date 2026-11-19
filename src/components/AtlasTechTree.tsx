@@ -17,7 +17,7 @@ const literalStyles = StyleSheet.create({
 
 
 interface Tech { id: string; name: string; cost: number; requires: string[] }
-export const TECH_TREE: Tech[] = [
+const TECH_TREE: Tech[] = [
   { id:'agri', name:'Agriculture', cost:2, requires:[] },
   { id:'pottery', name:'Pottery', cost:2, requires:['agri'] },
   { id:'writing', name:'Writing', cost:2, requires:['pottery'] },

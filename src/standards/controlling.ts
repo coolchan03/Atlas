@@ -37,7 +37,7 @@ export function inferEntity(text: string): Entity {
 }
 
 /** Which bodies control each kind of subject, in order. */
-export const CONTROLLING: Record<Entity, Body[]> = {
+const CONTROLLING: Record<Entity, Body[]> = {
   government: ['GASB'], private: ['FASB'], 'not-for-profit': ['FASB'], public: ['FASB', 'SEC'],
   'audit-public': ['PCAOB'], audit: ['AICPA'], tax: ['IRS'], unknown: [],
 };

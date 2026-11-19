@@ -8,8 +8,8 @@
 import { withTimeout } from '../utils/withTimeout';
 
 export const MAX_STEPS = 6;
-export const STEP_TIMEOUT_MS = 3 * 60 * 1000;
-export const MAX_ATTEMPTS = 2;
+const STEP_TIMEOUT_MS = 3 * 60 * 1000;
+const MAX_ATTEMPTS = 2;
 /** The most of one step's output that is carried into later steps and the final answer. */
 const OUTPUT_CHARS = 1500;
 
@@ -19,7 +19,7 @@ export interface StepResult { n: number; title: string; ok: boolean; output: str
 const clip = (t: string, n = OUTPUT_CHARS) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
 /** The planning request. Tools are listed by name only: a step that names any other tool is run as a plain reasoning step. */
-export function planPrompt(goal: string, tools: string[]): { system: string; user: string } {
+function planPrompt(goal: string, tools: string[]): { system: string; user: string } {
   return {
     system: `You break a request into a short ordered plan. Reply with ONLY a JSON array of at most ${MAX_STEPS} steps, each {"title": "what to do", "tool": "optional tool name", "args": {"name": "value"}}. Use a tool only from this list: ${tools.length ? tools.join(', ') : '(none)'}. Do not add steps that are not needed. If the request is simple, reply with one step.`,
     user: `REQUEST: ${goal}`,

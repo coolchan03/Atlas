@@ -6,7 +6,7 @@
 import type { Exercise, Progress } from '../study/exercises';
 import { scopeIds } from '../stores/projectTree';
 
-export const UNDERSTOOD_MIN_QUESTIONS = 5;
+const UNDERSTOOD_MIN_QUESTIONS = 5;
 export const UNDERSTOOD_SHARE = 0.8;
 
 type Understanding = 'not-checked' | 'needs-work' | 'understood';

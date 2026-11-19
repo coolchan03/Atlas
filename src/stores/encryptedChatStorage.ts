@@ -211,7 +211,7 @@ export async function relockProtectedChats(): Promise<void> {
 // Re-lock after the app has been in the background for a while, never in the
 // middle of a reply: a reply that finishes after its chat was re-locked would
 // be lost, because sealing needs the PIN that re-locking forgets.
-export const RELOCK_GRACE_MS = 30_000;
+const RELOCK_GRACE_MS = 30_000;
 const relockListeners = new Set<() => void>();
 export function onProtectedChatsRelocked(fn: () => void): () => void {
   relockListeners.add(fn);
@@ -226,7 +226,7 @@ function generationRunning(): boolean {
   const { callHook, HOOKS } = require('../bootstrap/hookRegistry');
   return callHook(HOOKS.generationActive) === true;
 }
-export function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
+function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
   if (relockTimer) clearTimeout(relockTimer);
   relockTimer = setTimeout(() => {
     relockTimer = null;
@@ -234,7 +234,7 @@ export function scheduleRelock(delayMs = RELOCK_GRACE_MS): void {
     void relockProtectedChats().then(() => relockListeners.forEach(fn => fn())).catch(() => undefined);
   }, delayMs);
 }
-export function cancelScheduledRelock(): void {
+function cancelScheduledRelock(): void {
   if (relockTimer) { clearTimeout(relockTimer); relockTimer = null; }
 }
 if (Platform.OS === 'android') AppState?.addEventListener?.('change', state => {

@@ -9,7 +9,7 @@ import type { Conversation, Message } from '../types';
 const GENERIC = new Set(['new chat', 'conversation', 'untitled', 'chat', '']);
 const SUFFIX = /\s*\((sync conflict|edited after deletion)\)\s*$/i;
 
-export const baseTitle = (title: string) => title.replace(SUFFIX, '').trim();
+const baseTitle = (title: string) => title.replace(SUFFIX, '').trim();
 const key = (title: string) => baseTitle(title).toLowerCase();
 const mergeable = (c: Conversation) => !c.pinVerifier && !c.protectedBlob && !c.isPrivate && !c.isArchived && !GENERIC.has(key(c.title));
 const sameMessage = (a: Message, b: Message) => a.role === b.role && a.content === b.content;

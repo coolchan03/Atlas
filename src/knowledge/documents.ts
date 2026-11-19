@@ -22,8 +22,8 @@ import { bookExtractPages, bookPageCount, removeBookSidecar } from './bookPages'
 import { bookKind, type BookKind } from './textPages';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 
-export const PAGES_PER_FILE = 20;
-export const CHUNKS_PER_FILE = 25;
+const PAGES_PER_FILE = 20;
+const CHUNKS_PER_FILE = 25;
 /** A page with fewer readable characters than this is treated as a scan or an image, not text. */
 const MIN_PAGE_CHARS = 20;
 

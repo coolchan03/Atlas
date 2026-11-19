@@ -23,7 +23,7 @@ import { readJson } from './storage';
 // ------------------------------------------------------------------ identity of a finding
 const normalise = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').replace(/[^a-z0-9% .,'-]/g, '').trim();
 /** The stable identity of a finding: the same claim about the same topic hashes the same wherever it was written. */
-export const findingContentHash = (topicId: string, finding: string): string => sha256Text(`${topicId}|${normalise(finding)}`);
+const findingContentHash = (topicId: string, finding: string): string => sha256Text(`${topicId}|${normalise(finding)}`);
 /** Identity of the evidence set, so an approval can be tied to exactly the evidence it saw. */
 export const evidenceHash = (evidence: EvidenceRef[]): string =>
   sha256Text(evidence.map((e) => `${e.sourceHash}:${e.chunkId}:${e.page ?? ''}:${normalise(e.quote ?? '')}`).sort().join('\n'));
@@ -77,7 +77,7 @@ async function setOpen(dir: string, open: boolean): Promise<void> {
   });
 }
 
-export const isFinalized = async (dir: string): Promise<boolean> => RNFS.exists(cycleFile(dir, 'final.json'));
+const isFinalized = async (dir: string): Promise<boolean> => RNFS.exists(cycleFile(dir, 'final.json'));
 
 /** Writes the running counters (not the findings) so an interrupted cycle shows what it had reached. */
 export async function checkpointCycle(handle: CycleHandle, patch: Partial<Pick<CycleReport, 'attempted'>> = {}): Promise<void> {

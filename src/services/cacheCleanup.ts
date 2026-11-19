@@ -18,7 +18,7 @@ export interface CacheItem {
 
 interface Kind { match: RegExp; label: string; rebuild: string; inUseWhileBusy: boolean }
 /** The cache folders Atlas writes, by name. Anything not listed here is never offered. */
-export const CACHE_KINDS: Kind[] = [
+const CACHE_KINDS: Kind[] = [
   { match: /^podcast-audio$/, label: 'Briefing and podcast audio', rebuild: 'Made again the next time you play it.', inUseWhileBusy: true },
   { match: /^updates$/, label: 'Downloaded app updates', rebuild: 'Downloaded again if you update.', inUseWhileBusy: true },
   { match: /^llm-sessions$/, label: 'Saved chat prompt state', rebuild: 'Chats reopen a little slower the first time.', inUseWhileBusy: true },

@@ -22,7 +22,7 @@ interface SweepSetting { label: string; backend: 'cpu' | 'opencl'; gpuLayers: nu
 interface SweepStep { setting: SweepSetting; ok: boolean; loadSeconds: number; error?: string; check?: OutputCheck; note?: string; scan?: string[] }
 export interface SweepResult { steps: SweepStep[]; files: string[]; vision?: { ok: boolean; reply: string; error?: string }; report: string; best?: SweepSetting }
 
-export const DEFAULT_SWEEP_LAYERS = [24, 16, 8];
+const DEFAULT_SWEEP_LAYERS = [24, 16, 8];
 
 /**
  * The settings tried. The CPU first, three ways: the app's own settings, with the ARM-optimized weight kernels off, and with the
@@ -174,7 +174,7 @@ export async function runModelSweep(model: LlamaDownloadedModel, opts: { layers?
   }
 }
 
-export function formatSweepReport(model: Pick<LlamaDownloadedModel, 'fileName'>, parts: { steps: SweepStep[]; vision?: SweepResult['vision']; files?: string[] }): string {
+function formatSweepReport(model: Pick<LlamaDownloadedModel, 'fileName'>, parts: { steps: SweepStep[]; vision?: SweepResult['vision']; files?: string[] }): string {
   const { steps, vision, files = [] } = parts;
   const lines = [`Test for ${model.fileName}`, ...files.map((f) => `- ${f}`), 'Each step: 2,048-token context, batch 128 unless stated, f16 KV cache, MTP off.'];
   for (const s of steps) {

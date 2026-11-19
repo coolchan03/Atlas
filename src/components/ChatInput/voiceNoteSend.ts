@@ -71,7 +71,7 @@ export interface VoiceNoteHandlerDeps {
  * through the SAME send path (`sendVoiceNote`).
  */
 /** Whisper's typical output for silence or background noise. */
-export function isNonSpeech(text: string): boolean {
+function isNonSpeech(text: string): boolean {
   const t = (text || '').replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ').replace(/[^\p{L}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
   return !t || ['you', 'thank you', 'thanks', 'thanks for watching', 'thank you for watching', 'bye', 'uh', 'um', 'hmm'].includes(t);
 }

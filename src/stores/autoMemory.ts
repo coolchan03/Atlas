@@ -65,7 +65,7 @@ export const useAutoMemory = create<AutoMemoryState>()(persist((set, get) => ({
 }));
 
 /** Called only for a saved, ordinary user chat turn; never read private or PIN-locked messages. */
-export function considerUserMemory(text: string, context: { therapy: boolean; private: boolean }): void {
+function considerUserMemory(text: string, context: { therapy: boolean; private: boolean }): void {
   if (context.private) return;
   useAutoMemory.getState().propose(text, context.therapy);
 }

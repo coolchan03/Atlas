@@ -11,7 +11,7 @@ interface S {
   set: (key: string, index: number) => void;
   clear: (key: string) => void;
 }
-export const useReadResume = create<S>()(
+const useReadResume = create<S>()(
   persist(
     (set) => ({
       positions: {},

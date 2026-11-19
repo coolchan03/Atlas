@@ -16,6 +16,6 @@ export function stepOverlap(attempt: string, step: string): number {
   return hit / want.size;
 }
 
-export const CLOSE = 0.3;
+const CLOSE = 0.3;
 /** What to tell the learner after they see a step they tried. */
 export const stepFeedback = (attempt: string, step: string): 'close' | 'compare' | 'skipped' => (!attempt.trim() ? 'skipped' : stepOverlap(attempt, step) >= CLOSE ? 'close' : 'compare');

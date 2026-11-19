@@ -20,7 +20,7 @@ export const IMAGE_STYLES: ImageStyle[] = [
   { id: 'fantasy', name: 'Fantasy art', prompt: 'epic fantasy art, magical atmosphere, detailed, concept art', negative: 'photo, plain background, low detail' },
 ];
 
-export const imageStyleById = (id?: string): ImageStyle => IMAGE_STYLES.find((s) => s.id === id) ?? IMAGE_STYLES[0];
+const imageStyleById = (id?: string): ImageStyle => IMAGE_STYLES.find((s) => s.id === id) ?? IMAGE_STYLES[0];
 
 /**
  * The prompt and negative prompt with the chosen style added. The style comes FIRST: CLIP-based models

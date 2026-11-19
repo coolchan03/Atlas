@@ -5,7 +5,7 @@
 import { practiceSet, type Exercise, type Progress } from './exercises';
 
 /** About how long each kind of question takes, in seconds. */
-export const SECONDS_BY_KIND: Record<Exercise['kind'], number> = {
+const SECONDS_BY_KIND: Record<Exercise['kind'], number> = {
   mcq: 45, truefalse: 25, fill: 40, calc: 120, order: 60, match: 75, table: 180, short: 90, testlet: 240,
 };
 export const SESSION_MINUTES = [5, 10, 20] as const;

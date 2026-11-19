@@ -2,9 +2,9 @@
 import { apaReference, type Citation } from './citations';
 
 export interface Paper extends Citation { id: string; question?: string; method?: string; sample?: string; findings?: string; limitations?: string }
-export const MATRIX_COLUMNS = ['Source', 'Research question', 'Method', 'Sample', 'Findings', 'Limitations'] as const;
+const MATRIX_COLUMNS = ['Source', 'Research question', 'Method', 'Sample', 'Findings', 'Limitations'] as const;
 
-export function matrixRows(papers: Paper[]): string[][] {
+function matrixRows(papers: Paper[]): string[][] {
   return papers.map((p) => [apaReference(p), p.question ?? '', p.method ?? '', p.sample ?? '', p.findings ?? '', p.limitations ?? '']);
 }
 /** Markdown table for export. */

@@ -16,7 +16,7 @@ import {
 import { searchFindings } from './cycles';
 
 export interface PromotionCriteria { minFindings: number; minDocuments: number; minAverageConfidence: number; minReviewed: number }
-export const DEFAULT_PROMOTION: PromotionCriteria = { minFindings: 5, minDocuments: 1, minAverageConfidence: 0.5, minReviewed: 1 };
+const DEFAULT_PROMOTION: PromotionCriteria = { minFindings: 5, minDocuments: 1, minAverageConfidence: 0.5, minReviewed: 1 };
 
 /** Well-known subjects: stable ids and the words that identify them. Anything else gets an id made from its own words. */
 const KNOWN_SUBJECTS: Array<{ topicId: string; name: string; words: string[] }> = [
@@ -30,7 +30,7 @@ const KNOWN_SUBJECTS: Array<{ topicId: string; name: string; words: string[] }> 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'general';
 
 /** A stable id for a subject: the same words always give the same id. */
-export function topicIdFor(text: string): { topicId: string; name: string; score: number } {
+function topicIdFor(text: string): { topicId: string; name: string; score: number } {
   const t = terms(text, 40);
   let best = { topicId: '', name: '', score: 0 };
   for (const k of KNOWN_SUBJECTS) {

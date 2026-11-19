@@ -97,7 +97,7 @@ const bannerStyles = StyleSheet.create({
 });
 
 /** A band under the header of an incognito chat that stays on screen: what it is, that nothing is kept, and (for a remote model) that the provider still sees the messages. */
-export const IncognitoBanner: React.FC<{ colors: ColorsType; isRemote?: boolean }> = ({ colors, isRemote }) => (
+const IncognitoBanner: React.FC<{ colors: ColorsType; isRemote?: boolean }> = ({ colors, isRemote }) => (
   <View
     testID="incognito-banner" accessible accessibilityRole="text"
     accessibilityLabel={`Incognito, not saved.${isRemote ? ' Your messages are still sent to the remote model provider.' : ''}`}

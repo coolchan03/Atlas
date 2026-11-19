@@ -34,7 +34,7 @@ export const LAYOUT_MODES: Array<{ id: LayoutMode; name: string; hint: string }>
 export interface SkinShape { radius: number; minBorder: number; shadow: 'none' | 'soft' | 'glow'; /** Extra rounded: buttons, chips and inputs are pills and square icon controls are circles; cards and panels keep large, content-safe corners. */ pill?: boolean }
 export type SkinId = 'aero' | 'retro' | 'terminal' | 'mac' | 'xp' | 'ios' | 'material' | 'neon';
 export interface Skin { id: SkinId; name: string; hint: string; look: Partial<Appearance>; shape: SkinShape }
-export const SKIN_DEFAULT_SHAPE: SkinShape = { radius: 1, minBorder: 0, shadow: 'none' };
+const SKIN_DEFAULT_SHAPE: SkinShape = { radius: 1, minBorder: 0, shadow: 'none' };
 
 export interface Appearance {
   /** A whole look chosen at once (colors, font, chat style and the shape of boxes); the pieces can still be changed. */
@@ -180,7 +180,7 @@ export const ACCENTS: Array<{ id: AccentId; name: string; light: Accent; dark: A
 ];
 
 /** Each part of the app's own color in Multicolor mode: [light, dark]. */
-export const SECTION_COLORS: Record<string, [string, string]> = {
+const SECTION_COLORS: Record<string, [string, string]> = {
   HomeTab: ['#1D4ED8', '#60A5FA'], ChatsTab: ['#047857', '#34D399'], ProjectsTab: ['#B3620F', '#F2A93B'],
   LanguageTab: ['#6D28D9', '#A78BFA'], ModelsTab: ['#0F766E', '#2DD4BF'], SettingsTab: ['#BE185D', '#F472B6'],
   EmergencyTab: ['#B91C1C', '#F87171'], LibraryTab: ['#0F766E', '#2DD4BF'], BriefTab: ['#B3620F', '#F2A93B'],

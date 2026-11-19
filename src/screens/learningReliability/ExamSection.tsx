@@ -12,13 +12,13 @@ import { QuestionImport } from './QuestionImport';
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** One line for one run: right answers, outdated figures, unsupported citations, speed and memory. */
-export function describeResult(r: ExamResult): string {
+function describeResult(r: ExamResult): string {
   const m = r.metrics;
   return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}${m.ungraded ? `. ${m.ungraded} not graded` : ''}`;
 }
 
 /** Why questions did not pass in one run, in plain words ("2 × The model failed to answer..."). Empty when everything passed or the run predates reasons. */
-export function describeReasons(r: ExamResult): string[] {
+function describeReasons(r: ExamResult): string[] {
   return reasonCounts(r.metrics).map(({ reason, count }) => `${count} × ${REASON_LABEL[reason]}`);
 }
 

@@ -16,7 +16,7 @@ export function confidenceOf(c: { status: ClaimStatus; sourcePassages: number; c
 }
 
 /** Whether a benchmark has enough questions to say anything. Below this the result is shown as a first look, not a measure. */
-export const MIN_EXAM_QUESTIONS = 20;
+const MIN_EXAM_QUESTIONS = 20;
 export function sampleNote(total: number): string | null {
   return total < MIN_EXAM_QUESTIONS ? `Only ${total} question${total === 1 ? '' : 's'}: too few to show real improvement. Use at least ${MIN_EXAM_QUESTIONS}.` : null;
 }

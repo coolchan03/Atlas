@@ -9,7 +9,7 @@ export interface Check { id: string; name: string; run: () => Promise<CheckOutco
 export interface CheckResult extends CheckOutcome { id: string; name: string; ms: number }
 
 /** The longest one check may take. */
-export const CHECK_TIMEOUT_MS = 25_000;
+const CHECK_TIMEOUT_MS = 25_000;
 
 const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> => new Promise<T>((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error(`no answer after ${Math.round(ms / 1000)} seconds`)), ms);

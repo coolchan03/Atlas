@@ -15,7 +15,7 @@ async function listAll(dir: string, prefix: string, out: Array<{ name: string; s
 }
 
 /** Reasons an unpacked tree is unsafe, or an empty list. */
-export async function extractedProblems(zipPath: string, dir: string): Promise<string[]> {
+async function extractedProblems(zipPath: string, dir: string): Promise<string[]> {
   let zipBytes = 0;
   try { zipBytes = Number((await RNFS.stat(zipPath)).size) || 0; } catch { /* size unknown: the ratio check is skipped, the other limits still apply */ }
   const files: Array<{ name: string; size: number }> = [];

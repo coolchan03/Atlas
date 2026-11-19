@@ -7,7 +7,7 @@ import type { NearbyStatus } from '../../services/nearbySync';
 import { useTheme } from '../../theme';
 
 /** Scannable pairing invitation. Its short-lived key must never be logged. */
-export function AtlasPairingQr({ value }: { value: string }) {
+function AtlasPairingQr({ value }: { value: string }) {
   const matrix = useMemo(() => {
     const qr = qrcode(0, 'M');
     qr.addData(value);

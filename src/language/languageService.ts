@@ -34,7 +34,7 @@ export const MISTAKES = 'mistakes';
 /** Practice that earns XP but no board progress (a speed round outside the board). */
 export const PRACTICE = 'practice';
 /** Daily XP goals to pick from (10 XP per right answer: one lesson is about 100). */
-export const DAILY_GOALS = [50, 100, 200, 300];
+const DAILY_GOALS = [50, 100, 200, 300];
 
 export const LANGUAGES = PHRASE_LANGUAGES.map(({ code, name, native }) => ({ code, name, native }));
 const langName = (code: string) => PHRASE_LANGUAGES.find((l) => l.code === code)?.name ?? code;

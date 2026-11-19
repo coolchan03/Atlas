@@ -136,7 +136,7 @@ export function storyKinds(h: Pick<Headline, 'title' | 'desc'>): string[] {
  * Broad sections such as U.S. or world news mix in sports and celebrity stories. Those are
  * dropped unless one of the user's interests is about them (a section or a matching name).
  */
-export function unwantedCategory(h: Pick<Headline, 'title' | 'desc'>, interests: string[]): boolean {
+function unwantedCategory(h: Pick<Headline, 'title' | 'desc'>, interests: string[]): boolean {
   const text = `${h.title} ${h.desc.slice(0, 200)}`;
   return (Object.keys(CATEGORY) as (keyof typeof CATEGORY)[]).some((cat) =>
     CATEGORY[cat].test(text) && !interests.some((i) => sectionFor(i) === cat || CATEGORY[cat].test(i)));

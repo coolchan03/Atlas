@@ -13,7 +13,7 @@ export interface SqlAdapter {
   executeSync(sql: string, params?: Params): { rows?: unknown[]; insertId?: number };
 }
 
-export const KNOWLEDGE_DB_NAME = 'atlas_learning_knowledge.db';
+const KNOWLEDGE_DB_NAME = 'atlas_learning_knowledge.db';
 /** 2 adds contradictions, mastery and exam items. Opening an older database only adds tables; nothing is dropped or rewritten. */
 export const KNOWLEDGE_SCHEMA_VERSION = 2;
 

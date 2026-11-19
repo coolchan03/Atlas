@@ -37,7 +37,7 @@ import { evidenceHash, effectiveReview, eraseFindings, getFinding, listCycles, m
 import { listProfiles, refreshStats, saveProfile } from './agents';
 import { listDocuments, saveDocument } from './documents';
 
-export const INTERCHANGE = 'atlas-learning-interchange/1.0';
+const INTERCHANGE = 'atlas-learning-interchange/1.0';
 const MAX_TEXT_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_PACKAGE_FILES = 20_000;
 const MAX_ORIGINAL_BYTES = 512 * 1024 * 1024;
@@ -233,7 +233,7 @@ async function openPackage(zipPath: string): Promise<{ pkg?: Package; refused: s
 const pushIssue = (list: ImportIssue[], where: string, problem: string) => { if (list.length < 200) list.push({ where, problem }); };
 
 /** Does the new finding contradict the existing one? Same subject matter, but different numbers. */
-export function looksContradictory(a: Pick<Finding, 'question' | 'finding' | 'contentHash'>, b: Pick<Finding, 'question' | 'finding' | 'contentHash'>): boolean {
+function looksContradictory(a: Pick<Finding, 'question' | 'finding' | 'contentHash'>, b: Pick<Finding, 'question' | 'finding' | 'contentHash'>): boolean {
   if (a.contentHash === b.contentHash) return false;
   const ta = terms(`${a.question} ${a.finding}`, 30); const tb = terms(`${b.question} ${b.finding}`, 30);
   const shared = ta.filter((w) => tb.includes(w)).length;

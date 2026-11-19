@@ -25,7 +25,7 @@ export interface NeuralVoice {
   accents?: boolean;
 }
 
-export const KOKORO_SPEAKERS = [
+const KOKORO_SPEAKERS = [
   { sid: 0, name: 'Default', female: true, accent: 'US' },
   { sid: 1, name: 'Bella', female: true, accent: 'US' },
   { sid: 2, name: 'Nicole', female: true, accent: 'US' },
@@ -46,7 +46,7 @@ const VARIANT = 1000;
  * Kokoro v1.0 English speakers (ids in the multi-language package). The favourites come
  * first; "Lewis (deep)" is Lewis played 10% lower, which keeps his pace and deepens the voice.
  */
-export const KOKORO_V1_SPEAKERS: NeuralSpeaker[] = [
+const KOKORO_V1_SPEAKERS: NeuralSpeaker[] = [
   { sid: 12, name: 'Echo', female: false, accent: 'US' },
   { sid: 18, name: 'Puck', female: false, accent: 'US' },
   { sid: 25, name: 'Fable', female: false, accent: 'UK' },

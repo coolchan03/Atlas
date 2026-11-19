@@ -6,7 +6,7 @@ import { useChatStore } from '../stores';
 import { duplicateGroups, mergeAllDuplicates, type MergeChoice } from './mergeDuplicates';
 import type { Conversation } from '../types';
 
-export const UNDO_MERGE_MS = 8000;
+const UNDO_MERGE_MS = 8000;
 
 interface Pending { originals: Conversation[]; merged: number; timer: ReturnType<typeof setTimeout> }
 let pending: Pending | null = null;

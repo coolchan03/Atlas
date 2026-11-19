@@ -10,7 +10,7 @@ export interface CrossEntry { id: number; en: string; word: string; row: number;
 export interface Crossword { rows: number; cols: number; cells: (string | null)[]; entries: CrossEntry[] }
 
 /** Letters of a word with accents and case ignored, for checking what the learner typed. */
-export const plainLetters = (s: string) => gridWord(s).normalize('NFD').replace(/\p{M}/gu, '');
+const plainLetters = (s: string) => gridWord(s).normalize('NFD').replace(/\p{M}/gu, '');
 
 /** A crossword needs at least this many words that cross. */
 export const MIN_WORDS = 4;

@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 
-export const UNDO_WAIT_MS = 8000;
+const UNDO_WAIT_MS = 8000;
 
 /**
  * Removing something takes effect at once and waits a few seconds for an Undo, instead of asking "Are you sure?" first.

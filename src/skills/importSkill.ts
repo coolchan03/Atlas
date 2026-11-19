@@ -27,7 +27,7 @@ async function readText(path: string): Promise<string> {
 }
 
 /** The skill in a picked SKILL.md (or any .md / .txt) file, or in a zipped skill folder. Files next to SKILL.md are ignored. */
-export async function readSkillFile(uri: string, name: string): Promise<ParsedSkill> {
+async function readSkillFile(uri: string, name: string): Promise<ParsedSkill> {
   const local = (await resolvePickedFileUri(uri, name || 'skill.md')).replace(/^file:\/\//, '');
   if (!/\.zip$/i.test(name)) return parseSkill(await readText(local));
   const dir = `${RNFS.CachesDirectoryPath}/skill-import-${Date.now()}`;

@@ -10,7 +10,7 @@ const requirements: Partial<Record<NativeFamily, ReadonlyArray<SupportKind>>> = 
   chroma: ['vae', 't5xxl'],
 };
 
-export const SUPPORTED_NATIVE_FAMILIES: readonly NativeFamily[] =
+const SUPPORTED_NATIVE_FAMILIES: readonly NativeFamily[] =
   ['sd15', 'sdxl', 'flux', 'z_image', 'anima', 'chroma'];
 
 export function getRequiredImageSupport(model: Pick<ONNXImageModel, 'nativeImageFamily'>) {

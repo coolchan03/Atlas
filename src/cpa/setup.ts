@@ -9,11 +9,11 @@ export const projectNameFor = (code: ExamCode): string => examLabel(code);
 const tutorPrompt = (code: ExamCode, name: string): string =>
   `You are a patient exam tutor for ${examLabel(code)} (${name}). Answer from the documents in this project (the user's own textbooks, notes and question banks) and say which document you used. If the documents do not cover a point, say so and give a general answer clearly marked as not from their materials. When the user answers a practice question wrongly, explain why the right answer is right and why theirs is not, step by step, with the numbers. Never invent a rule, rate, threshold or standard number: if you are not sure, say so and tell them to check the source. Rules change, so remind them to check anything that depends on a tax year, a jurisdiction (state or country) or a standard's effective date. You teach for an exam: you are not giving legal, medical, tax or investment advice.`;
 
-export const CPA_PROJECT_NAME = 'CPA Study';
+const CPA_PROJECT_NAME = 'CPA Study';
 const CPA_PROJECT_NAMES = [CPA_PROJECT_NAME, 'CPA Exam Preparation'];
 
 /** The one project all CPA material lives in: the one chosen before, one found by its name, or a new "CPA Study". Made on first use, never twice. */
-export function ensureCpaProject(): string {
+function ensureCpaProject(): string {
   const projects = useProjectStore.getState();
   const known = useCpa.getState().groupProjectId;
   const id = (known && projects.projects.some((p) => p.id === known) ? known : undefined)
@@ -27,7 +27,7 @@ export function ensureCpaProject(): string {
 }
 
 /** The folder (project) an exam's material lives in: CPA Study for every CPA exam; CFA Study, CMA Study or "<exam> Study" for the others. Made on first use, never twice. */
-export function ensureExamProject(code: ExamCode): string {
+function ensureExamProject(code: ExamCode): string {
   const folder = examFolder(code);
   const parentId = folder.key === 'cpa' ? ensureCpaProject() : ensureFolder(folder.name, code, folder.child ? `Shared by every exam inside it: the textbooks you add here are used by each of them.` : undefined);
   if (!folder.child) return parentId;

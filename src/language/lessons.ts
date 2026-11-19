@@ -66,7 +66,7 @@ const options = (right: string, pool: string[], o: { r: () => number; wrong?: nu
 export const words = (t: string) => t.split(/\s+/).filter(Boolean);
 
 /** The phrase with one word replaced by a gap, and the missing word. */
-export function blankOut(t: string, r: () => number): { shown: string; answer: string } | null {
+function blankOut(t: string, r: () => number): { shown: string; answer: string } | null {
   const w = words(t);
   const candidates = w.map((x, i) => ({ x, i })).filter(({ x }) => x.replace(/[.!?¡¿,]/g, '').length > 1);
   if (w.length < 3 || !candidates.length) return null;
@@ -87,7 +87,7 @@ const isWord = (it: Item) => words(it.t).length === 1 && it.t.replace(/[^\p{L}]/
 
 /** How hard a lesson is: wrong choices offered, look-alike distractors, extra word tiles. */
 export interface Difficulty { wrong: number; hard: boolean; extraTiles: number }
-export const EASY: Difficulty = { wrong: 3, hard: false, extraTiles: 2 };
+const EASY: Difficulty = { wrong: 3, hard: false, extraTiles: 2 };
 /** By CEFR level (1 = A1 .. 6 = C2): more and closer choices, more words that do not belong. */
 export const difficultyFor = (level: number): Difficulty =>
   ({ wrong: level <= 1 ? 3 : level <= 3 ? 4 : 5, hard: level >= 2, extraTiles: level <= 1 ? 2 : level <= 3 ? 3 : 4 });
@@ -140,7 +140,7 @@ function planKinds(length: number, { production, speaking }: { production?: numb
  * How many exercises fill `seconds`, given how long each kind takes (pace.ts). Quick games
  * mean more exercises, slow ones fewer, so lessons last about the same time.
  */
-export function lengthForTime(seconds: number, o: { production?: number; speaking?: boolean; secondsOf: (k: Kind) => number }): number {
+function lengthForTime(seconds: number, o: { production?: number; speaking?: boolean; secondsOf: (k: Kind) => number }): number {
   const { secondsOf } = o;
   let best = 4;
   for (let n = 4; n <= 40; n++) {

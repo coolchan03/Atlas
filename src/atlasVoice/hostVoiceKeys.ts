@@ -5,7 +5,7 @@ import type { VoiceProfile } from './profiles';
  * profile, written "profile:<id>". Profiles include cloned voices, which live in a different engine and are loaded when
  * their lines are rendered.
  */
-export const PROFILE_PREFIX = 'profile:';
+const PROFILE_PREFIX = 'profile:';
 
 export const profileKey = (id: string): string => `${PROFILE_PREFIX}${id}`;
 export const isProfileKey = (key: string | undefined): key is string => !!key && key.startsWith(PROFILE_PREFIX);

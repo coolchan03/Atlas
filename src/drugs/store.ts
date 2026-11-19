@@ -43,7 +43,7 @@ export async function lookupDrug(name: string, fetchFn?: typeof fetch): Promise<
 }
 
 /** A label as text for the AI: the names, then each section (cut to a length a small model can use). */
-export function labelForAi(l: DrugLabel, perSection = 1200): string {
+function labelForAi(l: DrugLabel, perSection = 1200): string {
   const head = `${l.brand || l.generic}${l.brand && l.generic ? ` (${l.generic})` : ''}${l.manufacturer ? `, ${l.manufacturer}` : ''}${l.type ? `, ${l.type}` : ''}${l.updated ? `, label revised ${l.updated}` : ''}`;
   const parts = DRUG_SECTIONS.filter((s) => l.sections[s.key]).map((s) => {
     const t = l.sections[s.key]!;

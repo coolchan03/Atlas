@@ -51,7 +51,7 @@ export { isWidgetSafeChat, shortcutDestination, selectResumeConversation } from 
 export type { ResumableConversation } from './homeShortcutPolicy';
 
 /** The icon a widget's tile starts with, by what it does. */
-export const DEFAULT_WIDGET_ICON: Record<HomeWidgetAction, string> = {
+const DEFAULT_WIDGET_ICON: Record<HomeWidgetAction, string> = {
   chat: 'message-circle', call: 'phone', 'resume-last': 'rotate-ccw', 'resume-most': 'star', 'model-picker': 'zap', 'music-studio': 'music', 'music-player': 'music',
   learning: 'trending-up', 'learning-status': 'bar-chart-2', 'daily-brief': 'sun', recorder: 'mic', compass: 'compass', 'read-aloud': 'volume-2',
   course: 'grid', project: 'folder', practice: 'check-square', review: 'repeat',

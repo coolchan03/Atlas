@@ -7,7 +7,7 @@ import { useMusicLibrary } from './library';
 import { hasSoundfont, loadSoundfontBytes, setActiveSoundfont } from './sampled';
 
 /** A small, free General MIDI SoundFont (TimGM6mb, GPL licence), downloaded only when the person asks. */
-export const FREE_SOUNDFONT = { url: 'https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2', name: 'TimGM6mb', approxMB: 6, /** The size of the file as published: a download far from it is not this file (moved, replaced or cut short) and is refused. */ minBytes: 5_000_000, maxBytes: 7_500_000 };
+const FREE_SOUNDFONT = { url: 'https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2', name: 'TimGM6mb', approxMB: 6, /** The size of the file as published: a download far from it is not this file (moved, replaced or cut short) and is refused. */ minBytes: 5_000_000, maxBytes: 7_500_000 };
 /**
  * Free General MIDI SoundFonts the person can download, smallest first. A bigger set has more lifelike recordings but takes more
  * space and memory while a tune is made (the whole file is read), so each says what it costs. Sizes are those of the published
@@ -41,7 +41,7 @@ export function fromBase64(text: string): Uint8Array {
 }
 
 /** The whole file as bytes, read a piece at a time. */
-export async function readFileBytes(path: string): Promise<Uint8Array> {
+async function readFileBytes(path: string): Promise<Uint8Array> {
   const size = Number((await RNFS.stat(path)).size);
   if (size > MAX_BYTES) throw new Error('That file is too big to use (over 150 MB).');
   const out = new Uint8Array(size);

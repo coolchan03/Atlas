@@ -6,7 +6,7 @@
 export interface AuthoritySource { kind?: string; url?: string; title?: string; publicationDate?: string; effectiveFrom?: string }
 
 /** Sites of the bodies that publish the rules themselves. Matching is on the host, so "fasb.org.evil.com" does not count. */
-export const OFFICIAL_SITES = [
+const OFFICIAL_SITES = [
   'fasb.org', 'asc.fasb.org', 'gasb.org', 'sec.gov', 'pcaobus.org', 'aicpa-cima.com', 'ifrs.org',
   'irs.gov', 'ecfr.gov', 'federalregister.gov', 'govinfo.gov', 'uscode.house.gov', 'treasury.gov',
 ];

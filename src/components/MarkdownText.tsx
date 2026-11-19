@@ -21,7 +21,7 @@ export function preprocessMarkdown(text: string): string {
  * Models sometimes write a table as HTML (<table><tr><th>...), which shows as raw tags. Each such table becomes a Markdown table: the first row is
  * the header, line breaks inside a cell become spaces, any other tag is dropped. Text with no <table> is returned as it was.
  */
-export function htmlTablesToMarkdown(text: string): string {
+function htmlTablesToMarkdown(text: string): string {
   if (!/<table/i.test(text)) return text;
   return text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_all, inner: string) => {
     const rows = [...inner.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((r) =>
@@ -42,7 +42,7 @@ const isTableLine = (line: string) => line.trim().startsWith('|') || (line.inclu
  * bars show. Those dividers are rewritten with ordinary hyphens (keeping any alignment colons), and a table that follows a line of
  * text with no blank line between is given one, so it is read as a table.
  */
-export function fixTables(text: string): string {
+function fixTables(text: string): string {
   if (!text.includes('|')) return text;
   const lines = text.split('\n');
   const out: string[] = [];

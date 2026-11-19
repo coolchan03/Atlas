@@ -20,7 +20,7 @@ export function setOffGrid(on: boolean): void {
 
 export { NETWORK_TOOLS };
 
-export const NIGHT_COLORS: any = {
+const NIGHT_COLORS: any = {
   background: '#000000', surface: '#160303', surfaceLight: '#220505', text: '#FF5A5A', textSecondary: '#D24848',
   textMuted: '#9E3434', border: '#3A0A0A', primary: '#FF3B3B', error: '#FF3B3B',
 };
