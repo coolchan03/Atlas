@@ -52,7 +52,7 @@ jobs:
       - name: TypeScript gate
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Core regression gate
-        run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent
+        run: ./node_modules/.bin/jest --ci --maxWorkers=3 --coverage=false --silent
       - name: Checkout pinned public llama.kt sources
         run: |
           set -euo pipefail

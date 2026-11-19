@@ -41,4 +41,4 @@ jobs:
       - name: Lint (ESLint on src)
         run: ./node_modules/.bin/eslint src --quiet
       - name: Run all available core regression tests
-        run: ./node_modules/.bin/jest --runInBand --forceExit --coverage=false --silent
+        run: ./node_modules/.bin/jest --ci --maxWorkers=3 --coverage=false --silent
