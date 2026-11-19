@@ -10,7 +10,7 @@ import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
-import { enqueue } from './generationQueue';
+import { cancel, enqueue } from './generationQueue';
 import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
@@ -21,13 +21,33 @@ import { isEnabled, isReference, isTeaching } from '../standards/docRoles';
 import { supersededEditions } from '../standards/taxSources';
 
 const MAX_TRIES = 2;
+/** The most one model call may take. A call that hangs is stopped (the native model is told to stop), and the lesson fails with a message instead of staying on "Writing...". */
+export const CALL_LIMIT_MS = 4 * 60 * 1000;
+/** The most one section's deepening may take, and all of a lesson's deepening together. A section that runs out keeps its short text. */
+export const SECTION_LIMIT_MS = 90 * 1000;
+export const EXPAND_LIMIT_MS = 6 * 60 * 1000;
+
+/** Tells the phone's model to stop, so a call abandoned after its time limit does not leave the engine busy for the next lesson. */
+async function stopModel(): Promise<void> {
+  try { await require('../services/llm').llmService.stopGeneration(); } catch { /* nothing was running */ }
+}
+
+/** One model call that gives up after `ms`: the model is stopped and the call fails. */
+export async function askBounded(system: string, user: string, ms = CALL_LIMIT_MS): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { void stopModel(); reject(new Error('The AI took too long to answer and was stopped.')); }, ms);
+    (timer as { unref?: () => void }).unref?.();
+  });
+  try { return await Promise.race([askModel(system, user), limit]); } finally { if (timer) clearTimeout(timer); }
+}
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
 const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];
 
 async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, what: string): Promise<T> {
   const { system, user } = prompt;
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
-    const raw = await askModel(system, attempt ? `${user}\n\nYour last answer could not be read. Reply with ONLY the JSON, nothing else.` : user);
+    const raw = await askBounded(system, attempt ? `${user}\n\nYour last answer could not be read. Reply with ONLY the JSON, nothing else.` : user);
     const value = read(raw);
     if (value) return value;
   }
@@ -180,7 +200,7 @@ export type Rewrite = keyof typeof REWRITES;
 export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), opts.background ? 0 : 1);
+  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), opts.background ? 0 : 1, { limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: () => void stopModel() });
 }
 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
@@ -223,13 +243,36 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
   }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
-  const written = withoutSources(
-    // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
-    content.kind === 'lesson' && shouldDeepen(course, square, rewrite) ? await deepenLesson(course, content, { title: square.title, excerpts }) : content,
-    excerpts, bank);
-  useTopics.getState().setContent(course.id, key, written);
+  // The first pass is a complete lesson: it is saved at once, so it can be read while the optional deepening goes on (or if that fails).
+  const draft = withoutSources(content, excerpts, bank);
+  useTopics.getState().setContent(course.id, key, draft);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
-  return written;
+  // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
+  if (content.kind === 'lesson' && shouldDeepen(course, square, rewrite)) {
+    enqueue(expandKey(course.id, key), () => expandSquare(course.id, key, draft, { title: square.title, excerpts, bank }), 0, { limitMs: EXPAND_LIMIT_MS, onAbort: () => void stopModel() })
+      .catch(() => undefined); // the saved draft stays as it is
+  }
+  return draft;
+}
+
+/** The queue key of a lesson's deepening, apart from the key of writing it. */
+const expandKey = (courseId: string, key: string) => `${courseId}:${key}:deepen`;
+
+/** Stops writing a square (and its deepening, if any). The draft already saved is kept. */
+export function stopWriting(courseId: string, key: string): void {
+  cancel(`${courseId}:${key}`);
+  cancel(expandKey(courseId, key));
+}
+
+/** Deepens a saved draft, then replaces it - but only if the square still holds that same draft (it was not rewritten, cleared or written again meanwhile). */
+async function expandSquare(courseId: string, key: string, draft: SquareContent, about: { title: string; excerpts: Excerpt[]; bank: string }): Promise<void> {
+  const course = useTopics.getState().courses.find((c) => c.id === courseId);
+  if (!course || course.content[key] !== draft || draft.kind !== 'lesson') return;
+  const deeper = await deepenLesson(course, draft, { title: about.title, excerpts: about.excerpts }, { sectionMs: SECTION_LIMIT_MS, totalMs: EXPAND_LIMIT_MS - 30_000 });
+  const now = useTopics.getState().courses.find((c) => c.id === courseId);
+  if (!now || now.content[key] !== draft) return;
+  const changedAny = deeper.kind === 'lesson' && deeper.sections.some((x, i) => x !== draft.sections[i]);
+  if (changedAny) useTopics.getState().setContent(courseId, key, withoutSources(deeper, about.excerpts, about.bank));
 }
 
 /** Whether a reading is written in depth: when the course says so, and not for a rewrite (shorter, simpler, another example) or an "Another look" lesson, which were asked to be less or plainer. */
@@ -240,19 +283,24 @@ export const shouldDeepen = (course: Pick<Course, 'readingDepth'>, square: { rem
  * A reading written in depth: each section of the first pass is written out again as full textbook paragraphs. A section the model cannot
  * deepen (an empty or far shorter answer, or an error) keeps what it had, so the reading is never worse than the short one.
  */
-export async function deepenLesson(course: Course, lesson: Extract<SquareContent, { kind: 'lesson' }>, about: { title: string; excerpts: Excerpt[] }): Promise<SquareContent> {
+export async function deepenLesson(course: Course, lesson: Extract<SquareContent, { kind: 'lesson' }>, about: { title: string; excerpts: Excerpt[] }, limits: { sectionMs?: number; totalMs?: number } = {}): Promise<SquareContent> {
   const { title, excerpts } = about;
   const passages = excerpts.map((e) => e.text).join('\n').slice(0, 1800);
+  const sectionMs = limits.sectionMs ?? SECTION_LIMIT_MS;
+  const deadline = Date.now() + (limits.totalMs ?? EXPAND_LIMIT_MS);
   const sections = [];
+  let failures = 0;
   for (const [i, section] of lesson.sections.slice(0, 8).entries()) {
+    // Out of time, or the model keeps failing: the remaining sections keep their short text.
+    if (Date.now() >= deadline || failures >= 2) { sections.push(section); continue; }
     try {
       const prompt = deepenMessages({
         courseTitle: course.title, topic: course.topic, squareTitle: title, heading: section.heading, text: section.text, example: section.example,
         others: lesson.sections.filter((_, k) => k !== i).map((x) => x.heading).filter(Boolean), excerpts: passages, difficulty: course.difficulty,
       });
-      const longer = prose(await askModel(prompt.system, prompt.user), 5000);
+      const longer = prose(await askBounded(prompt.system, prompt.user, Math.min(sectionMs, Math.max(1000, deadline - Date.now()))), 5000);
       sections.push(longer.length >= section.text.length * 1.3 && longer.length > 400 ? { ...section, text: longer } : section);
-    } catch { sections.push(section); }
+    } catch { failures += 1; sections.push(section); }
   }
   return { ...lesson, sections: [...sections, ...lesson.sections.slice(8)] };
 }

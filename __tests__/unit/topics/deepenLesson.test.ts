@@ -36,3 +36,31 @@ describe('when a reading is written in depth', () => {
     expect(shouldDeepen({}, { remedial: true })).toBe(false);
   });
 });
+
+describe('bounded deepening', () => {
+  it('a section whose model call hangs keeps its short text, and later sections still get their turn', async () => {
+    jest.useFakeTimers();
+    try {
+      mockAsk.mockImplementationOnce(() => new Promise(() => undefined)).mockResolvedValueOnce(LONG);
+      const run = deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] }, { sectionMs: 1000, totalMs: 60_000 });
+      await jest.advanceTimersByTimeAsync(1001);
+      const out: any = await run;
+      expect(out.sections[0].text).toBe('Cash is money.');
+      expect(out.sections[1].text.length).toBeGreaterThan(400);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('stops asking once the total time is used up', async () => {
+    mockAsk.mockResolvedValue(LONG);
+    const out: any = await deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] }, { totalMs: 0 });
+    expect(mockAsk).not.toHaveBeenCalled();
+    expect(out.sections.map((s: any) => s.text)).toEqual(['Cash is money.', 'Debts are owed.']);
+  });
+
+  it('gives up on the rest after repeated failures instead of making eight failing calls', async () => {
+    const many = { ...lesson, sections: Array.from({ length: 6 }, (_, i) => ({ heading: `S${i}`, text: 'Short.' })) };
+    mockAsk.mockRejectedValue(new Error('engine busy'));
+    await deepenLesson(course, many, { title: 'x', excerpts: [] });
+    expect(mockAsk).toHaveBeenCalledTimes(2);
+  });
+});
