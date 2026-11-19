@@ -1245,3 +1245,49 @@ describe('httpClient', () => {
 
   });
 });
+describe('fetchWithTimeout cancellation and bounds', () => {
+  afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+  const never = (signal: AbortSignal) => new Promise<never>((_, reject) => signal.addEventListener('abort', () => { const e = new Error('Aborted'); e.name = 'AbortError'; reject(e); }));
+
+  it("passes the caller's signal through: aborting it cancels the request", async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => never(init.signal)) as any);
+    const caller = new AbortController();
+    const pending = fetchWithTimeout('http://test.com/slow', { timeout: 60000, signal: caller.signal });
+    caller.abort();
+    await expect(pending).rejects.toThrow('Request cancelled');
+  });
+
+  it('is cancelled at once when the caller was already aborted', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => never(init.signal)) as any);
+    const caller = new AbortController(); caller.abort();
+    await expect(fetchWithTimeout('http://test.com/x', { signal: caller.signal })).rejects.toThrow('Request cancelled');
+  });
+
+  it('keeps the time limit running while the body is read, and says it timed out', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => Promise.resolve({
+      ok: true, headers: { get: () => 'application/json' }, json: () => never(init.signal),
+    })) as any);
+    const pending = fetchWithTimeout('http://test.com/stall', { timeout: 1000 });
+    const result = pending.catch((e: Error) => e.message);
+    await jest.advanceTimersByTimeAsync(1001);
+    expect(await result).toBe('Request timed out');
+  });
+
+  it('never repeats a POST, but repeats a GET after a network error', async () => {
+    const spy = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
+    await expect(fetchWithTimeout('http://test.com/pay', { method: 'POST', retries: 2, retryDelay: 1 })).rejects.toThrow('network down');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockClear();
+    await expect(fetchWithTimeout('http://test.com/get', { retries: 2, retryDelay: 1 })).rejects.toThrow('network down');
+    expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes its listener from the caller signal after every outcome', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, headers: { get: () => 'text/plain' }, text: async () => 'ok' } as any);
+    const caller = new AbortController();
+    const remove = jest.spyOn(caller.signal, 'removeEventListener');
+    await fetchWithTimeout('http://test.com/ok', { signal: caller.signal });
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+});

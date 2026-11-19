@@ -44,8 +44,18 @@ const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const DEFAULT_RETRIES = 0;
 const DEFAULT_RETRY_DELAY = 1000; // 1 second
 
+const SAFE_TO_REPEAT = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+
+/** Reads the response body (JSON when the server says so, else text). */
+async function readBody<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get('content-type') || '';
+  return (contentType.includes('application/json') ? await response.json() : await response.text()) as T;
+}
+
 /**
- * Fetch with timeout and retry support
+ * Fetch with timeout and retry support.
+ * The time limit covers the whole exchange, body included (a server that sends headers and then stalls cannot hang the caller), the
+ * caller's own `signal` still cancels the request, and a request that could do something twice (POST, PATCH) is never repeated.
  */
 export async function fetchWithTimeout<T = unknown>(
   url: string,
@@ -55,48 +65,46 @@ export async function fetchWithTimeout<T = unknown>(
     timeout = DEFAULT_TIMEOUT,
     retries = DEFAULT_RETRIES,
     retryDelay = DEFAULT_RETRY_DELAY,
+    signal: callerSignal,
     ...fetchOptions
   } = options;
+  const repeatable = SAFE_TO_REPEAT.has(String(fetchOptions.method ?? 'GET').toUpperCase());
+  const attempts = repeatable ? retries : 0;
 
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= attempts; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal?.aborted) controller.abort(); else callerSignal?.addEventListener?.('abort', onCallerAbort);
 
     try {
-      const response = await fetch(url, {
-        ...fetchOptions,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      if (controller.signal.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' }); // already cancelled: do not start
+      const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
-
-      // Try to parse as JSON, fall back to text
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        return response.json() as Promise<T>;
-      }
-      return response.text() as Promise<T>;
+      return await readBody<T>(response);
     } catch (error) {
-      clearTimeout(timeoutId);
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Don't retry on abort (user cancelled)
-      if ((error as Error).name === 'AbortError') {
-        throw new Error('Request cancelled');
+      // Cancelled by the caller or timed out: never retried (a timeout is reported as one, not as a cancel).
+      if ((error as Error).name === 'AbortError' || controller.signal.aborted) {
+        throw new Error(timedOut ? 'Request timed out' : 'Request cancelled');
       }
 
       // Retry on network errors
-      if (attempt < retries) {
-        logger.log(`[HTTP] Retry ${attempt + 1}/${retries} after error: ${lastError.message}`);
+      if (attempt < attempts) {
+        logger.log(`[HTTP] Retry ${attempt + 1}/${attempts} after error: ${lastError.message}`);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
+    } finally {
+      clearTimeout(timeoutId);
+      callerSignal?.removeEventListener?.('abort', onCallerAbort);
     }
   }
 
