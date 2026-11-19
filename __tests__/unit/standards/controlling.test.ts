@@ -52,5 +52,7 @@ describe('in the lesson prompt', () => {
     const flagged = contentMessages({ ...base, standardsFlags: 'No GASB document is in your project.\n' }).user;
     expect(flagged).toContain('No GASB document is in your project.');
     expect(contentMessages(base).user).not.toContain('No GASB');
+    // The warning is for the case where nothing was found too (the controlling document is missing).
+    expect(contentMessages({ ...base, excerpts: [], standardsFlags: 'No GASB document is in your project.\n' }).user).toContain('No GASB document');
   });
 });

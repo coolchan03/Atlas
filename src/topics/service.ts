@@ -10,7 +10,7 @@ import { useTopics, type Course } from './store';
 import { chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
-import { cancel, enqueue } from './generationQueue';
+import { cancel, enqueue, type JobControl } from './generationQueue';
 import { allocateExcerpts } from './allocateEvidence';
 import { controllingNote, controllingReport, inferEntity } from '../standards/controlling';
 import { classifyTaxSource, yearsAsked } from '../standards/taxSources';
@@ -47,9 +47,11 @@ export async function askBounded(system: string, user: string, ms = CALL_LIMIT_M
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
 const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];
 
-async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, what: string): Promise<T> {
+async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, about: string | { what: string; stopped: () => boolean }): Promise<T> {
   const { system, user } = prompt;
+  const { what, stopped } = typeof about === 'string' ? { what: about, stopped: () => false } : about;
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
+    if (stopped()) throw new Error('Stopped.'); // a Stop or a time-out must not start another model call
     const raw = await askBounded(system, attempt ? `${user}\n\nYour last answer could not be read. Reply with ONLY the JSON, nothing else.` : user);
     const value = read(raw);
     if (value) return value;
@@ -203,7 +205,7 @@ export type Rewrite = keyof typeof REWRITES;
 export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), { priority: opts.background ? 0 : 1, limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: () => void stopModel() });
+  return enqueue(`${course.id}:${key}`, (ctl) => writeSquare({ courseId: course.id, key, rewrite: opts.rewrite }, ctl), { priority: opts.background ? 0 : 1, limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: stopModel });
 }
 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
@@ -216,12 +218,13 @@ async function standardsFlags(course: Course, query: string): Promise<string> {
     const { ragService } = require('../services/rag');
     const docs: Array<{ name: string; enabled?: number | boolean }> = (await ragService.getDocumentsInScope(course.projectId)).filter(isEnabled);
     const yearOf = (name: string) => classifyTaxSource(name)?.year ?? (Number(/\b(20\d{2})\b/.exec(name)?.[1]) || undefined);
-    const entity = inferEntity(`${course.title} ${course.topic} ${query}`);
+    const entity = inferEntity(`${course.title} ${course.topic}`); // the course decides who the rules are for, never one square's wording
     return controllingNote(controllingReport({ entity, asOfYear: yearsAsked(`${query} ${course.topic}`)[0], documents: docs.map((d) => ({ name: d.name, year: yearOf(d.name) })) }));
   } catch { return ''; }
 }
 
-async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Promise<SquareContent> {
+async function writeSquare(target: { courseId: string; key: string; rewrite?: Rewrite }, ctl: JobControl): Promise<SquareContent> {
+  const { courseId, key, rewrite } = target;
   // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!course) throw new Error('That course is not on this phone any more.');
@@ -259,14 +262,15 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     excerpts,
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
-  }), (raw) => parseContent(asked.format, raw), `the "${square.title}" square`);
+  }), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled });
   // The first pass is a complete lesson: it is saved at once, so it can be read while the optional deepening goes on (or if that fails).
+  if (ctl.cancelled()) throw new Error('Stopped.'); // the person pressed Stop (or it timed out) while the model was answering: save nothing
   const draft = withoutSources(content, excerpts, bank);
   useTopics.getState().setContent(course.id, key, draft);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
   if (content.kind === 'lesson' && shouldDeepen(course, square, rewrite)) {
-    enqueue(expandKey(course.id, key), () => expandSquare({ courseId: course.id, key, draft, title: square.title, excerpts, bank }), { priority: 0, limitMs: EXPAND_LIMIT_MS, onAbort: () => void stopModel() })
+    enqueue(expandKey(course.id, key), () => expandSquare({ courseId: course.id, key, draft, title: square.title, excerpts, bank }), { priority: 0, limitMs: EXPAND_LIMIT_MS, onAbort: stopModel })
       .catch(() => undefined); // the saved draft stays as it is
   }
   return draft;

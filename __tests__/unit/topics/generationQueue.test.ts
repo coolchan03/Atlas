@@ -73,3 +73,25 @@ describe('lesson queue limits', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('an abandoned job really stops (audit F-5)', () => {
+  it('tells the work it was cancelled, and does not start the next job until the model has stopped', async () => {
+    jest.useRealTimers();
+    let seen: (() => boolean) | undefined;
+    let finishStop!: () => void;
+    const stopped = new Promise<void>((r) => { finishStop = r; });
+    const order: string[] = [];
+    const first = enqueue('first', (ctl) => { seen = ctl.cancelled; return new Promise<never>(() => undefined); }, { priority: 1, limitMs: 60_000, onAbort: () => stopped });
+    const second = enqueue('second', async () => { order.push('second ran'); return 2; }, 0);
+    const firstResult = first.catch((e: Error) => e.message);
+    expect(seen!()).toBe(false);
+    expect(cancel('first')).toBe(true);
+    expect(await firstResult).toBe('Stopped.');
+    expect(seen!()).toBe(true);
+    await tick(); await tick();
+    expect(order).toEqual([]); // the model has not finished stopping yet
+    finishStop();
+    expect(await second).toBe(2);
+    expect(order).toEqual(['second ran']);
+  });
+});
