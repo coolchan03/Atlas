@@ -15,7 +15,7 @@ export type Kind = string;
 const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
 const fail = (title: string) => (e: unknown) => Alert.alert(title, String((e as Error)?.message || e));
 
-const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
+export const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
   const { colors } = useTheme();
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
@@ -28,7 +28,7 @@ const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; childre
 
 
 /** The list of jobs and the recent runs. */
-export const JobList: React.FC<{ runs: Array<{ id: string; workflowId: string; status: string }>; onPick: (kind: Kind) => void; onOpen: (id: string) => void }> = ({ runs, onPick, onOpen }) => {
+export const JobList: React.FC<{ runs: Array<{ id: string; workflowId: string; status: string }>; onPick: (kind: Kind) => void; onOpen: (id: string) => void; onEdit: (id: string | null) => void }> = ({ runs, onPick, onOpen, onEdit }) => {
   const { colors } = useTheme();
   return (
     <Shell title="Multi-step helpers" onBack={undefined}>
@@ -39,6 +39,12 @@ export const JobList: React.FC<{ runs: Array<{ id: string; workflowId: string; s
             <Text style={[styles.h, { color: colors.text }]}>{w.title}</Text>
             <Text style={{ color: colors.textSecondary }}>{w.summary}</Text>
           </Card>
+        </TouchableOpacity>
+      ))}
+      <Button title="Make your own helper" variant="outline" onPress={() => onEdit(null)} testID="helper-new" />
+      {workflowList().filter((w) => w.id.startsWith('custom-')).map((w) => (
+        <TouchableOpacity key={w.id} onPress={() => onEdit(w.id.slice('custom-'.length))} accessibilityRole="button" testID={`helper-edit-${w.id}`}>
+          <Text style={{ color: colors.primary }}>Edit "{w.title}"</Text>
         </TouchableOpacity>
       ))}
       {runs.length > 0 && <Text style={[styles.h, { color: colors.text }]}>Recent</Text>}

@@ -10,11 +10,14 @@ import { accountant } from './accountant';
 import { bill, meeting } from './everyday';
 import { contract, cook, explain, howItWorks, repair, writing } from './helperJobs';
 import { budget, decision, mealWeek, studyPlan } from './moreJobs';
+import { toWorkflow, useCustomHelpers } from './customHelpers';
 import { localUniqueId } from '../utils/uniqueId';
 
 type AnyRun = Run<any>;
 const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract, budget, studyplan: studyPlan, mealweek: mealWeek, decision };
-export const workflowList = (): Array<Workflow<any>> => Object.values(WORKFLOWS);
+/** Every helper: the built-in ones, then the ones the person wrote. */
+export const workflowList = (): Array<Workflow<any>> => [...Object.values(WORKFLOWS), ...useCustomHelpers.getState().helpers.map(toWorkflow)];
+const workflowById = (id: string): Workflow<any> | undefined => WORKFLOWS[id] ?? workflowList().find((w) => w.id === id);
 
 interface RunsState { runs: AnyRun[]; rules: Record<string, string>; put: (r: AnyRun) => void; remove: (id: string) => void; setRules: (rules: Record<string, string>) => void }
 export const useWorkflowRuns = create<RunsState>()(persist((set) => ({
@@ -35,14 +38,14 @@ const save = (r: AnyRun) => {
 };
 const deps = { ask, save };
 const workflowFor = (run: AnyRun): Workflow<any> => {
-  const wf = WORKFLOWS[run.workflowId];
+  const wf = workflowById(run.workflowId);
   if (!wf) throw new Error('This job is not available any more.');
   return wf;
 };
 
 /** Starts a job from the text and extra choices its input asks for. */
 export function startWorkflow(id: string, text: string, fields: Record<string, string> = {}): Promise<AnyRun> {
-  const wf = WORKFLOWS[id];
+  const wf = workflowById(id);
   if (!wf) return Promise.reject(new Error('This job is not available any more.'));
   const ctx = wf.input.make(text, fields);
   // Category choices the person made on earlier statements carry over.

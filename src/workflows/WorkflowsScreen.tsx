@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import { useRecordings } from '../atlasRecorder/store';
 import { documentService } from '../services/documentService';
 import { answerRun, approveRun, cancelRun, resumeRun, startWorkflow, useWorkflowRuns } from './service';
+import { HelperEditor } from './HelperEditor';
+import { useCustomHelpers } from './customHelpers';
 import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
 
 /** Multi-step helpers: pick a job, give it text, answer its questions, approve the result. The logic lives in ./service. */
@@ -12,6 +14,8 @@ export const WorkflowsScreen: React.FC = () => {
   const [text, setText] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<string | null | undefined>(undefined); // undefined: not editing, null: a new helper, else a helper's id
+  const helpers = useCustomHelpers((s) => s.helpers);
   const [openId, setOpenId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const run = runs.find((r) => r.id === openId) ?? null;
@@ -30,6 +34,7 @@ export const WorkflowsScreen: React.FC = () => {
   });
   const start = () => work(() => startWorkflow(kind!, text, fields));
 
+  if (editing !== undefined) return <HelperEditor helper={helpers.find((h) => h.id === editing) ?? null} onClose={() => setEditing(undefined)} />;
   if (run) {
     return (
       <RunView run={run} busy={busy} answers={answers} setAnswers={setAnswers}
@@ -44,5 +49,5 @@ export const WorkflowsScreen: React.FC = () => {
     return <InputView kind={kind} text={text} setText={setText} fields={fields} setField={(id, v) => setFields((f) => ({ ...f, [id]: v }))}
       recordings={recordings} busy={busy} onFile={pickFile} onStart={start} onBack={() => { setKind(null); setText(''); setFields({}); }} />;
   }
-  return <JobList runs={runs} onPick={setKind} onOpen={setOpenId} />;
+  return <JobList runs={runs} onPick={setKind} onOpen={setOpenId} onEdit={setEditing} />;
 };
