@@ -10,6 +10,8 @@ import { INFERENCE_BACKENDS, type InferenceBackend } from '../types';
 import { hardwareService } from './hardware';
 import { llmService } from './llm';
 import { activeModelService } from './activeModelService';
+import { vulkanEngine } from './vulkanEngine';
+import { acceleratorCandidates, type TextAccelerator } from './acceleratorSelection';
 import { useSpeedStats, useTuned } from '../atlasTools/speed';
 import logger from '../utils/logger';
 
@@ -17,15 +19,23 @@ export interface TuneOption { id: string; label: string; backend: InferenceBacke
 export interface TuneResult { option: TuneOption; tps: number; firstWordSec: number; error?: string }
 
 /**
- * What to try: automatic acceleration, then the CPU with the recommended thread count, fewer threads
- * and a couple more. Fewer threads often win (the slow cores drag the pool), more rarely do.
+ * What to try: automatic acceleration, each NPU or GPU backend the phone offers for this model, then the CPU with the
+ * recommended thread count, fewer threads and a couple more. Fewer threads often win (the slow cores drag the pool), more rarely do.
  */
-export function tuneOptions(cores: number, recommended: number): TuneOption[] {
+const ACCELERATOR_OPTION: Record<TextAccelerator, { backend: InferenceBackend; label: string }> = {
+  htp: { backend: INFERENCE_BACKENDS.HTP, label: 'NPU (Hexagon)' },
+  opencl: { backend: INFERENCE_BACKENDS.OPENCL, label: 'GPU (OpenCL)' },
+  vulkan: { backend: INFERENCE_BACKENDS.VULKAN, label: 'GPU (Vulkan)' },
+};
+
+export function tuneOptions(cores: number, recommended: number, accelerators: TextAccelerator[] = []): TuneOption[] {
   const rec = Math.max(1, Math.min(recommended, cores));
   const cpu = (threads: number): TuneOption => ({ id: `cpu-${threads}`, label: `CPU, ${threads} threads`, backend: INFERENCE_BACKENDS.CPU, threads });
   const counts = [...new Set([rec, Math.max(2, Math.round(rec * 0.67)), Math.min(cores, rec + 2)])].filter((n) => n >= 1 && n <= cores);
   return [
     { id: 'auto', label: 'Automatic (GPU or NPU if the phone has one)', backend: INFERENCE_BACKENDS.AUTO, threads: rec },
+    // Each accelerator this phone and model can use is timed on its own, so the history says which one is fastest here.
+    ...accelerators.map((a): TuneOption => ({ id: a, ...ACCELERATOR_OPTION[a], threads: rec })),
     ...counts.map(cpu),
   ];
 }
@@ -36,6 +46,14 @@ export function pickBest(results: TuneResult[]): TuneResult | null {
   if (!ok.length) return null;
   const top = Math.max(...ok.map((r) => r.tps));
   return ok.filter((r) => r.tps >= top * 0.95).sort((a, b) => a.option.threads - b.option.threads || b.tps - a.tps)[0];
+}
+
+/** The NPU and GPU backends worth timing for this model on this phone (the same rule Automatic uses to choose). */
+export async function availableAccelerators(model: { filePath: string; mmProjPath?: string }): Promise<TextAccelerator[]> {
+  try {
+    const [acceleration, vulkanFound, slowGpu] = await Promise.all([hardwareService.getAccelerationCapability(), vulkanEngine.isAvailable(), vulkanEngine.isSlowTextGpu()]);
+    return acceleratorCandidates({ npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan: vulkanFound && !slowGpu }, model.filePath, !!model.mmProjPath);
+  } catch { return []; }
 }
 
 export interface TuneProgress { step: number; steps: number; label: string; results: TuneResult[] }
@@ -55,7 +73,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still being written. Wait for it to finish, then try again.');
   const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen };
   const [cores, recommended] = await Promise.all([hardwareService.getCpuCoreCount(), hardwareService.getRecommendedThreadCount()]);
-  const options = tuneOptions(cores, recommended);
+  const options = tuneOptions(cores, recommended, await availableAccelerators(model));
   const results: TuneResult[] = [];
   const restore = () => useAppStore.getState().updateSettings(old as any);
 
@@ -84,8 +102,13 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   }
   const best = cancelFlag ? null : pickBest(results);
   if (best) {
-    useAppStore.getState().updateSettings({ inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
-    useTuned.getState().mark(modelId);
+    // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
+    // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
+    const accelerated = best.option.backend !== INFERENCE_BACKENDS.AUTO && best.option.backend !== INFERENCE_BACKENDS.CPU;
+    useAppStore.getState().updateSettings(accelerated
+      ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads }
+      : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
+    useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.
     useSpeedStats.setState((st) => ({ byModel: { ...st.byModel, [modelId]: { ...(st.byModel[modelId] ?? { prefill: 0, outLen: 0, samples: 1 }), decode: best.tps } } }));
     // Load it the way it was just measured, so the next chat starts at the winning speed.

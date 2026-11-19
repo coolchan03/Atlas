@@ -61,11 +61,20 @@ export const useSpeedStats = create<SpeedState>()(persist((set) => ({
 }));
 
 /** Models whose settings were tuned with "Find the best settings" (so the slow-reply hint stops suggesting it). */
-interface TunedState { at: Record<string, number>; mark: (modelId: string) => void }
+interface TunedState {
+  at: Record<string, number>;
+  /** The NPU or GPU backend that timed fastest in that test, when one did (Automatic tries it first for this model). */
+  accelerator: Record<string, string>;
+  mark: (modelId: string, accelerator?: string) => void;
+}
 export const useTuned = create<TunedState>()(persist((set) => ({
   at: {},
-  mark: (modelId) => set((st) => ({ at: { ...st.at, [modelId]: Date.now() } })),
-}), { name: 'atlas-tuned-models', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ at: s.at }) }));
+  accelerator: {},
+  mark: (modelId, accelerator) => set((st) => {
+    const { [modelId]: _old, ...rest } = st.accelerator;
+    return { at: { ...st.at, [modelId]: Date.now() }, accelerator: accelerator ? { ...rest, [modelId]: accelerator } : rest };
+  }),
+}), { name: 'atlas-tuned-models', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ at: s.at, accelerator: s.accelerator }) }));
 
 /** Models whose slow-reply hint was dismissed. */
 interface HintState { off: Record<string, true>; dismiss: (modelId: string) => void }
@@ -81,6 +90,14 @@ const SLOW_TPS = 3;
 export function shouldSuggestTuning(o: { modelId: string | null | undefined; speed: ModelSpeed | undefined; tuned: boolean; dismissed: boolean }): boolean {
   const { modelId, speed } = o;
   return !!modelId && !o.tuned && !o.dismissed && !!speed && speed.samples >= 2 && speed.decode > 0 && speed.decode < SLOW_TPS;
+}
+
+/**
+ * True once a local model has answered at least once and never been tested on this phone: chat offers the one-minute test that times the
+ * CPU, GPU and NPU and keeps the fastest. (Not for a model that is already slow: shouldSuggestTuning covers that with its own words.)
+ */
+export function shouldOfferFirstTest(o: { modelId: string | null | undefined; speed: ModelSpeed | undefined; tuned: boolean; dismissed: boolean }): boolean {
+  return !!o.modelId && !o.tuned && !o.dismissed && !!o.speed && o.speed.samples >= 1 && o.speed.decode > 0 && !shouldSuggestTuning(o);
 }
 
 const THINK_MULT: Record<string, number> = { low: 1.6, medium: 2.5, high: 4 };

@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useAppStore } from '../stores/appStore';
 import { useChatStore } from '../stores/chatStore';
-import { shouldSuggestTuning, useSlowHint, useSpeedStats, useTuned } from '../atlasTools/speed';
+import { shouldOfferFirstTest, shouldSuggestTuning, useSlowHint, useSpeedStats, useTuned } from '../atlasTools/speed';
 import { slowCause, type SlowCause } from '../atlasTools/slowCause';
 import { hardwareService } from '../services/hardware';
 import { vulkanEngine } from '../services/vulkanEngine';
@@ -27,7 +27,10 @@ export const SlowReplyHint: React.FC = () => {
   const threads = useAppStore((s) => s.settings.nThreads ?? 0);
   const backend = useAppStore((s) => s.settings.inferenceBackend);
   const [cause, setCause] = useState<SlowCause | null>(null);
-  const show = !busy && !!modelId && shouldSuggestTuning({ modelId, speed, tuned, dismissed });
+  const slow = !busy && !!modelId && shouldSuggestTuning({ modelId, speed, tuned, dismissed });
+  // First time on this model: offer the speed test once, in a calmer voice than the slow-reply warning.
+  const firstTest = !busy && !!modelId && shouldOfferFirstTest({ modelId, speed, tuned, dismissed });
+  const show = slow;
 
   useEffect(() => {
     if (!show) return;
@@ -39,6 +42,20 @@ export const SlowReplyHint: React.FC = () => {
     return () => { live = false; };
   }, [show, threads, backend]);
 
+  if (firstTest) {
+    return (
+      <View style={styles.row} testID="first-test-hint">
+        <Icon name="zap" size={11} color={colors.textMuted} />
+        <Text style={[styles.text, { color: colors.textMuted }]}>Atlas can time this model on the CPU, GPU and NPU of this phone and keep the fastest (about a minute).</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('ModelTest', { modelId })} accessibilityLabel="Test this model's speed on this phone" testID="first-test-run">
+          <Text style={[styles.text, { color: colors.primary }]}>Test speed</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => useSlowHint.getState().dismiss(modelId!)} accessibilityLabel="Hide this tip" testID="first-test-dismiss">
+          <Icon name="x" size={12} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
   if (!show) return null;
   const fix = cause?.action;
   return (
