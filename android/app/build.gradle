@@ -64,9 +64,6 @@ react {
 def enableProguardInReleaseBuilds = false
 // R8 trial (never on by default): -PatlasMinify=true shrinks code and resources for ONE trial build. It must be tested on a phone before it
 // is ever turned on for a published build, because Atlas calls many native libraries from code R8 cannot see. See docs/r8-trial.md.
-// GenieX (Qualcomm's on-device runtime for the Snapdragon 8 Elite family) is added only to a build made with -PatlasGeniex=true: it adds
-// about 89 MB to the APK for two chips, and it has not been run on a phone yet. See docs/geniex-integration.md.
-def atlasGeniex = project.hasProperty('atlasGeniex') && project.property('atlasGeniex') == 'true'
 def atlasMinifyTrial = project.hasProperty('atlasMinify') && project.property('atlasMinify') == 'true'
 
 /**
@@ -85,7 +82,6 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 android {
     sourceSets {
         main {
-            java.srcDirs += atlasGeniex ? 'src/geniexOn/java' : 'src/geniexOff/java'
         }
     }
     ndkVersion rootProject.ext.ndkVersion
@@ -228,10 +224,6 @@ dependencies {
     // Atlas: natural offline voices (sherpa-onnx; the AAR is fetched by CI into libs/)
     implementation(files("libs/sherpa-onnx.aar"))
 
-    // GenieX (opt-in build only): the real engine lives in src/geniexOn, the do-nothing stub in src/geniexOff.
-    if (atlasGeniex) {
-        implementation("com.qualcomm.qti:geniex-android:0.10.0")
-    }
 
     // Coroutines for async operations (used by LocalDreamModule)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

@@ -5,5 +5,4 @@
 3. **Lint and types.** About 505 ESLint warnings (282 nested template literals, 182 bitwise operations in hashing/audio code, 24 hook dependency lists) and 776 uses of `any`; trim one rule category at a time with the 0-error gate kept.
 4. **Emulator screen-flow tests** in CI (none today).
 5. **Metro patch** (`patches/metro+0.83.3.patch`): lets Metro read assets with image-size 2.x; drop it when Metro itself moves to image-size 2.x. `npm audit` is at 0 findings.
-6. **GenieX** is parked (`geniex-integration.md`).
 7. **Older CPU-feature builds of llama.rn** (about 25 MB compressed) could be trimmed, but some phones would run slower.

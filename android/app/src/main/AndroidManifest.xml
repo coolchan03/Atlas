@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <!-- llama.kt is API 29; AtlasVulkanModule only loads it on API 29+. -->
-    <uses-sdk tools:overrideLibrary="com.tensai.llamakt,com.geniex.sdk" />
+    <uses-sdk tools:overrideLibrary="com.tensai.llamakt" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Lets Atlas hand a downloaded update to Android's installer (the person still confirms the install) -->

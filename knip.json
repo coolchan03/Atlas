@@ -4,6 +4,7 @@
   "project": ["src/**/*.{ts,tsx}"],
   "ignoreBinaries": ["swiftlint", "maestro", "xcpretty"],
   "ignoreDependencies": [
+    "metro",
     "react-compiler-runtime",
     "eslint-plugin-react-compiler",
     "eslint-plugin-react-native",
