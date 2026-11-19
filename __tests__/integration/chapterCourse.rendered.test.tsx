@@ -36,9 +36,9 @@ it('makes one unit per chapter with six squares (reading, key terms, worked exam
   await rtl.waitFor(() => expect(useTopics.getState().courses).toHaveLength(1));
   const course = useTopics.getState().courses[0];
   const per = (name: string) => [name, `${name}: key terms`, `${name}: worked example`, `${name}: quiz`, `${name}: assignment`, `${name}: chapter exam`];
-  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([...per('1 – Leases'), ...per('2 – Bonds'), ...per('3 – Revenue')]);
+  expect(course.squares.map((s: { title: string }) => s.title)).toEqual([...per('1 – Leases'), ...per('2 – Bonds'), ...per('3 – Revenue'), 'Financial accounting: final exam']);
   expect(course.squares.map((s: { format: string }) => s.format).slice(0, 6)).toEqual(['lesson', 'cards', 'worked', 'quiz', 'practice', 'quiz']);
-  expect(course.squares.filter((s: { checkpoint?: boolean }) => s.checkpoint)).toHaveLength(3);
+  expect(course.squares.filter((s: { checkpoint?: boolean }) => s.checkpoint)).toHaveLength(4); // three chapter exams and the final exam
   expect(course.projectId).toBe(project.id);
   expect(course.difficulty).toBe('beginner');
 });

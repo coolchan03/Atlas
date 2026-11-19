@@ -10,6 +10,7 @@ import { MAX_SQUARES } from '../topics/formats';
 import { examInfo, examLabel, type ExamCode } from './blueprints';
 import { useCpa, type CpaTopic } from './store';
 import { isOutlineDocument } from './outline';
+import { REVIEW_EVERY } from '../topics/chapters';
 
 
 /** The board for an exam's topics. Areas become units; every topic is a chapter of six squares, and each area ends with a review exam. */
@@ -24,7 +25,14 @@ export function examPlan(code: ExamCode, topics: CpaTopic[]): CoursePlan {
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => { if (squares.length < MAX_SQUARES) squares.push({ key: `s${squares.length + 1}`, ...sq }); };
   for (const area of areas) {
-    for (const t of topics.filter((x) => x.area === area)) deepChapter({ name: t.name, unit: area, about: `for the ${examLabel(code)} exam (${area})` }, size).forEach(add);
+    const inArea = topics.filter((x) => x.area === area);
+    inArea.forEach((t, i) => {
+      deepChapter({ name: t.name, unit: area, about: `for the ${examLabel(code)} exam (${area})` }, size).forEach(add);
+      // A bigger exam over the last few topics, so a long area is not one long stretch with a single test at the end.
+      if ((i + 1) % REVIEW_EVERY === 0 && i + 1 < inArea.length) {
+        add({ format: 'quiz', title: `${area}: topics ${i + 1 - REVIEW_EVERY + 1}-${i + 1} review exam`.slice(0, 60), focus: `Mixed questions on ${inArea.slice(i + 1 - REVIEW_EVERY, i + 1).map((x) => x.name).join(', ')}`, unit: area, checkpoint: true });
+      }
+    });
     add({ format: 'quiz', title: `${area}: review exam`.slice(0, 60), focus: `Everything in: ${area}`, unit: area, checkpoint: true });
   }
   add({ format: 'quiz', title: 'Whole exam check', focus: `Mixed questions from every area of the ${examLabel(code)} exam`, unit: areas[areas.length - 1] ?? 'Exam', checkpoint: true });

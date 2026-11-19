@@ -68,3 +68,20 @@ describe('one textbook at a time', () => {
     expect(plan.squares.indexOf(lessons[1])).toBeGreaterThan(plan.squares.findLastIndex((s: any) => s.unit === lessons[0].unit));
   });
 });
+
+describe('bigger exams over several chapters', () => {
+  const chap = (n: number) => ({ number: n, title: `Topic ${n} heading`, size: 5000, subject: `Topic ${n}` });
+  it('adds a review exam after every fourth chapter (not right before the final exam), a final exam per book, and one whole-course exam', () => {
+    const { bookByBookPlan, chapterPlan } = require('../../src/topics/chapters');
+    const nine = Array.from({ length: 9 }, (_, i) => chap(i + 1));
+    const single = chapterPlan(nine, 'Book').squares.filter((s: any) => /review exam|final exam/.test(s.title)).map((s: any) => s.title);
+    expect(single).toEqual(['Book: chapters 1-4 review exam', 'Book: chapters 5-8 review exam', 'Book: final exam']);
+    const eight = Array.from({ length: 8 }, (_, i) => chap(i + 1));
+    expect(chapterPlan(eight, 'Book').squares.filter((s: any) => /review exam/.test(s.title))).toHaveLength(1); // after 4; the 8th is followed by the final exam
+    const plan = bookByBookPlan([{ doc: 'A.pdf', chapters: [chap(1), chap(2)] }, { doc: 'B.pdf', chapters: [chap(1)] }], 'Course');
+    const exams = plan.squares.filter((s: any) => s.checkpoint && !/chapter exam/.test(s.title)).map((s: any) => s.title);
+    expect(exams).toEqual(['A: final exam', 'Course: whole course exam']); // one chapter alone has no final exam of its own
+    expect(plan.squares[plan.squares.length - 1].unit).toBe('Whole course exam');
+    expect(new Set(plan.squares.map((s: any) => s.key)).size).toBe(plan.squares.length);
+  });
+});

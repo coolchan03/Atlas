@@ -109,6 +109,32 @@ export function friendlyTitle(text: string): string {
 /** A book's name as the board shows it: no file extension, no underscores. */
 export const bookLabel = (doc: string): string => doc.replace(/\.[A-Za-z0-9]{2,4}$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || doc;
 
+/** A bigger exam over several chapters comes after this many chapters, and a final exam closes a book of two or more. */
+export const REVIEW_EVERY = 4;
+type Square = Omit<PlannedSquare, 'key'>;
+
+/**
+ * The squares of a run of chapters, with a bigger mixed exam after every REVIEW_EVERY chapters (not after the last chapter, which is
+ * followed by the final exam) and a final exam over everything at the end of two or more chapters. `label` names the book or course.
+ */
+function chaptersWithReviews(chapters: Chapter[], label: string, make: (c: Chapter) => Square[]): Square[] {
+  const out: Square[] = [];
+  const exam = (title: string, scope: string, covers: string): Square => ({
+    format: 'quiz', title: title.slice(0, 60), unit: `${label}: ${scope}`.slice(0, 80), checkpoint: true,
+    focus: `A bigger exam over ${covers}: harder mixed questions that join the chapters together, like a real exam`,
+  });
+  chapters.forEach((c, i) => {
+    out.push(...make(c));
+    const done = i + 1;
+    if (done % REVIEW_EVERY === 0 && done < chapters.length) {
+      const first = chapters[done - REVIEW_EVERY];
+      out.push(exam(`${label}: chapters ${first.number}-${c.number} review exam`, `chapters ${first.number}-${c.number} review`, `chapters ${first.number} to ${c.number} of ${label}`));
+    }
+  });
+  if (chapters.length >= 2) out.push(exam(`${label}: final exam`, 'final exam', `every chapter of ${label}`));
+  return out;
+}
+
 /**
  * A course through several textbooks ONE AT A TIME: all of the first book's chapters in order, then the second book's, and so on. Every chapter
  * of every book is kept (nothing is picked or merged away), and each chapter is read, then its key terms, a worked example, a quiz, an assignment
@@ -118,24 +144,23 @@ export function bookByBookPlan(books: Array<{ doc: string; chapters: Chapter[] }
   const squares: PlannedSquare[] = [];
   for (const b of books) {
     const label = bookLabel(b.doc);
-    for (const c of b.chapters) {
-      const unit = `${label}: ${chapterName(c)}`;
-      deepChapter({ name: chapterName(c), unit, about: `from ${label}`, topic: c.title || undefined }, CHAPTER_SQUARES)
-        .forEach((sq) => squares.push({ key: `s${squares.length + 1}`, ...sq, book: b.doc }));
-    }
+    chaptersWithReviews(b.chapters, label, (c) => deepChapter({ name: chapterName(c), unit: `${label}: ${chapterName(c)}`, about: `from ${label}`, topic: c.title || undefined }, CHAPTER_SQUARES))
+      .forEach((sq) => squares.push({ key: `s${squares.length + 1}`, ...sq, book: b.doc }));
   }
+  // After the last book, one exam over all of them.
+  if (books.length >= 2) squares.push({ key: `s${squares.length + 1}`, format: 'quiz', title: `${title}: whole course exam`.slice(0, 60), unit: 'Whole course exam', checkpoint: true, focus: `A big exam over every textbook of the course (${books.map((b) => bookLabel(b.doc)).join(', ')}): harder mixed questions that join the books together` });
   const order = books.map((b) => bookLabel(b.doc)).join(', then ');
-  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
+  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam. A bigger review exam follows every ${REVIEW_EVERY} chapters, each book ends with a final exam, and one exam closes the whole course.`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter and a bigger exam after every few.', theme: title, squares };
 }
 
-/** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */
+/** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), with a bigger exam after every few chapters and a final exam. */
 export function chapterPlan(chapters: Chapter[], book: string, manyBooks = false): CoursePlan {
   const used = chapters;
   const squares: PlannedSquare[] = [];
-  const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
+  const add = (sq: Square) => squares.push({ key: `s${squares.length + 1}`, ...sq });
   // The unit is named for what the chapter is mainly about ("7 – Leases"), not just its number; passages are still matched on the book's full heading.
   const about = manyBooks ? 'from all the textbooks in the project' : 'of the textbook';
   // Passages and questions are matched on the book's full heading (`topic`), while the board shows the short name.
-  for (const c of used) deepChapter({ name: chapterName(c), unit: chapterName(c), about, topic: c.title || undefined }, CHAPTER_SQUARES).forEach(add);
+  chaptersWithReviews(used, book, (c) => deepChapter({ name: chapterName(c), unit: chapterName(c), about, topic: c.title || undefined }, CHAPTER_SQUARES)).forEach(add);
   return { title: book, summary: manyBooks ? 'Every chapter of every textbook, with the same subject in different books made one unit: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.' : 'Every chapter of the book, one unit each: read it, learn its terms, see it worked, then quiz, assignment and chapter exam.', style: "The book's own order, one chapter at a time, with six squares in each chapter.", theme: book, squares };
 }

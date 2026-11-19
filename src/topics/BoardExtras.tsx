@@ -102,7 +102,9 @@ export function SourceLine({ course }: { course: Course }) {
   const books = docs.length ? docs : [...new Set((course.bookChapters ?? []).map((c) => c.doc))];
   if (!books.length) return null;
   const names = books.map(bookLabel);
-  return <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-source">{names.length === 1 ? `Primary source: ${names[0]}` : `Textbooks, taught one at a time: ${names.join(', then ')}`}</Text>;
+  const chapters = course.squares.filter((q) => q.format === 'lesson' && !q.checkpoint && !q.remedial).length;
+  const count = chapters ? ` (${chapters} chapters)` : '';
+  return <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-source">{names.length === 1 ? `Primary source: ${names[0]}${count}` : `Textbooks, taught one at a time: ${names.join(', then ')}${count}`}</Text>;
 }
 
 /** Add a game or any other kind of square: after the one you are on, or at the end of any chapter or topic of the board. */

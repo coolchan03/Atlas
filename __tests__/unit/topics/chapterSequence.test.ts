@@ -19,10 +19,11 @@ describe('a chapter on the board', () => {
     expect(new Set(sq.map((s) => s.title)).size).toBe(6);
   });
 
-  it('makes an exam board about six times longer than its checklist, with a review exam per area and a whole-exam check', () => {
+  it('makes an exam board about six times longer than its checklist, with a bigger exam after every four topics, a review exam per area and a whole-exam check', () => {
     const topics = Array.from({ length: 24 }, (_, i) => ({ id: `t${i}`, name: `Topic ${i + 1}`, area: i < 12 ? 'Area A' : 'Area B' })) as never[];
     const plan = examPlan('FAR' as never, topics);
-    expect(plan.squares).toHaveLength(24 * 6 + 2 + 1);
+    expect(plan.squares).toHaveLength(24 * 6 + 4 + 2 + 1); // 12 topics per area: bigger exams after topics 4 and 8 of each area
+    expect(plan.squares.filter((q) => /topics \d+-\d+ review exam/.test(q.title)).map((q) => q.title)).toEqual(['Area A: topics 1-4 review exam', 'Area A: topics 5-8 review exam', 'Area B: topics 1-4 review exam', 'Area B: topics 5-8 review exam']);
     expect(plan.squares[0].format).toBe('lesson');
     expect(plan.squares.at(-1)?.title).toBe('Whole exam check');
     expect(plan.squares.length).toBeLessThanOrEqual(MAX_SQUARES);
