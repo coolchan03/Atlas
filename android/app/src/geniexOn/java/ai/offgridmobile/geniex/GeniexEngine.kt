@@ -68,11 +68,14 @@ object GeniexEngine {
         activeOnError = onError
         job = scope.launch {
             try {
-                val chat = messages.map { (role, content) -> ChatMessage(role, content, null, null, null) }.toTypedArray()
+                val chat = messages.map { (role, content) -> ChatMessage(role, content, emptyList(), null, null) }.toTypedArray()
                 // The chat template turns the messages into the prompt the model expects; the raw text must never be sent.
-                val templated = model.applyChatTemplate(chat, null).getOrThrow()
-                val sampler = SamplerConfig().apply { setTemperature(temperature) }
-                val config = GenerationConfig().apply { setMaxTokens(maxTokens.coerceIn(1, 8192)); setSamplerConfig(sampler) }
+                val templated = model.applyChatTemplate(chat, null, enableThinking = false).getOrThrow()
+                val sampler = SamplerConfig()
+                sampler.temperature = temperature
+                val config = GenerationConfig()
+                config.maxTokens = maxTokens.coerceIn(1, 8192)
+                config.samplerConfig = sampler
                 model.generateStreamFlow(prompt = templated.formattedText, config = config).collect { result ->
                     when (result) {
                         is LlmStreamResult.Token -> onToken(result.text)
