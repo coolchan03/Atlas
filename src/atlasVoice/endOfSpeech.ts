@@ -38,7 +38,7 @@ export class EndOfSpeechDetector {
       this.samples++;
       return 'none';
     }
-    const loud = rms > Math.max(0.02, Math.min(this.floor, 0.03) * 3);
+    const loud = rms > Math.max(0.012, Math.min(this.floor, 0.03) * 3);
     if (loud) {
       if (!this.heardAt) this.heardAt = now;
       this.lastLoud = now;

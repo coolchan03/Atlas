@@ -18,6 +18,7 @@ import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnT
 import { callTrace } from './callLifecycle';
 import { shareItem } from '../utils/shareItem';
 import logger from '../utils/logger';
+const MAX_QUIET_TURNS = 4; // quiet listening stretches in a row (about a minute) before the call pauses
 
 
 /** mm:ss (or h:mm:ss) like a phone's call timer. */
@@ -106,6 +107,7 @@ export function AtlasAudioInput(props: any) {
   latest.current = props;
   // The turn ends by itself when the person stops talking (like a real call): see endOfSpeech.ts.
   const vad = useRef<EndOfSpeechDetector | null>(null);
+  const quietTurns = useRef(0);
 
   // Mic loudness -> decide when the person has finished talking, so nobody has to tap to send.
   useEffect(() => {
@@ -118,11 +120,13 @@ export function AtlasAudioInput(props: any) {
       }
       if (!latest.current.isRecording) return;
       const verdict = vad.current?.push(rms, Date.now());
-      if (verdict === 'end') latest.current.onStopRecording?.();
+      if (verdict === 'end') { quietTurns.current = 0; latest.current.onStopRecording?.(); }
       else if (verdict === 'nothing') {
         latest.current.onCancelRecording?.();
-        setPaused(true);
-        setNote('Paused - tap the button when you want to talk.');
+        // A quiet stretch is not a reason to stop listening (that felt like being muted): listen again a few times, then pause.
+        quietTurns.current += 1;
+        if (quietTurns.current < MAX_QUIET_TURNS) { setNote('Still listening...'); setFailedStarts(0); }
+        else { quietTurns.current = 0; setPaused(true); setNote('Paused after a long quiet. Tap the button when you want to talk.'); }
       }
     });
     return () => audioRecorderService.setLevelListener(null);
