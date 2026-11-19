@@ -16,7 +16,7 @@ type Props = {
 /** Voice (TTS) model picker: the voice panel registered in the modelsScreen.voiceTab slot. */
 export const VoiceModelsSheet: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(createStyles);
-  const panelHeight = Math.round(useWindowuseWindowDimensions().height * 0.6); // the window now, so rotating or unfolding resizes it
+  const panelHeight = Math.round(useWindowDimensions().height * 0.6); // the window now, so rotating or unfolding resizes it
   // Reactive: picks up the panel as soon as it is registered.
   const VoicePanel = useSlot(SLOTS.modelsScreenVoiceTab);
 
