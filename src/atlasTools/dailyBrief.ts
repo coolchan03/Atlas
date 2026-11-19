@@ -15,7 +15,7 @@ export const BRIEF_PROJECT = 'daily-brief';
 export const STORY_PAUSE_SECONDS = 7;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
 import { daySpoken } from './dayBrief';
-import { lastWorkedOn, packForTomorrow, streakSpoken, weeklyDigest } from './dayExtras';
+import { lastWorkedOn, packForTomorrow, reviewsDueSpoken, streakLine, weeklyDigest } from './dayExtras';
 import { nudgeOn } from './nudges';
 
 interface BriefPrefs {
@@ -398,7 +398,9 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     onItemsUsed: (count) => { usedStories = count; },
   }, onStep);
   // After the date come the weather, the day's calendar and the day's scheduled tasks, as fixed lines (the model left them out when only asked).
-  const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays') }), yourDay()].filter(Boolean);
+  // From 5 pm the briefing looks ahead: tomorrow's calendar and tasks instead of today's.
+  const evening = new Date().getHours() >= 17;
+  const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays'), day: evening ? 'tomorrow' : 'today' }), yourDay(evening ? 'tomorrow' : 'today')].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.
   if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
@@ -415,22 +417,25 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
  * The spoken "your day" lines: scheduled tasks later today and a low-battery heads-up, a study streak, a Monday digest of last week, and
  * where you were last. Best-effort: never stops the briefing. Private material (incognito or locked chats, protected projects) is left out.
  */
-function yourDay(): string {
+function yourDay(when: 'today' | 'tomorrow' = 'today'): string {
   const now = Date.now();
   const parts: string[] = [];
   try {
     const { useSchedule } = require('../schedule/store');
     const { useLowPower } = require('./lowPowerState');
     const power = useLowPower.getState();
-    if (nudgeOn('yourDay')) parts.push(daySpoken({ tasks: useSchedule.getState().tasks, now, batteryPercent: power.battery, charging: power.charging }));
+    if (nudgeOn('yourDay')) parts.push(daySpoken({ tasks: useSchedule.getState().tasks, now, batteryPercent: power.battery, charging: power.charging, when }));
   } catch { /* no schedule */ }
   try {
     const saved: Record<string, StudyResult[]> = useStudyStore.getState().saved;
     const { useProjectStore } = require('../stores/projectStore');
     const name = (id: string): string => useProjectStore.getState().getProject?.(id)?.name ?? 'your notes';
-    const items = Object.entries(saved).filter(([project]) => project !== BRIEF_PROJECT)
+    const open = (id: string): boolean => { const pr = useProjectStore.getState().getProject?.(id); return !(pr?.pinVerifier || pr?.protectedBlob); }; // never name a protected project
+    const items = Object.entries(saved).filter(([project]) => project !== BRIEF_PROJECT && open(project))
       .flatMap(([project, results]) => results.map((r) => ({ at: r.createdAt, project: name(project) })));
-    if (nudgeOn('studyStreak')) parts.push(streakSpoken(items.map((i) => i.at), now));
+    const progress = require('../study/progress');
+    if (nudgeOn('studyStreak')) parts.push(streakLine(progress.streakFrom(progress.useStudyProgress.getState().doneDays)));
+    if (nudgeOn('reviewsDue')) parts.push(reviewsDueSpoken(progress.dueItems(null, now, 1000).filter((d: { projectId: string }) => open(d.projectId)).map((d: { projectId: string }) => ({ project: name(d.projectId) }))));
     if (nudgeOn('weeklyDigest')) parts.push(weeklyDigest(items, now));
   } catch { /* no study history */ }
   try {

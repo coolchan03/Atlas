@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type NudgeId = 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'weeklyDigest' | 'lastWorked';
+export type NudgeId = 'backupReminder' | 'speedTips' | 'statusNotices' | 'packTomorrow' | 'birthdays' | 'yourDay' | 'studyStreak' | 'reviewsDue' | 'weeklyDigest' | 'lastWorked';
 
 export interface NudgeInfo { id: NudgeId; group: 'Reminders and tips' | 'Daily briefing lines'; label: string; hint: string }
 
@@ -18,7 +18,8 @@ export const NUDGES: NudgeInfo[] = [
   { id: 'packTomorrow', group: 'Daily briefing lines', label: 'Pack for tomorrow', hint: 'In the evening: an umbrella or a warmer jacket when the forecast calls for one.' },
   { id: 'birthdays', group: 'Daily briefing lines', label: 'Birthdays and anniversaries', hint: 'Said first when one is on your calendar today.' },
   { id: 'yourDay', group: 'Daily briefing lines', label: 'Scheduled tasks and battery', hint: 'Tasks that run later today, and a charge reminder when the battery is low.' },
-  { id: 'studyStreak', group: 'Daily briefing lines', label: 'Study streak', hint: 'Days in a row you worked on study material, from three days on.' },
+  { id: 'studyStreak', group: 'Daily briefing lines', label: 'Study streak', hint: 'Your study streak, from three days on.' },
+  { id: 'reviewsDue', group: 'Daily briefing lines', label: 'Review cards due', hint: 'How many review cards are due, and in which projects. Also shown as a card on Home.' },
   { id: 'weeklyDigest', group: 'Daily briefing lines', label: 'Monday digest', hint: 'What you made last week, and in which project.' },
   { id: 'lastWorked', group: 'Daily briefing lines', label: 'Where you were last', hint: 'The chat you were in most recently (never private or locked ones).' },
 ];

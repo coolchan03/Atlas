@@ -29,4 +29,16 @@ describe('the briefing "your day" line', () => {
     const many = Array.from({ length: 6 }, (_, i) => task({ id: `t${i}`, name: `Job ${i}`, hour: 9 + i }));
     expect(daySpoken({ now: morning, tasks: many })).toContain(', and 2 more scheduled.');
   });
+
+  it('in the evening names tomorrow\'s tasks only, and leaves the battery out', () => {
+    const evening = new Date(2026, 10, 19, 19, 0).getTime();
+    const text = daySpoken({ now: evening, when: 'tomorrow', batteryPercent: 10, charging: false, tasks: [
+      task({ name: 'Morning quiz', hour: 8 }), task({ name: 'Once today', repeat: 'once', onceAt: new Date(2026, 10, 19, 21, 0).getTime() }),
+      task({ name: 'Next week', repeat: 'once', onceAt: new Date(2026, 10, 27, 9, 0).getTime() }),
+    ] });
+    expect(text).toMatch(/^Tomorrow, Atlas has Morning quiz at 8:00.*scheduled\.$/);
+    expect(text).not.toContain('Once today');
+    expect(text).not.toContain('Next week');
+    expect(text).not.toContain('percent');
+  });
 });

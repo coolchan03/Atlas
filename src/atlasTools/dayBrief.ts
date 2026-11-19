@@ -9,22 +9,24 @@ import type { ScheduledTask } from '../schedule/store';
 const at = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const join = (items: string[]): string => (items.length > 1 ? `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}` : items[0] ?? '');
 
-export interface DayInputs { tasks: ScheduledTask[]; now: number; batteryPercent?: number | null; charging?: boolean }
+export interface DayInputs { tasks: ScheduledTask[]; now: number; batteryPercent?: number | null; charging?: boolean; /** 'tomorrow' (the evening briefing) names tomorrow's tasks and leaves the battery out. */ when?: 'today' | 'tomorrow' }
 
-export function daySpoken({ tasks, now, batteryPercent, charging }: DayInputs): string {
-  const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
+export function daySpoken({ tasks, now, batteryPercent, charging, when = 'today' }: DayInputs): string {
+  const dayStart = new Date(now); dayStart.setHours(23, 59, 59, 999); // the end of today
+  const from = when === 'tomorrow' ? dayStart.getTime() : now;
+  const to = when === 'tomorrow' ? dayStart.getTime() + 864e5 : dayStart.getTime();
   const todays = tasks
     .filter((t) => t.enabled && t.kind !== 'briefing')
-    .map((t) => ({ name: t.name, when: nextOccurrence(t, now) }))
-    .filter((t): t is { name: string; when: number } => t.when !== null && t.when <= endOfDay.getTime())
+    .map((t) => ({ name: t.name, when: nextOccurrence(t, from) }))
+    .filter((t): t is { name: string; when: number } => t.when !== null && t.when <= to)
     .sort((a, b) => a.when - b.when);
   const parts: string[] = [];
   if (todays.length) {
     const shown = todays.slice(0, 4).map((t) => `${t.name} at ${at(t.when)}`);
     const more = todays.length > 4 ? `, and ${todays.length - 4} more` : '';
-    parts.push(`Later today, Atlas has ${join(shown)}${more} scheduled.`);
+    parts.push(`${when === 'tomorrow' ? 'Tomorrow' : 'Later today'}, Atlas has ${join(shown)}${more} scheduled.`);
   }
-  if (typeof batteryPercent === 'number' && batteryPercent <= 30 && !charging) {
+  if (when === 'today' && typeof batteryPercent === 'number' && batteryPercent <= 30 && !charging) {
     parts.push(`Your phone is at ${Math.round(batteryPercent)} percent, so charge it before a long day.`);
   }
   return parts.join(' ');

@@ -6,6 +6,7 @@ import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { BackupReminderCard } from '../../components/BackupReminderCard';
+import { ReviewDueCard } from '../../components/ReviewDueCard';
 import { ContinueCard } from './components/ContinueCard';
 import { HomeShortcutsCard } from './HomeShortcutsCard';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
@@ -226,6 +227,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <ContinueCard navigation={navigation} />
 
           <HomeShortcutsCard navigation={navigation} />
+
+          <ReviewDueCard onOpen={(projectId) => navigation.navigate('Study', { projectId })} />
 
           <BackupReminderCard onOpenSettings={() => navigation.navigate('SettingsTab')} />
 

@@ -24,7 +24,7 @@ export function packForTomorrow(o: { today: DayForecast; tomorrow?: DayForecast;
 }
 
 /** Birthdays and anniversaries among today's calendar events, as "Today is Sam's birthday." (the rest of the events are listed separately). */
-export function specialDays(titles: string[]): { said: string; rest: string[] } {
+export function specialDays(titles: string[], when: 'Today' | 'Tomorrow' = 'Today'): { said: string; rest: string[] } {
   const special: string[] = [];
   const rest: string[] = [];
   for (const raw of titles) {
@@ -37,22 +37,22 @@ export function specialDays(titles: string[]): { said: string; rest: string[] } 
   }
   if (!special.length) return { said: '', rest };
   const list = special.length > 1 ? `${special.slice(0, -1).join(', ')} and ${special[special.length - 1]}` : special[0];
-  return { said: `Today is ${list}.`, rest };
+  return { said: `${when} is ${list}.`, rest };
 }
 
-/** Days in a row, ending today or yesterday, on which something was made. `times` are millisecond timestamps. */
-export function studyStreak(times: number[], now: number): { days: number; today: boolean } {
-  const have = new Set(times.map(dayKey));
-  const today = have.has(dayKey(now));
-  let days = 0;
-  for (let back = today ? 0 : 1; have.has(dayKey(now - back * DAY)); back++) days += 1;
-  return { days, today };
+/** "You are on a 5-day study streak." From three days on. `days` is the app's own streak (study/progress.ts `streakFrom`, one missed day a week forgiven). */
+export function streakLine(days: number): string {
+  return days >= 3 ? `You are on a ${days}-day study streak.` : '';
 }
 
-/** "You have worked on study material 5 days in a row." Said from 3 days on, and only while the streak is alive (today or yesterday). */
-export function streakSpoken(times: number[], now: number): string {
-  const { days } = studyStreak(times, now);
-  return days >= 3 ? `You have worked on study material ${days} days in a row.` : '';
+/** "You have 12 review cards due: 7 in FAR and 5 in REG." (the three projects with most cards are named). */
+export function reviewsDueSpoken(due: Array<{ project: string }>): string {
+  if (!due.length) return '';
+  const counts = new Map<string, number>();
+  for (const d of due) counts.set(d.project, (counts.get(d.project) ?? 0) + 1);
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([project, n]) => `${n} in ${project}`);
+  const list = top.length > 1 ? `${top.slice(0, -1).join(', ')} and ${top[top.length - 1]}` : top[0];
+  return `You have ${due.length} review card${due.length === 1 ? '' : 's'} due: ${list}.`;
 }
 
 /** Mondays only: what the last 7 days held. */

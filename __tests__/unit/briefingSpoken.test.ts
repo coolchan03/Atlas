@@ -67,4 +67,13 @@ describe('the opening and closing tunes', () => {
     expect(await run(2, { storyStarts: [], intro: false })).toEqual(['line2', 'outro']);
     expect(await run(2, { storyStarts: [] })).toEqual(['line2', 'outro']);
   });
+
+  it('reads tomorrow\'s events in the evening, with birthdays first', () => {
+    const { calendarSpoken } = require('../../src/atlasTools/calendarBrief');
+    const ctx = { flights: [], travelKeywords: [], eventTitles: [], today: [{ title: 'Today thing' }], tomorrow: [{ title: "Jo's birthday", allDay: true }, { title: 'Dentist', start: new Date(2026, 10, 20, 9, 30) }] };
+    const said = calendarSpoken(ctx, { day: 'tomorrow' });
+    expect(said).toMatch(/^Tomorrow is Jo's birthday\. On your calendar tomorrow: Dentist at .*\.$/);
+    expect(said).not.toContain('Today thing');
+    expect(calendarSpoken({ ...ctx, tomorrow: [] }, { day: 'tomorrow' })).toBe('');
+  });
 });

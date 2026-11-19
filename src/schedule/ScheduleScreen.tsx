@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { describeTiming, nextOccurrence, nextTimeOfDay, type Repeat } from './due';
 import { useSchedule, type ScheduledTask, type TaskKind } from './store';
 import { runTask } from './runner';
+import { QuickReminderBox } from './QuickReminderBox';
 import { askForNotifications, alarmsAvailable } from './alarms';
 
 const REPEATS: { id: Repeat; label: string }[] = [
@@ -103,6 +104,8 @@ export const ScheduleScreen: React.FC = () => {
         <Text style={[styles.meta, { color: colors.textMuted }]}>
           At the time you set, Atlas shows a notification; tap it and the task runs. A task also runs by itself whenever Atlas is open at that time. If the phone was away, it runs once when you come back. Each answer is kept as a chat, and a row on Home tells you it is ready.
         </Text>
+
+        <QuickReminderBox />
 
         {tasks.map((t) => {
           const next = t.enabled ? nextOccurrence(t, Date.now()) : null;

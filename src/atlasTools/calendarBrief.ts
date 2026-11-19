@@ -26,6 +26,8 @@ export interface CalendarContext {
   eventTitles: string[];
   /** Today's events only, in time order, for reading out. */
   today?: { title: string; start?: Date; allDay?: boolean }[];
+  /** Tomorrow's events, in time order (said in the evening instead of today's). */
+  tomorrow?: { title: string; start?: Date; allDay?: boolean }[];
 }
 
 const TRAVEL_RE = /\b(hotel|flight|fly|depart|arrival|check[\s-]?in|conference|trip|travel|airport|train|cruise)\b/i;
@@ -47,6 +49,15 @@ export function parseFlight(title: string, startDate: string): CalendarFlight | 
     destination: destMatch?.[1],
     departureTime: startDate ? new Date(startDate) : undefined,
   };
+}
+
+/** Which day an event is on: today (also events with no start time), tomorrow, or later. */
+function whichDay(at: Date | undefined, todayEnd: number, tomorrowEnd: number): 'today' | 'tomorrow' | null {
+  if (!at) return 'today';
+  const t = at.getTime();
+  if (Number.isNaN(t)) return null;
+  if (t < todayEnd) return 'today';
+  return t < tomorrowEnd ? 'tomorrow' : null;
 }
 
 /** Reads today's calendar events and extracts flight/travel context. Returns null on permission denial or unavailability. */
@@ -71,13 +82,17 @@ export async function readCalendarContext(): Promise<CalendarContext | null> {
     const seen = new Set<string>();
     const today: NonNullable<CalendarContext['today']> = [];
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const tomorrowEnd = todayEnd + 864e5;
+    const tomorrow: NonNullable<CalendarContext['tomorrow']> = [];
 
     for (const e of events) {
       const title = (e.title ?? '').trim();
       if (!title) continue;
       eventTitles.push(title);
       const at = e.startDate ? new Date(e.startDate) : undefined;
-      if (!at || (at.getTime() < todayEnd && !Number.isNaN(at.getTime()))) today.push({ title, start: at, allDay: e.allDay });
+      const day = whichDay(at, todayEnd, tomorrowEnd);
+      if (day === 'today') today.push({ title, start: at, allDay: e.allDay });
+      else if (day === 'tomorrow') tomorrow.push({ title, start: at, allDay: e.allDay });
       const flight = parseFlight(title, e.startDate ?? '');
       if (flight && !seen.has(flight.raw)) { seen.add(flight.raw); flights.push(flight); }
       if (TRAVEL_RE.test(title)) {
@@ -87,7 +102,8 @@ export async function readCalendarContext(): Promise<CalendarContext | null> {
       }
     }
     today.sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0));
-    return { flights, travelKeywords: travelKeywords.slice(0, 5), eventTitles, today };
+    tomorrow.sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0));
+    return { flights, travelKeywords: travelKeywords.slice(0, 5), eventTitles, today, tomorrow };
   } catch {
     return null;
   }
@@ -136,11 +152,12 @@ export function calendarSummary(ctx: CalendarContext): string {
  * What is on the calendar today, as sentences to speak ('' when nothing is). Events are named with their start times,
  * up to six, so the briefing always covers the day's plans instead of leaving it to the model to remember.
  */
-export function calendarSpoken(ctx: CalendarContext | null | undefined, opts: { birthdays?: boolean } = {}): string {
-  const all = ctx?.today ?? [];
+export function calendarSpoken(ctx: CalendarContext | null | undefined, opts: { birthdays?: boolean; day?: 'today' | 'tomorrow' } = {}): string {
+  const day = opts.day ?? 'today';
+  const all = (day === 'tomorrow' ? ctx?.tomorrow : ctx?.today) ?? [];
   if (!all.length) return '';
   // Birthdays and anniversaries are said first as themselves; the other events are listed.
-  const { said: special, rest } = opts.birthdays === false ? { said: '', rest: all.map((e) => e.title) } : specialDays(all.map((e) => e.title));
+  const { said: special, rest } = opts.birthdays === false ? { said: '', rest: all.map((e) => e.title) } : specialDays(all.map((e) => e.title), day === 'tomorrow' ? 'Tomorrow' : 'Today');
   const events = all.filter((e) => rest.includes(e.title));
   if (!events.length) return special;
   const say = (e: NonNullable<CalendarContext['today']>[number]) => (e.start && !e.allDay
@@ -149,5 +166,5 @@ export function calendarSpoken(ctx: CalendarContext | null | undefined, opts: { 
   const shown = events.slice(0, 6).map(say);
   const more = events.length > 6 ? `, and ${events.length - 6} more` : '';
   const list = shown.length > 1 ? `${shown.slice(0, -1).join(', ')}, and ${shown[shown.length - 1]}` : shown[0];
-  return `${special ? `${special} ` : ''}On your calendar today: ${list}${more}.`;
+  return `${special ? `${special} ` : ''}On your calendar ${day}: ${list}${more}.`;
 }

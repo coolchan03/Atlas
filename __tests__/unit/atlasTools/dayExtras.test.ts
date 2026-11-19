@@ -1,4 +1,4 @@
-import { lastWorkedOn, packForTomorrow, specialDays, streakSpoken, studyStreak, weeklyDigest } from '../../../src/atlasTools/dayExtras';
+import { lastWorkedOn, packForTomorrow, reviewsDueSpoken, specialDays, streakLine, weeklyDigest } from '../../../src/atlasTools/dayExtras';
 
 const C = { imperial: false, temp: 'c' as const };
 const F = { imperial: true, temp: 'f' as const };
@@ -27,17 +27,16 @@ describe('birthdays and anniversaries', () => {
   });
 });
 
-describe('study streak', () => {
-  const now = noon(2026, 10, 19);
-  it('counts days in a row ending today or yesterday', () => {
-    expect(studyStreak([now, now - DAY, now - 2 * DAY], now)).toEqual({ days: 3, today: true });
-    expect(studyStreak([now - DAY, now - 2 * DAY], now)).toEqual({ days: 2, today: false });
-    expect(studyStreak([now - 2 * DAY], now).days).toBe(0);
-    expect(studyStreak([now, now - 2 * DAY], now).days).toBe(1);
+describe('study streak and reviews due', () => {
+  it('names the streak from three days on', () => {
+    expect(streakLine(2)).toBe('');
+    expect(streakLine(5)).toBe('You are on a 5-day study streak.');
   });
-  it('speaks only from three days on', () => {
-    expect(streakSpoken([now, now - DAY], now)).toBe('');
-    expect(streakSpoken([now, now - DAY, now - 2 * DAY, now - 3 * DAY], now)).toBe('You have worked on study material 4 days in a row.');
+  it('counts due review cards and names the three busiest projects', () => {
+    expect(reviewsDueSpoken([])).toBe('');
+    expect(reviewsDueSpoken([{ project: 'FAR' }])).toBe('You have 1 review card due: 1 in FAR.');
+    const due = [...Array(7).fill({ project: 'FAR' }), ...Array(5).fill({ project: 'REG' }), ...Array(2).fill({ project: 'AUD' }), { project: 'BEC' }];
+    expect(reviewsDueSpoken(due)).toBe('You have 15 review cards due: 7 in FAR, 5 in REG and 2 in AUD.');
   });
 });
 
