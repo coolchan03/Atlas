@@ -60,6 +60,29 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             return soc.startsWith("SM")
         }
 
+        /**
+         * The Hexagon (HTP) generation of a known Snapdragon chip ("V73"), or null when the chip is not in this table. The libraries for the
+         * other generations are not needed on this phone and are not copied; an unknown chip gets every generation, as before.
+         */
+        internal fun htpVariantFor(soc: String?): String? = when (soc?.trim()?.uppercase()) {
+            "SM8350", "SM8350-AC", "SM7325", "SM7325-AE" -> "V68"
+            "SM8450", "SM8475" -> "V69"
+            "SM8550", "SM8635", "SM7675" -> "V73"
+            "SM8650" -> "V75"
+            "SM8750", "SM8750-AB" -> "V79"
+            "SM8850" -> "V81"
+            else -> null
+        }
+
+        private val HTP_GENERATION_FILE = Regex("""^libQnnHtpV(\d+)(?:Skel|Stub)?\.so$""")
+
+        /** Whether an asset under qnnlibs/ is needed on a phone with the given HTP generation (null: unknown, so every file is). */
+        internal fun needsQnnLib(fileName: String, variant: String?): Boolean {
+            if (variant == null) return true
+            val generation = HTP_GENERATION_FILE.matchEntire(fileName)?.groupValues?.get(1) ?: return true // shared libraries are always needed
+            return "V$generation" == variant
+        }
+
         internal fun resolveModelDir(dir: File, isCpu: Boolean): File? {
             val markerFile = if (isCpu) "unet.mnn" else "unet.bin"
 
@@ -253,8 +276,15 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
         try {
             val qnnLibs = reactApplicationContext.assets.list("qnnlibs")
+            val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else null
+            val variant = htpVariantFor(soc)
             qnnLibs?.forEach { fileName ->
                 val targetLib = File(runtimeDir, fileName)
+                // Another chip generation's libraries are neither copied nor kept (a copy left by an earlier version is removed to give the space back).
+                if (!needsQnnLib(fileName, variant)) {
+                    if (targetLib.exists() && targetLib.delete()) Log.d(TAG, "Removed unneeded $fileName ($soc uses $variant)")
+                    return@forEach
+                }
 
                 val needsCopy = !targetLib.exists() || run {
                     val assetInputStream = reactApplicationContext.assets.open("qnnlibs/$fileName")
