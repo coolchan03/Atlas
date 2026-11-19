@@ -186,7 +186,7 @@ class HardwareService {
           }
         })
         .catch(error =>
-          console.warn('Failed to fetch total memory in background:', error),
+          logger.warn('Failed to fetch total memory in background:', error),
         );
       return 4; // Safe default until cache is populated
     }
@@ -203,7 +203,7 @@ class HardwareService {
           }
         })
         .catch(error =>
-          console.warn(
+          logger.warn(
             'Failed to fetch available memory in background:',
             error,
           ),

@@ -1,4 +1,5 @@
 /** "Compare with GenieX": runs the same short prompts through llama.rn and GenieX on this phone and says whether GenieX is worth using. Shown only in a build that has GenieX on a chip it supports. */
+import { SPACING, TYPOGRAPHY } from '../constants';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
@@ -54,7 +55,7 @@ export const EngineCompareCard: React.FC<{ model: DownloadedModel }> = ({ model 
 };
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 10, padding: 14, gap: 8, marginBottom: 12 },
-  title: { fontSize: 16 },
-  button: { borderWidth: 1, borderRadius: 8, padding: 12, alignItems: 'center' },
+  card: { borderWidth: 1, borderRadius: SPACING.md, padding: SPACING.lg, gap: SPACING.sm, marginBottom: SPACING.md },
+  title: { ...TYPOGRAPHY.h2 },
+  button: { borderWidth: 1, borderRadius: SPACING.sm, padding: SPACING.md, alignItems: 'center' },
 });

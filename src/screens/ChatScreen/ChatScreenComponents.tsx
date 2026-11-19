@@ -1,3 +1,4 @@
+import { SPACING, TYPOGRAPHY } from '../../constants';
 import React from 'react';
 import {
   View,
@@ -90,9 +91,9 @@ export const NoModelScreen: React.FC<{
 );
 
 const bannerStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginTop: 6 },
-  title: { fontWeight: '700', fontSize: 13 },
-  note: { fontSize: 11, flexShrink: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: SPACING.sm, marginTop: SPACING.xs },
+  title: { ...TYPOGRAPHY.h3 },
+  note: { ...TYPOGRAPHY.meta, flexShrink: 1 },
 });
 
 /** A band under the header of an incognito chat that stays on screen: what it is, that nothing is kept, and (for a remote model) that the provider still sees the messages. */

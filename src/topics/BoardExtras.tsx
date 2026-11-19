@@ -1,3 +1,4 @@
+import { SPACING } from '../constants';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
@@ -126,7 +127,7 @@ export function WritingStatus({ courseId, squareKey, onStopped }: { courseId: st
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   meta: { fontSize: 13 },
   gap: { gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

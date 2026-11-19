@@ -1,3 +1,4 @@
+import logger from '../utils/logger';
 import { useEffect } from 'react';
 import { backgroundDownloadService } from '../services/backgroundDownloadService';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
@@ -39,7 +40,7 @@ export function useDownloadListeners() {
       } else if (entry.mmProjDownloadId === event.downloadId) {
         useDownloadStore.getState().updateMmProjProgress(event.downloadId, event.bytesDownloaded);
       } else {
-        console.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
+        logger.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
       }
     });
 

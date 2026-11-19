@@ -1,3 +1,4 @@
+import { SPACING, TYPOGRAPHY } from '../constants';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -93,9 +94,9 @@ export function ScoreEditorScreen({ route }: { route: { params: { scorePath?: st
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  body: { padding: 16, gap: 12, paddingBottom: 48 },
-  title: { fontSize: 18, fontWeight: '700' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },
-  small: { fontSize: 12 },
+  body: { padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxl },
+  title: { ...TYPOGRAPHY.h2 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'center' },
+  chip: { borderWidth: 1, borderRadius: SPACING.xl, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  small: { ...TYPOGRAPHY.meta },
 });

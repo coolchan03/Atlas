@@ -3,6 +3,7 @@
  * Supports: text files, code files, CSV, JSON, PDF, and other text-based formats
  */
 
+import logger from '../utils/logger';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { MediaAttachment } from '../types';
@@ -52,7 +53,7 @@ class DocumentService {
    * - Note: Files from keepLocalCopy are already in app's Documents directory
    */
   private async resolveContentUri(uri: string, fileName: string): Promise<string> {
-    console.log('[DocumentService] resolveContentUri');
+    logger.log('[DocumentService] resolveContentUri');
 
     // Check if this is a file from keepLocalCopy - it would be in our app's Documents directory
     // keepLocalCopy returns paths like: file:///Users/.../App/Documents/filename
@@ -68,7 +69,7 @@ class DocumentService {
     // Only skip copying if the file is exactly in our app's Documents directory
     // This must be a precise match to avoid security-scoped URLs from document picker
     if (cleanUri.startsWith(documentsPath)) {
-      console.log(`[DocumentService] File is in app Documents directory, using directly`);
+      logger.log(`[DocumentService] File is in app Documents directory, using directly`);
       return cleanUri;
     }
 
@@ -76,7 +77,7 @@ class DocumentService {
     if (Platform.OS === 'android' && uri.startsWith('content://')) {
       const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
       await RNFS.copyFile(uri, tempPath);
-      console.log('[DocumentService] Copied Android content:// URI to app storage');
+      logger.log('[DocumentService] Copied Android content:// URI to app storage');
       return tempPath;
     }
 
@@ -87,23 +88,23 @@ class DocumentService {
       try {
         // RNFS.copyFile can handle file:// URIs by copying the underlying file
         await RNFS.copyFile(uri, tempPath);
-        console.log('[DocumentService] Copied iOS file:// URI to app storage');
+        logger.log('[DocumentService] Copied iOS file:// URI to app storage');
         return tempPath;
       } catch (_copyError) {
         // If direct copy fails, try stripping the file:// prefix
         const pathWithoutScheme = decodedUri.replace(/^file:\/\//, '');
         try {
           await RNFS.copyFile(pathWithoutScheme, tempPath);
-          console.log('[DocumentService] Copied (fallback) to app storage');
+          logger.log('[DocumentService] Copied (fallback) to app storage');
           return tempPath;
         } catch {
-          console.error(`[DocumentService] Both copy attempts failed`);
+          logger.error(`[DocumentService] Both copy attempts failed`);
           throw new Error(`Could not access file. Please try selecting the file again.`);
         }
       }
     }
 
-    console.log('[DocumentService] Returning URI as-is');
+    logger.log('[DocumentService] Returning URI as-is');
     return uri;
   }
 
@@ -118,7 +119,7 @@ class DocumentService {
 
   private async readContent(resolvedPath: string, isPdf: boolean, opts: { maxChars: number; forceMarkdown?: boolean }): Promise<string> {
     const { maxChars, forceMarkdown = false } = opts;
-    console.log(`[DocumentService] readContent called - isPdf: ${isPdf}, maxChars: ${maxChars}`);
+    logger.log(`[DocumentService] readContent called - isPdf: ${isPdf}, maxChars: ${maxChars}`);
     const ext = `.${resolvedPath.split('.').pop()?.toLowerCase()}`;
     // The AI reads Markdown (headings, lists, tables) better than flat text, so documents are converted to it (Chat settings).
     const markdown = forceMarkdown || useAppStore.getState().settings.convertToMarkdown !== false;
@@ -127,14 +128,14 @@ class DocumentService {
       const raw = isPdf
         ? await pdfExtractor.extractText(resolvedPath, maxChars)
         : await RNFS.readFile(resolvedPath, 'utf8');
-      console.log(`[DocumentService] Successfully read ${raw.length} characters`);
+      logger.log(`[DocumentService] Successfully read ${raw.length} characters`);
       const text = markdown ? toMarkdown(raw, ext) : raw;
       if (text.length > maxChars) {
         return `${text.substring(0, maxChars)}\n\n... [Content truncated due to length]`;
       }
       return text;
     } catch (error: any) {
-      console.error(`[DocumentService] Error reading content:`, error?.message || error);
+      logger.error(`[DocumentService] Error reading content:`, error?.message || error);
       throw error;
     }
   }
@@ -188,7 +189,7 @@ class DocumentService {
       name = name.replaceAll(/[\\/]/g, '_');
       const extension = `.${name.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
-      console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
+      logger.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
       this.validateFileType(extension, isPdf);
 
       const resolvedPath = await this.resolveContentUri(filePath, name);
@@ -197,10 +198,10 @@ class DocumentService {
       let fileExists = false;
       try {
         fileExists = await RNFS.exists(resolvedPath);
-        console.log(`[DocumentService] File exists check: ${fileExists}`);
+        logger.log(`[DocumentService] File exists check: ${fileExists}`);
       } catch (existsError) {
         // RNFS.exists can fail on security-scoped URLs
-        console.error(`[DocumentService] exists() threw error:`, existsError);
+        logger.error(`[DocumentService] exists() threw error:`, existsError);
         throw new Error('Could not access file. Please try selecting the file again.');
       }
 
@@ -209,7 +210,7 @@ class DocumentService {
       }
 
       const stat = await RNFS.stat(resolvedPath);
-      console.log(`[DocumentService] File size: ${stat.size} bytes`);
+      logger.log(`[DocumentService] File size: ${stat.size} bytes`);
       // Text files are read whole; PDFs and office files are mostly pictures/zip, so allow bigger ones.
       const limit = isPdf || OFFICE_EXTENSIONS.includes(extension) ? 250 * 1024 * 1024 : MAX_FILE_SIZE;
       if (stat.size > limit) {

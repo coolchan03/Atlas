@@ -31,6 +31,8 @@ object GeniexEngine {
     @Volatile private var llm: LlmWrapper? = null
     @Volatile private var job: Job? = null
     @Volatile private var initialised = false
+    /** Where to report a reply that is stopped from outside, so the caller's promise always ends. */
+    @Volatile private var activeOnError: ((String) -> Unit)? = null
 
     fun chipSupported(soc: String): Boolean = soc.trim().uppercase() in CHIPS
     fun unavailableReason(soc: String): String =
@@ -63,6 +65,7 @@ object GeniexEngine {
                  onToken: (String) -> Unit, onDone: (Double, Double, Double, Long, Long, String) -> Unit, onError: (String) -> Unit) {
         val model = llm ?: return onError("No GenieX model is loaded.")
         job?.cancel()
+        activeOnError = onError
         job = scope.launch {
             try {
                 val chat = messages.map { (role, content) -> ChatMessage(role, content, null, null, null) }.toTypedArray()
@@ -74,6 +77,7 @@ object GeniexEngine {
                     when (result) {
                         is LlmStreamResult.Token -> onToken(result.text)
                         is LlmStreamResult.Completed -> result.profile.let { p ->
+                            activeOnError = null
                             onDone(p.ttftMs, p.prefillSpeed, p.decodingSpeed, p.promptTokens, p.generatedTokens, p.stopReason ?: "")
                         }
                         is LlmStreamResult.Error -> onError(result.throwable.message ?: "GenieX failed")
@@ -89,7 +93,10 @@ object GeniexEngine {
 
     fun stop() {
         val model = llm
+        val report = activeOnError
+        activeOnError = null
         job?.cancel()
+        report?.invoke("Stopped.")
         if (model != null) scope.launch { try { model.stopStream() } catch (_: Throwable) { /* nothing was running */ } }
     }
 

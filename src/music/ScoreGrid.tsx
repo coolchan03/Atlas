@@ -1,4 +1,5 @@
 /** The two grids of the score editor: a piano roll (pitch rows, step columns) and a drum grid. Presentation only: taps go to the screen. */
+import { TYPOGRAPHY } from '../constants';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
@@ -64,7 +65,7 @@ export function DrumGrid({ score, onTap }: { score: MusicScore; onTap: (kind: Dr
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
-  label: { width: 46, fontSize: 11 },
+  label: { width: 46, ...TYPOGRAPHY.meta },
   cell: { width: CELL, height: 24, borderWidth: 0.5 },
   barLine: { borderLeftWidth: 2 },
   stepLine: { borderLeftWidth: 0.5 },
