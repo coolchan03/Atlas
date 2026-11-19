@@ -13,3 +13,6 @@ Not enabled for published builds. R8 removes and renames Java/Kotlin code it thi
 3. Install the trial APK and run every feature that has native code: chat on CPU, OpenCL and NPU backends, vision, tool calling, speech-to-text, text-to-speech and voice cloning, image generation (MNN and QNN), music, downloads, ZIP import, offline library, maps.
 4. A crash in `adb logcat` that mentions `ClassNotFoundException`, `NoSuchMethodError` or `UnsatisfiedLinkError` means a missing keep rule: add `-keep class <name> { *; }` and repeat.
 5. Only when every feature works, decide whether the size saved is worth turning it on. Expect the saving to be small next to the native libraries (hundreds of MB), which R8 does not touch.
+
+## Result of the first trial (0.0.207 code, build 210)
+It built. The zipped build file is 234,857,281 bytes against 242,154,534 for the normal build of the same code: 7.3 MB smaller (3.0%), which is small because the native libraries (376 MB unpacked) are not touched by R8. The shrunk app has not been run on a phone, so `-PatlasMinify` stays off for published builds. If the saving is wanted, the trial APK has to be exercised feature by feature first (the list in this file).

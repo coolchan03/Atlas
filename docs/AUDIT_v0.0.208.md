@@ -23,3 +23,7 @@ The dead-export scan looked in `src`, `__tests__` and `scripts`, but not the roo
 
 ## Still open
 Voice engine comparisons with the real engines installed; Qualcomm's redistribution terms for the GenieX runtime libraries; 102 unused exports that need a human look; a Swift/iOS counterpart is not needed (Android only); `npm audit` leftovers that need bundler upgrades.
+
+## Added in 0.0.209
+- `knip` reports nothing (no unused exports, files, dependencies or duplicates) and `dependency-cruiser` reports no violations: the 31 remaining unused exports were re-exports nobody imported (removed) or names reached only through `require()` (marked `@public` so the tool knows), the unused `CenteredAlert` component is deleted, two undeclared dependencies are declared, and the three import cycles inherited from 0.0.205 are broken (the Brave search code, the read-aloud status type and the planned-square type each have their own small file).
+- The GenieX trial build (CI) found real compile errors in the engine code (a non-null tool list, a required `enableThinking` argument, property setters): fixed. The R8 trial built and was 7.3 MB (3%) smaller; see `docs/r8-trial.md`.
