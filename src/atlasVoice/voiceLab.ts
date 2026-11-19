@@ -20,6 +20,15 @@ export interface LabReport { referenceRate: number; reference?: LabStats; folder
 
 export const labAvailable = (): boolean => Platform.OS === 'android' && !!Native?.voiceLab;
 export const DEFAULT_LAB_TEXT = 'Hey man how is it going';
+
+/** Sentences that expose the known weak spots, to run the same cloned voice through: a short opening vowel ("I", "I'm"), numbers, a long run of prose and plain dialogue. */
+export const LAB_SAMPLES: Array<{ label: string; text: string }> = [
+  { label: '"I" at the start', text: 'I am here.' },
+  { label: '"I\'m" at the start', text: "I'm sure it will work." },
+  { label: 'Numbers', text: 'It costs 1,250 dollars, due on March 3rd.' },
+  { label: 'Long prose', text: 'When the lease began, the company recorded a liability and a matching right-of-use asset, then reduced the liability each month as payments were made.' },
+  { label: 'Dialogue', text: 'Okay. Sure! Why not?' },
+];
 export const LAB_STEPS = [2, 3, 5];
 
 const SYLLABLE_VOWELS = /[aeiouy]+/gi;

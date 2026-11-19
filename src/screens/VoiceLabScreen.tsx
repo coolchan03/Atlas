@@ -6,7 +6,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { ReadVoiceChooser } from '../atlasVoice/ReadVoiceChooser';
 import {
-  DEFAULT_LAB_TEXT, LAB_STEPS, LabReport, findings, formatReport, labAvailable, playThroughVoice, playWithAndroid, recommendSteps, runVoiceLab, stopLab,
+  DEFAULT_LAB_TEXT, LAB_SAMPLES, LAB_STEPS, LabReport, findings, formatReport, labAvailable, playThroughVoice, playWithAndroid, recommendSteps, runVoiceLab, stopLab,
 } from '../atlasVoice/voiceLab';
 import { readVoiceProfile } from '../atlasVoice/readAloud';
 import { useVoiceProfiles } from '../atlasVoice/profiles';
@@ -51,6 +51,14 @@ export const VoiceLabScreen: React.FC = () => {
         <Text style={[styles.label, { color: colors.text }]}>Sentence</Text>
         <TextInput testID="voice-lab-text" value={text} onChangeText={setText} multiline
           style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} />
+        <View style={styles.row}>
+          {LAB_SAMPLES.map((x) => (
+            <TouchableOpacity key={x.label} onPress={() => setText(x.text)} accessibilityRole="button" testID={`voice-lab-sample-${x.label}`}
+              style={[styles.chip, { borderColor: text === x.text ? colors.primary : colors.border, backgroundColor: colors.surface }]}>
+              <Text style={{ color: colors.text }}>{x.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <Text style={[styles.label, { color: colors.text }]}>Quality steps to compare</Text>
         <View style={styles.row}>
           {LAB_STEPS.concat([8]).map((n) => (
