@@ -1,11 +1,13 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
 import { Fold } from '../components/Fold';
 import { friendlyTitle } from './chapters';
 import { FORMATS, type SquareFormat } from './formats';
 import { useTopics, type Course } from './store';
+import { phaseOf, subscribe } from './generationQueue';
+import { stopWriting } from './service';
 
 /** The kinds of square a learner can add to the board themselves (the ones the app makes in code are left out). */
 const ADDABLE: SquareFormat[] = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman', 'match', 'quiz', 'truefalse', 'fill', 'recall', 'sort', 'order', 'cards', 'scenario', 'practice', 'numeric'];
@@ -64,7 +66,36 @@ export function WritingNotice({ embedded, onLeave }: { embedded: boolean; onLeav
   );
 }
 
+/** Re-renders when the lesson queue changes, and says whether this square's deeper rewrite is still being written. */
+export function useDeepening(courseId: string, key: string): boolean {
+  const [, bump] = useState(0);
+  useEffect(() => subscribe(() => bump((n) => n + 1)), []);
+  return phaseOf(`${courseId}:${key}:deepen`) !== undefined;
+}
+
+/** A saved lesson that is ready to read while its in-depth version is still being written in the background. */
+export function ExpandingNote({ show }: { show: boolean }) {
+  const { colors } = useTheme();
+  if (!show) return null;
+  return <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-expanding">Saved. Adding more depth in the background; this lesson is ready to read now.</Text>;
+}
+
+/** What the AI is doing for a square that is not written yet (waiting its turn, or writing), with a way to stop it. */
+export function WritingStatus({ courseId, squareKey, onStopped }: { courseId: string; squareKey: string; onStopped: () => void }) {
+  const { colors } = useTheme();
+  const [, bump] = useState(0);
+  useEffect(() => subscribe(() => bump((n) => n + 1)), []);
+  const waiting = phaseOf(`${courseId}:${squareKey}`) === 'waiting';
+  return (
+    <View style={styles.gap}>
+      <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">{waiting ? 'Waiting for the AI to finish another lesson...' : 'Writing this square...'}</Text></View>
+      <Button title="Stop" variant="outline" onPress={() => { stopWriting(courseId, squareKey); onStopped(); }} testID="square-stop" />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   meta: { fontSize: 13 },
   gap: { gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

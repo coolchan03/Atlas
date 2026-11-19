@@ -9,7 +9,7 @@ describe('lesson queue limits', () => {
   it('abandons a job that hangs, stops the model, and lets the next job run', async () => {
     jest.useFakeTimers();
     const onAbort = jest.fn();
-    const hung = enqueue('hung', never, 1, { limitMs: 1000, onAbort });
+    const hung = enqueue('hung', never, { priority: 1, limitMs: 1000, onAbort });
     const next = enqueue('next', async () => 'ok', 0);
     const hungResult = hung.catch((e: Error) => e.message);
     expect(phaseOf('hung')).toBe('writing');
@@ -24,7 +24,7 @@ describe('lesson queue limits', () => {
   it('ignores a late result from an abandoned job (the slot is released only once)', async () => {
     jest.useFakeTimers();
     let finish!: (v: string) => void;
-    const slow = enqueue('slow', () => new Promise<string>((r) => { finish = r; }), 1, { limitMs: 500 });
+    const slow = enqueue('slow', () => new Promise<string>((r) => { finish = r; }), { priority: 1, limitMs: 500 });
     const slowResult = slow.catch(() => 'timed out');
     const second = enqueue('second', () => new Promise<string>((r) => setTimeout(() => r('second'), 2000)), 1);
     await jest.advanceTimersByTimeAsync(501);
@@ -42,7 +42,7 @@ describe('lesson queue limits', () => {
     jest.useRealTimers();
     const onAbort = jest.fn();
     const ran = jest.fn();
-    const running = enqueue('running', never, 1, { limitMs: 60_000, onAbort });
+    const running = enqueue('running', never, { priority: 1, limitMs: 60_000, onAbort });
     const queued = enqueue('queued', async () => { ran(); return 1; }, 0);
     const r1 = running.catch((e: Error) => e.message);
     const r2 = queued.catch((e: Error) => e.message);

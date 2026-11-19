@@ -42,7 +42,7 @@ describe('bounded deepening', () => {
     jest.useFakeTimers();
     try {
       mockAsk.mockImplementationOnce(() => new Promise(() => undefined)).mockResolvedValueOnce(LONG);
-      const run = deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] }, { sectionMs: 1000, totalMs: 60_000 });
+      const run = deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [], sectionMs: 1000, totalMs: 60_000 });
       await jest.advanceTimersByTimeAsync(1001);
       const out: any = await run;
       expect(out.sections[0].text).toBe('Cash is money.');
@@ -52,7 +52,7 @@ describe('bounded deepening', () => {
 
   it('stops asking once the total time is used up', async () => {
     mockAsk.mockResolvedValue(LONG);
-    const out: any = await deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [] }, { totalMs: 0 });
+    const out: any = await deepenLesson(course, lesson, { title: '1 – Cash', excerpts: [], totalMs: 0 });
     expect(mockAsk).not.toHaveBeenCalled();
     expect(out.sections.map((s: any) => s.text)).toEqual(['Cash is money.', 'Debts are owed.']);
   });

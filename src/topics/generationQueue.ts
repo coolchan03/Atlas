@@ -69,13 +69,14 @@ function pump(): void {
 }
 
 /** Queues work under a key. `priority` 1 is a lesson the person is waiting for; 0 is one prepared ahead. */
-export function enqueue<T>(key: string, run: () => Promise<T>, priority: number, opts: { limitMs?: number; onAbort?: () => void } = {}): Promise<T> {
+export function enqueue<T>(key: string, run: () => Promise<T>, how: number | { priority: number; limitMs?: number; onAbort?: () => void }): Promise<T> {
+  const { priority, limitMs, onAbort } = typeof how === 'number' ? { priority: how } as { priority: number; limitMs?: number; onAbort?: () => void } : how;
   const existing = known.get(key) as Job<T> | undefined;
   if (existing) { existing.priority = Math.max(existing.priority, priority); return existing.promise; }
   let resolve!: (v: T) => void;
   let reject!: (e: unknown) => void;
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  const job: Job<T> = { key, priority, run, promise, resolve, reject, limitMs: opts.limitMs ?? DEFAULT_JOB_LIMIT_MS, onAbort: opts.onAbort, phase: 'waiting', settled: false };
+  const job: Job<T> = { key, priority, run, promise, resolve, reject, limitMs: limitMs ?? DEFAULT_JOB_LIMIT_MS, onAbort, phase: 'waiting', settled: false };
   known.set(key, job as Job);
   pending.push(job as Job);
   changed();

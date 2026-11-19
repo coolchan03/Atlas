@@ -13,8 +13,7 @@ import type { Space, SpaceKind } from '../language/board';
 import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } from './formats';
 import { courseProgress, useTopics, type Course } from './store';
 import { friendlyTitle } from './chapters';
-import { createChapterCourse, createCourse, findSources, squareContent, stopWriting, type Rewrite } from './service';
-import { phaseOf, subscribe } from './generationQueue';
+import { createChapterCourse, createCourse, findSources, squareContent, type Rewrite } from './service';
 import { importCourseFile, shareCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
@@ -23,7 +22,7 @@ import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
-import { AddSquarePanel, ReadingDepthChips, WritingNotice } from './BoardExtras';
+import { AddSquarePanel, ExpandingNote, ReadingDepthChips, useDeepening, WritingNotice, WritingStatus } from './BoardExtras';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
 import { WriteNowPanel } from './WriteNowPanel';
@@ -400,11 +399,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
   const [error, setError] = useState<string | null>(null);
   const [stars, setStars] = useState<number | null>(null);
   const [addedRemedial, setAddedRemedial] = useState(false);
-  // The saved draft can be read while its deeper version is still being written: say so, and update when that ends.
-  const [, bump] = useState(0);
-  React.useEffect(() => subscribe(() => bump((n) => n + 1)), []);
-  const expanding = phaseOf(`${courseId}:${key}:deepen`);
-
+  const expanding = useDeepening(courseId, key);
   const load = React.useCallback(() => {
     if (!course) return;
     setError(null);
@@ -424,7 +419,6 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
     setStars(n);
   };
   const again = () => { useTopics.getState().clearContent(courseId, key); setContent(null); setStars(null); setAddedRemedial(false); load(); };
-  // A lesson that is unclear is written again, simpler, with a different example, or shorter.
   const rewrite = (how: Rewrite) => { useTopics.getState().clearContent(courseId, key); setContent(null); setError(null); squareContent(useTopics.getState().courses.find((c) => c.id === courseId) ?? course, key, { rewrite: how }).then(setContent).catch((e) => setError(String(e?.message || e))); };
   const askTutor = () => {
     const app = useAppStore.getState();
@@ -465,7 +459,7 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
                 <Text style={{ color: colors.primary }}>{cruising ? 'You got the last two right. Skip this lesson?' : 'I already know this'}</Text>
               </TouchableOpacity>
             )}
-            {square.format === 'lesson' && !!expanding && <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-expanding">Saved. Adding more depth in the background; this lesson is ready to read now.</Text>}
+            <ExpandingNote show={expanding} />
             <RewriteRow show={square.format === 'lesson'} onPick={rewrite} content={content} title={square.title} />
             <SquareView content={content} onDone={finish} />
             <CitedFold passages={course.cited?.[key] ?? []} content={content} projectId={course.projectId} />
@@ -478,9 +472,8 @@ export const TopicSquareScreen: React.FC<{ courseId?: string; squareKey?: string
           </View>
         ) : (
           <View style={styles.gap}>
-            <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">{phaseOf(`${courseId}:${key}`) === 'waiting' ? 'Waiting for the AI to finish another lesson...' : 'Writing this square...'}</Text></View>
+            <WritingStatus courseId={courseId} squareKey={key} onStopped={() => setError('Stopped. Try again when you are ready.')} />
             <WritingNotice embedded={!!props.embedded} onLeave={() => navigation.goBack()} />
-            <Button title="Stop" onPress={() => { stopWriting(courseId, key); setError('Stopped. Try again when you are ready.'); }} testID="square-stop" />
           </View>
         )}
       </ScrollView>

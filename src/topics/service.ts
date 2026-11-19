@@ -200,7 +200,7 @@ export type Rewrite = keyof typeof REWRITES;
 export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), opts.background ? 0 : 1, { limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: () => void stopModel() });
+  return enqueue(`${course.id}:${key}`, () => writeSquare(course.id, key, opts.rewrite), { priority: opts.background ? 0 : 1, limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: () => void stopModel() });
 }
 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
@@ -249,7 +249,7 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
   if (content.kind === 'lesson' && shouldDeepen(course, square, rewrite)) {
-    enqueue(expandKey(course.id, key), () => expandSquare(course.id, key, draft, { title: square.title, excerpts, bank }), 0, { limitMs: EXPAND_LIMIT_MS, onAbort: () => void stopModel() })
+    enqueue(expandKey(course.id, key), () => expandSquare({ courseId: course.id, key, draft, title: square.title, excerpts, bank }), { priority: 0, limitMs: EXPAND_LIMIT_MS, onAbort: () => void stopModel() })
       .catch(() => undefined); // the saved draft stays as it is
   }
   return draft;
@@ -265,10 +265,11 @@ export function stopWriting(courseId: string, key: string): void {
 }
 
 /** Deepens a saved draft, then replaces it - but only if the square still holds that same draft (it was not rewritten, cleared or written again meanwhile). */
-async function expandSquare(courseId: string, key: string, draft: SquareContent, about: { title: string; excerpts: Excerpt[]; bank: string }): Promise<void> {
+async function expandSquare(about: { courseId: string; key: string; draft: SquareContent; title: string; excerpts: Excerpt[]; bank: string }): Promise<void> {
+  const { courseId, key, draft } = about;
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!course || course.content[key] !== draft || draft.kind !== 'lesson') return;
-  const deeper = await deepenLesson(course, draft, { title: about.title, excerpts: about.excerpts }, { sectionMs: SECTION_LIMIT_MS, totalMs: EXPAND_LIMIT_MS - 30_000 });
+  const deeper = await deepenLesson(course, draft, { title: about.title, excerpts: about.excerpts, sectionMs: SECTION_LIMIT_MS, totalMs: EXPAND_LIMIT_MS - 30_000 });
   const now = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!now || now.content[key] !== draft) return;
   const changedAny = deeper.kind === 'lesson' && deeper.sections.some((x, i) => x !== draft.sections[i]);
@@ -283,8 +284,9 @@ export const shouldDeepen = (course: Pick<Course, 'readingDepth'>, square: { rem
  * A reading written in depth: each section of the first pass is written out again as full textbook paragraphs. A section the model cannot
  * deepen (an empty or far shorter answer, or an error) keeps what it had, so the reading is never worse than the short one.
  */
-export async function deepenLesson(course: Course, lesson: Extract<SquareContent, { kind: 'lesson' }>, about: { title: string; excerpts: Excerpt[] }, limits: { sectionMs?: number; totalMs?: number } = {}): Promise<SquareContent> {
+export async function deepenLesson(course: Course, lesson: Extract<SquareContent, { kind: 'lesson' }>, about: { title: string; excerpts: Excerpt[]; sectionMs?: number; totalMs?: number }): Promise<SquareContent> {
   const { title, excerpts } = about;
+  const limits = about;
   const passages = excerpts.map((e) => e.text).join('\n').slice(0, 1800);
   const sectionMs = limits.sectionMs ?? SECTION_LIMIT_MS;
   const deadline = Date.now() + (limits.totalMs ?? EXPAND_LIMIT_MS);

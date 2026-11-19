@@ -156,6 +156,22 @@ export type Answerer = (item: ExamItem, mode: ExamMode) => Promise<Answered>;
 
 const clip = (t: string, n = 600) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
+/** Scores one answer and says why it passed or not. */
+function gradeItem(item: ExamItem, mode: ExamMode, answered: Answered & { seconds: number }): ItemResult {
+  const { seconds } = answered;
+  const text = String(answered.text ?? '');
+  const scored = scoreAnswer(text, item.expected);
+  const noEvidence = !scored.correct && !scored.outdated;
+  let reason: ExamReason = scored.correct ? 'correct' : scored.outdated ? 'outdated' : 'wrong-answer';
+  if (!text.trim()) reason = 'empty-answer';
+  else if (noEvidence && mode !== 'baseline' && answered.sourceCount === 0 && !answered.memoryCount) reason = 'no-sources';
+  else if (noEvidence && mode === 'memory' && answered.memoryCount === 0) reason = 'no-approved-memory';
+  return {
+    id: item.id, correct: scored.correct, score: scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
+    answer: clip(text), sourceCount: answered.sourceCount, memoryCount: answered.memoryCount,
+  };
+}
+
 /** Runs every item in one mode. The answerer is the model plus whatever retrieval the mode allows; scoring stays here. */
 export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number }): Promise<ExamMetrics> {
   const now = input.now ?? Date.now;
@@ -175,18 +191,8 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
       results.push({ id: item.id, correct: false, score: 0, outdated: false, seconds: (now() - started) / 1000, reason: 'inference-failure', error: clip(String(e?.message || e), 200) });
       continue;
     }
-    const seconds = (now() - started) / 1000;
-    const text = String(answered.text ?? '');
-    const scored = scoreAnswer(text, item.expected);
-    unsupported += citedNumbers(text).filter((n) => n < 1 || n > answered.sourceCount).length;
-    let reason: ExamReason = scored.correct ? 'correct' : scored.outdated ? 'outdated' : 'wrong-answer';
-    if (!text.trim()) reason = 'empty-answer';
-    else if (!scored.correct && !scored.outdated && input.mode !== 'baseline' && answered.sourceCount === 0 && !answered.memoryCount) reason = 'no-sources';
-    else if (!scored.correct && !scored.outdated && input.mode === 'memory' && answered.memoryCount === 0) reason = 'no-approved-memory';
-    results.push({
-      id: item.id, correct: scored.correct, score: scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
-      answer: clip(text), sourceCount: answered.sourceCount, memoryCount: answered.memoryCount,
-    });
+    results.push(gradeItem(item, input.mode, { ...answered, seconds: (now() - started) / 1000 }));
+    unsupported += citedNumbers(String(answered.text ?? '')).filter((n) => n < 1 || n > answered.sourceCount).length;
   }
   const ungraded = results.filter((r) => r.reason === 'invalid-key' || r.reason === 'inference-failure').length;
   const graded = results.length - ungraded;
