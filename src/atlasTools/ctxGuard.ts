@@ -22,7 +22,7 @@ async function goodMap(): Promise<Record<string, number>> {
   try { return JSON.parse((await AsyncStorage.getItem(GOOD)) || '{}') || {}; } catch { return {}; }
 }
 
-export const requestedCtx = (engine: Engine): number =>
+const requestedCtx = (engine: Engine): number =>
   Number((useAppStore.getState().settings as any)[key(engine)]) || DEFAULT[engine];
 
 /** Call just before loading. Only sizes bigger than the last working one are "risky". */

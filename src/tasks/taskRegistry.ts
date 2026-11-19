@@ -90,7 +90,7 @@ export const useTasks = create<State>()(persist((set, get) => ({
 }), { name: 'atlas-tasks', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ tasks: s.tasks.slice(0, 100) }) }));
 
 /** Safe boundary check for the work: true once the person asked to cancel, so it can stop and clean up. */
-export const isCancelled = (id: string): boolean => !!useTasks.getState().tasks.find((t) => t.id === id)?.cancelRequested;
+const isCancelled = (id: string): boolean => !!useTasks.getState().tasks.find((t) => t.id === id)?.cancelRequested;
 
 type Control = { id: string; progress: (p: { stage?: string; completed?: number; total?: number; checkpoint?: string }) => void; cancelled: () => boolean };
 

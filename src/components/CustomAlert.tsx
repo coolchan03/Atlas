@@ -13,9 +13,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 // AlertState + its factories are pure and live in utils/alertState so non-UI code can build an
 // alert state without importing this component (no-backward-layering-core). Re-exported here so
 // existing `from '../components/CustomAlert'` importers are unchanged.
-import { AlertButton } from '../utils/alertState';
+import type { AlertButton } from '../utils/alertState';
 
-export type { AlertButton };
 export type { AlertState } from '../utils/alertState';
 export { initialAlertState, showAlert, hideAlert } from '../utils/alertState';
 

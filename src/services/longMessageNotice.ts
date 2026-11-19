@@ -9,7 +9,7 @@ export function longMessageText(latestTokens: number, budgetTokens: number): str
     + 'To get the whole thing read: raise the memory size in Chat settings, or add the text as a document (a project, or Knowledge for a textbook) and ask about it, or send it in parts.';
 }
 
-/** Posts the notice in the chat that is open (the one being answered). */
+/** Posts the notice in the chat that is open (the one being answered). @public */
 export function postLongMessageNotice(latestTokens: number, budgetTokens: number): void {
   try {
     const { useChatStore } = require('../stores');

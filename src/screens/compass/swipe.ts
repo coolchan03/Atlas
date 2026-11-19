@@ -1,1 +1,1 @@
-export { SWIPE_MIN, swipeDirection } from '../../utils/swipe';
+export { swipeDirection } from '../../utils/swipe';

@@ -66,7 +66,7 @@ export function readingMinutes(words: number, rate: number): number {
   return Math.max(1, Math.ceil(words / (WORDS_PER_MINUTE * Math.max(0.25, rate))));
 }
 
-export type ReaderStatus = 'idle' | 'reading' | 'paused';
+import type { ReaderStatus } from './readerStatus';
 /**
  * What is really happening, from the voice engine's own reports: loading (the voice and its recording are being made ready),
  * generating (the first sound is being made), speaking, buffering (the next piece is still being made), paused, failed.

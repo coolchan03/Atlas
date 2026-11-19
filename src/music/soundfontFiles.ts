@@ -67,6 +67,7 @@ const dir = () => `${RNFS.DocumentDirectoryPath}/soundfonts`;
  * Keeps a file as the SoundFont in use. It is checked first, then put beside the old one under a temporary name and swapped in only once
  * it is all there, so a wrong file, a full disk or a lost connection leaves the working SoundFont as it was. `move` takes the file itself
  * instead of copying it (for one just downloaded into the app's own folder).
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export async function installSoundfontFrom(path: string, name: string, o: { move?: boolean } = {}): Promise<void> {
   const bytes = await checkFile(path);
@@ -85,7 +86,7 @@ export async function installSoundfontFrom(path: string, name: string, o: { move
   useMusicLibrary.getState().setUseSoundfont(true);
 }
 
-/** Downloads the small free SoundFont and keeps it. `onProgress` gets 0 to 1. */
+/** Downloads the small free SoundFont and keeps it. `onProgress` gets 0 to 1. @public */
 export const downloadFreeSoundfont = (onProgress?: (share: number) => void): Promise<void> => downloadSoundfont(SOUNDFONT_CHOICES[0], onProgress);
 
 /** Downloads one of the SoundFonts above and keeps it as the one in use. `onProgress` gets 0 to 1. */

@@ -6,7 +6,7 @@ import { readAloud, useReadAloud } from './readAloud';
 
 /** The longest document opened for reading (about seven hours of speech). */
 const MAX_CHARS = 400_000;
-export const wordCount = (text: string) => (text.trim() ? text.trim().split(/\s+/).length : 0);
+const wordCount = (text: string) => (text.trim() ? text.trim().split(/\s+/).length : 0);
 
 /** The text to read: typed or pasted, or a document opened from the phone. Shared by the Read aloud screen and its Home widget. */
 export function useReadAloudSource() {

@@ -98,7 +98,7 @@ interface DlState {
 }
 export const useNeuralVoices = create<DlState>((set) => ({ progress: {}, installed: {}, speakerCount: {}, set: (p) => set(p) }));
 
-/** "vits-piper-en_GB-northern_english_male-medium" -> "Northern English Male (Piper, en GB)". */
+/** "vits-piper-en_GB-northern_english_male-medium" -> "Northern English Male (Piper, en GB)". @public */
 export function importedVoiceName(id: string): string {
   const m = id.match(/^vits-piper-([a-z]{2})_([A-Z]{2})-(.+?)(-(x_low|low|medium|high))?$/);
   const words = (t: string) => t.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
@@ -210,6 +210,7 @@ export async function deleteVoice(id: string): Promise<void> {
 /**
  * What the native engine needs for a catalogue choice: the model's own speaker id, the
  * pronunciation dictionary for multi-accent packages and the voice depth.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export function nativeVoice(id: string, sid: number): { sid: number; style: { accent: string; depth: number } } {
   const voice = findNeuralVoice(id);

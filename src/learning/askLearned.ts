@@ -28,7 +28,7 @@ function learnedTopics(): string[] {
   return [...new Set(topics)];
 }
 
-/** The stored claims closest to a question, best first. */
+/** The stored claims closest to a question, best first. @public */
 export function relevantClaims(question: string, limit = 6): LearnedHit[] {
   const hits: LearnedHit[] = [];
   const asked = yearsOf(question);

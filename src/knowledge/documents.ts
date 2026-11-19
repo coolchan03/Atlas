@@ -55,7 +55,7 @@ async function patchDocument(sourceId: string, change: (d: SourceDocument) => vo
 export interface ImportResult { doc: SourceDocument; duplicate: boolean }
 
 /** What kind of book a stored document is, from its name (the stored original has no extension). */
-export const kindOf = (doc: { name: string }): BookKind => bookKind(doc.name) ?? 'pdf';
+const kindOf = (doc: { name: string }): BookKind => bookKind(doc.name) ?? 'pdf';
 
 /** Brings a PDF, EPUB or text file into Atlas's private storage. The same bytes imported twice are one document. */
 export async function importPdf(input: { uri: string; name: string; agentId?: string; topicId?: string }): Promise<ImportResult> {

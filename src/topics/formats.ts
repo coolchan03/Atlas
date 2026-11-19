@@ -12,9 +12,8 @@ import { DRILL_LABELS } from '../study/drills';
 import type { Exercise } from '../study/exercises';
 import type { PeriodicQuestion } from '../study/periodicQuiz';
 
-export type SquareFormat = 'lesson' | 'quiz' | 'cards' | 'match' | 'order' | 'practice' | 'fill' | 'truefalse' | 'scenario' | 'numeric' | 'worked' | 'table'
-  | 'recall' | 'fix' | 'tablefill' | 'sort' | 'dictation' | 'reading' | 'predict' | 'drill' | 'periodic'
-  | 'crossword' | 'wordsearch' | 'scramble' | 'memory' | 'hangman';
+import type { PlannedSquare, SquareFormat } from './plannedSquare';
+export type { PlannedSquare, SquareFormat };
 
 /** The games a course can have as a square: each is played from a list of terms with a clue. */
 const TERM_GAMES = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman'] as const;
@@ -80,7 +79,6 @@ export function subjectAdvice(topic: string): string {
 }
 export const FORMAT_IDS = FORMATS.map((f) => f.id);
 
-export interface PlannedSquare { key: string; format: SquareFormat; title: string; focus: string; unit: string; checkpoint?: boolean; remedial?: boolean; /** The subject alone ("Leases"), without the words every square of a chapter shares ("chapter exam", "quiz"): what passages and textbook questions are matched on. */ topic?: string }
 export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
 
 /** The longest board: 60 chapters of six squares each, and the checks between them. */
@@ -212,7 +210,7 @@ export const standardsNote = (text: string): string => (ACCOUNTING.test(text)
   ? 'Accounting standards change, and a textbook can be older than the latest FASB update. Teach the rule as the excerpts give it. Where a rule is one that FASB has been changing (leases, revenue, credit losses, segment reporting, income taxes, crypto assets and so on), add a line starting "Check:" telling the learner to confirm it with the latest-standards check, because a newer standard overrules the book. Never state an ASU number or an effective date from memory.\n'
   : '');
 
-/** Text cut only where a sentence or a word ends, never in the middle of one, with "..." when something was left off. */
+/** Text cut only where a sentence or a word ends, never in the middle of one, with "..." when something was left off. @public */
 export function tidy(v: unknown, max: number): string {
   const t = str(v, 100000);
   if (t.length <= max) return t;
@@ -222,7 +220,7 @@ export function tidy(v: unknown, max: number): string {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 1)).trim()}...`;
 }
 
-/** Text that must be whole to make sense (a question, an answer choice): null when it is longer than allowed, so the caller drops it instead of showing it cut off. */
+/** Text that must be whole to make sense (a question, an answer choice): null when it is longer than allowed, so the caller drops it instead of showing it cut off. @public */
 export const whole = (v: unknown, max: number): string | null => { const t = str(v, 100000); return t && t.length <= max ? t : null; };
 
 /** An assignment has to give real work: something to write, work out or explain, with a good answer to compare with. A task answered by pressing a button ("click next") is not one. */

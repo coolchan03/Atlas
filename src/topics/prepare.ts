@@ -22,6 +22,7 @@ export const aheadFor = (course: Course): number => course.prepareAhead ?? DEFAU
  * The next squares to write: the window is the first `count` squares not played yet (leaving out those the app makes in code), and
  * what is returned is the ones in that window that have no lesson yet. A window, not "the next few missing": once the window is
  * written there is nothing more to do until a square is played and it moves on.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export function nextToPrepare(course: Course, count: number): string[] {
   const window = course.squares.filter((s) => !course.progress[s.key] && !MADE_IN_CODE.includes(s.format)).slice(0, Math.max(0, count));

@@ -11,8 +11,8 @@ import { isDrumKind } from './instruments';
 import { pitchNumber } from './composition';
 import type { DrumKind, MusicNote, MusicScore, Voice } from './types';
 
-export const MAX_NOTES = 700;
-export const MAX_BEATS = 128;
+const MAX_NOTES = 700;
+const MAX_BEATS = 128;
 const MIN_GOOD_NOTES = 12;
 const DRUM_LENGTH: Record<DrumKind, number> = { kick: 0.25, snare: 0.25, hat: 0.2, openhat: 0.5, clap: 0.25, tom: 0.4, rim: 0.15, cowbell: 0.4, shaker: 0.25, crash: 3 };
 

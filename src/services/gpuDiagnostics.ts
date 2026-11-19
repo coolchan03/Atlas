@@ -29,6 +29,7 @@ const DEFAULT_SWEEP_LAYERS = [24, 16, 8];
  * larger batch a computer run uses (a computer decodes this file correctly, so a CPU failure that only some of these show
  * points at the phone's kernels; one that all show points at the file). Then each GPU layer count. OpenCL always runs with
  * flash attention off in Atlas, so there is no on/off pair.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export function sweepSettings(layers: number[] = DEFAULT_SWEEP_LAYERS, opts: { mtp?: boolean } = {}): SweepSetting[] {
   const settings: SweepSetting[] = [

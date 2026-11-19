@@ -1,6 +1,6 @@
-import { useLowPower, lowPowerEnabled, lowPowerActive, LOW_POWER_NOTE } from './lowPowerState';
+import { useLowPower, lowPowerEnabled } from './lowPowerState';
 
-export { useLowPower, lowPowerEnabled, lowPowerActive, LOW_POWER_NOTE };
+export { useLowPower };
 
 /** The text model that uses the least battery per answer: fastest measured on this phone, else the smallest file. */
 export function batteryModel(): { id: string; why: string } | null {

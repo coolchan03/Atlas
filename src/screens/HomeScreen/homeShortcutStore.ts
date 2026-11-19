@@ -47,8 +47,7 @@ export const useHomeShortcuts = create<State>()(persist((set) => ({
   partialize: (s) => ({ shortcuts: s.shortcuts }),
 }));
 
-export { isWidgetSafeChat, shortcutDestination, selectResumeConversation } from './homeShortcutPolicy';
-export type { ResumableConversation } from './homeShortcutPolicy';
+export { shortcutDestination, selectResumeConversation } from './homeShortcutPolicy';
 
 /** The icon a widget's tile starts with, by what it does. */
 const DEFAULT_WIDGET_ICON: Record<HomeWidgetAction, string> = {

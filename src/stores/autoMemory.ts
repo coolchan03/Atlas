@@ -79,7 +79,7 @@ function isProtectedConversation(conv: Conversation): boolean {
   } catch { return false; }
 }
 
-/** Entry point for the chat store: scans one saved user message unless its chat or project is protected. */
+/** Entry point for the chat store: scans one saved user message unless its chat or project is protected. @public */
 export function considerConversationMemory(conv: Conversation, text: string): void {
   const active = require('./agentStore').useAgentStore.getState().activeAgentId;
   considerUserMemory(text, { therapy: (conv.agentId || active) === 'counselor', private: isProtectedConversation(conv) });

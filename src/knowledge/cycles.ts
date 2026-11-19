@@ -24,7 +24,7 @@ import { readJson } from './storage';
 const normalise = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').replace(/[^a-z0-9% .,'-]/g, '').trim();
 /** The stable identity of a finding: the same claim about the same topic hashes the same wherever it was written. */
 const findingContentHash = (topicId: string, finding: string): string => sha256Text(`${topicId}|${normalise(finding)}`);
-/** Identity of the evidence set, so an approval can be tied to exactly the evidence it saw. */
+/** Identity of the evidence set, so an approval can be tied to exactly the evidence it saw. @public */
 export const evidenceHash = (evidence: EvidenceRef[]): string =>
   sha256Text(evidence.map((e) => `${e.sourceHash}:${e.chunkId}:${e.page ?? ''}:${normalise(e.quote ?? '')}`).sort().join('\n'));
 const distinctSources = (evidence: EvidenceRef[]) => new Set(evidence.map((e) => e.sourceHash)).size;
@@ -305,6 +305,7 @@ async function refreshStatus(recordId: string, note: string, by: string): Promis
 /**
  * Adds evidence to a finding already stored. That changes the evidence hash, so earlier approvals no longer apply and the finding
  * goes back to being reviewed: an approval is only ever about the evidence it was given.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export async function addEvidence(recordId: string, evidence: EvidenceRef[], note: string): Promise<Finding> {
   const state = await stateIndex.get(recordId);
@@ -332,6 +333,7 @@ export async function markConflict(pair: readonly [string, string], note: string
   }
 }
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export async function supersede(ids: { oldId: string; newId: string }, note: string, by = 'atlas'): Promise<void> {
   const { oldId, newId } = ids;
   const state = await stateIndex.get(oldId);

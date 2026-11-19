@@ -3,7 +3,7 @@
  * a chapter exam. Six squares, so a chapter is a stretch of the board the learner works through, not a single stop. Used for exam
  * checklists and textbooks, which are made without the AI's help in planning. Pure.
  */
-import type { PlannedSquare } from './formats';
+import type { PlannedSquare } from './plannedSquare';
 
 export const CHAPTER_SQUARES = 6;
 type Square = Omit<PlannedSquare, 'key'>;

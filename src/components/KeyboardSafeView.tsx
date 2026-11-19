@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Keyboard, Platform, View, type ViewProps } from 'react-native';
 
 /** The height of the on-screen keyboard right now (0 when it is hidden). */
-export function useKeyboardHeight(): number {
+function useKeyboardHeight(): number {
   const [height, setHeight] = useState(0);
   useEffect(() => {
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setHeight(e.endCoordinates.height));

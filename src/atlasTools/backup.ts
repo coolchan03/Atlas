@@ -26,7 +26,7 @@ import { useBackupReminder } from './backupReminder';
 const MAGIC = 'OffGridAtlasBackup';
 import { RESTORABLE_STORE_KEYS, EXCLUDED_BACKUP_KEYS, sanitizeBackupValue, stripProtectedDerivatives } from './backupKeys';
 
-export { RESTORABLE_STORE_KEYS, EXCLUDED_BACKUP_KEYS, sanitizeBackupValue };
+export { sanitizeBackupValue };
 function portableStoreValue(key: string, raw: string): string | null {
   const clean = sanitizeBackupValue(raw);
   const safe = clean && stripProtectedDerivatives(key, clean);

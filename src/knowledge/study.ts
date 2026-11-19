@@ -18,7 +18,7 @@ import { getProfile, promoteIfReady, refreshStats, routeSubject, setDocumentCoun
 import { assignDocument, chunkDocument, extractDocument, getDocument, listDocuments, markStudied, readChunks, setDocumentStatus } from './documents';
 import { withJobLock } from './jobs';
 import { currentModelName, modelAsker, type Ask } from './model';
-import { P, readJson, readJsonl, stateIndex, terms, writeJson } from './storage';
+import { P, readJson, readJsonl, stateIndex, writeJson } from './storage';
 import type { Basis, ChunkRecord, CycleReport } from './schema';
 
 const BATCH_CHUNKS = 3;
@@ -51,7 +51,7 @@ const MODEL_UNAVAILABLE = /no model selected|could not be loaded|failed to load|
 
 interface RawFinding { question?: unknown; finding?: unknown; quote?: unknown; uncertainty?: unknown; confidence?: unknown; basis?: unknown }
 
-/** Pulls the JSON array out of a reply, tolerating text around it. */
+/** Pulls the JSON array out of a reply, tolerating text around it. @public */
 export function parseFindings(reply: string): RawFinding[] | null {
   const start = reply.indexOf('['); const end = reply.lastIndexOf(']');
   if (start < 0 || end <= start) return null;
@@ -62,7 +62,7 @@ export function parseFindings(reply: string): RawFinding[] | null {
 }
 
 const flat = (t: string) => t.toLowerCase().replace(/[\s ]+/g, ' ').replace(/[^a-z0-9% .,'$-]/g, '').trim();
-/** True when the quote really is in the chunk (case, spacing and punctuation aside). */
+/** True when the quote really is in the chunk (case, spacing and punctuation aside). @public */
 export const quoteIsOnThePage = (quote: string, chunkText: string): boolean => { const q = flat(quote); return q.length >= 10 && flat(chunkText).includes(q); };
 
 interface Checkpoint { sourceId: string; next: number; findings: number; updatedAt: string }
@@ -131,6 +131,7 @@ async function fileFinding(ctx: { handle: CycleHandle; chunk: ChunkRecord; title
 /**
  * The manager step. A finding becomes approved only when the judge approved it AND at least two independent sources support it
  * (or a person approves it). Everything else stays provisional: kept, findable, labelled, and waiting for corroboration.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export async function managerPass(agentId: string): Promise<number> {
   let approved = 0;
@@ -225,7 +226,7 @@ export async function studyDocument(sourceId: string, opts: StudyOptions = {}): 
   });
 }
 
-/** What was learned, in plain words and from the findings themselves (no model call, so it cannot embellish them). */
+/** What was learned, in plain words and from the findings themselves (no model call, so it cannot embellish them). @public */
 export function summarise(title: string, findings: string[], run: { chunksThisRun: number; chunksTotal: number; pages: number | undefined; unreadable: number[]; done: boolean }): string {
   const { chunksThisRun, chunksTotal, pages, unreadable, done } = run;
   const parts = [`${done ? 'Studied' : 'Studied part of'} "${title}": ${chunksThisRun} section${chunksThisRun === 1 ? '' : 's'} this run${pages ? ` of a ${pages}-page document (${chunksTotal} sections in all)` : ''}.`];
@@ -233,5 +234,3 @@ export function summarise(title: string, findings: string[], run: { chunksThisRu
   if (unreadable.length) parts.push(`${unreadable.length} page${unreadable.length === 1 ? ' has' : 's have'} no readable text (scans?) and were not studied: pages ${unreadable.slice(0, 12).join(', ')}${unreadable.length > 12 ? ', ...' : ''}. Load a vision model before adding the PDF to read scanned pages.`);
   return parts.join(' ');
 }
-
-export { terms };

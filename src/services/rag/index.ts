@@ -32,7 +32,6 @@ async function removeAppOwnedCopy(path: string | undefined): Promise<void> {
 export type { RagDocument, RagSearchResult } from './database';
 ;
 export { chunkDocument } from './chunking';
-export { isTextDocument } from './textDocument';
 export { retrievalService } from './retrieval';
 ;
 

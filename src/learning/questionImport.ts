@@ -79,7 +79,7 @@ export function divide(items: NormalizedQuestion[], target: ImportTarget): { exa
 const SYSTEM = `You tidy test questions. The person pastes quiz or exam text in any layout (numbered lists, Q and A pairs, multiple choice with letters, tables, CSV). Reply with JSON only: {"questions":[{"question":"","answer":"","alternatives":["other ways to say the answer"],"options":["only for multiple choice, in order"],"topic":"","explanation":"only if the text gives one"}]}. Rules: keep every question's wording exactly as written, only fixing numbering and layout. Use the answer the text gives; if the text gives no answer for a question, leave that question out. For multiple choice, "answer" is the right option's letter or text. Never write an answer yourself. Never invent questions.`;
 
 /** Splits long text at line breaks into pieces a small model can handle. */
-export function chunks(source: string, size = CHUNK): string[] {
+function chunks(source: string, size = CHUNK): string[] {
   const out: string[] = [];
   let current = '';
   for (const line of source.split('\n')) {

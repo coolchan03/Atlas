@@ -69,7 +69,7 @@ export function similarity(a: string, b: string): number {
   return shared / Math.min(A.size, B.size);
 }
 
-export const FRESH_MS = 48 * 3600e3;
+const FRESH_MS = 48 * 3600e3;
 
 /** Fresh, non-promotional, de-duplicated headlines, newest first. */
 export function cleanHeadlines(items: Headline[], now = Date.now(), seen: string[] = []): Headline[] {
@@ -145,7 +145,7 @@ function unwantedCategory(h: Pick<Headline, 'title' | 'desc'>, interests: string
 const STOP = new Set(['the', 'and', 'news', 'about', 'with', 'from', 'latest', 'today', 'update', 'updates', 'stories']);
 
 /** A search result really is about the interest: it names at least one of its words. */
-export function mentions(h: Pick<Headline, 'title' | 'desc'>, interest: string): boolean {
+function mentions(h: Pick<Headline, 'title' | 'desc'>, interest: string): boolean {
   const keys = interest.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
   if (!keys.length) return true;
   const text = `${h.title} ${h.desc}`.toLowerCase();

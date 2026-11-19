@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /**
  * Offline maps: Mapsforge vector map files (one file per country / US state), downloaded
  * once while online, then drawn on the phone with no internet. GPS works without internet.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export const MAP_SERVERS = [
   'https://download.mapsforge.org/maps/v5/',
@@ -165,6 +166,7 @@ export async function deleteMap(path: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------- GPS
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export function isValidGpsFix(f: GpsFix | null | undefined): f is GpsFix {
   return !!f && Number.isFinite(f.lat) && Math.abs(f.lat) <= 90 &&
     Number.isFinite(f.lon) && Math.abs(f.lon) <= 180 &&
@@ -173,6 +175,7 @@ export function isValidGpsFix(f: GpsFix | null | undefined): f is GpsFix {
 
 const Native: any = NativeModules.AtlasDevice;
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export async function askLocationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   try {

@@ -4,14 +4,4 @@
  * modal's TextGenerationSection keeps its import path while there is only one
  * implementation. See ../settings/textGenAdvancedSections.
  */
-export {
-  BackendSelector,
-  LiteRTBackendSelector,
-  FlashAttentionToggle,
-  KvCacheTypeToggle,
-  CpuThreadsSlider,
-  BatchSizeSlider,
-  ModelLoadingModeSelector,
-  WarmUpToggle,
-  ShowGenerationDetailsToggle,
-} from '../settings/textGenAdvancedSections';
+export { BackendSelector, LiteRTBackendSelector, FlashAttentionToggle, KvCacheTypeToggle, CpuThreadsSlider, BatchSizeSlider, ModelLoadingModeSelector, ShowGenerationDetailsToggle } from '../settings/textGenAdvancedSections';

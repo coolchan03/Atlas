@@ -180,7 +180,7 @@ export async function importGgufFiles(
   setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));
 }
 
-/** Names of models that usually come with a separate vision (mmproj) file. */
+/** Names of models that usually come with a separate vision (mmproj) file. @public */
 export function looksLikeVisionModel(name: string): boolean {
   return /(^|[-_.\s])(vl|vlm|vision|llava|bakllava|minicpm-?v|smolvlm|moondream|internvl|pixtral|gemma-?3(?!n)|gemma-?4|qwen2\.5-?omni|granite-vision|mistral-small-3\.[12]|llama-?4|kimi-vl|ui-tars|omni)/i.test(name);
 }

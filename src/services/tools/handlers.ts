@@ -10,6 +10,8 @@ import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
 import * as DT from '../../atlasTools/deviceTools';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
 import { arg, requireString, EMPTY_WRITE } from './toolArgs';
+import { braveSearch } from './braveSearch';
+export { braveSearch };
 import { forceHttps, isBlockedUrl } from './urlSafety';
 import { evaluateExpression } from '../../utils/arithmetic';
 
@@ -176,24 +178,6 @@ async function dispatchTool(call: ToolCall): Promise<string> {
   }
 }
 
-export async function braveSearch(query: string): Promise<SearchResult[]> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html',
-      },
-    });
-    return parseBraveResults(await response.text());
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function handleWebSearch(query: string): Promise<string> {
   // Atlas: provider chosen on the Tools screen (SearXNG, DuckDuckGo, Exa, Parallel, Tavily, Brave).
   const { results, provider, notes } = await searchWeb(query, braveSearch);
@@ -212,75 +196,6 @@ async function handleWebSearch(query: string): Promise<string> {
     .join('\n\n')}`;
 }
 
-type SearchResult = { title: string; snippet: string; url?: string };
-
-function stripHtmlTags(html: string): string {
-  let result = '';
-  let inTag = false;
-  for (const ch of html) {
-    if (ch === '<') { inTag = true; continue; }
-    if (ch === '>') { inTag = false; continue; }
-    if (!inTag) result += ch;
-  }
-  return result;
-}
-
-function parseResultBlock(block: string): SearchResult | null {
-  const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
-  const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
-
-  const titleMatch = block.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</) ||
-                     block.match(/<a[^>]*href="https?:\/\/[^"]*"[^>]*>\s*<span[^>]*>([^<]+)/);
-  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
-
-  const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
-                       block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-  const snippet = snippetMatch
-    ? decodeHTMLEntities(stripHtmlTags(snippetMatch[1]).trim())
-    : '';
-
-  if (!title && !snippet) return null;
-  return { title: title || '(no title)', snippet: snippet || '(no snippet)', url };
-}
-
-function parseBraveResults(html: string): SearchResult[] {
-  const results: SearchResult[] = [];
-  const blocks = html.split(/class="result-wrapper/).slice(1);
-
-  for (const block of blocks) {
-    if (results.length >= 5) break;
-    const parsed = parseResultBlock(block);
-    if (parsed) results.push(parsed);
-  }
-
-  if (results.length === 0) {
-    const linkPattern = /<a[^>]*href="(https?:\/\/(?!search\.brave)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
-    let match;
-    while ((match = linkPattern.exec(html)) !== null && results.length < 5) {
-      const title = decodeHTMLEntities(match[2].trim());
-      if (!title.includes('Brave')) {
-        results.push({ title, snippet: '', url: match[1] });
-      }
-    }
-  }
-
-  return results;
-}
-
-function decodeHTMLEntities(text: string): string {
-  return text
-    .replaceAll('&amp;', '&')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&#x27;', "'")
-    .replaceAll('&#x2F;', '/')
-    .replaceAll('&nbsp;', ' ')
-    .replaceAll('&apos;', "'")
-    .replaceAll(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replaceAll(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
-}
 
 /**
  * Safe math expression evaluator using recursive descent parsing.

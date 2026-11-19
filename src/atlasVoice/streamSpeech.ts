@@ -109,5 +109,5 @@ export function finishStreamSpeech(conversationId: string, speakWhole: () => voi
   return true;
 }
 
-/** For tests: forget any reply in progress. */
+/** For tests: forget any reply in progress. @public */
 export function resetStreamSpeech(): void { session = null; dropped = null; }

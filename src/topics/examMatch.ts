@@ -14,7 +14,7 @@ const STOP = new Set(['and', 'the', 'for', 'with', 'of', 'to', 'in', 'on', 'a', 
 const stems = (text: string): string[] => [...new Set((text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w) => !STOP.has(w)).map((w) => w.slice(0, 5)))];
 
 /** How many of the topic's key words (matched by their first five letters) a text contains, against how many it needs. */
-export function mentions(topic: string, text: string): boolean {
+function mentions(topic: string, text: string): boolean {
   const want = stems(topic);
   if (!want.length) return false;
   const have = new Set(stems(text));
@@ -26,7 +26,7 @@ type InBooks = 'found' | 'thin' | 'missing';
 /** Each passage reduced to its key-word stems once, so many topics can be checked against thousands of passages quickly. */
 const indexPassages = (passages: string[]): Set<string>[] => passages.map((p) => new Set(stems(p)));
 /** Two or more passages that mention the topic: found. One: thin. None: missing. Every passage is read (a keyword scan, so it works before any search index exists). */
-export const coverage = (topic: string, index: Set<string>[]): InBooks => {
+const coverage = (topic: string, index: Set<string>[]): InBooks => {
   const want = stems(topic);
   const need = Math.min(2, want.length);
   let n = 0;

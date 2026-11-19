@@ -29,11 +29,8 @@ import {
   type AgentProfile, type ChunkRecord, type CycleReport, type ExportManifest, type Finding, type ReviewRecord, type RevisionRecord,
   type SourceDocument, type Tombstone,
 } from './schema';
-import {
-  P, appendJsonl, atomicWriteText, deviceId, ensureDir, hashIndex, knowledgeRoot, listDir, nowIso, readJson, readJsonl, removeTree,
-  sha256Text, stateIndex, terms, uuid, withLock, writeJson, type RecordState,
-} from './storage';
-import { evidenceHash, effectiveReview, eraseFindings, getFinding, listCycles, markConflict, statusFromReviews } from './cycles';
+import { P, appendJsonl, atomicWriteText, deviceId, ensureDir, hashIndex, listDir, nowIso, readJson, readJsonl, removeTree, sha256Text, stateIndex, terms, uuid, withLock, writeJson, type RecordState } from './storage';
+import { effectiveReview, eraseFindings, getFinding, listCycles, markConflict, statusFromReviews } from './cycles';
 import { listProfiles, refreshStats, saveProfile } from './agents';
 import { listDocuments, saveDocument } from './documents';
 
@@ -51,6 +48,7 @@ export interface ExportOptions { scope: ExportScope; includeOriginals?: boolean;
 export interface ExportResult { path: string; manifest: ExportManifest }
 export interface TransferEntry { kind: 'export' | 'import'; id: string; at: string; path?: string; counts: Record<string, number>; note?: string }
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const lastSuccessfulExport = async (): Promise<string | null> =>
   (await readJsonl<TransferEntry>(P.transfers())).filter((t) => t.kind === 'export').map((t) => t.at).sort().pop() ?? null;
 
@@ -402,5 +400,3 @@ async function findContradiction(f: Finding): Promise<Finding[]> {
   }
   return out;
 }
-
-export { evidenceHash, knowledgeRoot };

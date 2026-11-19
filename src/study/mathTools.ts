@@ -10,10 +10,13 @@ const list = (v: unknown): number[] => {
 };
 const round = (n: number, d = 6) => Number(n.toFixed(d));
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const mean = (x: number[]) => x.reduce((s, v) => s + v, 0) / x.length;
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const median = (x: number[]) => { const s = [...x].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const variance = (x: number[], sample = true) => { const m = mean(x); return x.reduce((s, v) => s + (v - m) ** 2, 0) / (x.length - (sample ? 1 : 0)); };
-export const stdev = (x: number[], sample = true) => Math.sqrt(variance(x, sample));
+const stdev = (x: number[], sample = true) => Math.sqrt(variance(x, sample));
 
 /** Regularised incomplete beta by continued fraction: gives the t distribution's p-value. */
 function betacf(a: number, b: number, x: number): number {

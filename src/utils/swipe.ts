@@ -1,5 +1,5 @@
 /** A swipe is mostly sideways and long enough that it was meant: a short or mostly vertical drag (scrolling) is not one. */
-export const SWIPE_MIN = 64;
+const SWIPE_MIN = 64;
 export function swipeDirection(dx: number, dy: number): 'left' | 'right' | null {
   if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy) * 2) return null;
   return dx < 0 ? 'left' : 'right';

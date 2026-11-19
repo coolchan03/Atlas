@@ -42,12 +42,13 @@ function sdPresent(path: string): boolean {
   }
   return sdOk.ok;
 }
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export function bigFilesBase(): string {
   const p = useStoragePrefs.getState();
   return p.useSd && p.sdPath && sdPresent(p.sdPath) ? p.sdPath : RNFS.ExternalDirectoryPath;
 }
 
-/** Both places, so files saved earlier on the other one are still found. */
+/** Both places, so files saved earlier on the other one are still found. @public */
 export function allBases(): string[] {
   const p = useStoragePrefs.getState();
   return [...new Set([RNFS.ExternalDirectoryPath, ...(p.sdPath ? [p.sdPath] : [])])];

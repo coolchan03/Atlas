@@ -4,9 +4,6 @@ import { zip } from 'react-native-zip-archive';
 import { ATLAS_REPO } from '../constants';
 import { importZipFromPath, MANIFEST_NAME, type PackManifest, type PackResult } from './packImport';
 import { packsForTier, type TierId } from './emergencyTiers';
-
-/** Atlas library packs, built automatically on GitHub (release "atlas-library") and downloaded on demand. */
-export { ATLAS_REPO };
 const ATLAS_LIBRARY_PROJECT = 'Atlas - Library';
 
 export interface AtlasPack { name: string; label: string; size: number; url: string; updated: string }

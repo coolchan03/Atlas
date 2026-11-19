@@ -4,9 +4,9 @@ import type { Project } from '../types';
 import { protectedVault } from './protectedProjectVault';
 import { protectedStudyVault } from './protectedStudyVault';
 import logger from '../utils/logger';
-import { isProtectedProjectUnlocked, isProtectedProjectOpen, unlockedProjectPin, unlockedProjectIds, unlockedProjectEntries, rememberProjectPin, forgetProjectPin, forgetAllProjectPins } from './protectionState';
+import { isProtectedProjectUnlocked, unlockedProjectPin, unlockedProjectIds, unlockedProjectEntries, rememberProjectPin, forgetProjectPin, forgetAllProjectPins } from './protectionState';
 
-export { isProtectedProjectUnlocked, isProtectedProjectOpen, unlockedProjectPin };
+export { isProtectedProjectUnlocked };
 
 /** Selective encryption of a project's metadata and its documents. Document text, names and
  * embeddings live in an encrypted per-project vault (protectedProjectVault), never in rag.db;

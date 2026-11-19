@@ -3,7 +3,7 @@
  * "AtlasMediaAction" and is turned into the same call the buttons on the Read Aloud screen make. The notification follows the reader:
  * shown while reading or paused (with the piece being read), removed when reading ends. The pieces are injected so this is tested without a phone.
  */
-import type { ReaderStatus } from './readAloud';
+import type { ReaderStatus } from './readerStatus';
 
 export interface ControlledReader {
   getState: () => { status: ReaderStatus; title: string; parts: string[]; index: number };

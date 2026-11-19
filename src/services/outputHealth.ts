@@ -239,7 +239,7 @@ export async function knownVerdict(key: VerdictKey): Promise<Verdict | null> {
   return (await readVerdicts())[keyOf(key)] ?? null;
 }
 
-/** One plain line per remembered check ("file | size | backend | layers | llama.rn version: OK/FAILED - why"), for diagnostics. */
+/** One plain line per remembered check ("file | size | backend | layers | llama.rn version: OK/FAILED - why"), for diagnostics. @public */
 export async function describeVerdicts(): Promise<string[]> {
   const all = await readVerdicts();
   return Object.entries(all).map(([key, v]) => {

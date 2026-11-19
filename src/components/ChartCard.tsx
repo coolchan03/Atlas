@@ -21,6 +21,7 @@ const slice = (c: { cx: number; cy: number; r: number }, a0: number, a1: number)
   return `M ${cx} ${cy} L ${p(a0)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)} Z`;
 };
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const ChartCard: React.FC<{ spec: ChartSpec }> = ({ spec }) => {
   const { colors } = useTheme();
   const pct = shares(spec.type === 'pie' ? spec.values : spec.values.map(() => 1));

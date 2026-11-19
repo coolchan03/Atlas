@@ -69,7 +69,7 @@ const SECONDS: Record<string, number> = { second: 1, minute: 60, hour: 3600, day
  * One spelling for the same quantity, applied to answer and wording alike: "1,200", "$1200" and "1200 dollars" agree, "50 percent" and
  * "50%" agree, "one minute" and "60 seconds" agree, and "straight-line" equals "straight line".
  */
-export function canonical(text: string): string {
+function canonical(text: string): string {
   return wordsToDigits(text.toLowerCase())
     .replace(/(\d),(?=\d{3}\b)/g, '$1')
     .replace(/\$\s*(\d+(?:\.\d+)?)/g, '$1 dollars ')

@@ -4,8 +4,6 @@ import { withUtm } from './utm';
 // Star button (Settings + share sheet) points at the mobile repo specifically.
 const GITHUB_URL = 'https://github.com/off-grid-ai/mobile';
 // Community links (Settings "Stay in the loop" card + About screen). Single source of truth.
-const FOLLOW_X_URL = 'https://x.com/alichherawalla';
-const SLACK_INVITE_URL = 'https://join.slack.com/t/off-grid-mobile/shared_invite/zt-43kbisqxf-hM0y07EnaNnIfVN9DLR3Dg';
 // The X share promotes the whole project, so it links to the org and early access.
 // GitHub ignores UTM, so only the early-access link (our property) is tagged; the
 // medium is the X share surface.
@@ -29,7 +27,7 @@ export async function shareOnX(): Promise<void> {
   await Linking.openURL(X_INTENT_URL);
 }
 
-export { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL };
+export { GITHUB_URL };
 
 type ShareVariant = 'text' | 'image';
 

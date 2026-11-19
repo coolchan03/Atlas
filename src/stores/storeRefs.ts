@@ -11,7 +11,7 @@ let project: StoreLike | null = null;
 export const registerChatStore = (s: StoreLike): void => { chat = s; };
 export const registerProjectStore = (s: StoreLike): void => { project = s; };
 
-/** The chat store (useChatStore). Throws if the store module has not been loaded yet. */
+/** The chat store (useChatStore). Throws if the store module has not been loaded yet. @public */
 export function chatStoreRef(): StoreLike {
   if (!chat) throw new Error('The chat store is not created yet.');
   return chat;

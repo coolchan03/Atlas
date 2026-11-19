@@ -10,7 +10,6 @@ export { ModelSelectorModal } from './ModelSelectorModal';
 export { GenerationSettingsModal } from './GenerationSettingsModal';
 export { CustomAlert, showAlert, hideAlert, initialAlertState } from './CustomAlert';
 export type { AlertState } from './CustomAlert';
-export { CenteredAlert } from './CenteredAlert';
 ;
 export { ModelFailureCard } from './ModelFailureCard';
 export { ImageGenAdviceCard } from './ImageGenAdviceCard';

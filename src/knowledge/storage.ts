@@ -25,6 +25,7 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 
 let rootDir: string | null = null;
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const knowledgeRoot = (): string => rootDir ?? `${RNFS.DocumentDirectoryPath}/learning`;
 
 export const P = {

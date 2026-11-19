@@ -41,7 +41,7 @@ async function resolvePath(p?: string): Promise<string> {
   return path;
 }
 
-/** How long a question to the user waits. An unseen prompt (app in the background, another sheet on top) held the whole reply forever. */
+/** How long a question to the user waits. An unseen prompt (app in the background, another sheet on top) held the whole reply forever. @public */
 export const CONFIRM_TIMEOUT_MS = 2 * 60 * 1000;
 
 export function confirm(title: string, message: string, ok = 'Allow'): Promise<boolean> {

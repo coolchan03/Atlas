@@ -5,11 +5,11 @@
  */
 import { autoBackup, listBackups, restoreBackup, allReportsMarkdown } from './backups';
 import { create } from 'zustand';
-import { closeInterruptedCycles, addReview, getFinding, searchFindings, type Query } from './cycles';
-import { importPdf, listDocuments, removeDocument, extractDocument, chunkDocument } from './documents';
+import { closeInterruptedCycles, addReview, searchFindings, type Query } from './cycles';
+import { importPdf, listDocuments, removeDocument } from './documents';
 import { studyDocument, type StudyProgress } from './study';
 import { createExport, applyImport, previewImport, transferHistory, type ExportOptions, type ImportReport } from './exchange';
-import { evaluateAgent, getProfile, listProfiles } from './agents';
+import { evaluateAgent, listProfiles } from './agents';
 import type { CycleReport } from './schema';
 
 export interface KnowledgeStatus {
@@ -26,7 +26,7 @@ const bump = () => useKnowledgeStatus.setState((s) => ({ version: s.version + 1 
 
 let stopRequested = false;
 
-/** Call once at app start: closes any cycle a killed app left open. */
+/** Call once at app start: closes any cycle a killed app left open. @public */
 export async function recoverKnowledge(): Promise<number> {
   const closed = await closeInterruptedCycles();
   if (closed) bump();
@@ -83,4 +83,4 @@ export async function previewPackage(path: string): Promise<ImportReport> { retu
 export async function importPackage(path: string): Promise<ImportReport> { const r = await applyImport(path); bump(); return r; }
 
 export async function snapshotFor(query: Query) { return searchFindings(query); }
-export { listProfiles, listDocuments, transferHistory, evaluateAgent, getProfile, getFinding, extractDocument, chunkDocument };
+export { listProfiles, listDocuments, transferHistory, evaluateAgent };

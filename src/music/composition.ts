@@ -11,7 +11,7 @@ import { noteWave } from './instruments';
 export const MUSIC_RATE = 24000;
 
 export type MusicMood = 'study' | 'ambient' | 'cinematic' | 'electronic' | StyleMood;
-export type { MusicRole, MusicNote, MusicScore, SoundPreset } from './types';
+export type { MusicScore, SoundPreset } from './types';
 
 const SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export function pitchNumber(name: string): number | null {

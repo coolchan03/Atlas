@@ -7,7 +7,6 @@ const pins = new Map<string, string>();
 
 /** True while a protected project is open (its PIN is in memory this session). */
 export const isProtectedProjectUnlocked = (id: string): boolean => pins.has(id);
-export const isProtectedProjectOpen = isProtectedProjectUnlocked;
 
 /** The PIN of an unlocked project, kept in memory only. For the document vault. */
 export const unlockedProjectPin = (id: string): string | undefined => pins.get(id);

@@ -430,7 +430,7 @@ export function activeAgentOverrides(): { temperature?: number; topP?: number; m
   return o;
 }
 
-/** Tools for the active agent, or null to use the global toggles. */
+/** Tools for the active agent, or null to use the global toggles. @public */
 export function activeAgentTools(): string[] | null {
   const { activeAgentId, agents } = useAgentStore.getState();
   const a = agents.find((x) => x.id === activeAgentId);

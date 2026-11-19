@@ -5,7 +5,7 @@
 /** `misses`: wrong answers not yet made up for (a right answer takes one off). It feeds the My mistakes list. */
 export interface Memory { box: number; due: number; misses?: number }
 
-/** Days until a word in each box is due again. */
+/** Days until a word in each box is due again. @public */
 export const INTERVAL_DAYS = [0, 1, 2, 4, 8, 16];
 const DAY = 864e5;
 

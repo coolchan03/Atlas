@@ -33,7 +33,6 @@ jest.mock('../../../src/services/rag/database', () => ({
 jest.mock('../../../src/stores/protectionState', () => ({
   unlockedProjectPin: (id: string) => (id === 'therapy' ? '123456' : undefined),
   isProtectedProjectUnlocked: (id: string) => id === 'therapy',
-  isProtectedProjectOpen: (id: string) => id === 'therapy',
   rememberProjectPin: jest.fn(), forgetProjectPin: jest.fn(), forgetAllProjectPins: jest.fn(),
   unlockedProjectIds: () => ['therapy'], unlockedProjectEntries: () => [['therapy', '123456']],
 }));

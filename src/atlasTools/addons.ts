@@ -46,6 +46,7 @@ export const ADDONS: Addon[] = [
 ];
 
 const BASE = 'https://download.kiwix.org/zim/';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const addonDir = () => `${require('./storage').bigFilesBase()}/zim`;
 
 interface DlState {

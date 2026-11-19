@@ -11,7 +11,7 @@ import { readZipDirectory } from './zipDirectory';
 const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
 export const MAX_ENTRIES = 5000;
 const MAX_UNPACKED_BYTES = 3 * 1024 * 1024 * 1024;
-export const MAX_RATIO = 200;
+const MAX_RATIO = 200;
 
 export type EntryKind = 'document' | 'questions' | 'archive' | 'unsupported' | 'unsafe';
 interface StagedEntry { name: string; path: string; size: number; kind: EntryKind; reason: string }

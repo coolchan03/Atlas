@@ -69,7 +69,7 @@ export async function listProfiles(opts: { includeMerged?: boolean } = {}): Prom
   return out;
 }
 
-/** Follows merges to the agent that now owns the knowledge. */
+/** Follows merges to the agent that now owns the knowledge. @public */
 export async function resolveAgent(agentId: string): Promise<string> {
   let id = agentId;
   for (let i = 0; i < 8; i++) { const p = await getProfile(id); if (!p?.mergedInto) return id; id = p.mergedInto; }
@@ -167,7 +167,7 @@ export async function promoteIfReady(agentId: string, criteria: PromotionCriteri
   return true;
 }
 
-/** The ordinary Atlas agent (persona) that speaks as this expert. Created once, reused after. */
+/** The ordinary Atlas agent (persona) that speaks as this expert. Created once, reused after. @public */
 export async function ensureAtlasAgent(agentId: string): Promise<string | null> {
   const p = await getProfile(agentId);
   if (!p || p.stage !== 'expert') return null;
@@ -209,7 +209,7 @@ async function moveFinding(recordId: string, from: string, to: string): Promise<
   await hashIndex.put(to, s.contentHash, recordId);
 }
 
-/** Folds one specialisation into another. Every finding keeps its identity; the old agent points at the new one. */
+/** Folds one specialisation into another. Every finding keeps its identity; the old agent points at the new one. @public */
 export async function mergeAgents(fromId: string, intoId: string): Promise<void> {
   if (fromId === intoId) return;
   const from = await getProfile(fromId); const into = await getProfile(intoId);
@@ -222,7 +222,7 @@ export async function mergeAgents(fromId: string, intoId: string): Promise<void>
   await refreshStats(intoId);
 }
 
-/** Splits a too-broad agent: findings that mention any of `keywords` move to a new workspace. */
+/** Splits a too-broad agent: findings that mention any of `keywords` move to a new workspace. @public */
 export async function splitAgent(agentId: string, name: string, keywords: string[]): Promise<AgentProfile> {
   const parent = await getProfile(agentId);
   if (!parent) throw new Error('No such agent.');

@@ -79,6 +79,7 @@ const EVERY_MS = 20 * 60 * 60 * 1000;
 /**
  * Once a day when the app opens, asks if a newer build is published and, if so, says so once (with "Skip this version").
  * Off when the person turned it off in Settings > App updates, in off-grid mode, or on a build that does not know its number.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export async function announceUpdateOnce(): Promise<void> {
   try {

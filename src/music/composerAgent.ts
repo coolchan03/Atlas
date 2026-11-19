@@ -106,7 +106,7 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
   return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a usable score (${problem}), so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };
 }
 
-/** What the make_music tool does: compose, render, save to the music library and start playing. Returns the words the chat model gives back. */
+/** What the make_music tool does: compose, render, save to the music library and start playing. Returns the words the chat model gives back. @public */
 export async function makeMusicForChat(args: { description?: unknown; seconds?: unknown; style?: unknown }): Promise<string> {
   const description = typeof args.description === 'string' ? args.description.trim() : '';
   if (!description) throw new Error('Missing required parameter: description (what the music should be like)');

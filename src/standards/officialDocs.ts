@@ -54,7 +54,7 @@ export function noteTaxSource(name: string, text: string): TaxSource | null {
 const STANDARD_BODY = /\b(financial accounting standards board|fasb)\b/i;
 const STANDARD_KIND = /\b(accounting standards update|accounting standards codification|statement of financial accounting standards|asc\s*\d{3}|asu\s*\d{4}-\d{2})\b/i;
 
-/** Whether the start of a document's text shows it is a FASB standard or update: the body's name and a standard's name, both on the first pages. */
+/** Whether the start of a document's text shows it is a FASB standard or update: the body's name and a standard's name, both on the first pages. @public */
 export function standardFromText(text: string): boolean {
   const start = text.slice(0, 6000);
   return STANDARD_BODY.test(start) && STANDARD_KIND.test(start);

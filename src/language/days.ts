@@ -1,4 +1,4 @@
-/** Calendar-day helpers for the course's daily history. Pure, so they are tested without a device. */
+/** Calendar-day helpers for the course's daily history. Pure, so they are tested without a device. @public */
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** Keeps the last 90 days of history. */

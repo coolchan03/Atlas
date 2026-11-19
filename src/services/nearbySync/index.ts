@@ -238,7 +238,7 @@ class NearbySyncService {
       throw new Error('Wrong device identity in encrypted sync message');
     await this.hydrated();
     const incomingDeleted = validateTombstones(remote.deleted);
-    const { isProtectedProjectOpen } = require('../../stores/protectedProjectStorage');
+    const { isProtectedProjectUnlocked } = require('../../stores/protectedProjectStorage');
     const { isLockedChatOpen } = require('../../stores/encryptedChatStorage');
     const projectsBefore = useProjectStore.getState().projects;
     const incomingProjects = applyTombstones(remote.projects, incomingDeleted.projects);
@@ -251,7 +251,7 @@ class NearbySyncService {
     const combined = combineTombstones(this.deleted, incomingDeleted);
     const nextProjects = mergeProjects(
       applyTombstones(useProjectStore.getState().projects, combined.projects),
-      applyTombstones(remote.projects, combined.projects), isProtectedProjectOpen);
+      applyTombstones(remote.projects, combined.projects), isProtectedProjectUnlocked);
     const projectIds = new Set(nextProjects.items.filter(p => !p.pinVerifier && !p.protectedBlob)
       .map(p => p.id));
     const nextChats = mergeConversations(

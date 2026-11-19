@@ -14,7 +14,7 @@ export interface ResumableConversation {
   isPrivate?: boolean; pinVerifier?: string; protectedBlob?: string;
   isArchived?: boolean;
 }
-export function isWidgetSafeChat(chat: ResumableConversation): boolean {
+function isWidgetSafeChat(chat: ResumableConversation): boolean {
   return !chat.isPrivate && !chat.pinVerifier && !chat.protectedBlob && !chat.isArchived;
 }
 /** Last: active chat if safe, otherwise last updated; most used: most sent messages. */

@@ -3,7 +3,7 @@ import type { LearningTerm } from '../learningGames';
 import type { Source } from '../engine';
 
 /** Deterministic PRNG so a saved game replays the same layout. */
-export function rng(seed: number): () => number {
+function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6D2B79F5) >>> 0;
@@ -188,6 +188,7 @@ export function layoutConceptMap(nodes: MapNode[], edges: MapEdge[], opts: { ite
 }
 
 // ------------------------------------------------------------- scoring helpers
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export function stars(score: number, max: number): number {
   if (max <= 0) return 0;
   const p = score / max;

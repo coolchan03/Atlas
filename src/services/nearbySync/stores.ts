@@ -17,9 +17,13 @@ import { mergeExercises } from './exerciseMerge';
 import { LIST_STORES, listIds, mergeListStore, type Baseline } from './listMerge';
 
 const STAMPS = 'atlas-sync-store-stamps-v1';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const APP_STORE = 'local-llm-app-storage';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const RECORDINGS = 'atlas-recordings';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const LANGUAGE = 'atlas-language';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const EXERCISES = 'atlas-exercises';
 /** Stores merged item by item every time, so work done on both phones is all kept. */
 const ALWAYS_MERGE = new Set([RECORDINGS, LANGUAGE, EXERCISES, ...LIST_STORES]);
@@ -120,6 +124,7 @@ const unionBy = <T,>(x: T[] = [], y: T[] = [], id: (t: T) => string) => {
  * word; for each square the best stars and most lessons; for each day the most XP; the newer
  * review schedule per word. Settings (language, level, goal) follow the copy changed most
  * recently, so both phones end up with the same ones instead of swapping them.
+ * @public Reached by name through require() (tests, other modules): the export is used.
  */
 export function mergeLanguage(localRaw: string, remoteRaw: string, remoteNewer = true): string {
   const a = JSON.parse(localRaw);

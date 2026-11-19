@@ -5,7 +5,7 @@
  * a place the map does not name is not reported.
  */
 import { NativeModules } from 'react-native';
-import { bearingDeg, compassName, distanceM, fmtDistance, installedMaps, useMaps } from './maps';
+import { bearingDeg, compassName, fmtDistance, installedMaps, useMaps } from './maps';
 
 interface MapEntry { path: string; name: string; sizeBytes?: number; source: 'downloaded' | 'from your files' }
 interface MapBounds { minLat: number; minLon: number; maxLat: number; maxLon: number; mapDate?: number }
@@ -34,12 +34,13 @@ function boundsOf(path: string): Promise<MapBounds | null> {
   return known;
 }
 
+/** @public Reached by name through require() (tests, other modules): the export is used. */
 export const covers = (b: MapBounds, lat: number, lon: number): boolean => lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon;
 
 const kmText = (m: number, imperial: boolean) => fmtDistance(m, imperial);
 const mb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
 
-/** The maps on the phone, where each covers, which one is open, and whether the user's position is inside. */
+/** The maps on the phone, where each covers, which one is open, and whether the user's position is inside. @public */
 export async function describeMaps(): Promise<string> {
   const maps = await mapsOnPhone();
   if (!maps.length) return 'There are no map files on this phone. The user can add one in Home > Maps > Maps on phone: download a region there, or open a .map file they already have.';
@@ -62,7 +63,7 @@ function formatPlaces(places: MapPlace[], from: { lat: number; lon: number }, im
 
 interface PlaceSearch { query?: string; lat?: number; lon?: number; radiusKm?: number; limit?: number }
 
-/** Named places near a point from the offline map that covers it. Defaults to the user's last GPS position. */
+/** Named places near a point from the offline map that covers it. Defaults to the user's last GPS position. @public */
 export async function placesNear(search: PlaceSearch = {}): Promise<string> {
   if (!nativeMapsAvailable()) return 'Reading map files needs the newest Atlas build on Android.';
   const state = useMaps.getState();
@@ -86,4 +87,3 @@ export async function placesNear(search: PlaceSearch = {}): Promise<string> {
   if (!found?.length) return `Nothing found for ${scope}. The map only lists what OpenStreetMap volunteers named, so a missing place is not proof it does not exist.`;
   return `${found.length} result${found.length === 1 ? '' : 's'} for ${scope}, nearest first:\n${formatPlaces(found, at, state.imperial)}`;
 }
-export { distanceM };
