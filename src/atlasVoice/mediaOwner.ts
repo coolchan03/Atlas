@@ -1,9 +1,9 @@
 /**
- * Read Aloud and the music player share ONE phone notification (the media controls). Whichever started showing it last owns it: only the
+ * Read Aloud, the music player and the daily briefing share ONE phone notification (the media controls). Whichever started showing it last owns it: only the
  * owner's presses are acted on, and only the owner may take it down, so a reader that finishes cannot remove the music's controls and a
  * press meant for the music cannot pause the reader.
  */
-export type MediaOwner = 'reader' | 'music';
+export type MediaOwner = 'reader' | 'music' | 'briefing';
 let owner: MediaOwner | null = null;
 
 export const claimMedia = (who: MediaOwner): void => { owner = who; };

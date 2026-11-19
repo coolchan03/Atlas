@@ -8,6 +8,7 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
+import { useBriefMedia, type BriefMediaState } from '../study/useBriefMedia';
 import { castLine, nativeEpisodeQueue, playLine, playJingle, setPodcastSpeed, stopPodcastAudio } from '../atlasVoice/podcastAudio';
 import * as nativePlayer from '../atlasVoice/nativeAudioPlayer';
 import { storyJumps, currentStory } from '../study/storyJumps';
@@ -189,6 +190,8 @@ export const StudyScreen: React.FC = () => {
   const [flipped, setFlipped] = useState<Record<number, boolean>>({});
   const [picked, setPicked] = useState<Record<number, number>>({});
   const [playing, setPlaying] = useState<number | null>(null);
+  const [media, setMedia] = useState<BriefMediaState>('off'); // the briefing's phone notification: playing, paused (keeps its place) or gone
+  const lastBrief = useRef<{ items: { text: string; pitch: number; voice?: string }[]; source: { audioKey: string; storyStarts: number[] } } | null>(null);
   const stopRef = useRef(false);
   const stopEpisode = useRef(false);
   const [podOpen, setPodOpen] = useState(false);
@@ -291,6 +294,7 @@ export const StudyScreen: React.FC = () => {
     const audioKey = source?.audioKey;
     const isBrief = !!audioKey && audioKey.startsWith(`${BRIEF_PROJECT}-`);
     setPodcastSpeed(isBrief ? prefs.speed ?? 1 : 1);
+    if (isBrief && source) { lastBrief.current = { items, source }; setMedia('playing'); }
     // Stories are told like cards: a chime, then a quiet beat so each one lands before the next starts.
     // The opening tune plays whenever the show is started from stopped (including carrying on where you left off), not when you skip within it.
     const tunes = isBrief && prefs.jingles !== false ? { storyStarts: source!.storyStarts, pauseSeconds: STORY_PAUSE_SECONDS, intro: playing === null } : undefined;
@@ -348,13 +352,20 @@ export const StudyScreen: React.FC = () => {
     if (playToken.current !== my) return; // a newer play (seek) took over
     keepScreenOn(false, 'study');
     setPlaying(null);
-    if (finished) { setResumeAt(0); if (isBrief) useBriefPrefs.getState().set({ listened: null }); }
+    if (finished) { setResumeAt(0); if (isBrief) { useBriefPrefs.getState().set({ listened: null }); setMedia('off'); } }
   };
   const halt = () => {
     playToken.current++; stopRef.current = true; stop(); stopPodcastAudio();
     if (nativePlayer.isAvailable()) nativePlayer.stop();
     keepScreenOn(false, 'study'); setPlaying(null);
+    setMedia((m) => (m === 'playing' ? 'paused' : m));
   };
+  const playBrief = (from: number) => { const b = lastBrief.current; if (b) void play(b.items, from, b.source); };
+  const briefLine = playing ?? resumeAt;
+  useBriefMedia(media, { line: briefLine, total: lastBrief.current?.items.length ?? 0 }, {
+    onPlay: () => playBrief(resumeAt), onPause: halt, onStop: () => { halt(); setMedia('off'); },
+    onJump: (d) => { const starts = [0, ...(lastBrief.current?.source.storyStarts ?? [])].sort((a, b) => a - b); playBrief(d > 0 ? starts.find((n) => n > briefLine) ?? briefLine : [...starts].reverse().find((n) => n < briefLine) ?? 0); },
+  });
 
   const [exporting, setExporting] = useState<VideoProgress | null>(null);
   const [savedVideo, setSavedVideo] = useState<SavedVideo | null>(null);
