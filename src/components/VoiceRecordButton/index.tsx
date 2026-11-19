@@ -308,7 +308,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         <Animated.View
           style={[styles.buttonWrapper, { transform: [{ scale: isRecording ? pulseAnim : 1 }] }]}
         >
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Stop"
             testID="voice-record-button-audio"
             onPress={handleToggle}
             disabled={disabled}

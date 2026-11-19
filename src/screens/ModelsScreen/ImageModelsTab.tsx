@@ -291,7 +291,7 @@ export const ImageModelsTab: React.FC<Props> = ({
           >
             <MaterialIcon name={showRecommendedOnly ? 'star' : 'star-border'} size={16} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Settings"
             style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
             onPress={() => setImageFiltersVisible(v => !v)}
             hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}

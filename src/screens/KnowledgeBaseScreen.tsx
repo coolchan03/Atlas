@@ -226,7 +226,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         onValueChange={(val) => handleToggleDocument(item.id, val)}
         trackColor={{ false: colors.border, true: colors.primary }}
       />
-      <TouchableOpacity style={styles.docDelete} onPress={() => handleDeleteDocument(item)}>
+      <TouchableOpacity accessibilityLabel="Delete" style={styles.docDelete} onPress={() => handleDeleteDocument(item)}>
         <Icon name="trash-2" size={16} color={colors.error} />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -235,7 +235,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -249,7 +249,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         <TouchableOpacity onPress={handleImportPack} style={styles.addButton} disabled={isPicking || !!indexingFile} accessibilityLabel="Import a .zip pack">
           <Icon name="package" size={20} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
+        <TouchableOpacity accessibilityLabel="Add" onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
           {indexingFile ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (

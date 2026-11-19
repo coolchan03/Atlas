@@ -76,7 +76,7 @@ export const ProjectsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fa
   };
 
   const renderRightActions = (project: Project) => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityLabel="Delete"
       style={styles.deleteAction}
       onPress={() => handleDeleteProject(project)}
     >

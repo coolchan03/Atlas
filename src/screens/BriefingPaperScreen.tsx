@@ -75,7 +75,7 @@ export const BriefingPaperScreen: React.FC = () => {
   if (!briefing) {
     return (
       <SafeAreaView style={[staticStyles.h6, { backgroundColor: colors.background }]} edges={['top']}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={staticStyles.h7}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={staticStyles.h7}>
           <Icon name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[staticStyles.h8, { ...TYPOGRAPHY.body, color: colors.textSecondary }]}>Briefing not found.</Text>
@@ -94,7 +94,7 @@ export const BriefingPaperScreen: React.FC = () => {
     <SafeAreaView style={[staticStyles.h9, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={[staticStyles.h10, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={staticStyles.h11}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={staticStyles.h11}>
           <Icon name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[staticStyles.h12, { ...TYPOGRAPHY.h3, color: colors.text }]}>Read</Text>

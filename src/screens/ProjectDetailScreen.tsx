@@ -172,7 +172,7 @@ export const ProjectDetailScreen: React.FC = () => {
       <ProjectPinGate projectId={projectId} />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -183,7 +183,7 @@ export const ProjectDetailScreen: React.FC = () => {
           </View>
           <Text style={styles.headerTitle} numberOfLines={1}>{project.name}</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('ProjectEdit', { projectId })} style={styles.editButton}>
+        <TouchableOpacity accessibilityLabel="Edit" onPress={() => navigation.navigate('ProjectEdit', { projectId })} style={styles.editButton}>
           <Icon name="edit-2" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>

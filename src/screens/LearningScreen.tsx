@@ -39,9 +39,9 @@ function Stepper({ label, value, onChange, colors, styles }: any) {
     <View style={styles.stepper}>
       <Text style={styles.stepLabel}>{label}</Text>
       <View style={styles.stepRow}>
-        <TouchableOpacity onPress={() => onChange(Math.max(1, value - 1))} style={styles.stepBtn}><Icon name="minus" size={16} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Remove" onPress={() => onChange(Math.max(1, value - 1))} style={styles.stepBtn}><Icon name="minus" size={16} color={colors.text} /></TouchableOpacity>
         <Text style={styles.stepValue}>{value}</Text>
-        <TouchableOpacity onPress={() => onChange(Math.min(20, value + 1))} style={styles.stepBtn}><Icon name="plus" size={16} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Add" onPress={() => onChange(Math.min(20, value + 1))} style={styles.stepBtn}><Icon name="plus" size={16} color={colors.text} /></TouchableOpacity>
       </View>
     </View>
   );
@@ -503,7 +503,7 @@ export const LearningScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenBackground screenKey="Learning" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.back}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} style={styles.back}
           accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
           <Icon name="check-square" size={20} color={colors.text} />

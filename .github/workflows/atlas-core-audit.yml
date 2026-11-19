@@ -39,6 +39,8 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Apply audited dependency patches
         run: ./node_modules/.bin/patch-package
+      - name: Version check (package.json, lockfile, build.gradle, release notes)
+        run: node scripts/release/check-version-consistency.cjs
       - name: Type check
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Lint (ESLint on src)

@@ -147,7 +147,7 @@ export const MyModelsScreen: React.FC = () => {
   return (
     <SafeAreaView style={[styles.s1, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.s2}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
         <Text style={[styles.s4, { color: colors.text }]}>My models</Text>
       </View>
       <ScrollView contentContainerStyle={styles.scrollBody}>
@@ -310,11 +310,11 @@ export const MyModelsScreen: React.FC = () => {
                       </TouchableOpacity>
                       {file.kind === 'lora' && (
                         <>
-                          <TouchableOpacity style={btn(colors.border)} disabled={!!busy}
+                          <TouchableOpacity accessibilityLabel="Remove" style={btn(colors.border)} disabled={!!busy}
                             onPress={() => changeImageSupport(m, file, { strength: Math.max(0, file.strength - 0.15) })}>
                             <Icon name="minus" size={15} color={colors.text} />
                           </TouchableOpacity>
-                          <TouchableOpacity style={btn(colors.border)} disabled={!!busy}
+                          <TouchableOpacity accessibilityLabel="Add" style={btn(colors.border)} disabled={!!busy}
                             onPress={() => changeImageSupport(m, file, { strength: Math.min(2, file.strength + 0.15) })}>
                             <Icon name="plus" size={15} color={colors.text} />
                           </TouchableOpacity>

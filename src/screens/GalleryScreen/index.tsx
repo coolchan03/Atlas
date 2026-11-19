@@ -94,7 +94,7 @@ export const GalleryScreen: React.FC = () => {
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+            <TouchableOpacity accessibilityLabel="Close" style={styles.closeButton} onPress={() => navigation.goBack()}>
               <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{screenTitle}</Text>

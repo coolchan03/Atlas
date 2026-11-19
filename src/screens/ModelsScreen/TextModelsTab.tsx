@@ -400,7 +400,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           <Icon name={currentSort.icon} size={14} color={sortToggleActive ? colors.primary : colors.textMuted} />
           {isSortActive && <View style={styles.filterDot} />}
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Settings"
           style={[styles.filterToggle, filterToggleActive && styles.filterToggleActive]}
           onPress={() => setTextFiltersVisible(v => !v)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}

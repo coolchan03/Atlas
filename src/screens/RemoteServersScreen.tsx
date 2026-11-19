@@ -123,7 +123,7 @@ export const RemoteServersScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()}>
           <Icon name="chevron-left" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Remote Servers</Text>

@@ -124,7 +124,7 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Orphaned Files</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Refresh"
             style={styles.scanButton}
             onPress={scanForOrphanedFiles}
             disabled={isScanning}
@@ -157,7 +157,7 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
                     {hardwareService.formatBytes(file.size)}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityLabel="Delete"
                   style={styles.deleteButton}
                   onPress={() => handleDeleteFile(file)}
                   disabled={isDeleting === file.path}

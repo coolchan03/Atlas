@@ -89,7 +89,7 @@ export const OfflineLibraryScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[literalStyles.s2, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => (article ? setArticle(null) : navigation.goBack())} style={literalStyles.s3}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => (article ? setArticle(null) : navigation.goBack())} style={literalStyles.s3}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
         <Text style={[{ color: colors.text }, literalStyles.s4]} numberOfLines={1}>{article ? article.title : 'Offline library'}</Text>
         {busy && <ActivityIndicator color={colors.primary} />}
       </View>

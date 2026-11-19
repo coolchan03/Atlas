@@ -183,9 +183,9 @@ export const SurvivalManualScreen: React.FC = () => {
     return (
       <SafeAreaView style={[literalStyles.s5, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={[literalStyles.s6, { backgroundColor: bar('#3F6212') }]}>
-          <TouchableOpacity onPress={() => { stop(); setChapter(null); }} style={literalStyles.s7}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity accessibilityLabel="Go back" onPress={() => { stop(); setChapter(null); }} style={literalStyles.s7}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
           <Text style={literalStyles.s8} numberOfLines={1}>{chapter.title}</Text>
-          <TouchableOpacity onPress={() => (speaking ? stop() : speak(prepareMessageForSpeech(chapter.md.replace(/!\[[^\]]*\]\([^)]*\)/g, '')), 'survival-chapter'))} style={literalStyles.s9}>
+          <TouchableOpacity accessibilityLabel={speaking ? 'Stop reading' : 'Read aloud'} onPress={() => (speaking ? stop() : speak(prepareMessageForSpeech(chapter.md.replace(/!\[[^\]]*\]\([^)]*\)/g, '')), 'survival-chapter'))} style={literalStyles.s9}>
             <Icon name={speaking ? 'volume-x' : 'volume-2'} size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setSize((s) => Math.max(13, s - 2))} style={literalStyles.s9}><Text style={literalStyles.s10}>A-</Text></TouchableOpacity>
@@ -223,7 +223,7 @@ export const SurvivalManualScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s5, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[literalStyles.s6, { backgroundColor: bar('#3F6212') }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s7}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={literalStyles.s7}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
         <Text style={literalStyles.s18}>Survival Manual</Text>
         <TouchableOpacity onPress={() => setNight(!night)} style={literalStyles.s9} accessibilityLabel="Red night mode"><Icon name="moon" size={20} color="#fff" /></TouchableOpacity>
       </View>

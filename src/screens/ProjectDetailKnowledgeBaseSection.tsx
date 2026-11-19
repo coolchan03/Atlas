@@ -149,7 +149,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
               <OfficialStandardButton name={doc.name} size={14} />
               <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}
                 trackColor={{ false: colors.border, true: colors.primary }} />
-              <TouchableOpacity style={styles.kbDocDelete} onPress={() => handleDeleteDocument(doc)}>
+              <TouchableOpacity accessibilityLabel="Delete" style={styles.kbDocDelete} onPress={() => handleDeleteDocument(doc)}>
                 <Icon name="trash-2" size={14} color={colors.error} />
               </TouchableOpacity>
             </TouchableOpacity>

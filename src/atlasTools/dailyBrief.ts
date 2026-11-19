@@ -14,6 +14,7 @@ export const BRIEF_PROJECT = 'daily-brief';
 /** The quiet beat after the chime before each story starts, so every story lands before the next. */
 export const STORY_PAUSE_SECONDS = 7;
 import { readCalendarContext, calendarSummary, calendarSpoken, type CalendarContext } from './calendarBrief';
+import { daySpoken } from './dayBrief';
 
 interface BriefPrefs {
   interests: string[];
@@ -390,8 +391,8 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     targetWords: p.minutes * WORDS_PER_MINUTE,
     onItemsUsed: (count) => { usedStories = count; },
   }, onStep);
-  // After the date come the weather and the day's calendar, as fixed lines (the model left them out when only asked).
-  const opening = [gotNews ? greetingLine() : '', weatherSaid, calendarSpoken(calendarCtx)].filter(Boolean);
+  // After the date come the weather, the day's calendar and the day's scheduled tasks, as fixed lines (the model left them out when only asked).
+  const opening = [gotNews ? greetingLine() : '', weatherSaid, calendarSpoken(calendarCtx), yourDay()].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.
   if (r.storyStarts) r.storyStarts = r.storyStarts.map((n) => n + opening.length);
@@ -402,6 +403,16 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   useStudyStore.getState().add(BRIEF_PROJECT, r);
   preRenderBriefing(r);
   return r;
+}
+
+/** The spoken "your day" line: scheduled tasks later today and a low-battery heads-up. Best-effort: never stops the briefing. */
+function yourDay(): string {
+  try {
+    const { useSchedule } = require('../schedule/store');
+    const { useLowPower } = require('./lowPowerState');
+    const power = useLowPower.getState();
+    return daySpoken({ tasks: useSchedule.getState().tasks, now: Date.now(), batteryPercent: power.battery, charging: power.charging });
+  } catch { return ''; }
 }
 
 /** Saves the briefing's audio in the background now, so it starts at once and plays without gaps. */

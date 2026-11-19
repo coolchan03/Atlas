@@ -119,7 +119,7 @@ export const PhrasesScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s13, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[literalStyles.s14, { backgroundColor: bar('#2563EB') }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s15}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={literalStyles.s15}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
         <Text style={literalStyles.s16}>Phrases</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={literalStyles.s17} contentContainerStyle={literalStyles.s18}>
@@ -138,7 +138,7 @@ export const PhrasesScreen: React.FC = () => {
           <View style={literalStyles.s24}>
             <TextInput value={custom} onChangeText={setCustom} onSubmitEditing={translate} placeholder="e.g. My friend is not breathing" placeholderTextColor={colors.textMuted}
               style={[literalStyles.s13, { backgroundColor: colors.background, color: colors.text }, literalStyles.s25]} />
-            <TouchableOpacity onPress={translate} disabled={busy} style={literalStyles.s26}>
+            <TouchableOpacity accessibilityLabel="Next" onPress={translate} disabled={busy} style={literalStyles.s26}>
               {busy ? <ActivityIndicator color="#fff" /> : <Icon name="arrow-right" size={18} color="#fff" />}
             </TouchableOpacity>
           </View>

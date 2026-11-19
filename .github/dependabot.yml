@@ -1,0 +1,18 @@
+# Weekly pull requests for newer versions of the GitHub actions the workflows use and of the npm packages, so security fixes and
+# deprecations (for example an action moving to a newer Node) are seen early instead of in a failing build.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    # React Native, Metro and the native-module packages move together; update them on purpose, not by bot.
+    ignore:
+      - dependency-name: react-native
+      - dependency-name: react
+      - dependency-name: metro
+      - dependency-name: "@react-native/*"
+      - dependency-name: llama.rn

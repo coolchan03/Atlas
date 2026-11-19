@@ -51,7 +51,7 @@ export const ToolsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Go back"
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}

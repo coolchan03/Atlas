@@ -99,7 +99,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
         {item.status !== 'failed' && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Close"
             style={styles.cancelButton}
             testID="remove-download-button"
             onPress={() => onRemove(item)}
@@ -214,7 +214,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
         {needsVisionRepair && !isRepairingVision && onRepairVision && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Tools"
             style={styles.repairButton}
             testID="repair-vision-button"
             onPress={() => onRepairVision(item)}
@@ -222,7 +222,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
             <Icon name="tool" size={18} color={colors.warning} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Delete"
           style={styles.deleteButton}
           testID="delete-model-button"
           onPress={() => onDelete(item)}

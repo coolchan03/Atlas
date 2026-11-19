@@ -151,7 +151,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
             autoCorrect={false}
             secureTextEntry={!showApiKey}
           />
-          <TouchableOpacity style={styles.apiKeyToggle} onPress={() => setShowApiKey(v => !v)}>
+          <TouchableOpacity style={styles.apiKeyToggle} onPress={() => setShowApiKey(v => !v)} accessibilityLabel={showApiKey ? 'Hide the key' : 'Show the key'}>
             <Icon name={showApiKey ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>

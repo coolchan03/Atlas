@@ -92,7 +92,7 @@ export const StorageSettingsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Go back"
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
@@ -178,7 +178,7 @@ export const StorageSettingsScreen: React.FC = () => {
                     {entry.fileName || 'Unknown file'} • {entry.modelId || 'Unknown model'}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityLabel="Close"
                   style={styles.deleteButton}
                   onPress={() => handleClearStaleDownload(entry.modelKey)}
                 >

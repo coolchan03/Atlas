@@ -669,7 +669,7 @@ export const StudyScreen: React.FC = () => {
               <Text style={[{ color: colors.text }, literalStyles.s54]}>{r.title ? `${r.kind === 'podcast' ? '🎙 ' : ''}${r.title}` : `${KINDS.find((k) => k.kind === r.kind)?.label || 'Answer'}${r.topic ? `: ${r.topic}` : ''}`}</Text>
               <Text style={[{ color: colors.textMuted }, literalStyles.s3]}>{new Date(r.createdAt).toLocaleString()}</Text>
             </View>
-            <TouchableOpacity onPress={() => remove(projectId, r.createdAt)} style={literalStyles.s58}><Icon name="trash-2" size={16} color={colors.textMuted} /></TouchableOpacity>
+            <TouchableOpacity accessibilityLabel="Delete" onPress={() => remove(projectId, r.createdAt)} style={literalStyles.s58}><Icon name="trash-2" size={16} color={colors.textMuted} /></TouchableOpacity>
           </TouchableOpacity>
         ))}
       </ScrollView>

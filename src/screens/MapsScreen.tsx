@@ -179,7 +179,7 @@ export const MapsScreen: React.FC = () => {
 
   const header = (
     <View style={[literalStyles.s1, { backgroundColor: night ? BACKGROUNDCOLOR_2A0000 : accent }]}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s2}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+      <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={literalStyles.s2}><Icon name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
       <Text style={literalStyles.s3}>Maps</Text>
       <TouchableOpacity onPress={() => setManager(true)} style={literalStyles.s4}>
         <Icon name="layers" size={20} color="#fff" /><Text style={literalStyles.s5}>Maps on phone</Text>
@@ -417,7 +417,7 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
     <Modal visible={visible} animationType="slide" onRequestClose={() => (path === null ? onClose() : setPath(path ? path.replace(/[^/]+\/$/, '') : null))}>
       <SafeAreaView style={[literalStyles.s32, { backgroundColor: colors.background }]}>
         <View style={[literalStyles.s57, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => (path === null ? onClose() : setPath(path ? path.replace(/[^/]+\/$/, '') : null))} style={literalStyles.s2}>
+          <TouchableOpacity accessibilityLabel={path === null ? 'Close' : 'Go back'} onPress={() => (path === null ? onClose() : setPath(path ? path.replace(/[^/]+\/$/, '') : null))} style={literalStyles.s2}>
             <Icon name={path === null ? 'x' : 'arrow-left'} size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[{ color: colors.text }, literalStyles.s58]} numberOfLines={1}>
@@ -443,7 +443,7 @@ const MapManager: React.FC<{ visible: boolean; onClose: () => void; colors: any;
                   <Text style={[{ color: colors.text }, literalStyles.s25]}>{m.name}</Text>
                   <Text style={[{ color: colors.textMuted }, literalStyles.s26]}>From your files{current === m.uri ? ' · in use' : ' · tap to use'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => removeExternal(m.uri)} style={literalStyles.s62}><Icon name="x" size={18} color={colors.textSecondary} /></TouchableOpacity>
+                <TouchableOpacity accessibilityLabel="Close" onPress={() => removeExternal(m.uri)} style={literalStyles.s62}><Icon name="x" size={18} color={colors.textSecondary} /></TouchableOpacity>
               </View>
             ))}
             {!local.length && !external.length && <Text style={[{ color: colors.textSecondary }, literalStyles.s63]}>No maps yet. A US state is usually 50-400 MB, a small country 50-800 MB.</Text>}

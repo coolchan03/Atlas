@@ -41,7 +41,7 @@ export const NoModelScreen: React.FC<{
   <SafeAreaView style={styles.container} edges={['top']}>
     <View style={styles.header}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerLeft}>
@@ -126,7 +126,7 @@ export const ChatHeader: React.FC<{
 }> = ({ styles, colors, activeConversation, navigation, onOpenModels, onOpenChatOptions, setShowSettingsPanel, researchMode, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+      <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()}>
         <Icon name="arrow-left" size={20} color={colors.text} />
       </TouchableOpacity>
       <View style={styles.headerLeft}>

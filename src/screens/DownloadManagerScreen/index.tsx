@@ -87,7 +87,7 @@ export const DownloadManagerScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} testID="back-button">
+        <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()} testID="back-button">
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>

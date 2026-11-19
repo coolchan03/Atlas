@@ -162,7 +162,7 @@ export const EmergencyScreen: React.FC = () => {
     return (
       <SafeAreaView style={[literalStyles.s6, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={[literalStyles.s10, { backgroundColor: bar(zc) }]}>
-          <TouchableOpacity onPress={() => { stop(); setOpen(null); }} style={literalStyles.s11}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity accessibilityLabel="Go back" onPress={() => { stop(); setOpen(null); }} style={literalStyles.s11}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
           <Text style={literalStyles.s12} numberOfLines={2}>{open.title}</Text>
           <TouchableOpacity onPress={() => setSize((s) => Math.max(14, s - 2))} style={literalStyles.s13}><Text style={literalStyles.s14}>A-</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setSize((s) => Math.min(30, s + 2))} style={literalStyles.s13}><Text style={literalStyles.s15}>A+</Text></TouchableOpacity>
@@ -186,7 +186,7 @@ export const EmergencyScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s6, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[literalStyles.s10, { backgroundColor: bar('#DC2626') }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s11}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={literalStyles.s11}><Icon name="arrow-left" size={24} color="#fff" /></TouchableOpacity>
         <Text style={literalStyles.s22}>Emergency</Text>
         <TouchableOpacity onPress={() => setNight(!night)} style={literalStyles.s13} accessibilityLabel="Red night mode"><Icon name="moon" size={20} color="#fff" /></TouchableOpacity>
       </View>

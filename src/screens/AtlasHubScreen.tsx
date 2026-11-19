@@ -68,7 +68,7 @@ export const AtlasHubScreen: React.FC = () => {
   return (
     <SafeAreaView style={[literalStyles.s1, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={literalStyles.s2}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={literalStyles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={literalStyles.s3}><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
         <View style={literalStyles.s4}>
           <Text style={[{ color: colors.text }, literalStyles.s5]}>Atlas</Text>
           <Text style={[{ color: colors.textSecondary }, literalStyles.s6]}>Emergencies, travel and off-grid life. All of it works offline.</Text>

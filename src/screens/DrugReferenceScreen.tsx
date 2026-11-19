@@ -100,7 +100,7 @@ export const DrugReferenceScreen: React.FC = () => {
           <TextInput testID="drug-query" value={query} onChangeText={setQuery} onSubmitEditing={search} returnKeyType="search" autoCapitalize="none"
             placeholder="Medicine name, such as ibuprofen" placeholderTextColor={colors.textMuted}
             style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} />
-          <TouchableOpacity onPress={search} disabled={busy || !query.trim()} style={[styles.action, { borderColor: colors.primary }]} testID="drug-search" accessibilityRole="button">
+          <TouchableOpacity accessibilityLabel="Search" onPress={search} disabled={busy || !query.trim()} style={[styles.action, { borderColor: colors.primary }]} testID="drug-search" accessibilityRole="button">
             {busy ? <ActivityIndicator color={colors.primary} /> : <Icon name="search" size={20} color={colors.primary} />}
           </TouchableOpacity>
         </View>

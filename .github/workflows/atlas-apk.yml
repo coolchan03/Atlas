@@ -19,6 +19,20 @@ on:
         description: 'Publish the signed APK on the Releases page (only after every check passes)'
         type: boolean
         default: false
+      draft:
+        description: 'With publish: create the release as a draft, so you read the notes and press Publish yourself'
+        type: boolean
+        default: false
+      prerelease:
+        description: 'With publish: mark the release as a pre-release (a beta), so it is not shown as the latest build'
+        type: boolean
+        default: false
+
+# A newer trial build on the same branch replaces an older one still running (one APK is about 250 MB of the free 500 MB of saved build files).
+# A build that publishes is never cancelled by a newer one: it waits its turn.
+concurrency:
+  group: atlas-apk-${{ github.ref }}-${{ inputs.publish == true && 'publish' || 'trial' }}
+  cancel-in-progress: ${{ inputs.publish != true }}
 
 jobs:
   apk:
@@ -63,7 +77,9 @@ jobs:
       - name: Apply audited native dependency patches
         run: ./node_modules/.bin/patch-package
       - name: Reconciled feature contract gate
-        run: node scripts/release/check-reconciled-release.cjs
+        run: |
+          node scripts/release/check-reconciled-release.cjs
+          node scripts/release/check-version-consistency.cjs
       - name: TypeScript gate
         run: ./node_modules/.bin/tsc --noEmit -p .
       - name: Core regression gate
@@ -348,7 +364,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node scripts/release/latest-notes.cjs > release-notes.md
-          if ! gh release create atlas-${{ github.run_number }} out/*.apk --latest \
+          # A pre-release or a draft is never marked "latest".
+          kind="--latest"
+          if [ "${{ inputs.prerelease }}" = "true" ]; then kind="--prerelease"; fi
+          if [ "${{ inputs.draft }}" = "true" ]; then kind="$kind --draft"; fi
+          if ! gh release create atlas-${{ github.run_number }} out/*.apk $kind \
             --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
             --notes-file release-notes.md; then
             echo "::error title=Release not created::The APK was built, signed and checked, and is saved as the build file Atlas-apk on this run (kept 3 days). Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Fix: Settings > Actions > General > Workflow permissions > Read and write permissions, then re-run this workflow with publish ticked."
