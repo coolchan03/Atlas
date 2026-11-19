@@ -6,6 +6,7 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -88,6 +89,25 @@ export const NoModelScreen: React.FC<{
   </SafeAreaView>
 );
 
+const bannerStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginTop: 6 },
+  title: { fontWeight: '700', fontSize: 13 },
+  note: { fontSize: 11, flexShrink: 1 },
+});
+
+/** A band under the header of an incognito chat that stays on screen: what it is, that nothing is kept, and (for a remote model) that the provider still sees the messages. */
+export const IncognitoBanner: React.FC<{ colors: ColorsType; isRemote?: boolean }> = ({ colors, isRemote }) => (
+  <View
+    testID="incognito-banner" accessible accessibilityRole="text"
+    accessibilityLabel={`Incognito, not saved.${isRemote ? ' Your messages are still sent to the remote model provider.' : ''}`}
+    style={[bannerStyles.row, { backgroundColor: colors.primary }]}
+  >
+    <Icon name="eye-off" size={14} color={colors.background} />
+    <Text style={[bannerStyles.title, { color: colors.background }]}>Incognito · not saved</Text>
+    {isRemote && <Text style={[bannerStyles.note, { color: colors.background }]} numberOfLines={2}>Remote model still receives your messages</Text>}
+  </View>
+);
+
 export const ChatHeader: React.FC<{
   styles: StylesType;
   colors: ColorsType;
@@ -157,6 +177,7 @@ export const ChatHeader: React.FC<{
         </AttachStep>
       </View>
     </View>
+    {activeConversation?.isPrivate && <IncognitoBanner colors={colors} isRemote={isRemote || modelRuntimeState === 'remote'} />}
   </View>
 );
 
