@@ -68,6 +68,8 @@ interface TopicsState {
   /** When a square went badly: puts a lesson that explains it differently right after it, and (for a quiz, a task or the like) a second square of the same kind with new questions after that. Returns whether any were added. */
   addRemedial: (id: string, afterKey: string) => boolean;
   remove: (id: string) => void;
+  /** Takes squares off the board (never one already played), with the lessons written for them. */
+  removeSquares: (id: string, keys: string[]) => void;
   /** Records every chapter of every book found in the course's project (for coverage views). */
   setBookChapters: (id: string, chapters: NonNullable<Course['bookChapters']>) => void;
   setContent: (id: string, key: string, content: SquareContent) => void;
@@ -151,6 +153,11 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     }) }));
     return added;
   },
+  removeSquares: (id, keys) => set((s) => ({ courses: s.courses.map((c) => {
+    if (c.id !== id) return c;
+    const gone = new Set(keys.filter((k) => !c.progress[k]));
+    return { ...c, squares: c.squares.filter((q) => !gone.has(q.key)), content: Object.fromEntries(Object.entries(c.content).filter(([k]) => !gone.has(k))) };
+  }) })),
   setReadingDepth: (id, depth) => set((s) => ({ courses: s.courses.map((c) => (c.id !== id || (c.readingDepth ?? 'deep') === depth ? c : {
     ...c, readingDepth: depth, content: Object.fromEntries(Object.entries(c.content).filter(([key]) => !!c.progress[key] || c.squares.find((q) => q.key === key)?.format !== 'lesson')),
   })) })),

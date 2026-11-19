@@ -48,3 +48,23 @@ describe('naming a chapter for what it is about', () => {
     expect(parseSubjects('no json', 2)).toBeNull();
   });
 });
+
+describe('one textbook at a time', () => {
+  it('lays out every chapter of the first book, then every chapter of the second, each with its book', () => {
+    const { bookByBookPlan } = require('../../src/topics/chapters');
+    const chap = (n: number, subject: string) => ({ number: n, title: `${subject} heading`, size: 5000, subject });
+    const plan = bookByBookPlan([
+      { doc: 'Intermediate_Accounting.pdf', chapters: [chap(1, 'Cash'), chap(2, 'Leases')] },
+      { doc: 'Auditing.pdf', chapters: [chap(1, 'Risk'), chap(2, 'Evidence'), chap(3, 'Reports')] },
+    ], 'FAR');
+    const lessons = plan.squares.filter((s: any) => s.format === 'lesson');
+    expect(lessons.map((s: any) => s.book)).toEqual(['Intermediate_Accounting.pdf', 'Intermediate_Accounting.pdf', 'Auditing.pdf', 'Auditing.pdf', 'Auditing.pdf']);
+    expect(lessons[0].unit).toBe('Intermediate Accounting: 1 – Cash');
+    // Within a chapter: read, then assignment and quiz, before the next chapter starts.
+    const first = plan.squares.filter((s: any) => s.unit === lessons[0].unit).map((s: any) => s.format);
+    expect(first[0]).toBe('lesson');
+    expect(first).toContain('practice');
+    expect(first).toContain('quiz');
+    expect(plan.squares.indexOf(lessons[1])).toBeGreaterThan(plan.squares.findLastIndex((s: any) => s.unit === lessons[0].unit));
+  });
+});

@@ -22,7 +22,7 @@ import { SquareView } from './SquareViews';
 import { ExamMatchCard } from './ExamMatchCard';
 import { AskLaterCard } from './AskLaterCard';
 import { Fold } from '../components/Fold';
-import { AddSquarePanel, ExpandingNote, ReadingDepthChips, useDeepening, WritingNotice, WritingStatus } from './BoardExtras';
+import { AddSquarePanel, ChangeBoardPanel, SourceLine, ExpandingNote, ReadingDepthChips, useDeepening, WritingNotice, WritingStatus } from './BoardExtras';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
 import { SwipeRow } from '../components/SwipeRow';
@@ -333,7 +333,7 @@ export const TopicBoardScreen: React.FC = () => {
     <ScrollView contentContainerStyle={styles.body}>
         <Text style={[styles.name, { color: colors.text }]}>{course.title}</Text>
         {!!course.summary && <Text style={[styles.meta, { color: colors.textSecondary }]}>{course.summary}</Text>}
-        {!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
+        <SourceLine course={course} />{!!course.style && <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-style">How it teaches: {course.style}</Text>}
         <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-progress">{p.done} of {p.total} squares · {stars} stars</Text>
         <Text style={[styles.meta, { color: colors.textSecondary }]}>How hard</Text>
         <View style={styles.chips} testID="course-difficulty">
@@ -345,7 +345,7 @@ export const TopicBoardScreen: React.FC = () => {
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
         <WriteNowPanel course={course} />
-        <AddSquarePanel course={course} currentKey={spaces[current]?.key} />
+        <AddSquarePanel course={course} currentKey={spaces[current]?.key} /><ChangeBoardPanel course={course} />
         {prep.courseId === course.id && !!prep.working && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}

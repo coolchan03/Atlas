@@ -82,7 +82,7 @@ export const FORMAT_IDS = FORMATS.map((f) => f.id);
 export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
 
 /** The longest board: 60 chapters of six squares each, and the checks between them. */
-export const MAX_SQUARES = 400;
+export const MAX_SQUARES = 1500;
 const asFormat = (v: unknown): SquareFormat => (FORMAT_IDS.includes(String(v).toLowerCase() as SquareFormat) ? (String(v).toLowerCase() as SquareFormat) : 'lesson');
 
 /** What the person asked for, passed to the AI. */

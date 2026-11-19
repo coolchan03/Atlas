@@ -7,7 +7,7 @@ import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, deepenMessages, prose, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
 import { useTopics, type Course } from './store';
-import { chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
+import { bookByBookPlan, chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { cancel, enqueue, type JobControl } from './generationQueue';
@@ -82,6 +82,12 @@ async function projectText(projectId: string): Promise<string> {
  */
 export async function createChapterCourse(request: CourseRequest, sources: CourseSource[], projectId: string): Promise<string | null> {
   const books = await bookChapters(projectId, isOutlineDocument);
+  // Several textbooks are taught one at a time, every chapter of each, in the order the books were added.
+  if (books.length > 1) {
+    const named = await Promise.all(books.map(async (b) => ({ doc: b.doc, chapters: await withSubjects(b.chapters.map((c) => ({ ...c, size: 0 }))) })));
+    const members = books.flatMap((b) => b.chapters.map((c) => ({ doc: b.doc, number: c.number, title: c.title })));
+    return useTopics.getState().add(request, bookByBookPlan(named, request.topic), { sources, projectId, bookChapters: members });
+  }
   const topics = books.length ? mergeBooks(books) : [];
   // Books whose chapters could not be told apart: fall back to the chapters found in the project's text as a whole.
   const chapters = topics.length >= 3 ? asChapters(topics) : findChapters(await projectText(projectId));
@@ -91,12 +97,17 @@ export async function createChapterCourse(request: CourseRequest, sources: Cours
 
 /** Each chapter with what it is mainly about ("Cash", "Liabilities"): named by the AI from the heading and the first lines, or cut from the heading when it cannot be asked. */
 async function withSubjects(chapters: Chapter[]): Promise<Chapter[]> {
-  let names: string[] | null = null;
-  try {
-    const prompt = subjectPrompt(chapters);
-    names = parseSubjects(await askModel(prompt.system, prompt.user), chapters.length);
-  } catch { /* the headings alone have to do */ }
-  return chapters.map((c, i) => ({ ...c, subject: names?.[i] && names[i].length >= 2 ? names[i] : shortSubject(c.title) }));
+  const names: Array<string | undefined> = [];
+  // Asked 20 chapters at a time: one long list of a whole book was too much for a small model, and every chapter fell back to a cut-off heading.
+  for (let at = 0; at < chapters.length; at += 20) {
+    const group = chapters.slice(at, at + 20);
+    try {
+      const prompt = subjectPrompt(group);
+      const got = parseSubjects(await askModel(prompt.system, prompt.user), group.length);
+      group.forEach((_, i) => { names[at + i] = got?.[i]; });
+    } catch { /* the headings alone have to do */ }
+  }
+  return chapters.map((c, i) => ({ ...c, subject: names[i] && names[i]!.length >= 2 ? names[i] : shortSubject(c.title) }));
 }
 
 /** The passages that the given passages point to by section number, one pointer each, not repeating any passage already held. */

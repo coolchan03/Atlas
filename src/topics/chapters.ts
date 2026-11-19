@@ -52,7 +52,8 @@ export function findChapters(text: string): Chapter[] {
 }
 
 const LEAD_IN = /^(?:assume|suppose|consider|imagine|understanding|introduction to|an? introduction to|an? overview of|overview of|learning objectives?(?: for)?|the basics of|about)\s+(?:that\s+)?(?:the\s+|an?\s+)?/i;
-const CLAUSE = /\s+(?:chooses?|decides?|that|which|who|to|as|for|when|where|how|why|is|are|was|were|can|will|would|should|using|with|and|of|in|on)\s+|[,;:(–—]/i;
+const CLAUSE = /\s+(?:chooses?|decides?|that|which|who|when|where|how|why|is|are|was|were|can|will|would|should|using)\s+|[,;:(–—]/i;
+const LEADING_FILLER = /^(?:of|the|and|a|an|in|on|to|for|with)\s+/i;
 const titleCase = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 /**
@@ -64,10 +65,10 @@ export function shortSubject(title: string): string {
   const t = title.replace(/\s+/g, ' ').trim().replace(/[.:;,]+$/, '');
   if (!t) return '';
   if (t.split(' ').length <= 4 && t.length <= 32) return titleCase(t);
-  const stripped = t.replace(LEAD_IN, '');
+  const stripped = t.replace(LEAD_IN, '').replace(LEADING_FILLER, '');
   const first = stripped.split(CLAUSE)[0].trim();
-  const words = (first.length >= 3 ? first : stripped).split(' ').filter(Boolean).slice(0, 4);
-  return titleCase(words.join(' '));
+  const words = (first.length >= 3 ? first : stripped).split(' ').filter(Boolean).slice(0, 5);
+  return titleCase(words.join(' ').replace(/\s+(?:and|of|the|in|on|for|with|to|a|an)$/i, ''));
 }
 
 /** The prompt that asks the AI for each chapter's subject, and a strict reader of its answer. */
@@ -103,6 +104,28 @@ export function friendlyTitle(text: string): string {
   if (!m) return text;
   const short = shortSubject(m[2]);
   return short ? `${m[1]} – ${short}${m[3] ?? ''}` : text;
+}
+
+/** A book's name as the board shows it: no file extension, no underscores. */
+export const bookLabel = (doc: string): string => doc.replace(/\.[A-Za-z0-9]{2,4}$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || doc;
+
+/**
+ * A course through several textbooks ONE AT A TIME: all of the first book's chapters in order, then the second book's, and so on. Every chapter
+ * of every book is kept (nothing is picked or merged away), and each chapter is read, then its key terms, a worked example, a quiz, an assignment
+ * and a chapter exam, before the next chapter starts. Every square carries the book it comes from.
+ */
+export function bookByBookPlan(books: Array<{ doc: string; chapters: Chapter[] }>, title: string): CoursePlan {
+  const squares: PlannedSquare[] = [];
+  for (const b of books) {
+    const label = bookLabel(b.doc);
+    for (const c of b.chapters) {
+      const unit = `${label}: ${chapterName(c)}`;
+      deepChapter({ name: chapterName(c), unit, about: `from ${label}`, topic: c.title || undefined }, CHAPTER_SQUARES)
+        .forEach((sq) => squares.push({ key: `s${squares.length + 1}`, ...sq, book: b.doc }));
+    }
+  }
+  const order = books.map((b) => bookLabel(b.doc)).join(', then ');
+  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
 }
 
 /** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */

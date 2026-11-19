@@ -1,16 +1,17 @@
 import { SPACING } from '../constants';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
 import { Fold } from '../components/Fold';
 import { Select } from '../components/Select';
 import { unitsOf } from './prepare';
-import { friendlyTitle } from './chapters';
+import { bookLabel, friendlyTitle } from './chapters';
 import { FORMATS, type SquareFormat } from './formats';
 import { useTopics, type Course } from './store';
 import { phaseOf, subscribe } from './generationQueue';
 import { stopWriting } from './service';
+import { editBoard } from './boardEdit';
 import { coverageView, STATE_LABEL } from './coverageView';
 import { useCpa } from '../cpa/store';
 
@@ -59,6 +60,40 @@ export function CoverageFold({ course }: { course: Course }) {
       {view.caveats.map((c, i) => line(c, `c:${i}`, colors.textMuted))}
     </Fold>
   );
+}
+
+/** Tell the AI what is missing or should go ("add a quiz to chapter 3", "remove the word games") and it changes the board. */
+export function ChangeBoardPanel({ course }: { course: Course }) {
+  const { colors } = useTheme();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState('');
+  const go = async () => {
+    setBusy(true); setSaid('');
+    try {
+      const r = await editBoard(course.id, text);
+      setSaid(!r ? 'The AI did not give a change Atlas could use. Try saying it another way.' : r.added || r.removed ? `Done: ${r.added} added, ${r.removed} removed. Squares you have played are never removed.` : 'The AI found nothing to change.');
+      if (r) setText('');
+    } catch (e) { setSaid(String((e as Error)?.message || e)); } finally { setBusy(false); }
+  };
+  return (
+    <Fold title="Tell the AI what to change on the board" testID="course-change-board">
+      <TextInput value={text} onChangeText={setText} multiline placeholder="For example: chapter 3 is missing a quiz, or remove the word games" placeholderTextColor={colors.textMuted}
+        style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="course-change-text" />
+      <Button title={busy ? 'Changing the board...' : 'Change the board'} onPress={() => void go()} disabled={busy || !text.trim()} testID="course-change-go" />
+      {!!said && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-change-done">{said}</Text>}
+    </Fold>
+  );
+}
+
+/** Which textbook the board teaches from: one book, or the books in the order they are taught (one at a time). */
+export function SourceLine({ course }: { course: Course }) {
+  const { colors } = useTheme();
+  const docs = [...new Set(course.squares.map((q) => q.book).filter(Boolean) as string[])];
+  const books = docs.length ? docs : [...new Set((course.bookChapters ?? []).map((c) => c.doc))];
+  if (!books.length) return null;
+  const names = books.map(bookLabel);
+  return <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-source">{names.length === 1 ? `Primary source: ${names[0]}` : `Textbooks, taught one at a time: ${names.join(', then ')}`}</Text>;
 }
 
 /** Add a game or any other kind of square: after the one you are on, or at the end of any chapter or topic of the board. */
@@ -142,5 +177,6 @@ const styles = StyleSheet.create({
   meta: { fontSize: 13 },
   gap: { gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, minHeight: 64 },
   chip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
 });
