@@ -9,10 +9,11 @@ import { advance, answer, approve, cancel, newRun, type Ask, type Run, type Work
 import { accountant } from './accountant';
 import { bill, meeting } from './everyday';
 import { contract, cook, explain, howItWorks, repair, writing } from './helperJobs';
+import { budget, decision, mealWeek, studyPlan } from './moreJobs';
 import { localUniqueId } from '../utils/uniqueId';
 
 type AnyRun = Run<any>;
-const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract };
+const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract, budget, studyplan: studyPlan, mealweek: mealWeek, decision };
 export const workflowList = (): Array<Workflow<any>> => Object.values(WORKFLOWS);
 
 interface RunsState { runs: AnyRun[]; rules: Record<string, string>; put: (r: AnyRun) => void; remove: (id: string) => void; setRules: (rules: Record<string, string>) => void }
