@@ -21,7 +21,7 @@ function stripAngleBracketTags(text: string): string {
 }
 
 /** How the passages were found: by meaning, by keywords (the embedding model was unavailable), or not at all — with the reason, so an empty index is not mistaken for a search that found nothing. */
-export type EvidenceKind = 'semantic' | 'lexical' | 'none-indexed' | 'none-matching';
+type EvidenceKind = 'semantic' | 'lexical' | 'none-indexed' | 'none-matching';
 
 interface SearchResult {
   chunks: RagSearchResult[];

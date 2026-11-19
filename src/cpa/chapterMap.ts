@@ -8,7 +8,7 @@ import { mentions } from './coverage';
 import type { ChapterRef } from '../topics/multiBook';
 
 export interface Objective { id: string; name: string; area?: string }
-export interface ObjectiveLink { objective: Objective; chapters: ChapterRef[]; books: string[] }
+interface ObjectiveLink { objective: Objective; chapters: ChapterRef[]; books: string[] }
 export interface ChapterMap {
   links: ObjectiveLink[];
   /** Objectives no chapter of any book matches: the lesson would rest on the AI's own knowledge or the standards alone. */

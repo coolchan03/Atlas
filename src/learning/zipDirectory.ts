@@ -6,7 +6,7 @@
 import RNFS from 'react-native-fs';
 
 export interface ZipEntryInfo { name: string; compressed: number; size: number }
-export interface ZipDirectory { entries: ZipEntryInfo[]; truncated: false }
+
 
 const EOCD_SIG = 0x06054b50;
 const CD_SIG = 0x02014b50;

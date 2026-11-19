@@ -6,15 +6,15 @@
 export type Rng = () => number; // a 32-bit unsigned integer per call
 
 const TWO32 = 4294967296;
-export const MAX_COUNT = 1000;
-export const MAX_DICE = 100;
-export const MAX_SIDES = 1000;
+const MAX_COUNT = 1000;
+const MAX_DICE = 100;
+const MAX_SIDES = 1000;
 
 /** True when draws come from a secure source on this phone. */
-export const hasSecureRandom = (): boolean => typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function';
+const hasSecureRandom = (): boolean => typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function';
 
 /** A system random number generator: Web Crypto when present, else Math.random. */
-export function systemRng(): Rng {
+function systemRng(): Rng {
   if (hasSecureRandom()) {
     const buf = new Uint32Array(1);
     return () => { crypto.getRandomValues(buf); return buf[0]; };
