@@ -6,12 +6,12 @@
 import type { DrumKind, MusicNote, MusicRole, MusicScore, Voice } from './types';
 
 export const GRID = 0.25; // a sixteenth note
-const MIN_PITCH = 24;
-const MAX_PITCH = 108;
+export const MIN_PITCH = 24;
+export const MAX_PITCH = 108;
 export const MAX_NOTES = 2000;
-const MAX_BEATS = 128;
-const MAX_BPM = 240;
-const MIN_BPM = 40;
+export const MAX_BEATS = 128;
+export const MAX_BPM = 240;
+export const MIN_BPM = 40;
 
 const snap = (beat: number) => Math.max(0, Math.min(MAX_BEATS - GRID, Math.round(beat / GRID) * GRID));
 const clampPitch = (p: number) => Math.max(MIN_PITCH, Math.min(MAX_PITCH, Math.round(p)));
@@ -98,7 +98,7 @@ const vlq = (n: number): number[] => { const out = [n & 0x7f]; let v = n >>> 7; 
 const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
 const be16 = (n: number) => [(n >>> 8) & 255, n & 255];
 const chunk = (tag: string, body: number[]) => [...Array.from(tag).map((c) => c.charCodeAt(0)), ...be32(body.length), ...body];
-const PROGRAM: Partial<Record<Voice, number>> = { piano: 0, epiano: 4, pluck: 24, driven: 29, organ: 16, bell: 14, saw: 81, pad: 89, bass: 33, sine: 80, flute: 73, clarinet: 71, oboe: 68, violin: 40, cello: 42, trumpet: 56, horn: 60, sax: 65, harp: 46, marimba: 12, vibes: 11, glock: 9, kalimba: 108, musicbox: 10, accordion: 21, harmonica: 22, banjo: 105, steeldrum: 114, choir: 52, harpsichord: 6, upright: 32, squarelead: 80, synthpluck: 84, warmpad: 89, glasspad: 92 };
+export const PROGRAM: Partial<Record<Voice, number>> = { piano: 0, epiano: 4, pluck: 24, driven: 29, organ: 16, bell: 14, saw: 81, pad: 89, bass: 33, sine: 80, flute: 73, clarinet: 71, oboe: 68, violin: 40, cello: 42, trumpet: 56, horn: 60, sax: 65, harp: 46, marimba: 12, vibes: 11, glock: 9, kalimba: 108, musicbox: 10, accordion: 21, harmonica: 22, banjo: 105, steeldrum: 114, choir: 52, harpsichord: 6, upright: 32, squarelead: 80, synthpluck: 84, warmpad: 89, glasspad: 92 };
 
 /** A standard MIDI file (format 1: a tempo track, then one track per part; drums on channel 10). Opens in any music app. */
 export function toMidi(score: MusicScore): Uint8Array {

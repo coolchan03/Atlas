@@ -12,8 +12,12 @@ import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } f
 import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
 import { saveAmbient, saveInstrumental } from '../music/saveTrack';
-import { composeMusic, composeVariation } from '../music/composerAgent';
+import { composeContinuation, composeMusic, composeVariation } from '../music/composerAgent';
 import RNFS from 'react-native-fs';
+import { pick as pickFiles, types } from '@react-native-documents/picker';
+import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { fromBase64 } from '../music/soundfontFiles';
+import { fromMidi } from '../music/midiImport';
 import { SoundfontCard } from '../music/SoundfontCard';
 import { AMBIENT, type AmbientKind } from '../music/ambient';
 import { SPACING } from '../constants';
@@ -55,8 +59,8 @@ export function MusicStudioScreen() {
     try { await instrumentalPlayer.play(track); }
     catch (error: any) { Alert.alert('Playback failed', String(error?.message || error)); }
   };
-  const saveScore = async (next: MusicScore, by?: string): Promise<void> => {
-    const track = await saveInstrumental(next, { mood, seconds: duration, by, onStep: setStatus });
+  const saveScore = async (next: MusicScore, by?: string, seconds = duration): Promise<void> => {
+    const track = await saveInstrumental(next, { mood, seconds, by, onStep: setStatus });
     setSelected(track.id);
     setScore(next);
     setStatus('Starting the player...');
@@ -83,6 +87,36 @@ export function MusicStudioScreen() {
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
+    finally { setBusy(false); setStatus(''); }
+  };
+  /** How long a score plays, in whole seconds (a little past its last note), for rendering a tune whose length is not the chosen duration. */
+  const secondsOf = (s: MusicScore): number => Math.min(300, Math.max(10, Math.ceil(Math.max(...s.notes.map((n) => n.beat + n.length)) * 60 / (s.bpm || 100)) + 2));
+  /** Brings in a standard MIDI file: it becomes a saved track that can be played, edited, varied and extended like any other. */
+  const importMidi = async () => {
+    if (busy) return;
+    try {
+      const [file] = await pickFiles({ type: [types.allFiles], allowMultiSelection: false });
+      if (!file) return;
+      setBusy(true); setStatus('Reading the MIDI file...');
+      const local = await resolvePickedFileUri(file.uri, file.name || 'tune.mid');
+      const imported = fromMidi(fromBase64(await RNFS.readFile(local.replace(/^file:\/\//, ''), 'base64')), file.name || '');
+      await saveScore(imported, 'imported MIDI file', secondsOf(imported));
+    } catch (error: any) {
+      if (!/cancel/i.test(String(error?.message || error)) && error?.code !== 'OPERATION_CANCELED') Alert.alert('Could not bring in the MIDI file', String(error?.message || error));
+    } finally { setBusy(false); setStatus(''); }
+  };
+  /** A saved tune followed by a new contrasting section, saved as a new track. */
+  const extendTune = async (track: InstrumentalTrack) => {
+    if (busy) return;
+    setBusy(true);
+    setStatus(`Asking the AI composer for a next section of "${track.title}" (this can take a minute or two)...`);
+    try {
+      const saved = JSON.parse(await RNFS.readFile(track.scorePath, 'utf8'));
+      if (!Array.isArray(saved?.notes) || !saved.notes.length) throw new Error('This track has no notes to continue.');
+      const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
+      const composed = await composeContinuation(saved as MusicScore, { mood: style });
+      await saveScore(composed.score, 'Atlas composer', secondsOf(composed.score));
+    } catch (error: any) { Alert.alert('Could not extend the tune', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
   /** A variation of a saved tune: same key and chords, a new melody, written by the composer from the saved score. */
@@ -184,6 +218,9 @@ export function MusicStudioScreen() {
           <TouchableOpacity onPress={() => make()} disabled={busy} testID="music-quick" style={[styles.action, { borderColor: colors.border }]}>
             <Text style={{ color: colors.text }}>Quick tune (no AI)</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => { void importMidi(); }} disabled={busy} testID="music-import-midi" accessibilityLabel="Import a MIDI file" style={[styles.action, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.text }}>Import MIDI</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={surprise} disabled={busy} testID="music-surprise" style={[styles.action, { borderColor: colors.border }]}>
             <Text style={{ color: colors.text }}>Surprise me</Text>
           </TouchableOpacity>
@@ -238,6 +275,7 @@ export function MusicStudioScreen() {
             <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { void shareItem({ title: track.title, file: track.path }); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
             {!!track.scorePath && <TouchableOpacity accessibilityLabel={`Edit notes of ${track.title}`} testID={`music-edit-${track.id}`} onPress={() => navigation.navigate('ScoreEditor', { scorePath: track.scorePath })} style={styles.end}><Text style={{ color: colors.primary }}>Edit notes</Text></TouchableOpacity>}
             {!!track.scorePath && track.mood !== 'ambient' && <TouchableOpacity accessibilityLabel={`Make a variation of ${track.title}`} testID={`music-variation-${track.id}`} onPress={() => { void makeVariation(track); }} disabled={busy} style={styles.end}><Text style={{ color: colors.primary }}>Variation</Text></TouchableOpacity>}
+            {!!track.scorePath && track.mood !== 'ambient' && <TouchableOpacity accessibilityLabel={`Continue ${track.title}`} testID={`music-continue-${track.id}`} onPress={() => { void extendTune(track); }} disabled={busy} style={styles.end}><Text style={{ color: colors.primary }}>Continue</Text></TouchableOpacity>}
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}

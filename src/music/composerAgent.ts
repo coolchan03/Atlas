@@ -156,6 +156,34 @@ export async function composeVariation(original: MusicScore, options: ComposeOpt
   } catch (e: any) { return fallback(String(e?.message || e)); }
 }
 
+/** The longest a track can be, in beats (the editor's limit): an extension stops there. */
+const MAX_TRACK_BEATS = 128;
+
+/**
+ * Continues a saved tune with a new, contrasting section (a B part) in the same key, tempo and chords, and returns the tune followed by
+ * that section. Needs room: a tune may not pass 32 bars, so a 24-bar tune is extended by up to 8 bars. Unlike a variation there is no
+ * built-in fallback (nothing the built-in composer makes would continue THIS tune), so a failure is reported.
+ */
+export async function composeContinuation(original: MusicScore, options: ComposeOptions & { mood?: StyleMood } = {}): Promise<Composed> {
+  const style = options.mood ?? options.style ?? 'focus';
+  const plan = inferPlan(original, 4);
+  if (!plan) throw new Error('The key of this tune could not be read from its notes.');
+  const origBeats = plan.bars.length * plan.beatsPerBar;
+  const extra = Math.min(plan.bars.length, Math.floor((MAX_TRACK_BEATS - origBeats) / plan.beatsPerBar));
+  if (extra < 4) throw new Error('This tune is already as long as a track can be (32 bars). Make a variation instead.');
+  const section: HarmonyPlan = { ...plan, bars: plan.bars.slice(0, extra) };
+  const text = continuationBrief(original, plan, extra);
+  const written = await writeScore({ text, plan: section }, options.ask ?? askModelDefault);
+  const added = written.score.notes.map((n) => ({ ...n, beat: n.beat + origBeats }));
+  const score: MusicScore = { ...original, title: `${original.title} (extended)`, notes: [...original.notes, ...added] };
+  return { score, via: 'composer', instruments: written.instruments, style, note: `Extended "${original.title}" by ${extra} bars. ${written.note}` };
+}
+
+/** What the composer is told to continue a tune: the plan, the original, and a contrasting section of the stated length. */
+function continuationBrief(original: MusicScore, plan: HarmonyPlan, bars: number): string {
+  return `Request: continue the tune below with its next section.\n${planText(plan)}\nTHE ORIGINAL (${plan.bars.length} bars, ${Math.round(original.bpm)} BPM):\n${scoreToText(original)}\n\nWrite ONLY the next section: exactly ${bars} bars, counted from beat 0 (the music that comes after the original), in the same key, tempo and chords as the first ${bars} bars above. Make it a CONTRAST (a B part): a new melody that is related but not a copy, a different rhythm, and one instrument added or swapped. Reply with the score lines only.`;
+}
+
 /** What the make_music tool does: compose, render, save to the music library and start playing. Returns the words the chat model gives back. @public */
 export async function makeMusicForChat(args: { description?: unknown; seconds?: unknown; style?: unknown }): Promise<string> {
   const description = typeof args.description === 'string' ? args.description.trim() : '';

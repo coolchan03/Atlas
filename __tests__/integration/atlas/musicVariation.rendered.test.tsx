@@ -27,3 +27,23 @@ it('offers a variation of a tune only, and saves the new tune next to the origin
   expect(useMusicLibrary.getState().tracks.some((t: { title: string }) => /variation|jazz/i.test(t.title) || t.title !== 'Tune A' && t.title !== 'Rain')).toBe(true);
   expect(alert).toHaveBeenCalledWith('Made with the built-in composer', expect.stringContaining('could not write a variation'));
 }, 60000);
+
+it('offers Continue and Import MIDI, and says why a tune could not be continued', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
+  const RNFS = require('react-native-fs');
+  const { MusicStudioScreen } = require('../../../src/screens/MusicStudioScreen');
+  const { useMusicLibrary } = require('../../../src/music/library');
+  const dir = `${RNFS.DocumentDirectoryPath}/atlas-compositions`;
+  await RNFS.mkdir(dir);
+  const notes = Array.from({ length: 32 }, (_, bar) => ({ pitch: 48, beat: bar * 4, length: 4, gain: 0.5, role: 'bass' }));
+  await RNFS.writeFile(`${dir}/instrumental-long.json`, JSON.stringify({ title: 'Long', bpm: 90, notes, mood: 'jazz' }), 'utf8');
+  useMusicLibrary.setState({ tracks: [{ id: 'long', title: 'Long', path: `${dir}/instrumental-long.wav`, scorePath: `${dir}/instrumental-long.json`, mood: 'jazz', sound: 'band', seconds: 30, createdAt: new Date().toISOString() }] });
+  const view = rtl.render(React.createElement(MusicStudioScreen));
+  expect(view.getByTestId('music-import-midi')).toBeTruthy();
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('music-continue-long')); });
+  await rtl.waitFor(() => expect(alert).toHaveBeenCalledWith('Could not extend the tune', expect.stringContaining('already as long')));
+  expect(useMusicLibrary.getState().tracks).toHaveLength(1);
+}, 60000);

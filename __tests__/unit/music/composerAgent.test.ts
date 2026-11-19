@@ -179,3 +179,28 @@ describe('making a variation of a saved tune', () => {
     expect(out.score.notes.length).toBeGreaterThan(20);
   });
 });
+
+describe('continuing a saved tune', () => {
+  const { composeContinuation } = require('../../../src/music/composerAgent');
+  const original = () => parseAgentScore(goodScore()).score;
+
+  it('asks for a contrasting next section and returns the tune followed by it, moved to start after the original', async () => {
+    const ask = jest.fn(async (_system: string, _user: string) => goodScore());
+    const out = await composeContinuation(original(), { ask, mood: 'jazz' });
+    expect(out.via).toBe('composer');
+    expect(out.score.title).toBe('Rainy Window (extended)');
+    expect(String(ask.mock.calls[0][1])).toContain('continue the tune below');
+    expect(String(ask.mock.calls[0][1])).toContain('exactly 4 bars');
+    const beats = out.score.notes.map((n: { beat: number }) => n.beat);
+    expect(Math.min(...beats)).toBe(0);
+    expect(Math.max(...beats)).toBeGreaterThanOrEqual(16); // the new section starts after the 4 original bars (16 beats)
+    expect(out.score.notes.length).toBeGreaterThan(original().notes.length);
+    expect(out.note).toContain('Extended "Rainy Window" by 4 bars');
+  });
+
+  it('refuses a tune that is already as long as a track can be, and reports a composer that fails', async () => {
+    const long = { title: 'Long', bpm: 90, notes: Array.from({ length: 32 }, (_, bar) => ({ pitch: 48, beat: bar * 4, length: 4, gain: 0.5, role: 'bass' as const })) };
+    await expect(composeContinuation(long, { ask: async () => goodScore() })).rejects.toThrow(/already as long/);
+    await expect(composeContinuation(original(), { ask: async () => 'no' })).rejects.toThrow();
+  });
+});
