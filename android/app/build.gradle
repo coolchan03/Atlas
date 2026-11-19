@@ -86,7 +86,10 @@ android {
         // overrides the library minimum and AtlasVulkanModule refuses to load it below API 29.
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1804544309
+        // Every CI build must be an upgrade of the one before it: the base is raised by the build (run) number CI passes, which only grows.
+        // A local build without -PatlasBuild keeps the base (never above a CI build). -PatlasVersionCode=<n> overrides both for a one-off.
+        def atlasBaseVersionCode = 1804544309
+        versionCode project.hasProperty('atlasVersionCode') ? project.property('atlasVersionCode').toInteger() : atlasBaseVersionCode + (project.hasProperty('atlasBuild') ? project.property('atlasBuild').toInteger() : 0)
         // CI passes -PatlasBuild=<run number>, so the version shown in the app says which build it is.
         versionName "0.0.205" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
     }

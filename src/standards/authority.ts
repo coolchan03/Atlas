@@ -12,8 +12,11 @@ export const OFFICIAL_SITES = [
 ];
 
 export function hostOf(url: string): string {
-  const m = url.trim().match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#:]+)/i);
-  return m ? m[1].toLowerCase().replace(/^www\./, '') : '';
+  const m = url.trim().match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#\\]+)/i);
+  if (!m) return '';
+  // The part after the last "@" is the host (what comes before it is a login, "fasb.org@evil.com" is evil.com); the port and a trailing dot are not part of the name.
+  const host = m[1].slice(m[1].lastIndexOf('@') + 1).replace(/:\d*$/, '').replace(/\.$/, '').toLowerCase().replace(/^www\./, '');
+  return /^[a-z0-9.-]+$/.test(host) ? host : '';
 }
 
 export const isOfficialUrl = (url: string): boolean => {

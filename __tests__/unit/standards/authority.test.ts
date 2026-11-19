@@ -77,3 +77,21 @@ describe('documents added under a standard\'s name', () => {
     expect(isOfficialSource({ kind: 'project', title: 'Becker FAR.pdf' })).toBe(false);
   });
 });
+
+describe('official URL matching by parsed host', () => {
+  const { isOfficialUrl, hostOf } = require('../../../src/standards/authority');
+  it('accepts the real sites and their subdomains', () => {
+    expect(isOfficialUrl('https://www.irs.gov/pub/irs-pdf/p535.pdf')).toBe(true);
+    expect(isOfficialUrl('https://asc.fasb.org:443/topic')).toBe(true);
+    expect(isOfficialUrl('https://user@fasb.org/page')).toBe(true);
+  });
+  it('rejects lookalikes, credentials tricks and paths that only mention the domain', () => {
+    expect(isOfficialUrl('https://fasb.org.evil.com/')).toBe(false);
+    expect(isOfficialUrl('https://evil.com/fasb.org')).toBe(false);
+    expect(isOfficialUrl('https://fasb.org@evil.com/')).toBe(false);
+    expect(isOfficialUrl('https://notirs.gov/')).toBe(false);
+    expect(isOfficialUrl('https://evil.com?u=https://irs.gov')).toBe(false);
+    expect(isOfficialUrl('https://evil.com\\@irs.gov/')).toBe(false);
+    expect(hostOf('not a url')).toBe('');
+  });
+});
