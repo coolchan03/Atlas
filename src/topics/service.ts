@@ -12,6 +12,8 @@ import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { cancel, enqueue } from './generationQueue';
 import { allocateExcerpts } from './allocateEvidence';
+import { controllingNote, controllingReport, inferEntity } from '../standards/controlling';
+import { classifyTaxSource, yearsAsked } from '../standards/taxSources';
 import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
@@ -207,6 +209,18 @@ export function squareContent(course: Course, key: string, opts: { background?: 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
 const subjectQuery = (sq: { topic?: string; title: string; focus: string }): string => sq.topic || `${sq.title} ${sq.focus}`;
 
+/** What to check about the controlling authority for this course's subject, from the documents in its project. Empty when nothing is wrong or no project is attached. */
+async function standardsFlags(course: Course, query: string): Promise<string> {
+  if (!course.projectId) return '';
+  try {
+    const { ragService } = require('../services/rag');
+    const docs: Array<{ name: string; enabled?: number | boolean }> = (await ragService.getDocumentsInScope(course.projectId)).filter(isEnabled);
+    const yearOf = (name: string) => classifyTaxSource(name)?.year ?? (Number(/\b(20\d{2})\b/.exec(name)?.[1]) || undefined);
+    const entity = inferEntity(`${course.title} ${course.topic} ${query}`);
+    return controllingNote(controllingReport({ entity, asOfYear: yearsAsked(`${query} ${course.topic}`)[0], documents: docs.map((d) => ({ name: d.name, year: yearOf(d.name) })) }));
+  } catch { return ''; }
+}
+
 async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Promise<SquareContent> {
   // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
@@ -241,6 +255,7 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
     square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
     bookQuestions: bank,
+    standardsFlags: await standardsFlags(course, query),
     excerpts,
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
