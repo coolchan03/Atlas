@@ -42,6 +42,7 @@ import { MemoryLedger } from './memoryLedger';
 import { conflictReason, isStandaloneClaim, rankClaims, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
+import { buildWorkingContext } from './workingContext';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -506,8 +507,10 @@ function examAnswerer(cfg: LearnConfig): Answerer {
     if (mode === 'baseline') return { text: await ask(EXAM_SYSTEM, `QUESTION: ${item.question}`, 'learner'), sourceCount: 0 };
     const { text: sources, list } = await research(cfg, item.question);
     const known = mode === 'memory' ? safely(() => learningKnowledgeDb.knownClaims(cfg.topic), []).filter((k) => k.status === 'verified') : []; // only notes the person reviewed and verified count as evidence; unreviewed candidates do not
-    const notes = rankClaims(item.question, known, 5).map((k, i) => `${i + 1}. ${k.text}`);
-    const material = [sources && `SOURCES:\n${sources}`, notes.length && `STORED NOTES:\n${notes.join('\n')}`].filter(Boolean).join('\n\n');
+    // Only the approved notes that bear on this question, within a small budget, from this subject's topic; dropped after the answer.
+    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ ...k, topic: cfg.topic })), budgetTokens: 600 });
+    const notes = working.usedNotes;
+    const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
     return { text, sourceCount: list.length, memoryCount: mode === 'memory' ? notes.length : undefined };
   };
