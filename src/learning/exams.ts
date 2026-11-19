@@ -72,7 +72,7 @@ const SECONDS: Record<string, number> = { second: 1, minute: 60, hour: 3600, day
 export function canonical(text: string): string {
   return wordsToDigits(text.toLowerCase())
     .replace(/(\d),(?=\d{3}\b)/g, '$1')
-    .replace(/\$\s*(\d)/g, '$1 dollars ')
+    .replace(/\$\s*(\d+(?:\.\d+)?)/g, '$1 dollars ')
     .replace(/(\d)\s*(?:%|per\s?cent|percent)/g, '$1 percent ')
     .replace(/\b(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week)s?\b/g, (_m, n: string, u: string) => `${Number((Number(n) * SECONDS[u]).toFixed(3))} secs `)
     .replace(/[\u2010-\u2015-]/g, ' ')
@@ -105,6 +105,8 @@ const has = (answer: string, wording: string) => {
  * that stretch rejects it, and numbers must match exactly, so "20 percent" never matches "120 percent" or "not 20 percent".
  */
 function hasTogether(answer: string, wording: string): boolean {
+  // A number and its unit must stay next to each other, which the exact-phrase check already requires: "35 years ... 21 percent" is not "35 percent".
+  if (/\d/.test(canonical(wording))) return false;
   const need = [...new Set(wordList(wording).filter((w) => /^\d/.test(w) || (w.length >= 3 && !FILLER.has(w))).map(stemWord))];
   if (need.length < 2) return false;
   const raw = wordList(answer);
@@ -336,16 +338,22 @@ const DAY = 86_400_000;
 const UNGRADED: ExamReason[] = ['invalid-key', 'inference-failure'];
 
 /**
- * Questions due for a retest: the latest graded attempt (this scoring version) was wrong, and enough days passed since it, counted from how
- * many misses in a row there have been. A question that was passed, never asked, or only could not be graded is never due.
+ * Questions due for a retest. Each mode is judged on its own history, because one run asks the same question in every mode (that is
+ * one attempt, not three misses): the model alone failing says nothing about what was learned, so it counts only when it is the only
+ * mode ever run. A question is due when, in a counted mode, its latest graded attempt was wrong and enough days have passed since it,
+ * waiting 1, 3, then 7 days for the 1st, 2nd and later consecutive misses in that mode. Passed, never asked, or only ungraded: not due.
  */
 export function dueRetests(items: Array<{ id: string }>, history: ExamResult[], now: Date = new Date()): string[] {
   return items.filter(({ id }) => {
     const graded = attemptsFor(history, id).filter((a) => a.version === BENCHMARK_VERSION && !(a.reason && UNGRADED.includes(a.reason)));
-    if (!graded.length || graded[0].correct) return false;
-    let misses = 0;
-    for (const a of graded) { if (a.correct) break; misses += 1; }
-    const wait = RETEST_DAYS[Math.min(misses, RETEST_DAYS.length) - 1] * DAY;
-    return now.getTime() - new Date(graded[0].at).getTime() >= wait;
+    const counted = graded.some((a) => a.mode !== 'baseline') ? graded.filter((a) => a.mode !== 'baseline') : graded;
+    return EXAM_MODES.some((mode) => {
+      const own = counted.filter((a) => a.mode === mode); // newest first
+      if (!own.length || own[0].correct) return false;
+      let misses = 0;
+      for (const a of own) { if (a.correct) break; misses += 1; }
+      const wait = RETEST_DAYS[Math.min(misses, RETEST_DAYS.length) - 1] * DAY;
+      return now.getTime() - new Date(own[0].at).getTime() >= wait;
+    });
   }).map((i) => i.id);
 }

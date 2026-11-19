@@ -170,3 +170,35 @@ describe('retest schedule and answer history', () => {
     expect(improvementSummary([partial, mem, base])).toContain('better');
   });
 });
+
+
+describe('retest schedule counts runs, not modes (audit F-2)', () => {
+  const { dueRetests } = require('../../../src/learning/exams');
+  const DAY = 86_400_000;
+  const now = new Date('2026-12-01T12:00:00Z');
+  const row = (mode: any, daysAgo: number, correct: boolean): ExamResult => ({ id: `${mode}${daysAgo}`, version: BENCHMARK_VERSION, mode, at: new Date(now.getTime() - daysAgo * DAY).toISOString(), metrics: { total: 1, correct: correct ? 1 : 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [{ id: 'q', correct, reason: correct ? 'correct' : 'wrong-answer' }] } as ExamMetrics });
+  it('one run that missed in all three modes waits 1 day, not 7', () => {
+    const run = (d: number) => [row('baseline', d, false), row('sources', d, false), row('memory', d, false)];
+    expect(dueRetests([{ id: 'q' }], run(0.5), now)).toEqual([]);
+    expect(dueRetests([{ id: 'q' }], run(1.2), now)).toEqual(['q']);
+  });
+  it('a question the model alone misses but memory passes is not due', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 5, false), row('sources', 5, true), row('memory', 5, true)], now)).toEqual([]);
+  });
+  it('a miss with sources is due even though memory passed (that mode still fails)', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 5, false), row('sources', 5, false), row('memory', 5, true)], now)).toEqual(['q']);
+  });
+  it('baseline counts when it is the only mode ever run', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 2, false)], now)).toEqual(['q']);
+  });
+});
+
+
+describe('numbers and their units stay together (audit F-7)', () => {
+  it('does not take a number and a unit from different places', () => {
+    expect(scoreAnswer('The useful life is 35 years and the rate is 21 percent.', { facts: [['35 percent']] }).correct).toBe(false);
+    expect(scoreAnswer('The useful life is 35 years and the rate is 21 percent.', { facts: [['21 percent']], forbid: ['35 percent'] })).toMatchObject({ correct: true, outdated: false });
+    expect(scoreAnswer('It rose by 35 percent.', { facts: [['35%']] }).correct).toBe(true);
+    expect(scoreAnswer('The recorded lease liability and asset.', { facts: [['lease liability recorded']] }).correct).toBe(true); // wording without numbers still matches in any order
+  });
+});
