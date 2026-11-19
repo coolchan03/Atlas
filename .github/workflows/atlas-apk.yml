@@ -93,8 +93,15 @@ jobs:
       - name: Install Vulkan shader-generator dependencies
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev ninja-build cmake python3
+          # The Ubuntu mirrors sometimes time out (this step failed once for that reason): try up to 4 times with a growing wait.
+          for attempt in 1 2 3 4; do
+            if sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq &&
+               sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends glslc spirv-headers libvulkan-dev ninja-build cmake python3; then
+              break
+            fi
+            [ "$attempt" = 4 ] && { echo "::error::apt could not install the Vulkan shader tools after 4 tries (package mirror problem, not a code problem)"; exit 1; }
+            echo "::warning::apt attempt $attempt failed; retrying"; sleep $((attempt * 20))
+          done
           command -v glslc
       - name: Bootstrap pinned llama.kt Vulkan sources
         working-directory: vendor/llama-kt
