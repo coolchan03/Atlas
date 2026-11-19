@@ -220,3 +220,13 @@ export function parseScreenReply(reply: string, count: number): Set<number> {
   }
   return out;
 }
+
+/** True when what was found for a story says little more than its headline (empty, short, or a repeat of the title), so the story cannot be explained from it. */
+export function isThinDetail(detail: string, title: string): boolean {
+  const text = detail.replace(/\s+/g, ' ').trim();
+  if (text.length < 140) return true;
+  return similarity(text.slice(0, 220), title) >= 0.8;
+}
+
+/** The line that goes with a story's material when it is thin: the script says so briefly instead of inventing details. */
+export const HEADLINE_ONLY_NOTE = 'Only the headline was available for this story: report the headline in one short sentence and say details were not available. Do not add facts.';

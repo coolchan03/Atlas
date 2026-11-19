@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Source, StudyResult, askModel, useStudyStore, writeEpisode } from '../study/engine';
-import { WORDS_PER_MINUTE, avoided, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
+import { HEADLINE_ONLY_NOTE, WORDS_PER_MINUTE, avoided, isThinDetail, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
 /** The quiet beat after the chime before each story starts, so every story lands before the next. */
@@ -181,11 +181,14 @@ function storyHeader(h: Headline): string {
 
 /** One outline item for one real story: its headline, outlet, time and any detail found. */
 async function storyItem({ h, interest, deep, n }: { h: Headline; interest: string; deep: boolean; n: number }): Promise<OutlineItem> {
-  const detail = await storyDetail(h, deep);
+  let detail = await storyDetail(h, deep);
+  // A story with little more than its headline gets one more try: the article itself.
+  if (!deep && isThinDetail(detail.text || h.desc || '', h.title)) detail = await storyDetail(h, true);
+  const thin = isThinDetail(detail.text || h.desc || '', h.title);
   const outlet = h.source ? ` (${h.source})` : '';
   return {
     topic: `${h.title}${outlet} - ${interest}`,
-    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
+    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}${thin ? `\n${HEADLINE_ONLY_NOTE}` : ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
   };
 }
 

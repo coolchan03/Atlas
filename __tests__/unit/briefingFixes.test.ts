@@ -29,3 +29,16 @@ describe('briefing fixes', () => {
     expect(briefingSummary(r, 'Daily briefing')).toContain('- Floods hit Texas (AP) https://x.test/a');
   });
 });
+
+describe('stories with only a headline', () => {
+  const { isThinDetail, HEADLINE_ONLY_NOTE } = require('../../src/atlasTools/newsSources');
+  it('treats empty, short and headline-repeating detail as thin, and real detail as enough', () => {
+    const title = 'City council approves new budget for roads';
+    expect(isThinDetail('', title)).toBe(true);
+    expect(isThinDetail('City council approves new budget for roads.', title)).toBe(true);
+    expect(isThinDetail('Short blurb.', title)).toBe(true);
+    const real = 'The council voted 7 to 2 on Tuesday to approve a 48 million dollar plan to repave highways and repair bridges over the next three years. Supporters said deferred maintenance had grown costly; opponents objected to a property tax increase to pay for it.';
+    expect(isThinDetail(real, title)).toBe(false);
+    expect(HEADLINE_ONLY_NOTE).toMatch(/Do not add facts/);
+  });
+});
