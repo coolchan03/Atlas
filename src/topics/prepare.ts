@@ -122,7 +122,7 @@ export async function writeNow(courseId: string, keys: string[], label: string):
       useBatch.setState({ working: key });
       let ok = false;
       let reason = '';
-      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+      for (let attempt = 0; attempt < 2 && !ok && !batchCancelled; attempt++) {
         try { await squareContent(useTopics.getState().courses.find((c) => c.id === courseId) ?? course, key, { background: true }); ok = true; }
         catch (e) { reason = String((e as Error)?.message || e); }
       }

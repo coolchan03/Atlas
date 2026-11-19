@@ -5,7 +5,11 @@
  * are not applied (agentStore.activeAgentOverrides asks here).
  */
 let depth = 0;
-export const inBackgroundWork = (): boolean => depth > 0;
+/** A chat reply that is being written right now is never treated as background work, even while a job is open between its model calls. */
+function chatIsGenerating(): boolean {
+  try { return !!require('./generationService').generationService.getState().isGenerating; } catch { return false; }
+}
+export const inBackgroundWork = (): boolean => depth > 0 && !chatIsGenerating();
 export async function asBackground<T>(job: () => Promise<T>): Promise<T> {
   depth += 1;
   try { return await job(); } finally { depth -= 1; }

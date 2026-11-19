@@ -7,14 +7,26 @@ import { FORMAT_IDS } from './formats';
 import { useTopics, type Course } from './store';
 import type { SquareFormat } from './plannedSquare';
 
+const BOARD_CHARS = 12000;
 export interface BoardChange { remove: string[]; add: Array<{ afterKey: string; format: SquareFormat; title: string; focus: string }> }
 
 /** The prompt: the board as one line per square (key, kind, title, chapter) and the request. */
-function editPrompt(course: Course, request: string): { system: string; user: string } {
-  const lines = course.squares.map((q) => `${q.key} | ${q.format} | ${q.title} | ${q.unit}${course.progress[q.key] ? ' | played' : ''}`).join('\n');
+function editPrompt(course: Course, request: string): { system: string; user: string; partial: boolean } {
+  const all = course.squares.map((q) => `${q.key} | ${q.format} | ${q.title} | ${q.unit}${course.progress[q.key] ? ' | played' : ''}`);
+  // A big board does not fit: show the chapters the request is about (words they share), then as many others as fit.
+  const wanted = new Set((request.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []));
+  const related = (q: Course['squares'][number]) => [...wanted].some((w) => `${q.unit} ${q.title} ${q.book ?? ''}`.toLowerCase().includes(w));
+  const picked = new Set<number>();
+  course.squares.forEach((q, i) => { if (related(q)) picked.add(i); });
+  let size = [...picked].reduce((n, i) => n + all[i].length + 1, 0);
+  let partial = false;
+  if (all.join('\n').length <= BOARD_CHARS) all.forEach((_, i) => picked.add(i));
+  else { partial = true; for (let i = 0; i < all.length && size + all[i].length < BOARD_CHARS; i++) if (!picked.has(i)) { picked.add(i); size += all[i].length + 1; } }
+  const lines = [...picked].sort((a, b) => a - b).map((i) => all[i]).join('\n').slice(0, BOARD_CHARS);
   return {
+    partial,
     system: 'You edit a learning board. Reply with ONLY JSON.',
-    user: `The board, one square per line (key | kind | title | chapter):\n${lines.slice(0, 12000)}\n\nThe learner says: "${request.slice(0, 600)}"\n\nReply with ONLY JSON: {"remove":["keys of squares to remove"],"add":[{"after":"key of the square to add it after","format":"one of ${FORMAT_IDS.join('|')}","title":"short title","focus":"what it covers"}]}. Never remove a square marked played. Use [] when nothing is needed.`,
+    user: `The board, one square per line (key | kind | title | chapter):\n${lines}\n\nThe learner says: "${request.slice(0, 600)}"\n\nReply with ONLY JSON: {"remove":["keys of squares to remove"],"add":[{"after":"key of the square to add it after","format":"one of ${FORMAT_IDS.join('|')}","title":"short title","focus":"what it covers"}]}. Never remove a square marked played. Use [] when nothing is needed.`,
   };
 }
 
@@ -36,7 +48,7 @@ export function parseChange(raw: string, course: Course): BoardChange | null {
 }
 
 /** Asks the AI and applies the change to the board. Returns what was done, or null when the answer could not be used. */
-export async function editBoard(courseId: string, request: string): Promise<{ added: number; removed: number } | null> {
+export async function editBoard(courseId: string, request: string): Promise<{ added: number; removed: number; partial: boolean } | null> {
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!course || !request.trim()) return null;
   const p = editPrompt(course, request);
@@ -45,5 +57,5 @@ export async function editBoard(courseId: string, request: string): Promise<{ ad
   let added = 0;
   for (const a of change.add) if (useTopics.getState().addSquare(courseId, a.afterKey, { format: a.format, title: a.title, focus: a.focus })) added += 1;
   if (change.remove.length) useTopics.getState().removeSquares(courseId, change.remove);
-  return { added, removed: change.remove.length };
+  return { added, removed: change.remove.length, partial: p.partial };
 }

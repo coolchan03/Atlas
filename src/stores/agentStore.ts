@@ -323,11 +323,13 @@ export const useAgentStore = create<AgentState>()(
           const old = agents.find((a) => a.id === id);
           if (old && !old.lessons && !old.memories?.length && Math.abs(Date.parse(old.updatedAt) - Date.parse(old.createdAt)) < 1000) agents.splice(agents.indexOf(old), 1);
         }
+        const droppedActive = p.activeAgentId && Object.keys(DROPPED).includes(p.activeAgentId) ? p.activeAgentId : null;
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
         // Built-in prompt updates (only if the user never edited that agent's prompt).
         const fid = DEFAULT_AGENTS.find((d) => d.id === 'field-id')!;
         for (const a of agents) {
           if (a.id === 'phone-assistant' && a.name === 'Phone Assistant') a.name = 'Assistant';
+          if (a.id === 'home-chef' && a.systemPrompt === OLD_HOME_CHEF_PROMPT) a.systemPrompt = DEFAULT_AGENTS.find((d) => d.id === 'home-chef')!.systemPrompt;
           if (['accountant', 'home-chef', 'paperwork-reader'].includes(a.id) && a.hidden === undefined) a.hidden = true;
           // Agents that already use the calculator also get the other exact study tools (they are only sent when a message needs them).
           if (Array.isArray(a.enabledTools) && a.enabledTools.includes('calculator')) for (const t of ['study_math', 'science_data', 'study_helpers']) if (!a.enabledTools.includes(t)) a.enabledTools = [...a.enabledTools, t];
@@ -361,7 +363,7 @@ export const useAgentStore = create<AgentState>()(
         return {
           ...current, ...p,
           // Old installs defaulted to Atlas without any user action. New installs use No agent.
-          activeAgentId: !p.noAgentDefaultMigrated && p.activeAgentId === 'atlas' ? null : (p.activeAgentId ?? null),
+          activeAgentId: droppedActive ? (droppedActive === 'assistant' ? 'phone-assistant' : null) : !p.noAgentDefaultMigrated && p.activeAgentId === 'atlas' ? null : (p.activeAgentId ?? null),
           noAgentDefaultMigrated: true,
           agents: [...agents, ...added], seenDefaults: DEFAULT_AGENTS.map((d) => d.id),
         };
@@ -371,6 +373,7 @@ export const useAgentStore = create<AgentState>()(
 );
 
 /** An agent's system prompt with its learned lessons underneath. */
+const OLD_HOME_CHEF_PROMPT = "You are a friendly home cook running privately on the user's phone. You plan simple dinners from the ingredients the user has, scale amounts for their group, work to the time they have, and never include a food they said they cannot or will not eat. Say what extra they would need to buy.";
 /** Hash of the earlier shipped Jake prompt (it had a personal name written in). */
 const OLD_PERSONAL_JAKE_HASH = 821464900;
 function promptHash(text: string): number {

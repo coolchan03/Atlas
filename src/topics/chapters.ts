@@ -116,16 +116,18 @@ export const bookLabel = (doc: string): string => doc.replace(/\.[A-Za-z0-9]{2,4
  */
 export function bookByBookPlan(books: Array<{ doc: string; chapters: Chapter[] }>, title: string): CoursePlan {
   const squares: PlannedSquare[] = [];
+  let capped = false;
   for (const b of books) {
     const label = bookLabel(b.doc);
     for (const c of b.chapters) {
+      if (squares.length + CHAPTER_SQUARES > MAX_SQUARES) { capped = true; continue; }
       const unit = `${label}: ${chapterName(c)}`;
       deepChapter({ name: chapterName(c), unit, about: `from ${label}`, topic: c.title || undefined }, CHAPTER_SQUARES)
         .forEach((sq) => squares.push({ key: `s${squares.length + 1}`, ...sq, book: b.doc }));
     }
   }
   const order = books.map((b) => bookLabel(b.doc)).join(', then ');
-  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
+  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.${capped ? ` The board holds at most ${MAX_SQUARES} squares, so the last chapters are not on it.` : ''}`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
 }
 
 /** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */

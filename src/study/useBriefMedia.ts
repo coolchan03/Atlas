@@ -10,17 +10,17 @@ import { claimMedia, ownsMedia, releaseMedia } from '../atlasVoice/mediaOwner';
 export type BriefMediaState = 'off' | 'playing' | 'paused';
 export interface BriefMediaActions { onPlay: () => void; onPause: () => void; onStop: () => void; onJump: (delta: number) => void }
 
-export function useBriefMedia(state: BriefMediaState, place: { line: number; total: number }, actions: BriefMediaActions): void {
-  const { line, total } = place;
+export function useBriefMedia(state: BriefMediaState, place: { line: number; total: number; unit: string }, actions: BriefMediaActions): void {
+  const { line, total, unit } = place;
   const latest = useRef(actions);
   latest.current = actions;
   useEffect(() => {
     const native = NativeModules.AtlasMediaControls;
     if (!native?.show || state === 'off') return;
     claimMedia('briefing');
-    native.show('Daily briefing', `Part ${Math.min(line + 1, Math.max(total, 1))} of ${total}`, state === 'playing');
+    native.show('Daily briefing', `${unit} ${Math.min(line + 1, Math.max(total, 1))} of ${total}`, state === 'playing');
     native.keepAlive?.(state === 'playing');
-  }, [state, line, total]);
+  }, [state, line, total, unit]);
   useEffect(() => {
     const native = NativeModules.AtlasMediaControls;
     if (!native?.show) return;
@@ -30,6 +30,10 @@ export function useBriefMedia(state: BriefMediaState, place: { line: number; tot
       if (e.action === 'play') a.onPlay(); else if (e.action === 'pause') a.onPause(); else if (e.action === 'next') a.onJump(1); else if (e.action === 'previous') a.onJump(-1); else a.onStop();
     });
     return () => sub.remove();
+  }, []);
+  // Leaving the screen takes the notification down and lets the phone stop holding the app in the foreground.
+  useEffect(() => () => {
+    if (releaseMedia('briefing')) { const native = NativeModules.AtlasMediaControls; native?.keepAlive?.(false); native?.hide?.(); }
   }, []);
   useEffect(() => {
     if (state !== 'off') return;

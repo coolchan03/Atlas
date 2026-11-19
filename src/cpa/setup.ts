@@ -104,13 +104,17 @@ export function gatherCpaProjects(): number {
   const store = useProjectStore.getState();
   if (!folderId || !store.projects.some((p) => p.id === folderId)) return 0;
   let moved = 0;
+  const done = useCpa.getState().gathered ?? [];
+  const handled: string[] = [];
   for (const [code, exam] of Object.entries(useCpa.getState().exams)) {
     const id = exam?.projectId;
+    if (id && done.includes(id)) continue; // moved once already: wherever the person put it since stays
     const project = id ? store.projects.find((p) => p.id === id) : undefined;
     if (!id || !project || id === folderId || project.parentId || project.pinVerifier || project.protectedBlob) continue;
     if (examFolder(code as ExamCode).name !== CPA_PROJECT_NAME) continue;
-    try { store.updateProject(id, { parentId: folderId }); moved += 1; } catch { /* would loop or locked: leave it */ }
+    try { store.updateProject(id, { parentId: folderId }); moved += 1; handled.push(id); } catch { /* would loop or locked: leave it */ }
   }
+  if (handled.length) useCpa.getState().markGathered(handled);
   return moved;
 }
 

@@ -72,7 +72,7 @@ export function ChangeBoardPanel({ course }: { course: Course }) {
     setBusy(true); setSaid('');
     try {
       const r = await editBoard(course.id, text);
-      setSaid(!r ? 'The AI did not give a change Atlas could use. Try saying it another way.' : r.added || r.removed ? `Done: ${r.added} added, ${r.removed} removed. Squares you have played are never removed.` : 'The AI found nothing to change.');
+      setSaid(!r ? 'The AI did not give a change Atlas could use. Try saying it another way.' : r.added || r.removed ? `Done: ${r.added} added, ${r.removed} removed. Squares you have played are never removed.${r.partial ? ' The board is big, so the AI saw the chapters you named plus the start of the board; name a chapter to change one it did not see.' : ''}` : 'The AI found nothing to change.');
       if (r) setText('');
     } catch (e) { setSaid(String((e as Error)?.message || e)); } finally { setBusy(false); }
   };

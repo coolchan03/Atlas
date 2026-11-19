@@ -9,6 +9,7 @@ import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
 import { Fold } from '../components/Fold';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { useBriefMedia, type BriefMediaState } from '../study/useBriefMedia';
 import { castLine, nativeEpisodeQueue, preRenderEpisode, playLine, playJingle, setPodcastSpeed, stopPodcastAudio } from '../atlasVoice/podcastAudio';
 import * as nativePlayer from '../atlasVoice/nativeAudioPlayer';
@@ -212,7 +213,10 @@ export const StudyScreen: React.FC = () => {
   const castVoice = (host: string, hosts: number) => castLine(host, hosts, voices);
   // A new host voice picked for the show that is open: its audio is made again in the new voices (lines already in them are kept).
   const hostPicks = useAtlasVoiceStore((s) => s.podcastVoices);
+  const seenPicks = useRef(hostPicks);
   React.useEffect(() => {
+    if (seenPicks.current === hostPicks) return; // opening a show is not a change of voices
+    seenPicks.current = hostPicks;
     if (!view?.podcast || !voices.length) return;
     const lines = view.podcast.map((l) => ({ text: l.text, ...castLine(l.host, view.hosts ?? 2, voices) }));
     preRenderEpisode(`${projectId}-${view.createdAt}`, lines);
@@ -370,9 +374,10 @@ export const StudyScreen: React.FC = () => {
   };
   const playBrief = (from: number) => { const b = lastBrief.current; if (b) void play(b.items, from, b.source); };
   const briefLine = playing ?? resumeAt;
-  useBriefMedia(media, { line: briefLine, total: lastBrief.current?.items.length ?? 0 }, {
+  const storyNow = view ? Math.max(0, currentStory(storyJumps(view), briefLine)) : 0;
+  useBriefMedia(media, { line: storyNow, total: Math.max(1, view ? storyJumps(view).length : 1), unit: 'Story' }, {
     onPlay: () => playBrief(resumeAt), onPause: halt, onStop: () => { halt(); setMedia('off'); },
-    onJump: (d) => { const starts = [0, ...(lastBrief.current?.source.storyStarts ?? [])].sort((a, b) => a - b); playBrief(d > 0 ? starts.find((n) => n > briefLine) ?? briefLine : [...starts].reverse().find((n) => n < briefLine) ?? 0); },
+    onJump: (d) => { const starts = [0, ...(lastBrief.current?.source.storyStarts ?? [])].sort((a, b) => a - b); const to = d > 0 ? starts.find((n) => n > briefLine) : [...starts].reverse().find((n) => n < briefLine) ?? 0; if (to !== undefined) playBrief(to); },
   });
 
   const [exporting, setExporting] = useState<VideoProgress | null>(null);
@@ -817,4 +822,4 @@ const MediaBar: React.FC<{
   );
 };
 
-const jumpStyles = StyleSheet.create({ row: { marginBottom: 10 }, count: { fontSize: 12, marginBottom: 4 }, chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, marginRight: 8 }, text: { fontSize: 13 } });
+const jumpStyles = StyleSheet.create({ row: { marginBottom: 10 }, count: { ...TYPOGRAPHY.meta, marginBottom: SPACING.xs }, chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, marginRight: 8 }, text: { fontSize: 13 } });

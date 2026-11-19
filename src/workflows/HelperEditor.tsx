@@ -58,7 +58,7 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
 
 const styles = StyleSheet.create({
   note: { ...TYPOGRAPHY.bodySmall },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
-  tall: { minHeight: 160 },
+  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  tall: { minHeight: SPACING.xxl * 5 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
 });

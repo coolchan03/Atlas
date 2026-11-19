@@ -11,6 +11,9 @@ interface State {
   exams: Partial<Record<ExamCode, CpaExam>>;
   /** The one optional shared "CPA Exam Preparation" project, when the person chose to organize CPA study in a project. */
   groupProjectId?: string;
+  /** Projects already put into the CPA Study folder once, so one the person moves out is not moved back. */
+  gathered?: string[];
+  markGathered: (ids: string[]) => void;
   setGroupProject: (projectId: string | undefined) => void;
   setExam: (code: ExamCode, exam: CpaExam) => void;
   setExamDate: (code: ExamCode, date: string | undefined) => void;
@@ -30,6 +33,7 @@ export const useCpa = create<State>()(persist((set) => {
   const change = (code: ExamCode, fn: (e: CpaExam) => CpaExam) => set((s) => (s.exams[code] ? { exams: { ...s.exams, [code]: fn(s.exams[code]!) } } : s));
   return {
     exams: {},
+    markGathered: (ids) => set((s) => ({ gathered: [...new Set([...(s.gathered ?? []), ...ids])] })),
     setGroupProject: (groupProjectId) => set({ groupProjectId }),
     setExam: (code, exam) => set((s) => ({ exams: { ...s.exams, [code]: exam } })),
     setExamDate: (code, examDate) => change(code, (e) => ({ ...e, examDate })),
@@ -39,6 +43,6 @@ export const useCpa = create<State>()(persist((set) => {
     removeTopic: (code, topicId) => change(code, (e) => ({ ...e, topics: e.topics.filter((t) => t.id !== topicId) })),
     replaceOutline: (code, areas) => change(code, (e) => ({ ...e, topics: topicsFrom(areas, e.topics) })),
   };
-}, { name: 'atlas-cpa-prep', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ exams: s.exams, groupProjectId: s.groupProjectId }) }));
+}, { name: 'atlas-cpa-prep', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ exams: s.exams, groupProjectId: s.groupProjectId, gathered: s.gathered }) }));
 
 export const defaultTopics = (code: ExamCode): CpaTopic[] => topicsFrom(EXAMS.find((e) => e.code === code)!.areas);
