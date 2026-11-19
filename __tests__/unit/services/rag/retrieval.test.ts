@@ -34,16 +34,33 @@ describe('RetrievalService', () => {
   });
 
   describe('search', () => {
-    it('falls back to first chunks when no embeddings exist', async () => {
+    it('ranks by keywords when no embeddings exist, and skips unrelated passages', async () => {
       mockGetEmbeddings.mockReturnValue([]);
-      const fallbackChunks = [
-        { doc_id: 1, name: 'doc.txt', content: 'hello', position: 0, score: 0 },
-      ];
-      mockGetChunks.mockReturnValue(fallbackChunks);
+      mockGetChunks.mockReturnValue([
+        { doc_id: 1, name: 'doc.txt', content: 'Preface and table of contents', position: 0, score: 0 },
+        { doc_id: 1, name: 'doc.txt', content: 'Operating leases are recorded as a right-of-use asset and lease liability', position: 5, score: 0 },
+      ]);
 
-      const result = await retrievalService.search('proj1', 'test query');
-      expect(result.chunks).toEqual(fallbackChunks);
+      const result = await retrievalService.search('proj1', 'How are operating leases recorded?');
+      expect(result.chunks.map((c) => c.position)).toEqual([5]);
+      expect(result.evidence).toBe('lexical');
       expect(result.truncated).toBe(false);
+    });
+
+    it('reports no relevant evidence instead of returning the first chunks', async () => {
+      mockGetEmbeddings.mockReturnValue([]);
+      mockGetChunks.mockReturnValue([{ doc_id: 1, name: 'doc.txt', content: 'Chapter one: photosynthesis in plants', position: 0, score: 0 }]);
+      const result = await retrievalService.search('proj1', 'depreciation of equipment');
+      expect(result.chunks).toEqual([]);
+      expect(result.evidence).toBe('none-matching');
+    });
+
+    it('tells an empty index apart from a search that found nothing', async () => {
+      mockGetEmbeddings.mockReturnValue([]);
+      mockGetChunks.mockReturnValue([]);
+      const result = await retrievalService.search('proj1', 'anything at all');
+      expect(result.chunks).toEqual([]);
+      expect(result.evidence).toBe('none-indexed');
     });
 
     it('returns empty for empty query', async () => {
@@ -77,32 +94,34 @@ describe('RetrievalService', () => {
       expect(embeddingService.load).toHaveBeenCalled();
     });
 
-    it('falls back to chunks if embedding load fails', async () => {
+    it('falls back to keyword ranking if embedding load fails', async () => {
       mockIsLoaded.mockReturnValue(false);
       (embeddingService.load as jest.Mock).mockRejectedValue(new Error('load failed'));
 
       mockGetEmbeddings.mockReturnValue([
         { chunk_rowid: 1, doc_id: 1, name: 'doc.txt', content: 'text', position: 0, embedding: [1, 0] },
       ]);
-      const fallback = [{ doc_id: 1, name: 'doc.txt', content: 'text', position: 0, score: 0 }];
+      const fallback = [{ doc_id: 1, name: 'doc.txt', content: 'a test of text', position: 0, score: 0 }];
       mockGetChunks.mockReturnValue(fallback);
 
       const result = await retrievalService.search('proj1', 'test');
-      expect(result.chunks).toEqual(fallback);
+      expect(result.chunks.map((c) => c.content)).toEqual(['a test of text']);
+      expect(result.evidence).toBe('lexical');
     });
 
-    it('falls back to chunks if embed call fails', async () => {
+    it('falls back to keyword ranking if embed call fails', async () => {
       mockIsLoaded.mockReturnValue(true);
       mockEmbed.mockRejectedValue(new Error('embed failed'));
 
       mockGetEmbeddings.mockReturnValue([
         { chunk_rowid: 1, doc_id: 1, name: 'doc.txt', content: 'text', position: 0, embedding: [1, 0] },
       ]);
-      const fallback = [{ doc_id: 1, name: 'doc.txt', content: 'text', position: 0, score: 0 }];
+      const fallback = [{ doc_id: 1, name: 'doc.txt', content: 'a test of text', position: 0, score: 0 }];
       mockGetChunks.mockReturnValue(fallback);
 
       const result = await retrievalService.search('proj1', 'test');
-      expect(result.chunks).toEqual(fallback);
+      expect(result.chunks.map((c) => c.content)).toEqual(['a test of text']);
+      expect(result.evidence).toBe('lexical');
     });
   });
 
@@ -168,10 +187,10 @@ describe('RetrievalService', () => {
   describe('searchWithBudget', () => {
     it('truncates results that exceed budget', async () => {
       mockGetEmbeddings.mockReturnValue([]);
-      const longContent = 'x'.repeat(3000);
+      const longContent = `query ${'x'.repeat(3000)}`;
       mockGetChunks.mockReturnValue([
         { doc_id: 1, name: 'a.txt', content: longContent, position: 0, score: 0 },
-        { doc_id: 2, name: 'b.txt', content: 'short', position: 0, score: 0 },
+        { doc_id: 2, name: 'b.txt', content: 'a short query', position: 0, score: 0 },
       ]);
 
       const result = await retrievalService.searchWithBudget({ projectId: 'proj1', query: 'query', contextLength: 2048 });
@@ -182,8 +201,8 @@ describe('RetrievalService', () => {
     it('includes all chunks if within budget', async () => {
       mockGetEmbeddings.mockReturnValue([]);
       mockGetChunks.mockReturnValue([
-        { doc_id: 1, name: 'a.txt', content: 'short chunk', position: 0, score: 0 },
-        { doc_id: 2, name: 'b.txt', content: 'another short', position: 0, score: 0 },
+        { doc_id: 1, name: 'a.txt', content: 'query chunk', position: 0, score: 0 },
+        { doc_id: 2, name: 'b.txt', content: 'another query', position: 0, score: 0 },
       ]);
 
       const result = await retrievalService.searchWithBudget({ projectId: 'proj1', query: 'query', contextLength: 4096 });

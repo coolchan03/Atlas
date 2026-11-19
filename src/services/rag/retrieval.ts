@@ -5,6 +5,7 @@ import { cosineSimilarity } from './vectorMath';
 import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
+import { lexicalRank } from './lexicalRank';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -19,10 +20,17 @@ function stripAngleBracketTags(text: string): string {
   return result;
 }
 
+/** How the passages were found: by meaning, by keywords (the embedding model was unavailable), or not at all — with the reason, so an empty index is not mistaken for a search that found nothing. */
+export type EvidenceKind = 'semantic' | 'lexical' | 'none-indexed' | 'none-matching';
+
 interface SearchResult {
   chunks: RagSearchResult[];
   truncated: boolean;
+  evidence?: EvidenceKind;
 }
+
+/** How many passages the keyword fallback reads per project. */
+const LEXICAL_POOL = 3000;
 
 /** Options for a search: how many passages, and which documents to look in (by name). */
 export interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
@@ -46,11 +54,26 @@ class RetrievalService {
   async search(projectId: string, query: string, options: number | SearchOptions = 5): Promise<SearchResult> {
     const { topK = 5, include } = typeof options === 'number' ? { topK: options } as SearchOptions : options;
     const exact = isProtectedProject(projectId) ? [] : this.exactMatches(projectId, query, { include, topK });
-    const semantic = await this.searchSemantic(projectId, query, { topK, include });
+    const found = await this.searchSemantic(projectId, query, { topK, include });
+    const semantic = found.chunks;
     // A passage that carries the exact section asked about comes first; the meaning-based results fill the rest.
     const seen = new Set(exact.map((c) => `${c.doc_id}:${c.position}`));
     const chunks = [...exact, ...semantic.filter((c) => !seen.has(`${c.doc_id}:${c.position}`))].slice(0, Math.max(topK, exact.length));
-    return { chunks, truncated: false };
+    const evidence: EvidenceKind = chunks.length ? (found.kind === 'lexical' ? 'lexical' : 'semantic') : found.kind === 'none-indexed' ? 'none-indexed' : 'none-matching';
+    return { chunks, truncated: false, evidence };
+  }
+
+  /** Keyword-ranked passages from the project (and its folders): used only when meaning-based search cannot run. */
+  private lexical(projectId: string, query: string, { include, topK = 5 }: SearchOptions): { chunks: RagSearchResult[]; kind: 'lexical' | 'none-matching' | 'none-indexed' } {
+    try {
+      const pool = scopeOf(projectId).flatMap((id) => knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL)).filter((c) => !include || include(c.name));
+      if (!pool.length) return { chunks: [], kind: 'none-indexed' };
+      const chunks = lexicalRank(query, pool, topK);
+      return { chunks, kind: chunks.length ? 'lexical' : 'none-matching' };
+    } catch (err) {
+      logger.error('[Retrieval] Keyword fallback failed', err);
+      return { chunks: [], kind: 'none-matching' };
+    }
   }
 
   /** Passages that contain a section, regulation, ASC topic, ASU, ruling or notice the question names, the ones that open with it first. */
@@ -67,25 +90,23 @@ class RetrievalService {
     } catch { return []; }
   }
 
-  private async searchSemantic(projectId: string, query: string, { include, topK = 5 }: SearchOptions): Promise<RagSearchResult[]> {
-    if (!query.trim()) return [];
+  private async searchSemantic(projectId: string, query: string, { include, topK = 5 }: SearchOptions): Promise<{ chunks: RagSearchResult[]; kind: EvidenceKind }> {
+    if (!query.trim()) return { chunks: [], kind: 'none-matching' };
 
-    const source = knowledgeSource(projectId);
     // The folders around the project are searched with it (the textbooks kept once for every exam inside a folder).
     const stored = scopeOf(projectId).flatMap((id) => embeddingsOf(id, knowledgeSource(id))).filter((e) => !include || include(e.name));
-    if (stored.length === 0 && include) return []; // nothing of the kind asked for (for example no reference documents): not the first chunks of something else
     if (stored.length === 0) {
-      // Fallback: return first chunks if no embeddings exist yet
-      logger.log('[Retrieval] No embeddings found, returning first chunks as fallback');
-      return source.getChunksByProject(projectId, topK);
+      // No embeddings yet: rank by the question's words. Passages that share none are not returned as if they matched.
+      logger.log('[Retrieval] No embeddings found, using keyword ranking');
+      return this.lexical(projectId, query, { include, topK });
     }
 
     if (!embeddingService.isLoaded()) {
       try {
         await embeddingService.load();
       } catch (err) {
-        logger.error('[Retrieval] Failed to load embedding model, falling back', err);
-        return source.getChunksByProject(projectId, topK);
+        logger.error('[Retrieval] Failed to load embedding model, using keyword ranking', err);
+        return this.lexical(projectId, query, { include, topK });
       }
     }
 
@@ -93,8 +114,8 @@ class RetrievalService {
     try {
       queryVec = await embeddingService.embed(query);
     } catch (err) {
-      logger.error('[Retrieval] Failed to embed query, falling back', err);
-      return source.getChunksByProject(projectId, topK);
+      logger.error('[Retrieval] Failed to embed query, using keyword ranking', err);
+      return this.lexical(projectId, query, { include, topK });
     }
 
     const scored = stored.map(entry => ({
@@ -107,7 +128,8 @@ class RetrievalService {
 
     scored.sort((a, b) => b.score - a.score);
     // Take extra candidates, then keep the ones that are about the question and spread them over the documents.
-    return rankChunks(query, scored.slice(0, topK * 3), topK);
+    const ranked = rankChunks(query, scored.slice(0, topK * 3), topK);
+    return { chunks: ranked, kind: ranked.length ? 'semantic' : 'none-matching' };
   }
 
   formatForPrompt(result: SearchResult): string {
@@ -145,7 +167,7 @@ class RetrievalService {
       fittingChunks.push(chunk);
     }
 
-    return { chunks: fittingChunks, truncated };
+    return { chunks: fittingChunks, truncated, evidence: result.evidence };
   }
 }
 

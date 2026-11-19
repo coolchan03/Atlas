@@ -161,8 +161,8 @@ describe('RAG Flow Integration', () => {
   // ============================================================================
   describe('search with budget truncation', () => {
     it('respects character budget and truncates lower-ranked results', async () => {
-      const longContent = 'x'.repeat(2000);
-      const shortContent = 'Short relevant chunk.';
+      const longContent = `test ${'x'.repeat(2000)}`;
+      const shortContent = 'Short relevant test chunk.';
 
       // No embeddings → falls back to getChunksByProject
       mockExecuteSync.mockImplementation((sql: string) => {
@@ -198,8 +198,8 @@ describe('RAG Flow Integration', () => {
         }
         if (typeof sql === 'string' && sql.includes('rag_chunks') && sql.includes('SELECT')) {
           return { rows: [
-            { doc_id: 1, name: 'a.txt', content: 'short chunk one', position: 0, score: 0 },
-            { doc_id: 2, name: 'b.txt', content: 'short chunk two', position: 0, score: 0 },
+            { doc_id: 1, name: 'a.txt', content: 'test chunk one', position: 0, score: 0 },
+            { doc_id: 2, name: 'b.txt', content: 'test chunk two', position: 0, score: 0 },
           ]};
         }
         return { rows: [], insertId: 0, rowsAffected: 0 };
