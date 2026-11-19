@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { quotedSentence, lessonText, spokenLesson, unbackedLines } from './citations';
+import { quotedSentence, lessonMarkdown, lessonText, spokenLesson, unbackedLines } from './citations';
+import { writeDocx } from '../services/docxExport';
+import { shareItem } from '../utils/shareItem';
 import { appSearch, verdictText, verifyLines, type LineVerdict } from './verifyLines';
 import { sourcePage } from './service';
 import { readAloud, useReadAloud } from '../atlasVoice/readAloud';
@@ -98,6 +100,10 @@ export function RewriteRow({ show, onPick, content, title }: { show: boolean; on
   const { colors } = useTheme();
   const reading = useReadAloud((s) => s.status === 'reading' && s.title === title);
   if (!show) return null;
+  const saveWord = async () => {
+    try { await shareItem({ title: title ?? 'Lesson', file: await writeDocx(title ?? 'Lesson', lessonMarkdown(title ?? 'Lesson', content)) }); }
+    catch (e: any) { Alert.alert('Could not save the Word document', String(e?.message || e)); }
+  };
   const toggle = () => { if (reading) readAloud.stop(); else { readAloud.load(spokenLesson(content), title ?? 'Lesson'); readAloud.play(); } };
   return (
     <View style={styles.row} testID="square-rewrite">
@@ -105,6 +111,11 @@ export function RewriteRow({ show, onPick, content, title }: { show: boolean; on
       <TouchableOpacity onPress={() => onPick('simpler')} testID="square-rewrite-simpler"><Text style={{ color: colors.primary }}>Simpler</Text></TouchableOpacity>
       <TouchableOpacity onPress={() => onPick('example')} testID="square-rewrite-example"><Text style={{ color: colors.primary }}>Another example</Text></TouchableOpacity>
       <TouchableOpacity onPress={() => onPick('shorter')} testID="square-rewrite-shorter"><Text style={{ color: colors.primary }}>Shorter</Text></TouchableOpacity>
+      {content?.kind === 'lesson' && (
+        <TouchableOpacity onPress={() => { void saveWord(); }} accessibilityRole="button" accessibilityLabel="Save this lesson as a Word document" testID="square-save-word">
+          <Text style={{ color: colors.primary }}>Save as Word</Text>
+        </TouchableOpacity>
+      )}
       {!!content && ttsAvailable() && (
         <TouchableOpacity onPress={toggle} accessibilityRole="button" accessibilityLabel={reading ? 'Stop reading this lesson' : 'Read this lesson aloud'} testID="square-read-aloud">
           <Text style={{ color: colors.primary }}>{reading ? 'Stop reading' : 'Read aloud'}</Text>

@@ -83,3 +83,18 @@ export function spokenLesson(content: SquareContent | null | undefined): string 
 export function supportOf(line: string, text: string): number {
   return overlap(words(line), new Set(words(text)));
 }
+
+/** A lesson as markdown text, for saving as a Word document: each section with its heading and example, common mistakes, a quick check, key points. */
+export function lessonMarkdown(title: string, content: SquareContent | null | undefined): string {
+  if (!content || content.kind !== 'lesson') return '';
+  const lines: string[] = [`# ${title}`, ''];
+  for (const s of content.sections) {
+    if (s.heading) lines.push(`## ${s.heading}`);
+    lines.push(s.text, '');
+    if (s.example) lines.push('**Example**', s.example, '');
+  }
+  if (content.commonMistakes?.length) lines.push('## Common mistakes', ...content.commonMistakes.map((k) => `- ${k}`), '');
+  if (content.quickCheck) lines.push('## Quick check', content.quickCheck.q, `**Answer:** ${content.quickCheck.a}`, '');
+  if (content.keyPoints.length) lines.push('## Key points', ...content.keyPoints.map((k) => `- ${k}`), '');
+  return lines.join('\n').trim();
+}
