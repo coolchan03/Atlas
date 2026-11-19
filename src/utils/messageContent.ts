@@ -222,6 +222,8 @@ function stripMarkdownForSpeech(content: string): string {
   result = result.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   // Images: ![alt](url) → alt
   result = result.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
+  // A bracketed note ([Text like a guy: lowercase], [smiles], [1]) is an instruction or stage direction, never something to say aloud.
+  result = result.replace(/\[[^\]\n]{1,300}\]/g, '');
   // Inline code: `code` → code
   result = result.replace(/`([^`]+)`/g, '$1');
   // Code blocks: ```...``` → (removed)
