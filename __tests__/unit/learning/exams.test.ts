@@ -134,3 +134,39 @@ describe('what to retest', () => {
     expect(retestNote([])).toBe('');
   });
 });
+
+describe('retest schedule and answer history', () => {
+  const { dueRetests, attemptsFor } = require('../../../src/learning/exams');
+  const DAY = 86_400_000;
+  const at = (daysAgo: number, now: Date) => new Date(now.getTime() - daysAgo * DAY).toISOString();
+  const res = (when: string, items: any[], retest = false): ExamResult => ({ id: when, version: BENCHMARK_VERSION, mode: 'memory', at: when, metrics: { total: items.length, correct: 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items, retest } as ExamMetrics });
+  const now = new Date('2026-12-01T12:00:00Z');
+  const miss = { id: 'a', correct: false, reason: 'wrong-answer', answer: 'x' };
+
+  it('a missed question is due after a day, then 3 days after a second miss, then 7', () => {
+    expect(dueRetests([{ id: 'a' }], [res(at(0.5, now), [miss])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [res(at(1.1, now), [miss])], now)).toEqual(['a']);
+    const twice = [res(at(2, now), [miss]), res(at(5, now), [miss])];
+    expect(dueRetests([{ id: 'a' }], twice, now)).toEqual([]); // two misses: wait 3 days from the latest (2 days ago)
+    expect(dueRetests([{ id: 'a' }], [res(at(3.5, now), [miss]), res(at(9, now), [miss])], now)).toEqual(['a']);
+  });
+  it('a question that was then passed, never asked, or only ungraded is not due; older scoring versions are ignored', () => {
+    expect(dueRetests([{ id: 'a' }], [res(at(5, now), [miss]), res(at(1, now), [{ id: 'a', correct: true, reason: 'correct' }])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'b' }], [res(at(5, now), [miss])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [res(at(5, now), [{ id: 'a', correct: false, reason: 'inference-failure' }])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [{ ...res(at(5, now), [miss]), version: '1' }], now)).toEqual([]);
+  });
+  it('lists every attempt at a question, newest first, with its reason and answer', () => {
+    const h = [res(at(3, now), [miss]), res(at(1, now), [{ id: 'a', correct: true, reason: 'correct', answer: 'right' }], true)];
+    const a = attemptsFor(h, 'a');
+    expect(a.map((x: any) => x.correct)).toEqual([true, false]);
+    expect(a[1]).toMatchObject({ reason: 'wrong-answer', answer: 'x' });
+  });
+  it('a retest run does not count in the memory-versus-model comparison', () => {
+    const full = res(at(2, now), Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, correct: true })));
+    const partial = res(at(1, now), [{ id: 'q1', correct: false }], true);
+    const base: ExamResult = { ...full, id: 'b', mode: 'baseline', at: at(2, now), metrics: { ...full.metrics, accuracy: 0.4 } as ExamMetrics };
+    const mem: ExamResult = { ...full, metrics: { ...full.metrics, accuracy: 0.8 } as ExamMetrics };
+    expect(improvementSummary([partial, mem, base])).toContain('better');
+  });
+});

@@ -38,6 +38,8 @@ interface ItemResult {
 export interface ExamMetrics {
   /** Questions asked. Accuracy is measured over the ones that could be graded (total minus ungraded). */
   total: number;
+  /** True for a run of only some questions (a retest). It is kept in the history, but never counts in the memory-versus-model comparison. */
+  retest?: boolean;
   /** Questions that could not be graded: the model failed to answer, or the answer key was unusable. */
   ungraded?: number;
   correct: number;
@@ -284,7 +286,7 @@ export class ExamStore {
 
   /** The questions a mode got wrong last time, to spot a mistake that is made again. */
   lastFailures(mode: ExamMode): string[] {
-    const last = this.history(40).find((r) => r.mode === mode && r.version === BENCHMARK_VERSION);
+    const last = this.history(40).find((r) => r.mode === mode && r.version === BENCHMARK_VERSION && !r.metrics.retest);
     return last ? last.metrics.items.filter((i) => !i.correct).map((i) => i.id) : [];
   }
 }
@@ -296,7 +298,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
  * without it, on the same version of the exam, over enough questions. Otherwise it says there is not enough to claim.
  */
 export function improvementSummary(history: ExamResult[]): string {
-  const latest = (mode: ExamMode) => history.find((r) => r.mode === mode && r.version === BENCHMARK_VERSION);
+  const latest = (mode: ExamMode) => history.find((r) => r.mode === mode && r.version === BENCHMARK_VERSION && !r.metrics.retest);
   const base = latest('baseline');
   const memory = latest('memory');
   if (!base || !memory) return 'Run the exam in the model alone mode and the stored memory mode to see whether memory helps.';
@@ -316,4 +318,34 @@ export function retestNote(history: ExamResult[]): string {
   if (missed.length) parts.push(`${missed.length} question${missed.length === 1 ? '' : 's'} missed in the last "${EXAM_MODE_LABEL[latest.mode]}" run: run the exam again to retest ${missed.length === 1 ? 'it' : 'them'}.`);
   if (ungraded) parts.push(`${ungraded} could not be graded (answer key or model problem), so they say nothing about what was learned.`);
   return parts.join(' ');
+}
+
+// ------------------------------------------------------------------ retests and answer history
+export interface Attempt { at: string; mode: ExamMode; correct: boolean; reason?: ExamReason; answer?: string; version: string }
+
+/** Every recorded attempt at one question, newest first (older scoring versions are kept, and marked, never mixed into the schedule). */
+export function attemptsFor(history: ExamResult[], itemId: string): Attempt[] {
+  return history
+    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, reason: i.reason, answer: i.answer, version: r.version })))
+    .sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/** Days to wait before retesting a question that has been missed 1, 2, 3... times in a row. */
+const RETEST_DAYS = [1, 3, 7];
+const DAY = 86_400_000;
+const UNGRADED: ExamReason[] = ['invalid-key', 'inference-failure'];
+
+/**
+ * Questions due for a retest: the latest graded attempt (this scoring version) was wrong, and enough days passed since it, counted from how
+ * many misses in a row there have been. A question that was passed, never asked, or only could not be graded is never due.
+ */
+export function dueRetests(items: Array<{ id: string }>, history: ExamResult[], now: Date = new Date()): string[] {
+  return items.filter(({ id }) => {
+    const graded = attemptsFor(history, id).filter((a) => a.version === BENCHMARK_VERSION && !(a.reason && UNGRADED.includes(a.reason)));
+    if (!graded.length || graded[0].correct) return false;
+    let misses = 0;
+    for (const a of graded) { if (a.correct) break; misses += 1; }
+    const wait = RETEST_DAYS[Math.min(misses, RETEST_DAYS.length) - 1] * DAY;
+    return now.getTime() - new Date(graded[0].at).getTime() >= wait;
+  }).map((i) => i.id);
 }

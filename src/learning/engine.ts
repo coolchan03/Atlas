@@ -523,10 +523,10 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
 }
 
 /** Runs a subject's exam in all three modes, saves each result, and returns them. Not while learning is running. */
-export async function runExamNow(subjectId: string, onStatus: (message: string) => void): Promise<ExamMetrics[]> {
+export async function runExamNow(subjectId: string, onStatus: (message: string) => void, only?: string[]): Promise<ExamMetrics[]> {
   if (running) throw new Error('Learning is running. Stop it first, then run the exam.');
-  const items = exams.items(subjectId);
-  if (!items.length) throw new Error('Add at least one exam question first.');
+  const items = exams.items(subjectId).filter((i) => !only || only.includes(i.id));
+  if (!items.length) throw new Error(only ? 'No question is due for a retest.' : 'Add at least one exam question first.');
   const cfg = L().getConfig(subjectId);
   running = true;
   stopRequested = false;
@@ -540,7 +540,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
       const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode) });
       const memoryMB = (await require('../services/hardware').hardwareService.getProcessMemory?.().catch(() => null))?.footprintMB;
       const counts = safely(() => learningKnowledgeDb.getReliabilitySnapshot().counts, null);
-      exams.saveResult(mode, { ...metrics, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });
+      exams.saveResult(mode, { ...metrics, retest: only ? true : undefined, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });
       results.push(metrics);
     }
     return results;

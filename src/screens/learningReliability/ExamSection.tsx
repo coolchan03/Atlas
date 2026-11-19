@@ -5,7 +5,7 @@ import { useTheme } from '../../theme';
 import { useLearningStore } from '../../learning/store';
 import { GENERAL_NAME, NO_AGENT } from '../../learning/agents';
 import { exams, runExamNow } from '../../learning/engine';
-import { EXAM_MODE_LABEL, REASON_LABEL, parseExpected, reasonCounts, type ExamResult } from '../../learning/exams';
+import { BENCHMARK_VERSION, EXAM_MODE_LABEL, REASON_LABEL, attemptsFor, dueRetests, parseExpected, reasonCounts, type ExamResult } from '../../learning/exams';
 import { sectionStyles as s } from './sectionStyles';
 import { QuestionImport } from './QuestionImport';
 
@@ -59,9 +59,10 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
     exams.addItem({ subjectId: subject, topic: useLearningStore.getState().getConfig(subject).topic, question, expected });
     setQuestion(''); setFacts(''); setForbid(''); setVersion((v) => v + 1);
   };
-  const run = async () => {
+  const due = useMemo(() => dueRetests(items, exams.history(60)), [items, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (only?: string[]) => {
     setRunning(true);
-    try { await runExamNow(subject, setStatus); } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
+    try { await runExamNow(subject, setStatus, only); } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
   };
   const field = [s.input, { color: colors.text, borderColor: colors.border }];
   return (
@@ -80,7 +81,15 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
       </View>
       {items.map((i) => (
         <View key={i.id} style={s.row}>
-          <Text style={[s.note, s.grow, { color: colors.text }]}>{i.question}</Text>
+          <View style={s.grow}>
+            <Text style={[s.note, { color: colors.text }]}>{i.question}</Text>
+            {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a) => (
+              <Text key={`${a.at}:${a.mode}`} style={[s.small, { color: colors.textMuted }]}>
+                {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
+              </Text>
+            ))}
+            {due.includes(i.id) && <Text style={[s.small, { color: colors.primary }]}>Due for a retest</Text>}
+          </View>
           <TouchableOpacity onPress={() => { exams.removeItem(i.id); setVersion((v) => v + 1); }} accessibilityLabel={`Remove ${i.question}`}><Text style={{ color: colors.error }}>Remove</Text></TouchableOpacity>
         </View>
       ))}
@@ -89,10 +98,13 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
       <TextInput testID="exam-forbid" value={forbid} onChangeText={setForbid} placeholder="Must not say (optional, separate with commas)" placeholderTextColor={colors.textMuted} style={field} />
       <View style={s.row}>
         <TouchableOpacity onPress={add} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="exam-add"><Text style={{ color: colors.primary }}>Add question</Text></TouchableOpacity>
-        <TouchableOpacity onPress={run} disabled={running || !items.length} style={[s.button, { borderColor: running || !items.length ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-run">
+        <TouchableOpacity onPress={() => run()} disabled={running || !items.length} style={[s.button, { borderColor: running || !items.length ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-run">
           {running ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: items.length ? colors.primary : colors.textMuted }}>Run the exam</Text>}
         </TouchableOpacity>
       </View>
+      {!!due.length && !running && (
+        <TouchableOpacity onPress={() => run(due)} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="exam-retest"><Text style={{ color: colors.primary }}>Retest {due.length} missed question{due.length === 1 ? '' : 's'}</Text></TouchableOpacity>
+      )}
       {!!status && <Text style={[s.small, { color: colors.textSecondary }]}>{status}</Text>}
       <QuestionImport subjectId={subject} onAdded={() => { setVersion((v) => v + 1); onChanged(); }} />
       <History history={history} />
