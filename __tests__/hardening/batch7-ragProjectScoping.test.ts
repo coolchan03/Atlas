@@ -149,7 +149,7 @@ describe('BATCH7 RAG retrieval project scoping (real retrievalService)', () => {
     mockGetEmbeddings.mockReturnValueOnce([]);
 
     const result = await retrievalService.search('alpha', 'anything', 5);
-    expect(mockGetChunks).toHaveBeenCalledWith('alpha', 3000);
+    expect(mockGetChunks).toHaveBeenCalledWith('alpha', 20000);
     expect(mockGetChunks).not.toHaveBeenCalledWith('beta', expect.anything());
     for (const chunk of result.chunks) {
       expect(chunk.content).not.toContain('BETA');

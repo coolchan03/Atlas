@@ -27,10 +27,12 @@ interface SearchResult {
   chunks: RagSearchResult[];
   truncated: boolean;
   evidence?: EvidenceKind;
+  /** True when the keyword search had to stop at LEXICAL_POOL passages of a project, so later passages were not looked at. */
+  partial?: boolean;
 }
 
 /** How many passages the keyword fallback reads per project. */
-const LEXICAL_POOL = 3000;
+const LEXICAL_POOL = 20000;
 
 /** Options for a search: how many passages, and which documents to look in (by name). */
 interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
@@ -60,16 +62,18 @@ class RetrievalService {
     const seen = new Set(exact.map((c) => `${c.doc_id}:${c.position}`));
     const chunks = [...exact, ...semantic.filter((c) => !seen.has(`${c.doc_id}:${c.position}`))].slice(0, Math.max(topK, exact.length));
     const evidence: EvidenceKind = chunks.length ? (found.kind === 'lexical' ? 'lexical' : 'semantic') : found.kind === 'none-indexed' ? 'none-indexed' : 'none-matching';
-    return { chunks, truncated: false, evidence };
+    return { chunks, truncated: false, evidence, ...(found.partial ? { partial: true } : {}) };
   }
 
   /** Keyword-ranked passages from the project (and its folders): used only when meaning-based search cannot run. */
-  private lexical(projectId: string, query: string, { include, topK = 5 }: SearchOptions): { chunks: RagSearchResult[]; kind: 'lexical' | 'none-matching' | 'none-indexed' } {
+  private lexical(projectId: string, query: string, { include, topK = 5 }: SearchOptions): { chunks: RagSearchResult[]; kind: 'lexical' | 'none-matching' | 'none-indexed'; partial?: boolean } {
     try {
-      const pool = scopeOf(projectId).flatMap((id) => knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL)).filter((c) => !include || include(c.name));
+      const perProject = scopeOf(projectId).map((id) => knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL));
+      const partial = perProject.some((rows) => rows.length >= LEXICAL_POOL);
+      const pool = perProject.flat().filter((c) => !include || include(c.name));
       if (!pool.length) return { chunks: [], kind: 'none-indexed' };
       const chunks = lexicalRank(query, pool, topK);
-      return { chunks, kind: chunks.length ? 'lexical' : 'none-matching' };
+      return { chunks, kind: chunks.length ? 'lexical' : 'none-matching', partial };
     } catch (err) {
       logger.error('[Retrieval] Keyword fallback failed', err);
       return { chunks: [], kind: 'none-matching' };
@@ -90,7 +94,7 @@ class RetrievalService {
     } catch { return []; }
   }
 
-  private async searchSemantic(projectId: string, query: string, { include, topK = 5 }: SearchOptions): Promise<{ chunks: RagSearchResult[]; kind: EvidenceKind }> {
+  private async searchSemantic(projectId: string, query: string, { include, topK = 5 }: SearchOptions): Promise<{ chunks: RagSearchResult[]; kind: EvidenceKind; partial?: boolean }> {
     if (!query.trim()) return { chunks: [], kind: 'none-matching' };
 
     // The folders around the project are searched with it (the textbooks kept once for every exam inside a folder).

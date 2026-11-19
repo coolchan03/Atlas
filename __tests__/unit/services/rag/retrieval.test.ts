@@ -55,6 +55,15 @@ describe('RetrievalService', () => {
       expect(result.evidence).toBe('none-matching');
     });
 
+    it('says so when the keyword search had to stop at the pool size', async () => {
+      mockGetEmbeddings.mockReturnValue([]);
+      mockGetChunks.mockReturnValue(Array.from({ length: 20000 }, (_, i) => ({ doc_id: 1, name: 'big.txt', content: `unrelated text ${i}`, position: i, score: 0 })));
+      const result = await retrievalService.search('proj1', 'depreciation schedule');
+      expect(result.chunks).toEqual([]);
+      expect(result.evidence).toBe('none-matching');
+      expect(result.partial).toBe(true);
+    });
+
     it('tells an empty index apart from a search that found nothing', async () => {
       mockGetEmbeddings.mockReturnValue([]);
       mockGetChunks.mockReturnValue([]);
