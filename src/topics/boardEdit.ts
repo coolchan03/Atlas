@@ -10,7 +10,7 @@ import type { SquareFormat } from './plannedSquare';
 export interface BoardChange { remove: string[]; add: Array<{ afterKey: string; format: SquareFormat; title: string; focus: string }> }
 
 /** The prompt: the board as one line per square (key, kind, title, chapter) and the request. */
-export function editPrompt(course: Course, request: string): { system: string; user: string } {
+function editPrompt(course: Course, request: string): { system: string; user: string } {
   const lines = course.squares.map((q) => `${q.key} | ${q.format} | ${q.title} | ${q.unit}${course.progress[q.key] ? ' | played' : ''}`).join('\n');
   return {
     system: 'You edit a learning board. Reply with ONLY JSON.',

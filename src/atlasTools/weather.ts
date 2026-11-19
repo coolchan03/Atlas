@@ -108,7 +108,7 @@ export function weatherSummary(w: WeatherData, cityName?: string, units: Units =
 }
 
 /** A friendly one-line tip for what to wear or do, from the high, low and rain chance (always in the speaker's plain words). */
-export function dressAdvice(w: WeatherData): string {
+function dressAdvice(w: WeatherData): string {
   if (w.precipProbPct >= 40) return 'Better bring an umbrella.';
   if (w.tempMaxC <= 5) return 'It is freezing out there, so bundle up with a coat, a hat and gloves.';
   if (w.tempMaxC <= 14) return 'It is cold, so wear a sweater.';
