@@ -46,13 +46,14 @@ describe('heat guard', () => {
 });
 
 describe('telling the person', () => {
-  it('says so when the guard turns on and when it turns off, but not while it stays the same or is switched off', () => {
+  it('says so when the guard turns on and when it turns off, but not while it stays the same or is switched off', async () => {
     jest.resetModules();
     const toasts: string[] = [];
     jest.doMock('../../../src/utils/toast', () => ({ showToast: (m: string) => toasts.push(m) }));
     const { recordThermal } = require('../../../src/atlasTools/thermal');
     const { useThermal: thermal } = require('../../../src/atlasTools/thermalState');
     const { useLowPower: low } = require('../../../src/atlasTools/lowPowerState');
+    await low.persist.rehydrate(); await require('../../../src/atlasTools/nudges').useNudges.persist.rehydrate(); // the saved settings are loaded
     thermal.setState({ level: null, hot: false });
     low.setState({ heatGuard: true });
     recordThermal(4); recordThermal(4);
@@ -62,5 +63,24 @@ describe('telling the person', () => {
     low.setState({ heatGuard: false });
     recordThermal(4); recordThermal(0);
     expect(toasts).toHaveLength(2);
+  });
+});
+
+describe('before the saved settings are loaded', () => {
+  it('says nothing about the heat guard (it would look switched on even if the person switched it off)', () => {
+    jest.resetModules();
+    const toasts: string[] = [];
+    jest.doMock('../../../src/utils/toast', () => ({ showToast: (m: string) => toasts.push(m) }));
+    const { recordThermal } = require('../../../src/atlasTools/thermal');
+    const { useLowPower: low } = require('../../../src/atlasTools/lowPowerState');
+    const { useThermal: thermal } = require('../../../src/atlasTools/thermalState');
+    thermal.setState({ level: null, hot: false });
+    const spy = jest.spyOn(low.persist, 'hasHydrated').mockReturnValue(false);
+    recordThermal(4);
+    expect(toasts).toEqual([]);
+    spy.mockReturnValue(true);
+    low.setState({ heatGuard: false });
+    recordThermal(0); recordThermal(4);
+    expect(toasts).toEqual([]); // switched off: still nothing
   });
 });

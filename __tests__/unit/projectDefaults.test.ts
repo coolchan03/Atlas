@@ -60,3 +60,23 @@ describe('project defaults, in the app', () => {
     expect(ov.maxTokens).toBe(64); // the agent's own limit stays below the project's 256
   });
 });
+
+describe('background jobs are not held to chat limits', () => {
+  it('ignores a short-answer project, low-battery and heat limits while a job such as writing practice questions runs', async () => {
+    jest.resetModules();
+    installNativeBoundary({ fs: true });
+    const { useProjectStore } = require('../../src/stores/projectStore');
+    const { useChatStore } = require('../../src/stores/chatStore');
+    const { activeAgentOverrides } = require('../../src/stores/agentStore');
+    const { useThermal } = require('../../src/atlasTools/thermalState');
+    const { asBackground } = require('../../src/services/backgroundWork');
+    useProjectStore.setState({ projects: [{ id: 'p', name: 'p', description: '', systemPrompt: '', createdAt: 'x', updatedAt: 'x', answerLength: 'short' }] });
+    useChatStore.getState().createConversation('m', undefined, 'p');
+    useThermal.getState().set(4);
+    expect(activeAgentOverrides().maxTokens).toBeDefined(); // a chat reply is held short
+    const inside = await asBackground(async () => activeAgentOverrides());
+    expect(inside).toEqual({});
+    await expect(asBackground(async () => { throw new Error('x'); })).rejects.toThrow('x');
+    expect(activeAgentOverrides().maxTokens).toBeDefined(); // and the limit is back afterwards, even after a failed job
+  });
+});

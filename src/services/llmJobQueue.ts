@@ -5,6 +5,8 @@
  * "Generation already in progress". Jobs now run one at a time, and each waits
  * for a running chat reply to finish first.
  */
+import { asBackground } from './backgroundWork';
+
 let tail: Promise<unknown> = Promise.resolve();
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -22,7 +24,7 @@ async function waitForChat(maxMs: number, shouldStop?: () => boolean): Promise<v
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
   const run = tail.then(async () => {
     await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
-    return job();
+    return asBackground(job);
   });
   tail = run.catch(() => undefined);
   return run;

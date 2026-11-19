@@ -6,6 +6,7 @@ import { COUNSELOR_PROMPT } from './counselorPrompt';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { lowPowerActive, useLowPower } from '../atlasTools/lowPowerState';
 import { answerCapFor } from './projectDefaults';
+import { inBackgroundWork } from '../services/backgroundWork';
 
 /**
  * Agents (Atlas): reusable personas, each with its own system prompt.
@@ -418,6 +419,7 @@ function openChatSettings(): { agentId?: string; cap?: number } {
 
 /** Sampling overrides of the active agent (only the ones it sets). */
 export function activeAgentOverrides(): { temperature?: number; topP?: number; maxTokens?: number; repeatPenalty?: number } {
+  if (inBackgroundWork()) return {}; // a background job is not a chat reply: no persona, no short-answer limits
   const { activeAgentId, agents } = useAgentStore.getState();
   // The chat's own agent wins, as in the system prompt (agentPrompt.ts), so a project's default agent also sets the sampling.
   const chatSettings = openChatSettings();
