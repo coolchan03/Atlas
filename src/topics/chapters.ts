@@ -48,7 +48,7 @@ export function findChapters(text: string): Chapter[] {
   const byNumber = new Map<number, (typeof real)[number]>();
   for (const h of real) { const kept = byNumber.get(h.number); if (!kept || h.size > kept.size) byNumber.set(h.number, h); }
   const clean = (t: string) => t.replace(/\(p\. \d+\)/g, ' ').replace(/\s+/g, ' ').trim();
-  return [...byNumber.values()].sort((a, b) => a.number - b.number).slice(0, 60).map((h) => ({ number: h.number, title: h.title, size: h.size, lead: clean(text.slice(h.at, h.at + 600)).slice(0, 320) }));
+  return [...byNumber.values()].sort((a, b) => a.number - b.number).map((h) => ({ number: h.number, title: h.title, size: h.size, lead: clean(text.slice(h.at, h.at + 600)).slice(0, 320) }));
 }
 
 const LEAD_IN = /^(?:assume|suppose|consider|imagine|understanding|introduction to|an? introduction to|an? overview of|overview of|learning objectives?(?: for)?|the basics of|about)\s+(?:that\s+)?(?:the\s+|an?\s+)?/i;
@@ -89,7 +89,7 @@ export function parseSubjects(raw: string, count: number): string[] | null {
   } catch { return null; }
 }
 
-import { MAX_SQUARES, type CoursePlan, type PlannedSquare } from './formats';
+import { type CoursePlan, type PlannedSquare } from './formats';
 import { CHAPTER_SQUARES, deepChapter } from './chapterSequence';
 
 /** "7 – Leases": the number, then what the chapter is mainly about (not the book's long heading). */
@@ -116,23 +116,21 @@ export const bookLabel = (doc: string): string => doc.replace(/\.[A-Za-z0-9]{2,4
  */
 export function bookByBookPlan(books: Array<{ doc: string; chapters: Chapter[] }>, title: string): CoursePlan {
   const squares: PlannedSquare[] = [];
-  let capped = false;
   for (const b of books) {
     const label = bookLabel(b.doc);
     for (const c of b.chapters) {
-      if (squares.length + CHAPTER_SQUARES > MAX_SQUARES) { capped = true; continue; }
       const unit = `${label}: ${chapterName(c)}`;
       deepChapter({ name: chapterName(c), unit, about: `from ${label}`, topic: c.title || undefined }, CHAPTER_SQUARES)
         .forEach((sq) => squares.push({ key: `s${squares.length + 1}`, ...sq, book: b.doc }));
     }
   }
   const order = books.map((b) => bookLabel(b.doc)).join(', then ');
-  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.${capped ? ` The board holds at most ${MAX_SQUARES} squares, so the last chapters are not on it.` : ''}`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
+  return { title, summary: `Every chapter of every textbook, one book at a time: ${order}. Each chapter is read, then its key terms, a worked example, a quiz, an assignment and a chapter exam.`, style: 'One textbook at a time, one chapter at a time, with six squares in each chapter.', theme: title, squares };
 }
 
 /** Six squares for every chapter (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam), within the board's size limit. */
 export function chapterPlan(chapters: Chapter[], book: string, manyBooks = false): CoursePlan {
-  const used = chapters.slice(0, Math.floor(MAX_SQUARES / CHAPTER_SQUARES));
+  const used = chapters;
   const squares: PlannedSquare[] = [];
   const add = (sq: Omit<PlannedSquare, 'key'>) => squares.push({ key: `s${squares.length + 1}`, ...sq });
   // The unit is named for what the chapter is mainly about ("7 – Leases"), not just its number; passages are still matched on the book's full heading.
