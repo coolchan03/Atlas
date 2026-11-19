@@ -43,13 +43,19 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc || true
-      - uses: actions/cache@v5
+      # Restore here and save at the very end with `if: always()`: the plain cache action saves only when the whole job
+      # succeeds, so one late failure (for example the release step) used to throw away a 40-minute build's caches.
+      - name: Restore the Gradle caches
+        id: gradle-cache
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-
+          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}
+          restore-keys: |
+            gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}-
+            gradle-
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
       - name: Install llama.rn native artifacts
@@ -141,7 +147,7 @@ jobs:
           echo "ATLAS_NDK=$NDK" >> "$GITHUB_ENV"
       - name: Restore the image engines if their inputs are unchanged
         id: sdcli
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: |
             android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
@@ -345,3 +351,19 @@ jobs:
           gh release create atlas-${{ github.run_number }} out/*.apk --latest \
             --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
             --notes-file release-notes.md
+      - name: Save the image engines for the next build
+        if: always() && steps.sdcli.outputs.cache-hit != 'true' && hashFiles('android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so') != ''
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+            android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so
+          key: ${{ steps.sdcli.outputs.cache-primary-key }}
+      - name: Save the Gradle caches for the next build
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}
