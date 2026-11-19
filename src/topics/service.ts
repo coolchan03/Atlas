@@ -11,6 +11,7 @@ import { chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, 
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
 import { bookQuestionsPrompt, looksLikeQuestions, projectQuestionBank, questionsOn } from '../study/bookQuestions';
 import { cancel, enqueue } from './generationQueue';
+import { allocateExcerpts } from './allocateEvidence';
 import { chunkPlace, makeSource, needsMoreInfo, pageOrSnippet, parsePicks, pickPrompt, relevantExcerpts, sourceQuestions, withoutSourceMentions, type Candidate, type CourseSource, type Excerpt } from './sources';
 import { isOutlineDocument } from '../cpa/outline';
 import { stillMissed } from './review';
@@ -142,7 +143,7 @@ async function projectExcerpts(projectId: string | undefined, query: string): Pr
     const reference = [...found, ...pointed].slice(0, 4).map((c) => excerpt(c, 'reference'));
     // A project with no teaching document (only the law, or only standards) is taught from what it has.
     if (!teach.length) return reference.map((e) => ({ ...e, role: 'teach' as const }));
-    return [...teach.slice(0, 5), ...reference];
+    return [...teach.slice(0, 8), ...reference];
   } catch { return []; }
 }
 
@@ -232,8 +233,9 @@ async function writeSquare(courseId: string, key: string, rewrite?: Rewrite): Pr
   }
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
   const query = subjectQuery(square);
-  let excerpts: Excerpt[] = [...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)].slice(0, 6);
-  if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = [...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)].slice(0, 5);
+  // The standard keeps its place when the books fill the rest, and the books share the room instead of the first one taking it.
+  let excerpts: Excerpt[] = allocateExcerpts([...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)], 7).chosen;
+  if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = allocateExcerpts([...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)], 7).chosen;
   const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], subjectQuery(square))) : '';
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,

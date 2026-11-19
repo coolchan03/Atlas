@@ -7,12 +7,30 @@ import { findChapters, type Chapter } from './chapters';
 import { isEnabled } from '../standards/docRoles';
 
 export interface BookChapters { doc: string; chapters: Array<Pick<Chapter, 'number' | 'title'>> }
-export interface MergedTopic { title: string; /** The books that have a chapter on it. */ docs: string[] }
+/** One chapter of one book, kept whatever happens to the topic it is grouped under. */
+export interface ChapterRef { doc: string; number: number; title: string }
+export interface MergedTopic {
+  title: string;
+  /** The books that have a chapter on it. */
+  docs: string[];
+  /** Every book chapter behind the topic, by book and chapter number, so nothing is lost when chapters are grouped. */
+  members: ChapterRef[];
+}
 
 const STOP = new Set(['and', 'the', 'for', 'with', 'of', 'to', 'in', 'on', 'an', 'a', 'basics', 'introduction', 'overview', 'other']);
-const words = (t: string): Set<string> => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.replace(/(ing|es|s)$/, '')).filter((w) => !STOP.has(w)));
-const SAME = 0.6;
-const same = (a: Set<string>, b: Set<string>): boolean => a.size > 0 && b.size > 0 && [...a].filter((w) => b.has(w)).length / Math.min(a.size, b.size) >= SAME;
+const words = (t: string): Set<string> => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.replace(/(ing|es|s)$/, '').replace(/e$/, '')).filter((w) => !STOP.has(w)));
+/**
+ * Two chapter titles are the same subject only when they say the same thing: the same words, or most of them with at least two in common
+ * (counted against the longer title, so "Leases" is not "Leases and sale-leasebacks", nor "Income taxes" "Income statement"). A chapter
+ * that is not clearly another book's chapter stays its own unit, beside the nearest one, rather than disappearing into it.
+ */
+const SAME = 0.75;
+const same = (a: Set<string>, b: Set<string>): boolean => {
+  if (!a.size || !b.size) return false;
+  const shared = [...a].filter((w) => b.has(w)).length;
+  if (shared === a.size && shared === b.size) return true;
+  return shared >= 2 && shared / Math.max(a.size, b.size) >= SAME;
+};
 const SKIP = /^(preface|index|appendix|glossary|answers?|solutions?|contents|about|foreword)\b/i;
 
 export function mergeBooks(books: BookChapters[]): MergedTopic[] {
@@ -29,14 +47,16 @@ export function mergeBooks(books: BookChapters[]): MergedTopic[] {
       const w = untitled ? new Set<string>() : words(title); // two books' untitled "Chapter 7" are not the same subject
       // Only a topic from ANOTHER book is the same subject: two chapters of one book are two units, however alike their titles.
       const at = topics.findIndex((t) => !t.docs.includes(book.doc) && same(w, keyOf(t)));
+      const member: ChapterRef = { doc: book.doc, number: c.number, title: untitled ? '' : title };
       if (at >= 0) {
-        if (!topics[at].docs.includes(book.doc)) topics[at].docs.push(book.doc);
+        topics[at].docs.push(book.doc);
+        topics[at].members.push(member);
         after = at;
       } else if (bookIndex === 0) {
-        topics.push({ title, docs: [book.doc] });
+        topics.push({ title, docs: [book.doc], members: [member] });
         after = topics.length - 1;
       } else {
-        topics.splice(after + 1, 0, { title, docs: [book.doc] });
+        topics.splice(after + 1, 0, { title, docs: [book.doc], members: [member] });
         after += 1;
       }
     }

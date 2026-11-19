@@ -13,9 +13,10 @@ describe('a course from all the textbooks', () => {
     const titles = topics.map((t) => t.title);
     expect(titles).toEqual(expect.arrayContaining(['Inventory', 'Leases', 'Income taxes', 'Pensions', 'Business combinations', 'Foreign currency']));
     expect(topics.find((t) => t.title === 'Income taxes')?.docs).toEqual(['Intermediate Accounting.pdf', 'Advanced Accounting.pdf']);
-    expect(topics.find((t) => t.title === 'Leases')?.docs).toHaveLength(2);
     expect(topics.find((t) => t.title === 'Business combinations')?.docs).toEqual(['Advanced Accounting.pdf']);
-    expect(titles.filter((t) => /leases/i.test(t))).toHaveLength(1);
+    // "Leases" and "Leases and sale-leasebacks" only look alike: they stay two units, so neither book's chapter is hidden inside the other's.
+    expect(titles).toEqual(expect.arrayContaining(['Leases', 'Leases and sale-leasebacks']));
+    expect(topics.find((t) => t.title === 'Leases')?.docs).toEqual(['Intermediate Accounting.pdf']);
   });
   it('puts a chapter only the second book has beside the chapter it follows, and numbers them in order', () => {
     const titles = mergeBooks([a, b]).map((t) => t.title);
@@ -57,5 +58,31 @@ describe('a standard outranks the books', () => {
     expect(note).toMatch(/STANDARD/);
     expect(note).toMatch(/older books may still show the old rule/);
     expect(authorityNote([{ source: 'A.pdf', rank: 5 }])).toBe('');
+  });
+});
+
+describe('every book chapter stays identifiable', () => {
+  it('remembers each chapter of each book behind a merged topic', () => {
+    const topics = mergeBooks([
+      book('A.pdf', ['Inventory', 'Income taxes', 'Pensions']),
+      { doc: 'B.pdf', chapters: [{ number: 12, title: 'Income taxes' }, { number: 13, title: 'Segment reporting' }, { number: 14, title: 'Interim reporting' }] },
+    ]);
+    expect(topics.find((t) => t.title === 'Income taxes')?.members).toEqual([
+      { doc: 'A.pdf', number: 2, title: 'Income taxes' }, { doc: 'B.pdf', number: 12, title: 'Income taxes' },
+    ]);
+    const all = topics.flatMap((t) => t.members);
+    expect(all).toHaveLength(6); // no chapter of either book was dropped
+  });
+  it('does not merge lookalike titles that are different subjects', () => {
+    const topics = mergeBooks([
+      book('A.pdf', ['Income taxes', 'Revenue recognition', 'Cash flows']),
+      book('B.pdf', ['Income statement', 'Revenue from contracts', 'Cash and equivalents']),
+    ]);
+    expect(topics).toHaveLength(6);
+    expect(topics.every((t) => t.docs.length === 1)).toBe(true);
+  });
+  it('merges the same chapter written with other plural or -ing forms', () => {
+    const topics = mergeBooks([book('A.pdf', ['Accounting for leases', 'Income taxes', 'Pensions']), book('B.pdf', ['Accounting for lease', 'Income tax', 'Inventory'])]);
+    expect(topics.find((t) => /leases?$/i.test(t.title))?.docs).toHaveLength(2);
   });
 });
