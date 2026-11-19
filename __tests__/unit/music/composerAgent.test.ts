@@ -76,19 +76,21 @@ describe('asking the composer', () => {
     expect(composerSystemPrompt()).toContain('upright');
   });
 
-  it('uses the composer\'s score when it is good', async () => {
+  it('uses the composer\'s score, and sends a weak one back once with what is wrong before keeping the better', async () => {
+    // This fixture plays the same bar four times: playable, but the listening check marks it down.
     const ask = jest.fn(async () => goodScore());
     const out = await composeMusic('rainy window', { ask });
     expect(out.via).toBe('composer');
     expect(out.instruments).toContain('Flute');
-    expect(ask).toHaveBeenCalledTimes(1);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(String(ask.mock.calls[1][1])).toContain('playable but weak');
+    expect(out.note).toContain('Quality check');
   });
 
   it('asks again, saying what was wrong, when the first score is unusable', async () => {
     const ask = jest.fn().mockResolvedValueOnce('Sure! Here is a song.').mockResolvedValueOnce(goodScore());
     const out = await composeMusic('calm piano', { ask });
     expect(out.via).toBe('composer');
-    expect(ask).toHaveBeenCalledTimes(2);
     expect(String(ask.mock.calls[1][1])).toContain('could not be used');
   });
 

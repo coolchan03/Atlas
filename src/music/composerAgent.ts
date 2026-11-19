@@ -10,6 +10,7 @@ import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
 import { seedFor } from './arrange';
 import { THEORY_PRIMER, conformScore, harmonyPlan, planText, type HarmonyPlan } from './theory';
+import { REWRITE_BELOW, critiqueScore, finishScore, rewriteRequest } from './critic';
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
 import type { MusicScore } from './types';
 
@@ -90,13 +91,25 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const raw = await ask(composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${problem}). Write it again using only TITLE, BPM, NOTE and DRUM lines.` : brief.text);
-      const report: AgentScoreReport = parseAgentScore(raw);
+      let report: AgentScoreReport = parseAgentScore(raw);
       // What the model wrote is held to the plan: out-of-key notes, off-beat timings and a bass that misses the chord root are put right.
-      const fixed = conformScore(report.score, brief.plan);
+      let fixed = conformScore(report.score, brief.plan);
       report.score = fixed.score;
+      let critique = critiqueScore(report.score, brief.plan);
+      let rewrote = false;
+      // A weak tune goes back once with the list of what is wrong; the better of the two is kept.
+      if (critique.score < REWRITE_BELOW && critique.issues.length) {
+        try {
+          const second = parseAgentScore(await ask(composerSystemPrompt(), rewriteRequest(brief.text, critique)));
+          const secondFixed = conformScore(second.score, brief.plan);
+          const secondCritique = critiqueScore(secondFixed.score, brief.plan);
+          if (secondCritique.score > critique.score) { report = { ...second, score: secondFixed.score }; fixed = secondFixed; critique = secondCritique; rewrote = true; }
+        } catch { /* keep the first tune */ }
+      }
+      report.score = finishScore(report.score, brief.plan);
       const instruments = [...report.instruments, ...report.drums.map((d) => `${d} drum`)].join(', ');
       const total = Object.values(fixed.changed).reduce((a, b) => a + b, 0);
-      return { score: report.score, via: 'composer', instruments, style, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}.` };
+      return { score: report.score, via: 'composer', instruments, style, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
     } catch (e: any) {
       problem = String(e?.message || e);
       if (/no model|could not be loaded|failed to load/i.test(problem)) break; // no point asking again
