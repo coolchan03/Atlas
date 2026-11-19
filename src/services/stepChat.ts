@@ -23,27 +23,49 @@ export function stepSummary(results: StepResult[]): string {
   return results.map((r) => `${r.ok ? '✓' : '✗'} ${r.n}. ${r.title}${r.ok ? '' : ` (failed: ${r.error})`}`).join('\n');
 }
 
+/**
+ * Runs "Work through steps" for one message. Returns false only when nothing was done (no usable plan, or the plan could not be asked
+ * for), so the message can be sent the ordinary way. Once a plan exists the message is saved, and whatever happens after (finished,
+ * stopped or failed) is saved as the reply and the function returns true: it never falls back to a normal send, which could repeat a tool.
+ */
 export async function runStepsInChat(conversationId: string, text: string): Promise<boolean> {
   const chat = useChatStore.getState();
   const conversation = chat.conversations.find((c) => c.id === conversationId);
   const enabledTools = enabledToolsFor(conversation as { enabledTools?: string[] } | undefined);
-  const outcome = await trackTask({ type: 'other', title: 'Working through steps' }, async (ctl) => {
-    return workThroughSteps(text, {
-      ask: (system, user) => askModel(system, user),
-      enabledTools,
-      shouldStop: () => ctl.cancelled(),
-      onProgress: (done, total, title) => ctl.progress({ stage: title, completed: done, total }),
-      tool: async (name, args) => {
-        const result = await executeToolCall({ id: `step-${Date.now()}`, name, arguments: args });
-        if (result.error) throw new Error(result.error);
-        return result.content;
-      },
+  const projectId = (conversation as { projectId?: string } | undefined)?.projectId;
+  const abort = new AbortController();
+  let saved = false;
+  let stoppedByPerson = false;
+  const saveUser = () => { if (!saved) { saved = true; chat.addMessage(conversationId, { role: 'user', content: text }); } };
+  try {
+    const outcome = await trackTask({ type: 'other', title: 'Working through steps' }, async (ctl) => {
+      const poll = setInterval(() => { if (ctl.cancelled()) abort.abort(); }, 500);
+      try {
+        return await workThroughSteps(text, {
+          ask: (system, user) => askModel(system, user),
+          enabledTools,
+          shouldStop: () => { const stop = ctl.cancelled(); if (stop) abort.abort(); return stop; },
+          onPlan: saveUser,
+          onProgress: (done, total, title) => ctl.progress({ stage: title, completed: done, total }),
+          tool: async (name, args) => {
+            const result = await executeToolCall({ id: `step-${Date.now()}`, name, arguments: args, context: { projectId }, signal: abort.signal });
+            if (result.error) throw new Error(result.error);
+            return result.content;
+          },
+        });
+      } finally { clearInterval(poll); stoppedByPerson = ctl.cancelled(); }
     });
-  });
-  if (!outcome) return false; // no plan, or stopped from Task Center before one was made
-  const done = outcome;
-  chat.addMessage(conversationId, { role: 'user', content: text });
-  const summary = stepSummary(done.results);
-  chat.addMessage(conversationId, { role: 'assistant', content: `${done.answer}${summary ? `\n\n---\nSteps:\n${summary}` : ''}` });
-  return true;
+    if (outcome) {
+      saveUser();
+      const summary = stepSummary(outcome.results);
+      chat.addMessage(conversationId, { role: 'assistant', content: `${outcome.answer}${summary ? `\n\n---\nSteps:\n${summary}` : ''}` });
+      return true;
+    }
+    if (saved || stoppedByPerson) { saveUser(); chat.addMessage(conversationId, { role: 'assistant', content: 'Stopped. Nothing from the unfinished steps was used.' }); return true; }
+    return false; // no usable plan: send the message the ordinary way
+  } catch (e: any) {
+    if (!saved) throw e; // nothing ran yet: the caller sends the message normally
+    chat.addMessage(conversationId, { role: 'assistant', content: `The steps could not be finished: ${String(e?.message || e)}` });
+    return true;
+  }
 }

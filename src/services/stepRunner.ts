@@ -61,8 +61,9 @@ export interface RunDeps {
 export async function runSteps(steps: PlanStep[], deps: RunDeps): Promise<{ results: StepResult[]; stopped: boolean }> {
   const results: StepResult[] = [];
   const limit = deps.stepTimeoutMs ?? STEP_TIMEOUT_MS;
-  const attempts = deps.maxAttempts ?? MAX_ATTEMPTS;
   for (const step of steps) {
+    // A step that uses a tool is never repeated: the first try may still be running, and a tool can change something.
+    const attempts = step.tool ? 1 : (deps.maxAttempts ?? MAX_ATTEMPTS);
     if (deps.shouldStop()) return { results, stopped: true };
     deps.onProgress?.(results.length, steps.length, step.title);
     let last = '';
@@ -98,6 +99,8 @@ export interface FlowDeps {
   enabledTools: string[];
   shouldStop: () => boolean;
   onProgress?: (done: number, total: number, title: string) => void;
+  /** Called once, with the plan, before the first step runs. */
+  onPlan?: (plan: PlanStep[]) => void;
   stepTimeoutMs?: number;
 }
 
@@ -106,6 +109,7 @@ export async function workThroughSteps(goal: string, deps: FlowDeps): Promise<{ 
   const p = planPrompt(goal, deps.enabledTools);
   const plan = parsePlan(await deps.ask(p.system, p.user), deps.enabledTools);
   if (!plan) return null;
+  deps.onPlan?.(plan);
   const { results, stopped } = await runSteps(plan, {
     shouldStop: deps.shouldStop, onProgress: deps.onProgress, stepTimeoutMs: deps.stepTimeoutMs,
     run: async (step, earlier) => {
