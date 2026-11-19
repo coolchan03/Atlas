@@ -139,7 +139,17 @@ jobs:
           test -n "$NDK"
           test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
           echo "ATLAS_NDK=$NDK" >> "$GITHUB_ENV"
+      - name: Restore the image engines if their inputs are unchanged
+        id: sdcli
+        uses: actions/cache@v5
+        with:
+          path: |
+            android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so
+            android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so
+          # Inputs: the pinned source commit (e16d26a9), our patches, the OpenCL stub from llama.rn and the build steps below.
+          key: sdcli-e16d26a9-${{ hashFiles('android/patches/**', 'node_modules/llama.rn/bin/arm64-v8a/libOpenCL.so') }}-${{ hashFiles('.github/workflows/atlas-apk.yml') }}
       - name: Build native ARM64 diffusion CLI from pinned upstream source
+        if: steps.sdcli.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
           git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
@@ -195,6 +205,7 @@ jobs:
           strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'ggml_vulkan'
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
       - name: Build OpenCL ARM64 diffusion CLI from the same pinned source
+        if: steps.sdcli.outputs.cache-hit != 'true'
         run: |
           # A second image engine for Adreno phones whose Vulkan driver rejects the
           # diffusion shaders: same sd-cli, ggml OpenCL backend with Adreno kernels.

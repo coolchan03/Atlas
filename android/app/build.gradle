@@ -104,7 +104,7 @@ android {
         def atlasBaseVersionCode = 1804544309
         versionCode project.hasProperty('atlasVersionCode') ? project.property('atlasVersionCode').toInteger() : atlasBaseVersionCode + (project.hasProperty('atlasBuild') ? project.property('atlasBuild').toInteger() : 0)
         // CI passes -PatlasBuild=<run number>, so the version shown in the app says which build it is.
-        versionName "0.0.210" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
+        versionName "0.0.211" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
     }
     signingConfigs {
         debug {
@@ -175,9 +175,16 @@ android {
             // Atlas: libkiwix ships its own libc++_shared.so like other native libraries.
             pickFirsts += ['**/libc++_shared.so']
         }
+        resources {
+            // Build bookkeeping that nothing reads at run time (library version stamps, coroutine debug data).
+            excludes += ['META-INF/*.version', 'DebugProbesKt.bin', 'META-INF/version-control-info.textproto',
+                         'META-INF/com/android/build/gradle/app-metadata.properties']
+        }
     }
-    aaptOptions {
-        // Prevent AAPT from compressing .gguf model files — they must be copied byte-for-byte
+    androidResources {
+        // Atlas has no translated screens; keep library strings in English only (resources.arsc shrinks).
+        localeFilters += ['en']
+        // Model files must be copied byte-for-byte, not compressed.
         noCompress 'gguf'
     }
 }

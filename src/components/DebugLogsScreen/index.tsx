@@ -50,35 +50,22 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
     }
   };
 
-  const handleCopyAllLogs = async () => {
-    const logsText = logs
-      .map(
-        (log: any) =>
-          `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
-      )
+  const logsText = () =>
+    logs
+      .map((log: any) => `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`)
       .join('\n');
 
+  const handleCopyAllLogs = async () => {
     try {
-      await Clipboard.setString(logsText);
-      // Show feedback (could use toast here)
+      await Clipboard.setString(logsText());
     } catch {
       // Failed to copy
     }
   };
 
   const handleShare = async () => {
-    const logsText = logs
-      .map(
-        (log: any) =>
-          `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
-      )
-      .join('\n');
-
     try {
-      await Share.share({
-        message: logsText,
-        title: 'Debug Logs',
-      });
+      await Share.share({ message: logsText(), title: 'Debug Logs' });
     } catch {
       // Cancelled
     }

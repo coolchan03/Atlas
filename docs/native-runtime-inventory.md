@@ -33,3 +33,9 @@ What this shows, not decides:
 - The seven llama.rn builds are chosen at run time by CPU features. Dropping the oldest ones would save about 35 MB but would make older phones fall back to slower code or fail to load: only an option if the supported phones are fixed.
 - `libstable_diffusion_core.so` is in the APK twice (12.1 MB in `lib/` and 11.5 MB in `assets/qnnlibs`), two different builds with the same name. Merging them needs a check that the QNN path can run the `lib/` copy.
 - The three image engines (`sdcli`, `sdcli_opencl`, `stable_diffusion_core`) total about 125 MB and serve different backends (Vulkan, OpenCL, QNN/MNN); none can be removed by name similarity.
+
+## Size changes in 0.0.211
+- Removed `assets/qnnlibs/libstable_diffusion_core.so` (11.5 MB, 4.2 MB compressed): the app always runs the copy in `jniLibs` (extracted to `nativeLibraryDir`; `useLegacyPackaging = true`), so the asset copy was only a fallback that cannot trigger.
+- Vector icon fonts limited to Feather and MaterialIcons (the only two used in `src`): about 3.9 MB.
+- `localeFilters = ['en']` and `META-INF/*.version`, `DebugProbesKt.bin` excluded.
+- Not done (needs a delivery path or has a speed cost): per-chip QNN libraries (about 50 MB for the five chip generations, only one is used on a phone) would need a download on first use; older CPU-feature builds of llama.rn would slow some phones.

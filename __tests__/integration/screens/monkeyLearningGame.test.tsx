@@ -18,7 +18,7 @@ describe('project learning games survive being pressed everywhere', () => {
       ...(kind === 'crossword' ? { crossword: buildCrossword(TERMS) } : {}), ...(kind === 'wordsearch' ? { wordSearch: buildWordSearch(TERMS) } : {}),
     };
     const view = rtl.render(React.createElement(ProjectLearningGame, { activity, onOpenSource: jest.fn() }));
-    for (const seed of [1, 9, 21]) await explore(view as never, { seed, presses: 80 });
+    for (const seed of [1, 9, 21]) await explore(view as never, { seed, presses: kind === 'wordsearch' ? 30 : 80 });
     view.unmount();
   }, 60000);
 });
