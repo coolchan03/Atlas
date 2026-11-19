@@ -5,7 +5,7 @@ import { useTheme } from '../../theme';
 import { useLearningStore } from '../../learning/store';
 import { GENERAL_NAME, NO_AGENT } from '../../learning/agents';
 import { exams, runExamNow } from '../../learning/engine';
-import { EXAM_MODE_LABEL, parseExpected, type ExamResult } from '../../learning/exams';
+import { EXAM_MODE_LABEL, REASON_LABEL, parseExpected, reasonCounts, type ExamResult } from '../../learning/exams';
 import { sectionStyles as s } from './sectionStyles';
 import { QuestionImport } from './QuestionImport';
 
@@ -14,7 +14,12 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 /** One line for one run: right answers, outdated figures, unsupported citations, speed and memory. */
 export function describeResult(r: ExamResult): string {
   const m = r.metrics;
-  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}`;
+  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}${m.ungraded ? `. ${m.ungraded} not graded` : ''}`;
+}
+
+/** Why questions did not pass in one run, in plain words ("2 × The model failed to answer..."). Empty when everything passed or the run predates reasons. */
+export function describeReasons(r: ExamResult): string[] {
+  return reasonCounts(r.metrics).map(({ reason, count }) => `${count} × ${REASON_LABEL[reason]}`);
 }
 
 const History: React.FC<{ history: ExamResult[] }> = ({ history }) => {
@@ -24,7 +29,10 @@ const History: React.FC<{ history: ExamResult[] }> = ({ history }) => {
     <View testID="exam-history">
       <Text style={[s.title, { color: colors.text }]}>Results so far</Text>
       {history.map((r) => (
-        <Text key={r.id} style={[s.small, { color: colors.textSecondary }]}>{new Date(r.at).toLocaleDateString()} · {describeResult(r)}</Text>
+        <View key={r.id}>
+          <Text style={[s.small, { color: colors.textSecondary }]}>{new Date(r.at).toLocaleDateString()} · {describeResult(r)}</Text>
+          {describeReasons(r).map((line) => <Text key={line} style={[s.small, { color: colors.textMuted }]}>   {line}</Text>)}
+        </View>
       ))}
       <Text style={[s.small, { color: colors.textMuted }]}>Answers are checked against the facts you wrote, not by the model. Memory use is read from the phone; processor use is not measured.</Text>
     </View>

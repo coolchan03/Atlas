@@ -1,16 +1,78 @@
-import { BENCHMARK_VERSION, ExamStore, improvementSummary, runExam, scoreAnswer, type ExamItem, type ExamResult, type ExamMetrics } from '../../../src/learning/exams';
+import { BENCHMARK_VERSION, ExamStore, improvementSummary, reasonCounts, runExam, scoreAnswer, type ExamItem, type ExamResult, type ExamMetrics } from '../../../src/learning/exams';
 import { memoryKnowledgeDb } from '../../harness/memoryKnowledgeDb';
 
 const expected = { facts: [['one minute', '1 minute', '60 seconds'], ['cool']], forbid: ['ten minutes'] };
 
 describe('scoring an exam answer without a model', () => {
   it('needs every fact, accepts any wording of each, and sees numbers written out', () => {
-    expect(scoreAnswer('Boil it for 1 minute, then let it cool.', expected)).toEqual({ score: 1, correct: true, outdated: false });
-    expect(scoreAnswer('Boil it for one minute.', expected)).toEqual({ score: 0.5, correct: false, outdated: false });
+    expect(scoreAnswer('Boil it for 1 minute, then let it cool.', expected)).toEqual({ score: 1, correct: true, outdated: false, missing: [] });
+    expect(scoreAnswer('Boil it for one minute.', expected)).toEqual({ score: 0.5, correct: false, outdated: false, missing: ['cool'] });
   });
 
   it('marks an answer that uses a forbidden figure, even when the facts are there', () => {
     expect(scoreAnswer('Boil it for one minute, or ten minutes, and cool it.', expected)).toMatchObject({ score: 1, correct: false, outdated: true });
+  });
+});
+
+describe('wording tolerance without rewarding wrong answers', () => {
+  const lease = { facts: [['lease liability'], ['right-of-use asset']] };
+  it('accepts reordered and singular/plural wording', () => {
+    expect(scoreAnswer('The lessee records a right of use asset and a liability for the lease.', lease).correct).toBe(true);
+    expect(scoreAnswer('Recorded lease liabilities and right-of-use assets appear on the balance sheet.', lease).correct).toBe(true);
+  });
+  it('treats equivalent numbers and units as the same', () => {
+    expect(scoreAnswer('The rate is 50 percent.', { facts: [['50%']] }).correct).toBe(true);
+    expect(scoreAnswer('It costs $1,200.', { facts: [['1200 dollars']] }).correct).toBe(true);
+    expect(scoreAnswer('Wait sixty seconds.', { facts: [['1 minute']] }).correct).toBe(true);
+    expect(scoreAnswer('Wait 90 seconds.', { facts: [['1 minute']] }).correct).toBe(false);
+  });
+  it('does not accept a missing fact, a different number, a negation or a contradiction', () => {
+    expect(scoreAnswer('Only a lease liability is recorded.', lease)).toMatchObject({ correct: false, missing: ['right-of-use asset'] });
+    expect(scoreAnswer('The rate is 120 percent.', { facts: [['20 percent']] }).correct).toBe(false);
+    expect(scoreAnswer('It is not a lease liability, and there is a right-of-use asset.', lease).correct).toBe(false);
+    expect(scoreAnswer('The lease liability is never recorded; the right-of-use asset is.', lease).correct).toBe(false);
+    expect(scoreAnswer('Straight-line depreciation applies, not declining balance.', { facts: [['declining balance']] }).correct).toBe(false);
+    expect(scoreAnswer('The limit is 10,000 dollars, formerly 5,000.', { facts: [['10000']], forbid: ['5000'] })).toMatchObject({ correct: false, outdated: true });
+  });
+  it('does not match words scattered far apart', () => {
+    const far = `lease ${'filler words '.repeat(20)} liability`;
+    expect(scoreAnswer(far, { facts: [['lease liability']] }).correct).toBe(false);
+  });
+});
+
+describe('failure reasons', () => {
+  const items: ExamItem[] = ['a', 'b', 'c', 'd'].map((id) => ({ id, subjectId: 's', topic: 't', question: `Question ${id}?`, expected }));
+  items.push({ id: 'bad', subjectId: 's', topic: 't', question: 'Q?', expected: { facts: [] } });
+  const run = (mode: 'baseline' | 'sources' | 'memory', answer: (id: string) => any) => runExam({ items, mode, answer: async (i) => answer(i.id) });
+
+  it('separates a wrong answer, an inference failure, an unusable key and missing evidence, and grades only what can be graded', async () => {
+    const m = await run('memory', (id) => {
+      if (id === 'a') return { text: 'Boil one minute and cool.', sourceCount: 1, memoryCount: 1 };
+      if (id === 'b') return { text: 'Just cook it.', sourceCount: 1, memoryCount: 0 };
+      if (id === 'c') throw new Error('model unloaded');
+      return { text: 'Something else', sourceCount: 0, memoryCount: 0 };
+    });
+    const by = Object.fromEntries(m.items.map((i) => [i.id, i]));
+    expect(by.a.reason).toBe('correct');
+    expect(by.b.reason).toBe('no-approved-memory');
+    expect(by.c).toMatchObject({ reason: 'inference-failure', error: 'model unloaded' });
+    expect(by.d.reason).toBe('no-sources');
+    expect(by.bad.reason).toBe('invalid-key');
+    expect(m).toMatchObject({ total: 5, ungraded: 2, correct: 1 });
+    expect(m.accuracy).toBeCloseTo(1 / 3);
+    expect(by.b.missing).toEqual(['one minute', 'cool']);
+    expect(reasonCounts(m).map((r) => r.reason).sort()).toEqual(['inference-failure', 'invalid-key', 'no-approved-memory', 'no-sources']);
+  });
+
+  it('records the model\'s wrong answer, and an empty one', async () => {
+    const m = await run('baseline', (id) => ({ text: id === 'a' ? '' : 'Boil ten minutes.', sourceCount: 0 }));
+    expect(m.items.find((i) => i.id === 'a')?.reason).toBe('empty-answer');
+    expect(m.items.find((i) => i.id === 'b')).toMatchObject({ reason: 'outdated', answer: 'Boil ten minutes.' });
+    expect(m.items.find((i) => i.id === 'c')?.reason).toBe('outdated');
+  });
+
+  it('repeated attempts keep separate history and scoring versions', () => {
+    expect(BENCHMARK_VERSION).toBe('2');
   });
 });
 

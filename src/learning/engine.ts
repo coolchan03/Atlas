@@ -509,7 +509,7 @@ function examAnswerer(cfg: LearnConfig): Answerer {
     const notes = rankClaims(item.question, known, 5).map((k, i) => `${i + 1}. ${k.text}`);
     const material = [sources && `SOURCES:\n${sources}`, notes.length && `STORED NOTES:\n${notes.join('\n')}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
-    return { text, sourceCount: list.length };
+    return { text, sourceCount: list.length, memoryCount: mode === 'memory' ? notes.length : undefined };
   };
 }
 

@@ -1,6 +1,6 @@
 import type { LearningKnowledgeDb } from './knowledgeDb';
 import { citedNumbers } from './evidenceGate';
-import { numbersIn, similarity } from './claimText';
+import { numbersIn, similarity, wordsToDigits } from './claimText';
 
 /** The three ways the same questions are answered, so retrieval and memory can be measured against the model alone. */
 export type ExamMode = 'baseline' | 'sources' | 'memory';
@@ -8,7 +8,7 @@ export const EXAM_MODES: ExamMode[] = ['baseline', 'sources', 'memory'];
 export const EXAM_MODE_LABEL: Record<ExamMode, string> = { baseline: 'The model alone', sources: 'With sources', memory: 'With sources and stored memory' };
 
 /** Bump when scoring changes, so results from different rules are never compared. */
-export const BENCHMARK_VERSION = '1';
+export const BENCHMARK_VERSION = '2'; // 2: wording-tolerant matching (reordered words, equivalent numbers and units), per-answer reasons, ungraded items
 
 export interface Expected {
   /** Each entry is a fact; any one of its wordings counts ("one minute", "1 minute", "60 seconds"). */
@@ -18,9 +18,28 @@ export interface Expected {
 }
 export interface ExamItem { id: string; subjectId: string; topic: string; question: string; expected: Expected }
 
-export interface ItemResult { id: string; correct: boolean; score: number; outdated: boolean; seconds: number }
+/**
+ * Why an answer did not pass (or that it did). Only 'wrong-answer' and 'outdated' say the model was wrong; the rest say the exam
+ * could not fairly judge it, and those items are left out of the accuracy.
+ */
+export type ExamReason = 'correct' | 'wrong-answer' | 'outdated' | 'empty-answer' | 'no-sources' | 'no-approved-memory' | 'invalid-key' | 'inference-failure';
+export interface ItemResult {
+  id: string; correct: boolean; score: number; outdated: boolean; seconds: number;
+  /** Absent in results saved by benchmark version 1. */
+  reason?: ExamReason;
+  /** Facts the answer did not contain (the first wording of each). */
+  missing?: string[];
+  /** The answer the model gave (shortened), and what went wrong when it could not answer. */
+  answer?: string;
+  error?: string;
+  sourceCount?: number;
+  memoryCount?: number;
+}
 export interface ExamMetrics {
+  /** Questions asked. Accuracy is measured over the ones that could be graded (total minus ungraded). */
   total: number;
+  /** Questions that could not be graded: the model failed to answer, or the answer key was unusable. */
+  ungraded?: number;
   correct: number;
   accuracy: number;
   /** Answers that used a figure the exam marks as out of date or wrong. */
@@ -38,34 +57,104 @@ export interface ExamMetrics {
 }
 export interface ExamResult { id: string; version: string; mode: ExamMode; metrics: ExamMetrics; at: string }
 
+const NEGATORS = new Set(['not', 'no', 'never', 'nor', 'neither', 'cannot', 'without']);
+const isNegator = (w: string) => NEGATORS.has(w) || w.endsWith("n't");
+const FILLER = new Set(['the', 'and', 'for', 'are', 'was', 'were', 'that', 'this', 'with', 'from', 'has', 'have', 'had', 'its', 'but', 'can', 'will', 'may', 'than', 'then', 'into', 'also', 'each', 'any', 'all', 'who', 'what', 'when', 'where', 'which', 'their', 'there', 'they', 'them', 'been', 'being', 'such', 'only', 'more', 'most', 'some', 'other', 'about', 'over', 'under', 'should', 'would', 'could', 'must', 'does', 'did', 'out', 'use', 'used', 'uses', 'using']);
+const COPULA = new Set(['is', 'are', 'was', 'were', 'does', 'do', 'did', 'can', 'will', 'should', 'must', 'would']);
+const SECONDS: Record<string, number> = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800 };
+
+/**
+ * One spelling for the same quantity, applied to answer and wording alike: "1,200", "$1200" and "1200 dollars" agree, "50 percent" and
+ * "50%" agree, "one minute" and "60 seconds" agree, and "straight-line" equals "straight line".
+ */
+export function canonical(text: string): string {
+  return wordsToDigits(text.toLowerCase())
+    .replace(/(\d),(?=\d{3}\b)/g, '$1')
+    .replace(/\$\s*(\d)/g, '$1 dollars ')
+    .replace(/(\d)\s*(?:%|per\s?cent|percent)/g, '$1 percent ')
+    .replace(/\b(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week)s?\b/g, (_m, n: string, u: string) => `${Number((Number(n) * SECONDS[u]).toFixed(3))} secs `)
+    .replace(/[\u2010-\u2015-]/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+const wordList = (text: string) => (canonical(text).match(/\d+(?:\.\d+)?|[a-z']+/g) ?? []);
+const stemWord = (w: string) => (/^\d/.test(w) ? w : w.length > 4 && w.endsWith('ies') ? `${w.slice(0, -3)}y` : w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+
 /** True when the wording appears as whole words/numbers and is not negated right before ("not 20", "isn't 20"), so "120" never matches "20". */
 const has = (answer: string, wording: string) => {
-  const w = wording.toLowerCase().trim();
+  const w = canonical(wording).trim();
   if (!w) return false;
-  const a = answer.toLowerCase();
+  const a = canonical(answer);
   const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`(^|[^a-z0-9.])${esc}(?![a-z0-9]|\\.\\d)`, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(a))) {
     const before = a.slice(0, m.index + m[1].length).trimEnd();
-    if (!/(?:\bnot|\bno|\bnever|n't|\bnor|\bneither)$/.test(before)) return true;
+    const after = a.slice(m.index + m[0].length);
+    const negatedAfter = /^\s*(?:(?:is|are|was|were|does|do|did|can|will|should|must|would)\s+)?(?:not|never)\b|^\s*(?:is|are|does|do|did|can|won|should)n't\b/.test(after);
+    if (!negatedAfter && !/(?:\bnot|\bno|\bnever|n't|\bnor|\bneither|\bwithout)(?:\s+(?:a|an|the|any|really|always))?$/.test(before)) return true;
   }
   return false;
 };
 
+/**
+ * True when every meaningful word and number of a multi-word wording appears close together in the answer, in any order and with
+ * plural/singular forms ("the lease liability is recorded" matches "recorded lease liabilities"). A negation inside or just before
+ * that stretch rejects it, and numbers must match exactly, so "20 percent" never matches "120 percent" or "not 20 percent".
+ */
+function hasTogether(answer: string, wording: string): boolean {
+  const need = [...new Set(wordList(wording).filter((w) => /^\d/.test(w) || (w.length >= 3 && !FILLER.has(w))).map(stemWord))];
+  if (need.length < 2) return false;
+  const raw = wordList(answer);
+  const seq = raw.map(stemWord);
+  const maxSpan = need.length * 2 + 6;
+  for (let start = 0; start < seq.length; start += 1) {
+    if (!need.includes(seq[start])) continue;
+    const seen = new Set<string>();
+    for (let end = start; end < seq.length && end - start < maxSpan; end += 1) {
+      if (need.includes(seq[end])) seen.add(seq[end]);
+      if (seen.size === need.length) {
+        const tail = raw.slice(end + 1, end + 3);
+        const afterIdx = COPULA.has(tail[0]) ? 1 : 0;
+        const negated = raw.slice(Math.max(0, start - 2), end + 1).some(isNegator) || (!!tail[afterIdx] && isNegator(tail[afterIdx]));
+        if (!negated) return true;
+        break;
+      }
+    }
+  }
+  return false;
+}
+
+const matches = (answer: string, wording: string) => has(answer, wording) || hasTogether(answer, wording);
+
+export interface Score { score: number; correct: boolean; outdated: boolean; missing: string[] }
+
 /** Facts found, the share of them, and whether the answer used a forbidden wording. No model involved. */
-export function scoreAnswer(answer: string, expected: Expected): { score: number; correct: boolean; outdated: boolean } {
+export function scoreAnswer(answer: string, expected: Expected): Score {
   const text = answer.replace(/\[\d+\]/g, ' ');
   const unnegated = text.replace(/\b(?:not|no|never|nor|neither|\w+n't)\s+[$]?[\d.,]+/gi, ' '); // a negated figure is not an answer
   const spelled = `${text} ${numbersIn(unnegated).join(' ')}`;
-  const found = expected.facts.filter((alts) => alts.some((w) => has(spelled, w))).length;
-  const outdated = (expected.forbid ?? []).some((w) => w.trim() && has(text, w));
+  const hit = expected.facts.map((alts) => alts.some((w) => matches(spelled, w)));
+  const found = hit.filter(Boolean).length;
+  const outdated = (expected.forbid ?? []).some((w) => w.trim() && matches(text, w));
   const score = expected.facts.length ? found / expected.facts.length : 0;
-  return { score, correct: score === 1 && !outdated, outdated };
+  const missing = expected.facts.filter((_, i) => !hit[i]).map((alts) => alts[0]);
+  return { score, correct: score === 1 && !outdated, outdated, missing };
 }
 
-export interface Answered { text: string; /** The numbered sources the model was given (none for the model alone). */ sourceCount: number }
+/** An answer key a person can have saved but nothing can be graded against: no facts, or only blank wordings. */
+export const isUsableKey = (expected: Expected | undefined): boolean => !!expected && Array.isArray(expected.facts) && expected.facts.length > 0 && expected.facts.every((alts) => Array.isArray(alts) && alts.some((w) => String(w).trim()));
+
+export interface Answered {
+  text: string;
+  /** The numbered sources the model was given (none for the model alone). */
+  sourceCount: number;
+  /** Stored, approved notes the model was given (only in the memory mode). */
+  memoryCount?: number;
+}
 export type Answerer = (item: ExamItem, mode: ExamMode) => Promise<Answered>;
+
+const clip = (t: string, n = 600) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
 /** Runs every item in one mode. The answerer is the model plus whatever retrieval the mode allows; scoring stays here. */
 export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number }): Promise<ExamMetrics> {
@@ -74,20 +163,61 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
   let unsupported = 0;
   for (const item of input.items) {
     const started = now();
-    const answered = await input.answer(item, input.mode);
+    if (!isUsableKey(item.expected)) {
+      results.push({ id: item.id, correct: false, score: 0, outdated: false, seconds: 0, reason: 'invalid-key' });
+      continue;
+    }
+    let answered: Answered;
+    try {
+      answered = await input.answer(item, input.mode);
+    } catch (e: any) {
+      // A model or retrieval failure is not a wrong answer: record why, and carry on with the next question.
+      results.push({ id: item.id, correct: false, score: 0, outdated: false, seconds: (now() - started) / 1000, reason: 'inference-failure', error: clip(String(e?.message || e), 200) });
+      continue;
+    }
     const seconds = (now() - started) / 1000;
-    const scored = scoreAnswer(answered.text, item.expected);
-    unsupported += citedNumbers(answered.text).filter((n) => n < 1 || n > answered.sourceCount).length;
-    results.push({ id: item.id, ...scored, seconds });
+    const text = String(answered.text ?? '');
+    const scored = scoreAnswer(text, item.expected);
+    unsupported += citedNumbers(text).filter((n) => n < 1 || n > answered.sourceCount).length;
+    let reason: ExamReason = scored.correct ? 'correct' : scored.outdated ? 'outdated' : 'wrong-answer';
+    if (!text.trim()) reason = 'empty-answer';
+    else if (!scored.correct && !scored.outdated && input.mode !== 'baseline' && answered.sourceCount === 0 && !answered.memoryCount) reason = 'no-sources';
+    else if (!scored.correct && !scored.outdated && input.mode === 'memory' && answered.memoryCount === 0) reason = 'no-approved-memory';
+    results.push({
+      id: item.id, correct: scored.correct, score: scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
+      answer: clip(text), sourceCount: answered.sourceCount, memoryCount: answered.memoryCount,
+    });
   }
+  const ungraded = results.filter((r) => r.reason === 'invalid-key' || r.reason === 'inference-failure').length;
+  const graded = results.length - ungraded;
   const correct = results.filter((r) => r.correct).length;
   const failed = new Set(input.previousFailures ?? []);
   return {
-    total: results.length, correct, accuracy: results.length ? correct / results.length : 0,
+    total: results.length, ungraded, correct, accuracy: graded ? correct / graded : 0,
     outdatedAnswers: results.filter((r) => r.outdated).length, unsupportedCitations: unsupported,
     repeatFailures: results.filter((r) => !r.correct && failed.has(r.id)).length,
     averageSeconds: results.length ? results.reduce((a, r) => a + r.seconds, 0) / results.length : 0, items: results,
   };
+}
+
+/** Short plain-language cause for each kind of failure, for the results screen. */
+export const REASON_LABEL: Record<ExamReason, string> = {
+  correct: 'Right',
+  'wrong-answer': 'The answer left out or changed a required fact',
+  outdated: 'The answer used a figure marked out of date or wrong',
+  'empty-answer': 'The model gave no answer',
+  'no-sources': 'No source was found for this question, so the model had nothing to read',
+  'no-approved-memory': 'No approved stored note matched this question',
+  'invalid-key': 'The answer key is empty or unusable, so this question was not graded',
+  'inference-failure': 'The model failed to answer, so this question was not graded',
+};
+
+/** How many questions of a run ended in each reason, most common first. Undefined for results saved before reasons existed. */
+export function reasonCounts(metrics: ExamMetrics): Array<{ reason: ExamReason; count: number }> {
+  if (!metrics.items.some((i) => i.reason)) return [];
+  const tally = new Map<ExamReason, number>();
+  metrics.items.forEach((i) => { if (i.reason && i.reason !== 'correct') tally.set(i.reason, (tally.get(i.reason) ?? 0) + 1); });
+  return [...tally.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -164,7 +294,7 @@ export function improvementSummary(history: ExamResult[]): string {
   const base = latest('baseline');
   const memory = latest('memory');
   if (!base || !memory) return 'Run the exam in the model alone mode and the stored memory mode to see whether memory helps.';
-  if (Math.min(base.metrics.total, memory.metrics.total) < MIN_QUESTIONS) return `Fewer than ${MIN_QUESTIONS} questions: too few to say whether anything improved.`;
+  if (Math.min(base.metrics.total - (base.metrics.ungraded ?? 0), memory.metrics.total - (memory.metrics.ungraded ?? 0)) < MIN_QUESTIONS) return `Fewer than ${MIN_QUESTIONS} questions: too few to say whether anything improved.`;
   const delta = memory.metrics.accuracy - base.metrics.accuracy;
   if (delta > 0) return `With sources and stored memory the answers were right ${pct(memory.metrics.accuracy)} of the time, against ${pct(base.metrics.accuracy)} for the model alone (${Math.round(delta * 100)} points better on ${memory.metrics.total} questions).`;
   return `No measured improvement: ${pct(memory.metrics.accuracy)} with sources and stored memory against ${pct(base.metrics.accuracy)} for the model alone.`;

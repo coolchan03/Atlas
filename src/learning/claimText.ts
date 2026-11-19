@@ -25,7 +25,7 @@ const NUMBER_WORDS: Record<string, number> = {
 const UNITS = 'minutes?|hours?|days?|weeks?|months?|years?|seconds?|inch(?:es)?|foot|feet|miles?|dollars?|percent|grams?|kg|liters?|cups?|times?|steps?|points?';
 
 /** Number words written out become digits. "one" counts only before a unit, because it is also an ordinary pronoun. */
-function wordsToDigits(text: string): string {
+export function wordsToDigits(text: string): string {
   return text
     .replace(new RegExp(`\\bone(?=\\s+(?:${UNITS})\\b)`, 'gi'), '1')
     .replace(new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join('|')})\\b`, 'gi'), (w) => String(NUMBER_WORDS[w.toLowerCase()]));
