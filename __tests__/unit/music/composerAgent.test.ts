@@ -82,7 +82,7 @@ describe('asking the composer', () => {
     const out = await composeMusic('rainy window', { ask });
     expect(out.via).toBe('composer');
     expect(out.instruments).toContain('Flute');
-    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask).toHaveBeenCalledTimes(3); // the tune, the rewrite of the weak tune, and a short question for its name
     expect(String(ask.mock.calls[1][1])).toContain('playable but weak');
     expect(out.note).toContain('Quality check');
   });
@@ -211,5 +211,36 @@ describe('continuing a saved tune', () => {
     const out = await extend(original(), { ask: async () => greedy });
     const ends = out.score.notes.map((n: { beat: number; length: number }) => n.beat + n.length);
     expect(Math.max(...ends)).toBeLessThanOrEqual(32 + 1e-6); // 4 original bars + 4 new bars = 32 beats
+  });
+});
+
+describe('the AI names the tune it made', () => {
+  const { cleanTitle } = require('../../../src/music/composerAgent');
+  it('cleans a reply into a title, and refuses what is not one', () => {
+    expect(cleanTitle('Night Train Home')).toBe('Night Train Home');
+    expect(cleanTitle('"Window Rain."')).toBe('Window Rain');
+    expect(cleanTitle('Title: **Quiet Harbour**\nIt is a calm piece.')).toBe('Quiet Harbour');
+    expect(cleanTitle('<think>hmm</think>\nSlow Morning')).toBe('Slow Morning');
+    expect(cleanTitle('A calm instrumental tune')).toBe(''); // names itself a tune
+    expect(cleanTitle('One two three four five six seven')).toBe('');
+    expect(cleanTitle('')).toBe('');
+  });
+
+  it('asks for a name after the tune, and uses it instead of the title the composer wrote', async () => {
+    const answers = [goodScore(), 'Window Rain', 'Window Rain'];
+    const ask = jest.fn(async (_s: string, _u: string) => answers.shift() ?? 'Window Rain');
+    const out = await composeMusic('rainy window', { ask });
+    const asked = ask.mock.calls.map((c) => String(c[1]));
+    expect(asked[asked.length - 1]).toContain('Give it a title');
+    expect(asked[asked.length - 1]).toContain('rainy window');
+    expect(out.score.title).toBe('Window Rain');
+  });
+
+  it('keeps the composer\'s own title when the model cannot name it, and gives an untitled tune a made-up one', async () => {
+    const asks = [goodScore().replace('TITLE: Rainy Window', 'TITLE: Original instrumental'), '', ''];
+    const ask = jest.fn(async () => asks.shift() ?? '');
+    const out = await composeMusic('calm piano', { ask });
+    expect(out.score.title).not.toBe('Original instrumental');
+    expect(out.score.title.length).toBeGreaterThan(2);
   });
 });

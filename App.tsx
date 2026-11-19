@@ -32,6 +32,7 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { registerAtlasVoice } from './src/atlasVoice';
 import { startLowPowerMonitor } from './src/atlasTools/lowPower';
 import { startThermalMonitor } from './src/atlasTools/thermal';
+import { connectMusicControls } from './src/music/musicControls';
 import { autoPickAcceleration } from './src/atlasTools/accel';
 import { startCtxRecovery } from './src/atlasTools/ctxGuard';
 import { purgePrivateChatImages } from './src/services/privateImagePurge';
@@ -50,6 +51,7 @@ registerAtlasVoice();
 registerAtlasHooks();
 startLowPowerMonitor();
 startThermalMonitor();
+connectMusicControls();
 autoPickAcceleration();
 startCtxRecovery();
 startTextAppearance(); // font and text size apply to every Text without a restart

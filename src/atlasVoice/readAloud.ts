@@ -250,7 +250,10 @@ function connectMediaControls(): void {
   const native = NativeModules.AtlasMediaControls;
   if (!native?.show) return; // the phone has the controls when its native module is there
   const { startMediaControls } = require('./mediaControls');
-  const controls = startMediaControls({ getState: readAloud.useReader.getState, subscribe: readAloud.useReader.subscribe, play: readAloud.play, pause: readAloud.pause, stop: readAloud.stop, jump: readAloud.jump }, native);
-  new NativeEventEmitter(native).addListener('AtlasMediaAction', (e: { action: string }) => controls.press(e.action as never));
+  const { claimMedia, ownsMedia, releaseMedia } = require('./mediaOwner');
+  // The reader and the music player share one notification: only the one that owns it shows, answers presses or takes it down.
+  const shared = { show: (t: string, x: string, p: boolean) => { claimMedia('reader'); native.show(t, x, p); }, hide: () => { if (releaseMedia('reader')) native.hide(); } };
+  const controls = startMediaControls({ getState: readAloud.useReader.getState, subscribe: readAloud.useReader.subscribe, play: readAloud.play, pause: readAloud.pause, stop: readAloud.stop, jump: readAloud.jump }, shared);
+  new NativeEventEmitter(native).addListener('AtlasMediaAction', (e: { action: string }) => { if (ownsMedia('reader')) controls.press(e.action as never); });
 }
 connectMediaControls();

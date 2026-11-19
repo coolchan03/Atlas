@@ -19,6 +19,9 @@ interface MusicLibraryState {
   soundfont: InstalledSoundfont | null;
   /** Play on the real instruments when a SoundFont is installed. */
   useSoundfont: boolean;
+  /** Keep playing when Atlas is in the background or closed from the recent apps, with controls in the phone's media player. */
+  background: boolean;
+  setBackground: (on: boolean) => void;
   setSoundfont: (sf: InstalledSoundfont | null) => void;
   setUseSoundfont: (on: boolean) => void;
   setVolume: (value: number) => void;
@@ -27,7 +30,8 @@ interface MusicLibraryState {
   removeTrack: (id: string) => void;
 }
 export const useMusicLibrary = create<MusicLibraryState>()(persist((set) => ({
-  tracks: [], volume: 0.45, loop: true, soundfont: null, useSoundfont: true,
+  tracks: [], volume: 0.45, loop: true, soundfont: null, useSoundfont: true, background: true,
+  setBackground: (background) => set({ background }),
   setSoundfont: (soundfont) => set({ soundfont }),
   setUseSoundfont: (useSoundfont) => set({ useSoundfont }),
   setVolume: (volume) => set({ volume: clampMusicVolume(volume) }),
@@ -37,7 +41,7 @@ export const useMusicLibrary = create<MusicLibraryState>()(persist((set) => ({
 }), {
   name: 'atlas-instrumental-library-v1', version: 1,
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (s) => ({ tracks: s.tracks, volume: s.volume, loop: s.loop, soundfont: s.soundfont, useSoundfont: s.useSoundfont }),
+  partialize: (s) => ({ tracks: s.tracks, volume: s.volume, loop: s.loop, soundfont: s.soundfont, useSoundfont: s.useSoundfont, background: s.background }),
 }));
 
 /** Delete exactly the two files for this track after it has been stopped. Never traverse user-chosen paths. */

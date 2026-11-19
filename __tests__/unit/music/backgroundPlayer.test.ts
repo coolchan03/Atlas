@@ -144,7 +144,7 @@ describe('controls', () => {
 
 describe('listening to the phone', () => {
   it('lowers the music while speech plays, and pauses when the app goes to the background or a call comes in', async () => {
-    const { player, playback, track, speech, appHandlers, interruptionHandlers, sources } = load();
+    const { player, playback, track, speech, library, appHandlers, interruptionHandlers, sources } = load();
     await player.play(track('a'));
     speech.markSpeechStarted('utt');
     expect(playback.getState().ducked).toBe(true);
@@ -152,8 +152,14 @@ describe('listening to the phone', () => {
     expect(playback.getState().ducked).toBe(false);
     appHandlers.change('active');
     expect(playback.getState().playing).toBe(true);
+    // By default the music goes on when Atlas is left (it is held in the foreground and shown in the phone's media controls)...
+    appHandlers.change('background');
+    expect(playback.getState().playing).toBe(true);
+    // ...and pauses as it used to when "keep playing in the background" is switched off.
+    library.getState().setBackground(false);
     appHandlers.change('background');
     expect(playback.getState().paused).toBe(true);
+    library.getState().setBackground(true);
     await player.resume();
     interruptionHandlers[0]({ type: 'ended' });
     expect(playback.getState().playing).toBe(true);

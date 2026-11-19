@@ -43,10 +43,10 @@ class InstrumentalBackgroundPlayer {
       if (state.volume !== previous.volume) this.applyVolume(0.2);
       if (state.loop !== previous.loop && this.source) this.source.loop = state.loop;
     });
-    // In-app navigation is supported. Backgrounding Atlas pauses playback; no unrequested
-    // Android foreground service, lock-screen player, or long-running audio notification.
+    // In-app navigation is supported. Leaving Atlas keeps the music playing (it is held in the foreground and shown in the phone's media
+    // controls: musicControls.ts) unless the person turned "keep playing in the background" off, which pauses it as it used to.
     const app = AppState.addEventListener('change', (value) => {
-      if (value !== 'active') this.pause();
+      if (value !== 'active' && !useMusicLibrary.getState().background) this.pause();
     });
     try {
       AudioManager.observeAudioInterruptions(true);

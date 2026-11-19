@@ -9,6 +9,7 @@ import { instrumentsForPrompt } from './catalog';
 import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
 import { seedFor } from './arrange';
+import { randomTitle } from './titles';
 import { THEORY_PRIMER, conformScore, harmonyPlan, inferPlan, planText, scoreToText, type HarmonyPlan } from './theory';
 import { REWRITE_BELOW, critiqueScore, finishScore, rewriteRequest } from './critic';
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
@@ -87,6 +88,28 @@ function variationBrief(original: MusicScore, plan: HarmonyPlan): string {
   return `Request: a variation of the tune below.\n${planText(plan)}\nTHE ORIGINAL (${bars} bars, ${Math.round(original.bpm)} BPM):\n${scoreToText(original)}\n\nWrite a VARIATION: keep the key, the chords, the tempo and exactly ${bars} bars, and keep a similar band. Write a new melody that is clearly related to the original (reuse its opening idea, changed), change the rhythm of the bass and the drums a little, and let a different instrument carry the tune in the second half. Reply with the score lines only.`;
 }
 
+const NAMER_SYSTEM = `You give instrumental tunes their names. Reply with ONLY the title: 2 to 5 words, no quotes, no full stop, no explanation. A title is evocative (a place, a mood, an image), like "Window Rain" or "Night Train Home". Never use the words music, tune, song, instrumental or track.`;
+
+/** What the model said, cleaned into a title (2 to 6 words, no quotes or labels), or '' when it is not a usable title. */
+export function cleanTitle(raw: string): string {
+  const line = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? '';
+  const text = line.replace(/^(title|name)\s*[:\-]\s*/i, '').replace(/^["'“”‘’*_`#\s]+|["'“”‘’*_`.!\s]+$/g, '').replace(/\s+/g, ' ');
+  const words = text.split(' ').filter(Boolean);
+  if (words.length < 1 || words.length > 6 || text.length > 50 || /\b(music|tune|song|instrumental|track)\b/i.test(text)) return '';
+  return text;
+}
+
+/** Asks the model for a name for a finished tune (one short reply). Returns the title, or '' to keep the one the tune has. */
+async function nameTune(o: { request: string; style: StyleMood; plan: HarmonyPlan; bpm: number; instruments: string }, ask: (system: string, user: string) => Promise<string>): Promise<string> {
+  try {
+    const about = `Style: ${styleLabel(o.style)}. ${harmonyLabel(o.plan)}, about ${Math.round(o.bpm)} beats per minute. Played by ${o.instruments}.${o.request.trim() ? ` The request was: "${o.request.trim().slice(0, 160)}".` : ''}`;
+    return cleanTitle(await ask(NAMER_SYSTEM, `${about}\nGive it a title.`));
+  } catch { return ''; }
+}
+
+/** True for the placeholder a tune gets when the composer wrote no title of its own. */
+const isPlaceholderTitle = (title: string): boolean => !title.trim() || /^original instrumental$/i.test(title.trim());
+
 interface Written { score: MusicScore; instruments: string; note: string }
 
 /**
@@ -131,8 +154,12 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
   const style = options.style ?? styleFromText(request) ?? 'focus';
   const brief = composerBrief(request, style, seconds);
   try {
-    const written = await writeScore(brief, options.ask ?? askModelDefault);
-    return { score: written.score, via: 'composer', instruments: written.instruments, style, note: written.note };
+    const ask = options.ask ?? askModelDefault;
+    const written = await writeScore(brief, ask);
+    // The AI names what it made: a short second question once the tune is written (the title it wrote on its own is the fallback).
+    const named = await nameTune({ request, style, plan: brief.plan, bpm: written.score.bpm, instruments: written.instruments }, ask);
+    const score = named ? { ...written.score, title: named } : isPlaceholderTitle(written.score.title) ? { ...written.score, title: randomTitle(style, specFor(style).group) } : written.score;
+    return { score, via: 'composer', instruments: written.instruments, style, note: written.note };
   } catch (e: any) {
     const built = composeStyled(request, style);
     return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a usable score (${String(e?.message || e)}), so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };

@@ -178,6 +178,12 @@
           android:exported="false"
           android:foregroundServiceType="mediaPlayback" />
 
+      <!-- Music Studio: holds the process while music plays with the screen off or the app closed from the recent apps, and shows it in the phone's media controls. -->
+      <service
+          android:name=".atlastts.AtlasMediaForegroundService"
+          android:exported="false"
+          android:foregroundServiceType="mediaPlayback" />
+
         <!-- Atlas: lets other apps (browser, document viewers) open files the assistant made -->
         <provider
             android:name=".atlasdevice.AtlasFileProvider"

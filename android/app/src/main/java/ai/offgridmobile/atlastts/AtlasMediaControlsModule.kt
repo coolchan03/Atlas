@@ -99,15 +99,32 @@ class AtlasMediaControlsModule(private val ctx: ReactApplicationContext) : React
                 .setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
                 .apply { if (open != null) setContentIntent(PendingIntent.getActivity(ctx, 5, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)) }
                 .build()
+            currentNotification = notification
             nm.notify(NOTIFICATION_ID, notification)
         } catch (_: Exception) {
             // No notification permission, or the phone refused: reading goes on without the lock-screen controls.
         }
     }
 
+    /**
+     * Holds Atlas in the foreground while music plays (true) so it keeps playing with the screen off or the app closed from the recent
+     * apps; false lets go. Needs the media notification from show() and the notification permission; without them it does nothing.
+     */
+    @ReactMethod
+    fun keepAlive(on: Boolean) {
+        try {
+            val intent = Intent(ctx, AtlasMediaForegroundService::class.java)
+            if (on) ContextCompat.startForegroundService(ctx, intent) else ctx.stopService(intent)
+        } catch (_: Exception) {
+            // Android refused a foreground start (the app was not in a state that allows it): music keeps to its old behaviour.
+        }
+    }
+
     /** Takes the controls away (reading ended or was stopped). */
     @ReactMethod
     fun hide() {
+        try { ctx.stopService(Intent(ctx, AtlasMediaForegroundService::class.java)) } catch (_: Exception) {}
+        currentNotification = null
         try { (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
         try { session?.isActive = false; session?.release() } catch (_: Exception) {}
         session = null
@@ -127,6 +144,8 @@ class AtlasMediaControlsModule(private val ctx: ReactApplicationContext) : React
         private const val ACTION = "ai.offgridmobile.atlas.READ_ALOUD_ACTION"
         private const val EXTRA_ACTION = "action"
         private const val CHANNEL = "atlas_read_aloud_controls"
-        private const val NOTIFICATION_ID = 7421
+        const val NOTIFICATION_ID = 7421
+        /** The media notification last built, so the foreground service can show the same one. */
+        @Volatile var currentNotification: Notification? = null
     }
 }
