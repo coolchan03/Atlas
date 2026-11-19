@@ -25,3 +25,13 @@ describe('speed kept per backend', () => {
     expect(useSpeedStats.getState().byConfig).toEqual({});
   });
 });
+
+describe('backend advice', () => {
+  it('says which backend is faster only from enough real runs on each', () => {
+    const { backendAdvice } = require('../../../src/atlasTools/speed');
+    const rec = useSpeedStats.getState().record;
+    for (let i = 0; i < 3; i += 1) { rec('m9', { decode: 4, backend: 'cpu' }); rec('m9', { decode: 12, backend: 'htp' }); }
+    expect(backendAdvice(useSpeedStats.getState().byConfig, 'm9')).toBe('HTP wrote 12.0 per second here, against 4.0 on CPU (measured on this phone, 3+ replies each).');
+    expect(backendAdvice({}, 'nope')).toBeNull();
+  });
+});

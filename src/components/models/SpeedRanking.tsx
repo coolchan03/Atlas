@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
-import { useSpeedStats, speedHealthLabel, type ModelSpeed } from '../../atlasTools/speed';
+import { useSpeedStats, speedHealthLabel, backendAdvice, type ModelSpeed } from '../../atlasTools/speed';
 const literalStyles = StyleSheet.create({
   s1: { fontSize: 16 },
   s2: { fontSize: 12, marginTop: 2 },
@@ -27,6 +27,7 @@ export const SpeedRankingCard: React.FC<{ style?: object }> = ({ style }) => {
   const { colors } = useTheme();
   const models = useAppStore(s => s.downloadedModels);
   const speeds = useSpeedStats(s => s.byModel);
+  const byConfig = useSpeedStats(s => s.byConfig);
   const ranked = rankModelsBySpeed(models, speeds).slice(0, 6);
   if (!ranked.length) return null;
   return (
@@ -34,13 +35,16 @@ export const SpeedRankingCard: React.FC<{ style?: object }> = ({ style }) => {
       <Text style={[{ color: colors.text }, literalStyles.s1]}>Fastest on this phone</Text>
       <Text style={[{ color: colors.textMuted }, literalStyles.s2]}>Measured while you chat. Word-pieces per second.</Text>
       {ranked.map((m, i) => (
-        <View key={m.id} style={literalStyles.s3}>
+        <React.Fragment key={m.id}>
+        <View style={literalStyles.s3}>
           <Text style={[{ color: i === 0 ? colors.primary : colors.textMuted }, literalStyles.s4]}>{i + 1}.</Text>
           <Text style={[{ color: colors.text }, literalStyles.s5]} numberOfLines={1}>{m.name}</Text>
           <Text style={{ color: colors.textSecondary }}>
             {m.decode.toFixed(1)} writing · {speedHealthLabel(m.decode)}{m.prefill > 0 ? ` · reads ${Math.round(m.prefill)}` : ''}
           </Text>
         </View>
+        {!!backendAdvice(byConfig, m.id) && <Text style={[{ color: colors.textMuted }, literalStyles.s2]} testID={`speed-advice-${m.id}`}>{backendAdvice(byConfig, m.id)}</Text>}
+        </React.Fragment>
       ))}
     </View>
   );

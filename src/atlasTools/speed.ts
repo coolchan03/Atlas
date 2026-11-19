@@ -155,3 +155,12 @@ export function fmtSec(s: number): string {
   const m = Math.floor(s / 60), r = Math.round(s % 60);
   return r ? `${m} min ${r} s` : `${m} min`;
 }
+
+/** A plain sentence about which backend measured faster for a model, or null when there is not enough to say. Never from one run, never from pooled figures. */
+export function backendAdvice(byConfig: Record<string, ModelSpeed>, modelId: string, minSamples = 3): string | null {
+  const best = fastestBackend(byConfig, modelId, minSamples);
+  if (!best) return null;
+  const others = Object.entries(byConfig).filter(([k, v]) => k.startsWith(`${modelId}|`) && k.slice(modelId.length + 1) !== best.backend && v.samples >= minSamples && v.decode > 0);
+  const slowest = others.map(([k, v]) => ({ backend: k.slice(modelId.length + 1), decode: v.decode })).sort((a, b) => a.decode - b.decode)[0];
+  return `${best.backend.toUpperCase()} wrote ${best.decode.toFixed(1)} per second here, against ${slowest.decode.toFixed(1)} on ${slowest.backend.toUpperCase()} (measured on this phone, ${minSamples}+ replies each).`;
+}

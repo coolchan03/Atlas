@@ -42,3 +42,14 @@ describe('hands-free call listening rule', () => {
     expect(callPhase(with_({ speaking: true, isRecording: true }))).toBe('speaking');
   });
 });
+
+describe('call trace', () => {
+  const { describePhaseChange, noteCallTrace, callTrace, clearCallTrace } = require('../../../src/atlasVoice/callLifecycle');
+  it('describes a phase change with its duration and keeps the newest lines', () => {
+    expect(describePhaseChange({ prev: 'listening', next: 'transcribing' }, 2500, '1 failed mic starts')).toBe('[CALL-STATE] listening -> transcribing after 2.5 s (1 failed mic starts)');
+    clearCallTrace();
+    for (let i = 0; i < 70; i += 1) noteCallTrace(`line ${i}`, 0);
+    expect(callTrace()).toHaveLength(60);
+    expect(callTrace()[59]).toContain('line 69');
+  });
+});

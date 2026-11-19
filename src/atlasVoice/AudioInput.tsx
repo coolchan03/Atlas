@@ -12,7 +12,7 @@ import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
-import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, shouldStartListening } from './callLifecycle';
+import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, type CallPhase } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import logger from '../utils/logger';
 
@@ -184,6 +184,20 @@ export function AtlasAudioInput(props: any) {
     }, LISTEN_DELAY_MS);
     return () => { clearTimeout(start); if (check) clearTimeout(check); };
   }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]); // eslint-disable-line react-hooks/exhaustive-deps -- reads the rest live through refs
+
+  // Every change of what the call is doing is logged with how long the last stage took, plus the events that explain a stall
+  // (an error from the recorder or speech engine, a muted or paused call), so a failed call can be read back afterwards.
+  const phase = callPhase({ handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts });
+  const lastPhase = useRef<{ phase: CallPhase; at: number }>({ phase, at: Date.now() });
+  useEffect(() => {
+    const now = Date.now();
+    if (lastPhase.current.phase === phase) return;
+    const line = describePhaseChange({ prev: lastPhase.current.phase, next: phase }, now - lastPhase.current.at, failedStarts ? `${failedStarts} failed mic starts` : '');
+    logger.log(line); noteCallTrace(line, now);
+    lastPhase.current = { phase, at: now };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (error) { const line = `[CALL-ERROR] ${String(error)}`; logger.warn(line); noteCallTrace(line); } }, [error]);
+  useEffect(() => { noteCallTrace(`[CALL-ROUTE] ${earpiece ? 'earpiece' : 'speaker'}`); }, [earpiece]);
 
   const toggleMute = () => {
     const next = !muted;

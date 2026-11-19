@@ -44,3 +44,18 @@ export function callPhase(s: CallSnapshot): CallPhase {
 
 /** True when the call should open the microphone now (after LISTEN_DELAY_MS of staying idle). */
 export const shouldStartListening = (s: CallSnapshot): boolean => callPhase(s) === 'idle' && s.failedStarts < MAX_FAILED_STARTS;
+
+/** One line for the call log when the phase changes: what it was, what it is, and how long the last phase lasted. */
+export function describePhaseChange(change: { prev: CallPhase; next: CallPhase }, sinceMs: number, extra = ''): string {
+  return `[CALL-STATE] ${change.prev} -> ${change.next} after ${(Math.max(0, sinceMs) / 1000).toFixed(1)} s${extra ? ` (${extra})` : ''}`;
+}
+
+const trace: string[] = [];
+const TRACE_MAX = 60;
+/** Keeps the newest call-state lines so a failed call can be explained afterwards (shown with the diagnostics). */
+export function noteCallTrace(line: string, now = Date.now()): void {
+  trace.push(`${new Date(now).toISOString().slice(11, 19)} ${line}`);
+  if (trace.length > TRACE_MAX) trace.shift();
+}
+export const callTrace = (): string[] => [...trace];
+export const clearCallTrace = (): void => { trace.length = 0; };
