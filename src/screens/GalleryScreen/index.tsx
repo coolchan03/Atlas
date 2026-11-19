@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, FlatList, Platform } from 'react-native';
+import { View, Text, Image, TouchableOpacity, FlatList, Platform, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import { GeneratedImage } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { createStyles, COLUMN_COUNT } from './styles';
+import { createStyles, galleryColumns } from './styles';
 import { useGalleryActions } from './useGalleryActions';
 import { GalleryGridItem } from './GridItem';
 import { FullscreenViewer } from './FullscreenViewer';
@@ -21,6 +21,7 @@ export const GalleryScreen: React.FC = () => {
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const columns = galleryColumns(useWindowDimensions().width);
 
   const {
     isSelectMode,
@@ -160,7 +161,8 @@ export const GalleryScreen: React.FC = () => {
           data={displayImages}
           renderItem={renderGridItem}
           keyExtractor={(item) => item.id}
-          numColumns={COLUMN_COUNT}
+          key={columns}
+          numColumns={columns}
           contentContainerStyle={styles.gridContainer}
           columnWrapperStyle={styles.gridRow}
           showsVerticalScrollIndicator={false}

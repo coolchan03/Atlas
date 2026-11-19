@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Image, TouchableOpacity } from 'react-native';
+import { View, Image, TouchableOpacity, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { useThemedStyles } from '../../theme';
 import { GeneratedImage } from '../../types';
-import { createStyles } from './styles';
+import { createStyles, galleryCell, galleryColumns } from './styles';
 
 interface GalleryGridItemProps {
   item: GeneratedImage;
@@ -24,11 +24,13 @@ export const GalleryGridItem: React.FC<GalleryGridItemProps> = ({
   onLongPress,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const { width } = useWindowDimensions();
+  const size = galleryCell(width, galleryColumns(width));
 
   return (
     <AnimatedEntry index={index} staggerMs={40} maxItems={15}>
       <TouchableOpacity
-        style={styles.gridItem}
+        style={[styles.gridItem, { width: size, height: size }]}
         onPress={onPress}
         onLongPress={onLongPress}
         activeOpacity={0.8}
