@@ -39,7 +39,7 @@ import { mayRewrite, onTask, planStep, pruneBank, resolveQuestion } from './cycl
 import { waveDigest, waveReports, waveTally } from './wave';
 import { MasteryStore, type DueConcept } from './masteryStore';
 import { MemoryLedger } from './memoryLedger';
-import { conflictReason, isStandaloneClaim, rankClaims, recallScore } from './claimText';
+import { conflictReason, isStandaloneClaim, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { buildWorkingContext } from './workingContext';
@@ -285,9 +285,11 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
     return;
   }
   status('Learner is writing a report...');
+  // What is already stored about this question: background to avoid repeating or contradicting it, never a source to cite.
+  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: (await loadCards(cfg.topic, agent.id).catch(() => [])).map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: 400 }).text;
   const report = await ask(
     learnerSystem(agent, st, cfg),
-    `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
+    `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}${known ? `ALREADY STORED (background only, NOT a source: do not cite it, and say if the sources contradict it):\n${known}\n\n` : ''}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
     'learner',
   );
   L().log({ agentId: agent.id, kind: 'report', title: `Report: ${item.q.slice(0, 70)}`, body: report.slice(0, 2500) });
@@ -341,10 +343,12 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     if (stopRequested) return;
     status(`Practicing from memory: ${c.question.slice(0, 60)}...`);
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
-    const notes = rankClaims(c.question, safely(() => learningKnowledgeDb.knownClaims(c.topic), []), 5).map((k) => k.text);
+    // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
+    const cards = await loadCards(c.topic, agent.id).catch(() => []);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cards.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: 500 }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
-      const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.map((n, i) => `${i + 1}. ${n}`).join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
+      const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
       const score = recallScore(answer, stored);
       outcome = score >= 0.7 ? 'correct' : score >= 0.4 ? 'partial' : 'wrong';
       if (outcome === 'wrong') safely(() => memory.recordExperience({ topic: cfg.topic, attempt: `Recall: ${c.question}`, outcome: 'wrong', correction: stored.join(' ') }), undefined);
