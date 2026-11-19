@@ -30,3 +30,13 @@ describe('text accelerator candidate selection', () => {
     expect(() => requireGpuLayers('vulkan', 8)).not.toThrow();
   });
 });
+
+describe('preferMeasured', () => {
+  const { preferMeasured } = require('../../../src/services/acceleratorSelection');
+  it('moves the measured winner first, only if it is already a compatible candidate', () => {
+    expect(preferMeasured(['htp', 'opencl', 'cpu'], 'opencl')).toEqual(['opencl', 'htp', 'cpu']);
+    expect(preferMeasured(['opencl', 'cpu'], 'htp')).toEqual(['opencl', 'cpu']); // htp is not compatible here: not brought back
+    expect(preferMeasured(['htp', 'cpu'], null)).toEqual(['htp', 'cpu']);
+    expect(preferMeasured(['htp', 'cpu'], 'CPU')).toEqual(['cpu', 'htp']);
+  });
+});

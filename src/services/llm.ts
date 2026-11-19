@@ -3,7 +3,7 @@ import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers } from './gpuOffload';
-import { acceleratorCandidates, requireGpuLayers } from './acceleratorSelection';
+import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './acceleratorSelection';
 import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
 import { Message, INFERENCE_BACKENDS } from '../types';
@@ -211,6 +211,12 @@ class LLMService {
           modelPath, !!mmProjPath,
         );
         candidates.push(INFERENCE_BACKENDS.CPU);
+        // Measured speed on this phone beats a guess: the backend that wrote fastest for this model in real runs goes first.
+        try {
+          const { useSpeedStats, fastestBackend } = require('../atlasTools/speed');
+          const id = useAppStore.getState().activeModelId;
+          if (id) candidates = preferMeasured(candidates, fastestBackend(useSpeedStats.getState().byConfig, id)?.backend);
+        } catch { /* no speed history: keep the default order */ }
       }
       // Only Auto may try a different engine. Explicit NPU, GPU, and Vulkan
       // selections fail visibly rather than silently running on CPU.

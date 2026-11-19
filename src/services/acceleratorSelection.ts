@@ -47,3 +47,14 @@ export function requireGpuLayers(backend: TextAccelerator, layers: number): void
     );
   }
 }
+
+/**
+ * In Automatic mode, tries first the backend that MEASURED fastest for this model on this phone, when real runs on two or more
+ * backends exist. It only reorders backends that are already compatible candidates (so a measured winner can never bring back a
+ * backend that lacks the vision or tool support this model needs), and the rest keep their order, ending in the CPU fallback.
+ */
+export function preferMeasured(candidates: InferenceBackend[], fastest: string | null | undefined): InferenceBackend[] {
+  if (!fastest) return candidates;
+  const winner = candidates.find((c) => String(c).toLowerCase() === fastest.toLowerCase());
+  return winner ? [winner, ...candidates.filter((c) => c !== winner)] : candidates;
+}
