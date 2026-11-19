@@ -19,7 +19,7 @@ import { addToPractice } from './importQuestions';
 import { outlineFromText, outlineToText, parseOutline } from './outline';
 import { describeEvidence, projectIdsFor, topicEvidence } from './progress';
 import { describePace, pace, validDay } from './schedule';
-import { CORE_CPA_CODES, organizeCpaInOneProject, setupAllCpaExams, setupCpaExam, stampExamScope } from './setup';
+import { CORE_CPA_CODES, organizeCpaInOneProject, setupAllCpaExams, setupCpaExam, stampExamScope, gatherCpaProjects } from './setup';
 import { useCpa, type CpaTopic } from './store';
 import { useTopics, courseProgress } from '../topics/store';
 import { boardCovers, ensureExamCourse } from './course';
@@ -50,7 +50,7 @@ export const CpaPrepScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const exams = useCpa((s) => s.exams);
   const ready = CORE_CPA_CODES.every((c) => exams[c]);
-  useEffect(() => { stampExamScope(); }, []); // older questions get their exam code (additive, nothing moves)
+  useEffect(() => { stampExamScope(); gatherCpaProjects(); }, []); // older questions get their exam code (additive, nothing moves)
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Professional exam prep" />

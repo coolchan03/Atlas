@@ -94,6 +94,26 @@ export function organizeCpaInOneProject(existingProjectId?: string): string {
   return id;
 }
 
+/**
+ * Puts every CPA exam's own project inside the CPA Study folder, so older CPA projects (made before the folder existed) are not left
+ * loose on the Projects screen. Only top-level projects move; one already inside a folder is left where the person put it. Nothing is
+ * renamed or deleted and ids stay the same, so progress and documents are unchanged. Safe to run again. Returns how many moved.
+ */
+export function gatherCpaProjects(): number {
+  const folderId = useCpa.getState().groupProjectId ?? examFolderId('FAR');
+  const store = useProjectStore.getState();
+  if (!folderId || !store.projects.some((p) => p.id === folderId)) return 0;
+  let moved = 0;
+  for (const [code, exam] of Object.entries(useCpa.getState().exams)) {
+    const id = exam?.projectId;
+    const project = id ? store.projects.find((p) => p.id === id) : undefined;
+    if (!id || !project || id === folderId || project.parentId || project.pinVerifier || project.protectedBlob) continue;
+    if (examFolder(code as ExamCode).name !== CPA_PROJECT_NAME) continue;
+    try { store.updateProject(id, { parentId: folderId }); moved += 1; } catch { /* would loop or locked: leave it */ }
+  }
+  return moved;
+}
+
 export interface ScopePreview { examCode: string; questions: number }
 /** What the exam-code stamp would touch: unstamped questions whose project belongs to exactly one exam. Pure; changes nothing. */
 export function previewExamScope(): ScopePreview[] {
