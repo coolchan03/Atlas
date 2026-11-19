@@ -893,10 +893,12 @@ describe('ModelSettingsScreen', () => {
     });
 
     // HTP is currently disabled via HTP_UI_ENABLED feature flag
-    it('locks KV cache display to f16 on HTP backend', () => {
+    it('keeps the KV cache choice (q4_0) on a backend that runs f16, and can still be changed', () => {
       useAppStore.getState().updateSettings({ inferenceBackend: 'htp', cacheType: 'q4_0' });
-      const { getByText } = renderWithSections('text');
-      expect(getByText(/Full precision/)).toBeTruthy();
+      const { getByText, getByTestId } = renderWithSections('text');
+      expect(getByText(/4-bit quantized/)).toBeTruthy();
+      fireEvent.press(getByTestId('cache-type-q8_0-button'));
+      expect(useAppStore.getState().settings.cacheType).toBe('q8_0');
     });
   });
 
