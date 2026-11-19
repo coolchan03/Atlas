@@ -30,6 +30,7 @@ const STORES: Record<string, () => any> = {
   'atlas-recordings': () => require('../atlasRecorder/store').useRecordings,
   'atlas-about-me': () => require('../stores/aboutMeStore').useAboutMe,
   'atlas-skills': () => require('../skills/skillsStore').useSkills,
+  'atlas-custom-helpers': () => require('../workflows/customHelpers').useCustomHelpers,
   'atlas-schedule': () => require('../schedule/store').useSchedule,
   'atlas-topics': () => require('../topics/store').useTopics,
   'atlas-pins': () => require('../pins/store').usePins,

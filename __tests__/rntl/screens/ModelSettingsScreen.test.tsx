@@ -857,9 +857,9 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('q4_0')).toBeTruthy();
     });
 
-    it('defaults to q8_0', () => {
+    it('defaults to q4_0', () => {
       const state = useAppStore.getState();
-      expect(state.settings.cacheType).toBe('q8_0');
+      expect(state.settings.cacheType).toBe('q4_0');
     });
 
     it('updates store when f16 is pressed', () => {
@@ -975,7 +975,7 @@ describe('ModelSettingsScreen', () => {
       expect(s.maxTokens).toBe(1024);
       expect(s.nThreads).toBe(0);
       expect(s.nBatch).toBe(512);
-      expect(s.cacheType).toBe('q8_0');
+      expect(s.cacheType).toBe('q4_0');
       expect(s.flashAttn).toBe(true);
       expect(s.inferenceBackend).toBe('metal'); // iOS default
       expect(s.gpuLayers).toBe(99);

@@ -18,7 +18,7 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   const [idea, setIdea] = useState('');
   const [busy, setBusy] = useState(false);
   const problems = steps.trim() ? parseSteps(steps).errors : [];
-  const input = (value: string, set: (v: string) => void, placeholder: string, testID: string, tall = false) => (
+  const input = ({ value, set, placeholder, testID, tall = false }: { value: string; set: (v: string) => void; placeholder: string; testID: string; tall?: boolean }) => (
     <TextInput style={[styles.input, tall && styles.tall, { color: colors.text, borderColor: colors.border }]} value={value} onChangeText={set} placeholder={placeholder}
       placeholderTextColor={colors.textMuted} multiline={tall} textAlignVertical={tall ? 'top' : 'center'} testID={testID} />
   );
@@ -40,13 +40,13 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   return (
     <Shell title={helper ? 'Edit helper' : 'Make your own helper'} onBack={onClose}>
       <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line. Each line starts with field: (asked first), ask: (a choice part-way, with choices after a |) or ai: (an instruction for the AI). The last AI result is shown for your approval, then saved as a note.</Text>
-      {input(title, setTitle, 'Name, for example: Reply writer', 'helper-title')}
-      {input(summary, setSummary, 'One line about what it does (optional)', 'helper-summary')}
-      {input(help, setHelp, 'What to paste or type when it starts (optional)', 'helper-help')}
-      {input(steps, setSteps, EXAMPLE, 'helper-steps', true)}
+      {input({ value: title, set: setTitle, placeholder: 'Name, for example: Reply writer', testID: 'helper-title' })}
+      {input({ value: summary, set: setSummary, placeholder: 'One line about what it does (optional)', testID: 'helper-summary' })}
+      {input({ value: help, set: setHelp, placeholder: 'What to paste or type when it starts (optional)', testID: 'helper-help' })}
+      {input({ value: steps, set: setSteps, placeholder: EXAMPLE, testID: 'helper-steps', tall: true })}
       {problems.map((p) => <Text key={p} style={{ color: colors.error }}>{p}</Text>)}
       <Text style={[styles.note, { color: colors.textSecondary }]}>Not sure how to write the steps? Say what you want and the AI drafts them for you to edit.</Text>
-      {input(idea, setIdea, 'For example: turn my rough notes into a polite email', 'helper-idea')}
+      {input({ value: idea, set: setIdea, placeholder: 'For example: turn my rough notes into a polite email', testID: 'helper-idea' })}
       <View style={styles.row}>
         <Button title={busy ? 'Drafting...' : 'Draft the steps'} variant="outline" onPress={() => void draft()} disabled={busy || idea.trim().length < 8} testID="helper-draft" />
         <Button title="Save" onPress={save} disabled={!title.trim() || !steps.trim() || problems.length > 0} testID="helper-save" />

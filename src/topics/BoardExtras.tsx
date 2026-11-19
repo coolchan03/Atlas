@@ -1,6 +1,6 @@
 import { SPACING } from '../constants';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
 import { Fold } from '../components/Fold';
@@ -10,7 +10,7 @@ import { bookLabel, friendlyTitle } from './chapters';
 import { FORMATS, type SquareFormat } from './formats';
 import { useTopics, type Course } from './store';
 import { phaseOf, subscribe } from './generationQueue';
-import { stopWriting } from './service';
+import { createChapterCourse, stopWriting } from './service';
 import { editBoard } from './boardEdit';
 import { coverageView, STATE_LABEL } from './coverageView';
 import { useCpa } from '../cpa/store';
@@ -82,6 +82,15 @@ export function ChangeBoardPanel({ course }: { course: Course }) {
         style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="course-change-text" />
       <Button title={busy ? 'Changing the board...' : 'Change the board'} onPress={() => void go()} disabled={busy || !text.trim()} testID="course-change-go" />
       {!!said && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-change-done">{said}</Text>}
+      {!!course.projectId && !!course.bookChapters?.length && (
+        <Button title="Make a new board from every chapter of the textbooks" variant="outline" disabled={busy} testID="course-rebuild"
+          onPress={() => Alert.alert('Make a new board?', 'It goes through the textbooks one at a time, every chapter of each. This board stays as it is.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Make it', onPress: () => {
+            setBusy(true); setSaid('');
+            createChapterCourse(course.request, course.sources ?? [], course.projectId!)
+              .then((id) => setSaid(id ? 'A new board is in your course list.' : 'No textbook chapters could be found to build from.'))
+              .catch((e) => setSaid(String((e as Error)?.message || e))).finally(() => setBusy(false));
+          } }])} />
+      )}
     </Fold>
   );
 }

@@ -291,7 +291,7 @@ describe('LLMService', () => {
       );
     });
 
-    it('uses flashAttn=true from store and sets q8_0 KV cache', async () => {
+    it('uses flashAttn=true from store and sets q4_0 KV cache (the default)', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
@@ -308,8 +308,8 @@ describe('LLMService', () => {
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
           flash_attn_type: 'auto',
-          cache_type_k: 'q8_0',
-          cache_type_v: 'q8_0',
+          cache_type_k: 'q4_0',
+          cache_type_v: 'q4_0',
         })
       );
     });
@@ -356,8 +356,8 @@ describe('LLMService', () => {
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
           flash_attn_type: 'auto',
-          cache_type_k: 'q8_0',
-          cache_type_v: 'q8_0',
+          cache_type_k: 'q4_0',
+          cache_type_v: 'q4_0',
         })
       );
     });

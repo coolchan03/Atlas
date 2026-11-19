@@ -67,7 +67,7 @@ export const resetStores = (): void => {
       gpuLayers: 99,
       flashAttn: false,
       aggressiveModelLoading: false,
-      cacheType: 'q8_0',
+      cacheType: 'q4_0',
       showGenerationDetails: false,
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
