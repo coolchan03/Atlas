@@ -1,5 +1,6 @@
+import { KeyboardSafeView } from './KeyboardSafeView';
 import React, { useState } from 'react';
-import { StyleSheet, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Modal, Text, TextInput, TouchableOpacity } from 'react-native';
 import { useTheme } from '../theme';
 import { useNavigation } from '@react-navigation/native';
 import { useProjectStore } from '../stores/projectStore';
@@ -45,7 +46,7 @@ export function ProjectPinGate({ projectId }: { projectId: string }) {
     } finally { setBusy(false); }
   };
   return <Modal visible={locked} transparent={false} animationType="fade" onRequestClose={() => navigation.goBack()}>
-    <View style={[literalStyles.s1, { backgroundColor: colors.background }]}>
+    <KeyboardSafeView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
       <Text style={[{ color: colors.text }, literalStyles.s2]}>Protected project</Text>
       <Text style={{ color: colors.textSecondary }}>Enter this project's PIN. You can use the same PIN for multiple individually protected projects and chats.</Text>
       <TextInput secureTextEntry keyboardType="number-pad" value={pin} onChangeText={v => setPin(v.replace(/\D/g,'').slice(0,12))}
@@ -56,6 +57,6 @@ export function ProjectPinGate({ projectId }: { projectId: string }) {
       <TouchableOpacity disabled={busy || pin.length < 4} onPress={submit} style={[literalStyles.s6, { backgroundColor: colors.primary }]}>
         <Text style={literalStyles.s7}>{busy ? 'Unlocking…' : 'Unlock project'}</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardSafeView>
   </Modal>;
 }

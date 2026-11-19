@@ -1,5 +1,6 @@
+import { KeyboardSafeView } from './KeyboardSafeView';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Modal, Text, TextInput, TouchableOpacity } from 'react-native';
 import { useChatStore } from '../stores/chatStore';
 import { onProtectedChatsRelocked, unlockChat } from '../stores/encryptedChatStorage';
 import { useTheme } from '../theme';
@@ -62,7 +63,7 @@ export function ChatPinGate({ conversationId }: { conversationId?: string | null
     } finally { setBusy(false); }
   };
   return <Modal visible={locked} animationType="fade" onRequestClose={() => navigation.goBack()} transparent={false}>
-    <View style={[literalStyles.s1, { backgroundColor: colors.background }]}>
+    <KeyboardSafeView style={[literalStyles.s1, { backgroundColor: colors.background }]}>
       <Text style={[{ color: colors.text }, literalStyles.s2]}>Locked conversation</Text>
       <Text style={{ color: colors.textSecondary }}>Enter this chat's PIN to open it.</Text>
       <TextInput value={pin} onChangeText={v => setPin(v.replace(/\D/g, '').slice(0, 12))} secureTextEntry keyboardType="number-pad" placeholder="4–12 digit PIN" placeholderTextColor={colors.textMuted} style={[{ color: colors.text }, literalStyles.s3, { borderColor: colors.border }]} />
@@ -74,6 +75,6 @@ export function ChatPinGate({ conversationId }: { conversationId?: string | null
       <TouchableOpacity disabled={busy || pin.length < 4} onPress={() => submit(true)} style={[literalStyles.s8, { borderColor: colors.border }]}>
         <Text style={[{ color: colors.text }, literalStyles.s5]}>Unlock other chats using the same PIN</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardSafeView>
   </Modal>;
 }
