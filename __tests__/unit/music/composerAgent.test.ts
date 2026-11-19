@@ -155,3 +155,27 @@ describe('the make_music tool', () => {
     await expect(agent.makeMusicForChat({})).rejects.toThrow('description');
   });
 });
+
+describe('making a variation of a saved tune', () => {
+  const { composeVariation } = require('../../../src/music/composerAgent');
+  const original = () => parseAgentScore(goodScore()).score;
+
+  it('shows the composer the original and its key, keeps the length, and names the result a variation', async () => {
+    const ask = jest.fn(async (_system: string, _user: string) => goodScore());
+    const out = await composeVariation(original(), { ask, mood: 'jazz' });
+    expect(out.via).toBe('composer');
+    expect(out.score.title).toBe('Rainy Window (variation)');
+    const brief = String(ask.mock.calls[0][1]);
+    expect(brief).toContain('a variation of the tune below');
+    expect(brief).toContain('KEY:');
+    expect(brief).toContain('THE ORIGINAL (4 bars');
+    expect(brief).toContain('NOTE C3 0 4');
+  });
+
+  it('falls back to the next variant from the built-in composer when the composer fails', async () => {
+    const out = await composeVariation(original(), { ask: async () => 'no', mood: 'jazz', variant: 2 });
+    expect(out.via).toBe('built-in');
+    expect(out.note).toContain('could not write a variation');
+    expect(out.score.notes.length).toBeGreaterThan(20);
+  });
+});

@@ -74,3 +74,33 @@ describe('finishing a tune', () => {
     expect(tune.notes[0].gain).toBe(0.5); // the original is not changed
   });
 });
+
+describe('reading the plan back from a finished tune', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { inferPlan, scoreToText } = require('../../../src/music/theory');
+  const { parseAgentScore } = require('../../../src/music/agentScore');
+
+  it('finds the home note, the scale and each bar\'s chord root from the notes', () => {
+    const tune = finishScore(goodTune(), plan);
+    const read = inferPlan(tune, bpb)!;
+    expect(read.tonic).toBe(plan.tonic);
+    expect(read.bars).toHaveLength(plan.bars.length);
+    // the last bar is the one finishing moved onto the home note
+    expect(read.bars.slice(0, -1).map((b: { root: number }) => b.root)).toEqual(plan.bars.slice(0, -1).map((b) => b.root));
+    expect(read.bars.at(-1).root).toBe(plan.tonic);
+    // every chord tone the tune plays in a bar is in that bar's chord
+    read.bars.slice(0, -1).forEach((b: { tones: number[] }, i: number) => plan.bars[i].tones.slice(0, 3).forEach((t) => expect(b.tones).toContain(t)));
+  });
+
+  it('writes a tune as the composer\'s own line format, and reads it back note for note', () => {
+    const text = scoreToText(goodTune());
+    expect(text.split('\n').slice(0, 2)).toEqual(['TITLE: t', 'BPM: 90']);
+    const back = parseAgentScore(text);
+    expect(back.score.notes.length).toBe(goodTune().notes.length);
+    expect(back.instruments).toEqual(expect.arrayContaining(['Flute', 'Upright bass', 'Warm pad']));
+  });
+
+  it('gives nothing for a tune with no pitched notes', () => {
+    expect(inferPlan({ title: 't', bpm: 90, notes: [{ pitch: 48, beat: 0, length: 0.2, gain: 0.5, role: 'perc', voice: 'kick' }] })).toBeNull();
+  });
+});

@@ -5,6 +5,11 @@ name: Build Atlas APK
 on:
   push:
     branches: [atlas-voice, claude/atlas-voice-music-home-widgets]
+  # Twice a week on the default branch, a build that is never published and saves no APK: it keeps the Gradle and image-engine caches
+  # fresh (GitHub deletes a cache nobody used for 7 days, and a feature branch can read the default branch's caches). It only starts once
+  # this workflow is on the default branch.
+  schedule:
+    - cron: '17 5 * * 1,4'
   workflow_dispatch:
     inputs:
       minify_trial:
@@ -351,6 +356,7 @@ jobs:
           mkdir -p out
           cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'schedule'
         with:
           # A shrunk trial build gets its own name so the official-publish workflow (which takes Atlas-apk) can never pick it up.
           name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || 'Atlas-apk' }}

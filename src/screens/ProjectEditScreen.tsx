@@ -22,6 +22,8 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore } from '../stores';
+import { useAgentStore } from '../stores/agentStore';
+import { ChipPicker } from '../components/GenerationSettingsModal/ChatPickers';
 import { RootStackParamList } from '../navigation/types';
 import { ProjectPinGate } from '../components/ProjectPinGate';
 import { FolderPicker } from '../components/FolderPicker';
@@ -74,6 +76,7 @@ export const ProjectEditScreen: React.FC = () => {
     }
   }, []);
 
+  const agents = useAgentStore((s) => s.agents);
   const [kind, setKind] = useState<ProjectKind>('general');
   // The folder this project is inside (a new project can start inside one, from a folder's page).
   const [parentId, setParentId] = useState<string | undefined>(route.params?.parentId);
@@ -82,6 +85,8 @@ export const ProjectEditScreen: React.FC = () => {
     description: '',
     systemPrompt: '',
     allowLearningActivities: true,
+    defaultAgentId: '',
+    answerLength: 'normal' as 'short' | 'normal',
   });
 
   useEffect(() => {
@@ -93,6 +98,8 @@ export const ProjectEditScreen: React.FC = () => {
         description: existingProject.description,
         systemPrompt: existingProject.systemPrompt,
         allowLearningActivities: existingProject.allowLearningActivities !== false,
+        defaultAgentId: existingProject.defaultAgentId ?? '',
+        answerLength: existingProject.answerLength ?? 'normal',
       });
     }
   }, [existingProject]);
@@ -122,6 +129,8 @@ export const ProjectEditScreen: React.FC = () => {
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
+        defaultAgentId: formData.defaultAgentId || undefined,
+        answerLength: formData.answerLength,
         kind,
         parentId,
       });
@@ -131,6 +140,8 @@ export const ProjectEditScreen: React.FC = () => {
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
         allowLearningActivities: formData.allowLearningActivities,
+        ...(formData.defaultAgentId ? { defaultAgentId: formData.defaultAgentId } : {}),
+        answerLength: formData.answerLength,
         kind,
         ...(parentId ? { parentId } : {}),
       });
@@ -215,7 +226,7 @@ export const ProjectEditScreen: React.FC = () => {
           {/* System Prompt */}
           <Text style={styles.label}>Project notes (optional)</Text>
           <Text style={styles.hint}>
-            Extra context for chats in this project. It is added under the active agent's instructions. Who answers and how is set in Agents.
+            Extra context for chats in this project. It is added under the instructions of the chat's agent. Pick the agent new chats start with below.
           </Text>
           <TextInput
             style={[styles.input, styles.textArea]}
@@ -230,6 +241,19 @@ export const ProjectEditScreen: React.FC = () => {
           <Text style={styles.tip}>
             Tip: Be specific about what you want the AI to do, how it should respond, and any context it needs.
           </Text>
+
+          <ChipPicker
+            title="Agent for new chats in this project"
+            active={formData.defaultAgentId}
+            options={[{ id: '', label: 'Ask each time' }, ...agents.map((a) => ({ id: a.id, label: a.name }))]}
+            onChoose={(id) => setFormData((f) => ({ ...f, defaultAgentId: id }))}
+          />
+          <ChipPicker
+            title="Answer length in this project"
+            active={formData.answerLength}
+            options={[{ id: 'normal', label: 'Normal' }, { id: 'short', label: 'Short (about 250 words)' }]}
+            onChoose={(id) => setFormData((f) => ({ ...f, answerLength: id as 'short' | 'normal' }))}
+          />
 
           <Text style={styles.label}>Learning activities</Text>
           <Text style={styles.hint}>Allow Atlas to suggest learning games, quizzes or podcasts based on this project's material. On by default; turn it off for writing-only projects. Offline arcade games are in Emergency mode.</Text>

@@ -385,6 +385,10 @@ export interface ImageGenerationProgress {
 export interface Project {
   /** The project this one is inside (a folder), when it is inside one. Its documents are searched along with this project's. */
   parentId?: string;
+  /** The agent new chats in this project start with (a chat can still pick another). */
+  defaultAgentId?: string;
+  /** 'short' keeps answers in this project's chats brief (a token cap); anything else leaves the length to the agent. */
+  answerLength?: 'short' | 'normal';
   /** Answers from this project's books quote the passage and name the document, and say when something is not in the books. */
   citeBooks?: boolean;
   isPinned?: boolean;

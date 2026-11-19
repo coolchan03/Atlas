@@ -11,7 +11,7 @@ import type { Conversation } from '../../types';
 
 type Option = { id: string; label: string };
 
-const ChipPicker: React.FC<{ title: string; active: string; options: Option[]; onChoose: (id: string) => void }> = ({ title, active, options, onChoose }) => {
+export const ChipPicker: React.FC<{ title: string; active: string; options: Option[]; onChoose: (id: string) => void }> = ({ title, active, options, onChoose }) => {
   const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.box}>

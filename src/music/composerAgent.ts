@@ -9,7 +9,7 @@ import { instrumentsForPrompt } from './catalog';
 import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
 import { seedFor } from './arrange';
-import { THEORY_PRIMER, conformScore, harmonyPlan, planText, type HarmonyPlan } from './theory';
+import { THEORY_PRIMER, conformScore, harmonyPlan, inferPlan, planText, scoreToText, type HarmonyPlan } from './theory';
 import { REWRITE_BELOW, critiqueScore, finishScore, rewriteRequest } from './critic';
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
 import type { MusicScore } from './types';
@@ -81,12 +81,19 @@ async function askModelDefault(system: string, user: string): Promise<string> {
   return askModel(system, user);
 }
 
-/** Writes a tune for a request: the composer agent first (twice if the first score is unusable), then the built-in composer. */
-export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
-  const seconds = clampSeconds(options.seconds);
-  const style = options.style ?? styleFromText(request) ?? 'focus';
-  const brief = composerBrief(request, style, seconds);
-  const ask = options.ask ?? askModelDefault;
+/** What the composer is told for a variation: the plan the original follows, the original itself, and what to change and keep. */
+function variationBrief(original: MusicScore, plan: HarmonyPlan): string {
+  const bars = plan.bars.length;
+  return `Request: a variation of the tune below.\n${planText(plan)}\nTHE ORIGINAL (${bars} bars, ${Math.round(original.bpm)} BPM):\n${scoreToText(original)}\n\nWrite a VARIATION: keep the key, the chords, the tempo and exactly ${bars} bars, and keep a similar band. Write a new melody that is clearly related to the original (reuse its opening idea, changed), change the rhythm of the bass and the drums a little, and let a different instrument carry the tune in the second half. Reply with the score lines only.`;
+}
+
+interface Written { score: MusicScore; instruments: string; note: string }
+
+/**
+ * The composer's whole pass for one brief: ask (twice if the first score is unusable), put the notes in key, listen to the result and
+ * send a weak tune back once, then end it on the home note with fades. Throws the last problem when no usable score came back.
+ */
+async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (system: string, user: string) => Promise<string>): Promise<Written> {
   let problem = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -109,14 +116,44 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
       report.score = finishScore(report.score, brief.plan);
       const instruments = [...report.instruments, ...report.drums.map((d) => `${d} drum`)].join(', ');
       const total = Object.values(fixed.changed).reduce((a, b) => a + b, 0);
-      return { score: report.score, via: 'composer', instruments, style, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
+      return { score: report.score, instruments, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
     } catch (e: any) {
       problem = String(e?.message || e);
       if (/no model|could not be loaded|failed to load/i.test(problem)) break; // no point asking again
     }
   }
-  const built = composeStyled(request, style);
-  return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a usable score (${problem}), so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };
+  throw new Error(problem);
+}
+
+/** Writes a tune for a request: the composer agent first, then the built-in composer when it cannot. */
+export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
+  const seconds = clampSeconds(options.seconds);
+  const style = options.style ?? styleFromText(request) ?? 'focus';
+  const brief = composerBrief(request, style, seconds);
+  try {
+    const written = await writeScore(brief, options.ask ?? askModelDefault);
+    return { score: written.score, via: 'composer', instruments: written.instruments, style, note: written.note };
+  } catch (e: any) {
+    const built = composeStyled(request, style);
+    return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a usable score (${String(e?.message || e)}), so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };
+  }
+}
+
+/**
+ * A variation of a saved tune: the same key, scale, chords, tempo and length, with a new melody and a changed feel. The key and chords are
+ * read back from the notes (theory.ts `inferPlan`), the composer is shown the original and asked for a related new tune, and the answer goes
+ * through the same checks as any other. When the composer cannot, the built-in composer makes the next variant of the same style.
+ */
+export async function composeVariation(original: MusicScore, options: ComposeOptions & { mood?: StyleMood; variant?: number } = {}): Promise<Composed> {
+  const style = options.mood ?? options.style ?? 'focus';
+  const plan = inferPlan(original, 4);
+  const fallback = (why: string): Composed => ({ score: composeStyled(original.title, style, { variant: (options.variant ?? 0) + 1 }), via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a variation (${why}), so the built-in ${styleLabel(style)} composer made the next variant.` });
+  if (!plan) return fallback('the key of this tune could not be read from its notes');
+  const text = variationBrief(original, plan);
+  try {
+    const written = await writeScore({ text, plan }, options.ask ?? askModelDefault);
+    return { score: { ...written.score, title: `${original.title} (variation)` }, via: 'composer', instruments: written.instruments, style, note: `Variation of "${original.title}". ${written.note}` };
+  } catch (e: any) { return fallback(String(e?.message || e)); }
 }
 
 /** What the make_music tool does: compose, render, save to the music library and start playing. Returns the words the chat model gives back. @public */

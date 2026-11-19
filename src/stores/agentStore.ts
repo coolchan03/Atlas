@@ -5,6 +5,7 @@ import { generateId } from '../utils/generateId';
 import { COUNSELOR_PROMPT } from './counselorPrompt';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { lowPowerActive, useLowPower } from '../atlasTools/lowPowerState';
+import { answerCapFor } from './projectDefaults';
 
 /**
  * Agents (Atlas): reusable personas, each with its own system prompt.
@@ -405,6 +406,16 @@ export function agentPromptWithLessons(agent: Agent): string {
   return p;
 }
 
+/** The answer cap of the project the open chat belongs to (undefined: none). Reads the two stores through storeRefs, which has no imports of its own. */
+function currentProjectAnswerCap(): number | undefined {
+  try {
+    const refs = require('./storeRefs');
+    const chat = refs.chatStoreRef().getState();
+    const open = chat.conversations.find((c: { id: string }) => c.id === chat.activeConversationId);
+    return answerCapFor(open?.projectId ? refs.projectStoreRef().getState().getProject(open.projectId) : undefined);
+  } catch { return undefined; }
+}
+
 /** Sampling overrides of the active agent (only the ones it sets). */
 export function activeAgentOverrides(): { temperature?: number; topP?: number; maxTokens?: number; repeatPenalty?: number } {
   const { activeAgentId, agents } = useAgentStore.getState();
@@ -416,6 +427,9 @@ export function activeAgentOverrides(): { temperature?: number; topP?: number; m
     const base = (a && typeof a.maxTokens === 'number') ? a.maxTokens : cap;
     o.maxTokens = Math.min(base, cap);
   }
+  // A project set to short answers caps the chats inside it.
+  const projectCap = currentProjectAnswerCap();
+  if (projectCap !== undefined) o.maxTokens = Math.min(o.maxTokens ?? projectCap, projectCap);
   if (!a) {
     if (require('./uiModeStore').useUiModeStore.getState().interfaceMode === 'audio') o.maxTokens = Math.min(o.maxTokens ?? 96, 96);
     return o;

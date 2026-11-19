@@ -127,3 +127,53 @@ export function conformScore(score: MusicScore, plan: HarmonyPlan): Conformed {
   });
   return { score: { ...score, notes }, changed };
 }
+
+// ------------------------------------------------------------------ reading a plan back from a saved tune
+const NAME_OF = (pitch: number, flats: boolean): string => `${pcName(pitch, flats)}${Math.floor(pitch / 12) - 1}`;
+/** The instrument a note is shown as when it has none of its own (tunes from the built-in composer name only a role). */
+const DEFAULT_VOICE: Record<'melody' | 'pad' | 'bass', string> = { melody: 'flute', pad: 'warmpad', bass: 'upright' };
+
+/** A score as the one-fact-per-line text the composer reads and writes (the same format as agentScore.ts parses). */
+export function scoreToText(score: MusicScore): string {
+  const lines = [`TITLE: ${score.title}`, `BPM: ${Math.round(score.bpm)}`];
+  for (const n of [...score.notes].sort((a, b) => a.beat - b.beat || a.pitch - b.pitch)) {
+    const gain = Math.round(n.gain * 100) / 100;
+    if (n.role === 'perc') lines.push(`DRUM ${String(n.voice ?? 'kick')} ${n.beat} ${gain}`);
+    else lines.push(`NOTE ${NAME_OF(n.pitch, false)} ${n.beat} ${n.length} ${gain} ${String(n.voice ?? DEFAULT_VOICE[roleOf(n)])}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The key, scale and a chord for every bar, worked out from the notes of a finished tune: the home note is where the tune ends (the
+ * bass, else the melody), the scale is the one most of the notes belong to, and each bar's chord is its bass root with the pad notes
+ * played in that bar (or a triad from the scale). Null when there is nothing pitched to read.
+ */
+export function inferPlan(score: MusicScore, beatsPerBar = 4): HarmonyPlan | null {
+  const pitched = score.notes.filter((n) => n.role !== 'perc');
+  if (!pitched.length) return null;
+  const byBeat = (a: MusicNote, b: MusicNote) => a.beat - b.beat;
+  const ender = [...pitched].filter((n) => n.role === 'bass').sort(byBeat).at(-1) ?? [...pitched].sort(byBeat).at(-1)!;
+  const tonic = mod12(ender.pitch);
+  const histogram = new Array<number>(12).fill(0);
+  for (const n of pitched) histogram[mod12(n.pitch - tonic)] += 1;
+  const fit = (scale: number[]) => scale.reduce((sum, d) => sum + histogram[d], 0);
+  const [, chosen] = SCALE_NAMES.reduce((best, cur) => (fit(cur[1]) > fit(best[1]) ? cur : best));
+  const scale = chosen.map((d) => mod12(tonic + d));
+  const flats = KEYS.find((k) => k.pc === tonic)?.flats ?? false;
+  const end = Math.max(...score.notes.map((n) => n.beat + n.length));
+  const bars = Math.max(1, Math.min(64, Math.ceil(end / beatsPerBar - 1e-6)));
+  const inBar = (n: MusicNote, bar: number) => n.beat >= bar * beatsPerBar - 1e-6 && n.beat < (bar + 1) * beatsPerBar - 1e-6;
+  let lastRoot = tonic;
+  const plan: BarPlan[] = Array.from({ length: bars }, (_, bar) => {
+    const bass = pitched.filter((n) => n.role === 'bass' && inBar(n, bar)).sort((a, b) => a.pitch - b.pitch)[0];
+    const root = bass ? mod12(bass.pitch) : lastRoot;
+    lastRoot = root;
+    const pads = [...new Set(pitched.filter((n) => n.role === 'pad' && inBar(n, bar)).map((n) => mod12(n.pitch)))];
+    const triad = [root, mod12(root + (scale.includes(mod12(root + 4)) ? 4 : 3)), mod12(root + 7)];
+    const tones = [root, ...(pads.length >= 2 ? pads : triad).filter((t) => t !== root)];
+    const degree = Math.max(0, scale.indexOf(root));
+    return { bar, degree, root, tones, name: chordName(root, tones, flats) };
+  });
+  return { tonic, flats, scale, scaleName: nameOf(chosen), bars: plan, beatsPerBar };
+}

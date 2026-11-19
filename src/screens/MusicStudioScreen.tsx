@@ -12,7 +12,8 @@ import { STYLES, composeStyled, type Energy, type StyleGroup, type StyleMood } f
 import { POPULAR, instrumentsOf, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
 import { saveAmbient, saveInstrumental } from '../music/saveTrack';
-import { composeMusic } from '../music/composerAgent';
+import { composeMusic, composeVariation } from '../music/composerAgent';
+import RNFS from 'react-native-fs';
 import { SoundfontCard } from '../music/SoundfontCard';
 import { AMBIENT, type AmbientKind } from '../music/ambient';
 import { SPACING } from '../constants';
@@ -82,6 +83,21 @@ export function MusicStudioScreen() {
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
+    finally { setBusy(false); setStatus(''); }
+  };
+  /** A variation of a saved tune: same key and chords, a new melody, written by the composer from the saved score. */
+  const makeVariation = async (track: InstrumentalTrack) => {
+    if (busy) return;
+    setBusy(true);
+    setStatus(`Asking the AI composer for a variation of "${track.title}" (this can take a minute or two)...`);
+    try {
+      const saved = JSON.parse(await RNFS.readFile(track.scorePath, 'utf8'));
+      if (!Array.isArray(saved?.notes) || !saved.notes.length) throw new Error('This track has no notes to vary (background sounds cannot be varied).');
+      const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
+      const composed = await composeVariation(saved as MusicScore, { mood: style, seconds: track.seconds });
+      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
+      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
+    } catch (error: any) { Alert.alert('Could not make a variation', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
   /** Makes a background sound (white noise, rain...) and plays it on a loop. */
@@ -221,6 +237,7 @@ export function MusicStudioScreen() {
             </TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { void shareItem({ title: track.title, file: track.path }); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
             {!!track.scorePath && <TouchableOpacity accessibilityLabel={`Edit notes of ${track.title}`} testID={`music-edit-${track.id}`} onPress={() => navigation.navigate('ScoreEditor', { scorePath: track.scorePath })} style={styles.end}><Text style={{ color: colors.primary }}>Edit notes</Text></TouchableOpacity>}
+            {!!track.scorePath && track.mood !== 'ambient' && <TouchableOpacity accessibilityLabel={`Make a variation of ${track.title}`} testID={`music-variation-${track.id}`} onPress={() => { void makeVariation(track); }} disabled={busy} style={styles.end}><Text style={{ color: colors.primary }}>Variation</Text></TouchableOpacity>}
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}

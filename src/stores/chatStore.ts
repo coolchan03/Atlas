@@ -174,7 +174,7 @@ export const useChatStore = create<ChatState>()(
       // Preserve the existing four-argument API until chat callers migrate to options.
 
       createConversation: (modelId, title, projectId, privateChat = false) => {
-        const protectedProject = !!projectId && !!require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier;
+        const project = projectId ? require('./projectStore').useProjectStore.getState().getProject(projectId) : undefined; const protectedProject = !!project?.pinVerifier;
         if (protectedProject && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {
           throw new Error('Unlock this protected project to start a chat in it.');
         }
@@ -188,7 +188,7 @@ export const useChatStore = create<ChatState>()(
           updatedAt: new Date().toISOString(),
           projectId: projectId,
           isPrivate: privateChat,
-          agentId: undefined,
+          agentId: require('./projectDefaults').defaultAgentFor(project, require('./agentStore').useAgentStore.getState().agents.map((a: { id: string }) => a.id)),
         };
 
         set((state) => ({
