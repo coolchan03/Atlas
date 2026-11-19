@@ -63,6 +63,4 @@ export function generateGeniex(messages: Array<{ role: string; content: string }
     n.generate(id, messages, o.maxTokens ?? 512, o.temperature ?? 0.7).catch((e) => finish(() => reject(e)));
   });
 }
-
-export const stopGeniex = async (): Promise<void> => { await native()?.stop(); };
 export const unloadGeniex = async (): Promise<void> => { await native()?.unload(); };

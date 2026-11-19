@@ -116,14 +116,6 @@ export function dueItems(projectId: string | null, now = Date.now(), limit = 50)
     .slice(0, limit);
 }
 
-/** Items answered wrong more often than right (weak spots). */
-export function weakItems(projectId: string, limit = 20): ProgressItem[] {
-  return Object.values(useStudyProgress.getState().items)
-    .filter((i) => i.projectId === projectId && i.wrong > 0)
-    .sort((a, b) => (b.wrong - b.correct) - (a.wrong - a.correct))
-    .slice(0, limit);
-}
-
 /**
  * Current streak in days, allowing one missed day per ISO week (a "freeze").
  * Pure so it can be tested: pass the finished days.

@@ -4,8 +4,6 @@ import { CPA_EXAMS, examFolder, examLabel, type ExamCode } from './blueprints';
 import { defaultTopics, useCpa } from './store';
 import { useExerciseStore, type Exercise } from '../study/exercises';
 
-export const projectNameFor = (code: ExamCode): string => examLabel(code);
-
 const tutorPrompt = (code: ExamCode, name: string): string =>
   `You are a patient exam tutor for ${examLabel(code)} (${name}). Answer from the documents in this project (the user's own textbooks, notes and question banks) and say which document you used. If the documents do not cover a point, say so and give a general answer clearly marked as not from their materials. When the user answers a practice question wrongly, explain why the right answer is right and why theirs is not, step by step, with the numbers. Never invent a rule, rate, threshold or standard number: if you are not sure, say so and tell them to check the source. Rules change, so remind them to check anything that depends on a tax year, a jurisdiction (state or country) or a standard's effective date. You teach for an exam: you are not giving legal, medical, tax or investment advice.`;
 

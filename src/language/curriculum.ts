@@ -173,4 +173,3 @@ export const UNITS: Unit[] = [
 
 export const unitById = (id: string) => UNITS.find((u) => u.id === id);
 export const unitsForLevel = (level: LevelId) => UNITS.filter((u) => u.level === level);
-export const KIND_LABEL: Record<UnitKind, string> = { vocab: 'Vocabulary', grammar: 'Grammar', theme: 'Theme' };

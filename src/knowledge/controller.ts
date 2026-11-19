@@ -5,7 +5,7 @@
  */
 import { autoBackup, listBackups, restoreBackup, allReportsMarkdown } from './backups';
 import { create } from 'zustand';
-import { closeInterruptedCycles, addReview, getFinding, searchFindings, type Query } from './cycles';
+import { addReview, getFinding, searchFindings, type Query } from './cycles';
 import { importPdf, listDocuments, removeDocument, extractDocument, chunkDocument } from './documents';
 import { studyDocument, type StudyProgress } from './study';
 import { createExport, applyImport, previewImport, transferHistory, type ExportOptions, type ImportReport } from './exchange';
@@ -25,13 +25,6 @@ const patch = (p: Partial<KnowledgeStatus>) => useKnowledgeStatus.setState(p);
 const bump = () => useKnowledgeStatus.setState((s) => ({ version: s.version + 1 }));
 
 let stopRequested = false;
-
-/** Call once at app start: closes any cycle a killed app left open. */
-export async function recoverKnowledge(): Promise<number> {
-  const closed = await closeInterruptedCycles();
-  if (closed) bump();
-  return closed;
-}
 
 export async function addPdfs(files: Array<{ uri: string; name: string }>, agentId?: string): Promise<{ added: number; duplicates: number; failed: string[] }> {
   const out = { added: 0, duplicates: 0, failed: [] as string[] };

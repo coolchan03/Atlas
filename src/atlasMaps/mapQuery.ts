@@ -86,6 +86,4 @@ export async function placesNear(search: PlaceSearch = {}): Promise<string> {
   if (!found?.length) return `Nothing found for ${scope}. The map only lists what OpenStreetMap volunteers named, so a missing place is not proof it does not exist.`;
   return `${found.length} result${found.length === 1 ? '' : 's'} for ${scope}, nearest first:\n${formatPlaces(found, at, state.imperial)}`;
 }
-
-export const _resetMapBoundsForTests = (): void => { bounds.clear(); };
 export { distanceM };

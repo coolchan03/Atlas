@@ -93,10 +93,6 @@ export function chunks(source: string, size = CHUNK): string[] {
 /** Reads pasted questions into the standard form with the AI, a piece at a time. Returns what it found; the person reviews it. */
 export interface ImportReport { questions: NormalizedQuestion[]; pieces: number; piecesRead: number; capped: boolean }
 
-export async function normalizeQuestions(source: string, ask: Ask, topics: string[] = []): Promise<NormalizedQuestion[]> {
-  return (await normalizeQuestionsReport(source, ask, topics)).questions;
-}
-
 /** The same, plus how much of the text was read, so a stop at the safety limit is never silent. */
 export async function normalizeQuestionsReport(source: string, ask: Ask, topics: string[] = []): Promise<ImportReport> {
   const found: NormalizedQuestion[] = [];

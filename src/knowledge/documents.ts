@@ -14,7 +14,7 @@ import RNFS from 'react-native-fs';
 import { ocrAvailable, ocrPage } from './ocr';
 import { SCHEMA_VERSION, type ChunkRecord, type SourceDocument } from './schema';
 import {
-  P, appendJsonl, atomicWriteText, ensureDir, nowIso, readJson, readJsonl, removeTree, sha256Text, uuid, withLock, writeJson,
+  P, appendJsonl, atomicWriteText, ensureDir, nowIso, readJson, readJsonl, removeTree, uuid, withLock, writeJson,
 } from './storage';
 import { Chunker } from './chunker';
 import { eraseFindings, findingsCiting } from './cycles';
@@ -205,16 +205,3 @@ export async function removeDocument(sourceId: string): Promise<{ erasedFindings
   await saveDocument({ ...doc, name: '(removed)', title: undefined, removed: true, status: 'failed', progress: { pagesExtracted: 0, chunksTotal: 0, chunksStudied: 0 }, unreadablePages: [] });
   return { erasedFindings };
 }
-
-/** Storage used by documents (original + text + chunks), for the control that keeps temporary data bounded. */
-export async function documentBytes(hash: string): Promise<number> {
-  let total = 0;
-  for (const dir of [P.extractedDir(hash), P.chunksDir(hash)]) {
-    if (!(await RNFS.exists(dir))) continue;
-    for (const f of await RNFS.readDir(dir)) total += Number(f.size);
-  }
-  if (await RNFS.exists(P.original(hash))) total += Number((await RNFS.stat(P.original(hash))).size);
-  return total;
-}
-
-export const documentKey = (doc: SourceDocument) => sha256Text(`${doc.hash}:${doc.sourceId}`).slice(0, 12);

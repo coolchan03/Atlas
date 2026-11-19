@@ -34,16 +34,6 @@ export function getRegisteredScreens(): RegisteredScreen[] {
 }
 
 /**
- * Reactive read of whether a screen with the given name is registered.
- * Subscribes via useSyncExternalStore so a screen registered AFTER a consumer
- * mounted (e.g. a feature registered at runtime) makes
- * the consumer re-render. Mirrors useSlot in slotRegistry.
- */
-export function useHasRegisteredScreen(name: string): boolean {
-  return useSyncExternalStore(subscribe, () => screens.some(s => s.name === name));
-}
-
-/**
  * Reactive read of the full registered-screen list. The navigator subscribes via
  * useSyncExternalStore so a screen registered AFTER it mounted — registered at
  * runtime re-renders the navigator and mounts the route live, with no app restart.

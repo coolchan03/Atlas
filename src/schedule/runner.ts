@@ -10,10 +10,6 @@ import { startAlarmSync, syncAlarms } from './alarms';
 
 const RETRY_AFTER_MS = 15 * 60_000;
 let busy = false;
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((fn) => fn());
-export const isRunning = () => busy;
-export const onRunningChange = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
 function whatToAsk(task: ScheduledTask): { system: string; user: string } {
   const { useSkills } = require('../skills/skillsStore');
@@ -68,7 +64,7 @@ export async function runTask(id: string, scheduledFor = Date.now()): Promise<st
   const { tasks, update } = useSchedule.getState();
   const task = tasks.find((t) => t.id === id);
   if (!task || busy) return busy ? 'Another scheduled task is running.' : 'Task not found.';
-  busy = true; emit();
+  busy = true;
   update(id, { lastTriedAt: scheduledFor });
   try {
     const { chatId } = await whileAwake(`Running: ${task.name}`, () => doTask(task));
@@ -82,7 +78,7 @@ export async function runTask(id: string, scheduledFor = Date.now()): Promise<st
     const message = String(e?.message || e);
     update(id, { lastError: message });
     return message;
-  } finally { busy = false; emit(); }
+  } finally { busy = false; }
 }
 
 /** Runs every task that is due, one after another. A task that failed is tried again after a while, not at once. */

@@ -151,10 +151,6 @@ function lengthForTime(seconds: number, o: { production?: number; speaking?: boo
   return best;
 }
 
-/** Estimated seconds for a built lesson. */
-export const lessonSeconds = (exercises: Exercise[], secondsOf: (k: Kind) => number) =>
-  exercises.reduce((t, e) => t + secondsOf(e.kind), 0);
-
 /**
  * A lesson (one exercise is a matching round): recognition first, then production for the
  * `production` share. Sized by `seconds` (a time budget) or `length`. Every item is used
@@ -209,12 +205,6 @@ export function checkSpoken(heard: string, answer: string): 'right' | 'wrong' {
   if (!want.length || !got.size) return 'wrong';
   return want.filter((w) => got.has(w)).length / want.length >= 0.75 ? 'right' : 'wrong';
 }
-
-/** Answers are compared without case, accents' spacing or end punctuation. */
-export const sameAnswer = (a: string, b: string) => {
-  const n = (s: string) => s.toLowerCase().replace(/[.!?¡¿,]/g, '').replace(/\s+/g, ' ').trim();
-  return n(a) === n(b);
-};
 
 /** 3 stars at 90% right, 2 at 70%, otherwise 1 for finishing. */
 export const starsFor = (right: number, total: number) => (right / Math.max(1, total) >= 0.9 ? 3 : right / Math.max(1, total) >= 0.7 ? 2 : 1);

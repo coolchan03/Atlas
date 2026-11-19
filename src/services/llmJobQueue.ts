@@ -6,9 +6,6 @@
  * for a running chat reply to finish first.
  */
 let tail: Promise<unknown> = Promise.resolve();
-let waiting = 0;
-
-export function pendingBackgroundJobs(): number { return waiting; }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -23,12 +20,9 @@ async function waitForChat(maxMs: number, shouldStop?: () => boolean): Promise<v
 }
 
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
-  waiting++;
   const run = tail.then(async () => {
-    try {
-      await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
-      return await job();
-    } finally { waiting--; }
+    await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
+    return job();
   });
   tail = run.catch(() => undefined);
   return run;

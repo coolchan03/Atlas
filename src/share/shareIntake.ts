@@ -11,7 +11,6 @@ import logger from '../utils/logger';
 export const useIncomingShare = create<{ text: string | null; set: (text: string | null) => void }>((set) => ({ text: null, set: (text) => set({ text }) }));
 
 const Native: { getInitialShare?: () => Promise<string | null> } | undefined = Platform.OS === 'android' ? NativeModules.AtlasShare : undefined;
-export const shareAvailable = Boolean(Native);
 
 /** Opens the share screen if a share is waiting and the app is ready; otherwise keeps it waiting. Safe to call any time. */
 export function flushShare(): void {

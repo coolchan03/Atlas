@@ -6,7 +6,6 @@
 import { P, atomicWriteText, nowIso, removeTree } from './storage';
 
 let active: string | null = null;
-export const activeJob = (): string | null => active;
 
 export async function withJobLock<T>(name: string, fn: (heartbeat: () => Promise<void>) => Promise<T>): Promise<T> {
   if (active) throw new Error(`Another learning job is already running (${active}). Wait for it to finish or pause it.`);

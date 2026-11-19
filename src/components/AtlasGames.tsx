@@ -79,7 +79,6 @@ function winner(b: Board): number {
   for (const [a,c,d] of lines) if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
   return b.every(Boolean) ? 3 : 0;
 }
-export const evaluateTicTacToe = winner;
 
 export function AtlasGames({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();

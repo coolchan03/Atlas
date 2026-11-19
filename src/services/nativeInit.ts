@@ -118,8 +118,6 @@ export function trackAbandonedInit<T>(promise: Promise<T>, release: (value: T) =
   abandoned = entry;
 }
 
-export const hasAbandonedInit = (): boolean => !!abandoned && !abandoned.done;
-
 /**
  * Waits for a timed-out load to finish and release its context before another load starts. Throws a readable error
  * when it is still stuck after `maxWaitMs`: starting a second multi-gigabyte load next to a wedged one risks the

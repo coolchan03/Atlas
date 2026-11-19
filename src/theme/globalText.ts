@@ -30,7 +30,6 @@ export function setTextAppearance(next: TextAppearance): void {
   try { require('../utils/logger').default.log(`[FONT] appearance ${next.key} heading=${next.heading} body=${next.body}`); } catch { /* logger unavailable */ }
   listeners.forEach(l => l());
 }
-export const getTextAppearance = (): TextAppearance => current;
 
 /** Plain system families the app uses by default; only these follow the chosen font. Code (monospace, Menlo) stays. */
 const FOLLOWS_FONT = new Set(['sans-serif', 'serif', ...FONT_CHOICES.filter(f => f.id !== 'mono' && f.id !== 'pixel').flatMap(f => [f.heading, f.body])]);

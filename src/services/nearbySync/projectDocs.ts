@@ -51,9 +51,6 @@ export async function docsOnPhone(projectIds: string[]): Promise<string[]> {
   return (await localDocs(projectIds)).map((d) => docKey(d.meta));
 }
 
-/** Keys of documents too big to go inside the sync message (the same ones the sender streams). */
-export const isLarge = (size: number): boolean => size > INLINE_BYTES;
-
 /** Sends each document the other phone lacks: its text first, then the file. Returns how many documents were sent. */
 interface DocProgress { name: string; doc: number; docs: number; piece: number; pieces: number }
 export interface DocSendIo { send: (piece: DocTextBatch | DocFileChunk) => Promise<void>; report?: (p: DocProgress) => void }

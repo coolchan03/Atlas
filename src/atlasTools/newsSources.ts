@@ -181,14 +181,6 @@ export function avoided(h: Pick<Headline, 'title' | 'desc'>, avoid: string[]): b
   });
 }
 
-/**
- * Spoken words a story can carry from its sources (about one script line, ~20 words, per
- * 80 characters of source, never more than the lines per story): used to keep adding
- * stories until the briefing really fills the chosen length.
- */
-export const storyWords = (sourceChars: number, maxLines: number) =>
-  Math.min(maxLines, Math.max(4, Math.round(sourceChars / 80))) * 20;
-
 /** Spreads the story budget over the interests in turn, so every interest is covered. */
 export function pickStories(perInterest: Headline[][], budget: number): { interest: number; headline: Headline }[] {
   const picked: { interest: number; headline: Headline }[] = [];

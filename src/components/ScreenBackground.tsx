@@ -2,10 +2,6 @@ import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { useAppStore } from '../stores/appStore';
 
-/** Returns true when a per-screen background is configured for this key — use to set parent to transparent. */
-export const useHasScreenBg = (screenKey: string): boolean =>
-  useAppStore((s) => !!s.settings.screenBackgrounds?.[screenKey]?.uri);
-
 /**
  * Absolutely-positioned background image layer. Place as first child of a screen container.
  * Returns null when no background is configured so layout is unaffected.

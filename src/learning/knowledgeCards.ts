@@ -123,14 +123,6 @@ export async function loadCards(topic: string, agentId?: string, limit = 300): P
   return mergeCards(out);
 }
 
-export const readersFromStores = (): DeepReaders => ({
-  claim: (id) => require('./knowledgeDb').learningKnowledgeDb.getClaimSources(id),
-  finding: async (id) => {
-    const f = await require('../knowledge/cycles').getFinding(id) as Finding | null;
-    return (f?.evidence ?? []).map((e) => ({ title: f?.documentTitle ?? e.sourceId, locator: e.locator ?? (e.page ? `page ${e.page}` : ''), passage: e.quote ?? '' }));
-  },
-});
-
 /** Cards for every subject that has a learning task: [{ agentId, topic }]. */
 export async function loadAllCards(subjects: Array<{ agentId: string; topic: string }>): Promise<KnowledgeCard[]> {
   const seen = new Set<string>();

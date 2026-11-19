@@ -3,7 +3,7 @@
  * General MIDI program (a piano, a violin, a fingered bass...) and each drum a key of the standard drum kit. With no SoundFont installed
  * nothing here applies and the built-in synthesiser plays as before.
  */
-import { findPreset, parseSf2, renderNote, type Sf2 } from './soundfont';
+import { parseSf2, renderNote, type Sf2 } from './soundfont';
 import type { DrumKind, MusicNote, Voice } from './types';
 
 /** The General MIDI program of each instrument name. A voice with no entry (a plain sine) stays synthesised. */
@@ -51,5 +51,3 @@ export function sampledNote(note: MusicNote, name: Voice, o: { samples: number; 
   for (let i = 0; i < wave.length; i++) wave[i] *= scale;
   return wave;
 }
-
-export const presetName = (bank: number, program: number): string => (active ? findPreset(active, bank, program)?.name ?? '' : '');

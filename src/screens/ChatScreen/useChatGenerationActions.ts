@@ -443,7 +443,6 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, messageT
 /** True while Deep Research is gathering sources (before generation starts). Sends made then are
  *  queued like sends during a generation, instead of starting a second, racing research turn. */
 let researchInFlight = false;
-export function isResearchInFlight(): boolean { return researchInFlight; }
 
 /** Reads a very long message in parts with the loaded model; returns the shorter text for the model, or the message itself. */
 async function condenseLongMessage(text: string, deps: GenerationDeps): Promise<string> {
