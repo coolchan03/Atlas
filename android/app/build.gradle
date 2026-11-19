@@ -60,6 +60,9 @@ react {
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = false
+// R8 trial (never on by default): -PatlasMinify=true shrinks code and resources for ONE trial build. It must be tested on a phone before it
+// is ever turned on for a published build, because Atlas calls many native libraries from code R8 cannot see. See docs/r8-trial.md.
+def atlasMinifyTrial = project.hasProperty('atlasMinify') && project.property('atlasMinify') == 'true'
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -147,8 +150,9 @@ android {
             } else {
                 signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
             }
-            minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            minifyEnabled enableProguardInReleaseBuilds || atlasMinifyTrial
+            shrinkResources atlasMinifyTrial
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro", "proguard-atlas-native.pro"
         }
     }
     packaging {
