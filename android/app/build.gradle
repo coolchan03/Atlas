@@ -2,6 +2,8 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.google.devtools.ksp"
 apply plugin: "com.facebook.react"
+// Only Feather and MaterialIcons are used in src; bundling all 19 icon fonts cost ~3.9 MB.
+project.ext.vectoricons = [iconFontNames: ['Feather.ttf', 'MaterialIcons.ttf']]
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
 /**
