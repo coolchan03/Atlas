@@ -71,6 +71,8 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
         await llmService.generateResponse([{ id: 'u', role: 'user', content: PROMPT, timestamp: 0 }], { disableThinking: true });
         const st = llmService.getPerformanceStats();
         results.push({ option, tps: st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0, firstWordSec: (st.lastTimeToFirstToken || 0) / 1000 });
+        // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
+        useSpeedStats.getState().record(modelId, { decode: st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0, backend: String(option.backend) });
       } catch (e: any) {
         logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
         results.push({ option, tps: 0, firstWordSec: 0, error: String(e?.message || e) });
