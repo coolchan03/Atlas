@@ -13,6 +13,15 @@ jest.mock('@react-native-documents/picker', () => ({
   keepLocalCopy: async ({ files }: { files: Array<{ uri: string }> }) => files.map((f) => ({ status: 'success', localUri: f.uri })),
 }));
 
+// The harness's fake zip is JSON, so its file list comes from that JSON (the real directory reader has its own tests in zipDirectory.test).
+jest.mock('../../src/learning/zipDirectory', () => ({
+  readZipDirectory: async (path: string) => {
+    const RNFS = require('react-native-fs');
+    const { files } = JSON.parse(await RNFS.readFile(path, 'utf8'));
+    return Object.entries(files).map(([name, data]) => ({ name, compressed: 1, size: Buffer.from(String(data), 'base64').length }));
+  },
+}));
+
 async function setup(files: Record<string, string>, name = 'FAR materials.zip') {
   installNativeBoundary({ fs: true });
   const RNFS = require('react-native-fs');
