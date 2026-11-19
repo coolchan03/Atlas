@@ -127,3 +127,12 @@ export function toMidi(score: MusicScore): Uint8Array {
   });
   return Uint8Array.from([...head, ...conductor, ...tracks.flat()]);
 }
+
+/** The pitched instruments a part can be given, in the order the picker shows them. */
+export const VOICE_LIST: Voice[] = ['piano', 'epiano', 'organ', 'harpsichord', 'pluck', 'driven', 'upright', 'bass', 'violin', 'cello', 'flute', 'clarinet', 'oboe', 'trumpet', 'horn', 'sax',
+  'harp', 'marimba', 'vibes', 'glock', 'kalimba', 'musicbox', 'bell', 'accordion', 'harmonica', 'banjo', 'steeldrum', 'choir', 'saw', 'squarelead', 'synthpluck', 'pad', 'warmpad', 'glasspad', 'sine'];
+
+/** Moves every note later (or earlier) by whole steps; notes never go before the start or past the end of the grid. */
+export function shiftAll(score: MusicScore, beats: number): MusicScore {
+  return withNotes(score, score.notes.map((n) => ({ ...n, beat: snap(n.beat + beats) })));
+}

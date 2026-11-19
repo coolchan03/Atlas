@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useTheme } from '../theme';
@@ -24,6 +25,7 @@ const DURATIONS = [30, 60, 90] as const;
 /** Music Studio makes original instrumental music in a chosen style, played by a small band, entirely on the phone. */
 export function MusicStudioScreen() {
   const { colors } = useTheme();
+  const navigation = useNavigation<any>();
   const [prompt, setPrompt] = useState('');
   const [mood, setMood] = useState<StyleMood>('focus');
   const [energy, setEnergy] = useState<Energy>('medium');
@@ -218,6 +220,7 @@ export function MusicStudioScreen() {
               <Text style={[styles.small, { color: colors.textSecondary }]}>{STYLES[track.mood as StyleMood]?.label ?? track.mood} · {track.seconds}s {playback.current?.id === track.id && playback.playing ? '· Playing' : ''}</Text>
             </TouchableOpacity>
             <TouchableOpacity accessibilityLabel={`Share ${track.title}`} testID={`music-share-${track.id}`} onPress={() => { void shareItem({ title: track.title, file: track.path }); }} style={styles.end}><Text style={{ color: colors.primary }}>Share</Text></TouchableOpacity>
+            {!!track.scorePath && <TouchableOpacity accessibilityLabel={`Edit notes of ${track.title}`} testID={`music-edit-${track.id}`} onPress={() => navigation.navigate('ScoreEditor', { scorePath: track.scorePath })} style={styles.end}><Text style={{ color: colors.primary }}>Edit notes</Text></TouchableOpacity>}
             <TouchableOpacity accessibilityLabel={`Delete ${track.title}`} onPress={() => remove(track)} style={styles.end}><Text style={{ color: colors.error }}>Delete</Text></TouchableOpacity>
           </View>
         ))}

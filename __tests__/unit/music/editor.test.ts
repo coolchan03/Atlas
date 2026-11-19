@@ -81,3 +81,12 @@ describe('MIDI export', () => {
     expect(toMidi(base()).length).toBeGreaterThan(30);
   });
 });
+
+it('shifts every note by a step and keeps them inside the grid', () => {
+  const { shiftAll } = require('../../../src/music/editor');
+  const s = { title: 't', bpm: 100, notes: [{ pitch: 60, beat: 0, length: 1, gain: 1 }, { pitch: 62, beat: 127.75, length: 1, gain: 1 }] };
+  const out = shiftAll(s, 0.25);
+  expect(out.notes[0].beat).toBe(0.25);
+  expect(out.notes[1].beat).toBe(127.75);
+  expect(shiftAll(s, -1).notes[0].beat).toBe(0);
+});

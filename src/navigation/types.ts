@@ -61,6 +61,7 @@ export type RootStackParamList = {
   Appearance: undefined;
   Presentations: { slides?: import('../services/presentationTemplates').PresentationSlide[]; name?: string } | undefined;
   MusicStudio: undefined;
+  ScoreEditor: { scorePath?: string; score?: import('../music/types').MusicScore };
   ReadAloud: undefined;
   VoiceLab: undefined;
   SelfCheck: undefined;
