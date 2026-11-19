@@ -170,13 +170,14 @@ function decode(path: string): Promise<any> {
  */
 export function speechSpan(samples: ArrayLike<number>, sampleRate: number): { offset: number; duration: number } {
   const total = samples.length / sampleRate;
-  const quiet = 0.01;
+  // Low and a generous lead: a soft opening vowel ("I", "I'm") fades in below a loud threshold, and cutting into that fade is heard as a glitch on the first sound.
+  const quiet = 0.004;
   let first = 0;
   while (first < samples.length && Math.abs(samples[first]) < quiet) first++;
   let last = samples.length - 1;
   while (last > first && Math.abs(samples[last]) < quiet) last--;
   if (first >= last) return { offset: 0, duration: total };
-  const offset = Math.max(0, first / sampleRate - 0.03);
+  const offset = Math.max(0, first / sampleRate - 0.12);
   const end = Math.min(total, last / sampleRate + 0.08);
   return { offset, duration: Math.max(0.05, end - offset) };
 }

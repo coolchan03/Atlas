@@ -58,8 +58,8 @@ describe('casting and measuring speech', () => {
     const samples = new Float32Array(1000);
     for (let i = 300; i < 600; i++) samples[i] = 0.4;
     const span = mod.speechSpan(samples, 100);
-    expect(span.offset).toBeCloseTo(2.97, 2);
-    expect(span.duration).toBeCloseTo(3.1, 1);
+    expect(span.offset).toBeCloseTo(2.88, 2);
+    expect(span.duration).toBeCloseTo(3.2, 1);
   });
 });
 
