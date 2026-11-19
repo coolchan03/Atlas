@@ -8,8 +8,9 @@ import { useTheme } from '../theme';
 import { useProjectStore } from '../stores';
 import { MarkdownText } from '../components/MarkdownText';
 import { PodcastVoicePicker } from '../components/PodcastVoicePicker';
+import { Fold } from '../components/Fold';
 import { useBriefMedia, type BriefMediaState } from '../study/useBriefMedia';
-import { castLine, nativeEpisodeQueue, playLine, playJingle, setPodcastSpeed, stopPodcastAudio } from '../atlasVoice/podcastAudio';
+import { castLine, nativeEpisodeQueue, preRenderEpisode, playLine, playJingle, setPodcastSpeed, stopPodcastAudio } from '../atlasVoice/podcastAudio';
 import * as nativePlayer from '../atlasVoice/nativeAudioPlayer';
 import { storyJumps, currentStory } from '../study/storyJumps';
 import { resumeLine } from '../study/listenPosition';
@@ -209,6 +210,13 @@ export const StudyScreen: React.FC = () => {
   }, [view]);
   // Different installed voices for different hosts; with fewer voices, vary the pitch instead.
   const castVoice = (host: string, hosts: number) => castLine(host, hosts, voices);
+  // A new host voice picked for the show that is open: its audio is made again in the new voices (lines already in them are kept).
+  const hostPicks = useAtlasVoiceStore((s) => s.podcastVoices);
+  React.useEffect(() => {
+    if (!view?.podcast || !voices.length) return;
+    const lines = view.podcast.map((l) => ({ text: l.text, ...castLine(l.host, view.hosts ?? 2, voices) }));
+    preRenderEpisode(`${projectId}-${view.createdAt}`, lines);
+  }, [hostPicks]); // eslint-disable-line react-hooks/exhaustive-deps -- only a change of the picked voices re-renders
   const rate = useAtlasVoiceStore((s) => s.rate);
   const [itemStart, setItemStart] = useState(0);
   const [resumeAt, setResumeAt] = useState(() => {
@@ -503,6 +511,10 @@ export const StudyScreen: React.FC = () => {
           )}
           {v.podcast && (
             <View>
+              <Fold title="Change the host voices" testID="show-host-voices">
+                <Text style={[{ color: colors.textSecondary }, literalStyles.s64]}>Pick a voice for each host. The audio is made again in the new voices; press play when it is ready.</Text>
+                <PodcastVoicePicker hosts={v.hosts ?? 2} />
+              </Fold>
               {(() => {
                 const items = v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }));
                 return (
