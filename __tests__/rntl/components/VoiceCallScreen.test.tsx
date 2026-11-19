@@ -34,6 +34,7 @@ it('looks like a phone call: caller name and a running call timer', () => {
 it('starts listening as soon as a hands-free call opens', () => {
   const p = props();
   render(<AtlasAudioInput {...p} />);
+  act(() => { jest.advanceTimersByTime(300); });
   expect(p.onStartRecording).toHaveBeenCalledTimes(1);
 });
 

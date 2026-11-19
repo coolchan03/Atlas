@@ -12,6 +12,7 @@ import { useAtlasVoiceStore } from './store';
 import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
+import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, shouldStartListening } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import logger from '../utils/logger';
 
@@ -67,6 +68,10 @@ export function AtlasAudioInput(props: any) {
   const setEarpiece = useAtlasVoiceStore((s) => s.setEarpiece);
   const [note, setNote] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  // Paused by the person's silence (not by tapping mute): the call stays quiet until they tap.
+  const [paused, setPaused] = useState(false);
+  // Listening starts that did not lead to a recording; after a few the call says so instead of retrying forever.
+  const [failedStarts, setFailedStarts] = useState(0);
   const callerName = useCallerName();
   // Where the time of the last turn went (see turnTiming.ts): shown under the status and logged.
   const times = useRef<TurnTimes>({});
@@ -112,6 +117,7 @@ export function AtlasAudioInput(props: any) {
       if (verdict === 'end') latest.current.onStopRecording?.();
       else if (verdict === 'nothing') {
         latest.current.onCancelRecording?.();
+        setPaused(true);
         setNote('Paused - tap the button when you want to talk.');
       }
     });
@@ -158,25 +164,32 @@ export function AtlasAudioInput(props: any) {
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  // A call is live as soon as it opens: in hands-free mode start listening straight away.
+  // One rule opens the microphone (callLifecycle.ts): whenever the call is idle and not muted or paused, it listens. This covers the
+  // start of the call (even if the speech model is still loading), the end of every answer (spoken or not), and a recovery after a
+  // turn that ended oddly. A start that never leads to a recording is counted, and after a few the call says so.
+  const doneTickSeen = useRef(doneTick);
+  doneTickSeen.current = doneTick;
   useEffect(() => {
-    const p = latest.current;
-    if (handsFree && p.voiceAvailable && !p.isRecording && !p.isGenerating && !p.disabled) p.onStartRecording?.();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, when the call opens
-
-  // Hands-free loop: when a spoken answer finishes, open the mic again.
-  const firstTick = useRef(doneTick);
-  useEffect(() => {
-    if (doneTick === firstTick.current) return;
-    const p = latest.current;
-    if (!handsFree || mutedRef.current || !p.voiceAvailable || p.isRecording || p.isGenerating || p.isTranscribing) return;
-    const t = setTimeout(() => { setNote(null); latest.current.onStartRecording?.(); }, 250);
-    return () => clearTimeout(t);
-  }, [doneTick]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isRecording) { if (failedStarts) setFailedStarts(0); return undefined; }
+    const snapshot = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
+    if (!shouldStartListening(snapshot)) {
+      if (handsFree && failedStarts >= MAX_FAILED_STARTS) setNote('The microphone did not start. Tap the button to try again.');
+      return undefined;
+    }
+    let check: ReturnType<typeof setTimeout> | undefined;
+    const start = setTimeout(() => {
+      setNote(null);
+      latest.current.onStartRecording?.();
+      check = setTimeout(() => { if (!latest.current.isRecording) setFailedStarts((n) => n + 1); }, START_CHECK_MS);
+    }, LISTEN_DELAY_MS);
+    return () => { clearTimeout(start); if (check) clearTimeout(check); };
+  }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]); // eslint-disable-line react-hooks/exhaustive-deps -- reads the rest live through refs
 
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
+    setPaused(false);
+    setFailedStarts(0);
     if (next && isRecording) onCancelRecording?.();
     setNote(next ? 'Muted - Atlas is not listening.' : null);
   };
@@ -189,6 +202,8 @@ export function AtlasAudioInput(props: any) {
 
   const press = () => {
     setNote(null);
+    setPaused(false);
+    setFailedStarts(0);
     if (muted) setMuted(false);
     if (speakingKey) { stopSpeech(); return; }
     if (isRecording) { onStopRecording?.(); return; }
