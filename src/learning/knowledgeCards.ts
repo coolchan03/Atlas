@@ -107,7 +107,7 @@ export async function loadCards(topic: string, agentId?: string, limit = 300): P
   const out: KnowledgeCard[] = [];
   try {
     const { learningKnowledgeDb } = require('./knowledgeDb');
-    for (const k of learningKnowledgeDb.knownClaims(topic, limit)) {
+    for (const k of learningKnowledgeDb.knownClaims(topic, limit, agentId)) {
       let sources: string[] = []; let n = 0;
       try { const rows = learningKnowledgeDb.getClaimSources(k.id); n = rows.filter((r: { passage: string }) => r.passage.trim()).length; sources = rows.map((r: { title: string }) => r.title).filter(Boolean); } catch { /* sources unreadable: the card shows no evidence */ }
       const card = claimCard({ ...k, topic, sources, evidenceCount: n });

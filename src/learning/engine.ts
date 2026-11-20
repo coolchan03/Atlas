@@ -43,6 +43,7 @@ import { conflictReason, isStandaloneClaim, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
 import { buildWorkingContext } from './workingContext';
+import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, loadCards } from './knowledgeCards';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
@@ -523,6 +524,29 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
 }
 
 /** Runs a subject's exam in all three modes, saves each result, and returns them. Not while learning is running. */
+/**
+ * The Judge writes application questions from what the subject has learned (verified claims first) and saves them as exam items with
+ * their hidden answer keys. Returns how many were added and how many were dropped as too familiar or repeated.
+ */
+export async function judgeWritesQuestions(subjectId: string, onStatus: (message: string) => void): Promise<{ added: number; familiar: number; repeats: number }> {
+  const cfg = useLearningStore.getState().getConfig(subjectId);
+  const topic = cfg.topic.trim();
+  if (!topic) throw new Error('Give this subject a topic first.');
+  const known = learningKnowledgeDb.knownClaims(topic, 40, subjectId)
+    .sort((a, b) => Number(b.status === 'verified') - Number(a.status === 'verified')).slice(0, 8).map((k) => k.text);
+  if (known.length < 2) throw new Error('Nothing has been learned yet to write questions from. Let the learner study first.');
+  if (running) throw new Error('Learning is running. Stop it first, then ask the Judge for questions.');
+  stopRequested = false;
+  baseModel = useAppStore.getState().activeModelId || '';
+  roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
+  onStatus('The Judge is writing application questions...');
+  const p = applicationPrompt(topic, known);
+  const reply = await ask(p.system, p.user, 'judge');
+  const { kept, familiar, repeats } = applicationQuestions(reply, known, exams.items(subjectId).map((i) => i.question));
+  kept.forEach((q) => exams.addItem({ subjectId, topic: q.topic ?? topic, question: q.question, expected: keyFor(q) }));
+  return { added: kept.length, familiar, repeats };
+}
+
 export async function runExamNow(subjectId: string, onStatus: (message: string) => void, only?: string[]): Promise<ExamMetrics[]> {
   if (running) throw new Error('Learning is running. Stop it first, then run the exam.');
   const items = exams.items(subjectId).filter((i) => !only || only.includes(i.id));

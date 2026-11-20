@@ -197,8 +197,13 @@ export class LearningKnowledgeDb {
   }
 
   /** Claims already known on a topic, newest first, for comparing a new claim against. Rejected and superseded ones are skipped. */
-  knownClaims(topic: string, limit = 300): Array<{ id: string; text: string; status: ClaimStatus }> {
-    return (this.sql("SELECT id, claim_text, status FROM atlas_claims WHERE topic = ? AND status NOT IN ('rejected','superseded') ORDER BY created_at DESC LIMIT ?", [topic, limit]).rows ?? [])
+  knownClaims(topic: string, limit = 300, subjectId?: string): Array<{ id: string; text: string; status: ClaimStatus }> {
+    // With a subject, only what that subject's own reports produced (so two projects on a similar topic never share cards); a claim whose
+    // report was never archived (older data) still counts for its topic.
+    const scoped = subjectId !== undefined;
+    const sql = `SELECT c.id, c.claim_text, c.status FROM atlas_claims c ${scoped ? 'LEFT JOIN atlas_report_archive r ON r.id = c.report_id' : ''}
+      WHERE c.topic = ? AND c.status NOT IN ('rejected','superseded') ${scoped ? 'AND (r.id IS NULL OR r.subject_id = ?)' : ''} ORDER BY c.created_at DESC LIMIT ?`;
+    return (this.sql(sql, scoped ? [topic, subjectId as string, limit] : [topic, limit]).rows ?? [])
       .map((r) => ({ id: String((r as any).id), text: String((r as any).claim_text), status: (r as any).status as ClaimStatus }));
   }
 

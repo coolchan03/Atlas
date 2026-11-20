@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } fro
 import { useTheme } from '../../theme';
 import { useLearningStore } from '../../learning/store';
 import { GENERAL_NAME, NO_AGENT } from '../../learning/agents';
-import { exams, runExamNow } from '../../learning/engine';
+import { exams, judgeWritesQuestions, runExamNow } from '../../learning/engine';
 import { BENCHMARK_VERSION, EXAM_MODE_LABEL, REASON_LABEL, attemptsFor, dueRetests, parseExpected, reasonCounts, type ExamResult } from '../../learning/exams';
 import { sectionStyles as s } from './sectionStyles';
 import { QuestionImport } from './QuestionImport';
@@ -64,6 +64,13 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
     setRunning(true);
     try { await runExamNow(subject, setStatus, only); } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
   };
+  const judgeQuestions = async () => {
+    setRunning(true);
+    try {
+      const r = await judgeWritesQuestions(subject, setStatus);
+      Alert.alert('Application questions', r.added ? `${r.added} new question${r.added === 1 ? '' : 's'} added with hidden answer keys.${r.familiar ? ` ${r.familiar} dropped for only restating what was learned.` : ''}` : 'No new question came back that was not just a repeat. Try again after more is learned.');
+    } catch (e: any) { Alert.alert('Application questions', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
+  };
   const field = [s.input, { color: colors.text, borderColor: colors.border }];
   return (
     <View style={[s.card, { borderColor: colors.border }]} testID="exam-section">
@@ -98,6 +105,7 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
       <TextInput testID="exam-forbid" value={forbid} onChangeText={setForbid} placeholder="Must not say (optional, separate with commas)" placeholderTextColor={colors.textMuted} style={field} />
       <View style={s.row}>
         <TouchableOpacity onPress={add} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="exam-add"><Text style={{ color: colors.primary }}>Add question</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => void judgeQuestions()} disabled={running} style={[s.button, { borderColor: running ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-judge-write"><Text style={{ color: running ? colors.textMuted : colors.primary }}>Judge writes application questions</Text></TouchableOpacity>
         <TouchableOpacity onPress={() => run()} disabled={running || !items.length} style={[s.button, { borderColor: running || !items.length ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-run">
           {running ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: items.length ? colors.primary : colors.textMuted }}>Run the exam</Text>}
         </TouchableOpacity>
