@@ -74,9 +74,14 @@ let baseModel = '';
 
 /** The room a step has for stored notes and passages: a share of the loaded model's context, halved while the phone is saving power or hot. */
 function stepBudget(share: number): number {
-  let pressure = false;
-  try { pressure = require('../atlasTools/lowPowerState').lowPowerActive(); } catch { /* no power state: no pressure */ }
-  return budgetFor(llmService.getPerformanceSettings().contextLength || 2048, share, pressure);
+  return budgetFor(llmService.getPerformanceSettings().contextLength || 2048, share, underPressure());
+}
+const underPressure = (): boolean => { try { return !!require('../atlasTools/lowPowerState').lowPowerActive(); } catch { return false; } };
+
+/** What a step can hold right now, for the screen: the model's context, the room for stored knowledge, and whether the phone is saving power. */
+export function learningLoad(): { contextTokens: number; knowledgeTokens: number; pressure: boolean } {
+  const contextTokens = llmService.getPerformanceSettings().contextLength || 2048;
+  return { contextTokens, knowledgeTokens: budgetFor(contextTokens, 0.2, underPressure()), pressure: underPressure() };
 }
 
 async function ensureModel(): Promise<void> {
@@ -109,13 +114,15 @@ async function ask(system: string, user: string, role: Role): Promise<string> {
 
 // ------------------------------------------------------------------ research
 /** What the learner read for a question: the text it is shown (each source numbered) and the same sources as a list. */
-interface Research { text: string; list: ReportSource[] }
+interface Research { text: string; list: ReportSource[]; /** How the project's documents were searched: 'semantic', 'lexical' (keywords only), or 'none-indexed' / 'none-matching'. */ retrieval?: string }
 
 async function research(cfg: LearnConfig, query: string): Promise<Research> {
   const found: Array<{ title: string; kind: ReportSource['kind']; content: string; url?: string; sourceId?: string; locator?: string }> = [];
+  let retrieval: string | undefined;
   if (cfg.projectId) {
     try {
       const res: any = await ragService.searchProject(cfg.projectId, query);
+      retrieval = res?.evidence;
       const old = supersededEditions((res?.chunks || []).map((c: any) => String(c.name)));
       (res?.chunks || []).filter((c: any) => !old.has(String(c.name))).slice(0, 3).forEach((c: any) => found.push({ title: String(c.name), kind: 'project', content: String(c.content).replace(/\s+/g, ' ').slice(0, 800), sourceId: c.doc_id != null ? `${cfg.projectId}:document:${c.doc_id}` : undefined, locator: c.position != null ? `chunk ${c.position}` : undefined }));
     } catch (e) { logger.log(`[Learning] knowledge search failed: ${String(e)}`); }
@@ -149,6 +156,7 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
   if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
   return {
+    retrieval,
     text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES} ${yearNotes(query, found.map((f) => f.title))}\n\n`.replace(' \n\n', '\n\n') : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
     list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
   };
@@ -281,10 +289,25 @@ async function buildBank(agent: Agent, cfg: LearnConfig): Promise<void> {
 }
 
 // ------------------------------------------------------------------ 2. study + reports
+const DEGRADED_TEXT: Record<string, string> = {
+  lexical: 'The project\'s documents were searched by keywords only (the search model is not loaded), so matches may be weaker than usual.',
+  'none-indexed': 'The project\'s documents are not indexed yet, so nothing could be read from them.',
+};
+const degradedTold = new Set<string>();
+/** Says once per learner and kind when the documents could not be searched properly, so a weak report is not mistaken for a thorough one. */
+function noteDegradedSearch(agentId: string, retrieval: string | undefined): void {
+  const text = retrieval ? DEGRADED_TEXT[retrieval] : undefined;
+  if (!text || degradedTold.has(`${agentId}:${retrieval}`)) return;
+  degradedTold.add(`${agentId}:${retrieval}`);
+  L().log({ agentId, kind: 'info', title: 'Search is degraded', body: text });
+}
+
+
 async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Promise<void> {
   const st = L().get(agent.id);
   status(`Learner is researching: ${item.q.slice(0, 60)}...`);
-  const { text: src, list: sourceList } = await research(cfg, item.q);
+  const { text: src, list: sourceList, retrieval } = await research(cfg, item.q);
+  noteDegradedSearch(agent.id, retrieval);
   if (stopRequested) return;
   const again = mayRewrite((st.reportLog ?? []).find((r) => r.itemId === item.id), sourceList);
   if (!again.ok) {

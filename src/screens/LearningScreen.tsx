@@ -19,7 +19,7 @@ import { refineTask } from '../learning/refineTask';
 import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
 import { startTalkChat } from '../learning/talk';
 import { askAsReport } from '../learning/askReport';
-import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
+import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound, learningLoad } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
 import { ProjectZip } from './learningReliability/ProjectZip';
@@ -258,6 +258,9 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.statusBox}>
         <Text style={[styles.phase, { color: phase.phase === 'blocked' ? colors.error : phase.phase === 'idle' || phase.phase === 'paused' ? colors.textMuted : colors.primary }]} testID="learn-phase">{phase.label}</Text>
         <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
+        <Text style={styles.counts} testID="learn-load">
+          {(() => { const l = learningLoad(); return `Context ${l.contextTokens} tokens · room for stored knowledge ~${l.knowledgeTokens}${l.pressure ? ' (halved: saving power)' : ''}`; })()}
+        </Text>
         <Text style={styles.counts}>
           Round {st?.round ?? 0} · {count('answered')} legacy judge approvals (unverified) · {count('uncertain')} awaiting verification · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
         </Text>

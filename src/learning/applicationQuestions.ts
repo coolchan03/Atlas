@@ -10,7 +10,7 @@ import type { Expected } from './exams';
 
 /** A question this close to a claim's own wording only asks for the claim back. */
 const TOO_FAMILIAR = 0.6;
-export const MAX_APPLICATION_QUESTIONS = 6;
+const MAX_APPLICATION_QUESTIONS = 6;
 
 /** The prompt: the claims the questions must be built on, and what a good application question is. */
 export function applicationPrompt(topic: string, claims: string[]): { system: string; user: string } {
