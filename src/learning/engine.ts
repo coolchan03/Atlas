@@ -558,8 +558,8 @@ const EXAM_SYSTEM = 'You answer exam questions. Answer directly with the specifi
 /** The Judge's second opinion on an answer the word matching did not pass: are the key facts there, in other words? */
 const judgeSecondOpinion: SecondOpinion = async (item, answer) => {
   const facts = item.expected.facts.map((alts) => `- ${alts[0]}`).join('\n');
-  const reply = await ask('You compare an answer with the facts it should contain. The answer may use different words. Reply with one word only: YES if every fact is there, PARTLY if some are, NO if none are or the answer says something contrary.', `QUESTION: ${item.question}\n\nFACTS THE ANSWER SHOULD CONTAIN:\n${facts}\n\nANSWER:\n${answer}`, 'judge');
-  const word = /\b(yes|partly|no)\b/i.exec(reply)?.[1]?.toLowerCase();
+  const reply = await ask('You compare an answer with the facts it should contain. The answer may use different words. Reply with one word only: YES if every fact is there, PARTLY if some are, NO if none are or the answer says something contrary.', `QUESTION: ${item.question}\n\nFACTS THE ANSWER SHOULD CONTAIN:\n${facts}\n\nANSWER (between the lines):\n---\n${answer}\n---`, 'judge');
+  const word = /^\W*(yes|partly|no)\b/i.exec(reply.replace(/<think>[\s\S]*?<\/think>/gi, ''))?.[1]?.toLowerCase(); // the first word is the verdict
   return word === 'yes' || word === 'partly' || word === 'no' ? word : null;
 };
 

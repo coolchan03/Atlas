@@ -21,7 +21,7 @@ MELODY: E5:1 G5:1 A5:2 G5:1 E5:1 D5:2 C5:1 D5:1 E5:2 -:1 C5:3`;
 
 export interface Melody { title: string; bpm: number | null; notes: Array<{ pitch: number | null; length: number }> }
 
-const TOKEN = /^([A-Ga-g][#b♯♭]?-?\d|-|r|rest)(?:[:/x*]\s*(\d+(?:\.\d+)?|\.\d+))?$/;
+const TOKEN = /^([A-G][#b♯♭]?-?\d|-|r|rest)(?:[:/x*]\s*(\d+(?:\.\d+)?|\.\d+))?$/i;
 
 /** The title, tempo and notes in a reply. Any line with a run of note tokens counts, whatever it is called; other words are ignored. */
 export function parseMelody(raw: string): Melody {
@@ -30,7 +30,7 @@ export function parseMelody(raw: string): Melody {
   const bpmText = /^\W*(?:bpm|tempo)\s*[:\-]?\s*(\d{2,3})/im.exec(text)?.[1];
   const notes: Melody['notes'] = [];
   for (const line of text.split(/\r?\n/)) {
-    const body = line.replace(/^\W*(?:melody|notes?)\s*[:\-]\s*/i, '');
+    const body = line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/^\W*(?:melody|notes?)\s*[:\-]\s*/i, '');
     const tokens = body.replace(/[,|;]+/g, ' ').trim().split(/\s+/).filter(Boolean);
     const parsed = tokens.map((t) => TOKEN.exec(t));
     if (tokens.length < 4 || parsed.filter(Boolean).length < tokens.length * 0.8) continue; // not a melody line
@@ -39,8 +39,7 @@ export function parseMelody(raw: string): Melody {
       const length = Math.min(8, Math.max(0.25, Number(m[2] ?? 1) || 1));
       const rest = /^(-|r|rest)$/i.test(m[1]);
       const pitch = rest ? null : pitchNumber(m[1][0].toUpperCase() + m[1].slice(1).replace(/♯/g, '#').replace(/♭/g, 'b'));
-      if (!rest && !Number.isFinite(pitch)) continue;
-      notes.push({ pitch, length });
+      notes.push({ pitch: rest || !Number.isFinite(pitch) ? null : pitch, length }); // a note that cannot be read keeps its time as a rest
     }
   }
   return { title, bpm: bpmText ? Math.min(165, Math.max(60, Number(bpmText))) : null, notes };
@@ -52,7 +51,10 @@ export function scoreFromMelody(melody: Melody, plan: HarmonyPlan, options: { ti
   const notes: MusicNote[] = [];
   let beat = 0;
   let played = 0;
-  for (const n of melody.notes) {
+  // A melody shorter than the tune is played again until the end of the plan (a phrase repeated, as tunes do).
+  const phrase = melody.notes.reduce((a, n) => a + n.length, 0);
+  const looped = phrase > 0 ? Array.from({ length: Math.min(8, Math.ceil(end / phrase)) }, () => melody.notes).flat() : [];
+  for (const n of looped) {
     if (beat >= end) break;
     const length = Math.min(n.length, end - beat);
     if (n.pitch !== null) { notes.push({ pitch: intoRange(n.pitch, RANGE.melody), beat, length, gain: 0.6, role: 'melody', voice: options.band?.melody }); played += 1; }

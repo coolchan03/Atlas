@@ -216,7 +216,8 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
     const score = named ? { ...written.score, title: named } : isPlaceholderTitle(written.score.title) ? { ...written.score, title: randomTitle(style, specFor(style).group) } : written.score;
     return { score, via: 'composer', instruments: written.instruments, style, note: written.note };
   } catch (e: any) {
-    const noModel = /no model|could not be loaded|failed to load/i.test(String(e?.message || e)); // nothing to ask: no more questions
+    // Nothing more is asked when there is no model, or when the model was stopped for being stuck or too slow: a second try would only repeat it.
+    const noModel = /no model|could not be loaded|failed to load|took too long|was stopped|still (reading|writing)|stopped writing|out of memory/i.test(String(e?.message || e));
     const melodyOnly = noModel ? null : await writeMelodyOnly(brief, { request, style }, ask);
     if (melodyOnly) return melodyOnly;
     // Even here the tune gets a name of its own: the AI's, else a random one for the style (never the request text as a title).

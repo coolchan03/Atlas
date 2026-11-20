@@ -65,7 +65,7 @@ const STALL_MS = 2 * 60 * 1000;
 async function askBounded(system: string, user: string, overallMs = callLimit()): Promise<string> {
   let timer: ReturnType<typeof setInterval> | undefined;
   const readMs = readLimitMs();
-  beginWork();
+  const token = beginWork();
   const limit = new Promise<never>((_, reject) => {
     timer = setInterval(() => {
       const why = giveUpReason(currentWork(), Date.now(), { readMs, stallMs: STALL_MS, overallMs });
@@ -77,8 +77,8 @@ async function askBounded(system: string, user: string, overallMs = callLimit())
     (timer as { unref?: () => void }).unref?.();
   });
   try {
-    return await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(); else noteWriting(content); }), limit]);
-  } finally { if (timer) clearInterval(timer); endWork(); }
+    return await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(token); else noteWriting(token, content); }), limit]);
+  } finally { if (timer) clearInterval(timer); endWork(token); }
 }
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
 const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];

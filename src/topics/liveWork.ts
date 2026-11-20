@@ -8,21 +8,25 @@
  * making progress, or when it passes the overall limit for the model in use (timeLimit.ts).
  */
 type WorkPhase = 'idle' | 'waiting' | 'reading' | 'writing';
-export interface Work { phase: WorkPhase; startedAt: number; phaseSince: number; lastTokenAt: number; chars: number }
+export interface Work { phase: WorkPhase; startedAt: number; phaseSince: number; lastTokenAt: number; chars: number; text: string }
 
-const idle = (): Work => ({ phase: 'idle', startedAt: 0, phaseSince: 0, lastTokenAt: 0, chars: 0 });
+const idle = (): Work => ({ phase: 'idle', startedAt: 0, phaseSince: 0, lastTokenAt: 0, chars: 0, text: '' });
 let work: Work = idle();
+/** Which call owns the record: a call that was stopped and finishes late must not touch the record of the call that came after it. */
+let owner = 0;
 
 export const currentWork = (): Work => ({ ...work });
-export function beginWork(now = Date.now()): void { work = { phase: 'waiting', startedAt: now, phaseSince: now, lastTokenAt: 0, chars: 0 }; }
-export function endWork(): void { work = idle(); }
+/** Starts a call's record and returns its token; the other functions only act for the call whose token is the latest. */
+export function beginWork(now = Date.now()): number { owner += 1; work = { phase: 'waiting', startedAt: now, phaseSince: now, lastTokenAt: 0, chars: 0, text: '' }; return owner; }
+export function endWork(token: number): void { if (token === owner) work = idle(); }
 /** The model started on the prompt (local model only). */
-export function noteReading(now = Date.now()): void { if (work.phase === 'waiting') work = { ...work, phase: 'reading', phaseSince: now }; }
+export function noteReading(token: number, now = Date.now()): void { if (token === owner && work.phase === 'waiting') work = { ...work, phase: 'reading', phaseSince: now }; }
 /** Output arrived: `content` is what the stream carried (the whole text so far, or just the new piece). */
-export function noteWriting(content: string, now = Date.now()): void {
-  if (work.phase === 'idle') return;
-  const grown = content.length >= work.chars ? content.length : work.chars + content.length; // a growing whole text, or a new piece
-  work = { ...work, phase: 'writing', phaseSince: work.phase === 'writing' ? work.phaseSince : now, lastTokenAt: now, chars: grown };
+export function noteWriting(token: number, content: string, now = Date.now()): void {
+  if (token !== owner || work.phase === 'idle') return;
+  // The stream sends either the whole text so far (it starts with what came before) or just the new piece.
+  const whole = work.text !== '' && content.length > work.text.length && content.startsWith(work.text);
+  work = { ...work, phase: 'writing', phaseSince: work.phase === 'writing' ? work.phaseSince : now, lastTokenAt: now, chars: whole ? content.length : work.chars + content.length, text: whole ? content : content.length > 2000 ? '' : content };
 }
 
 export interface GiveUpLimits { readMs: number; stallMs: number; overallMs: number }

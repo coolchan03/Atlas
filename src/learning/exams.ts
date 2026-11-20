@@ -47,6 +47,8 @@ interface ItemResult {
 export interface ExamMetrics {
   /** Questions asked. Accuracy is measured over the ones that could be graded (total minus ungraded). */
   total: number;
+  /** True when a Judge's second opinion was available for this run: runs with and without one are not compared. */
+  secondOpinion?: boolean;
   /** True for a run of only some questions (a retest). It is kept in the history, but never counts in the memory-versus-model comparison. */
   retest?: boolean;
   /** Questions that could not be graded: the model failed to answer, or the answer key was unusable. */
@@ -198,10 +200,11 @@ const GIVE_UP_EXAM_AFTER = 5;
  * figure and had evidence), the Judge is asked whether the key facts are all there ('yes': right), some ('partly': mostly right) or not.
  * It can only raise a result, never lower one, and what it did is kept on the result so it can be seen. A Judge that fails changes nothing.
  */
-async function withSecondOpinion(item: ExamItem, graded: ItemResult, judge?: SecondOpinion): Promise<ItemResult> {
+async function withSecondOpinion(asked: { item: ExamItem; fullAnswer: string; judge?: SecondOpinion }, graded: ItemResult): Promise<ItemResult> {
+  const { item, fullAnswer, judge } = asked;
   if (!judge || graded.correct || graded.outdated || graded.reason !== 'wrong-answer' || !graded.answer) return graded;
   let verdict: Awaited<ReturnType<SecondOpinion>> = null;
-  try { verdict = await judge(item, graded.answer); } catch { return graded; }
+  try { verdict = await judge(item, fullAnswer); } catch (e: any) { if (String(e?.message) === 'stopped') throw e; return graded; } // a Stop ends the exam; a Judge that fails changes nothing
   if (verdict === 'yes') return { ...graded, correct: true, credit: 1, reason: 'correct', judged: 'yes', missing: [] };
   if (verdict === 'partly') return { ...graded, credit: Math.max(graded.credit ?? 0, ACCEPT_SHARE), judged: 'partly' };
   return graded;
@@ -233,7 +236,7 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
       results.push({ id: item.id, correct: false, score: 0, outdated: false, seconds: (now() - started) / 1000, reason: 'inference-failure', error: clip(String(e?.message || e), 200) });
       continue;
     }
-    const graded = await withSecondOpinion(item, gradeItem(item, input.mode, { ...answered, seconds: (now() - started) / 1000 }), input.judge);
+    const graded = await withSecondOpinion({ item, fullAnswer: String(answered.text ?? ''), judge: input.judge }, gradeItem(item, input.mode, { ...answered, seconds: (now() - started) / 1000 }));
     results.push(graded);
     missesInARow = (graded.credit ?? 0) > 0 ? 0 : missesInARow + 1;
     unsupported += citedNumbers(String(answered.text ?? '')).filter((n) => n < 1 || n > answered.sourceCount).length;
@@ -244,7 +247,7 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
   const earned = results.filter((r) => !(r.reason && NOT_GRADED.includes(r.reason))).reduce((a, r) => a + (r.credit ?? (r.correct ? 1 : 0)), 0);
   const failed = new Set(input.previousFailures ?? []);
   return {
-    total: results.length, ungraded, correct, mostlyRight: results.filter((r) => !r.correct && isAccepted(r)).length, accuracy: graded ? earned / graded : 0,
+    total: results.length, ungraded, secondOpinion: !!input.judge, correct, mostlyRight: results.filter((r) => !r.correct && isAccepted(r)).length, accuracy: graded ? earned / graded : 0,
     outdatedAnswers: results.filter((r) => r.outdated).length, unsupportedCitations: unsupported,
     repeatFailures: results.filter((r) => !r.correct && !(r.reason && NOT_GRADED.includes(r.reason)) && failed.has(r.id)).length,
     averageSeconds: results.length ? results.reduce((a, r) => a + r.seconds, 0) / results.length : 0, items: results,
@@ -346,6 +349,7 @@ export function improvementSummary(history: ExamResult[]): string {
   const base = latest('baseline');
   const memory = latest('memory');
   if (!base || !memory) return 'Run the exam in the model alone mode and the stored memory mode to see whether memory helps.';
+  if (!!base.metrics.secondOpinion !== !!memory.metrics.secondOpinion) return 'One run had the Judge reading answers in other words and the other did not, so they were graded differently and cannot be compared. Run the exam again in both modes.';
   if ([base, memory].some((r) => r.metrics.items.some((i) => i.reason === 'stopped'))) return 'A run stopped early after several misses in a row, so the two runs did not answer the same questions and cannot be compared. Fix what is failing, then run the exam again.';
   if (Math.min(base.metrics.total - (base.metrics.ungraded ?? 0), memory.metrics.total - (memory.metrics.ungraded ?? 0)) < MIN_QUESTIONS) return `Fewer than ${MIN_QUESTIONS} questions: too few to say whether anything improved.`;
   const delta = memory.metrics.accuracy - base.metrics.accuracy;

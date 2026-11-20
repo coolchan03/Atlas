@@ -291,3 +291,15 @@ describe('when the full score cannot be read', () => {
     expect(out.score.title).not.toMatch(/make me some jazz/i);
   });
 });
+
+describe('a short melody', () => {
+  it('is played again to the end of the tune, and a note that cannot be read keeps its time as a rest', () => {
+    const { parseMelody, scoreFromMelody } = require('../../../src/music/melodyFallback');
+    const brief = composerBrief('calm', 'focus', 30);
+    const melody = parseMelody('- C5:1 R:1 E5:2 C9:1 G5:1 A5:1 G5:1 E5:1 D5:1');
+    expect(melody.notes.map((n: { pitch: number | null }) => n.pitch === null)).toEqual([false, true, false, true, false, false, false, false, false]);
+    const score = scoreFromMelody(melody, brief.plan, { title: 't', bpm: 80 });
+    const last = Math.max(...score.notes.filter((n: { role: string }) => n.role === 'melody').map((n: { beat: number }) => n.beat));
+    expect(last).toBeGreaterThan(brief.plan.bars.length * 4 - 12); // the phrase was repeated to near the end
+  });
+});
