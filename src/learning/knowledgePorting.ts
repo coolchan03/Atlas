@@ -11,6 +11,8 @@ export interface ExportOptions {
   statuses?: ClaimStatus[];
   /** Include the cited passages. Off by default: passages may be copyrighted or private. */
   includePassages?: boolean;
+  /** Only what belongs to these learning subjects (one project): their claims and learning progress, and none of the phone-wide experience, strategies or exam results. */
+  scope?: { claimIds: Set<string>; subjectIds: Set<string> };
 }
 
 /**
@@ -18,7 +20,9 @@ export interface ExportOptions {
  * experience, procedures, exam results and learning progress. Exam questions are left out on purpose.
  */
 export function exportLedger(db: LearningKnowledgeDb, options: ExportOptions = {}): PortableRecord[] {
-  const claims = db.exportClaims(options.statuses ?? ['verified'], { includePassages: options.includePassages }) as unknown as PortableClaim[];
+  const all = db.exportClaims(options.statuses ?? ['verified'], { includePassages: options.includePassages }) as unknown as PortableClaim[];
+  const { scope } = options;
+  const claims = scope ? all.filter((c) => scope.claimIds.has(c.id)) : all;
   const ids = new Set(claims.map((c) => c.id));
   const out: PortableRecord[] = [...claims];
   for (const r of rows(db, 'SELECT * FROM atlas_contradictions')) {
@@ -27,16 +31,17 @@ export function exportLedger(db: LearningKnowledgeDb, options: ExportOptions = {
   for (const r of rows(db, 'SELECT * FROM atlas_claim_history')) {
     if (ids.has(r.claim_id)) out.push({ ...head('claim_history', `${r.claim_id}:${r.id}`), claimId: r.claim_id, oldStatus: r.old_status, newStatus: r.new_status, actor: r.actor, reason: r.reason, at: r.at });
   }
-  for (const r of rows(db, 'SELECT * FROM atlas_experience')) {
+  for (const r of scope ? [] : rows(db, 'SELECT * FROM atlas_experience')) {
     out.push({ ...head('experience', r.id), topic: r.topic, attempt: r.attempt, outcome: r.outcome, correction: text(r.correction), createdAt: r.created_at });
   }
-  for (const r of rows(db, 'SELECT * FROM atlas_procedures')) {
+  for (const r of scope ? [] : rows(db, 'SELECT * FROM atlas_procedures')) {
     out.push({ ...head('procedure', r.id), topic: r.topic, method: r.method, status: r.verification_status, provenance: r.provenance, createdAt: r.created_at, updatedAt: r.updated_at });
   }
-  for (const r of rows(db, 'SELECT * FROM atlas_exam_results')) {
+  for (const r of scope ? [] : rows(db, 'SELECT * FROM atlas_exam_results')) {
     out.push({ ...head('exam_result', r.id), benchmarkVersion: r.benchmark_version, mode: r.mode, metrics: JSON.parse(String(r.metrics_json)), createdAt: r.created_at });
   }
   for (const r of rows(db, 'SELECT * FROM atlas_mastery')) {
+    if (scope && !scope.subjectIds.has(String(r.subject_id))) continue;
     out.push({ ...head('mastery', r.concept_id), subjectId: r.subject_id, topic: r.topic, question: r.question, strength: Number(r.strength), streak: Number(r.streak), attempts: Number(r.attempts), lastAt: text(r.last_at), nextReview: r.next_review, lastOutcome: text(r.last_outcome) });
   }
   return out;
@@ -45,11 +50,13 @@ export function exportLedger(db: LearningKnowledgeDb, options: ExportOptions = {
 export interface ImportSummary { added: number; skipped: number }
 
 /** Claims already in the ledger are skipped, so importing the same file twice changes nothing. */
-function importClaim(db: LearningKnowledgeDb, c: PortableClaim): boolean {
+function importClaim(db: LearningKnowledgeDb, c: PortableClaim, keepStatus: boolean): boolean {
   if (db.getClaim(c.id)) return false;
-  // An import never grants "verified": that needs a review on this device. Restrictive statuses carry over.
-  const status: ClaimStatus = c.status === 'verified' ? 'candidate' : c.status;
-  const note = c.status === 'verified' ? `Imported as verified elsewhere; not reviewed on this device. ${c.uncertainty ?? ''}`.trim() : c.uncertainty ?? '';
+  // An ordinary import never grants "verified": that needs a review on this device. Restrictive statuses carry over.
+  // Moving your own project between your own phones (keepStatus) keeps each claim exactly as it was marked.
+  const downgrade = c.status === 'verified' && !keepStatus;
+  const status: ClaimStatus = downgrade ? 'candidate' : c.status;
+  const note = downgrade ? `Imported as verified elsewhere; not reviewed on this device. ${c.uncertainty ?? ''}`.trim() : c.uncertainty ?? '';
   db.sql(`INSERT INTO atlas_claims (id, topic, question, claim_text, report_id, status, uncertainty, confidence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [c.id, c.topic, c.question, c.claim, c.reportId, status, note || null, null, c.createdAt, c.updatedAt]);
   for (const cite of c.citations as Array<Record<string, any>>) {
@@ -107,15 +114,14 @@ const IMPORTERS: ByType = {
 };
 
 /** Imports validated records inside one transaction: a bad record changes nothing. Claims first, so the rest can refer to them. */
-export function importLedger(db: LearningKnowledgeDb, records: unknown[]): ImportSummary {
+export function importLedger(db: LearningKnowledgeDb, records: unknown[], options: { keepStatus?: boolean } = {}): ImportSummary {
   const valid = records.map(validateKnowledgeRecord);
   const claimsFirst = [...valid.filter((r) => r.recordType === 'claim'), ...valid.filter((r) => r.recordType !== 'claim')];
   const summary: ImportSummary = { added: 0, skipped: 0 };
   db.sql('BEGIN');
   try {
     for (const r of claimsFirst) {
-      const write = r.recordType === 'claim' ? importClaim : (IMPORTERS[r.recordType] as Importer<PortableRecord> | undefined);
-      const added = write ? write(db, r as never) : false;
+      const added = r.recordType === 'claim' ? importClaim(db, r, !!options.keepStatus) : ((IMPORTERS[r.recordType] as Importer<PortableRecord> | undefined)?.(db, r as never) ?? false);
       if (added) summary.added += 1; else summary.skipped += 1;
     }
     db.sql('COMMIT');

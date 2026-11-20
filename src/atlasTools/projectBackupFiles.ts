@@ -35,7 +35,7 @@ const safeFile = (file: ProjectBackupFile, allowed: Set<string>): void => {
     throw new Error('Invalid project document in backup. No files were restored.');
   }
 };
-async function readablePath(path: string, name: string): Promise<string> {
+export async function readablePath(path: string, name: string): Promise<string> {
   if (await RNFS.exists(path)) return path;
   // Older project imports kept a picker-cache path in the index even though the
   // document service also saved a permanent attachments copy.

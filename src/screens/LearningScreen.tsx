@@ -22,6 +22,7 @@ import { askAsReport } from '../learning/askReport';
 import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound } from '../learning/engine';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
+import { ProjectZip } from './learningReliability/ProjectZip';
 const literalStyles = StyleSheet.create({
   s1: { marginTop: 0 },
   s2: { fontWeight: '700' },
@@ -420,6 +421,8 @@ export const LearningScreen: React.FC = () => {
         </TouchableOpacity>
       {foldHead('own-questions', 'Your own questions and tests')}
       {!folded['own-questions'] && <QuestionImport subjectId={agentId} onAdded={() => undefined} />}
+      {foldHead('project-zip', 'Export or open this project as a ZIP')}
+      {!folded['project-zip'] && <ProjectZip projectId={cfg.projectId} />}
 
       <Text style={styles.label}>Question bank</Text>
       <Text style={styles.note}>The learner writes it, the judge approves or rejects (the learner can argue back once), the manager can drop or add questions. Tap a question to open it. You can then approve it, reject it or remove it yourself.</Text>
