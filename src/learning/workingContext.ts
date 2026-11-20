@@ -6,7 +6,7 @@
  */
 import { similarity } from './claimText';
 
-export interface NoteIn { id: string; text: string; status: string; topic?: string; source?: string }
+export interface NoteIn { id: string; text: string; status: string; topic?: string; source?: string; /** Always included first, whatever the question (the learner's active goal). */ pinned?: boolean }
 export interface PassageIn { source: string; where?: string; text: string }
 export interface WorkingContext {
   text: string;
@@ -42,7 +42,7 @@ export function buildWorkingContext(input: { question: string; topic: string; no
 
   const ranked = input.notes
     .filter((n) => !n.topic || n.topic === topic) // another project's note is never used
-    .map((n) => ({ n, s: similarity(question, n.text) * (n.status === 'verified' ? 1.15 : n.status === 'disputed' ? 0.6 : 1) }))
+    .map((n) => ({ n, s: n.pinned ? 10 : similarity(question, n.text) * (n.status === 'verified' ? 1.15 : n.status === 'disputed' ? 0.6 : 1) }))
     .filter((x) => x.s > MIN_RELEVANCE)
     .sort((a, b) => b.s - a.s);
   ranked.forEach(({ n }, i) => {

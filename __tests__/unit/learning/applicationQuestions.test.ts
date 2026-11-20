@@ -49,3 +49,21 @@ describe('the room a step has for stored knowledge', () => {
     expect(budgetFor(0, 0.2)).toBe(410); // an unknown context is treated as the smallest usual one
   });
 });
+
+describe('goals and corrections as hot cards', () => {
+  it('a goal is pinned into every step, and neither a goal nor a correction counts as checked knowledge', () => {
+    const { goalCard, correctionCard, cardNotes, approvedCards, summarizeCards, claimCard } = require('../../../src/learning/knowledgeCards');
+    const { buildWorkingContext } = require('../../../src/learning/workingContext');
+    const goal = goalCard('water', 'Learn safe drinking water rules', 'Focus on boiling times');
+    const fix = correctionCard({ id: 'e1', topic: 'water', attempt: 'Boil 10 minutes', correction: 'One minute is enough' });
+    const claim = claimCard({ id: 'c1', text: 'Boil water for one minute.', status: 'verified', topic: 'water', evidenceCount: 1 });
+    expect(goalCard('water', '', '')).toBeNull();
+    expect(correctionCard({ id: 'e2', topic: 'water', attempt: 'x', correction: '' })).toBeNull();
+    const cards = [goal, fix, claim];
+    expect(approvedCards(cards).map((c: { id: string }) => c.id)).toEqual(['claim:c1']);
+    expect(summarizeCards(cards).total).toBe(1);
+    const ctx = buildWorkingContext({ question: 'How do solar panels work?', topic: 'water', notes: cardNotes(cards), budgetTokens: 400 });
+    expect(ctx.text).toMatch(/Active goal|Objective: Learn safe drinking water/); // pinned, though the question is about something else
+    expect(ctx.text).not.toMatch(/Boil water for one minute/); // an unrelated checked note stays out
+  });
+});

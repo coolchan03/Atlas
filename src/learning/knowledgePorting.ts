@@ -49,14 +49,22 @@ export function exportLedger(db: LearningKnowledgeDb, options: ExportOptions = {
 
 export interface ImportSummary { added: number; skipped: number }
 
+/**
+ * The status an imported claim gets, and the note that says so. An ordinary import never grants "verified": that needs a review on this
+ * device, so a verified claim arrives as a candidate. Moving your own project (keepStatus) keeps each claim exactly as it was marked.
+ */
+function importedStatus(c: PortableClaim, keepStatus: boolean): { status: ClaimStatus; note: string } {
+  const was = c.uncertainty ?? '';
+  if (c.status !== 'verified') return { status: c.status, note: was };
+  return keepStatus
+    ? { status: 'verified', note: `Imported from a project ZIP with its status kept. ${was}`.trim() }
+    : { status: 'candidate', note: `Imported as verified elsewhere; not reviewed on this device. ${was}`.trim() };
+}
+
 /** Claims already in the ledger are skipped, so importing the same file twice changes nothing. */
 function importClaim(db: LearningKnowledgeDb, c: PortableClaim, keepStatus: boolean): boolean {
   if (db.getClaim(c.id)) return false;
-  // An ordinary import never grants "verified": that needs a review on this device. Restrictive statuses carry over.
-  // Moving your own project between your own phones (keepStatus) keeps each claim exactly as it was marked.
-  const downgrade = c.status === 'verified' && !keepStatus;
-  const status: ClaimStatus = downgrade ? 'candidate' : c.status;
-  const note = downgrade ? `Imported as verified elsewhere; not reviewed on this device. ${c.uncertainty ?? ''}`.trim() : c.uncertainty ?? '';
+  const { status, note } = importedStatus(c, keepStatus);
   db.sql(`INSERT INTO atlas_claims (id, topic, question, claim_text, report_id, status, uncertainty, confidence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [c.id, c.topic, c.question, c.claim, c.reportId, status, note || null, null, c.createdAt, c.updatedAt]);
   for (const cite of c.citations as Array<Record<string, any>>) {
@@ -114,12 +122,13 @@ const IMPORTERS: ByType = {
 };
 
 /** Imports validated records inside one transaction: a bad record changes nothing. Claims first, so the rest can refer to them. */
-export function importLedger(db: LearningKnowledgeDb, records: unknown[], options: { keepStatus?: boolean } = {}): ImportSummary {
+export function importLedger(db: LearningKnowledgeDb, records: unknown[], options: { keepStatus?: boolean; /** Runs inside the same transaction, before the records, so a failure undoes it too. */ before?: () => void } = {}): ImportSummary {
   const valid = records.map(validateKnowledgeRecord);
   const claimsFirst = [...valid.filter((r) => r.recordType === 'claim'), ...valid.filter((r) => r.recordType !== 'claim')];
   const summary: ImportSummary = { added: 0, skipped: 0 };
   db.sql('BEGIN');
   try {
+    options.before?.();
     for (const r of claimsFirst) {
       const added = r.recordType === 'claim' ? importClaim(db, r, !!options.keepStatus) : ((IMPORTERS[r.recordType] as Importer<PortableRecord> | undefined)?.(db, r as never) ?? false);
       if (added) summary.added += 1; else summary.skipped += 1;

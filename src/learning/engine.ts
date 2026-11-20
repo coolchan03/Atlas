@@ -44,7 +44,7 @@ import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/
 import { stripInjection } from './sourceSafety';
 import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
-import { approvedCards, loadCards } from './knowledgeCards';
+import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -317,7 +317,7 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   }
   status('Learner is writing a report...');
   // What is already stored about this question: background to avoid repeating or contradicting it, never a source to cite.
-  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: (await loadCards(cfg.topic, agent.id).catch(() => [])).map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: stepBudget(0.12) }).text;
+  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: cardNotes(await loadCards(cfg.topic, agent.id).catch(() => [])), budgetTokens: stepBudget(0.12) }).text;
   const report = await ask(
     learnerSystem(agent, st, cfg),
     `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}${known ? `ALREADY STORED (background only, NOT a source: do not cite it, and say if the sources contradict it):\n${known}\n\n` : ''}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
@@ -376,7 +376,7 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
     // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
     const cards = await loadCards(c.topic, agent.id).catch(() => []);
-    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cards.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: stepBudget(0.15) }).text.split('\n').filter(Boolean);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15) }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
@@ -545,7 +545,7 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
     // Only reviewed and approved knowledge (from both the claims ledger and the reviewed findings), and only cards that have a source on file.
     const known = mode === 'memory' ? approvedCards(await loadCards(cfg.topic, subjectId && !isNoAgent(subjectId) ? subjectId : undefined)) : [];
     // Only the approved notes that bear on this question, within a small budget, from this subject's topic; dropped after the answer.
-    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic, source: k.source })), budgetTokens: stepBudget(0.2) });
+    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: cardNotes(known, true), budgetTokens: stepBudget(0.2) });
     const notes = working.usedNotes;
     const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
@@ -553,7 +553,6 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
   };
 }
 
-/** Runs a subject's exam in all three modes, saves each result, and returns them. Not while learning is running. */
 /**
  * The Judge writes application questions from what the subject has learned (verified claims first) and saves them as exam items with
  * their hidden answer keys. Returns how many were added and how many were dropped as too familiar or repeated.
@@ -566,17 +565,22 @@ export async function judgeWritesQuestions(subjectId: string, onStatus: (message
     .sort((a, b) => Number(b.status === 'verified') - Number(a.status === 'verified')).slice(0, 8).map((k) => k.text);
   if (known.length < 2) throw new Error('Nothing has been learned yet to write questions from. Let the learner study first.');
   if (running) throw new Error('Learning is running. Stop it first, then ask the Judge for questions.');
+  running = true; // one model call at a time: learning, an exam or this cannot start while it runs
   stopRequested = false;
   baseModel = useAppStore.getState().activeModelId || '';
   roleModels = { learner: cfg.learnerModelId || baseModel, judge: cfg.judgeModelId || baseModel, manager: cfg.managerModelId || baseModel };
-  onStatus('The Judge is writing application questions...');
-  const p = applicationPrompt(topic, known);
-  const reply = await ask(p.system, p.user, 'judge');
-  const { kept, familiar, repeats } = applicationQuestions(reply, known, exams.items(subjectId).map((i) => i.question));
-  kept.forEach((q) => exams.addItem({ subjectId, topic: q.topic ?? topic, question: q.question, expected: keyFor(q) }));
-  return { added: kept.length, familiar, repeats };
+  holdScreenOnly('learning-exam', true);
+  try {
+    onStatus('The Judge is writing application questions...');
+    const p = applicationPrompt(topic, known);
+    const reply = await ask(p.system, p.user, 'judge');
+    const { kept, familiar, repeats } = applicationQuestions(reply, known, exams.items(subjectId).map((i) => i.question));
+    kept.forEach((q) => exams.addItem({ subjectId, topic: q.topic ?? topic, question: q.question, expected: keyFor(q) }));
+    return { added: kept.length, familiar, repeats };
+  } finally { holdScreenOnly('learning-exam', false); running = false; status('Idle'); }
 }
 
+/** Runs a subject's exam in all three modes, saves each result, and returns them. Not while learning is running. */
 export async function runExamNow(subjectId: string, onStatus: (message: string) => void, only?: string[]): Promise<ExamMetrics[]> {
   if (running) throw new Error('Learning is running. Stop it first, then run the exam.');
   const items = exams.items(subjectId).filter((i) => !only || only.includes(i.id));
@@ -604,6 +608,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
 // ------------------------------------------------------------------ loop
 let awakeTimer: ReturnType<typeof setInterval> | null = null;
 export async function startLearning(agentId: string): Promise<void> {
+  degradedTold.clear(); // a new run tells again if the documents still cannot be searched properly
   if (running) return;
   running = true;
   // The phone must not sleep while it learns, even after leaving this screen (unless turned off on the Teach screen). The setting is

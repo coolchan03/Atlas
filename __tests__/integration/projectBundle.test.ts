@@ -85,3 +85,17 @@ it('refuses a bundle whose file changed, and changes nothing', async () => {
   expect(b.projects.getState().projects.map((p: { name: string }) => p.name)).not.toContain('Water course');
   expect(db2.getClaim('r1:claim:1')).toBeFalsy();
 });
+
+it('leaves a project that already has this id as it is, and never mixes in a learner that works on another project', async () => {
+  const { a, db, projectId } = await seedPhoneA();
+  await a.bundle.writeProjectBundle(projectId, BUNDLE, db);
+  const b = await emptyPhone();
+  b.projects.setState({ projects: [...b.projects.getState().projects, { id: projectId, name: 'My own name', description: 'mine', systemPrompt: '', icon: '#111', createdAt: '2027-01-01', updatedAt: '2027-01-01' }] });
+  b.learning.getState().setConfig('expert-water', { topic: 'water', projectId: 'some-other-project' });
+  const result = await b.bundle.applyProjectBundle(BUNDLE, b.memoryDb());
+  expect(b.projects.getState().projects.filter((p: { id: string }) => p.id === projectId)).toHaveLength(1);
+  expect(b.projects.getState().projects.find((p: { id: string }) => p.id === projectId).name).toBe('My own name');
+  expect(result.notes).toBe(0);
+  expect(b.learning.getState().get('expert-water').notes).toEqual([]);
+  expect(b.learning.getState().getConfig('expert-water').projectId).toBe('some-other-project');
+});

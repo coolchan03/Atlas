@@ -1,7 +1,7 @@
 /** The file side of the project bundle: write a folder, zip it, let the person save it; and pick a zip, check it, unpack it, merge it. */
 import RNFS from 'react-native-fs';
 import { zip, unzip } from 'react-native-zip-archive';
-import { saveDocuments } from '@react-native-documents/picker';
+import { saveDocuments, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { applyProjectBundle, writeProjectBundle, type BundleManifest, type BundleResult } from './projectBundle';
 import { directoryProblems, MAX_ENTRIES } from './zipStaging';
@@ -19,7 +19,9 @@ export async function exportProjectZip(projectId: string): Promise<{ name: strin
     await zip(scratch, target);
     const safe = manifest.project.name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40) || 'project';
     const name = `Atlas-project-${safe}-${new Date().toISOString().slice(0, 10)}.zip`;
-    const [saved] = await saveDocuments({ sourceUris: [`file://${target}`], mimeType: 'application/zip', fileName: name, copy: true });
+    let saved: { name?: string | null } | undefined;
+    try { [saved] = await saveDocuments({ sourceUris: [`file://${target}`], mimeType: 'application/zip', fileName: name, copy: true }); }
+    catch (e) { if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) return null; throw e; } // backing out of the save sheet is not an error
     return saved ? { name: saved.name ?? name, manifest } : null;
   } finally {
     await RNFS.unlink(scratch).catch(() => undefined);

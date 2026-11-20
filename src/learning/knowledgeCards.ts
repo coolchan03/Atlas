@@ -8,7 +8,7 @@
 import type { Finding, FindingStatus } from '../knowledge/schema';
 
 type CardStatus = 'verified' | 'candidate' | 'disputed' | 'needs_review';
-type CardOrigin = 'claim' | 'finding';
+type CardOrigin = 'claim' | 'finding' | 'goal' | 'correction';
 
 export interface KnowledgeCard {
   /** Stable: the record's own id, prefixed by its store. */
@@ -59,6 +59,23 @@ export function findingCard(f: Pick<Finding, 'recordId' | 'topicId' | 'question'
   };
 }
 
+/** The learner's active goal: the person's objective and the Manager's current direction. A goal is an instruction, not a fact, so it has no evidence and is never counted as checked knowledge. */
+export function goalCard(topic: string, objective: string, direction: string): KnowledgeCard | null {
+  const text = [objective.trim() && `Objective: ${objective.trim()}`, direction.trim() && `Current direction: ${direction.trim()}`].filter(Boolean).join(' ');
+  if (!text) return null;
+  return { id: `goal:${norm(topic).replace(/ /g, '-') || 'goal'}`, origin: 'goal', topic, title: 'Active goal', text: clip(text, CARD_CHARS), status: 'candidate', source: 'Your objective', hasEvidence: false, deep: { origin: 'goal', id: topic } };
+}
+
+/** A mistake the learner made and its correction, so the same slip is not repeated. Never evidence for a fact. */
+export function correctionCard(e: { id: string; topic: string; attempt: string; correction?: string | null }): KnowledgeCard | null {
+  const fix = (e.correction ?? '').trim();
+  if (!fix) return null;
+  return { id: `correction:${e.id}`, origin: 'correction', topic: e.topic, title: clip(`Mistake: ${e.attempt}`, TITLE_CHARS), text: clip(`Earlier mistake: ${e.attempt}. Correction: ${fix}`, CARD_CHARS), status: 'candidate', source: 'A mistake it made', hasEvidence: false, deep: { origin: 'correction', id: e.id } };
+}
+
+/** The notes the working context reads: a goal is pinned, everything else is ranked by the question. */
+export const cardNotes = (cards: KnowledgeCard[], withSource = false) => cards.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic, pinned: k.origin === 'goal', ...(withSource ? { source: k.source } : {}) }));
+
 const RANK: Record<CardStatus, number> = { verified: 3, candidate: 2, needs_review: 1, disputed: 0 };
 
 /**
@@ -82,7 +99,8 @@ export function mergeCards(cards: KnowledgeCard[]): KnowledgeCard[] {
 export const approvedCards = (cards: KnowledgeCard[]): KnowledgeCard[] => cards.filter((c) => c.status === 'verified' && c.hasEvidence);
 
 export interface CardSummary { total: number; verified: number; candidate: number; disputed: number; needsReview: number; withoutEvidence: number; fromClaims: number; fromFindings: number }
-export function summarizeCards(cards: KnowledgeCard[]): CardSummary {
+export function summarizeCards(allCards: KnowledgeCard[]): CardSummary {
+  const cards = allCards.filter((c) => c.origin === 'claim' || c.origin === 'finding'); // goals and corrections are guidance, not knowledge
   const count = (s: CardStatus) => cards.filter((c) => c.status === s).length;
   return {
     total: cards.length, verified: count('verified'), candidate: count('candidate'), disputed: count('disputed'), needsReview: count('needs_review'),
@@ -97,6 +115,7 @@ export interface DeepReaders {
   finding: (id: string) => Promise<Array<{ title: string; locator: string; passage: string }>> | Array<{ title: string; locator: string; passage: string }>;
 }
 export async function deepPassages(card: KnowledgeCard, read: DeepReaders, limit = 3): Promise<Array<{ title: string; locator: string; passage: string }>> {
+  if (card.deep.origin !== 'claim' && card.deep.origin !== 'finding') return []; // a goal or a correction has no source passages
   const rows = await (card.deep.origin === 'claim' ? read.claim(card.deep.id) : read.finding(card.deep.id));
   return rows.filter((r) => r.passage.trim()).slice(0, limit);
 }
@@ -114,6 +133,18 @@ export async function loadCards(topic: string, agentId?: string, limit = 300): P
       if (card) out.push(card);
     }
   } catch { /* claims store unavailable */ }
+  try {
+    if (agentId) {
+      const { useLearningStore } = require('./store');
+      const s = useLearningStore.getState();
+      const goal = goalCard(topic, s.getConfig(agentId).topic, s.get(agentId).direction);
+      if (goal) out.push(goal);
+      const { learningKnowledgeDb: db } = require('./knowledgeDb');
+      for (const r of (db.sql('SELECT id, topic, attempt, correction FROM atlas_experience WHERE topic = ? AND correction IS NOT NULL ORDER BY created_at DESC LIMIT 12', [topic]).rows ?? []) as Array<{ id: string; topic: string; attempt: string; correction: string }>) {
+        const card = correctionCard(r); if (card) out.push(card);
+      }
+    }
+  } catch { /* goals and corrections unavailable */ }
   try {
     if (agentId) {
       const { searchFindings } = require('../knowledge/cycles');

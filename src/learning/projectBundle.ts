@@ -16,13 +16,12 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { learningKnowledgeDb, type LearningKnowledgeDb } from './knowledgeDb';
 import { exportLedger, importLedger } from './knowledgePorting';
-import { toKnowledgeJsonl } from './knowledgeInterchange';
+import { toKnowledgeJsonl, validateKnowledgeRecord } from './knowledgeInterchange';
 import { loadCards } from './knowledgeCards';
 import { newItem, useLearningStore, type LearnConfig } from './store';
 import { useProjectStore } from '../stores/projectStore';
 import { ragService } from '../services/rag';
 import { readablePath } from '../atlasTools/projectBackupFiles';
-import { mergeProjects } from '../services/nearbySync/merge';
 import type { Project } from '../types';
 
 const BUNDLE_FORMAT = 'atlas-project-bundle';
@@ -84,7 +83,10 @@ export async function writeProjectBundle(projectId: string, dir: string, db: Lea
   };
   const subjects = projectSubjects(projectId);
   const ids = subjects.map((s) => s.agentId);
-  const claimIds = new Set(ids.length ? rows(db, `SELECT c.id FROM atlas_claims c JOIN atlas_report_archive r ON r.id = c.report_id WHERE r.subject_id IN (${marks(ids.length)})`, ids).map((r) => String(r.id)) : []);
+  // The claims of these learners' reports, and older claims whose report was never archived but whose topic is one of theirs.
+  const topics = [...new Set(subjects.map((s) => s.topic).filter(Boolean))];
+  const claimIds = new Set(ids.length ? rows(db, `SELECT c.id FROM atlas_claims c LEFT JOIN atlas_report_archive r ON r.id = c.report_id
+    WHERE r.subject_id IN (${marks(ids.length)}) ${topics.length ? `OR (r.id IS NULL AND c.topic IN (${marks(topics.length)}))` : ''}`, [...ids, ...topics]).map((r) => String(r.id)) : []);
   const records = exportLedger(db, { statuses: [...ALL_STATUSES], includePassages: true, scope: { claimIds, subjectIds: new Set(ids) } });
   const reports = ids.length ? rows(db, `SELECT * FROM atlas_report_archive WHERE subject_id IN (${marks(ids.length)}) ORDER BY id`, ids) : [];
   const cards = (await Promise.all(subjects.map((s) => loadCards(s.topic, s.agentId).catch(() => [])))).flat();
@@ -156,27 +158,29 @@ async function verifyUnpacked(dir: string): Promise<BundleManifest> {
 }
 
 /** Adds the bundle's documents to the project; one already there (same name and size) is left alone. Returns how many were added. */
-async function restoreDocuments(dir: string, projectId: string, docs: DocEntry[]): Promise<number> {
+async function restoreDocuments(dir: string, projectId: string, docs: Array<DocEntry & { chunkRows: ChunkRow[] }>): Promise<number> {
   const have = await ragService.getDocumentsByProject(projectId);
   const root = `${RNFS.DocumentDirectoryPath}/atlas-project-files/${projectId}`;
   const incoming: Array<Parameters<typeof ragService.appendProjectDocuments>[0][number]> = [];
   for (const [i, d] of docs.entries()) {
-    if (!SAFE_PATH.test(d.file) || !SAFE_PATH.test(d.chunks) || have.some((h) => h.name === d.name && Number(h.size) === d.size)) continue;
+    if (have.some((h) => h.name === d.name && Number(h.size) === d.size)) continue;
     await RNFS.mkdir(root);
     const path = `${root}/${Date.now().toString(36)}_${i}_${fileName(d.name)}`;
     await RNFS.copyFile(`${dir}/${d.file}`, path);
-    incoming.push({ projectId, name: d.name, path, size: d.size, enabled: d.enabled, createdAt: d.createdAt, chunks: await readJson(dir, d.chunks) });
+    incoming.push({ projectId, name: d.name, path, size: d.size, enabled: d.enabled, createdAt: d.createdAt, chunks: d.chunkRows });
   }
   if (incoming.length) await ragService.appendProjectDocuments(incoming);
   return incoming.length;
 }
 
-/** Learners: settings only where there are none; notes and study questions only the ones not already there. */
+/** Learners: settings only where there are none; notes and study questions only the ones not already there. A learner that already works on another project is left alone. */
 function mergeSubjects(subjects: BundleSubject[], projectId: string): { notes: number; questions: number } {
   let notes = 0; let questions = 0;
   for (const s of subjects) {
+    const existing = useLearningStore.getState().config[s.agentId];
+    if (existing?.projectId && existing.projectId !== projectId) continue; // someone else's learner: never mix the two
     if (s.agentId.startsWith('expert-') && !useLearningStore.getState().experts.some((e) => e.id === s.agentId)) useLearningStore.setState((st) => ({ experts: [...st.experts, { id: s.agentId, name: s.name }] }));
-    if (!useLearningStore.getState().config[s.agentId]) useLearningStore.getState().setConfig(s.agentId, { ...s.config, projectId });
+    if (!existing) useLearningStore.getState().setConfig(s.agentId, { ...s.config, projectId });
     const cur = useLearningStore.getState().get(s.agentId);
     const newNotes = s.notes.filter((n) => !cur.notes.some((c) => c.q === n.q));
     const newQuestions = s.bank.filter((b) => !cur.bank.some((c) => c.q === b.q));
@@ -189,24 +193,48 @@ function mergeSubjects(subjects: BundleSubject[], projectId: string): { notes: n
   return { notes, questions };
 }
 
-/** Checks an unpacked bundle and merges it into this phone. Nothing is overwritten and importing the same bundle twice adds nothing. */
-export async function applyProjectBundle(dir: string, db: LearningKnowledgeDb = learningKnowledgeDb): Promise<BundleResult> {
-  const manifest = await verifyUnpacked(dir);
-  const project = await readJson<Project>(dir, 'project.json');
-  if (project.id !== manifest.project.id || project.pinVerifier || project.protectedBlob) throw new Error('Nothing was imported. The bundle\'s project record is not valid.');
-  const subjects = await readJson<BundleSubject[]>(dir, 'learning/subjects.json');
-  const reports = await readJson<Array<Record<string, any>>>(dir, 'learning/reports.json');
-  const lines = (await RNFS.readFile(`${dir}/learning/claims.jsonl`, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+type ChunkRow = { content: string; position: number };
+const isText = (v: unknown): v is string => typeof v === 'string';
 
-  // The project first, so documents and learners have somewhere to belong.
-  useProjectStore.setState({ projects: mergeProjects(useProjectStore.getState().projects, [project]).items });
-  const documents = await restoreDocuments(dir, project.id, await readJson<DocEntry[]>(dir, 'documents/index.json'));
-  // Reports first (so each claim knows which learner it belongs to), then the claims with the status they had.
-  for (const r of reports) {
-    db.sql(`INSERT OR IGNORE INTO atlas_report_archive (id, subject_id, question, report_text, source_text, source_list_json, original_timestamp, judge_status, judge_score, judge_reason, archived_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [r.id, r.subject_id, r.question, r.report_text, r.source_text, r.source_list_json, r.original_timestamp, r.judge_status, r.judge_score ?? null, r.judge_reason ?? null, r.archived_at]);
+/** Reads and checks EVERYTHING in the bundle before anything on the phone changes. Throws "Nothing was imported" for the first thing wrong. */
+async function prepareBundle(dir: string) {
+  const bad = (what: string): never => { throw new Error(`Nothing was imported. ${what}`); };
+  const manifest = await verifyUnpacked(dir);
+  const listed = new Set(manifest.files.map((f) => f.path));
+  const project = await readJson<Project>(dir, 'project.json');
+  if (project.id !== manifest.project.id || project.pinVerifier || project.protectedBlob) bad('The bundle\'s project record is not valid.');
+  const subjects = await readJson<BundleSubject[]>(dir, 'learning/subjects.json');
+  if (!Array.isArray(subjects) || subjects.some((s) => !s || !isText(s.agentId) || !SAFE_ID.test(s.agentId) || !isText(s.name) || !Array.isArray(s.notes) || !Array.isArray(s.bank)
+    || s.notes.some((n) => !n || !isText(n.q) || !isText(n.answer)) || s.bank.some((b) => !b || !isText(b.q)) || !s.config || !isText(s.config.topic))) bad('The learners in the bundle are damaged.');
+  const reports = await readJson<Array<Record<string, any>>>(dir, 'learning/reports.json');
+  if (!Array.isArray(reports) || reports.some((r) => !r || !isText(r.id) || !isText(r.subject_id) || !isText(r.question) || !isText(r.report_text))) bad('The reports in the bundle are damaged.');
+  const lines = (await RNFS.readFile(`${dir}/learning/claims.jsonl`, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  lines.forEach(validateKnowledgeRecord); // throws on the first malformed record
+  const index = await readJson<DocEntry[]>(dir, 'documents/index.json');
+  if (!Array.isArray(index)) bad('The document list is damaged.');
+  const docs: Array<DocEntry & { chunkRows: ChunkRow[] }> = [];
+  for (const d of index) {
+    if (!d || !isText(d.name) || !Number.isFinite(d.size) || !listed.has(d.file) || !listed.has(d.chunks)) bad('A document in the bundle is not listed in its manifest.');
+    const chunkRows = await readJson<ChunkRow[]>(dir, d.chunks);
+    if (!Array.isArray(chunkRows) || !chunkRows.length || chunkRows.some((c) => !c || !isText(c.content) || !Number.isInteger(c.position))) bad(`The text of "${d.name}" is damaged.`);
+    docs.push({ ...d, chunkRows });
   }
-  const ledger = importLedger(db, lines, { keepStatus: true });
+  return { project, subjects, reports, lines, docs };
+}
+
+/** Checks an unpacked bundle completely, then merges it into this phone. Nothing is overwritten and importing the same bundle twice adds nothing. */
+export async function applyProjectBundle(dir: string, db: LearningKnowledgeDb = learningKnowledgeDb): Promise<BundleResult> {
+  const { project, subjects, reports, lines, docs } = await prepareBundle(dir);
+  // The learned records first, in ONE database transaction (the reports so each claim knows its learner, then the claims with the status they had).
+  const ledger = importLedger(db, lines, { keepStatus: true, before: () => {
+    for (const r of reports) {
+      db.sql(`INSERT OR IGNORE INTO atlas_report_archive (id, subject_id, question, report_text, source_text, source_list_json, original_timestamp, judge_status, judge_score, judge_reason, archived_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [r.id, r.subject_id, r.question, r.report_text, r.source_text ?? '', r.source_list_json ?? '[]', r.original_timestamp ?? 0, r.judge_status ?? 'pass', r.judge_score ?? null, r.judge_reason ?? null, r.archived_at ?? new Date().toISOString()]);
+    }
+  } });
+  const documents = await restoreDocuments(dir, project.id, docs);
+  // The project: an existing one with this id is left exactly as it is; otherwise it is added.
+  if (!useProjectStore.getState().projects.some((p) => p.id === project.id)) useProjectStore.setState((st) => ({ projects: [...st.projects, project] }));
   const learned = mergeSubjects(subjects, project.id);
   return { project: project.name, documents, records: ledger.added, skippedRecords: ledger.skipped, ...learned };
 }
