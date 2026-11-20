@@ -5,6 +5,7 @@
 import { askModel } from '../study/engine';
 import { callLimitMs } from './timeLimit';
 import { beginWork, currentWork, endWork, giveUpReason, noteReading, noteWriting } from './liveWork';
+import { maxCharsFor, repairCutJson, runawayReason } from './runaway';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
@@ -62,7 +63,10 @@ const STALL_MS = 2 * 60 * 1000;
  * One model call that is stopped when it stops making progress, not just when it is slow: still reading the sources for too long, no new
  * word for two minutes while writing, or past the overall limit for the model in use (liveWork.ts says which, and the screen shows it).
  */
-async function askBounded(system: string, user: string, overallMs = callLimit()): Promise<string> {
+interface Bounded { text: string; /** True when the model was cut off for running on or repeating itself; the text is what it had written. */ cutShort: boolean }
+
+async function askBounded(system: string, user: string, limits: { overallMs?: number; maxChars?: number } = {}): Promise<Bounded> {
+  const { overallMs = callLimit(), maxChars = Infinity } = limits;
   let timer: ReturnType<typeof setInterval> | undefined;
   const readMs = readLimitMs();
   const token = beginWork();
@@ -78,9 +82,26 @@ async function askBounded(system: string, user: string, overallMs = callLimit())
     }, Math.min(2000, Math.max(50, overallMs / 4))); // looks often enough to hold a short limit
     (timer as { unref?: () => void }).unref?.();
   });
+  // A reply that runs on (thousands of words, or the same paragraph over and over) is cut here and what was written is kept.
+  let written = '';
+  let cut: ((text: string) => void) | undefined;
+  let checkedAt = 0;
+  const cutShort = new Promise<string>((resolve) => { cut = resolve; });
+  const onProgress = (event: 'reading' | 'writing', content: string): void => {
+    if (event === 'reading') { noteReading(token); return; }
+    noteWriting(token, content);
+    written = content.length > written.length && content.startsWith(written) ? content : written + content;
+    if (written.length - checkedAt < 300) return; // looking every few hundred characters is enough
+    checkedAt = written.length;
+    const why = runawayReason(written, maxChars);
+    if (why) { logger.warn(`[LESSON] cut short: ${why}`); cut?.(written); }
+  };
   try {
-    const answer = await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(token); else noteWriting(token, content); }), limit]);
-    logger.log(`[LESSON] answered in ${((Date.now() - asked) / 1000).toFixed(1)} s, ${answer.length} characters`);
+    const model = askModel(system, user, onProgress);
+    model.catch(() => undefined); // when the reply is cut short, the model's own end is no longer waited for
+    const answer = await Promise.race([model.then((text) => ({ text, cutShort: false })), cutShort.then((text) => ({ text, cutShort: true })), limit]);
+    if (answer.cutShort) await stopModel(); // stopped before the next call, so two never share the model
+    logger.log(`[LESSON] answered in ${((Date.now() - asked) / 1000).toFixed(1)} s, ${answer.text.length} characters${answer.cutShort ? ' (cut short)' : ''}`);
     return answer;
   } catch (e) {
     logger.warn(`[LESSON] the call failed after ${((Date.now() - asked) / 1000).toFixed(1)} s: ${String((e as Error)?.message || e).slice(0, 300)}`);
@@ -90,13 +111,18 @@ async function askBounded(system: string, user: string, overallMs = callLimit())
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
 const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];
 
-async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, about: string | { what: string; stopped: () => boolean }): Promise<T> {
+async function askUntil<T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, about: string | { what: string; stopped: () => boolean; maxChars?: number }): Promise<T> {
   const { system, user } = prompt;
-  const { what, stopped } = typeof about === 'string' ? { what: about, stopped: () => false } : about;
+  const { what, stopped, maxChars } = typeof about === 'string' ? { what: about, stopped: () => false, maxChars: undefined } : about;
+  let ranOn = false;
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     if (stopped()) throw new Error('Stopped.'); // a Stop or a time-out must not start another model call
-    const raw = await askBounded(system, attempt ? `${user}\n\nYour last answer could not be read. Reply with ONLY the JSON, nothing else.` : user);
-    const value = read(raw);
+    const again = ranOn ? 'Your last answer ran on far too long. Write it SHORT: at most 4 sections of 2 or 3 sentences each, no long examples, and finish the JSON.' : 'Your last answer could not be read. Reply with ONLY the JSON, nothing else.';
+    const { text: raw, cutShort } = await askBounded(system, attempt ? `${user}\n\n${again}` : user, { maxChars });
+    ranOn = cutShort;
+    let value = read(raw);
+    // A reply that was cut short is read as far as it goes (the last unfinished part is left out), so the lesson still advances.
+    if (!value && cutShort) { const repaired = repairCutJson(raw); value = repaired ? read(repaired) : null; if (value) logger.warn(`[LESSON] ${what}: kept what was written before the cut (${repaired.length} characters)`); }
     if (value) return value;
     logger.warn(`[LESSON] ${what}: the reply could not be read (try ${attempt + 1} of ${MAX_TRIES}); it began: ${raw.slice(0, 200).replace(/\s+/g, ' ')} ... and ended: ${raw.slice(-120).replace(/\s+/g, ' ')}`);
   }
@@ -319,7 +345,7 @@ async function writeSquare(target: { courseId: string; key: string; rewrite?: Re
     excerpts,
     retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
     rewrite: rewrite ? REWRITES[rewrite] : undefined,
-  }), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled });
+  }), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled, maxChars: maxCharsFor(asked.format) });
   // The first pass is a complete lesson: it is saved at once, so it can be read while the optional deepening goes on (or if that fails).
   if (ctl.cancelled()) throw new Error('Stopped.'); // the person pressed Stop (or it timed out) while the model was answering: save nothing
   const draft = withoutSources(content, excerpts, bank);
@@ -380,7 +406,7 @@ export async function deepenLesson(course: Course, lesson: Extract<SquareContent
         courseTitle: course.title, topic: course.topic, squareTitle: title, heading: section.heading, text: section.text, example: section.example,
         others: lesson.sections.filter((_, k) => k !== i).map((x) => x.heading).filter(Boolean), excerpts: passages, difficulty: course.difficulty,
       });
-      const longer = prose(await askBounded(prompt.system, prompt.user, Math.min(sectionMs, Math.max(1000, deadline - Date.now()))), 5000);
+      const longer = prose((await askBounded(prompt.system, prompt.user, { overallMs: Math.min(sectionMs, Math.max(1000, deadline - Date.now())), maxChars: 6500 })).text, 5000);
       sections.push(longer.length >= section.text.length * 1.3 && longer.length > 400 ? { ...section, text: longer } : section);
     } catch { failures += 1; sections.push(section); }
   }
