@@ -167,7 +167,7 @@ export interface SquareRequest { courseTitle: string; topic: string; level: stri
 const SHAPES: Record<SquareFormat, string> = {
   drill: '{}  (made by the app, not written by the AI)',
   periodic: '{}  (made by the app, not written by the AI)',
-  lesson: '{"sections": [{"heading": "...", "text": "plain explanation, 2 to 4 sentences (under 80 words), may use short code or numbers", "example": "a worked example or code (optional)"}], "commonMistakes": ["a mistake learners make here and how to avoid it"], "quickCheck": {"q": "one question to test yourself", "a": "its answer"}, "keyPoints": ["..."]}  (4 to 7 sections that together cover the whole topic, 2 or 3 common mistakes, 3 to 6 key points; the whole answer under 700 words, and stop when the JSON is complete)',
+  lesson: '{"sections": [{"heading": "...", "text": "plain explanation, 2 to 4 sentences (under 80 words), may use short code or numbers", "example": "a worked example or code (optional)"}], "commonMistakes": ["a mistake learners make here and how to avoid it"], "quickCheck": {"q": "one question to test yourself", "a": "its answer"}, "keyPoints": ["..."]}  (4 to 7 sections that together cover the whole topic, 2 or 3 common mistakes, 3 to 6 key points; the whole answer under 1200 words, tables included, and stop when the JSON is complete)',
   quiz: '{"questions": [{"q": "...", "options": ["A", "B", "C", "D"], "answer": 0, "why": "one sentence on why that answer is right"}]}  (5 to 8 questions, "answer" is the index of the right option, vary where it is)',
   cards: '{"cards": [{"front": "term or question", "back": "short definition or answer"}]}  (8 to 14 cards)',
   match: '{"pairs": [{"left": "...", "right": "..."}]}  (5 or 6 pairs, every left and every right different)',

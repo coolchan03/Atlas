@@ -5,12 +5,14 @@
  */
 
 /** The most characters a reply of this kind can reasonably have; past it the model is running on. */
-export const maxCharsFor = (format: string): number => (format === 'lesson' ? 9500 : 6500);
+export const maxCharsFor = (format: string): number => (format === 'lesson' ? 24000 : 14000);
 
 /** True when the end of the text already appeared at least twice before it: the model is going round in a loop. */
 export function isLooping(text: string): boolean {
   if (text.length < 600) return false;
   const tail = text.slice(-140);
+  // Table rules and rows of the same few symbols repeat by nature: only a tail with real words in it can be a loop.
+  if (tail.replace(/[\s|\-:+_=*#.,0-9]/g, '').length < 60) return false;
   let found = 0;
   for (let at = text.indexOf(tail); at !== -1 && at < text.length - 140; at = text.indexOf(tail, at + 1)) found += 1;
   return found >= 2;

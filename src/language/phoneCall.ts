@@ -4,6 +4,7 @@
  * prompts and the parsing are tested without a device.
  */
 import { levelGuide, methodFor, type LevelId } from './teaching';
+import { stripEmoji } from '../utils/emoji';
 
 export interface Scenario {
   id: string;
@@ -57,7 +58,7 @@ export function callSystemPrompt(s: Scenario, language: string, level: LevelId):
 
 /** Splits a reply into sentences to speak one by one (so the first is heard while the rest are read out). */
 export function sentencesOf(text: string): string[] {
-  return (text.replace(/<think>[\s\S]*?<\/think>/g, '').match(/[^.!?…。！？]+[.!?…。！？]*/g) ?? [])
+  return (stripEmoji(text.replace(/<think>[\s\S]*?<\/think>/g, '')).match(/[^.!?…。！？]+[.!?…。！？]*/g) ?? [])
     .map((x) => x.replace(/[*_#`]/g, '').trim()).filter((x) => /[\p{L}\p{N}]/u.test(x));
 }
 

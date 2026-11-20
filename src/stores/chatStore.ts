@@ -8,7 +8,7 @@ import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageC
 import { generateId } from '../utils/generateId';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
-import { enforceForageSafety } from '../utils/forageSafety';
+import { enforceForageSafety } from '../utils/forageSafety'; import { finishForCall, forCall } from './callText';
 import { registerChatStore } from './storeRefs';
 
 /** Field ID replies get the code-enforced foraging safety net. */
@@ -382,7 +382,7 @@ export const useChatStore = create<ChatState>()(
 
       appendToStreamingMessage: (token) => {
         set((state) => ({
-          streamingMessage: stripStreamingControlTokens(state.streamingMessage + token),
+          streamingMessage: forCall(stripStreamingControlTokens(state.streamingMessage + token)), // in a call no emoji reaches the screen or the voice
           isStreaming: true,
           isThinking: false,
         }));
@@ -418,8 +418,7 @@ export const useChatStore = create<ChatState>()(
         const streamReasoning = streamingReasoningContent.trim() || undefined;
         const parsed = parseModelOutput(streamingMessage, streamReasoning);
         const reasoningContent = parsed.reasoning ?? undefined;
-        const sanitizedMessage = isFieldIdConversation(get().conversations.find((c) => c.id === conversationId))
-          ? enforceForageSafety(parsed.answer) : parsed.answer;
+        const sanitizedMessage = finishForCall(isFieldIdConversation(get().conversations.find((c) => c.id === conversationId)) ? enforceForageSafety(parsed.answer) : parsed.answer);
         if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {
             role: 'assistant',

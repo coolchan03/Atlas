@@ -72,21 +72,23 @@ async function askBounded(system: string, user: string, limits: { overallMs?: nu
   const token = beginWork();
   const asked = Date.now();
   logger.log(`[LESSON] asking the model: ${system.length + user.length} characters in the prompt, limits read ${Math.round(readMs / 1000)} s, overall ${Math.round(overallMs / 1000)} s`);
+  // A reply that runs on (thousands of words, or the same paragraph over and over) is cut here and what was written is kept.
+  let written = '';
+  let cut: ((text: string) => void) | undefined;
+  let checkedAt = 0;
+  const cutShort = new Promise<string>((resolve) => { cut = resolve; });
   const limit = new Promise<never>((_, reject) => {
     timer = setInterval(() => {
       const why = giveUpReason(currentWork(), Date.now(), { readMs, stallMs: STALL_MS, overallMs });
       if (!why) return;
+      // Out of time while words were still coming (slow, not stuck): what was written is kept, not thrown away.
+      if (why.why === 'slow' && currentWork().phase === 'writing' && written.length > 800) { logger.warn('[LESSON] out of time while writing: keeping what was written'); cut?.(written); return; }
       logger.warn(`[LESSON] stopped: ${why.why}`);
       void stopModel();
       reject(new Error(why.message));
     }, Math.min(2000, Math.max(50, overallMs / 4))); // looks often enough to hold a short limit
     (timer as { unref?: () => void }).unref?.();
   });
-  // A reply that runs on (thousands of words, or the same paragraph over and over) is cut here and what was written is kept.
-  let written = '';
-  let cut: ((text: string) => void) | undefined;
-  let checkedAt = 0;
-  const cutShort = new Promise<string>((resolve) => { cut = resolve; });
   const onProgress = (event: 'reading' | 'writing', content: string): void => {
     if (event === 'reading') { noteReading(token); return; }
     noteWriting(token, content);

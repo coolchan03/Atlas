@@ -8,7 +8,7 @@ jest.mock('../../src/study/engine', () => ({
     progress?.('reading', '');
     // Section after section, far past any real lesson, and the call never ends on its own.
     let text = '{"sections": [';
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 160; i++) {
       text += `${i ? ', ' : ''}{"heading": "Part ${i}", "text": "${`Point ${i} says something different about the topic number ${i * 13}. `.repeat(4)}"}`;
       progress?.('writing', text);
     }
@@ -30,7 +30,7 @@ it('cuts a reply that runs on and keeps the finished sections, so the lesson adv
   const lesson: any = await squareContent(course(), 'a1');
   expect(lesson.kind).toBe('lesson');
   expect(lesson.sections.length).toBeGreaterThanOrEqual(2);
-  expect(lesson.sections.length).toBeLessThan(60);
+  expect(lesson.sections.length).toBeLessThan(160);
   expect(mockCalls).toHaveLength(1); // one call: it advanced, with no second try
   expect(course().content.a1).toBeTruthy();
 }, 20000);

@@ -22,6 +22,7 @@ const VOICE_CALL_STYLE = [
   'Talk like a friendly person: contractions (it\'s, you\'re, don\'t), a short reaction now and then ("Got it."), and a short follow-up question when it helps.',
   'Never use lists, markdown, headings, tables, code, links, symbols or emojis. Say numbers the way you would speak them.',
   'If the user interrupts you, do not repeat what you already said; respond to what they just said.',
+  'Never use an emoji or an emoticon in a call, even if another instruction allows or asks for one: every word is read aloud.',
 ].join(' ');
 
 /**

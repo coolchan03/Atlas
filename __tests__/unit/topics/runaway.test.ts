@@ -3,12 +3,14 @@ import { parseContent } from '../../../src/topics/formats';
 
 describe('a model that does not stop', () => {
   it('is cut when the reply is far longer than any lesson, or goes round in a loop, and not before', () => {
-    const varied = (n: number) => Array.from({ length: 400 }, (_, i) => `point ${i} about topic ${i * 7}`).join('. ').slice(0, n);
+    const varied = (n: number) => Array.from({ length: 2500 }, (_, i) => `point ${i} about topic ${i * 7}`).join('. ').slice(0, n);
     expect(runawayReason(varied(5000), maxCharsFor('lesson'))).toBeNull();
-    expect(runawayReason(varied(9600), maxCharsFor('lesson'))).toMatch(/ran past/);
+    expect(runawayReason(varied(25000), maxCharsFor('lesson'))).toMatch(/ran past/);
     expect(maxCharsFor('quiz')).toBeLessThan(maxCharsFor('lesson'));
     const loop = `Intro. ${'The lease liability is the present value of the payments. '.repeat(12)}`;
     expect(isLooping(loop)).toBe(true);
+    const table = `Rates\n${'| --- | --- | --- | --- |\n| 0 | 0 | 0 | 0 |\n'.repeat(40)}`;
+    expect(isLooping(table)).toBe(false); // a table repeats symbols and numbers, not words
     expect(isLooping('A varied text. '.repeat(5) + Array.from({ length: 40 }, (_, i) => `sentence number ${i} says something new`).join('. '))).toBe(false);
   });
 
