@@ -23,3 +23,12 @@ describe('teasers the model makes up', () => {
     expect(scrubTeasers([{ text: 'Only a teaser: stay tuned.' }, { text: 'Real story.' }], [1]).starts).toEqual([0]);
   });
 });
+
+describe('scrub keeps real news', () => {
+  const { withoutTeasers } = require('../../src/atlasTools/briefingScrub');
+  it('leaves decimals, abbreviations and findings alone', () => {
+    for (const t of ['Inflation rose 2.5 percent in the U.S. last month.', 'Researchers find a link between sleep and memory.', 'Police arrested two men after the break-in on Monday.']) {
+      expect(withoutTeasers(t)).toBe(t);
+    }
+  });
+});

@@ -168,8 +168,8 @@ async function libraryFacts(topic: string, startN: number): Promise<Source[]> {
 
 /** An article's first sentence is its definition ("The United States is a country in..."), which is no fun fact: with three or more sentences the first is dropped. */
 function withoutDefinition(extract: string): string {
-  const sentences = extract.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
-  return sentences.length >= 3 ? sentences.slice(1).join('').trim() : extract;
+  const sentences = extract.split(/(?<=[.!?])\s+(?=[A-Z])/); // a full stop inside U.S. or 2.5 is not a sentence end
+  return sentences.length >= 3 && sentences[0].length > 40 ? sentences.slice(1).join(' ').trim() : extract;
 }
 
 async function webFacts(topic: string, startN: number): Promise<Source[]> {
@@ -413,6 +413,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     const clean = scrubTeasers(r.podcast, r.storyStarts ?? []);
     r.podcast = clean.lines;
     if (r.storyStarts) r.storyStarts = clean.starts;
+    if (r.storyItems) r.storyItems = clean.keptStarts.map((i) => r.storyItems![i]);
   }
   const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays'), day: evening ? 'tomorrow' : 'today' }), yourDay(evening ? 'tomorrow' : 'today')].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];

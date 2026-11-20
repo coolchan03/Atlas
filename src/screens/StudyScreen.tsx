@@ -25,6 +25,7 @@ import { ProjectGame } from '../components/games/ProjectGame';
 import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
 import { dueItems, streakFrom, useStudyProgress } from '../study/progress';
 import { Switch } from 'react-native';
+import logger from '../utils/logger';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExportAvailable, VideoExportCancelled, type SavedVideo, type VideoProgress } from '../services/videoExport';
@@ -338,7 +339,7 @@ export const StudyScreen: React.FC = () => {
             });
             const unF = nativePlayer.onFinished(() => settle(true));
             // A tune that cannot be played is skipped by the native player, which carries on: it must not end the show.
-            const unE = nativePlayer.onError((message) => { if (/_jingles/.test(message)) return; settle(false); });
+            const unE = nativePlayer.onError((message) => { logger.warn(`[POD] native player: ${message}`); if (/_jingles/.test(message)) return; settle(false); });
             // Poll isStopped() so the native service halts when the user taps stop.
             const poll = setInterval(() => { if (isStopped()) { nativePlayer.stop(); settle(false); } }, 500);
             nativePlayer.play(queue.paths, { startIndex: 0, speed: isBrief ? prefs.speed ?? 1 : 1 });

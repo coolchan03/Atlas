@@ -6,20 +6,23 @@
 const TEASERS: RegExp[] = [
   /\bwhat else is (making|in|on) (the )?(headlines?|news)\b/i,
   /\b(next|up next|coming up|still to come|later)\b[^.!?]{0,60}\b(we('|’)ll|we will|i('|’)ll|i will|let('|’)s)\b[^.!?]{0,40}\b(see|look|hear|take a look|turn to|cover|explore)\b/i,
-  /\b(stay tuned|more (to come|after the break)|don('|’)t go anywhere|after the (briefing|news|show|break))\b/i,
-  /\b(watch|see|check out|find)\b[^.!?]{0,40}\b(video|footage|clip|link|article|full story)\b/i,
+  /\b(stay tuned|more (to come|after the break)|don('|’)t go anywhere)\b/i,
+  /\b(you can|you could|you('|’)ll be able to|feel free to|be sure to)\b[^.!?]{0,40}\b(watch|see|check out|find|read)\b[^.!?]{0,40}\b(video|footage|clip|link|article|full story|after the (briefing|news|show|broadcast))\b/i,
   /\b(we('|’)ll|we will|i('|’)ll|i will|let me|i can)\b[^.!?]{0,30}\b(elaborate|dig deeper|go deeper|tell you more|have more|come back to|get into more|expand on)\b/i,
   /\bmore (details|on this|on that|information) (later|to come|soon|shortly|below)\b/i,
 ];
 
-const sentences = (text: string): string[] => text.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+// A sentence ends at . ! or ? followed by a space, so 2.5 and U.S. stay whole.
+const sentences = (text: string): string[] => text.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
 
 /** A line with its teaser sentences removed ('' when nothing is left). */
 export function withoutTeasers(text: string): string {
-  return sentences(text).filter((s) => !TEASERS.some((t) => t.test(s))).join(' ').trim();
+  const all = sentences(text);
+  const kept = all.filter((s) => !TEASERS.some((t) => t.test(s)));
+  return kept.length === all.length ? text.trim() : kept.join(' ').trim();
 }
 
-export function scrubTeasers<L extends { text: string }>(lines: L[], starts: number[] = []): { lines: L[]; starts: number[]; removed: number } {
+export function scrubTeasers<L extends { text: string }>(lines: L[], starts: number[] = []): { lines: L[]; starts: number[]; keptStarts: number[]; removed: number } {
   const kept: L[] = [];
   const newIndex: number[] = []; // for each old line, the index of the first kept line at or after it
   const pending: number[] = [];
@@ -34,6 +37,8 @@ export function scrubTeasers<L extends { text: string }>(lines: L[], starts: num
     kept.push({ ...l, text });
   });
   pending.forEach((p) => { newIndex[p] = kept.length; });
-  const fixed = [...new Set(starts.map((s) => Math.min(newIndex[s] ?? s, Math.max(0, kept.length - 1))))].sort((a, b) => a - b);
-  return { lines: kept, starts: fixed, removed };
+  const mapped = starts.map((s) => Math.min(newIndex[s] ?? s, Math.max(0, kept.length - 1)));
+  // Two stories that now begin on the same line are one: keepStarts says which of the original starts survive (for parallel arrays).
+  const keptStarts = mapped.map((m, i) => i).filter((i) => mapped.indexOf(mapped[i]) === i);
+  return { lines: kept, starts: keptStarts.map((i) => mapped[i]), keptStarts, removed };
 }

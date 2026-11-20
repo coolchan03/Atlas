@@ -6,11 +6,11 @@ package ai.offgridmobile.atlastts
  * as long as the speech they made; very short pieces say nothing about speed (a cold start dominates) and are ignored.
  *
  * The voice must not change quality while it is talking (it used to step down in the middle of a sentence run, which sounded like it
- * got worse for no reason). So a decision only takes effect at the start of the next utterance ([beginUtterance]), and the decision is
- * settled after [settleAfter] measured generations: from then on the quality stays where it is for the rest of the app's life. It only
- * ever steps down. Pure.
+ * got worse for no reason). So a decision only takes effect at the start of the next utterance ([beginUtterance]), and it only
+ * ever steps down (at most three times in the app's life), so a phone that slows down later (heat, battery) is still caught. The first
+ * [warmUp] generation(s) are ignored: loading the model makes them slow on any phone. Pure.
  */
-class AutoSteps(private val slowAbove: Double = 0.6, private val settleAfter: Int = 6) {
+class AutoSteps(private val slowAbove: Double = 0.6, private val warmUp: Int = 1) {
     private val levels = listOf(8, 5, 3, 2)
     /** The level in force for the utterance being made. */
     @Volatile private var level = 0
@@ -27,8 +27,9 @@ class AutoSteps(private val slowAbove: Double = 0.6, private val settleAfter: In
 
     @Synchronized
     fun record(millis: Long, audioSeconds: Double) {
-        if (audioSeconds < 0.5 || measured >= settleAfter) return
+        if (audioSeconds < 0.5) return
         measured += 1
+        if (measured <= warmUp) return
         val factor = millis / 1000.0 / audioSeconds
         if (factor <= slowAbove) { slowInARow = 0; return }
         slowInARow += 1
