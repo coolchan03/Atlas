@@ -14,7 +14,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 /** One line for one run: right answers, outdated figures, unsupported citations, speed and memory. */
 function describeResult(r: ExamResult): string {
   const m = r.metrics;
-  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} right (${m.correct} of ${m.total}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}${m.ungraded ? `. ${m.ungraded} not graded` : ''}`;
+  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} credit (${m.correct} of ${m.total} fully right${m.mostlyRight ? `, ${m.mostlyRight} mostly right` : ''}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}${m.ungraded ? `. ${m.ungraded} not graded` : ''}`;
 }
 
 /** Why questions did not pass in one run, in plain words ("2 × The model failed to answer..."). Empty when everything passed or the run predates reasons. */
@@ -62,7 +62,10 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
   const due = useMemo(() => dueRetests(items, exams.history(60)), [items, version]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = async (only?: string[]) => {
     setRunning(true);
-    try { await runExamNow(subject, setStatus, only); } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
+    try {
+      const ran = await runExamNow(subject, setStatus, only);
+      if (ran.some((m) => m.items.some((i) => i.reason === 'stopped'))) Alert.alert('The exam stopped early', 'Five answers in a row earned nothing, so the rest were not asked: asking more only repeats the failure. Try a larger model for the learner, let it study the subject again (it re-studies questions it keeps missing), or check that the answer keys use wordings the model would use.');
+    } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
   };
   const judgeQuestions = async () => {
     setRunning(true);
@@ -93,7 +96,7 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
             {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a, k) => (
               <View key={`${a.at}:${a.mode}`}>
                 <Text style={[s.small, { color: colors.textMuted }]}>
-                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
+                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.accepted ? 'mostly right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
                 </Text>
                 {k === 0 && !a.correct && !!a.answer && <Text style={[s.small, { color: colors.textMuted }]} testID={`exam-said-${i.id}`}>It said: "{a.answer.slice(0, 160)}"{a.missing?.length ? ` · missing: ${a.missing.join(', ').slice(0, 120)}` : ''}</Text>}
               </View>

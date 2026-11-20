@@ -30,7 +30,7 @@ export function nextProgress(prev: Progress | null, outcome: Outcome, now: Date)
   return { strength, streak, attempts: (prev?.attempts ?? 0) + 1, nextReview: new Date(now.getTime() + days * DAY_MS) };
 }
 
-export interface DueConcept { id: string; question: string; topic: string; strength: number }
+export interface DueConcept { id: string; question: string; topic: string; strength: number; attempts: number; streak: number }
 export interface MasterySummary { tracked: number; due: number; mastered: number; averageStrength: number }
 
 /** Concept mastery and review scheduling for one learning subject, kept in the knowledge ledger. */
@@ -57,8 +57,13 @@ export class MasteryStore {
 
   /** Concepts whose review time has come, the weakest first. */
   due(subjectId: string, now = new Date(), limit = 3): DueConcept[] {
-    return (this.db.sql('SELECT concept_id, question, topic, strength FROM atlas_mastery WHERE subject_id = ? AND next_review <= ? ORDER BY strength ASC, next_review ASC LIMIT ?',
-      [subjectId, now.toISOString(), limit]).rows ?? []).map((r: any) => ({ id: String(r.concept_id), question: String(r.question), topic: String(r.topic), strength: Number(r.strength) }));
+    return (this.db.sql('SELECT concept_id, question, topic, strength, attempts, streak FROM atlas_mastery WHERE subject_id = ? AND next_review <= ? ORDER BY strength ASC, next_review ASC LIMIT ?',
+      [subjectId, now.toISOString(), limit]).rows ?? []).map((r: any) => ({ id: String(r.concept_id), question: String(r.question), topic: String(r.topic), strength: Number(r.strength), attempts: Number(r.attempts) || 0, streak: Number(r.streak) || 0 }));
+  }
+
+  /** Puts a concept's next review `days` from now: it rests from the tests (and is not due again until then). */
+  rest(conceptIdValue: string, days: number): void {
+    this.db.sql('UPDATE atlas_mastery SET next_review = ? WHERE concept_id = ?', [new Date(this.clock().getTime() + days * DAY_MS).toISOString(), conceptIdValue]);
   }
 
   /** Progress for one subject, or for all of them when `subjectId` is null. */

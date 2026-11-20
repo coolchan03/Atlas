@@ -1,4 +1,4 @@
-import { BENCHMARK_VERSION, ExamStore, improvementSummary, reasonCounts, runExam, scoreAnswer, type ExamItem, type ExamResult, type ExamMetrics } from '../../../src/learning/exams';
+import { BENCHMARK_VERSION, ExamStore, isAccepted, improvementSummary, reasonCounts, runExam, scoreAnswer, type ExamItem, type ExamResult, type ExamMetrics } from '../../../src/learning/exams';
 import { memoryKnowledgeDb } from '../../harness/memoryKnowledgeDb';
 
 const expected = { facts: [['one minute', '1 minute', '60 seconds'], ['cool']], forbid: ['ten minutes'] };
@@ -72,7 +72,7 @@ describe('failure reasons', () => {
   });
 
   it('repeated attempts keep separate history and scoring versions', () => {
-    expect(BENCHMARK_VERSION).toBe('2');
+    expect(BENCHMARK_VERSION).toBe('3');
   });
 });
 
@@ -202,3 +202,39 @@ describe('numbers and their units stay together (audit F-7)', () => {
     expect(scoreAnswer('The recorded lease liability and asset.', { facts: [['lease liability recorded']] }).correct).toBe(true); // wording without numbers still matches in any order
   });
 });
+
+describe('partial credit', () => {
+  const three = { facts: [['alpha'], ['beta'], ['gamma']], forbid: ['delta'] };
+  const items: ExamItem[] = [{ id: 'q', subjectId: 's', topic: 't', question: 'Q?', expected: three }];
+
+  it('gives credit for the share of facts held, accepts a mostly right answer, and gives nothing for a forbidden one', async () => {
+    const mostly = await runExam({ items, mode: 'sources', answer: async () => ({ text: 'alpha and beta', sourceCount: 1 }), now: () => 0 });
+    expect(mostly).toMatchObject({ correct: 0, mostlyRight: 1 });
+    expect(mostly.accuracy).toBeCloseTo(2 / 3);
+    const forbidden = await runExam({ items, mode: 'sources', answer: async () => ({ text: 'alpha beta gamma delta', sourceCount: 1 }), now: () => 0 });
+    expect(forbidden).toMatchObject({ mostlyRight: 0, accuracy: 0 });
+    expect(isAccepted({ correct: false, credit: 0.5, outdated: false })).toBe(false);
+  });
+
+  it('does not schedule a retest for a mostly right answer, but does for a poor one', async () => {
+    const { dueRetests } = require('../../../src/learning/exams');
+    const at = '2026-01-01T00:00:00.000Z';
+    const result = (text: string, id: string): ExamResult => ({ id, version: BENCHMARK_VERSION, mode: 'sources', at, metrics: { total: 1, correct: 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [{ id: 'q', correct: false, score: text === 'mostly' ? 0.67 : 0.33, credit: text === 'mostly' ? 0.67 : 0.33, outdated: false, seconds: 1, reason: 'wrong-answer' }] } });
+    const later = new Date('2026-02-01T00:00:00.000Z');
+    expect(dueRetests([{ id: 'q' }], [result('mostly', 'r1')], later)).toEqual([]);
+    expect(dueRetests([{ id: 'q' }], [result('poor', 'r2')], later)).toEqual(['q']);
+  });
+});
+
+describe('stopping a run that keeps failing', () => {
+  it('leaves the rest unasked, not graded, after several answers in a row that earned nothing', async () => {
+    const many: ExamItem[] = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, subjectId: 's', topic: 't', question: `Q${i}?`, expected }));
+    let asked = 0;
+    const metrics = await runExam({ items: many, mode: 'sources', answer: async () => { asked += 1; return { text: 'no idea', sourceCount: 1 }; }, giveUpAfter: 3, now: () => 0 });
+    expect(asked).toBe(3);
+    expect(metrics.ungraded).toBe(5);
+    expect(metrics.items.filter((i) => i.reason === 'stopped')).toHaveLength(5);
+    expect(metrics.accuracy).toBe(0);
+  });
+});
+

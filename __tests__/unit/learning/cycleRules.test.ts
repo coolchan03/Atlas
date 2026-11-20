@@ -28,7 +28,7 @@ describe('rewriting a report only when it can improve', () => {
 describe('what the cycle does next', () => {
   const item = (id: string, status: BankItem['status'] = 'approved'): BankItem => ({ id, q: `Question ${id}`, status, tries: 0, round: 1 });
   const conflict = { id: 'k', reason: 'different numbers', a: { id: 'a', text: 'Boil one minute.' }, b: { id: 'b', text: 'Boil ten minutes.' } };
-  const due = [{ id: 'c', question: 'Old question', topic: 't', strength: 0.2 }];
+  const due = [{ id: 'c', question: 'Old question', topic: 't', strength: 0.2, attempts: 1, streak: 0 }];
 
   it('settles conflicts first, then reviews, then new study in the plan order', () => {
     const base = { bank: [item('1'), item('2')], pendingItemIds: [] as string[], unaskedConflicts: [conflict], due };

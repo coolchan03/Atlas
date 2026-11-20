@@ -45,6 +45,7 @@ import { stripInjection } from './sourceSafety';
 import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
+import { batchStruggled, isStruggling, nextNotesBoost, restudyQuestion, REST_DAYS } from './struggle';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -368,15 +369,25 @@ function markReport(agentId: string, itemId: string, patch: Partial<LearnReport>
  * Practice: concepts due for review are answered again from what is stored, and graded by comparing the answer with the
  * stored claims, never by a model. It measures whether the knowledge can be found and used, and schedules the next review.
  */
+let notesBoost = 1; // widened after a practice batch mostly failed, back to 1 after a clean one (struggle.ts)
+
 async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): Promise<void> {
   let recalled = 0;
+  const outcomes: Array<'correct' | 'partial' | 'wrong'> = [];
   for (const c of due) {
     if (stopRequested) return;
+    // Missed again and again: stop testing it, rest it for a few days and study it again in simple terms instead.
+    if (isStruggling(c)) {
+      safely(() => mastery.rest(c.id, REST_DAYS), undefined);
+      L().addItems(agent.id, [newItem(restudyQuestion(c.question), L().get(agent.id).round, 'approved')]);
+      L().log({ agentId: agent.id, kind: 'info', title: 'Stopped testing a question it keeps missing', body: `"${c.question.slice(0, 120)}" was missed ${c.attempts} times. It is rested for ${REST_DAYS} days and studied again in simple terms instead.` });
+      continue;
+    }
     status(`Practicing from memory: ${c.question.slice(0, 60)}...`);
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
     // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
     const cards = await loadCards(c.topic, agent.id).catch(() => []);
-    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15) }).text.split('\n').filter(Boolean);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15 * notesBoost) }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
@@ -385,8 +396,12 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
       if (outcome === 'wrong') safely(() => memory.recordExperience({ topic: cfg.topic, attempt: `Recall: ${c.question}`, outcome: 'wrong', correction: stored.join(' ') }), undefined);
     }
     if (outcome === 'correct') recalled += 1;
+    outcomes.push(outcome);
     safely(() => mastery.record(agent.id, c, outcome), undefined);
   }
+  const before = notesBoost;
+  notesBoost = nextNotesBoost(notesBoost, outcomes);
+  if (batchStruggled(outcomes) && notesBoost > before) L().log({ agentId: agent.id, kind: 'info', title: 'Most practice answers were wrong', body: `The learner is given ${notesBoost}x as many stored notes for the next practice.` });
   L().log({ agentId: agent.id, kind: 'info', title: `Practice: ${recalled} of ${due.length} recalled`, body: 'Graded by comparing each answer with what was stored, not by the model.' });
 }
 
