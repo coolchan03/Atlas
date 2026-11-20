@@ -40,6 +40,7 @@
     "llama.rn": "0.13.0-rc.9",
     "node-html-parser": "^7.1.0",
     "patch-package": "^8.0.1",
+    "promise": "^8.3.0",
     "qrcode-generator": "^1.4.4",
     "react": "19.2.0",
     "react-compiler-runtime": "^1.0.0",

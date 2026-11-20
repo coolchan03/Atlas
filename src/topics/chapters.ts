@@ -54,7 +54,8 @@ export function findChapters(text: string): Chapter[] {
   const realAll = withBody.filter((h) => h.size >= MIN_BODY);
   // The chapters are the heading kind that numbers the most distinct things (chapters, rather than the parts inside them).
   const distinct = (kind: string) => new Set(realAll.filter((h) => h.kind === kind).map((h) => h.number)).size;
-  const kinds = [...new Set(realAll.map((h) => h.kind))].sort((a, b) => distinct(b) - distinct(a) || (a === 'chapter' ? -1 : b === 'chapter' ? 1 : 0));
+  // "Chapter" is the chapters whenever there are a few of them (a book's lessons or parts inside them number more, but are not its chapters).
+  const kinds = [...new Set(realAll.map((h) => h.kind))].sort((a, b) => (distinct('chapter') >= 3 ? Number(b === 'chapter') - Number(a === 'chapter') : 0) || distinct(b) - distinct(a));
   const real = realAll.filter((h) => h.kind === kinds[0]);
   const byNumber = new Map<number, (typeof real)[number]>();
   for (const h of real) { const kept = byNumber.get(h.number); if (!kept || h.size > kept.size) byNumber.set(h.number, h); }

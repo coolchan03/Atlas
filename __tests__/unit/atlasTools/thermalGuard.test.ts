@@ -84,3 +84,15 @@ describe('before the saved settings are loaded', () => {
     expect(toasts).toEqual([]); // switched off: still nothing
   });
 });
+
+describe('the heat guard is not on unless it was switched on', () => {
+  it('is off by default, and an older saved "on" is switched off once by the migration', () => {
+    jest.isolateModules(() => {
+      const mod = require('../../../src/atlasTools/lowPowerState');
+      expect(mod.useLowPower.getInitialState().heatGuard).toBe(false);
+      const migrate = mod.useLowPower.persist.getOptions().migrate;
+      expect(migrate({ heatGuard: true, enabled: true }, 1).heatGuard).toBe(false);
+      expect(migrate({ heatGuard: true }, 2).heatGuard).toBe(true);
+    });
+  });
+});

@@ -104,3 +104,9 @@ describe('finding every chapter', () => {
     expect(findChapters(text).map((c) => c.number)).toEqual([1, 2, 3]);
   });
 });
+
+it('keeps the chapters when each chapter has more numbered lessons than there are chapters', () => {
+  const parts = (c: number) => Array.from({ length: 8 }, (_, i) => `Lesson ${(c - 1) * 8 + i + 1}\n${body(`l${c}${i}`)}`).join('\n');
+  const text = [1, 2, 3, 4].map((c) => `Chapter ${c}: Topic ${c}\n${parts(c)}`).join('\n');
+  expect(findChapters(text).map((c) => c.number)).toEqual([1, 2, 3, 4]);
+});

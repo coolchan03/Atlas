@@ -209,10 +209,12 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
 }
 
 /** The screen stays on while the AI writes the tune (it can take minutes on a slow phone). */
+let musicJobs = 0;
 async function withScreenOn<T>(work: () => Promise<T>): Promise<T> {
+  const reason = `music-writing-${++musicJobs}`; // one reason per call: a second tune finishing never lets go of the first one's hold
   let power: { holdScreenAwake: (r: string) => void; releaseScreenAwake: (r: string) => void } | null = null;
-  try { power = require('../atlasTools/runtimePower'); power?.holdScreenAwake('music-writing'); } catch { power = null; }
-  try { return await work(); } finally { power?.releaseScreenAwake('music-writing'); }
+  try { power = require('../atlasTools/runtimePower'); power?.holdScreenAwake(reason); } catch { power = null; }
+  try { return await work(); } finally { power?.releaseScreenAwake(reason); }
 }
 
 async function composeMusicNow(request: string, options: ComposeOptions): Promise<Composed> {

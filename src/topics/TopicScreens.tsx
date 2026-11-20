@@ -320,7 +320,7 @@ export const TopicBoardScreen: React.FC = () => {
   const prep = usePrepare();
   const writingNow = useBatch((b) => b.courseId === courseId && !!b.working); // while "write now" runs, its own line is the only count shown
   const doneCount = course ? Object.keys(course.progress).length : 0;
-  React.useEffect(() => { if (course) void prepareAhead(courseId); }, [courseId, doneCount, course?.difficulty, course?.prepareAhead]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (course) void prepareAhead(courseId); }, [courseId, doneCount, course?.difficulty, course?.prepareAhead]); // eslint-disable-line react-hooks/exhaustive-deps -- write ahead when the board opens, a square is finished, or the setting or difficulty changes
   if (!course) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Course" onBack={() => navigation.goBack()} /></SafeAreaView>;
 
   const done = (key: string) => !!course.progress[key];

@@ -16,7 +16,7 @@ interface LowPowerState {
   threshold: number;
   modelId: string;
   maxTokens: number;
-  /** Keep answers short while the phone is too hot (thermal.ts). On unless switched off. */
+  /** Keep answers short while the phone is too hot (thermal.ts). Off unless switched on: it used to be on for everyone, so a phone that warmed up while writing lessons or music quietly went into a power-saving mode nobody asked for. */
   heatGuard: boolean;
   active: boolean;
   prevModelId: string;
@@ -30,12 +30,15 @@ interface LowPowerState {
 export const useLowPower = create<LowPowerState>()(
   persist(
     (set) => ({
-      enabled: false, threshold: 20, modelId: '', maxTokens: 256, heatGuard: true,
+      enabled: false, threshold: 20, modelId: '', maxTokens: 256, heatGuard: false,
       active: false, prevModelId: '', switchedTo: '', battery: null, charging: false,
       set: (p) => set(p),
     }),
     {
       name: 'atlas-low-power',
+      version: 2,
+      // Version 1 had the heat guard on for everyone, so a saved "on" cannot be told from a choice: it is switched off once, and stays as the person sets it from here.
+      migrate: (saved, from) => (from < 2 ? { ...(saved as object), heatGuard: false } : saved) as LowPowerState,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ enabled: s.enabled, threshold: s.threshold, modelId: s.modelId, maxTokens: s.maxTokens, heatGuard: s.heatGuard }),
     },

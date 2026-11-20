@@ -25,7 +25,7 @@ export function LowPowerCard() {
         <View style={literalStyles.s1}>
           <Text style={[st.h, { color: colors.text }]}>Heat guard</Text>
           <Text style={[st.p, { color: colors.textSecondary }]}>
-            When the phone gets hot, answers are kept short until it cools, which lets it cool faster.
+            Off unless you switch it on. When on and the phone gets hot, answers are kept short until it cools, which lets it cool faster.
             {hot && s.heatGuard ? '  ACTIVE NOW: the phone is hot.' : ''}
           </Text>
         </View>

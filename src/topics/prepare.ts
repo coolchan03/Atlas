@@ -31,6 +31,8 @@ export function nextToPrepare(course: Course, count: number): string[] {
 
 let running = false;
 let batchRunning = false;
+/** True while the ahead writer has a lesson in the queue, so "write now" can wait for it instead of sharing the model with it. */
+let aheadWriting = false;
 
 /** Starts writing the next lessons of a course (if it is not already), one after another. Safe to call whenever the board or progress changes. */
 export async function prepareAhead(courseId: string): Promise<void> {
@@ -44,10 +46,12 @@ export async function prepareAhead(courseId: string): Promise<void> {
       const todo = nextToPrepare(course, wanted);
       if (!todo.length) { usePrepare.setState({ courseId, working: '', ready: wanted, total: wanted, error: '' }); break; }
       // A lesson someone is waiting for, or a "write now" batch, is being written: one writer at a time, so the screen has one count and one list.
-      if (personWaiting() || batchRunning) { await new Promise((r) => setTimeout(r, 1000)); continue; }
+      if (personWaiting() || batchRunning) { usePrepare.setState({ working: '' }); await new Promise((r) => setTimeout(r, 1000)); continue; }
       usePrepare.setState({ courseId, working: todo[0], ready: wanted - todo.length, total: wanted, error: '' });
+      aheadWriting = true;
       try { await squareContent(course, todo[0], { background: true }); }
       catch (e) { usePrepare.setState({ working: '', error: String((e as Error)?.message || e) }); break; }
+      finally { aheadWriting = false; }
     }
   } finally {
     running = false;
@@ -102,6 +106,7 @@ export function cancelWriteNow(): void {
 export async function writeNow(courseId: string, keys: string[], label: string): Promise<number> {
   if (batchRunning || !keys.length) return 0;
   batchRunning = true;
+  while (aheadWriting) await new Promise((r) => setTimeout(r, 500)); // the lesson being written ahead finishes first: one writer at a time
   batchCancelled = false;
   useBatch.setState({ courseId, label, total: keys.length, done: 0, working: '', failed: [], error: '' });
   let written = 0;

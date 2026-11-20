@@ -18,7 +18,7 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
-import { loadPreviousSession } from './src/utils/appLog';
+import { flushAppLog, loadPreviousSession } from './src/utils/appLog';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
@@ -66,8 +66,11 @@ try {
   const previous = errorUtils?.getGlobalHandler();
   errorUtils?.setGlobalHandler((error, fatal) => {
     logger.error(`[UNCAUGHT${fatal ? ' FATAL' : ''}]`, error instanceof Error ? `${error.name}: ${error.message}\n${String(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error));
+    void flushAppLog(); // written now: a fatal error ends the app before the usual few seconds are up
     previous?.(error, fatal);
   });
+  // A promise that fails and is never caught (most async failures: model calls, downloads) is logged too.
+  require('promise/setimmediate/rejection-tracking').enable({ allRejections: true, onUnhandled: (_id: number, error: unknown) => logger.warn('[UNHANDLED REJECTION]', error instanceof Error ? `${error.name}: ${error.message}` : String(error)) });
 } catch { /* the log is a convenience */ }
 
 // Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
