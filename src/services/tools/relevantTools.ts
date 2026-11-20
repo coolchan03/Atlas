@@ -44,7 +44,7 @@ const TRIGGERS: Record<string, RegExp> = {
   list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
   map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
   remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
-  make_helper: /\b(helper|multi-?step|workflow|template|reusable|repeatable|every time i|each time i|make me a tool|build me a tool|new tool)\b/i,
+  make_helper: /\b(make|build|create|set up|write)\b.{0,30}\b(helper|multi-?step|workflow|template|reusable|repeatable)\b|\b(helper|multi-?step)\b.{0,20}\b(for|that|which)\b/i,
   schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
   draft_message: { test: reachesSomeone } as RegExp,
 };

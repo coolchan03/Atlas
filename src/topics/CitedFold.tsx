@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -28,7 +28,7 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
   const [checking, setChecking] = useState(false);
   const lesson = lessonText(content);
   const unbacked = unbackedLines(content, passages);
-  const gaps = content?.kind === 'lesson' ? missingTerms(lesson, passages.map((p) => p.text)) : [];
+  const gaps = useMemo(() => (content?.kind === 'lesson' ? missingTerms(lesson, passages.map((p) => p.text)) : []), [content, passages]); // eslint-disable-line react-hooks/exhaustive-deps -- lesson follows content
   // A verdict belongs to the line it was made for: when the lesson is written again the lines change, so the old verdicts go.
   const lineKey = unbacked.join('\n');
   useEffect(() => { setVerdicts(null); }, [lineKey]);

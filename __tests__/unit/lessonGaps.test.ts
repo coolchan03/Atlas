@@ -19,3 +19,9 @@ it('says nothing when the lesson covers what the sources stress', () => {
   const lesson = 'The lessee records a right-of-use asset and a lease liability at present value using the incremental borrowing rate, with amortised asset and depreciation. Short-term arrangements are exempt.';
   expect(missingTerms(lesson, passages)).toEqual([]);
 });
+
+it('treats a word and its plural as the same word', () => {
+  const sources = ['The processes run. Processes start. Many processes end. A process is a run.'];
+  expect(missingTerms('Each process is one run of the steps.', sources)).toEqual([]);
+  expect(missingTerms('The steps are simple.', sources)).toEqual(['processes']);
+});

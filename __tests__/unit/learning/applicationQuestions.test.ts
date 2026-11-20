@@ -75,7 +75,7 @@ describe('a multiple-choice question is asked with its choices', () => {
     const text = questionText(q);
     expect(text).toContain('A) Straight-line');
     expect(text).toContain('C) Units of production');
-    expect(text).toMatch(/full text of the correct choice/);
+    expect(text).not.toMatch(/full text/); // the instruction belongs to the exam's prompt, not to a stored study question
     expect(questionText({ question: 'What is 2+2?', answer: '4', alternatives: [] })).toBe('What is 2+2?');
   });
 });

@@ -19,3 +19,13 @@ it('stops at ten helpers made by the AI', () => {
   for (let i = 0; i < 10; i++) saveHelperFromTool({ title: `H${i}`, steps: 'ai: do it' });
   expect(() => saveHelperFromTool({ title: 'One more', steps: 'ai: do it' })).toThrow(/already 10/);
 });
+
+it('saving the same title again replaces the AI\'s copy, and a full list is never pushed over', () => {
+  saveHelperFromTool({ title: 'Reply writer', steps: 'ai: v1' });
+  saveHelperFromTool({ title: 'reply writer', steps: 'ai: v2' });
+  expect(useCustomHelpers.getState().helpers).toHaveLength(1);
+  expect(useCustomHelpers.getState().helpers[0].steps).toBe('ai: v2');
+  useCustomHelpers.setState({ helpers: Array.from({ length: 30 }, (_, i) => ({ id: `own${i}`, title: `Mine ${i}`, summary: '', help: '', steps: 'ai: x', createdAt: i })) });
+  expect(() => saveHelperFromTool({ title: 'New', steps: 'ai: y' })).toThrow(/full \(30\)/);
+  expect(useCustomHelpers.getState().helpers).toHaveLength(30);
+});

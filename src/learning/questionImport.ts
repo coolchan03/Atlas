@@ -63,11 +63,11 @@ export function withoutRepeats(items: NormalizedQuestion[], existing: string[]):
 
 /**
  * The question as it is ASKED. A multiple-choice question without its choices cannot be answered, so the choices travel with it, and the
- * model is told to answer with the choice's own words (the key is the choice's text, not its letter).
+ * exam tells the model to answer with the choice's own words (the key is the choice's text, not its letter).
  */
 export function questionText(item: NormalizedQuestion): string {
   if (!item.options || item.options.length < 2) return item.question;
-  return `${item.question}\nChoices:\n${item.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n')}\nAnswer with the full text of the correct choice.`;
+  return `${item.question}\nChoices:\n${item.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n')}`;
 }
 
 /** The answer key an exam scores against: each line of the answer is a fact, and its other wordings count too. */

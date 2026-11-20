@@ -33,6 +33,7 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
       setSteps(lines.join('\n'));
     } catch (e) { Alert.alert('Could not draft the steps', String((e as Error)?.message || e)); } finally { setBusy(false); }
   };
+  // Saving an edit makes the helper the person's own: it no longer says "made by the AI" and no longer counts toward the AI's limit.
   const save = () => {
     useCustomHelpers.getState().save({ id: helper?.id ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), summary: summary.trim(), help: help.trim(), steps: steps.trim() });
     onClose();
