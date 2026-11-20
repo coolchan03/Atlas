@@ -4,6 +4,7 @@
  * Offline / off-grid: an "offline edition" from the offline library instead.
  * The episode is written by the model on the phone and saved like a study podcast.
  */
+import { scrubTeasers } from './briefingScrub';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -165,11 +166,17 @@ async function libraryFacts(topic: string, startN: number): Promise<Source[]> {
   } catch { return []; }
 }
 
+/** An article's first sentence is its definition ("The United States is a country in..."), which is no fun fact: with three or more sentences the first is dropped. */
+function withoutDefinition(extract: string): string {
+  const sentences = extract.match(/[^.!?]+[.!?]+(?:\s|$)/g) ?? [];
+  return sentences.length >= 3 ? sentences.slice(1).join('').trim() : extract;
+}
+
 async function webFacts(topic: string, startN: number): Promise<Source[]> {
   try {
     const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
     const json = JSON.parse(await fetchText(url, 8000));
-    const text = (json.extract || '').trim().slice(0, 1200);
+    const text = withoutDefinition((json.extract || '').trim()).slice(0, 1200);
     if (!text || text.length < 50) return [];
     return [{ n: startN, doc: `Wikipedia: ${json.title || topic}`, part: 1, text, origin: 'web' }];
   } catch { return []; }
@@ -208,7 +215,7 @@ async function libraryItems(interests: string[], withNews: boolean, firstN: numb
     }
     if (!facts.length) continue;
     n += facts.length;
-    out.push({ topic: withNews ? `A fun fact about ${topic} from ${factSource}` : `From the offline library: ${topic}`, sources: facts, always: true });
+    out.push({ topic: withNews ? `A surprising, specific fun fact about ${topic} from ${factSource} (one detail such as a number, a date or a first; never a definition of what ${topic} is)` : `From the offline library: ${topic}`, sources: facts, always: true });
     if (withNews) break;
   }
   return out;
@@ -288,7 +295,7 @@ async function wantedInterests(all: string[], avoid: string[]): Promise<string[]
   return wanted.length ? wanted : ['world news'];
 }
 
-const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with brief transitions like "Next..." or "Also..." or "In other news...". Speak as a reporter relaying the news: attribute each story to its outlet in the third person ("According to Reuters...", "The BBC reports..."), never say "I" or "we" about what happened, and never read a headline out as if it were your own words or in quotation marks. Give every story its own two to four sentences of detail, never just the headline. Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
+const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with a transition of one to four words ("Next.", "Also.", "In other news."). Never say what comes next, never talk about the show, the headlines or the stories as a whole, and never promise more detail, a video, a link or another segment: say what the story says and stop. Speak as a reporter relaying the news: attribute each story to its outlet in the third person ("According to Reuters...", "The BBC reports..."), never say "I" or "we" about what happened, and never read a headline out as if it were your own words or in quotation marks. Give every story its own two to four sentences of detail, never just the headline. Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
 
 /** The opening line, made here so the date is always said first (the model was leaving it out or putting it mid-show). */
 export function greetingLine(now = new Date()): string {
@@ -401,6 +408,12 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   // After the date come the weather, the day's calendar and the day's scheduled tasks, as fixed lines (the model left them out when only asked).
   // From 5 pm the briefing looks ahead: tomorrow's calendar and tasks instead of today's.
   const evening = new Date().getHours() >= 17;
+  // Teasers the model made up ("next we will see what else is making headlines", "watch the video after the briefing") are taken out.
+  if (r.podcast) {
+    const clean = scrubTeasers(r.podcast, r.storyStarts ?? []);
+    r.podcast = clean.lines;
+    if (r.storyStarts) r.storyStarts = clean.starts;
+  }
   const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays'), day: evening ? 'tomorrow' : 'today' }), yourDay(evening ? 'tomorrow' : 'today')].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];
   // The opening lines come first, so every story start moves down by that many lines.

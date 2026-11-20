@@ -280,6 +280,7 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
     fun synthesize(parts: List<String>, sid: Int, speed: Float, cancelled: () -> Boolean): Pair<ShortArray, Int>? {
         return genExec.submit(Callable<Pair<ShortArray, Int>?> {
             val engine = tts ?: return@Callable null
+            auto.beginUtterance()
             val reference = cloneReference; val steps = cloneSteps
             val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
             val out = java.io.ByteArrayOutputStream()
@@ -346,6 +347,7 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
         val engine = tts
         if (token != my) { emit("AtlasTtsStopped", id, endReason); return }
         if (engine == null) { emit("AtlasTtsError", id, "No voice is loaded"); return }
+        auto.beginUtterance() // a change of quality only ever starts here, never in the middle of an utterance
         val reference = cloneReference; val steps = cloneSteps
         val (genSpeed, rate) = deepen(speed, try { engine.sampleRate() } catch (_: Throwable) { 24000 }, depth)
         val queue = LinkedBlockingQueue<FloatArray>()

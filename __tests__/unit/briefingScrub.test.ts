@@ -1,0 +1,25 @@
+import { scrubTeasers, withoutTeasers } from '../../src/atlasTools/briefingScrub';
+
+describe('teasers the model makes up', () => {
+  it.each([
+    ['Officials said the bridge reopens Monday. Next, we will see what else is making headlines this morning.', 'Officials said the bridge reopens Monday.'],
+    ['Prices rose two percent. We will elaborate on this story in a moment.', 'Prices rose two percent.'],
+    ['The storm hit the coast. You can watch a video of it after the news briefing.', 'The storm hit the coast.'],
+    ['The vote passed. Stay tuned for more.', 'The vote passed.'],
+    ['The team won 3-1. I\'ll tell you more about it later.', 'The team won 3-1.'],
+  ])('removes the sentence from %s', (text, want) => { expect(withoutTeasers(text)).toBe(want); });
+
+  it('keeps ordinary sentences, including ones that start with Next or mention a video as news', () => {
+    expect(withoutTeasers('Next, the council approved the budget.')).toBe('Next, the council approved the budget.');
+    expect(withoutTeasers('The video of the rescue has been viewed a million times.')).toBe('The video of the rescue has been viewed a million times.');
+  });
+
+  it('drops a line that was only a teaser and moves the story starts with the lines', () => {
+    const lines = [{ text: 'Story one is here.' }, { text: 'Next we will see what else is making headlines this morning.' }, { text: 'Story two begins.' }, { text: 'It continues.' }];
+    const out = scrubTeasers(lines, [2]);
+    expect(out.lines.map((l) => l.text)).toEqual(['Story one is here.', 'Story two begins.', 'It continues.']);
+    expect(out.starts).toEqual([1]);
+    expect(out.removed).toBe(1);
+    expect(scrubTeasers([{ text: 'Only a teaser: stay tuned.' }, { text: 'Real story.' }], [1]).starts).toEqual([0]);
+  });
+});
