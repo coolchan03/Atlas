@@ -25,7 +25,7 @@ import { readablePath } from '../atlasTools/projectBackupFiles';
 import { mergeProjects } from '../services/nearbySync/merge';
 import type { Project } from '../types';
 
-export const BUNDLE_FORMAT = 'atlas-project-bundle';
+const BUNDLE_FORMAT = 'atlas-project-bundle';
 const VERSION = 1;
 const ALL_STATUSES = ['candidate', 'verified', 'disputed', 'superseded', 'rejected'] as const;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -51,7 +51,7 @@ const hashText = (text: string): BundleFile['sha256'] => sha256(text);
 const bytesOf = (text: string): number => unescape(encodeURIComponent(text)).length;
 
 /** The learning subjects (learners) that work on a project. */
-export function projectSubjects(projectId: string): Array<{ agentId: string; name: string; topic: string }> {
+function projectSubjects(projectId: string): Array<{ agentId: string; name: string; topic: string }> {
   const st = useLearningStore.getState();
   return Object.entries(st.config).filter(([, c]) => c.projectId === projectId).map(([agentId, c]) => {
     let name = st.experts.find((e) => e.id === agentId)?.name;
@@ -118,7 +118,7 @@ export async function writeProjectBundle(projectId: string, dir: string, db: Lea
 }
 
 /** Problems with a manifest and the files actually found, or an empty list. Pure. */
-export function bundleProblems(manifest: unknown, found: Record<string, { size: number; sha256: string }>): string[] {
+function bundleProblems(manifest: unknown, found: Record<string, { size: number; sha256: string }>): string[] {
   const m = manifest as BundleManifest;
   if (!m || m.format !== BUNDLE_FORMAT) return ['This is not an Atlas project bundle.'];
   if (!Number.isInteger(m.version) || m.version > VERSION) return ['This bundle was made by a newer Atlas. Update Atlas to open it.'];
