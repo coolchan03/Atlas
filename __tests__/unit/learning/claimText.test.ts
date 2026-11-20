@@ -88,6 +88,7 @@ describe('practice scoring without a model', () => {
     expect(recallScore('Boil water for one minute to make it safe.', stored)).toBe(0.5);
     expect(recallScore('Boil water for ten minutes.', stored)).toBe(0);
     expect(recallScore('anything', [])).toBe(0);
+    expect(recallScore('Something else entirely about cats.', stored)).toBe(0); // loosely alike earns nothing
   });
 
   it('retrieves the closest stored claims for a question', () => {

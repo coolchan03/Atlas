@@ -63,7 +63,8 @@ export class MasteryStore {
 
   /** Puts a concept's next review `days` from now: it rests from the tests (and is not due again until then). */
   rest(conceptIdValue: string, days: number): void {
-    this.db.sql('UPDATE atlas_mastery SET next_review = ? WHERE concept_id = ?', [new Date(this.clock().getTime() + days * DAY_MS).toISOString(), conceptIdValue]);
+    // Attempts start again, so after the rest it gets real tests before it can be given up on once more.
+    this.db.sql('UPDATE atlas_mastery SET attempts = 0, next_review = ? WHERE concept_id = ?', [new Date(this.clock().getTime() + days * DAY_MS).toISOString(), conceptIdValue]);
   }
 
   /** Progress for one subject, or for all of them when `subjectId` is null. */

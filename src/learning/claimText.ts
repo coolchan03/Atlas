@@ -176,13 +176,13 @@ export function rankClaims<T extends { text: string }>(question: string, known: 
 export function recallScore(answer: string, claims: string[]): number {
   if (!claims.length) return 0;
   const have = new Set(numbersIn(answer));
-  // A claim recalled in its own words counts in full; one the answer only gets across in part (the right figures, about a third of the words) counts half.
+  // A claim recalled in its own words counts in full; one the answer only gets across in part (the right figures, about 40% of the words) counts half.
   // A wrong or missing figure is a wrong fact, so it earns nothing.
   const credit = claims.map((c): number => {
     const claim = c.replace(/\[\d+\]/g, '');
     if (!numbersIn(claim).every((n) => have.has(n))) return 0;
     const alike = similarity(claim, answer);
-    return alike >= 0.5 ? 1 : alike >= 0.3 ? 0.5 : 0;
+    return alike >= 0.5 ? 1 : alike >= 0.4 ? 0.5 : 0;
   });
   return credit.reduce((a, b) => a + b, 0) / claims.length;
 }

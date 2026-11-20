@@ -235,6 +235,9 @@ describe('stopping a run that keeps failing', () => {
     expect(metrics.ungraded).toBe(5);
     expect(metrics.items.filter((i) => i.reason === 'stopped')).toHaveLength(5);
     expect(metrics.accuracy).toBe(0);
+    // The questions it never got to are due at once.
+    const { dueRetests } = require('../../../src/learning/exams');
+    const run: ExamResult = { id: 'r', version: BENCHMARK_VERSION, mode: 'sources', at: new Date().toISOString(), metrics };
+    expect(dueRetests(many, [run])).toEqual(expect.arrayContaining(['i3', 'i4', 'i5', 'i6', 'i7']));
   });
 });
-

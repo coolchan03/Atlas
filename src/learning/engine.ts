@@ -369,7 +369,7 @@ function markReport(agentId: string, itemId: string, patch: Partial<LearnReport>
  * Practice: concepts due for review are answered again from what is stored, and graded by comparing the answer with the
  * stored claims, never by a model. It measures whether the knowledge can be found and used, and schedules the next review.
  */
-let notesBoost = 1; // widened after a practice batch mostly failed, back to 1 after a clean one (struggle.ts)
+const notesBoost = new Map<string, number>(); // per subject: widened after a practice batch mostly failed, back to 1 after a clean one (struggle.ts)
 
 async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): Promise<void> {
   let recalled = 0;
@@ -379,7 +379,8 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     // Missed again and again: stop testing it, rest it for a few days and study it again in simple terms instead.
     if (isStruggling(c)) {
       safely(() => mastery.rest(c.id, REST_DAYS), undefined);
-      L().addItems(agent.id, [newItem(restudyQuestion(c.question), L().get(agent.id).round, 'approved')]);
+      const restudy = restudyQuestion(c.question);
+      if (!L().get(agent.id).bank.some((b) => b.q === restudy)) L().addItems(agent.id, [newItem(restudy, L().get(agent.id).round, 'approved')]);
       L().log({ agentId: agent.id, kind: 'info', title: 'Stopped testing a question it keeps missing', body: `"${c.question.slice(0, 120)}" was missed ${c.attempts} times. It is rested for ${REST_DAYS} days and studied again in simple terms instead.` });
       continue;
     }
@@ -387,7 +388,7 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
     // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
     const cards = await loadCards(c.topic, agent.id).catch(() => []);
-    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15 * notesBoost) }).text.split('\n').filter(Boolean);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15 * (notesBoost.get(agent.id) ?? 1)) }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
@@ -399,9 +400,11 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     outcomes.push(outcome);
     safely(() => mastery.record(agent.id, c, outcome), undefined);
   }
-  const before = notesBoost;
-  notesBoost = nextNotesBoost(notesBoost, outcomes);
-  if (batchStruggled(outcomes) && notesBoost > before) L().log({ agentId: agent.id, kind: 'info', title: 'Most practice answers were wrong', body: `The learner is given ${notesBoost}x as many stored notes for the next practice.` });
+  const before = notesBoost.get(agent.id) ?? 1;
+  const after = nextNotesBoost(before, outcomes);
+  notesBoost.set(agent.id, after);
+  // Said only when the budget really grows (it is capped on a phone with plenty of memory).
+  if (batchStruggled(outcomes) && stepBudget(0.15 * after) > stepBudget(0.15 * before)) L().log({ agentId: agent.id, kind: 'info', title: 'Most practice answers were wrong', body: 'The learner is given more of the stored notes for the next practice.' });
   L().log({ agentId: agent.id, kind: 'info', title: `Practice: ${recalled} of ${due.length} recalled`, body: 'Graded by comparing each answer with what was stored, not by the model.' });
 }
 
@@ -623,6 +626,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
 // ------------------------------------------------------------------ loop
 let awakeTimer: ReturnType<typeof setInterval> | null = null;
 export async function startLearning(agentId: string): Promise<void> {
+  notesBoost.clear();
   degradedTold.clear(); // a new run tells again if the documents still cannot be searched properly
   if (running) return;
   running = true;

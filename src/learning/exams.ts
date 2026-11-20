@@ -11,7 +11,7 @@ export const EXAM_MODE_LABEL: Record<ExamMode, string> = { baseline: 'The model 
 export const BENCHMARK_VERSION = '3'; // 3: partial credit (an answer with most of the facts is mostly right and is not retested); 2: wording-tolerant matching (reordered words, equivalent numbers and units), per-answer reasons, ungraded items
 
 /** An answer holding at least this share of the facts, and nothing the key forbids, is accepted as mostly right: it earns that share as credit and is not retested. */
-const ACCEPT_SHARE = 0.6
+const ACCEPT_SHARE = 0.6;
 
 export interface Expected {
   /** Each entry is a fact; any one of its wordings counts ("one minute", "1 minute", "60 seconds"). */
@@ -25,9 +25,9 @@ export interface ExamItem { id: string; subjectId: string; topic: string; questi
  * Why an answer did not pass (or that it did). Only 'wrong-answer' and 'outdated' say the model was wrong; the rest say the exam
  * could not fairly judge it, and those items are left out of the accuracy.
  */
+export type ExamReason = 'correct' | 'wrong-answer' | 'outdated' | 'empty-answer' | 'no-sources' | 'no-approved-memory' | 'invalid-key' | 'inference-failure' | 'stopped';
 /** The reasons that mean a question was not graded, so it says nothing about what was learned. */
 const NOT_GRADED: ExamReason[] = ['invalid-key', 'inference-failure', 'stopped'];
-export type ExamReason = 'correct' | 'wrong-answer' | 'outdated' | 'empty-answer' | 'no-sources' | 'no-approved-memory' | 'invalid-key' | 'inference-failure' | 'stopped';
 interface ItemResult {
   id: string; correct: boolean; score: number; outdated: boolean; seconds: number;
   /** What the answer earns: 1 when right, the share of facts it held when partly right, 0 when it used a forbidden wording. */
@@ -181,7 +181,7 @@ function gradeItem(item: ExamItem, mode: ExamMode, answered: Answered & { second
   else if (noEvidence && mode !== 'baseline' && answered.sourceCount === 0 && !answered.memoryCount) reason = 'no-sources';
   else if (noEvidence && mode === 'memory' && answered.memoryCount === 0) reason = 'no-approved-memory';
   return {
-    id: item.id, correct: scored.correct, score: scored.score, credit: scored.outdated ? 0 : scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
+    id: item.id, correct: scored.correct, score: scored.score, credit: scored.outdated || reason === 'no-sources' || reason === 'no-approved-memory' ? 0 : scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
     answer: clip(text), sourceCount: answered.sourceCount, memoryCount: answered.memoryCount,
   };
 }
@@ -228,7 +228,7 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
   return {
     total: results.length, ungraded, correct, mostlyRight: results.filter((r) => !r.correct && isAccepted(r)).length, accuracy: graded ? earned / graded : 0,
     outdatedAnswers: results.filter((r) => r.outdated).length, unsupportedCitations: unsupported,
-    repeatFailures: results.filter((r) => !r.correct && failed.has(r.id)).length,
+    repeatFailures: results.filter((r) => !r.correct && !(r.reason && NOT_GRADED.includes(r.reason)) && failed.has(r.id)).length,
     averageSeconds: results.length ? results.reduce((a, r) => a + r.seconds, 0) / results.length : 0, items: results,
   };
 }
@@ -313,7 +313,7 @@ export class ExamStore {
   /** The questions a mode got wrong last time, to spot a mistake that is made again. */
   lastFailures(mode: ExamMode): string[] {
     const last = this.history(40).find((r) => r.mode === mode && r.version === BENCHMARK_VERSION && !r.metrics.retest);
-    return last ? last.metrics.items.filter((i) => !isAccepted(i)).map((i) => i.id) : [];
+    return last ? last.metrics.items.filter((i) => !isAccepted(i) && !(i.reason && NOT_GRADED.includes(i.reason))).map((i) => i.id) : [];
   }
 }
 
@@ -328,6 +328,7 @@ export function improvementSummary(history: ExamResult[]): string {
   const base = latest('baseline');
   const memory = latest('memory');
   if (!base || !memory) return 'Run the exam in the model alone mode and the stored memory mode to see whether memory helps.';
+  if ([base, memory].some((r) => r.metrics.items.some((i) => i.reason === 'stopped'))) return 'A run stopped early after several misses in a row, so the two runs did not answer the same questions and cannot be compared. Fix what is failing, then run the exam again.';
   if (Math.min(base.metrics.total - (base.metrics.ungraded ?? 0), memory.metrics.total - (memory.metrics.ungraded ?? 0)) < MIN_QUESTIONS) return `Fewer than ${MIN_QUESTIONS} questions: too few to say whether anything improved.`;
   const delta = memory.metrics.accuracy - base.metrics.accuracy;
   if (delta > 0) return `With sources and stored memory the answers were right ${pct(memory.metrics.accuracy)} of the time, against ${pct(base.metrics.accuracy)} for the model alone (${Math.round(delta * 100)} points better on ${memory.metrics.total} questions).`;
@@ -352,7 +353,7 @@ export interface Attempt { at: string; mode: ExamMode; correct: boolean; accepte
 /** Every recorded attempt at one question, newest first (older scoring versions are kept, and marked, never mixed into the schedule). */
 export function attemptsFor(history: ExamResult[], itemId: string): Attempt[] {
   return history
-    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, accepted: isAccepted(i), reason: i.reason, answer: i.answer, missing: i.missing, version: r.version })))
+    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, accepted: r.version === BENCHMARK_VERSION ? isAccepted(i) : i.correct, reason: i.reason, answer: i.answer, missing: i.missing, version: r.version })))
     .sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
@@ -369,6 +370,9 @@ const UNGRADED = NOT_GRADED;
  */
 export function dueRetests(items: Array<{ id: string }>, history: ExamResult[], now: Date = new Date()): string[] {
   return items.filter(({ id }) => {
+    // A question the last run never got to (it stopped after repeated misses) is due at once.
+    const newest = attemptsFor(history, id)[0];
+    if (newest && newest.version === BENCHMARK_VERSION && newest.reason === 'stopped') return true;
     const graded = attemptsFor(history, id).filter((a) => a.version === BENCHMARK_VERSION && !(a.reason && UNGRADED.includes(a.reason)));
     const counted = graded.some((a) => a.mode !== 'baseline') ? graded.filter((a) => a.mode !== 'baseline') : graded;
     return EXAM_MODES.some((mode) => {
