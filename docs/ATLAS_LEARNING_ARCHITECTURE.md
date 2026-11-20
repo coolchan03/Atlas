@@ -122,7 +122,7 @@ finished. Privacy gating is not part of this work (see "Dropped by the owner" at
   application questions with hidden answer keys (the learner never sees the key; the key is stored only on the Judge side).
 - **Manager:** reads measured progress and repeated failures; finds neglected topics and redundant lessons; prioritises next work;
   keeps high-risk conclusions (medical, legal, tax, money) under human review.
-- **Roles and models:** different compatible models per role only when memory allows. Never run two large models at once past the
+- **Roles and models:** the owner swaps models often, so the learned memory is model-independent (cards and claims record which model wrote them; any model can use them). Different compatible models per role only when memory allows. Never run two large models at once past the
   device limit; load on demand, unload after, and say plainly when a role falls back to the one loaded model.
 
 Exists in `engine.ts`: the three roles, the question bank, judge passes, manager reviews, redo with feedback, checkpoints.
@@ -151,26 +151,34 @@ opened (spaced intervals exist in `masteryStore.ts`), never assuming Android run
 - Retrieved documents and web pages are untrusted data, never instructions (`sourceSafety.ts` exists; extend its tests to hidden text,
   encoded text and long documents).
 
-## One-way Pi knowledge export (SLE v1)
+## Export a project as one ZIP (replaces the Pi and SLE export)
 
-- Atlas may export selected deep-knowledge records to the Raspberry Pi central archive when the user asks. There is no
-  automatic sync, replication or download of the Pi archive.
-- Optional import of small approved knowledge cards, with provenance (where it came from, when, which export).
-- The Pi validates and reviews imported candidates on its own. Atlas never says an upload means the Pi approved the content: the
-  status shown is "sent", "received" or "reviewed by the Pi" only when the Pi says so.
-- Transfers are manual, encrypted and authenticated over any network, checksum-verified, recoverable after interruption and
-  non-destructive. Records keep their project label so lessons from different projects are not mixed on the Pi.
-- **Compatibility:** `ATLAS_LEARNING_INTERCHANGE.md` (atlas-learning-interchange/1.0) is not an SLE v1 or Street bundle and was never
-  tested against one. The Street prototype exports immutable capsule JSON files, not full source documents. Before writing the
-  exporter: get real sample bundles, confirm the capsule fields against them, then agree a versioned extension for richer evidence
-  (cited passages, source hash, page, quote). Keep Atlas-side files checksummed so the extension stays verifiable.
+The Raspberry Pi and SLE export is scratched. What is wanted is one ZIP the owner can keep or move to another phone:
+
+- **The project:** its name, instructions, settings and chats' links to the project (not other projects).
+- **What the learner has learned (the hot memory):** the knowledge cards and the claims behind them, both **candidates and verified**
+  (and disputed ones, marked as disputed), each with its status, its source passages and its page or locator.
+- **The documents related to the project:** the original files, with the extracted text and chunk index so they open without
+  re-reading. Preserve originals byte for byte.
+- A `manifest.json` (counts, per-file size and SHA-256, app and schema versions, the project and when it was exported) and a
+  `checksums.json`, so an import can check the bundle first and a damaged bundle changes nothing.
+- **Import:** reading the same ZIP twice adds nothing (match by record id and content hash); nothing is overwritten; a claim that
+  arrives as verified is kept as it was marked in the ZIP and shows where it came from; a conflicting copy is kept next to the
+  original and marked disputed, as the interchange rules already say.
+- **Built on what exists:** `knowledgeInterchange.ts`, `knowledgePorting.ts`, `zipDirectory.ts` and `docs/ATLAS_LEARNING_INTERCHANGE.md`
+  (atlas-learning-interchange/1.0) already write and read a ZIP with a manifest, checksums, findings, reviews and cited chunks, with
+  originals optional. Gaps: the project record itself, all the project's documents (not only the cited chunks) with originals on by
+  default, the ledger claims and cards in one bundle (today the claims ledger and the reviewed findings are two stores), and a button
+  on the project's Teach AI screen. Street and SLE compatibility is no longer a goal.
+- What the Judge has learned (its verdicts and hidden application questions) is not part of the export. Exam questions stay out, as
+  they do today, so a copied bundle cannot leak the answers to a test.
 
 ## Interface (inside Teach AI, kept compact)
 
 Show: current objective and active agent; status (learning, reviewing, testing, blocked or paused, with the reason); research and
 review state; last completed lesson; knowledge retrieved for the current lesson; questions awaiting review; mastery and upcoming
-retests; token use, memory pressure and progress; a manual "Send selected learning to the Pi" action with a preview of exactly
-what leaves the phone.
+retests; token use, memory pressure and progress; an "Export this project" action that makes the ZIP and says what is in it (project,
+learned cards and claims with their statuses, documents).
 
 ## Phases
 
@@ -180,7 +188,8 @@ what leaves the phone.
 3. Judge: structured verdicts and hidden-key application questions; Manager priorities from measured data.
 4. Testing and mastery evidence on the learning screen; retests due on open.
 5. Retrieval degradation marking; device-aware budgets and memory checks; per-role models with a memory guard.
-6. Pi export: sample bundles first, then the versioned extension, then the manual exporter and optional card import.
+6. Project ZIP export and import: the project record, all documents with originals, claims and cards (candidates and verified), checksums,
+   repeat-import safety, then the button.
 
 ## Acceptance (every item needs an honest result, including "not done")
 
@@ -190,18 +199,18 @@ and resume; low-memory run). The final handoff lists code changes, test outcomes
 
 ## Questions for the owner
 
-- Sample SLE v1 or Street bundles, and the Pi's receiving address and authentication method.
 - Which records may leave the phone by default (verified only, or candidates too).
-- Whether the Judge may run on a different model from the learner on your phones, and which models you want for each role.
+- Which models you use for the learner and for the Judge. The learner's memory and the export must not depend on which model wrote them: every card and claim records the model that wrote it, and a different model can read, test and extend it.
 
 ## Dropped by the owner
 
-The owner chose to scratch privacy gating from this work. Not required, not tested, and not built here:
+The owner chose to scratch privacy gating and the Pi and SLE export from this work. Not required, not tested, and not built here:
 
-- Excluding protected or private projects and chats from the Pi export, and asking for consent per export or per card import.
+- The Raspberry Pi and SLE v1 export, Street compatibility, and anything about the Pi reviewing records.
+- Excluding protected or private projects and chats from an export, and asking for consent per export or per card import.
 - Privacy-control tests, and any rule that a record may not leave the phone because of how it was protected.
 - A "do not silently weaken privacy" requirement for new learning features.
 
 Kept, because they are about not breaking things or about the safety of the data, not privacy: stored data stays readable after
-migration (already-protected projects still open), imports and transfers are checksum-verified and non-destructive, retrieved text is
-treated as untrusted data and never as instructions, and Atlas never says the Pi approved something it did not.
+migration (already-protected projects still open), imports are checksum-verified and non-destructive, and retrieved text is treated as
+untrusted data and never as instructions.
