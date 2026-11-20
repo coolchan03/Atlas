@@ -116,7 +116,9 @@ export function toMidi(score: MusicScore): Uint8Array {
     for (const n of score.notes.filter((x) => roleOf(x) === role)) {
       const on = Math.round(n.beat * TICKS); const off = Math.round((n.beat + Math.max(GRID, n.length)) * TICKS);
       const velocity = Math.max(1, Math.min(127, Math.round((n.gain ?? 0.8) * 127)));
-      events.push({ tick: on, order: 2, bytes: [0x90 | channel, n.pitch & 127, velocity] }, { tick: off, order: 1, bytes: [0x80 | channel, n.pitch & 127, 0] });
+      // A drum hit sounds the pitch of its own drum (kick, snare, hat...), whatever pitch the note was stored with.
+      const key = (role === 'perc' ? DRUM_ROWS.find((r) => r.kind === n.voice)?.pitch : undefined) ?? n.pitch;
+      events.push({ tick: on, order: 2, bytes: [0x90 | channel, key & 127, velocity] }, { tick: off, order: 1, bytes: [0x80 | channel, key & 127, 0] });
     }
     events.sort((a, b) => a.tick - b.tick || a.order - b.order);
     const body: number[] = [];

@@ -43,6 +43,7 @@ export function ScoreEditorScreen({ route }: { route: { params: { scorePath?: st
   );
   const run = async (label: string, work: () => Promise<void>) => { setBusy(label); try { await work(); } catch (e: any) { Alert.alert('Not done', String(e?.message || e)); } finally { setBusy(''); } };
   const save = (play: boolean) => run(play ? 'Making the sound...' : 'Saving...', async () => {
+    if (!score.notes.length) throw new Error('Add some notes first: tap a square to place one.');
     const track = await saveInstrumental(score, { mood: 'focus', seconds: Math.max(10, Math.min(120, Math.ceil(score.notes.reduce((m, n) => Math.max(m, n.beat + n.length), 0) * 60 / score.bpm) + 2)), by: 'Score editor' });
     if (play) await instrumentalPlayer.play(track);
   });

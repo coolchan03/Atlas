@@ -21,3 +21,28 @@ describe('presets for making your own music', () => {
     expect(PRESETS.find((p) => p.id === 'blues')!.build().notes.filter((n) => n.role === 'bass').length).toBe(24); // 12 bars, two bass notes each
   });
 });
+
+describe('what the review found', () => {
+  it('exports each drum on its own key, with every hit on the editor grid, bass and chords inside range', () => {
+    const score = PRESETS.find((p) => p.id === 'blues')!.build();
+    const kinds = new Set(score.notes.filter((n) => n.role === 'perc').map((n) => n.voice));
+    expect(kinds).toEqual(new Set(['kick', 'snare', 'hat']));
+    const bytes: number[] = Array.from(toMidi(score));
+    // note-on events on channel 10 (0x99): kick 36, snare 38 and hat 42 all appear
+    const keys = new Set(bytes.flatMap((b, i) => (b === 0x99 && bytes[i + 1] >= 30 && bytes[i + 1] <= 50 && bytes[i + 2] > 0 ? [bytes[i + 1]] : [])));
+    expect([...keys]).toEqual(expect.arrayContaining([36, 38, 42]));
+    for (const p of PRESETS) {
+      const s = p.build();
+      expect(s.notes.every((n) => Math.abs(n.beat * 4 - Math.round(n.beat * 4)) < 1e-9)).toBe(true);
+      expect(s.notes.filter((n) => n.role === 'bass').every((n) => n.pitch >= 40)).toBe(true);
+      expect(s.notes.filter((n) => n.role === 'pad').every((n) => n.pitch <= 72)).toBe(true);
+    }
+  });
+  it('buildPreset knows only the presets, and a sentence starting with Note is not a score line', () => {
+    const { buildPreset } = require('../../../src/music/presets');
+    const { parseAgentScore } = require('../../../src/music/agentScore');
+    expect(buildPreset('nope')).toBeNull();
+    expect(buildPreset('pop').title).toBe('My pop tune');
+    expect(() => parseAgentScore('Note that I kept it simple.\nNOTE C4 0 1 0.5 piano')).toThrow(/1 usable\)/);
+  });
+});

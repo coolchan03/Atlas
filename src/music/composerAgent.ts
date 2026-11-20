@@ -147,7 +147,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
   let problem = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const raw = await ask(attempt ? compactSystemPrompt() : composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${problem}). Write it again using only TITLE, BPM, NOTE and DRUM lines, one per line, with no other words.` : brief.text);
+      const raw = await ask(attempt ? compactSystemPrompt() : composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${/enough playable notes/.test(problem) ? 'too few readable NOTE lines' : 'a problem with its lines'}). Write it again using only TITLE, BPM, NOTE and DRUM lines, one per line, with no other words.` : brief.text);
       const minNotes = Math.min(12, Math.max(6, brief.plan.bars.length * 2)); // a short tune needs fewer notes
       let report: AgentScoreReport = parseAgentScore(raw, minNotes);
       // What the model wrote is held to the plan: out-of-key notes, off-beat timings and a bass that misses the chord root are put right.

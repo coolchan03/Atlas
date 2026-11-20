@@ -53,6 +53,13 @@ function parseDrum(parts: string[]): MusicNote | null {
   return { pitch: 48, beat, length: DRUM_LENGTH[kind], gain, role: 'perc', voice: kind };
 }
 
+/** What to tell the person (and the log) when a reply had too little music: how much was readable, or what the model said instead. */
+function tooFewMessage(raw: string, usable: number, dropped: number): string {
+  const said = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/\s+/g, ' ').trim().slice(0, 70);
+  const detail = [`${usable} usable`, dropped ? `${dropped} lines it wrote could not be read` : ''].filter(Boolean).join(', ');
+  return `The composer did not write enough playable notes (${usable || dropped ? detail : `${detail}; it replied "${said}"`}).`;
+}
+
 /** The tune in a reply, checked line by line. Throws a readable message when there is not enough good music to play. */
 export function parseAgentScore(raw: string, minNotes = MIN_GOOD_NOTES): AgentScoreReport {
   let title = 'Original instrumental';
@@ -64,15 +71,12 @@ export function parseAgentScore(raw: string, minNotes = MIN_GOOD_NOTES): AgentSc
     const head = (parts[0] ?? '').toUpperCase();
     if (head === 'TITLE') title = line.replace(/^title:?\s*/i, '').slice(0, 70) || title;
     else if (head === 'BPM') { const n = Number(parts[1]); if (Number.isInteger(n) && n >= 60 && n <= 165) bpm = n; }
-    else if (head === 'NOTE' || head === 'DRUM') {
+    else if ((head === 'NOTE' || head === 'DRUM') && parts.slice(1).some(isNumber)) { // a sentence that starts with "Note" has no numbers: it is not a score line
       const note = head === 'NOTE' ? parseNote(parts) : parseDrum(parts);
       if (note && notes.length < MAX_NOTES) notes.push(note); else dropped++;
     }
   }
-  if (notes.length < minNotes) {
-    const said = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/\s+/g, ' ').trim().slice(0, 70);
-    throw new Error(`The composer did not write enough playable notes (${notes.length} usable${dropped ? `, ${dropped} lines it wrote could not be read` : ''}${notes.length || dropped ? '' : `; it replied "${said}"`}).`);
-  }
+  if (notes.length < minNotes) throw new Error(tooFewMessage(raw, notes.length, dropped));
   const seconds = Math.max(...notes.map((n) => n.beat + n.length)) * 60 / bpm;
   if (seconds > 100) throw new Error('The tune is longer than the 100 seconds one pass may take.');
   if (!notes.some((n) => n.role !== 'perc')) throw new Error('The tune has only drums.');

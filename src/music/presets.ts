@@ -17,14 +17,18 @@ const root = (name: string): number => ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B:
 
 interface Bar { root: string; quality: Quality }
 
+/** Keeps the bass inside the bass instruments' range (they start at E2) and the chords inside a pad's comfortable top (C5 and below, one octave of headroom). */
+const bassPitch = (p: number): number => (p < 40 ? p + 12 : p);
+const padPitch = (p: number): number => (p > 72 ? p - 12 : p);
+
 /** A chord held for a bar, its root an octave down in the bass. */
 function chordBar(bar: Bar, index: number, beats = 4): MusicNote[] {
   const r = root(bar.root);
   const start = index * beats;
   return [
-    ...CHORDS[bar.quality].map((i): MusicNote => ({ pitch: r + 12 + i, beat: start, length: beats - 0.25, gain: 0.35, role: 'pad' })),
-    { pitch: r - 12, beat: start, length: beats / 2, gain: 0.55, role: 'bass' },
-    { pitch: r - 12, beat: start + beats / 2, length: beats / 2 - 0.25, gain: 0.45, role: 'bass' },
+    ...CHORDS[bar.quality].map((i): MusicNote => ({ pitch: padPitch(r + 12 + i), beat: start, length: beats - 0.25, gain: 0.35, role: 'pad' })),
+    { pitch: bassPitch(r - 12), beat: start, length: beats / 2, gain: 0.55, role: 'bass' },
+    { pitch: bassPitch(r - 12), beat: start + beats / 2, length: beats / 2 - 0.25, gain: 0.45, role: 'bass' },
   ];
 }
 
@@ -43,7 +47,7 @@ function drumPattern(bars: number, pattern: 'rock' | 'lofi' | 'shuffle'): MusicN
       for (let h = 0; h < 4; h++) out.push(drum('hat', s + h + 0.5, 0.3));
     } else {
       out.push(drum('kick', s, 0.7), drum('snare', s + 1, 0.6), drum('kick', s + 2, 0.65), drum('snare', s + 3, 0.6));
-      for (let h = 0; h < 4; h++) out.push(drum('hat', s + h, 0.4), drum('hat', s + h + 0.67, 0.25));
+      for (let h = 0; h < 4; h++) out.push(drum('hat', s + h, 0.4), drum('hat', s + h + 0.75, 0.25));
     }
   }
   return out;
@@ -56,6 +60,9 @@ const band = (melody: Voice, pad: Voice, bass: Voice): Band => ({ melody, pad, b
 const bar = (r: string, quality: Quality): Bar => ({ root: r, quality });
 
 const BLUES: Bar[] = ['A', 'A', 'A', 'A', 'D', 'D', 'A', 'A', 'E', 'D', 'A', 'E'].map((r) => bar(r, 'dom7'));
+
+/** The score a preset starts from, or null for an id that is not a preset. */
+export const buildPreset = (id: string): MusicScore | null => PRESETS.find((p) => p.id === id)?.build() ?? null;
 
 export const PRESETS: TunePreset[] = [
   { id: 'blank', label: 'Blank page', hint: 'Nothing yet: tap squares to write every note yourself', build: () => ({ title: 'My tune', bpm: 100, notes: [], band: band('piano', 'piano', 'upright') }) },
