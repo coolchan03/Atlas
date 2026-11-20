@@ -7,6 +7,7 @@ import { callLimitMs } from './timeLimit';
 import { beginWork, currentWork, endWork, giveUpReason, noteReading, noteWriting } from './liveWork';
 import { maxCharsFor, repairCutJson, runawayReason } from './runaway';
 import { writeLessonInPieces } from './lessonWriter';
+import { remoteActive } from '../study/remoteAsk';
 import { SLOW_WRITER_TPS, activeWritingSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
@@ -290,7 +291,7 @@ export type Rewrite = keyof typeof REWRITES;
 export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, (ctl) => writeSquare({ courseId: course.id, key, rewrite: opts.rewrite }, ctl), { priority: opts.background ? 0 : 1, limitMs: 2 * callLimit() + 60_000, onAbort: stopModel });
+  return enqueue(`${course.id}:${key}`, (ctl) => writeSquare({ courseId: course.id, key, rewrite: opts.rewrite }, ctl), { priority: opts.background ? 0 : 1, limitMs: writesInPieces(course.squares.find((s) => s.key === key)?.format ?? '') ? Math.max(2 * callLimit() + 60_000, 45 * 60_000) : 2 * callLimit() + 60_000, onAbort: stopModel });
 }
 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
@@ -307,6 +308,9 @@ async function standardsFlags(course: Course, query: string): Promise<string> {
     return controllingNote(controllingReport({ entity, asOfYear: yearsAsked(`${query} ${course.topic}`)[0], documents: docs.map((d) => ({ name: d.name, year: yearOf(d.name) })) }));
   } catch { return ''; }
 }
+
+/** True when a square is written in pieces: a lesson, on a model that writes slowly here (a server model is fast and is asked once). */
+const writesInPieces = (format: string): boolean => format === 'lesson' && activeWritingSpeed() > 0 && activeWritingSpeed() < SLOW_WRITER_TPS && !remoteActive();
 
 /** What writeBody needs to ask the model for one square. */
 interface BodyInput { course: Course; key: string; square: PlannedSquare; asked: PlannedSquare; before: string[]; excerpts: Excerpt[]; bank: string; query: string; rewrite?: Rewrite }
@@ -325,10 +329,11 @@ async function writeBody(input: BodyInput, ctl: JobControl): Promise<SquareConte
   };
   const whole = () => askUntil(contentMessages(request), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled, maxChars: maxCharsFor(asked.format) });
   // A slow model writes a lesson in small pieces (outline, then two sections at a time): each piece finishes and is kept. If the pieces cannot be made, the whole lesson is asked for in one call as before.
-  const slow = asked.format === 'lesson' && activeWritingSpeed() > 0 && activeWritingSpeed() < SLOW_WRITER_TPS;
+  const slow = writesInPieces(asked.format);
   return slow ? await writeLessonInPieces(request, {
     ask: (prompt, read, how) => askUntil(prompt, read, { ...how, stopped: ctl.cancelled }),
     save: (lesson) => useTopics.getState().setContent(course.id, key, withoutSources(lesson, excerpts, bank)),
+    discard: () => useTopics.getState().clearContent(course.id, key),
     stopped: ctl.cancelled,
   }).catch((e) => { if (ctl.cancelled()) throw e; logger.warn(`[LESSON] writing in pieces failed (${String((e as Error)?.message || e).slice(0, 160)}): asking for the whole lesson`); return whole(); }) : await whole();
 }

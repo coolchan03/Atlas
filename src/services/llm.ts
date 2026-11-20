@@ -238,7 +238,7 @@ class LLMService {
             // Same device-RAM cap as OpenCL; 99 means "all layers that are safe here".
             const deviceInfo = await hardwareService.getDeviceInfo();
             const requestedLayers = getGpuLayersForDevice(deviceInfo.totalMemory,
-              useAppStore.getState().settings.gpuLayers || 99,
+              nGpuLayers || 99, // this model's own layer count (what its speed test kept), not only the global setting
               { modelBytes: fileSize, availableBytes: deviceInfo.availableMemory });
             requireGpuLayers('vulkan', requestedLayers);
             const contextLength = Math.min(ctxLen, 32768);
@@ -389,7 +389,7 @@ class LLMService {
         // the ≤4GB floor does (the caps used to zero the NPU on 6GB phones too).
         if (!(await hardwareService.getSoCInfo()).hasNPU && strictAcceleration)
           throw new Error('HTP/NPU not supported by this device');
-        safeGpuLayers = deviceInfo.totalMemory / BYTES_PER_GB > 4 ? (settings?.gpuLayers || 99) : 0;
+        safeGpuLayers = deviceInfo.totalMemory / BYTES_PER_GB > 4 ? (params.nGpuLayers || 99) : 0;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);

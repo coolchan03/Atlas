@@ -81,7 +81,7 @@ describe('finding the best settings', () => {
   it('tries fewer, more and all GPU layers for an accelerated winner (never the count already in use), and nothing for the CPU', () => {
     const npu = { id: 'htp', label: 'NPU', backend: 'htp' as any, threads: 6 };
     expect(layerOptions(npu, 20).map((o) => o.extra)).toEqual([{ gpuLayers: 10 }, { gpuLayers: 30 }, { gpuLayers: 99 }]);
-    expect(layerOptions(npu, 99).map((o) => o.extra?.gpuLayers)).toEqual([50, 149]);
+    expect(layerOptions(npu, 99).map((o) => o.extra?.gpuLayers)).toEqual([50]); // 99 already means all, so "more" and "all" are not tried again
     expect(layerOptions({ ...npu, backend: 'cpu' as any }, 20)).toEqual([]);
     expect(layerOptions({ ...npu, backend: 'auto' as any }, 20)).toEqual([]);
   });

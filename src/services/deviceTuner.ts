@@ -73,7 +73,7 @@ const ACCELERATED: string[] = [INFERENCE_BACKENDS.HTP, INFERENCE_BACKENDS.OPENCL
  */
 export function layerOptions(base: TuneOption, current: number): TuneOption[] {
   if (!ACCELERATED.includes(String(base.backend))) return [];
-  const counts = [...new Set([Math.max(4, Math.round(current / 2)), Math.round(current * 1.5), 99])].filter((n) => n !== current && n >= 1);
+  const counts = [...new Set([Math.max(4, Math.round(current / 2)), Math.round(current * 1.5), 99].map((n) => Math.min(99, n)))].filter((n) => n !== current && n >= 1);
   return counts.map((n) => ({ ...base, id: `${base.id}+layers-${n}`, label: `${base.label}, ${n >= 99 ? 'all' : n} GPU layers`, extra: { ...base.extra, gpuLayers: n } }));
 }
 
@@ -158,6 +158,11 @@ function markMtp(modelId: string, on: boolean): void {
   if (downloadedModels.some((m) => m.id === modelId)) setDownloadedModels(downloadedModels.map((m) => (m.id === modelId && m.engine === 'llama' ? { ...m, embeddedMtp: on } : m)));
 }
 
+/** Puts the model back as it was unless the MTP try won. */
+function undoMtpTry(modelId: string, model: { embeddedMtp?: boolean }, chosen: TuneResult | null): void {
+  if (!chosen?.option.extra?.mtp) markMtp(modelId, !!model.embeddedMtp);
+}
+
 /** Drafting with built-in MTP is saved on the model only when it won; otherwise the model is as it was. */
 async function restoreMtp(modelId: string, model: { draftPath?: string; embeddedMtp?: boolean }, best: TuneResult | null): Promise<void> {
   if (model.embeddedMtp || model.draftPath) return;
@@ -212,6 +217,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
     await runList(refine, { done: options.length, total: options.length + refine.length, prefix: 'memory: ' });
     // A memory-setting refinement is kept only when clearly faster than the plain winner it was built from.
     chosen = cancelFlag ? null : keepRefinement(results, first);
+    undoMtpTry(modelId, model, chosen); // a lost MTP try is undone before the batch round, which must not run with it
     // The longer test: how fast a long prompt is read with other batch sizes. The winner so far is timed again on the same long prompt first.
     if (opts.deep && chosen && !cancelFlag) {
       const base = chosen.option;
@@ -223,6 +229,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   } finally {
     // Whatever happens, the settings end as the best one (below) or as they were, and an earlier saved result is not lost.
     restore();
+    undoMtpTry(modelId, model, chosen);
     if (cancelFlag || !chosen) useTuned.getState().setMemory(modelId, earlierMemory);
   }
   const best = cancelFlag ? null : chosen;

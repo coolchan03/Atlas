@@ -11,10 +11,16 @@ type Lesson = Extract<SquareContent, { kind: 'lesson' }>;
 export interface LessonIO {
   ask: <T>(prompt: { system: string; user: string }, read: (raw: string) => T | null, how: { what: string; maxChars: number }) => Promise<T>;
   save: (lesson: Lesson) => void;
+  /** Takes back what was saved, when the writing ends without a lesson (stopped, or out of time). */
+  discard: () => void;
   stopped: () => boolean;
 }
 
 export async function writeLessonInPieces(base: SquareRequest, io: LessonIO): Promise<Lesson> {
+  try { return await pieces(base, io); } catch (e) { io.discard(); throw e; } // a half-written lesson must not stand in for a finished one
+}
+
+async function pieces(base: SquareRequest, io: LessonIO): Promise<Lesson> {
   const outline = await io.ask(contentMessages({ ...base, shape: OUTLINE_SHAPE, part: outlinePart, excerpts: base.excerpts?.slice(0, 3) }), parseOutline, { what: 'the outline of the lesson', maxChars: 3000 });
   logger.log(`[LESSON] in pieces: ${outline.length} sections, ${Math.ceil(outline.length / 2)} calls for them`);
   const sections: Lesson['sections'] = [];

@@ -85,7 +85,13 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {
   // The chosen background model is loaded here, once any chat reply has finished (never while one is being written).
-  if (onBackground) await useBackgroundModelNow().catch((e) => logger.warn(`[AI] the background model could not be loaded, using the model that is loaded: ${String((e as Error)?.message || e)}`));
+  if (onBackground) {
+    try { await useBackgroundModelNow(); } catch (e) {
+      // The background model could not be loaded (memory held by speech or images, a load error): the usual route to a loaded model takes over.
+      logger.warn(`[AI] the background model could not be loaded, using the chat model: ${String((e as Error)?.message || e)}`);
+      try { await callHook(HOOKS.ensureTextModel, null); } catch (error) { try { await require('../atlasTools/models').forceLoadTextModel(); } catch { throw error; } }
+    }
+  }
   progress?.('reading', '');
   const asked = Date.now();
   const purpose = system.replace(/\s+/g, ' ').slice(0, 60);
@@ -104,9 +110,8 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
     const perf = llmService.getPerformanceStats();
     logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${(perf.lastTimeToFirstToken / 1000).toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars`);
   } catch { /* the line is a convenience */ }
-  if (onBackground) scheduleChatModelRestore();
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  });
+  }).finally(() => { if (onBackground) scheduleChatModelRestore(); }); // also after a failure: the chat model comes back
 }
 
 const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;

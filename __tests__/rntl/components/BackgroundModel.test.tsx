@@ -37,6 +37,8 @@ describe('the background model', () => {
       expect(activeWritingSpeed()).toBeCloseTo(17.2); // the checks follow the model that does the writing
       expect(await useBackgroundModelNow()).toBe(true);
       expect(ensureTextModel).toHaveBeenCalledWith('small');
+      expect(useAppStore.getState().activeModelId).toBe('big'); // the chat choice is never changed by loading the background model
+      useAppStore.setState({ loadedTextModelId: 'small' });
       scheduleChatModelRestore();
       await jest.advanceTimersByTimeAsync(46_000);
       expect(ensureTextModel).toHaveBeenLastCalledWith('big');
