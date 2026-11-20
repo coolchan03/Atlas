@@ -535,7 +535,7 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
 }
 
 // ------------------------------------------------------------------ exams
-const EXAM_SYSTEM = 'You answer exam questions. Be accurate and brief: 2 to 4 plain sentences. If you are not sure, say so.';
+const EXAM_SYSTEM = 'You answer exam questions. Answer directly with the specific facts, numbers and terms the question asks for, in 2 to 4 plain sentences. Never refuse: if you are unsure, give your best answer and say you are unsure.';
 
 /** Answers an exam question in one mode: the model alone, with searched sources, or with sources and the notes stored so far. */
 function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {

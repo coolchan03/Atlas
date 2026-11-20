@@ -10,7 +10,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { InputField, Workflow } from './engine';
 
-export interface CustomHelper { id: string; title: string; summary: string; help: string; steps: string; createdAt: number }
+export interface CustomHelper { id: string; title: string; summary: string; help: string; steps: string; createdAt: number; /** Made by the chat AI (make_helper), so the list can say so. */ madeByAi?: boolean }
 interface State { helpers: CustomHelper[]; save: (h: Omit<CustomHelper, 'createdAt'>) => void; remove: (id: string) => void }
 
 export const useCustomHelpers = create<State>()(persist((set) => ({
@@ -58,7 +58,7 @@ export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
       return { outputs: [...ctx.outputs, result] };
     } }));
   return {
-    id: `custom-${h.id}`, title: h.title, summary: h.summary || 'A helper you made.',
+    id: `custom-${h.id}`, title: h.madeByAi ? `${h.title} (made by the AI)` : h.title, summary: h.summary || 'A helper you made.',
     input: { help: h.help || 'Paste or type what this helper should work on.', minChars: 1, fields: parsed.fields,
       make: (t, f) => ({ text: t, fields: f, fieldLabels: parsed.fields.map((x) => x.label), answers: [], outputs: [] }) },
     steps: [...steps,

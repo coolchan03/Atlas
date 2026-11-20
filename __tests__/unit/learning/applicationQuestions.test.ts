@@ -67,3 +67,15 @@ describe('goals and corrections as hot cards', () => {
     expect(ctx.text).not.toMatch(/Boil water for one minute/); // an unrelated checked note stays out
   });
 });
+
+describe('a multiple-choice question is asked with its choices', () => {
+  it('puts the choices in the question and tells the model to answer with the choice\'s text', () => {
+    const { questionText } = require('../../../src/learning/questionImport');
+    const q = { question: 'Which method spreads cost evenly?', answer: 'Straight-line', alternatives: [], options: ['Straight-line', 'Declining balance', 'Units of production'] };
+    const text = questionText(q);
+    expect(text).toContain('A) Straight-line');
+    expect(text).toContain('C) Units of production');
+    expect(text).toMatch(/full text of the correct choice/);
+    expect(questionText({ question: 'What is 2+2?', answer: '4', alternatives: [] })).toBe('What is 2+2?');
+  });
+});

@@ -3,6 +3,7 @@
  * asked for once more before giving up with a message the person can act on.
  */
 import { askModel } from '../study/engine';
+import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
 import { contentMessages, deepenMessages, prose, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
@@ -259,11 +260,13 @@ async function writeSquare(target: { courseId: string; key: string; rewrite?: Re
     useTopics.getState().setContent(course.id, key, made);
     return made;
   }
+  const startedAt = Date.now();
   const asked = square.format === 'drill' ? { ...square, format: 'numeric' as const } : square;
   const query = subjectQuery(square);
   // The standard keeps its place when the books fill the rest, and the books share the room instead of the first one taking it.
   let excerpts: Excerpt[] = allocateExcerpts([...await projectExcerpts(course.projectId, query), ...relevantExcerpts(course.sources ?? [], query)], 7).chosen;
   if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = allocateExcerpts([...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)], 7).chosen;
+  const foundAt = Date.now();
   const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], subjectQuery(square))) : '';
   const content = await askUntil(contentMessages({
     courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
@@ -277,6 +280,8 @@ async function writeSquare(target: { courseId: string; key: string; rewrite?: Re
   // The first pass is a complete lesson: it is saved at once, so it can be read while the optional deepening goes on (or if that fails).
   if (ctl.cancelled()) throw new Error('Stopped.'); // the person pressed Stop (or it timed out) while the model was answering: save nothing
   const draft = withoutSources(content, excerpts, bank);
+  // Where the time went, for the Debug Logs screen: finding the passages, then the model writing.
+  logger.log(`[LESSON] "${square.title.slice(0, 50)}" (${square.format}): ${foundAt - startedAt} ms finding ${excerpts.length} passages, ${Date.now() - foundAt} ms writing`);
   useTopics.getState().setContent(course.id, key, draft);
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.

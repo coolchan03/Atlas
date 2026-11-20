@@ -7,6 +7,7 @@ import { writeDocx } from '../services/docxExport';
 import { shareItem } from '../utils/shareItem';
 import { appSearch, verdictText, verifyLines, type LineVerdict } from './verifyLines';
 import { sourcePage } from './service';
+import { missingTerms } from './gaps';
 import { readAloud, useReadAloud } from '../atlasVoice/readAloud';
 import { ttsAvailable } from '../atlasVoice/tts';
 import type { SquareContent } from './formats';
@@ -27,6 +28,7 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
   const [checking, setChecking] = useState(false);
   const lesson = lessonText(content);
   const unbacked = unbackedLines(content, passages);
+  const gaps = content?.kind === 'lesson' ? missingTerms(lesson, passages.map((p) => p.text)) : [];
   // A verdict belongs to the line it was made for: when the lesson is written again the lines change, so the old verdicts go.
   const lineKey = unbacked.join('\n');
   useEffect(() => { setVerdicts(null); }, [lineKey]);
@@ -55,6 +57,7 @@ export function CitedFold({ passages, content, projectId }: { passages: Passage[
           <Text style={{ color: colors.textSecondary }}>{page.text}</Text>
         </View>
       )}
+      {gaps.length > 0 && <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-gaps">Your sources stress these, but the lesson does not use them: {gaps.join(', ')}. A hint, not a mistake.</Text>}
       {unbacked.length > 0 && (
         <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="square-unbacked">
           <Text style={[styles.meta, { color: colors.textMuted }]}>Not found in your sources (from the AI's own knowledge, so check it)</Text>

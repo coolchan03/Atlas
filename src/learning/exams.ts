@@ -323,12 +323,12 @@ export function retestNote(history: ExamResult[]): string {
 }
 
 // ------------------------------------------------------------------ retests and answer history
-export interface Attempt { at: string; mode: ExamMode; correct: boolean; reason?: ExamReason; answer?: string; version: string }
+export interface Attempt { at: string; mode: ExamMode; correct: boolean; reason?: ExamReason; answer?: string; missing?: string[]; version: string }
 
 /** Every recorded attempt at one question, newest first (older scoring versions are kept, and marked, never mixed into the schedule). */
 export function attemptsFor(history: ExamResult[], itemId: string): Attempt[] {
   return history
-    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, reason: i.reason, answer: i.answer, version: r.version })))
+    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, reason: i.reason, answer: i.answer, missing: i.missing, version: r.version })))
     .sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 

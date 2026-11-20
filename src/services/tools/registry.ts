@@ -264,6 +264,15 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'make_helper', name: 'make_helper', displayName: 'Make a multi-step helper', icon: 'list',
+    description: "Make a reusable multi-step helper for the user, when they ask for a repeatable job (for example 'a reply writer', 'a meeting recap', 'a study plan from notes'). A helper is a name plus step lines, one per line: 'field: <label> | <choice>, <choice>' (asked first; leave off the choices for a typed answer), 'ask: <question> | <choice>, <choice>' (a choice part-way) and 'ai: <one instruction>'. Use at least one ai: line and at most 8 lines. It is saved in Multi-step helpers for the user to read and run; it can only use the text and answers the user gives it.",
+    parameters: {
+      title: { type: 'string', description: 'Short name, 2 to 5 words', required: true },
+      steps: { type: 'string', description: 'The step lines, one per line', required: true },
+      summary: { type: 'string', description: 'One sentence about what it does (optional)' },
+    },
+  },
+  {
     id: 'my_location', name: 'my_location', displayName: 'My location',
     description: "The user's GPS position (works offline) and the distance and direction to their saved places (camp, car, water...). Use for 'where am I', 'how far to camp', 'which way is the car'. It gives coordinates only: it does not know what is nearby, so never name airports, towns or landmarks from it.", icon: 'map-pin',
     parameters: {},

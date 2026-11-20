@@ -90,10 +90,13 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
         <View key={i.id} style={s.row}>
           <View style={s.grow}>
             <Text style={[s.note, { color: colors.text }]}>{i.question}</Text>
-            {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a) => (
-              <Text key={`${a.at}:${a.mode}`} style={[s.small, { color: colors.textMuted }]}>
-                {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
-              </Text>
+            {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a, k) => (
+              <View key={`${a.at}:${a.mode}`}>
+                <Text style={[s.small, { color: colors.textMuted }]}>
+                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
+                </Text>
+                {k === 0 && !a.correct && !!a.answer && <Text style={[s.small, { color: colors.textMuted }]} testID={`exam-said-${i.id}`}>It said: "{a.answer.slice(0, 160)}"{a.missing?.length ? ` · missing: ${a.missing.join(', ').slice(0, 120)}` : ''}</Text>}
+              </View>
             ))}
             {due.includes(i.id) && <Text style={[s.small, { color: colors.primary }]}>Due for a retest</Text>}
           </View>

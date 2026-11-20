@@ -2,7 +2,7 @@
  * Puts reviewed, normalized questions where the person chose: the exam (measured, never studied), the study questions
  * (the learner researches them), or a split with some held back for the exam. Repeats of anything already there are skipped.
  */
-import { divide, toExpected, withoutRepeats, type ImportTarget, type NormalizedQuestion } from './questionImport';
+import { divide, questionText, toExpected, withoutRepeats, type ImportTarget, type NormalizedQuestion } from './questionImport';
 import { exams } from './engine';
 import { newItem, useLearningStore } from './store';
 
@@ -15,7 +15,7 @@ export function addImportedQuestions(subjectId: string, items: NormalizedQuestio
   const { kept, repeats } = withoutRepeats(items, existing);
   const { exam, study } = divide(kept, target);
   const topic = store.getConfig(subjectId).topic;
-  exam.forEach((q) => exams.addItem({ subjectId, topic: q.topic ?? topic, question: q.question, expected: toExpected(q) }));
-  if (study.length) store.addItems(subjectId, study.map((q) => newItem(q.question, state.round || 1, 'approved')));
+  exam.forEach((q) => exams.addItem({ subjectId, topic: q.topic ?? topic, question: questionText(q), expected: toExpected(q) }));
+  if (study.length) store.addItems(subjectId, study.map((q) => newItem(questionText(q), state.round || 1, 'approved')));
   return { exam: exam.length, study: study.length, repeats };
 }
