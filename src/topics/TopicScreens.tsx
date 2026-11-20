@@ -30,7 +30,7 @@ import { WriteNowPanel } from './WriteNowPanel';
 import { matchExam, type ExamCode } from '../cpa/blueprints';
 import { setupCpaExam } from '../cpa/setup';
 import { ensureExamCourse } from '../cpa/course';
-import { AHEAD_CHOICES, aheadFor, prepareAhead, usePrepare } from './prepare';
+import { AHEAD_CHOICES, aheadFor, prepareAhead, useBatch, usePrepare } from './prepare';
 import { keepMissed } from './review';
 import { useLayoutClass } from '../hooks/useLayoutClass';
 import { ResizableSplit } from '../components/ResizableSplit';
@@ -318,8 +318,8 @@ export const TopicBoardScreen: React.FC = () => {
   const { twoPane } = useLayoutClass();
   const [picked, setPicked] = useState<string | null>(null);
   const prep = usePrepare();
+  const writingNow = useBatch((b) => b.courseId === courseId && !!b.working); // while "write now" runs, its own line is the only count shown
   const doneCount = course ? Object.keys(course.progress).length : 0;
-  // Write the next lessons in the background whenever the board is opened, a square is finished, or the setting or difficulty changes.
   React.useEffect(() => { if (course) void prepareAhead(courseId); }, [courseId, doneCount, course?.difficulty, course?.prepareAhead]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!course) return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Header title="Course" onBack={() => navigation.goBack()} /></SafeAreaView>;
 
@@ -346,7 +346,7 @@ export const TopicBoardScreen: React.FC = () => {
         </View>
         <WriteNowPanel course={course} />
         <AddSquarePanel course={course} currentKey={spaces[current]?.key} /><ChangeBoardPanel course={course} />
-        {prep.courseId === course.id && !!prep.working && (
+        {prep.courseId === course.id && !!prep.working && !writingNow && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
         )}
         {prep.courseId === course.id && !prep.working && !!prep.error && (

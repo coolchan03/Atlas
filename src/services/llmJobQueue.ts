@@ -6,6 +6,7 @@
  * for a running chat reply to finish first.
  */
 import { asBackground } from './backgroundWork';
+import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 
 let tail: Promise<unknown> = Promise.resolve();
 
@@ -21,11 +22,17 @@ async function waitForChat(maxMs: number, shouldStop?: () => boolean): Promise<v
   }
 }
 
+/** How many background jobs are queued or running: the screen stays on from the first to the last (a lesson, music, the briefing, learning, an exam). */
+let jobsInFlight = 0;
+
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
+  if (jobsInFlight++ === 0) holdScreenAwake('background-ai');
   const run = tail.then(async () => {
     await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
     return asBackground(job);
   });
+  const done = () => { if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); };
+  run.then(done, done);
   tail = run.catch(() => undefined);
   return run;
 }

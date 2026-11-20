@@ -66,6 +66,8 @@ async function askBounded(system: string, user: string, overallMs = callLimit())
   let timer: ReturnType<typeof setInterval> | undefined;
   const readMs = readLimitMs();
   const token = beginWork();
+  const asked = Date.now();
+  logger.log(`[LESSON] asking the model: ${system.length + user.length} characters in the prompt, limits read ${Math.round(readMs / 1000)} s, overall ${Math.round(overallMs / 1000)} s`);
   const limit = new Promise<never>((_, reject) => {
     timer = setInterval(() => {
       const why = giveUpReason(currentWork(), Date.now(), { readMs, stallMs: STALL_MS, overallMs });
@@ -77,7 +79,12 @@ async function askBounded(system: string, user: string, overallMs = callLimit())
     (timer as { unref?: () => void }).unref?.();
   });
   try {
-    return await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(token); else noteWriting(token, content); }), limit]);
+    const answer = await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(token); else noteWriting(token, content); }), limit]);
+    logger.log(`[LESSON] answered in ${((Date.now() - asked) / 1000).toFixed(1)} s, ${answer.length} characters`);
+    return answer;
+  } catch (e) {
+    logger.warn(`[LESSON] the call failed after ${((Date.now() - asked) / 1000).toFixed(1)} s: ${String((e as Error)?.message || e).slice(0, 300)}`);
+    throw e;
   } finally { if (timer) clearInterval(timer); endWork(token); }
 }
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
@@ -91,6 +98,7 @@ async function askUntil<T>(prompt: { system: string; user: string }, read: (raw:
     const raw = await askBounded(system, attempt ? `${user}\n\nYour last answer could not be read. Reply with ONLY the JSON, nothing else.` : user);
     const value = read(raw);
     if (value) return value;
+    logger.warn(`[LESSON] ${what}: the reply could not be read (try ${attempt + 1} of ${MAX_TRIES}); it began: ${raw.slice(0, 200).replace(/\s+/g, ' ')} ... and ended: ${raw.slice(-120).replace(/\s+/g, ' ')}`);
   }
   throw new Error(`The AI did not write ${what} in a form Atlas can use. Try again, or use a bigger model.`);
 }

@@ -54,3 +54,16 @@ describe('telling reading from writing, and slow from stuck', () => {
     expect(currentWork().chars).toBe(13);
   });
 });
+
+describe('the screen stays on while a lesson is written', () => {
+  it('holds the screen for the whole job and lets go afterwards', async () => {
+    jest.resetModules();
+    const { screenAwakeReasons } = require('../../../src/atlasTools/runtimePower');
+    const queue = require('../../../src/topics/generationQueue');
+    let seen: string[] = [];
+    await queue.enqueue('k', async () => { seen = screenAwakeReasons(); return 1; }, 1);
+    expect(seen).toContain('lesson-writing');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screenAwakeReasons()).not.toContain('lesson-writing');
+  });
+});

@@ -27,11 +27,12 @@ function course() {
   return { id, useTopics, prepare: require('../../src/topics/prepare') };
 }
 
-it('writes the next few squares now, and lists the chapters with how many are written', async () => {
+it('writes squares now, and lists the chapters with how many are written', async () => {
   const { id, useTopics, prepare } = course();
   const get = () => useTopics.getState().courses.find((c: { id: string }) => c.id === id);
-  expect(prepare.nextMissing(get(), 4)).toEqual(['a1', 'a2', 'a3', 'b1']);
-  expect(await prepare.writeNow(id, prepare.nextMissing(get(), 4), 'the next 4')).toBe(4);
+  const four = prepare.missingAll(get()).slice(0, 4);
+  expect(four).toEqual(['a1', 'a2', 'a3', 'b1']);
+  expect(await prepare.writeNow(id, four, 'four squares')).toBe(4);
   expect(Object.keys(get().content).sort()).toEqual(['a1', 'a2', 'a3', 'b1']);
   expect(prepare.unitsOf(get())).toEqual([{ unit: 'Chapter 1: Alpha', total: 3, written: 3 }, { unit: 'Chapter 2: Beta', total: 3, written: 1 }]);
   expect(prepare.useBatch.getState()).toMatchObject({ total: 4, done: 4, failed: [] });

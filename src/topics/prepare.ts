@@ -30,6 +30,7 @@ export function nextToPrepare(course: Course, count: number): string[] {
 }
 
 let running = false;
+let batchRunning = false;
 
 /** Starts writing the next lessons of a course (if it is not already), one after another. Safe to call whenever the board or progress changes. */
 export async function prepareAhead(courseId: string): Promise<void> {
@@ -42,8 +43,8 @@ export async function prepareAhead(courseId: string): Promise<void> {
       const wanted = aheadFor(course);
       const todo = nextToPrepare(course, wanted);
       if (!todo.length) { usePrepare.setState({ courseId, working: '', ready: wanted, total: wanted, error: '' }); break; }
-      // A lesson someone is waiting for is being written: let it finish before starting another one in the background.
-      if (personWaiting()) { await new Promise((r) => setTimeout(r, 1000)); continue; }
+      // A lesson someone is waiting for, or a "write now" batch, is being written: one writer at a time, so the screen has one count and one list.
+      if (personWaiting() || batchRunning) { await new Promise((r) => setTimeout(r, 1000)); continue; }
       usePrepare.setState({ courseId, working: todo[0], ready: wanted - todo.length, total: wanted, error: '' });
       try { await squareContent(course, todo[0], { background: true }); }
       catch (e) { usePrepare.setState({ working: '', error: String((e as Error)?.message || e) }); break; }
@@ -57,12 +58,6 @@ export async function prepareAhead(courseId: string): Promise<void> {
 // ------------------------------------------------------------------ write now
 /** The squares of a course still to be written (not played, not made in code, no content yet), in board order. */
 const missing = (course: Course): string[] => course.squares.filter((s) => !course.content[s.key] && !MADE_IN_CODE.includes(s.format)).map((s) => s.key);
-
-/** The next `count` squares that still need writing, from the first one not played yet. */
-export function nextMissing(course: Course, count: number): string[] {
-  const todo = new Set(missing(course));
-  return course.squares.filter((s) => !course.progress[s.key] && todo.has(s.key)).slice(0, Math.max(0, count)).map((s) => s.key);
-}
 
 /** Every square of one chapter (unit) that still needs writing. */
 export function missingInUnit(course: Course, unit: string): string[] {
@@ -90,7 +85,6 @@ interface BatchState { courseId: string; label: string; total: number; done: num
 /** What "write now" is doing, for the board: which square, how many are done, and which ones failed (and why the first one did). */
 export const useBatch = create<BatchState & { error: string }>(() => ({ courseId: '', label: '', total: 0, done: 0, working: '', failed: [], error: '' }));
 
-let batchRunning = false;
 let batchCancelled = false;
 
 /** Stops "write now" after the square being written is stopped: nothing more is started, and what is already written stays. */

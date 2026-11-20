@@ -205,6 +205,17 @@ async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { r
 
 /** Writes a tune for a request: the composer agent first, then its melody alone, then the built-in composer when neither works. */
 export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
+  return withScreenOn(() => composeMusicNow(request, options));
+}
+
+/** The screen stays on while the AI writes the tune (it can take minutes on a slow phone). */
+async function withScreenOn<T>(work: () => Promise<T>): Promise<T> {
+  let power: { holdScreenAwake: (r: string) => void; releaseScreenAwake: (r: string) => void } | null = null;
+  try { power = require('../atlasTools/runtimePower'); power?.holdScreenAwake('music-writing'); } catch { power = null; }
+  try { return await work(); } finally { power?.releaseScreenAwake('music-writing'); }
+}
+
+async function composeMusicNow(request: string, options: ComposeOptions): Promise<Composed> {
   const seconds = clampSeconds(options.seconds);
   const style = options.style ?? styleFromText(request) ?? 'focus';
   const brief = composerBrief(request, style, { seconds, instruments: options.instruments });
@@ -233,6 +244,10 @@ export async function composeMusic(request: string, options: ComposeOptions = {}
  * through the same checks as any other. When the composer cannot, the built-in composer makes the next variant of the same style.
  */
 export async function composeVariation(original: MusicScore, options: ComposeOptions & { mood?: StyleMood; variant?: number } = {}): Promise<Composed> {
+  return withScreenOn(() => composeVariationNow(original, options));
+}
+
+async function composeVariationNow(original: MusicScore, options: ComposeOptions & { mood?: StyleMood; variant?: number }): Promise<Composed> {
   const style = options.mood ?? options.style ?? 'focus';
   const plan = inferPlan(original, 4);
   const fallback = (why: string): Composed => ({ score: composeStyled(original.title, style, { variant: (options.variant ?? 0) + 1 }), via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a variation (${why}), so the built-in ${styleLabel(style)} composer made the next variant.` });

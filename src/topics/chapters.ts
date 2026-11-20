@@ -5,10 +5,12 @@
  */
 export interface Chapter { number: number; title: string; /** How much text follows the heading before the next chapter. */ size: number; /** The first lines of the chapter, for naming it. */ lead?: string; /** What the chapter is mainly about in one to three words ("Cash", "Liabilities"), when it has been worked out. */ subject?: string }
 
-const HEADING = /^\s*(?:\(p\. \d+\)\s*)?(chapter|unit|module|lesson|part)\s+(\d{1,3}|[ivxlc]{1,6})\b[\s:.\-–—]*(.{0,90})$/i;
+const HEADING = /^\s*(?:\(p\. \d+\)\s*)?(chapter|unit|module|lesson|part)\s+(\d{1,3}|[ivxlc]{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b[\s:.\-–—]*(.{0,90})$/i;
 const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 const toNumber = (token: string): number => {
   if (/^\d+$/.test(token)) return Number(token);
+  if (WORDS.includes(token.toLowerCase())) return WORDS.indexOf(token.toLowerCase());
   let total = 0; const t = token.toLowerCase();
   for (let i = 0; i < t.length; i++) total += (ROMAN[t[i]] < (ROMAN[t[i + 1]] ?? 0) ? -1 : 1) * ROMAN[t[i]];
   return total;
@@ -32,7 +34,7 @@ const MAX_DETECTED_CHAPTERS = 400;
 
 export function findChapters(text: string): Chapter[] {
   const lines = text.replace(/\r/g, '').split('\n');
-  const heads: Array<{ number: number; title: string; at: number }> = [];
+  const heads: Array<{ number: number; title: string; at: number; kind: string }> = [];
   let offset = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -41,13 +43,19 @@ export function findChapters(text: string): Chapter[] {
       let title = m[3].trim().replace(/\.{2,}.*$/, '').replace(/\s+\d+$/, '').trim();
       // Many books put the title on the line after "Chapter 7": take it from there.
       if (!title) title = titleBelow(lines, i + 1);
-      heads.push({ number: toNumber(m[2]), title, at: offset });
+      heads.push({ number: toNumber(m[2]), title, at: offset, kind: m[1].toLowerCase() });
     }
     offset += line.length + 1;
   }
   // Keep each heading that has a real body; when the same number appears twice (contents, then the chapter), the later one with a body wins.
-  const withBody = heads.map((h, i) => ({ ...h, size: (heads[i + 1]?.at ?? text.length) - h.at }));
-  const real = withBody.filter((h) => h.size >= MIN_BODY);
+  // A chapter's body runs to the next heading of the SAME kind: a "Part 1" or "Lesson 2" inside a chapter must not cut the chapter short
+  // (that dropped chapters whose first section started soon after their heading) or take a chapter's number.
+  const withBody = heads.map((h, i) => ({ ...h, size: (heads.slice(i + 1).find((n) => n.kind === h.kind)?.at ?? text.length) - h.at }));
+  const realAll = withBody.filter((h) => h.size >= MIN_BODY);
+  // The chapters are the heading kind that numbers the most distinct things (chapters, rather than the parts inside them).
+  const distinct = (kind: string) => new Set(realAll.filter((h) => h.kind === kind).map((h) => h.number)).size;
+  const kinds = [...new Set(realAll.map((h) => h.kind))].sort((a, b) => distinct(b) - distinct(a) || (a === 'chapter' ? -1 : b === 'chapter' ? 1 : 0));
+  const real = realAll.filter((h) => h.kind === kinds[0]);
   const byNumber = new Map<number, (typeof real)[number]>();
   for (const h of real) { const kept = byNumber.get(h.number); if (!kept || h.size > kept.size) byNumber.set(h.number, h); }
   const clean = (t: string) => t.replace(/\(p\. \d+\)/g, ' ').replace(/\s+/g, ' ').trim();

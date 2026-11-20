@@ -8,6 +8,13 @@
  */
 const DEFAULT_JOB_LIMIT_MS = 8 * 60 * 1000;
 
+const keepAwake = (on: boolean): void => {
+  try {
+    const power = require('../atlasTools/runtimePower');
+    if (on) power.holdScreenAwake('lesson-writing'); else power.releaseScreenAwake('lesson-writing');
+  } catch { /* the screen setting is not part of the queue */ }
+};
+
 export type JobPhase = 'waiting' | 'writing';
 /** Given to the work so an abandoned job can see it and stop: after a Stop or a time-out it must not call the model again or save anything. */
 export interface JobControl { cancelled: () => boolean }
@@ -44,7 +51,7 @@ function settle(job: Job, how: () => void, afterAbort?: Promise<unknown>): void 
   known.delete(job.key);
   how();
   // The slot is handed to the next job only once the model has really stopped, so two generations never share the single on-device model.
-  const release = () => { if (current === job) current = null; changed(); pump(); };
+  const release = () => { if (current === job) { current = null; keepAwake(false); } changed(); pump(); };
   if (afterAbort) void afterAbort.then(release, release); else release();
 }
 
@@ -62,6 +69,7 @@ function pump(): void {
   const [job] = pending.splice(best, 1);
   current = job;
   job.phase = 'writing';
+  keepAwake(true); // the screen stays on for the whole lesson: finding passages, loading the model, every call
   // The job is forgotten before its result is handed over, so asking for the same lesson again afterwards writes it again.
   if (job.limitMs > 0 && Number.isFinite(job.limitMs)) {
     job.timer = setTimeout(() => {

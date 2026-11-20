@@ -18,6 +18,7 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { loadPreviousSession } from './src/utils/appLog';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
@@ -57,6 +58,17 @@ startCtxRecovery();
 startTextAppearance(); // font and text size apply to every Text without a restart
 
 LogBox.ignoreAllLogs(); // Suppress all logs
+
+// The app-wide log (every build): the end of the last session is kept for a crash report, and an uncaught error is written to the log before the app handles it.
+void loadPreviousSession();
+try {
+  const errorUtils = (globalThis as { ErrorUtils?: { getGlobalHandler: () => (e: unknown, fatal?: boolean) => void; setGlobalHandler: (h: (e: unknown, fatal?: boolean) => void) => void } }).ErrorUtils;
+  const previous = errorUtils?.getGlobalHandler();
+  errorUtils?.setGlobalHandler((error, fatal) => {
+    logger.error(`[UNCAUGHT${fatal ? ' FATAL' : ''}]`, error instanceof Error ? `${error.name}: ${error.message}\n${String(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error));
+    previous?.(error, fatal);
+  });
+} catch { /* the log is a convenience */ }
 
 // Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
 // is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).

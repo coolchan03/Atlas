@@ -4,12 +4,10 @@ import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { friendlyTitle } from './chapters';
 import { Fold } from '../components/Fold';
-import { cancelWriteNow, missingAll, missingInUnit, nextMissing, unitsOf, useBatch, writeNow } from './prepare';
+import { cancelWriteNow, missingAll, missingInUnit, unitsOf, useBatch, writeNow } from './prepare';
 import type { Course } from './store';
 
-const NEXT = [5, 10, 20];
-
-/** Writes squares now, instead of when you reach them: the next few, a whole chapter, or the whole course. Shows which one is being written and which failed. */
+/** Writes squares now, instead of when you reach them: a whole chapter or the whole course (how far ahead to write as you play is the setting above). Shows which one is being written and which failed. */
 export function WriteNowPanel({ course }: { course: Course }) {
   const { colors } = useTheme();
   const batch = useBatch();
@@ -26,7 +24,6 @@ export function WriteNowPanel({ course }: { course: Course }) {
     <View style={styles.box} testID="course-write-now">
       <Text style={[styles.head, { color: colors.textSecondary }]}>Write squares now</Text>
       <View style={styles.row}>
-        {NEXT.map((n) => link({ label: `Next ${n}`, onPress: () => void writeNow(course.id, nextMissing(course, n), `the next ${n}`), testID: `write-next-${n}`, disabled: !nextMissing(course, n).length }))}
         {link({ label: 'Whole course', onPress: () => void writeNow(course.id, missingAll(course), 'the whole course'), testID: 'write-all', disabled: !missingAll(course).length })}
       </View>
       {running && (

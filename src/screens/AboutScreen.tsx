@@ -12,6 +12,7 @@ import packageJson from '../../package.json';
 import { appVersionLabel } from '../utils/appVersion';
 import { useSecretTaps } from '../hooks/useSecretTaps';
 import { gatherDiagnostics } from '../atlasTools/diagnostics';
+import { gatherSupportReport, shareSupportReport } from '../atlasTools/supportReport';
 import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
 import { ModelGpuTest } from '../components/ModelGpuTest';
 import { AppUpdateCard } from '../components/settings/AppUpdateCard';
@@ -26,6 +27,13 @@ export const AboutScreen: React.FC = () => {
   const focusTrigger = useFocusTrigger();
   const [llamaRuntimeStatus, setLlamaRuntimeStatus] = useState('Checking native runtime…');
   const [copied, setCopied] = useState<string | null>(null);
+  const shareLogs = () => {
+    shareSupportReport().then((ok) => setCopied(ok ? 'Logs ready to share.' : 'Could not share the logs.')).catch(() => setCopied('Could not share the logs.'));
+  };
+  const copyLogs = () => {
+    gatherSupportReport().then((text) => { Clipboard.setString(text); setCopied('All logs copied. Paste them into a message.'); })
+      .catch(() => setCopied('Could not read the logs.'));
+  };
   const copyDiagnostics = () => {
     gatherDiagnostics().then((text) => { Clipboard.setString(text); setCopied('Copied. Paste it into a message.'); })
       .catch(() => setCopied('Could not read the diagnostics.'));
@@ -61,7 +69,13 @@ export const AboutScreen: React.FC = () => {
           <TouchableOpacity onPress={copyDiagnostics} testID="copy-diagnostics" accessibilityLabel="Copy diagnostics" style={styles.backButton}>
             <Icon name="copy" size={18} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={styles.runtimeInfo} testID="copy-diagnostics-note">{copied ?? 'Copy diagnostics: a summary of this phone and its speeds, with nothing personal in it.'}</Text>
+          <TouchableOpacity onPress={shareLogs} testID="share-logs" accessibilityLabel="Share all logs" style={styles.backButton}>
+            <Icon name="share-2" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={copyLogs} testID="copy-logs" accessibilityLabel="Copy all logs" style={styles.backButton}>
+            <Icon name="file-text" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <Text style={styles.runtimeInfo} testID="copy-diagnostics-note">{copied ?? 'Copy diagnostics: a summary of this phone and its speeds, with nothing personal in it. Share all logs (the arrow) or copy them (the page) sends everything the app wrote down about what went wrong; it can name files and topics.'}</Text>
         </View>
         <ModelGpuTest />
 

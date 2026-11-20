@@ -87,3 +87,20 @@ describe('bigger exams over several chapters', () => {
     expect(new Set(plan.squares.map((s: any) => s.key)).size).toBe(plan.squares.length);
   });
 });
+
+describe('finding every chapter', () => {
+  it('keeps a chapter whose first section starts soon after its heading, and does not let a part take a chapter number', () => {
+    const text = [
+      'Chapter 1: Basis', 'Part 1', body('basis one'), 'Part 2', body('basis two'),
+      'Chapter 2: Gains', 'Lesson 1', 'short intro', 'Lesson 2', body('gains'),
+      'Chapter 3: Leases', body('leases'),
+    ].join('\n');
+    const chapters = findChapters(text);
+    expect(chapters.map((c) => `${c.number}:${c.title}`)).toEqual(['1:Basis', '2:Gains', '3:Leases']);
+  });
+
+  it('reads chapters numbered in words and lists them from the first', () => {
+    const text = `Chapter Two: Gains\n${body('gains')}\nChapter One: Basis\n${body('basis')}\nChapter Three: Leases\n${body('leases')}`;
+    expect(findChapters(text).map((c) => c.number)).toEqual([1, 2, 3]);
+  });
+});
