@@ -46,7 +46,7 @@ import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
 import { batchStruggled, isStruggling, nextNotesBoost, restudyQuestion, REST_DAYS } from './struggle';
-import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
+import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics, type SecondOpinion } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
 const memory = new MemoryLedger(learningKnowledgeDb);
@@ -555,6 +555,14 @@ async function managerReview(agent: Agent, cfg: LearnConfig): Promise<void> {
 // ------------------------------------------------------------------ exams
 const EXAM_SYSTEM = 'You answer exam questions. Answer directly with the specific facts, numbers and terms the question asks for, in 2 to 4 plain sentences. If the question lists choices, answer with the full text of the correct choice, not just its letter. Never refuse: if you are unsure, give your best answer and say you are unsure.';
 
+/** The Judge's second opinion on an answer the word matching did not pass: are the key facts there, in other words? */
+const judgeSecondOpinion: SecondOpinion = async (item, answer) => {
+  const facts = item.expected.facts.map((alts) => `- ${alts[0]}`).join('\n');
+  const reply = await ask('You compare an answer with the facts it should contain. The answer may use different words. Reply with one word only: YES if every fact is there, PARTLY if some are, NO if none are or the answer says something contrary.', `QUESTION: ${item.question}\n\nFACTS THE ANSWER SHOULD CONTAIN:\n${facts}\n\nANSWER:\n${answer}`, 'judge');
+  const word = /\b(yes|partly|no)\b/i.exec(reply)?.[1]?.toLowerCase();
+  return word === 'yes' || word === 'partly' || word === 'no' ? word : null;
+};
+
 /** Answers an exam question in one mode: the model alone, with searched sources, or with sources and the notes stored so far. */
 function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
   return async (item, mode) => {
@@ -613,7 +621,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
     const results: ExamMetrics[] = [];
     for (const mode of EXAM_MODES) {
       onStatus(`Exam: ${mode}...`);
-      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode) });
+      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode), judge: judgeSecondOpinion });
       const memoryMB = (await require('../services/hardware').hardwareService.getProcessMemory?.().catch(() => null))?.footprintMB;
       const counts = safely(() => learningKnowledgeDb.getReliabilitySnapshot().counts, null);
       exams.saveResult(mode, { ...metrics, retest: only ? true : undefined, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });

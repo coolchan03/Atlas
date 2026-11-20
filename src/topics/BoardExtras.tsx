@@ -12,6 +12,7 @@ import { useTopics, type Course } from './store';
 import { phaseOf, subscribe } from './generationQueue';
 import { createChapterCourse, stopWriting } from './service';
 import { editBoard } from './boardEdit';
+import { currentWork, workLine } from './liveWork';
 import { coverageView, STATE_LABEL } from './coverageView';
 import { useCpa } from '../cpa/store';
 
@@ -175,9 +176,14 @@ export function WritingStatus({ courseId, squareKey, onStopped }: { courseId: st
   const [, bump] = useState(0);
   useEffect(() => subscribe(() => bump((n) => n + 1)), []);
   const waiting = phaseOf(`${courseId}:${squareKey}`) === 'waiting';
+  // What the AI is doing right now, so a slow wait can be told from a stuck one: reading the sources, or writing (and how much).
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const live = waiting ? '' : workLine(currentWork(), now);
   return (
     <View style={styles.gap}>
       <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={[styles.meta, { color: colors.textSecondary }]} testID="square-writing">{waiting ? 'Waiting for the AI to finish another lesson...' : 'Writing this square...'}</Text></View>
+      {!!live && <Text style={[styles.meta, { color: colors.textMuted }]} testID="square-live">{live}</Text>}
       <Button title="Stop" variant="outline" onPress={() => { stopWriting(courseId, squareKey); onStopped(); }} testID="square-stop" />
     </View>
   );

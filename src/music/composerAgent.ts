@@ -15,6 +15,7 @@ import { REWRITE_BELOW, critiqueScore, finishScore, rewriteRequest } from './cri
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
 import type { MusicScore } from './types';
 import logger from '../utils/logger';
+import { melodySystemPrompt, parseMelody, scoreFromMelody } from './melodyFallback';
 
 /** Not an entry in the agent store on purpose: nothing lists it, edits it or chats with it. */
 export const COMPOSER_AGENT = { id: '__atlas-composer__', hidden: true, name: 'Atlas composer' } as const;
@@ -179,20 +180,48 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
   throw new Error(problem);
 }
 
-/** Writes a tune for a request: the composer agent first, then the built-in composer when it cannot. */
+/**
+ * The composer's last try: only the melody (melodyFallback.ts), with the bass and chords made from the plan. Returns null when the model's
+ * reply has too few notes, so the built-in composer takes over. The title is the AI's own, else a random one for the style.
+ */
+async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { request: string; style: StyleMood }, ask: (system: string, user: string) => Promise<string>): Promise<Composed | null> {
+  let raw = '';
+  try {
+    raw = await ask(melodySystemPrompt(), `${brief.text}\n\nWrite only the melody, in the format given.`);
+    const spec = specFor(ctx.style);
+    const melody = parseMelody(raw);
+    const made = scoreFromMelody(melody, brief.plan, { title: melody.title, bpm: melody.bpm ?? spec.bpm, band: spec.band });
+    if (!made) throw new Error(`only ${melody.notes.filter((n) => n.pitch !== null).length} readable notes`);
+    const conformed = conformScore(made, brief.plan);
+    const finished = finishScore(conformed.score, brief.plan, {});
+    const named = await nameTune({ request: ctx.request, style: ctx.style, plan: brief.plan, bpm: finished.bpm, instruments: instrumentsOf(ctx.style) }, ask);
+    const title = named || cleanTitle(melody.title) || randomTitle(ctx.style, spec.group);
+    return { score: { ...finished, title }, via: 'composer', instruments: instrumentsOf(ctx.style), style: ctx.style, note: `The composer's full score could not be read, so it wrote the melody only (${melody.notes.filter((n) => n.pitch !== null).length} notes) and the app added the bass and chords in ${harmonyLabel(brief.plan)}.` };
+  } catch (e: any) {
+    logger.warn(`[MUSIC] melody-only try unusable: ${String(e?.message || e)}; reply began: ${raw.slice(0, 160).replace(/\s+/g, ' ')}`);
+    return null;
+  }
+}
+
+/** Writes a tune for a request: the composer agent first, then its melody alone, then the built-in composer when neither works. */
 export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
   const seconds = clampSeconds(options.seconds);
   const style = options.style ?? styleFromText(request) ?? 'focus';
   const brief = composerBrief(request, style, { seconds, instruments: options.instruments });
+  const ask = options.ask ?? askModelDefault;
   try {
-    const ask = options.ask ?? askModelDefault;
     const written = await writeScore(brief, ask);
     // The AI names what it made: a short second question once the tune is written (the title it wrote on its own is the fallback).
     const named = await nameTune({ request, style, plan: brief.plan, bpm: written.score.bpm, instruments: written.instruments }, ask);
     const score = named ? { ...written.score, title: named } : isPlaceholderTitle(written.score.title) ? { ...written.score, title: randomTitle(style, specFor(style).group) } : written.score;
     return { score, via: 'composer', instruments: written.instruments, style, note: written.note };
   } catch (e: any) {
-    const built = composeStyled(request, style);
+    const noModel = /no model|could not be loaded|failed to load/i.test(String(e?.message || e)); // nothing to ask: no more questions
+    const melodyOnly = noModel ? null : await writeMelodyOnly(brief, { request, style }, ask);
+    if (melodyOnly) return melodyOnly;
+    // Even here the tune gets a name of its own: the AI's, else a random one for the style (never the request text as a title).
+    const named = noModel ? '' : await nameTune({ request, style, plan: brief.plan, bpm: specFor(style).bpm, instruments: instrumentsOf(style) }, ask);
+    const built = { ...composeStyled(request, style), title: `${named || randomTitle(style, specFor(style).group)} (${specFor(style).label})` };
     return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a usable score (${String(e?.message || e)}), so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };
   }
 }

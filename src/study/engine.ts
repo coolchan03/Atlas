@@ -66,9 +66,11 @@ export const sourceBlock = (s: Source[]) => s.map((x) => `[${x.n}] (${x.doc}, pa
 const refs = (t: string) => [...new Set([...t.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])))];
 
 /** One grounded model call for study features (games use it too). */
-export async function askModel(system: string, user: string): Promise<string> { return ask(system, user); }
+/** `progress` hears when the local model starts on the prompt ('reading') and each time output arrives ('writing', with what came). */
+export type AskProgress = (event: 'reading' | 'writing', content: string) => void;
+export async function askModel(system: string, user: string, progress?: AskProgress): Promise<string> { return ask(system, user, progress); }
 
-async function ask(system: string, user: string): Promise<string> {
+async function ask(system: string, user: string, progress?: AskProgress): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   const remote = await askRemote(system, user);
   if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -79,9 +81,10 @@ async function ask(system: string, user: string): Promise<string> {
   }
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {
+  progress?.('reading', '');
   const out: string = await llmService.generateResponse(
     [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
-    { disableThinking: true },
+    { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
   );
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   });

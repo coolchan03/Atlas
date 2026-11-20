@@ -241,3 +241,24 @@ describe('stopping a run that keeps failing', () => {
     expect(dueRetests(many, [run])).toEqual(expect.arrayContaining(['i3', 'i4', 'i5', 'i6', 'i7']));
   });
 });
+
+describe('the Judge as a second opinion', () => {
+  const key = { facts: [['alpha'], ['beta']], forbid: ['delta'] };
+  const one: ExamItem[] = [{ id: 'q', subjectId: 's', topic: 't', question: 'Q?', expected: key }];
+  const run = (text: string, verdict: 'yes' | 'partly' | 'no' | null | 'throws') => runExam({
+    items: one, mode: 'sources', now: () => 0, answer: async () => ({ text, sourceCount: 1 }),
+    judge: async () => { if (verdict === 'throws') throw new Error('busy'); return verdict; },
+  });
+
+  it('raises an answer that says it in other words, and only raises', async () => {
+    expect(await run('the first thing and the second thing', 'yes')).toMatchObject({ correct: 1, accuracy: 1 });
+    expect(await run('the first thing only', 'partly')).toMatchObject({ correct: 0, mostlyRight: 1 });
+    expect(await run('nonsense', 'no')).toMatchObject({ correct: 0, mostlyRight: 0, accuracy: 0 });
+    expect(await run('nonsense', 'throws')).toMatchObject({ correct: 0, accuracy: 0 });
+  });
+
+  it('never overrides a forbidden figure', async () => {
+    expect(await run('alpha beta delta', 'yes')).toMatchObject({ correct: 0, outdatedAnswers: 1, accuracy: 0 });
+  });
+});
+

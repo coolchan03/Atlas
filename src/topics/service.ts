@@ -4,6 +4,7 @@
  */
 import { askModel } from '../study/engine';
 import { callLimitMs } from './timeLimit';
+import { beginWork, currentWork, endWork, giveUpReason, noteReading, noteWriting } from './liveWork';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
@@ -46,14 +47,38 @@ async function stopModel(): Promise<void> {
   try { await require('../services/llm').llmService.stopGeneration(); } catch { /* nothing was running */ }
 }
 
-/** One model call that gives up after `ms`: the model is stopped and the call fails. */
-async function askBounded(system: string, user: string, ms = callLimit()): Promise<string> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+/** How long the model may read the sources before its first word, from its measured reading speed (3 to 20 minutes). */
+function readLimitMs(): number {
+  try {
+    const id = require('../stores').useAppStore.getState().activeModelId;
+    const prefill = id ? require('../atlasTools/speed').useSpeedStats.getState().byModel[id]?.prefill : 0;
+    return Math.round(Math.min(20 * 60_000, Math.max(3 * 60_000, ((prefill > 0 ? 3500 / prefill : 60) * 3) * 1000)));
+  } catch { return 3 * 60_000; }
+}
+/** No new word for this long while writing means the model is stuck, however slow it is otherwise. */
+const STALL_MS = 2 * 60 * 1000;
+
+/**
+ * One model call that is stopped when it stops making progress, not just when it is slow: still reading the sources for too long, no new
+ * word for two minutes while writing, or past the overall limit for the model in use (liveWork.ts says which, and the screen shows it).
+ */
+async function askBounded(system: string, user: string, overallMs = callLimit()): Promise<string> {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const readMs = readLimitMs();
+  beginWork();
   const limit = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => { void stopModel(); reject(new Error(`The AI took too long to answer (over ${Math.round(ms / 60000)} minutes) and was stopped. This model is slow on this phone: try a smaller model, or a shorter lesson (rewrite it shorter).`)); }, ms);
+    timer = setInterval(() => {
+      const why = giveUpReason(currentWork(), Date.now(), { readMs, stallMs: STALL_MS, overallMs });
+      if (!why) return;
+      logger.warn(`[LESSON] stopped: ${why.why}`);
+      void stopModel();
+      reject(new Error(why.message));
+    }, Math.min(2000, Math.max(50, overallMs / 4))); // looks often enough to hold a short limit
     (timer as { unref?: () => void }).unref?.();
   });
-  try { return await Promise.race([askModel(system, user), limit]); } finally { if (timer) clearTimeout(timer); }
+  try {
+    return await Promise.race([askModel(system, user, (event, content) => { if (event === 'reading') noteReading(); else noteWriting(content); }), limit]);
+  } finally { if (timer) clearInterval(timer); endWork(); }
 }
 /** Squares made of questions: these start from the textbook's own questions when the course's project has them. */
 const QUESTION_FORMATS = ['quiz', 'truefalse', 'fill', 'scenario', 'numeric', 'recall', 'practice', 'reading', 'predict', 'fix'];

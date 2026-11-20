@@ -96,7 +96,7 @@ export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) 
             {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a, k) => (
               <View key={`${a.at}:${a.mode}`}>
                 <Text style={[s.small, { color: colors.textMuted }]}>
-                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.accepted ? 'mostly right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
+                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.accepted ? 'mostly right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.judged ? ' (the Judge read it)' : ''}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
                 </Text>
                 {k === 0 && !a.correct && !!a.answer && <Text style={[s.small, { color: colors.textMuted }]} testID={`exam-said-${i.id}`}>It said: "{a.answer.slice(0, 160)}"{a.missing?.length ? ` · missing: ${a.missing.join(', ').slice(0, 120)}` : ''}</Text>}
               </View>

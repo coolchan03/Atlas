@@ -267,3 +267,27 @@ describe('reading the ways a small model really writes a score', () => {
     expect(() => parseAgentScore('NOTE C4 0 1 0.5 piano\nNOTE X9 0 1 0.5 piano')).toThrow(/1 usable, 1 lines it wrote could not be read/);
   });
 });
+
+describe('when the full score cannot be read', () => {
+  it('uses the melody alone with the bass and chords from the app, and names the tune', async () => {
+    const replies = [
+      'I think this would be nice.', 'Sorry, here is a poem.', // both full-score tries unusable
+      'TITLE: Slow Lanterns\nBPM: 80\nMELODY: E5:1 G5:1 A5:2 G5:1 E5:1 D5:2 C5:1 D5:1 E5:2 -:1 C5:3 E5:1 G5:1 A5:2 G5:1 E5:1 D5:2 C5:4',
+      'Paper Lanterns', // the name
+    ];
+    const ask = jest.fn(async () => replies.shift() ?? '');
+    const out = await composeMusic('a calm jazz tune', { ask });
+    expect(out.via).toBe('composer');
+    expect(out.note).toMatch(/melody only/);
+    expect(out.score.title).toBe('Paper Lanterns');
+    expect(out.score.notes.some((n) => n.role === 'melody')).toBe(true);
+    expect(out.score.notes.some((n) => n.role === 'bass')).toBe(true);
+  });
+
+  it('gives the built-in tune a name of its own, not the request text', async () => {
+    const ask = jest.fn(async () => 'nothing useful');
+    const out = await composeMusic('make me some jazz music please', { ask });
+    expect(out.via).toBe('built-in');
+    expect(out.score.title).not.toMatch(/make me some jazz/i);
+  });
+});

@@ -32,6 +32,8 @@ interface ItemResult {
   id: string; correct: boolean; score: number; outdated: boolean; seconds: number;
   /** What the answer earns: 1 when right, the share of facts it held when partly right, 0 when it used a forbidden wording. */
   credit?: number;
+  /** The Judge's second opinion on an answer the word matching did not pass ('yes': all the facts in other words; 'partly': some of them). It only ever raises a result. */
+  judged?: 'yes' | 'partly';
   /** Absent in results saved by benchmark version 1. */
   reason?: ExamReason;
   /** Facts the answer did not contain (the first wording of each). */
@@ -167,6 +169,8 @@ interface Answered {
   memoryCount?: number;
 }
 export type Answerer = (item: ExamItem, mode: ExamMode) => Promise<Answered>;
+/** A second opinion on an answer the matching did not pass: does it hold the key facts in other words? */
+export type SecondOpinion = (item: ExamItem, answer: string) => Promise<'yes' | 'partly' | 'no' | null>;
 
 const clip = (t: string, n = 600) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
@@ -189,11 +193,25 @@ function gradeItem(item: ExamItem, mode: ExamMode, answered: Answered & { second
 /** An exam run stops after this many answers in a row that earned no credit at all. */
 const GIVE_UP_EXAM_AFTER = 5;
 
+/**
+ * The word matching cannot see an answer that says the same thing in other words. For an answer it did not pass (and that used no forbidden
+ * figure and had evidence), the Judge is asked whether the key facts are all there ('yes': right), some ('partly': mostly right) or not.
+ * It can only raise a result, never lower one, and what it did is kept on the result so it can be seen. A Judge that fails changes nothing.
+ */
+async function withSecondOpinion(item: ExamItem, graded: ItemResult, judge?: SecondOpinion): Promise<ItemResult> {
+  if (!judge || graded.correct || graded.outdated || graded.reason !== 'wrong-answer' || !graded.answer) return graded;
+  let verdict: Awaited<ReturnType<SecondOpinion>> = null;
+  try { verdict = await judge(item, graded.answer); } catch { return graded; }
+  if (verdict === 'yes') return { ...graded, correct: true, credit: 1, reason: 'correct', judged: 'yes', missing: [] };
+  if (verdict === 'partly') return { ...graded, credit: Math.max(graded.credit ?? 0, ACCEPT_SHARE), judged: 'partly' };
+  return graded;
+}
+
 /** Right, or mostly right (at least ACCEPT_SHARE of the facts and nothing forbidden). */
 export const isAccepted = (r: { correct: boolean; credit?: number; outdated: boolean }): boolean => r.correct || (!r.outdated && (r.credit ?? 0) >= ACCEPT_SHARE);
 
 /** Runs every item in one mode. The answerer is the model plus whatever retrieval the mode allows; scoring stays here. */
-export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number; giveUpAfter?: number }): Promise<ExamMetrics> {
+export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number; giveUpAfter?: number; judge?: SecondOpinion }): Promise<ExamMetrics> {
   const now = input.now ?? Date.now;
   const results: ItemResult[] = [];
   let unsupported = 0;
@@ -215,7 +233,7 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
       results.push({ id: item.id, correct: false, score: 0, outdated: false, seconds: (now() - started) / 1000, reason: 'inference-failure', error: clip(String(e?.message || e), 200) });
       continue;
     }
-    const graded = gradeItem(item, input.mode, { ...answered, seconds: (now() - started) / 1000 });
+    const graded = await withSecondOpinion(item, gradeItem(item, input.mode, { ...answered, seconds: (now() - started) / 1000 }), input.judge);
     results.push(graded);
     missesInARow = (graded.credit ?? 0) > 0 ? 0 : missesInARow + 1;
     unsupported += citedNumbers(String(answered.text ?? '')).filter((n) => n < 1 || n > answered.sourceCount).length;
@@ -348,12 +366,12 @@ export function retestNote(history: ExamResult[]): string {
 }
 
 // ------------------------------------------------------------------ retests and answer history
-export interface Attempt { at: string; mode: ExamMode; correct: boolean; accepted: boolean; reason?: ExamReason; answer?: string; missing?: string[]; version: string }
+export interface Attempt { at: string; mode: ExamMode; correct: boolean; accepted: boolean; judged?: 'yes' | 'partly'; reason?: ExamReason; answer?: string; missing?: string[]; version: string }
 
 /** Every recorded attempt at one question, newest first (older scoring versions are kept, and marked, never mixed into the schedule). */
 export function attemptsFor(history: ExamResult[], itemId: string): Attempt[] {
   return history
-    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, accepted: r.version === BENCHMARK_VERSION ? isAccepted(i) : i.correct, reason: i.reason, answer: i.answer, missing: i.missing, version: r.version })))
+    .flatMap((r) => r.metrics.items.filter((i) => i.id === itemId).map((i) => ({ at: r.at, mode: r.mode, correct: i.correct, accepted: r.version === BENCHMARK_VERSION ? isAccepted(i) : i.correct, judged: i.judged, reason: i.reason, answer: i.answer, missing: i.missing, version: r.version })))
     .sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
