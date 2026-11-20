@@ -4,6 +4,7 @@
  * exact source passage it came from ([1], [2] ... tap to read the passage).
  */
 import logger from '../utils/logger';
+import { backgroundModelId, scheduleChatModelRestore, useBackgroundModelNow } from './backgroundModel';
 import { ragService } from '../services/rag';
 import { askRemote } from './remoteAsk';
 import { runBackgroundJob } from '../services/llmJobQueue';
@@ -75,13 +76,16 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   const remote = await askRemote(system, user);
   if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  try { await callHook(HOOKS.ensureTextModel, null); } catch (error) {
+  const onBackground = !!backgroundModelId();
+  if (!onBackground) try { await callHook(HOOKS.ensureTextModel, null); } catch (error) {
     // The usual load can fail while speech or image models hold the memory (a chat frees it first, which is why starting
     // a chat used to make this work). Free the memory and load the model once before giving up.
     try { await require('../atlasTools/models').forceLoadTextModel(); } catch { throw error; }
   }
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {
+  // The chosen background model is loaded here, once any chat reply has finished (never while one is being written).
+  if (onBackground) await useBackgroundModelNow().catch((e) => logger.warn(`[AI] the background model could not be loaded, using the model that is loaded: ${String((e as Error)?.message || e)}`));
   progress?.('reading', '');
   const asked = Date.now();
   const purpose = system.replace(/\s+/g, ' ').slice(0, 60);
@@ -100,6 +104,7 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
     const perf = llmService.getPerformanceStats();
     logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${(perf.lastTimeToFirstToken / 1000).toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars`);
   } catch { /* the line is a convenience */ }
+  if (onBackground) scheduleChatModelRestore();
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   });
 }

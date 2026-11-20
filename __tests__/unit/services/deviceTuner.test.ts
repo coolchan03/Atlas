@@ -1,4 +1,4 @@
-import { pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
+import { layerOptions, mtpOptions, pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
 import { shouldOfferFirstTest, shouldSuggestTuning, useTuned, withModelMemory } from '../../../src/atlasTools/speed';
 
 const result = (id: string, threads: number, tps: number, error?: string): TuneResult =>
@@ -76,5 +76,21 @@ describe('finding the best settings', () => {
     // The person picked a cheaper cache afterwards: their choice wins for the cache, the saved batch size still applies.
     expect(withModelMemory({ cacheType: 'q8_0', nBatch: 512 }, 'm1')).toEqual({ cacheType: 'q8_0', nBatch: 1024 });
     useTuned.getState().setMemory('m1', undefined);
+  });
+
+  it('tries fewer, more and all GPU layers for an accelerated winner (never the count already in use), and nothing for the CPU', () => {
+    const npu = { id: 'htp', label: 'NPU', backend: 'htp' as any, threads: 6 };
+    expect(layerOptions(npu, 20).map((o) => o.extra)).toEqual([{ gpuLayers: 10 }, { gpuLayers: 30 }, { gpuLayers: 99 }]);
+    expect(layerOptions(npu, 99).map((o) => o.extra?.gpuLayers)).toEqual([50, 149]);
+    expect(layerOptions({ ...npu, backend: 'cpu' as any }, 20)).toEqual([]);
+    expect(layerOptions({ ...npu, backend: 'auto' as any }, 20)).toEqual([]);
+  });
+
+  it('tries the model\'s built-in MTP drafting once, only when it has no draft file and is not marked as having it', () => {
+    const base = { id: 'cpu-6', label: 'CPU', backend: 'cpu' as any, threads: 6 };
+    expect(mtpOptions(base, { engine: 'llama' }).map((o) => o.extra)).toEqual([{ mtp: true }]);
+    expect(mtpOptions(base, { engine: 'llama', draftPath: '/m/draft.gguf' })).toEqual([]);
+    expect(mtpOptions(base, { engine: 'llama', embeddedMtp: true })).toEqual([]);
+    expect(mtpOptions(base, { engine: 'litert' })).toEqual([]);
   });
 });

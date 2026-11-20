@@ -15,6 +15,7 @@ import { REWRITE_BELOW, critiqueScore, finishScore, rewriteRequest } from './cri
 import { instrumentsOf, styleFromText, styleLabel } from './simple';
 import type { MusicScore } from './types';
 import logger from '../utils/logger';
+import { SLOW_WRITER_TPS, activeWritingSpeed } from '../atlasTools/speed';
 import { melodySystemPrompt, parseMelody, scoreFromMelody } from './melodyFallback';
 
 /** Not an entry in the agent store on purpose: nothing lists it, edits it or chats with it. */
@@ -217,16 +218,6 @@ async function withScreenOn<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); } finally { power?.releaseScreenAwake(reason); }
 }
 
-/** Below this writing speed (tokens a second) a whole score takes minutes per try, so the composer writes only the melody. */
-const SLOW_WRITER_TPS = 8;
-/** The measured writing speed of the model in use, or 0 when none is known. */
-function writingSpeed(): number {
-  try {
-    const id = require('../stores').useAppStore.getState().activeModelId;
-    return id ? Number(require('../atlasTools/speed').useSpeedStats.getState().byModel[id]?.decode) || 0 : 0;
-  } catch { return 0; }
-}
-
 /** Times each question to the model, so the log says where the minutes went. */
 function timed(ask: (system: string, user: string) => Promise<string>): (system: string, user: string) => Promise<string> {
   return async (system, user) => {
@@ -246,7 +237,7 @@ async function composeMusicNow(request: string, options: ComposeOptions): Promis
   const ask = timed(options.ask ?? askModelDefault);
   // A slow writer (a big model on this phone) needs minutes for a whole score, and up to four questions: it is asked for the melody alone,
   // one short question, and the app builds the rest. The built-in composer takes over if that cannot be read.
-  const speed = writingSpeed();
+  const speed = activeWritingSpeed();
   if (speed > 0 && speed < SLOW_WRITER_TPS) {
     logger.log(`[MUSIC] this model writes about ${speed.toFixed(1)} tokens a second: asking for the melody only`);
     const melodyFirst = await writeMelodyOnly(brief, { request, style }, ask);

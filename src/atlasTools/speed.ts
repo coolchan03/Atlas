@@ -60,6 +60,16 @@ export const useSpeedStats = create<SpeedState>()(persist((set) => ({
   partialize: (s) => ({ byModel: s.byModel, byConfig: s.byConfig }),
 }));
 
+/** The writing speed (tokens a second) measured for the model that background work uses, or 0 when none is known. */
+export function activeWritingSpeed(): number {
+  const st = useAppStore.getState();
+  const id = st.settings.backgroundModelId && st.downloadedModels.some((m) => m.id === st.settings.backgroundModelId) ? st.settings.backgroundModelId : st.activeModelId; // background work uses its own model when one is chosen
+  return id ? Number(useSpeedStats.getState().byModel[id]?.decode) || 0 : 0;
+}
+
+/** Below this writing speed a model counts as slow: work is split into small pieces and asked in the shortest form. */
+export const SLOW_WRITER_TPS = 8;
+
 /** Models whose settings were tuned with "Find the best settings" (so the slow-reply hint stops suggesting it). */
 interface TunedState {
   at: Record<string, number>;
@@ -71,17 +81,17 @@ interface TunedState {
   setMemory: (modelId: string, memory?: ModelMemory) => void;
 }
 export interface ModelMemory {
-  cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number;
+  cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number; gpuLayers?: number;
   /** The global values in force when it was saved: if the person changes one in Settings afterwards, their choice wins over the saved one. */
-  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number };
+  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number };
 }
 
 /** The settings one model loads with: the global ones, with the memory settings its test kept (each only while the global one is unchanged since). */
-export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number }>(settings: T, modelId: string | undefined): T {
+export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number }>(settings: T, modelId: string | undefined): T {
   const kept = modelId ? useTuned.getState().memory[modelId] : undefined;
   if (!kept) return settings;
   const out: T = { ...settings };
-  for (const key of ['cacheType', 'flashAttn', 'nBatch'] as const) {
+  for (const key of ['cacheType', 'flashAttn', 'nBatch', 'gpuLayers'] as const) {
     const wanted = kept[key];
     if (wanted !== undefined && (!kept.from || kept.from[key] === settings[key])) (out as Record<string, unknown>)[key] = wanted;
   }

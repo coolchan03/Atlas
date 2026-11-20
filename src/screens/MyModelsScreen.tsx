@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Clipboard, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SpeedRankingCard } from '../components/models/SpeedRanking';
+import { BackgroundModelCard } from '../components/models/BackgroundModel';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
@@ -152,6 +153,7 @@ export const MyModelsScreen: React.FC = () => {
       </View>
       <ScrollView contentContainerStyle={styles.scrollBody}>
         <SpeedRankingCard style={card} />
+        <BackgroundModelCard style={card} />
         {/* Storage */}
         <View style={card}>
           <Text style={[styles.s5, { color: colors.text }]}>Storage</Text>

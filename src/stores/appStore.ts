@@ -96,6 +96,8 @@ type AppSettings = {
   warmUpAfterLoad?: boolean;
   /** Use a model's attached MTP file to draft tokens (on unless set to false). */
   useMtp?: boolean;
+  /** A model used for writing in the background (lessons, music, the briefing); the chat model is used when none is chosen. */
+  backgroundModelId?: string;
   /** CPU only: false turns off llama.cpp's ARM-optimized repacked weight kernels (a diagnostic for a model that writes noise on the CPU). Default on. */
   cpuRepack?: boolean;
   /** Send only the tools a message could need (on unless set to false): a faster first reply. */

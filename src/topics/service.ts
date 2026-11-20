@@ -6,10 +6,12 @@ import { askModel } from '../study/engine';
 import { callLimitMs } from './timeLimit';
 import { beginWork, currentWork, endWork, giveUpReason, noteReading, noteWriting } from './liveWork';
 import { maxCharsFor, repairCutJson, runawayReason } from './runaway';
+import { writeLessonInPieces } from './lessonWriter';
+import { SLOW_WRITER_TPS, activeWritingSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
-import { contentMessages, deepenMessages, prose, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type SquareContent } from './formats';
+import { contentMessages, deepenMessages, prose, gradeMessages, parseContent, parseGrade, parsePlan, planMessages, type CourseRequest, type PlannedSquare, type SquareContent, type SquareRequest } from './formats';
 import { useTopics, type Course } from './store';
 import { bookByBookPlan, chapterPlan, findChapters, parseSubjects, shortSubject, subjectPrompt, type Chapter } from './chapters';
 import { asChapters, bookChapters, mergeBooks } from './multiBook';
@@ -306,6 +308,31 @@ async function standardsFlags(course: Course, query: string): Promise<string> {
   } catch { return ''; }
 }
 
+/** What writeBody needs to ask the model for one square. */
+interface BodyInput { course: Course; key: string; square: PlannedSquare; asked: PlannedSquare; before: string[]; excerpts: Excerpt[]; bank: string; query: string; rewrite?: Rewrite }
+
+/** Asks the model for one square's content: a slow model writes a lesson in small pieces, every other square (and a fast model) in one call. */
+async function writeBody(input: BodyInput, ctl: JobControl): Promise<SquareContent> {
+  const { course, key, square, asked, before, excerpts, bank, query, rewrite } = input;
+  const request: SquareRequest = {
+    courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
+    square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
+    bookQuestions: bank,
+    standardsFlags: await standardsFlags(course, query),
+    excerpts,
+    retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
+    rewrite: rewrite ? REWRITES[rewrite] : undefined,
+  };
+  const whole = () => askUntil(contentMessages(request), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled, maxChars: maxCharsFor(asked.format) });
+  // A slow model writes a lesson in small pieces (outline, then two sections at a time): each piece finishes and is kept. If the pieces cannot be made, the whole lesson is asked for in one call as before.
+  const slow = asked.format === 'lesson' && activeWritingSpeed() > 0 && activeWritingSpeed() < SLOW_WRITER_TPS;
+  return slow ? await writeLessonInPieces(request, {
+    ask: (prompt, read, how) => askUntil(prompt, read, { ...how, stopped: ctl.cancelled }),
+    save: (lesson) => useTopics.getState().setContent(course.id, key, withoutSources(lesson, excerpts, bank)),
+    stopped: ctl.cancelled,
+  }).catch((e) => { if (ctl.cancelled()) throw e; logger.warn(`[LESSON] writing in pieces failed (${String((e as Error)?.message || e).slice(0, 160)}): asking for the whole lesson`); return whole(); }) : await whole();
+}
+
 async function writeSquare(target: { courseId: string; key: string; rewrite?: Rewrite }, ctl: JobControl): Promise<SquareContent> {
   const { courseId, key, rewrite } = target;
   // Read the course as it is now: it may have changed (or the square been written) while this waited its turn.
@@ -339,15 +366,7 @@ async function writeSquare(target: { courseId: string; key: string; rewrite?: Re
   if (needsMoreInfo(excerpts) && square.format === 'lesson') excerpts = allocateExcerpts([...excerpts, ...await webExcerpts(`${course.topic} ${square.title}`)], 7).chosen;
   const foundAt = Date.now();
   const bank = QUESTION_FORMATS.includes(asked.format) ? bookQuestionsPrompt(questionsOn([...sourceQuestions(course.sources), ...await projectQuestionBank(course.projectId)], subjectQuery(square))) : '';
-  const content = await askUntil(contentMessages({
-    courseTitle: course.title, topic: course.topic, level: course.request.level, how: course.request.how, style: course.style,
-    square: asked, before, minutes: course.request.minutes, difficulty: course.difficulty,
-    bookQuestions: bank,
-    standardsFlags: await standardsFlags(course, query),
-    excerpts,
-    retry: asked.format === 'quiz' ? stillMissed(course.id, asked.checkpoint ? 6 : 3) : undefined,
-    rewrite: rewrite ? REWRITES[rewrite] : undefined,
-  }), (raw) => parseContent(asked.format, raw), { what: `the "${square.title}" square`, stopped: ctl.cancelled, maxChars: maxCharsFor(asked.format) });
+  const content = await writeBody({ course, key, square, asked, before, excerpts, bank, query, rewrite }, ctl);
   // The first pass is a complete lesson: it is saved at once, so it can be read while the optional deepening goes on (or if that fails).
   if (ctl.cancelled()) throw new Error('Stopped.'); // the person pressed Stop (or it timed out) while the model was answering: save nothing
   const draft = withoutSources(content, excerpts, bank);

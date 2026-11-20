@@ -13,11 +13,11 @@ import { llmService } from './llm';
 import { activeModelService } from './activeModelService';
 import { vulkanEngine } from './vulkanEngine';
 import { acceleratorCandidates, type TextAccelerator } from './acceleratorSelection';
-import { useSpeedStats, useTuned } from '../atlasTools/speed';
+import { useSpeedStats, useTuned, type ModelMemory } from '../atlasTools/speed';
 import logger from '../utils/logger';
 
 /** The model-memory settings a refinement changes on top of the winning backend and thread count. */
-interface TuneExtra { cacheType?: CacheType; flashAttn?: boolean; nBatch?: number }
+interface TuneExtra { cacheType?: CacheType; flashAttn?: boolean; nBatch?: number; gpuLayers?: number; /** The model drafts with the multi-token-prediction layers built into it (see modelManager.setEmbeddedMtp). */ mtp?: boolean }
 export interface TuneOption { id: string; label: string; backend: InferenceBackend; threads: number; extra?: TuneExtra }
 export interface TuneResult { option: TuneOption; tps: number; firstWordSec: number; error?: string }
 
@@ -64,6 +64,31 @@ export function refineOptions(base: TuneOption, current: { cacheType: CacheType;
 const BIG_MODEL_BYTES = 2.5e9;
 
 /** Batch sizes worth timing against the one in use (they change how fast the prompt is read, not how fast the answer is written). */
+const ACCELERATED: string[] = [INFERENCE_BACKENDS.HTP, INFERENCE_BACKENDS.OPENCL, INFERENCE_BACKENDS.VULKAN];
+
+/**
+ * How many layers go to the NPU or GPU: the winning accelerator again with fewer, more, and all of them. A model that fits on the chip
+ * entirely is often much faster than one split between chip and CPU, and the other way round when the chip's memory is short. Only for
+ * an accelerated winner; the layer count in use is never repeated.
+ */
+export function layerOptions(base: TuneOption, current: number): TuneOption[] {
+  if (!ACCELERATED.includes(String(base.backend))) return [];
+  const counts = [...new Set([Math.max(4, Math.round(current / 2)), Math.round(current * 1.5), 99])].filter((n) => n !== current && n >= 1);
+  return counts.map((n) => ({ ...base, id: `${base.id}+layers-${n}`, label: `${base.label}, ${n >= 99 ? 'all' : n} GPU layers`, extra: { ...base.extra, gpuLayers: n } }));
+}
+
+/** Drafting with the layers built into the model, tried once for a model that has no draft file and is not marked as having them: kept only if clearly faster. */
+export function mtpOptions(base: TuneOption, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean }): TuneOption[] {
+  if (model.engine !== 'llama' || model.draftPath || model.embeddedMtp) return [];
+  return [{ ...base, id: `${base.id}+mtp`, label: `${base.label}, drafting with built-in MTP`, extra: { ...base.extra, mtp: true } }];
+}
+
+/** The part of an option's extras that is saved as the model's own settings (drafting is saved on the model itself). */
+const memoryOf = (extra: TuneExtra | undefined): ModelMemory => {
+  const { mtp: _mtp, ...rest } = extra ?? {};
+  return rest;
+};
+
 function batchOptions(base: TuneOption, current: number): TuneOption[] {
   return [256, 512, 1024].filter((n) => n !== current).map((n) => ({ ...base, id: `${base.id}+batch-${n}`, label: `${base.label}, batch ${n}`, extra: { ...base.extra, nBatch: n } }));
 }
@@ -98,12 +123,14 @@ const LONG_PROMPT = `${'The river runs past the mill, the town and the old stone
 
 const PROMPT = 'Write one short paragraph (about 50 words) about rivers. No title.';
 
-type TuneBase = { cacheType: CacheType; flashAttn: boolean; nBatch: number };
+type TuneBase = { cacheType: CacheType; flashAttn: boolean; nBatch: number; gpuLayers: number };
 
 /** Loads the model with one option's settings (the rest as they were), writes one reply and reports how fast it went. */
 async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneOption, prompt: string): Promise<TuneResult> {
   const { modelId, old } = ctx;
-  useAppStore.getState().updateSettings({ inferenceBackend: option.backend, nThreads: option.threads, backendUserChosen: true, cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, ...option.extra } as any);
+  useAppStore.getState().updateSettings({ inferenceBackend: option.backend, nThreads: option.threads, backendUserChosen: true, cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers, ...memoryOf(option.extra) } as any);
+  // Drafting with the model's own prediction layers: set on the model for this try (the engine loads without it if the model has none).
+  if (option.extra?.mtp) markMtp(modelId, true);
   try {
     // A fresh load each time: threads, acceleration and the cache are fixed when the model loads.
     await activeModelService.unloadTextModel(true);
@@ -118,6 +145,24 @@ async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneO
     logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
     return { option, tps: 0, firstWordSec: 0, error: String(e?.message || e) };
   }
+}
+
+/** Everything tried on the winner of the first round: memory settings, how many layers go to the chip, and the model's built-in MTP drafting. */
+function secondRound(base: TuneOption, old: TuneBase, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean; filePath?: string; fileSize?: number }): TuneOption[] {
+  return [...refineOptions(base, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model), ...layerOptions(base, old.gpuLayers), ...mtpOptions(base, model)];
+}
+
+/** Marks (or unmarks) a model as drafting with its built-in MTP, in the app only: a try is not saved. */
+function markMtp(modelId: string, on: boolean): void {
+  const { downloadedModels, setDownloadedModels } = useAppStore.getState();
+  if (downloadedModels.some((m) => m.id === modelId)) setDownloadedModels(downloadedModels.map((m) => (m.id === modelId && m.engine === 'llama' ? { ...m, embeddedMtp: on } : m)));
+}
+
+/** Drafting with built-in MTP is saved on the model only when it won; otherwise the model is as it was. */
+async function restoreMtp(modelId: string, model: { draftPath?: string; embeddedMtp?: boolean }, best: TuneResult | null): Promise<void> {
+  if (model.embeddedMtp || model.draftPath) return;
+  if (best?.option.extra?.mtp) await require('./modelManager').modelManager.setEmbeddedMtp(modelId, true).catch(() => undefined);
+  else markMtp(modelId, false);
 }
 
 /** The best memory-setting refinement when it is clearly faster than the plain winner it was built from, else the plain winner. */
@@ -140,7 +185,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   const model = store.downloadedModels.find((m) => m.id === modelId);
   if (!model || model.engine !== 'llama') throw new Error('Pick a downloaded GGUF text model to tune.');
   if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still being written. Wait for it to finish, then try again.');
-  const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch };
+  const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch, gpuLayers: store.settings.gpuLayers };
   // What an earlier test saved for this model would hide the settings being timed, so it is set aside until the new result is known.
   const earlierMemory = useTuned.getState().memory[modelId];
   const [cores, recommended] = await Promise.all([hardwareService.getCpuCoreCount(), hardwareService.getRecommendedThreadCount()]);
@@ -163,7 +208,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
     useTuned.getState().setMemory(modelId, undefined);
     await runList(options, { done: 0, total: options.length });
     first = cancelFlag ? null : pickBest(results);
-    const refine = first ? refineOptions(first.option, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model) : [];
+    const refine = first ? secondRound(first.option, old, model) : [];
     await runList(refine, { done: options.length, total: options.length + refine.length, prefix: 'memory: ' });
     // A memory-setting refinement is kept only when clearly faster than the plain winner it was built from.
     chosen = cancelFlag ? null : keepRefinement(results, first);
@@ -181,6 +226,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
     if (cancelFlag || !chosen) useTuned.getState().setMemory(modelId, earlierMemory);
   }
   const best = cancelFlag ? null : chosen;
+  await restoreMtp(modelId, model, best);
   if (best) {
     // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
     // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
@@ -189,7 +235,8 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
       ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads }
       : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
     // Cache type, flash attention and batch size are kept for this model only: the other models keep the global ones.
-    useTuned.getState().setMemory(modelId, best.option.extra && { ...best.option.extra, from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch } });
+    const kept = memoryOf(best.option.extra);
+    useTuned.getState().setMemory(modelId, Object.keys(kept).length ? { ...kept, from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers } } : undefined);
     useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.
     useSpeedStats.setState((st) => ({ byModel: { ...st.byModel, [modelId]: { ...(st.byModel[modelId] ?? { prefill: 0, outLen: 0, samples: 1 }), decode: best.tps } } }));
