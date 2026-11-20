@@ -39,7 +39,7 @@ export function formatDiagnostics(d: DiagnosticsInput): string {
     lines.push('Model: none selected');
   }
   if (d.llamaRn) lines.push(`llama.rn: ${d.llamaRn}`);
-  if (d.gpuChecks?.length) lines.push('GPU output checks:', ...d.gpuChecks.map((c) => `  ${c}`));
+  if (d.model) lines.push(d.gpuChecks?.length ? `First-reply checks for this model:\n${d.gpuChecks.map((c) => `  ${c}`).join('\n')}` : 'First-reply checks for this model: none yet.');
   lines.push(`Last call: ${d.lastCall ?? 'none yet'}`);
   if (d.callTrace?.length) lines.push(`Call trace (newest 12):\n${d.callTrace.slice(-12).join('\n')}`);
   return lines.join('\n');
@@ -90,6 +90,6 @@ export async function gatherDiagnostics(): Promise<string> {
     lastCall: lastCallTiming(),
     callTrace: require('../atlasVoice/callLifecycle').callTrace() as string[],
     llamaRn: await safe(() => require('llama.rn/package.json').version as string, undefined),
-    gpuChecks: await safe(() => require('../services/outputHealth').describeVerdicts() as Promise<string[]>, []),
+    gpuChecks: active ? await safe(() => require('../services/outputHealth').describeVerdicts(String(active.fileName || String(active.filePath || '').split('/').pop() || '')) as Promise<string[]>, []) : [],
   });
 }

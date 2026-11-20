@@ -30,4 +30,20 @@ describe('the app-wide log and the report that shares it', () => {
     const lines = Array.from({ length: 3000 }, (_, i) => ({ at: i, level: 'log' as const, message: 'x'.repeat(690) }));
     expect(formatSupportReport({ diagnostics: 'd', briefing: [], lines, previous: 'p'.repeat(300_000), now: 0 }).length).toBeLessThan(260_000);
   });
+
+  it('describes the models on the phone with their speeds, and reports only the model in use in the first-reply checks', async () => {
+    const { useAppStore } = require('../../src/stores/appStore');
+    const { useSpeedStats } = require('../../src/atlasTools/speed');
+    useAppStore.setState({ activeModelId: 'q', downloadedModels: [
+      { id: 'q', name: 'Qwen3.5-9B', engine: 'llama', fileName: 'qwen.gguf', filePath: '/m/qwen.gguf', fileSize: 5e9, quantization: 'Q4_0' },
+      { id: 'g', name: 'Gemma4-12B', engine: 'llama', fileName: 'gemma.gguf', filePath: '/m/gemma.gguf', fileSize: 7e9, quantization: 'Q4_K_M' },
+    ] });
+    useSpeedStats.setState({ byModel: { q: { decode: 4.1, prefill: 28, outLen: 0, samples: 9 } } });
+    const { gatherSupportReport } = require('../../src/atlasTools/supportReport');
+    const report: string = await gatherSupportReport();
+    expect(report).toContain('* Qwen3.5-9B | llama, Q4_0 | 4768 MB | writes 4.1, reads 28 tok/s, 9 replies');
+    expect(report).toContain('Gemma4-12B | llama, Q4_K_M');
+    expect(report).toContain('Power: battery');
+  });
 });
+

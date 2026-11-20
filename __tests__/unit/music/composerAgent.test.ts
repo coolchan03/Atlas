@@ -303,3 +303,21 @@ describe('a short melody', () => {
     expect(last).toBeGreaterThan(brief.plan.bars.length * 4 - 12); // the phrase was repeated to near the end
   });
 });
+
+describe('a model that writes slowly', () => {
+  it('is asked for the melody alone, once, instead of for a whole score and a rewrite', async () => {
+    jest.resetModules();
+    installNativeBoundary({ fs: true });
+    const { useAppStore } = require('../../../src/stores/appStore');
+    const { useSpeedStats } = require('../../../src/atlasTools/speed');
+    useAppStore.setState({ activeModelId: 'slow-model' });
+    useSpeedStats.setState({ byModel: { 'slow-model': { decode: 4.1, prefill: 28, outLen: 0, samples: 5 } } });
+    const { composeMusic: compose } = require('../../../src/music/composerAgent');
+    const replies = ['TITLE: Slow Lanterns\nBPM: 80\nMELODY: E5:1 G5:1 A5:2 G5:1 E5:1 D5:2 C5:1 D5:1 E5:2 -:1 C5:3', 'Paper Lanterns'];
+    const ask = jest.fn(async () => replies.shift() ?? '');
+    const out = await compose('calm jazz', { ask });
+    expect(out.via).toBe('composer');
+    expect(ask).toHaveBeenCalledTimes(2); // the melody, and its name
+    expect(out.note).toMatch(/4\.1 tokens a second/);
+  });
+});

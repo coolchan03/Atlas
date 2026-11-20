@@ -29,7 +29,7 @@ describe('diagnostics summary', () => {
   it('carries the llama.rn version and what the GPU output checks found, so a report shows whether a GPU setting writes real words', () => {
     const text = formatDiagnostics({ ...base, llamaRn: '0.13.0-rc.9', gpuChecks: ['Gemma4-12B.gguf (7040 MB), opencl, 24 GPU layers, llama.rn 0.13.0-rc.9: FAILED - the reply is made of placeholder tokens'] });
     expect(text).toContain('llama.rn: 0.13.0-rc.9');
-    expect(text).toContain('GPU output checks:\n  Gemma4-12B.gguf (7040 MB), opencl, 24 GPU layers');
+    expect(text).toContain('First-reply checks for this model:\n  Gemma4-12B.gguf (7040 MB), opencl, 24 GPU layers');
   });
 
   it('says so when there is no model, no GPU, nothing measured and no call yet', () => {

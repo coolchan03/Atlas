@@ -217,11 +217,44 @@ async function withScreenOn<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); } finally { power?.releaseScreenAwake(reason); }
 }
 
+/** Below this writing speed (tokens a second) a whole score takes minutes per try, so the composer writes only the melody. */
+const SLOW_WRITER_TPS = 8;
+/** The measured writing speed of the model in use, or 0 when none is known. */
+function writingSpeed(): number {
+  try {
+    const id = require('../stores').useAppStore.getState().activeModelId;
+    return id ? Number(require('../atlasTools/speed').useSpeedStats.getState().byModel[id]?.decode) || 0 : 0;
+  } catch { return 0; }
+}
+
+/** Times each question to the model, so the log says where the minutes went. */
+function timed(ask: (system: string, user: string) => Promise<string>): (system: string, user: string) => Promise<string> {
+  return async (system, user) => {
+    const at = Date.now();
+    try {
+      const reply = await ask(system, user);
+      logger.log(`[MUSIC] the model answered in ${((Date.now() - at) / 1000).toFixed(0)} s: ${reply.length} characters for a prompt of ${system.length + user.length}`);
+      return reply;
+    } catch (e) { logger.warn(`[MUSIC] the model failed after ${((Date.now() - at) / 1000).toFixed(0)} s: ${String((e as Error)?.message || e).slice(0, 200)}`); throw e; }
+  };
+}
+
 async function composeMusicNow(request: string, options: ComposeOptions): Promise<Composed> {
   const seconds = clampSeconds(options.seconds);
   const style = options.style ?? styleFromText(request) ?? 'focus';
   const brief = composerBrief(request, style, { seconds, instruments: options.instruments });
-  const ask = options.ask ?? askModelDefault;
+  const ask = timed(options.ask ?? askModelDefault);
+  // A slow writer (a big model on this phone) needs minutes for a whole score, and up to four questions: it is asked for the melody alone,
+  // one short question, and the app builds the rest. The built-in composer takes over if that cannot be read.
+  const speed = writingSpeed();
+  if (speed > 0 && speed < SLOW_WRITER_TPS) {
+    logger.log(`[MUSIC] this model writes about ${speed.toFixed(1)} tokens a second: asking for the melody only`);
+    const melodyFirst = await writeMelodyOnly(brief, { request, style }, ask);
+    if (melodyFirst) return { ...melodyFirst, note: `${melodyFirst.note} This model writes about ${speed.toFixed(1)} tokens a second, so the composer was asked for the melody only: a whole score would take several minutes.` };
+    const named = await nameTune({ request, style, plan: brief.plan, bpm: specFor(style).bpm, instruments: instrumentsOf(style) }, ask);
+    const built = { ...composeStyled(request, style), title: `${named || randomTitle(style, specFor(style).group)} (${specFor(style).label})` };
+    return { score: built, via: 'built-in', instruments: instrumentsOf(style), style, note: `The composer could not write a melody this model could be read from, so the built-in ${styleLabel(style)} composer made this tune with ${instrumentsOf(style)}.` };
+  }
   try {
     const written = await writeScore(brief, ask);
     // The AI names what it made: a short second question once the tune is written (the title it wrote on its own is the fallback).

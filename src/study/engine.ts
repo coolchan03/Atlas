@@ -3,6 +3,7 @@
  * generated on the phone with the loaded model, and every item points back to the
  * exact source passage it came from ([1], [2] ... tap to read the passage).
  */
+import logger from '../utils/logger';
 import { ragService } from '../services/rag';
 import { askRemote } from './remoteAsk';
 import { runBackgroundJob } from '../services/llmJobQueue';
@@ -82,10 +83,23 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
   const { llmService } = require('../services/llm');
   return runBackgroundJob(async () => {
   progress?.('reading', '');
-  const out: string = await llmService.generateResponse(
+  const asked = Date.now();
+  const purpose = system.replace(/\s+/g, ' ').slice(0, 60);
+  let out: string;
+  try {
+  out = await llmService.generateResponse(
     [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
     { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
   );
+  } catch (e) {
+    logger.warn(`[AI] background call failed after ${((Date.now() - asked) / 1000).toFixed(1)} s (${purpose}): ${String((e as Error)?.message || e).slice(0, 200)}`);
+    throw e;
+  }
+  // One line per background call: what it was for, how big the prompt was, how long it read, how much it wrote and how fast.
+  try {
+    const perf = llmService.getPerformanceStats();
+    logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${(perf.lastTimeToFirstToken / 1000).toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars`);
+  } catch { /* the line is a convenience */ }
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   });
 }

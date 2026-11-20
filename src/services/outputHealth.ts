@@ -239,10 +239,11 @@ export async function knownVerdict(key: VerdictKey): Promise<Verdict | null> {
   return (await readVerdicts())[keyOf(key)] ?? null;
 }
 
-/** One plain line per remembered check ("file | size | backend | layers | llama.rn version: OK/FAILED - why"), for diagnostics. @public */
-export async function describeVerdicts(): Promise<string[]> {
+/** One plain line per remembered check ("file | size | backend | layers | llama.rn version: OK/FAILED - why"), for diagnostics: all models, or just `onlyFile`. @public */
+export async function describeVerdicts(onlyFile?: string): Promise<string[]> {
   const all = await readVerdicts();
-  return Object.entries(all).map(([key, v]) => {
+  // With a file name, only that model's checks: the list also remembers every model ever tried, which made a report about one model talk about others.
+  return Object.entries(all).filter(([key]) => !onlyFile || key.split('|')[0] === onlyFile).map(([key, v]) => {
     const [model, size, backend, layers, build, variant] = key.split('|');
     return `${model} (${Math.round(Number(size) / 1048576)} MB), ${backend}, ${layers} GPU layers${variant ? `, ${variant}` : ''}, llama.rn ${build}: ${v.ok ? (v.primed ? 'wrote real text with the first-word workaround' : 'wrote real text') : `FAILED - ${v.reason}`}`;
   });
