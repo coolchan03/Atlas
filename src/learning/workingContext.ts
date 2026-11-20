@@ -18,6 +18,16 @@ export interface WorkingContext {
   approxTokens: number;
 }
 
+/**
+ * How many tokens of notes and passages a step may use, from the loaded model's context window (a share of it, never under 200 or over
+ * 1800) and halved when the phone is under pressure (low battery, hot). So a small model on a weak phone is never handed a context it cannot
+ * hold, and a big model is not flooded.
+ */
+export function budgetFor(contextTokens: number, share: number, pressure = false): number {
+  const base = Math.min(1800, Math.max(200, Math.round((contextTokens || 2048) * share)));
+  return pressure ? Math.max(150, Math.round(base / 2)) : base;
+}
+
 export const approxTokens = (text: string): number => Math.ceil(text.length / 4);
 const LABEL: Record<string, string> = { verified: 'checked', candidate: 'not yet reviewed', disputed: 'DISPUTED', needs_review: 'needs review' };
 const MIN_RELEVANCE = 0.15;

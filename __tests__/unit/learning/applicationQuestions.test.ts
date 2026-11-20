@@ -38,3 +38,14 @@ describe('cards stay inside their own subject', () => {
     expect(ids()).toEqual(['a1', 'b1', 'old']);
   });
 });
+
+describe('the room a step has for stored knowledge', () => {
+  it('follows the model\'s context, stays between 200 and 1800 tokens, and halves under pressure', () => {
+    const { budgetFor } = require('../../../src/learning/workingContext');
+    expect(budgetFor(2048, 0.2)).toBe(410);
+    expect(budgetFor(512, 0.12)).toBe(200);
+    expect(budgetFor(32768, 0.2)).toBe(1800);
+    expect(budgetFor(4096, 0.2, true)).toBe(410);
+    expect(budgetFor(0, 0.2)).toBe(410); // an unknown context is treated as the smallest usual one
+  });
+});

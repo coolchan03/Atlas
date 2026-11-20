@@ -42,7 +42,7 @@ import { MemoryLedger } from './memoryLedger';
 import { conflictReason, isStandaloneClaim, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
-import { buildWorkingContext } from './workingContext';
+import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, loadCards } from './knowledgeCards';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics } from './exams';
@@ -71,6 +71,13 @@ const L = () => useLearningStore.getState();
 type Role = 'learner' | 'judge' | 'manager';
 let roleModels: Record<Role, string> = { learner: '', judge: '', manager: '' };
 let baseModel = '';
+
+/** The room a step has for stored notes and passages: a share of the loaded model's context, halved while the phone is saving power or hot. */
+function stepBudget(share: number): number {
+  let pressure = false;
+  try { pressure = require('../atlasTools/lowPowerState').lowPowerActive(); } catch { /* no power state: no pressure */ }
+  return budgetFor(llmService.getPerformanceSettings().contextLength || 2048, share, pressure);
+}
 
 async function ensureModel(): Promise<void> {
   if (llmService.isModelLoaded()) return;
@@ -287,7 +294,7 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   }
   status('Learner is writing a report...');
   // What is already stored about this question: background to avoid repeating or contradicting it, never a source to cite.
-  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: (await loadCards(cfg.topic, agent.id).catch(() => [])).map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: 400 }).text;
+  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: (await loadCards(cfg.topic, agent.id).catch(() => [])).map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: stepBudget(0.12) }).text;
   const report = await ask(
     learnerSystem(agent, st, cfg),
     `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}${known ? `ALREADY STORED (background only, NOT a source: do not cite it, and say if the sources contradict it):\n${known}\n\n` : ''}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
@@ -346,7 +353,7 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
     // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
     const cards = await loadCards(c.topic, agent.id).catch(() => []);
-    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cards.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: 500 }).text.split('\n').filter(Boolean);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cards.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic })), budgetTokens: stepBudget(0.15) }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
@@ -515,7 +522,7 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
     // Only reviewed and approved knowledge (from both the claims ledger and the reviewed findings), and only cards that have a source on file.
     const known = mode === 'memory' ? approvedCards(await loadCards(cfg.topic, subjectId && !isNoAgent(subjectId) ? subjectId : undefined)) : [];
     // Only the approved notes that bear on this question, within a small budget, from this subject's topic; dropped after the answer.
-    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic, source: k.source })), budgetTokens: 600 });
+    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: known.map((k) => ({ id: k.id, text: k.text, status: k.status, topic: k.topic, source: k.source })), budgetTokens: stepBudget(0.2) });
     const notes = working.usedNotes;
     const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');

@@ -23,6 +23,7 @@ import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, ke
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
 import { ProjectZip } from './learningReliability/ProjectZip';
+import { phaseOf } from '../learning/phase';
 const literalStyles = StyleSheet.create({
   s1: { marginTop: 0 },
   s2: { fontWeight: '700' },
@@ -71,6 +72,7 @@ export const LearningScreen: React.FC = () => {
   const clearAgent = useLearningStore((s) => s.clearAgent);
   const [running, setRunning] = useState(isLearning());
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
+  const phase = phaseOf(statusText, isLearning());
   const [open, setOpen] = useState<string | null>(null);
   const [newQ, setNewQ] = useState('');
   const [advanced, setAdvanced] = useState(false);
@@ -254,6 +256,7 @@ export const LearningScreen: React.FC = () => {
       )}
 
       <View style={styles.statusBox}>
+        <Text style={[styles.phase, { color: phase.phase === 'blocked' ? colors.error : phase.phase === 'idle' || phase.phase === 'paused' ? colors.textMuted : colors.primary }]} testID="learn-phase">{phase.label}</Text>
         <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
         <Text style={styles.counts}>
           Round {st?.round ?? 0} · {count('answered')} legacy judge approvals (unverified) · {count('uncertain')} awaiting verification · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
@@ -553,6 +556,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   stepBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center' as const, justifyContent: 'center' as const },
   stepValue: { ...TYPOGRAPHY.body, color: colors.text, width: 36, textAlign: 'center' as const },
   statusBox: { marginTop: SPACING.lg, padding: SPACING.md, borderRadius: 8, backgroundColor: colors.surface },
+  phase: { ...TYPOGRAPHY.meta, textTransform: 'uppercase' as const, letterSpacing: 1 },
   statusText: { ...TYPOGRAPHY.body, color: colors.text, fontWeight: '600' as const },
   counts: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: 4 },
   roleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 6 },
