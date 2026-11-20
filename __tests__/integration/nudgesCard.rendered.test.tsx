@@ -1,7 +1,7 @@
-/** Settings has a switch for every reminder, tip, notice and extra briefing line, and the switches really change what is shown or said. */
+/** Settings (reminders) and the briefing screen (briefing lines) have a switch for every reminder, tip, notice and extra briefing line, and the switches really change what is shown or said. */
 import { installNativeBoundary, requireRTL } from '../harness/nativeBoundary';
 
-it('switches a reminder and a briefing line off from Settings, and the app stops showing and saying them', () => {
+it('switches a reminder and a briefing line off from their screens, and the app stops showing and saying them', () => {
   jest.resetModules();
   installNativeBoundary({ fs: true });
   const rtl = requireRTL();
@@ -14,7 +14,7 @@ it('switches a reminder and a briefing line off from Settings, and the app stops
   useBackupReminder.setState({ since: Date.now() - 30 * 864e5, lastBackupAt: null, snoozedUntil: 0 });
 
   // One screen holds both, as the real app does.
-  const card = rtl.render(React.createElement(React.Fragment, null, React.createElement(NudgesCard), React.createElement(BackupReminderCard, { onOpenSettings: jest.fn() })));
+  const card = rtl.render(React.createElement(React.Fragment, null, React.createElement(NudgesCard, { group: 'Reminders and tips' }), React.createElement(NudgesCard, { group: 'Daily briefing lines', bare: true }), React.createElement(BackupReminderCard, { onOpenSettings: jest.fn() })));
   const reminder = card;
   for (const n of NUDGES) { expect(card.getByTestId(`nudge-${n.id}`)).toBeTruthy(); expect(useNudges.getState()[n.id]).toBe(true); }
   expect(reminder.queryByTestId('backup-reminder')).not.toBeNull();

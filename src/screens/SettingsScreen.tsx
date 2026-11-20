@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { LowPowerCard } from '../components/LowPowerCard';
-import { NudgesCard } from '../components/NudgesCard';
 import { useWideLayout } from '../hooks/useWideLayout';
 import {
   StyleSheet, View,
@@ -160,7 +159,7 @@ export const SettingsScreen: React.FC = () => {
                 { icon: 'activity', title: 'Self-check', desc: 'Test what works on this phone', screen: 'SelfCheck' as const },
                 { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
                 { icon: 'save', title: 'Backup & sync', desc: 'Back up and restore; sync with nearby devices', screen: 'Backup' as const },
-                { icon: 'users', title: 'Assistant permissions', desc: 'Review all requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },
+                { icon: 'users', title: 'Assistant settings', desc: 'Reminders and tips, requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },
                 { icon: 'activity', title: 'Task center', desc: 'See, cancel and retry imports, downloads and other long jobs', screen: 'TaskCenter' as const },
                 { icon: 'image', title: 'Background images', desc: 'Set a background photo for any screen', screen: 'BackgroundSettings' as const },
               ],
@@ -196,9 +195,6 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Atlas: low-battery mode */}
         <LowPowerCard />
-
-        {/* Reminders, tips and the extra lines of the daily briefing */}
-        <NudgesCard />
 
         {/* About */}
         <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>

@@ -8,6 +8,7 @@ import { AppPermissionsCard } from '../components/AppPermissionsCard';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
+import { NudgesCard } from '../components/NudgesCard';
 
 export const AssistantAccessScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -20,10 +21,11 @@ export const AssistantAccessScreen: React.FC = () => {
         <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Assistant permissions</Text>
+        <Text style={styles.headerTitle}>Assistant settings</Text>
         <View style={styles.backButton} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
+        <NudgesCard group="Reminders and tips" />
         <AssistantAccessCard />
         <AppPermissionsCard />
       </ScrollView>

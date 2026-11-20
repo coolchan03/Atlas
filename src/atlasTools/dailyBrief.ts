@@ -172,13 +172,41 @@ function withoutDefinition(extract: string): string {
   return sentences.length >= 3 && sentences[0].length > 40 ? sentences.slice(1).join(' ').trim() : extract;
 }
 
+/** A page title that would only repeat the topic or is a list, index or disambiguation page: not a fact worth telling. */
+const dullTitle = (title: string, topic: string): boolean =>
+  title.toLowerCase() === topic.toLowerCase() || /^(list|lists|outline|index|timeline|history) of\b|\(disambiguation\)|^portal:/i.test(title);
+
+async function wikiSummary(title: string): Promise<{ title: string; text: string } | null> {
+  const json = JSON.parse(await fetchText(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, 8000));
+  if (json.type === 'disambiguation') return null;
+  return { title: json.title || title, text: (json.extract || '').trim() };
+}
+
+/**
+ * A fun fact is about something specific the topic touches, not the topic itself (nobody learns anything from "the United States is a
+ * country"): one of the pages Wikipedia finds for the topic is picked at random (three tries at most) and told without its opening definition. The topic's own
+ * page is the fallback when search finds nothing.
+ */
 async function webFacts(topic: string, startN: number): Promise<Source[]> {
+  const make = (page: { title: string; text: string }, definition: boolean): Source[] => {
+    const text = (definition ? withoutDefinition(page.text) : page.text).slice(0, 1200);
+    return text.length < 50 ? [] : [{ n: startN, doc: `Wikipedia: ${page.title}`, part: 1, text, origin: 'web' }];
+  };
   try {
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
-    const json = JSON.parse(await fetchText(url, 8000));
-    const text = withoutDefinition((json.extract || '').trim()).slice(0, 1200);
-    if (!text || text.length < 50) return [];
-    return [{ n: startN, doc: `Wikipedia: ${json.title || topic}`, part: 1, text, origin: 'web' }];
+    const found = JSON.parse(await fetchText(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=12&format=json&origin=*`, 8000));
+    const titles: string[] = (found?.query?.search ?? []).map((r: { title: string }) => r.title).filter((t: string) => !dullTitle(t, topic)).slice(0, 8);
+    for (let tries = 0; titles.length && tries < 3; tries++) {
+      const [title] = titles.splice(Math.floor(Math.random() * titles.length), 1);
+      try {
+        const page = await wikiSummary(title);
+        const facts = page ? make(page, true) : [];
+        if (facts.length) return facts;
+      } catch { /* try another page */ }
+    }
+  } catch { /* fall back to the topic's own page */ }
+  try {
+    const page = await wikiSummary(topic);
+    return page ? make(page, true) : [];
   } catch { return []; }
 }
 
@@ -215,7 +243,7 @@ async function libraryItems(interests: string[], withNews: boolean, firstN: numb
     }
     if (!facts.length) continue;
     n += facts.length;
-    out.push({ topic: withNews ? `A surprising, specific fun fact about ${topic} from ${factSource} (one detail such as a number, a date or a first; never a definition of what ${topic} is)` : `From the offline library: ${topic}`, sources: facts, always: true });
+    out.push({ topic: withNews ? `A surprising, specific fun fact from ${factSource}, connected to ${topic} (one detail such as a number, a date or a first; never a definition of what ${topic} or the page's subject is, and never something everyone already knows)` : `From the offline library: ${topic}`, sources: facts, always: true });
     if (withNews) break;
   }
   return out;

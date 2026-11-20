@@ -1,19 +1,19 @@
 import React from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '../theme';
-import { NUDGES, useNudges } from '../atlasTools/nudges';
+import { NUDGES, useNudges, type NudgeInfo } from '../atlasTools/nudges';
 import { SPACING, TYPOGRAPHY } from '../constants';
 
-/** Settings card: a switch for every reminder, tip, notice and extra briefing line. */
-export function NudgesCard() {
+/** A switch for every reminder, tip, notice and extra briefing line of one group (all groups when none is given). */
+export function NudgesCard({ group: only, bare }: { group?: NudgeInfo['group']; bare?: boolean }) {
   const { colors } = useTheme();
   const flags = useNudges();
-  const groups = [...new Set(NUDGES.map((n) => n.group))];
+  const groups = [...new Set(NUDGES.map((n) => n.group))].filter((g) => !only || g === only);
   return (
-    <View style={[st.card, { backgroundColor: colors.surface }]} testID="nudges-card">
+    <View style={bare ? undefined : [st.card, { backgroundColor: colors.surface }]} testID="nudges-card">
       {groups.map((group) => (
         <View key={group} style={st.group}>
-          <Text style={[st.h, { color: colors.text }]}>{group}</Text>
+          {!bare && <Text style={[st.h, { color: colors.text }]}>{group}</Text>}
           {NUDGES.filter((n) => n.group === group).map((n) => (
             <View key={n.id} style={st.row}>
               <View style={st.text}>

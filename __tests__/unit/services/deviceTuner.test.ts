@@ -1,4 +1,4 @@
-import { pickBest, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
+import { pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
 import { shouldOfferFirstTest, shouldSuggestTuning, useTuned } from '../../../src/atlasTools/speed';
 
 const result = (id: string, threads: number, tps: number, error?: string): TuneResult =>
@@ -21,6 +21,18 @@ describe('finding the best settings', () => {
     expect(pickBest([result('a', 4, 4.5), result('b', 6, 3.7), result('c', 8, 2.1)])?.option.id).toBe('a');
     expect(pickBest([result('a', 6, 4.6), result('b', 4, 4.5)])?.option.id).toBe('b');
     expect(pickBest([result('a', 6, 5.5), result('b', 4, 4.5)])?.option.id).toBe('a');
+  });
+
+  it('then tries the memory settings on the winner: other cache types and flash attention, but never a value already in use', () => {
+    const base = { id: 'cpu-4', label: 'CPU, 4 threads', backend: 'cpu' as any, threads: 4 };
+    const small = { fileSize: 1e9 };
+    const opts = refineOptions(base, { cacheType: 'q4_0', flashAttn: true }, small);
+    expect(opts.map((o) => o.extra)).toEqual([{ cacheType: 'f16' }, { cacheType: 'q8_0' }, { flashAttn: false, cacheType: 'f16' }]);
+    expect(refineOptions(base, { cacheType: 'f16', flashAttn: false }, small).map((o) => o.extra)).toEqual([{ flashAttn: true }]);
+    expect(refineOptions(base, { cacheType: 'q4_0', flashAttn: true }, { filePath: '/m/gemma-4-e2b.gguf' })).toEqual([]);
+    expect(refineOptions({ ...base, backend: 'auto' as any }, { cacheType: 'q4_0', flashAttn: true })).toEqual([]);
+    expect(refineOptions(base, { cacheType: 'q4_0', flashAttn: true }, { fileSize: 4e9 }).map((o) => o.extra)).toEqual([{ cacheType: 'q8_0' }]);
+    expect(refineOptions({ ...base, backend: 'htp' as any }, { cacheType: 'q4_0', flashAttn: true })).toEqual([]);
   });
 
   it('ignores options that failed, and picks nothing when none worked', () => {

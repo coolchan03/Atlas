@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OfflineNote } from '../components/OfflineNote';
+import { NudgesCard } from '../components/NudgesCard';
 import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackground } from '../components/ScreenBackground';
@@ -327,6 +328,10 @@ export const DailyBriefScreen: React.FC = () => {
             <Text style={styles.switchLabel}>Read each full article (more detail, slower)</Text>
             <Switch value={prefs.deep} onValueChange={(v) => prefs.set({ deep: v })} />
           </View>
+        </Card>
+
+        <Card title="Extra lines in the briefing" subtitle="Things the show adds when they apply to you.">
+          <NudgesCard group="Daily briefing lines" bare />
         </Card>
 
         {list.length > 0 && (
