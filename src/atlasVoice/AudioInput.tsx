@@ -13,7 +13,7 @@ import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
 import { Alert } from 'react-native';
-import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, type CallPhase } from './callLifecycle';
+import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, stallNote, type CallPhase, type CallSnapshot } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import { callTrace } from './callLifecycle';
 import { shareItem } from '../utils/shareItem';
@@ -204,6 +204,22 @@ export function AtlasAudioInput(props: any) {
     logger.log(line); noteCallTrace(line, now);
     lastPhase.current = { phase, at: now };
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A stage that lasts too long (the call sitting idle without opening the microphone, a reply that never ends) is written to the log once, with the flags behind it.
+  const snapshotRef = useRef<CallSnapshot | null>(null);
+  snapshotRef.current = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
+  const stallNoted = useRef('');
+  useEffect(() => {
+    if (!handsFree) return undefined;
+    const timer = setInterval(() => {
+      const snap = snapshotRef.current;
+      const stall = snap ? stallNote(snap, Date.now() - lastPhase.current.at) : null;
+      const key = `${lastPhase.current.at}`;
+      if (!stall || stallNoted.current === key) return;
+      stallNoted.current = key;
+      logger.warn(stall); noteCallTrace(stall);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [handsFree]);
   useEffect(() => { if (error) { const line = `[CALL-ERROR] ${String(error)}`; logger.warn(line); noteCallTrace(line); } }, [error]);
   useEffect(() => { noteCallTrace(`[CALL-ROUTE] ${earpiece ? 'earpiece' : 'speaker'}`); }, [earpiece]);
 

@@ -11,7 +11,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
-import { BRIEF_PROJECT, makeBriefing, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
+import { BRIEF_PROJECT, makeBriefing, previewFunFact, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { AVOID_SUGGESTIONS } from '../atlasTools/newsSources';
 import { useStoryReview } from './BriefStorySheet';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
@@ -324,6 +324,15 @@ export const DailyBriefScreen: React.FC = () => {
             <Text style={styles.switchLabel}>Fun facts (offline library or online Wikipedia)</Text>
             <Switch value={prefs.funFacts} onValueChange={(v) => prefs.set({ funFacts: v })} />
           </View>
+          {prefs.funFacts && prefs.interests.length > 0 && (
+            <TouchableOpacity testID="brief-fact-preview" accessibilityLabel="Preview a fun fact" onPress={async () => {
+              const topic = prefs.interests[Math.floor(Math.random() * prefs.interests.length)];
+              const fact = await previewFunFact(topic).catch(() => null);
+              Alert.alert(fact ? `A fun fact about ${topic}` : 'No fun fact found', fact ? `From ${fact.page}\n\n${fact.text}` : `Nothing was found for ${topic} in the offline library or online. Press again for another interest.`);
+            }}>
+              <Text style={styles.link}>Preview a fun fact (press again for another)</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>Read each full article (more detail, slower)</Text>
             <Switch value={prefs.deep} onValueChange={(v) => prefs.set({ deep: v })} />

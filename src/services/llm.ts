@@ -93,7 +93,10 @@ class LLMService {
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
     const validation = await validateModelFile(modelPath);
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
-    const rawSettings = useAppStore.getState().settings;
+    const baseSettings = useAppStore.getState().settings;
+    // The memory settings that timed fastest for THIS model (Find the best settings) apply to it alone.
+    const modelId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
+    const rawSettings = modelId ? { ...baseSettings, ...useTuned.getState().memory[modelId] } : baseSettings;
     const backend = backendOverride ?? rawSettings.inferenceBackend;
     // HTP only accelerates selected quants. OpenCL can also support Q4_K
     // (subject to the actual native runtime); let its load probe decide.

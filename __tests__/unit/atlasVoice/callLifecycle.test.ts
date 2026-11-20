@@ -1,4 +1,4 @@
-import { callPhase, shouldStartListening, MAX_FAILED_STARTS, type CallSnapshot } from '../../../src/atlasVoice/callLifecycle';
+import { callPhase, stallNote, shouldStartListening, MAX_FAILED_STARTS, type CallSnapshot } from '../../../src/atlasVoice/callLifecycle';
 
 const idle: CallSnapshot = { handsFree: true, muted: false, paused: false, voiceAvailable: true, disabled: false, isRecording: false, isTranscribing: false, isGenerating: false, isModelLoading: false, speaking: false, failedStarts: 0 };
 const with_ = (o: Partial<CallSnapshot>): CallSnapshot => ({ ...idle, ...o });
@@ -51,5 +51,13 @@ describe('call trace', () => {
     for (let i = 0; i < 70; i += 1) noteCallTrace(`line ${i}`, 0);
     expect(callTrace()).toHaveLength(60);
     expect(callTrace()[59]).toContain('line 69');
+  });
+});
+
+describe('call stall note', () => {
+  it('stays silent while a stage is normal and names the flags once an idle call has not started listening', () => {
+    expect(stallNote(idle, 1000)).toBeNull();
+    expect(stallNote(with_({ muted: true }), 600000)).toBeNull();
+    expect(stallNote(with_({ failedStarts: 3 }), 4000)).toContain('flags on: handsFree, voiceAvailable, failedStarts');
   });
 });

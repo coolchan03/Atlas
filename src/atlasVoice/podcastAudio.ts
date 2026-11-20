@@ -15,6 +15,10 @@ import { profileCacheKey, profileForKey } from './hostVoiceKeys';
 import { makeJingle, wavBytes, toBase64, jingleSeconds, JINGLE_PEAK, type JingleKind, type JingleVolume } from './jingles';
 import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
+import { noteBriefTrace } from './briefTrace';
+
+/** A [POD] line for the Debug Logs and for the briefing's own "What just happened" trace. */
+function podNote(level: 'log' | 'warn', message: string): void { logger[level](message); noteBriefTrace(message); }
 
 export interface CastLine { text: string; pitch: number; voice?: string }
 
@@ -63,7 +67,7 @@ function pump(): void {
   if (rendering) return;
   const next = queued.shift();
   if (!next) {
-    if (borrowedVoice) { borrowedVoice = false; logger.log('[POD] render queue empty: putting your saved voice back'); restoreSavedVoice().catch(() => undefined); }
+    if (borrowedVoice) { borrowedVoice = false; podNote('log', '[POD] render queue empty: putting your saved voice back'); restoreSavedVoice().catch(() => undefined); }
     return;
   }
   rendering = true;
@@ -96,25 +100,25 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
     resolve: finish,
     run: async () => {
       try {
-        if (await RNFS.exists(path)) { logger.log(`[POD] line ${i}: already rendered (no wait)`); return path; }
+        if (await RNFS.exists(path)) { podNote('log', `[POD] line ${i}: already rendered (no wait)`); return path; }
         await RNFS.mkdir(dir(key));
         const t0 = Date.now();
         const profile = profileForKey(items[i].voice, useVoiceProfiles.getState().profiles);
         if (profile) {
           borrowedVoice = true;
-          logger.log(`[POD] line ${i}: borrowing voice ${profile.voiceId}#${profile.sid} for a host`);
+          podNote('log', `[POD] line ${i}: borrowing voice ${profile.voiceId}#${profile.sid} for a host`);
           await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
         } else if (borrowedVoice) {
           // A line in an ordinary voice must not be made by the engine a profile left loaded.
           borrowedVoice = false;
-          logger.log(`[POD] line ${i}: ordinary voice after a borrowed one: putting your saved voice back first`);
+          podNote('log', `[POD] line ${i}: ordinary voice after a borrowed one: putting your saved voice back first`);
           await restoreSavedVoice();
         }
         const out = await synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch });
-        logger.log(`[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")`);
+        podNote('log', `[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")`);
         return out;
       } catch (e: any) {
-        logger.warn(`[POD] could not render line ${i}: ${e?.message ?? e}`);
+        podNote('warn', `[POD] could not render line ${i}: ${e?.message ?? e}`);
         return null;
       }
     },
@@ -220,7 +224,7 @@ function playFile(path: string, whole = false): Promise<PlayResult> {
       let span = { offset: 0, duration: buffer.duration as number };
       if (!whole) { try { span = speechSpan(buffer.getChannelData(0), buffer.sampleRate); } catch { /* play the whole file */ } }
       node.start(0, span.offset, span.duration);
-    })().catch((e) => { logger.warn(`[POD] playback failed: ${e?.message ?? e}`); finish(token === stopToken ? 'failed' : 'stopped'); });
+    })().catch((e) => { podNote('warn', `[POD] playback failed: ${e?.message ?? e}`); finish(token === stopToken ? 'failed' : 'stopped'); });
   });
 }
 
@@ -231,7 +235,7 @@ function playFile(path: string, whole = false): Promise<PlayResult> {
 export async function playLine(key: string, items: CastLine[], i: number): Promise<boolean> {
   const line = items[i];
   if (!renderable(items)) {
-    logger.warn('[POD] this phone cannot save speech to a file, so every line is spoken live (expect a long silence before each)');
+    podNote('warn', '[POD] this phone cannot save speech to a file, so every line is spoken live (expect a long silence before each)');
     return speakAndWait(line.text, { pitch: line.pitch, voice: line.voice || '' });
   }
   const token = stopToken;
@@ -244,7 +248,7 @@ export async function playLine(key: string, items: CastLine[], i: number): Promi
   const path = await current;
   if (token !== stopToken) return false;
   if (!path) {
-    logger.warn(`[POD] line ${i}: no rendered file, speaking it live (expect a long silence first)`);
+    podNote('warn', `[POD] line ${i}: no rendered file, speaking it live (expect a long silence first)`);
     return speakAndWait(line.text, { pitch: line.pitch, voice: line.voice || '' });
   }
   // A saved file the system could not play (cleared from the cache, cut short): forget it and say the
@@ -312,8 +316,9 @@ export async function nativeEpisodeQueue(
     paths.push(p);
   }
   if (tunes) await addJingle('outro');
-  logger.log(`[POD] queue of ${paths.length} files from line ${first}: intro ${!!tunes && (tunes.intro ?? first === 0)}, outro ${!!tunes}, story pause ${tunes?.pauseSeconds ?? 0}s`);
+  podNote('log', `[POD] queue of ${paths.length} files from line ${first}: intro ${!!tunes && (tunes.intro ?? first === 0)}, outro ${!!tunes}, story pause ${tunes?.pauseSeconds ?? 0}s`);
 
+  noteBriefTrace(`[POD] queue: ${paths.map((x, i) => (lineAtIndex.has(i) ? `line ${lineAtIndex.get(i)}` : /_jingles\/(\w+)/.exec(x)?.[1] ?? 'file')).join(', ')}`);
   return { paths, lineAtIndex };
 }
 
@@ -359,18 +364,18 @@ export async function playJingle(kind: JingleKind, volume: JingleVolume = 'norma
     const result = await Promise.race([playFile(path, true), limit]);
     if (timer) clearTimeout(timer);
     if (result === 'timeout') {
-      logger.warn(`[POD] jingle ${kind} did not finish in time: skipped`);
+      podNote('warn', `[POD] jingle ${kind} did not finish in time: skipped`);
       const settle = settleCurrent; // end it without counting as a stop by the listener
       settleCurrent = null;
       try { source?.stop(); } catch { /* already stopped */ }
       source = null;
       settle?.('stopped');
     } else if (result === 'failed') {
-      logger.warn(`[POD] jingle ${kind} could not be played: skipped`);
+      podNote('warn', `[POD] jingle ${kind} could not be played: skipped`);
     }
     return token === stopToken;
   } catch (e: any) {
-    logger.warn(`[POD] jingle ${kind} skipped: ${e?.message ?? e}`);
+    podNote('warn', `[POD] jingle ${kind} skipped: ${e?.message ?? e}`);
     return token === stopToken;
   }
 }

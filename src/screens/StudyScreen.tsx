@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { shareItem } from '../utils/shareItem';
 import { StyleSheet, ActivityIndicator, Alert, BackHandler, Linking, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -26,6 +25,8 @@ import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/gener
 import { dueItems, streakFrom, useStudyProgress } from '../study/progress';
 import { Switch } from 'react-native';
 import logger from '../utils/logger';
+import { briefTrace, noteBriefTrace } from '../atlasVoice/briefTrace';
+import { shareItem } from '../utils/shareItem';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExportAvailable, VideoExportCancelled, type SavedVideo, type VideoProgress } from '../services/videoExport';
@@ -301,6 +302,7 @@ export const StudyScreen: React.FC = () => {
     stop();
     stopPodcastAudio(); // a line playing from a file would otherwise play on top of the new one
     stopRef.current = false;
+    noteBriefTrace(`[POD] play pressed at line ${from}`);
     keepScreenOn(true, 'study');
     let finished = false;
     const prefs = useBriefPrefs.getState();
@@ -334,12 +336,13 @@ export const StudyScreen: React.FC = () => {
               resolve(result);
             };
             const unP = nativePlayer.onProgress((fileIdx) => {
+              noteBriefTrace(`[POD] playing file ${fileIdx + 1} of ${queue.paths.length}${queue.lineAtIndex.has(fileIdx) ? ` (line ${queue.lineAtIndex.get(fileIdx)})` : ' (a tune or pause)'}`);
               const lineIdx = queue.lineAtIndex.get(fileIdx);
               if (lineIdx !== undefined) onLine(lineIdx);
             });
             const unF = nativePlayer.onFinished(() => settle(true));
             // A tune that cannot be played is skipped by the native player, which carries on: it must not end the show.
-            const unE = nativePlayer.onError((message) => { logger.warn(`[POD] native player: ${message}`); if (/_jingles/.test(message)) return; settle(false); });
+            const unE = nativePlayer.onError((message) => { logger.warn(`[POD] native player: ${message}`); noteBriefTrace(`[POD] native player: ${message}`); if (/_jingles/.test(message)) return; settle(false); });
             // Poll isStopped() so the native service halts when the user taps stop.
             const poll = setInterval(() => { if (isStopped()) { nativePlayer.stop(); settle(false); } }, 500);
             nativePlayer.play(queue.paths, { startIndex: 0, speed: isBrief ? prefs.speed ?? 1 : 1 });
@@ -372,6 +375,12 @@ export const StudyScreen: React.FC = () => {
     if (nativePlayer.isAvailable()) nativePlayer.stop();
     keepScreenOn(false, 'study'); setPlaying(null);
     setMedia((m) => (m === 'playing' ? 'paused' : m));
+  };
+  /** The briefing player's own account of its last run: the queue, each file it reached, anything the phone's player skipped. */
+  const showBriefTrace = () => {
+    const lines = briefTrace();
+    const text = lines.length ? lines.join('\n') : 'Nothing has been played yet. Press play, then look here.';
+    Alert.alert('What just happened', text.slice(-1500), [{ text: 'Close', style: 'cancel' }, { text: 'Share', onPress: () => { void shareItem({ title: 'Atlas briefing trace', text }); } }]);
   };
   const playBrief = (from: number) => { const b = lastBrief.current; if (b) void play(b.items, from, b.source); };
   const briefLine = playing ?? resumeAt;
@@ -528,6 +537,9 @@ export const StudyScreen: React.FC = () => {
                     onPlay={(i) => play(items, i, { audioKey: `${projectId}-${v.createdAt}`, storyStarts: v.storyStarts ?? [] })} onPause={halt} label="podcast" />
                 );
               })()}
+              <TouchableOpacity onPress={showBriefTrace} accessibilityLabel="Show what just happened while this played" testID="brief-what-happened">
+                <Text style={[{ color: colors.primary }, literalStyles.s64]}>What just happened</Text>
+              </TouchableOpacity>
               {(() => {
                 const jumps = storyJumps(v);
                 if (!jumps.length) return null;

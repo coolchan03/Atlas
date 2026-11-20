@@ -50,6 +50,18 @@ export function describePhaseChange(change: { prev: CallPhase; next: CallPhase }
   return `[CALL-STATE] ${change.prev} -> ${change.next} after ${(Math.max(0, sinceMs) / 1000).toFixed(1)} s${extra ? ` (${extra})` : ''}`;
 }
 
+/** How long a stage may last before the call notes it as a stall (muted and paused are the person's own choices and never stall). */
+const STALL_AFTER_MS: Partial<Record<CallPhase, number>> = { idle: 3000, loading: 45000, transcribing: 20000, generating: 90000, speaking: 120000, unavailable: 5000 };
+
+/** One line explaining a stage that has lasted too long, with every flag that decided it, or null while it is normal. Pure. */
+export function stallNote(s: CallSnapshot, since: number): string | null {
+  const phase = callPhase(s);
+  const limit = STALL_AFTER_MS[phase];
+  if (limit === undefined || since < limit) return null;
+  const on = (Object.keys(s) as (keyof CallSnapshot)[]).filter((k) => s[k] === true || (typeof s[k] === 'number' && s[k] > 0)).join(', ');
+  return `[CALL-STALL] ${phase} for ${(since / 1000).toFixed(0)} s, not listening; flags on: ${on || 'none'}`;
+}
+
 const trace: string[] = [];
 const TRACE_MAX = 60;
 /** Keeps the newest call-state lines so a failed call can be explained afterwards (shown with the diagnostics). */

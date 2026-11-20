@@ -5,6 +5,7 @@
  * The episode is written by the model on the phone and saved like a study podcast.
  */
 import { scrubTeasers } from './briefingScrub';
+import { clearBriefTrace, noteBriefTrace } from '../atlasVoice/briefTrace';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -210,6 +211,12 @@ async function webFacts(topic: string, startN: number): Promise<Source[]> {
   } catch { return []; }
 }
 
+/** The source a fun fact would be told from for one interest right now (library first, then a related Wikipedia page), or null. For the preview on the briefing screen. */
+export async function previewFunFact(topic: string): Promise<{ page: string; text: string } | null> {
+  const found = (await libraryFacts(topic, 1))[0] ?? (offGridNow() ? undefined : (await webFacts(topic, 1))[0]);
+  return found ? { page: found.doc, text: found.text.slice(0, 600) } : null;
+}
+
 type OutlineItem = { topic: string; sources: Source[]; always?: boolean };
 
 function storyHeader(h: Headline): string {
@@ -338,6 +345,7 @@ const briefingRules = (avoid: string[], gotNews: boolean): string | undefined =>
 
 /** Builds today's briefing from real, current stories and saves it. */
 export async function makeBriefing(onStep: (m: string) => void, voicesAvailable: number): Promise<StudyResult> {
+  clearBriefTrace();
   const p = useBriefPrefs.getState();
   const interests = await wantedInterests(p.interests, p.avoid ?? []);
   let offline = false;
@@ -442,6 +450,10 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
     r.podcast = clean.lines;
     if (r.storyStarts) r.storyStarts = clean.starts;
     if (r.storyItems) r.storyItems = clean.keptStarts.map((i) => r.storyItems![i]);
+    // What the quality check found, kept for "What just happened": stories told from a headline alone, teasers taken out, and the fun fact's page.
+    const thin = outline.filter((o) => o.sources.some((x) => x.text.includes(HEADLINE_ONLY_NOTE))).map((o) => o.topic.split(' - ')[0]);
+    const fact = outline.find((o) => o.always)?.sources[0]?.doc;
+    noteBriefTrace(`[BRIEF] ${r.storyStarts?.length ?? 0} stories, ${r.podcast.length} lines; ${thin.length ? `told from the headline alone: ${thin.join('; ')}` : 'every story had detail'}; ${clean.removed} teaser line${clean.removed === 1 ? '' : 's'} taken out${fact ? `; fun fact from ${fact}` : ''}`);
   }
   const opening = [gotNews ? greetingLine() : '', weatherSaid, packSaid, calendarSpoken(calendarCtx, { birthdays: nudgeOn('birthdays'), day: evening ? 'tomorrow' : 'today' }), yourDay(evening ? 'tomorrow' : 'today')].filter(Boolean);
   if (r.podcast) r.podcast = [...opening.map((text) => ({ host: 'A' as const, text })), ...r.podcast];

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -20,6 +20,8 @@ import { cancelTuning, tuneDevice, type TuneOutcome, type TuneProgress } from '.
 const COLOR_FFF = '#fff';
 const BORDERCOLOR_D4A017 = '#d4a017';
 const literalStyles = StyleSheet.create({
+  deepRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8 },
+  deepText: { flex: 1, fontSize: 13 },
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   s3: { padding: 6 },
@@ -95,6 +97,7 @@ const TextModelTestScreen: React.FC = () => {
   // Memory refusal can be overridden, the same "Load Anyway" the chat offers.
   const [canForce, setCanForce] = useState(false);
   const [tuneBusy, setTuneBusy] = useState(false);
+  const [deepTune, setDeepTune] = useState(false);
   const [tune, setTune] = useState<TuneProgress | null>(null);
   const [tuned, setTuned] = useState<TuneOutcome | null>(null);
   const [tuneError, setTuneError] = useState<string | null>(null);
@@ -279,7 +282,7 @@ const TextModelTestScreen: React.FC = () => {
   const findBest = async () => {
     if (!model || tuneBusy || running || vulkanBusy) return;
     setTuneBusy(true); setTuned(null); setTuneError(null); setTune(null);
-    try { setTuned(await tuneDevice(model.id, setTune)); }
+    try { setTuned(await tuneDevice(model.id, setTune, { deep: deepTune })); }
     catch (e: any) { setTuneError(e?.message || String(e)); }
     finally { setTuneBusy(false); setTune(null); }
   };
@@ -315,6 +318,10 @@ const TextModelTestScreen: React.FC = () => {
               <View style={card} testID="model-tune">
                 <Text style={[{ color: colors.text }, literalStyles.s14]}>Find the best settings</Text>
                 <Text style={[{ color: colors.textSecondary }, literalStyles.s15]}>Loads this model a few ways (automatic GPU or NPU, and the CPU with different thread counts), times a short reply each way and keeps the fastest. Takes a few minutes. Your chat is not touched.</Text>
+                <View style={literalStyles.deepRow}>
+                  <Text style={[{ color: colors.textSecondary }, literalStyles.deepText]}>Also time batch sizes with a long prompt (a few minutes longer; speeds up reading what you send)</Text>
+                  <Switch value={deepTune} onValueChange={setDeepTune} disabled={tuneBusy} testID="model-tune-deep" />
+                </View>
                 <TouchableOpacity onPress={findBest} disabled={running || vulkanBusy || tuneBusy} testID="model-tune-start" style={[literalStyles.s16, { backgroundColor: tuneBusy ? colors.border : colors.primary }, literalStyles.s17]}>
                   <Text style={[buttonText, { color: WHITE }]}>{tuneBusy ? `Trying ${tune?.step ?? 1} of ${tune?.steps ?? '...'}: ${tune?.label ?? ''}` : tuned ? 'Find again' : 'Find the best settings'}</Text>
                 </TouchableOpacity>

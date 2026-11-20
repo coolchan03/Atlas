@@ -17,7 +17,7 @@ import { useSpeedStats, useTuned } from '../atlasTools/speed';
 import logger from '../utils/logger';
 
 /** The model-memory settings a refinement changes on top of the winning backend and thread count. */
-interface TuneExtra { cacheType?: CacheType; flashAttn?: boolean }
+interface TuneExtra { cacheType?: CacheType; flashAttn?: boolean; nBatch?: number }
 export interface TuneOption { id: string; label: string; backend: InferenceBackend; threads: number; extra?: TuneExtra }
 export interface TuneResult { option: TuneOption; tps: number; firstWordSec: number; error?: string }
 
@@ -63,6 +63,11 @@ export function refineOptions(base: TuneOption, current: { cacheType: CacheType;
 /** Models above this size are not tried with an f16 cache or without flash attention (memory). */
 const BIG_MODEL_BYTES = 2.5e9;
 
+/** Batch sizes worth timing against the one in use (they change how fast the prompt is read, not how fast the answer is written). */
+function batchOptions(base: TuneOption, current: number): TuneOption[] {
+  return [256, 512, 1024].filter((n) => n !== current).map((n) => ({ ...base, id: `${base.id}+batch-${n}`, label: `${base.label}, batch ${n}`, extra: { ...base.extra, nBatch: n } }));
+}
+
 /** A refinement must beat the plain winner by this much to be kept: smaller differences are measuring noise. */
 const REFINE_GAIN = 1.08;
 
@@ -88,71 +93,109 @@ export interface TuneOutcome { best: TuneResult | null; results: TuneResult[]; a
 let cancelFlag = false;
 export const cancelTuning = () => { cancelFlag = true; };
 
+/** Long enough that reading it, not writing the answer, is most of the wait: it shows what a different batch size does. */
+const LONG_PROMPT = `${'The river runs past the mill, the town and the old stone bridge before it reaches the sea. '.repeat(24)}Summarise the paragraph above in one sentence.`;
+
 const PROMPT = 'Write one short paragraph (about 50 words) about rivers. No title.';
 
+type TuneBase = { cacheType: CacheType; flashAttn: boolean; nBatch: number };
+
+/** Loads the model with one option's settings (the rest as they were), writes one reply and reports how fast it went. */
+async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneOption, prompt: string): Promise<TuneResult> {
+  const { modelId, old } = ctx;
+  useAppStore.getState().updateSettings({ inferenceBackend: option.backend, nThreads: option.threads, backendUserChosen: true, cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, ...option.extra } as any);
+  try {
+    // A fresh load each time: threads, acceleration and the cache are fixed when the model loads.
+    await activeModelService.unloadTextModel(true);
+    await activeModelService.loadTextModel(modelId);
+    await llmService.generateResponse([{ id: 'u', role: 'user', content: prompt, timestamp: 0 }], { disableThinking: true });
+    const st = llmService.getPerformanceStats();
+    const tps = st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0;
+    // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
+    if (!option.extra && prompt === PROMPT) useSpeedStats.getState().record(modelId, { decode: tps, backend: String(option.backend) });
+    return { option, tps, firstWordSec: (st.lastTimeToFirstToken || 0) / 1000 };
+  } catch (e: any) {
+    logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
+    return { option, tps: 0, firstWordSec: 0, error: String(e?.message || e) };
+  }
+}
+
+/** The best memory-setting refinement when it is clearly faster than the plain winner it was built from, else the plain winner. */
+function keepRefinement(results: TuneResult[], first: TuneResult | null): TuneResult | null {
+  const refined = pickBest(results.filter((r) => r.option.extra));
+  return refined && first && refined.tps >= first.tps * REFINE_GAIN ? refined : first;
+}
+
+/** The batch size that read the long prompt clearly faster than the one in use ('batch-now' is that one), else the winner unchanged. */
+function keepBatch(deepResults: TuneResult[], chosen: TuneResult): TuneResult {
+  const baseline = deepResults.find((r) => !r.error && r.option.id.endsWith('batch-now'));
+  const quickest = deepResults.filter((r) => !r.error && !r.option.id.endsWith('batch-now') && r.firstWordSec > 0).sort((a, b) => a.firstWordSec - b.firstWordSec)[0];
+  return baseline && quickest && quickest.firstWordSec * REFINE_GAIN <= baseline.firstWordSec ? { ...quickest, tps: chosen.tps } : chosen;
+}
+
 /** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). */
-export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) => void): Promise<TuneOutcome> {
+export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean } = {}): Promise<TuneOutcome> {
   cancelFlag = false;
   const store = useAppStore.getState();
   const model = store.downloadedModels.find((m) => m.id === modelId);
   if (!model || model.engine !== 'llama') throw new Error('Pick a downloaded GGUF text model to tune.');
   if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still being written. Wait for it to finish, then try again.');
-  const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn };
+  const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch };
+  // What an earlier test saved for this model would hide the settings being timed, so it is set aside until the new result is known.
+  const earlierMemory = useTuned.getState().memory[modelId];
+  useTuned.getState().setMemory(modelId, undefined);
   const [cores, recommended] = await Promise.all([hardwareService.getCpuCoreCount(), hardwareService.getRecommendedThreadCount()]);
   const options = tuneOptions(cores, recommended, await availableAccelerators(model));
   const results: TuneResult[] = [];
   const restore = () => useAppStore.getState().updateSettings(old as any);
 
-  const run = async (option: TuneOption): Promise<void> => {
-    useAppStore.getState().updateSettings({ inferenceBackend: option.backend, nThreads: option.threads, backendUserChosen: true, cacheType: old.cacheType, flashAttn: old.flashAttn, ...option.extra } as any);
-    try {
-      // A fresh load each time: threads, acceleration and the cache are fixed when the model loads.
-      await activeModelService.unloadTextModel(true);
-      await activeModelService.loadTextModel(modelId);
-      await llmService.generateResponse([{ id: 'u', role: 'user', content: PROMPT, timestamp: 0 }], { disableThinking: true });
-      const st = llmService.getPerformanceStats();
-      results.push({ option, tps: st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0, firstWordSec: (st.lastTimeToFirstToken || 0) / 1000 });
-      // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
-      if (!option.extra) useSpeedStats.getState().record(modelId, { decode: st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0, backend: String(option.backend) });
-    } catch (e: any) {
-      logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
-      results.push({ option, tps: 0, firstWordSec: 0, error: String(e?.message || e) });
+  const deepResults: TuneResult[] = [];
+  const runList = async (list: TuneOption[], at: { done: number; total: number; prefix?: string; prompt?: string; into?: TuneResult[] }): Promise<void> => {
+    const { prompt = PROMPT, into = results } = at;
+    for (const [i, option] of list.entries()) {
+      if (cancelFlag) break;
+      onProgress({ step: at.done + i + 1, steps: at.total, label: `${at.prefix ?? ''}${option.label}`, results: [...results, ...deepResults] });
+      into.push(await timeOption({ modelId, old }, option, prompt));
     }
   };
   let first: TuneResult | null = null;
+  let chosen: TuneResult | null = null;
   try {
-    for (const [i, option] of options.entries()) {
-      if (cancelFlag) break;
-      onProgress({ step: i + 1, steps: options.length, label: option.label, results: [...results] });
-      await run(option);
-    }
+    await runList(options, { done: 0, total: options.length });
     first = cancelFlag ? null : pickBest(results);
     const refine = first ? refineOptions(first.option, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model) : [];
-    for (const [j, option] of refine.entries()) {
-      if (cancelFlag) break;
-      onProgress({ step: options.length + j + 1, steps: options.length + refine.length, label: `memory: ${option.label}`, results: [...results] });
-      await run(option);
+    await runList(refine, { done: options.length, total: options.length + refine.length, prefix: 'memory: ' });
+    // A memory-setting refinement is kept only when clearly faster than the plain winner it was built from.
+    chosen = cancelFlag ? null : keepRefinement(results, first);
+    // The longer test: how fast a long prompt is read with other batch sizes. The winner so far is timed again on the same long prompt first.
+    if (opts.deep && chosen && !cancelFlag) {
+      const base = chosen.option;
+      const batches = [{ ...base, id: `${base.id}+batch-now`, label: `${base.label}, batch ${old.nBatch} (as now)` }, ...batchOptions(base, old.nBatch)];
+      const done = options.length + refine.length;
+      await runList(batches, { done, total: done + batches.length, prefix: 'long prompt: ', prompt: LONG_PROMPT, into: deepResults });
+      chosen = keepBatch(deepResults, chosen);
     }
   } finally {
     // Whatever happens, the settings end as the best one (below) or as they were.
     restore();
   }
-  // A memory-setting refinement is kept only when clearly faster than the plain winner it was built from.
-  const refined = pickBest(results.filter((r) => r.option.extra));
-  const best = cancelFlag ? null : refined && first && refined.tps >= first.tps * REFINE_GAIN ? refined : first;
+  const best = cancelFlag ? null : chosen;
   if (best) {
     // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
     // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
     const accelerated = best.option.backend !== INFERENCE_BACKENDS.AUTO && best.option.backend !== INFERENCE_BACKENDS.CPU;
     useAppStore.getState().updateSettings(accelerated
-      ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads, ...best.option.extra }
-      : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true, ...best.option.extra } as any);
+      ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads }
+      : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
+    // Cache type, flash attention and batch size are kept for this model only: the other models keep the global ones.
+    useTuned.getState().setMemory(modelId, best.option.extra);
     useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.
     useSpeedStats.setState((st) => ({ byModel: { ...st.byModel, [modelId]: { ...(st.byModel[modelId] ?? { prefill: 0, outLen: 0, samples: 1 }), decode: best.tps } } }));
     // Load it the way it was just measured, so the next chat starts at the winning speed.
     try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(modelId); } catch { /* the chat reloads it on demand */ }
   }
-  return { best, results, applied: !!best, cancelled: cancelFlag };
+  if (!best) useTuned.getState().setMemory(modelId, earlierMemory); // nothing was learned: what was saved before stays
+  return { best, results: [...results, ...deepResults], applied: !!best, cancelled: cancelFlag };
 }
 

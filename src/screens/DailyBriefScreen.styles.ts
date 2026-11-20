@@ -20,6 +20,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   descGap: { marginTop: 6 },
   descGapSmall: { marginTop: 4 },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
+  link: { ...TYPOGRAPHY.body, color: colors.primary, marginTop: SPACING.sm },
   sectionLabel: { ...TYPOGRAPHY.label, color: colors.textSecondary, marginTop: SPACING.sm },
   actions: { marginTop: SPACING.md, gap: SPACING.sm },
   progressRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md },

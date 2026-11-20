@@ -65,16 +65,25 @@ interface TunedState {
   at: Record<string, number>;
   /** The NPU or GPU backend that timed fastest in that test, when one did (Automatic tries it first for this model). */
   accelerator: Record<string, string>;
+  /** Memory settings that timed fastest for one model (KV cache type, flash attention, batch size). They apply to that model only; others keep the global settings. */
+  memory: Record<string, ModelMemory>;
   mark: (modelId: string, accelerator?: string) => void;
+  setMemory: (modelId: string, memory?: ModelMemory) => void;
 }
+export interface ModelMemory { cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number }
 export const useTuned = create<TunedState>()(persist((set) => ({
   at: {},
   accelerator: {},
+  memory: {},
+  setMemory: (modelId, memory) => set((st) => {
+    const { [modelId]: _old, ...rest } = st.memory;
+    return { memory: memory && Object.keys(memory).length ? { ...rest, [modelId]: memory } : rest };
+  }),
   mark: (modelId, accelerator) => set((st) => {
     const { [modelId]: _old, ...rest } = st.accelerator;
     return { at: { ...st.at, [modelId]: Date.now() }, accelerator: accelerator ? { ...rest, [modelId]: accelerator } : rest };
   }),
-}), { name: 'atlas-tuned-models', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ at: s.at, accelerator: s.accelerator }) }));
+}), { name: 'atlas-tuned-models', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ at: s.at, accelerator: s.accelerator, memory: s.memory }) }));
 
 /** Models whose slow-reply hint was dismissed. */
 interface HintState { off: Record<string, true>; dismiss: (modelId: string) => void }

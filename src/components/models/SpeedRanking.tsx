@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
-import { useSpeedStats, speedHealthLabel, backendAdvice, type ModelSpeed } from '../../atlasTools/speed';
+import { useSpeedStats, useTuned, speedHealthLabel, backendAdvice, type ModelMemory, type ModelSpeed } from '../../atlasTools/speed';
 const literalStyles = StyleSheet.create({
   s1: { fontSize: 16 },
   s2: { fontSize: 12, marginTop: 2 },
@@ -14,6 +14,14 @@ const literalStyles = StyleSheet.create({
 
 
 interface RankedModel { id: string; name: string; decode: number; prefill: number }
+
+/** What "Find the best settings" kept for a model, in words ('' when it was never tested). */
+function tunedLine(tuned: { at: number | undefined; accelerator: string | undefined; memory: ModelMemory | undefined }): string {
+  if (!tuned.at) return '';
+  const m = tuned.memory;
+  const parts = [`tested: ${tuned.accelerator ?? 'CPU or automatic'}`, m?.cacheType && `${m.cacheType} cache`, m?.flashAttn === false && 'no flash attention', m?.nBatch && `batch ${m.nBatch}`];
+  return parts.filter(Boolean).join(', ');
+}
 
 /** Measured models only, fastest writer first. */
 function rankModelsBySpeed(models: Array<{ id: string; name: string }>, speeds: Record<string, ModelSpeed>): RankedModel[] {
@@ -28,6 +36,7 @@ export const SpeedRankingCard: React.FC<{ style?: object }> = ({ style }) => {
   const models = useAppStore(s => s.downloadedModels);
   const speeds = useSpeedStats(s => s.byModel);
   const byConfig = useSpeedStats(s => s.byConfig);
+  const tuned = useTuned();
   const ranked = rankModelsBySpeed(models, speeds).slice(0, 6);
   if (!ranked.length) return null;
   return (
@@ -43,6 +52,7 @@ export const SpeedRankingCard: React.FC<{ style?: object }> = ({ style }) => {
             {m.decode.toFixed(1)} writing · {speedHealthLabel(m.decode)}{m.prefill > 0 ? ` · reads ${Math.round(m.prefill)}` : ''}
           </Text>
         </View>
+        <Text style={[{ color: colors.textMuted }, literalStyles.s2]} testID={`speed-tuned-${m.id}`}>{tunedLine({ at: tuned.at[m.id], accelerator: tuned.accelerator[m.id], memory: tuned.memory[m.id] }) || 'Not tested yet: open the model test and press Find the best settings.'}</Text>
         {!!backendAdvice(byConfig, m.id) && <Text style={[{ color: colors.textMuted }, literalStyles.s2]} testID={`speed-advice-${m.id}`}>{backendAdvice(byConfig, m.id)}</Text>}
         </React.Fragment>
       ))}
