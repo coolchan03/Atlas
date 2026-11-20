@@ -81,9 +81,11 @@ export const FORMAT_IDS = FORMATS.map((f) => f.id);
 
 export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
 
-/** The longest board: 60 chapters of six squares each, and the checks between them. */
-/** There is no limit on the size of a board: every chapter of every book is kept. */
-export const MAX_SQUARES = Number.POSITIVE_INFINITY;
+/**
+ * A board has no size limit: every chapter of every book is kept. Only a board the AI plans is held to this many squares, so a model that
+ * loops and repeats units cannot fill the phone.
+ */
+const MAX_AI_PLAN_SQUARES = 400;
 const asFormat = (v: unknown): SquareFormat => (FORMAT_IDS.includes(String(v).toLowerCase() as SquareFormat) ? (String(v).toLowerCase() as SquareFormat) : 'lesson');
 
 /** What the person asked for, passed to the AI. */
@@ -124,12 +126,12 @@ export function parsePlan(raw: string): CoursePlan | null {
     const unit = str(u?.title, 80) || `Unit ${ui + 1}`;
     (Array.isArray(u?.squares) ? u.squares : []).forEach((s: any) => {
       const title = str(s?.title, 60);
-      if (!title || squares.length >= MAX_SQUARES) return;
+      if (!title || squares.length >= MAX_AI_PLAN_SQUARES) return;
       squares.push({ key: `s${squares.length + 1}`, format: asFormat(s?.format), title, focus: str(s?.focus, 240) || title, unit });
     });
   });
   if (squares.length < 3) return null;
-  const planned = expandLessons(squares, MAX_SQUARES - 1);
+  const planned = expandLessons(squares, MAX_AI_PLAN_SQUARES - 1);
   squares.splice(0, squares.length, ...planned);
   const last = squares[squares.length - 1];
   if (last.format !== 'quiz') {
@@ -195,7 +197,7 @@ export function contentMessages(r: SquareRequest) {
   return {
     system: `You are an expert teacher of ${r.topic}. ${r.style ? `Teaching style: ${r.style}.` : ''} Write exactly what is asked, accurately, at the learner's level. Write maths and science in plain text with symbols (², √, ÷, ×, π, fractions as a/b). Reply with ONLY JSON.${subjectAdvice(r.topic) ? ` ${subjectAdvice(r.topic)}` : ''}`,
     user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
-${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is the final check: cover the whole course.' : ''}
+${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is a check, not new teaching: draw only on what it covers (above) and on what came before it, and cover all of it.' : ''}
 It should take about ${r.minutes} minutes. Do not repeat earlier squares.
 ${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${r.square.format === 'practice' ? ASSIGNMENT_NOTE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.standardsFlags ?? ''}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${authorityNote(r.excerpts)}${r.excerpts.map((e) => `[${e.source}${e.role === 'reference' ? ` (REFERENCE: ${e.label ?? 'standard'})` : e.label && e.label !== 'textbook' ? ` (${e.label})` : ''}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}Reply with ONLY JSON in this shape: ${SHAPES[r.square.format]}`,
   };

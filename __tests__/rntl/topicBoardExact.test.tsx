@@ -2,7 +2,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { SquareView } from '../../src/topics/SquareViews';
-import { FORMATS, MAX_SQUARES, parseContent, parsePlan, planMessages, starsForShare } from '../../src/topics/formats';
+import { FORMATS, parseContent, parsePlan, planMessages, starsForShare } from '../../src/topics/formats';
 import { drillFor, makeDrill } from '../../src/study/drills';
 import { evalExpression } from '../../src/study/mathTools';
 
@@ -35,7 +35,6 @@ describe('drill squares', () => {
   it('are on the AI menu, and the plan asks for every part of a whole subject', () => {
     expect(FORMATS.some((f) => f.id === 'drill')).toBe(true);
     expect(planMessages({ topic: 'Accounting', goal: '', level: 'Complete beginner', how: '', minutes: 10 } as any).user).toMatch(/EVERY major part/);
-    expect(MAX_SQUARES).toBeGreaterThanOrEqual(60);
     const units = Array.from({ length: 8 }, (_, u) => ({ title: `Unit ${u + 1}`, squares: Array.from({ length: 7 }, (__, s) => ({ format: s === 3 ? 'drill' : 'lesson', title: `Part ${u}-${s}`, focus: 'x' })) }));
     const plan = parsePlan(JSON.stringify({ title: 'T', summary: 's', style: 'st', theme: 'th', units }));
     expect(plan?.squares.length).toBeGreaterThanOrEqual(56);

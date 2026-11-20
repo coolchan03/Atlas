@@ -81,7 +81,9 @@ describe('bigger exams over several chapters', () => {
     const plan = bookByBookPlan([{ doc: 'A.pdf', chapters: [chap(1), chap(2)] }, { doc: 'B.pdf', chapters: [chap(1)] }], 'Course');
     const exams = plan.squares.filter((s: any) => s.checkpoint && !/chapter exam/.test(s.title)).map((s: any) => s.title);
     expect(exams).toEqual(['A: final exam', 'Course: whole course exam']); // one chapter alone has no final exam of its own
-    expect(plan.squares[plan.squares.length - 1].unit).toBe('Whole course exam');
+    const last = plan.squares[plan.squares.length - 1];
+    expect(last.unit).toBe('B: 1 – Topic 1'); // an exam sits in the unit of the chapter it follows, so it is not a chapter of its own
+    expect(new Set(plan.squares.filter((s: any) => /(review|final|whole course) exam/.test(s.title)).map((s: any) => s.unit)).size).toBe(2);
     expect(new Set(plan.squares.map((s: any) => s.key)).size).toBe(plan.squares.length);
   });
 });

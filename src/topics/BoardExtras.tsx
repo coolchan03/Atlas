@@ -102,7 +102,7 @@ export function SourceLine({ course }: { course: Course }) {
   const books = docs.length ? docs : [...new Set((course.bookChapters ?? []).map((c) => c.doc))];
   if (!books.length) return null;
   const names = books.map(bookLabel);
-  const chapters = course.squares.filter((q) => q.format === 'lesson' && !q.checkpoint && !q.remedial).length;
+  const chapters = new Set(course.squares.filter((q) => q.format === 'lesson' && !q.checkpoint && !q.remedial).map((q) => q.unit)).size;
   const count = chapters ? ` (${chapters} chapters)` : '';
   return <Text style={[styles.meta, { color: colors.textSecondary }]} testID="course-source">{names.length === 1 ? `Primary source: ${names[0]}${count}` : `Textbooks, taught one at a time: ${names.join(', then ')}${count}`}</Text>;
 }

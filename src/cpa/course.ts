@@ -6,7 +6,6 @@
 import { useTopics, type Course } from '../topics/store';
 import type { CoursePlan, PlannedSquare } from '../topics/formats';
 import { CHAPTER_SQUARES, MAX_CHAPTER_SQUARES, deepChapter } from '../topics/chapterSequence';
-import { MAX_SQUARES } from '../topics/formats';
 import { examInfo, examLabel, type ExamCode } from './blueprints';
 import { useCpa, type CpaTopic } from './store';
 import { isOutlineDocument } from './outline';
@@ -23,7 +22,7 @@ export function examPlan(code: ExamCode, topics: CpaTopic[]): CoursePlan {
   // Chapters are six squares; with few topics each gets more practice (up to fourteen) so the board reaches the minimum.
   const size = topics.length ? Math.min(MAX_CHAPTER_SQUARES, Math.max(CHAPTER_SQUARES, Math.ceil((MIN_EXAM_SQUARES - areas.length - 1) / topics.length))) : CHAPTER_SQUARES;
   const squares: PlannedSquare[] = [];
-  const add = (sq: Omit<PlannedSquare, 'key'>) => { if (squares.length < MAX_SQUARES) squares.push({ key: `s${squares.length + 1}`, ...sq }); };
+  const add = (sq: Omit<PlannedSquare, 'key'>) => { squares.push({ key: `s${squares.length + 1}`, ...sq }); };
   for (const area of areas) {
     const inArea = topics.filter((x) => x.area === area);
     inArea.forEach((t, i) => {

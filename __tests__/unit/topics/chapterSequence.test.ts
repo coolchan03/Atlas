@@ -1,6 +1,5 @@
 import { chapterSquares, CHAPTER_SQUARES } from '../../../src/topics/chapterSequence';
 import { examPlan } from '../../../src/cpa/course';
-import { MAX_SQUARES } from '../../../src/topics/formats';
 
 describe('a chapter on the board', () => {
   it('is six squares: the reading, key terms, a worked example, a quiz, an assignment and a chapter exam', () => {
@@ -26,7 +25,6 @@ describe('a chapter on the board', () => {
     expect(plan.squares.filter((q) => /topics \d+-\d+ review exam/.test(q.title)).map((q) => q.title)).toEqual(['Area A: topics 1-4 review exam', 'Area A: topics 5-8 review exam', 'Area B: topics 1-4 review exam', 'Area B: topics 5-8 review exam']);
     expect(plan.squares[0].format).toBe('lesson');
     expect(plan.squares.at(-1)?.title).toBe('Whole exam check');
-    expect(plan.squares.length).toBeLessThanOrEqual(MAX_SQUARES);
     expect(new Set(plan.squares.map((s) => s.key)).size).toBe(plan.squares.length);
   });
 });

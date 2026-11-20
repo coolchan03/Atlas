@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
-import { MAX_SQUARES, type CoursePlan, type CourseRequest, type PlannedSquare, type SquareContent } from './formats';
+import { type CoursePlan, type CourseRequest, type PlannedSquare, type SquareContent } from './formats';
 import { difficultyFromLevel, type Difficulty } from '../study/difficulty';
 import { MAX_SOURCES, type CourseSource } from './sources';
 
@@ -110,7 +110,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
     const added = items.map((it) => ({ key: `s${++n}`, format: 'lesson' as const, title: it.title.slice(0, 60), focus: it.focus, unit: it.unit }));
     const last = c.squares[c.squares.length - 1];
     const squares = last?.checkpoint && last.format === 'quiz' ? [...c.squares.slice(0, -1), ...added, last] : [...c.squares, ...added];
-    return { ...c, squares: squares.slice(0, 80) };
+    return { ...c, squares };
   }) })),
   setDifficulty: (id, difficulty) => set((s) => ({ courses: s.courses.map((c) => (c.id !== id || c.difficulty === difficulty ? c : {
     ...c, difficulty, content: Object.fromEntries(Object.entries(c.content).filter(([key]) => !!c.progress[key])),
@@ -140,7 +140,7 @@ export const useTopics = create<TopicsState>()(persist((set) => ({
   addSquare: (id, afterKey, square) => {
     let added: string | null = null;
     set((s) => ({ courses: s.courses.map((c) => {
-      if (c.id !== id || c.squares.length >= MAX_SQUARES) return c;
+      if (c.id !== id) return c;
       const at = Math.max(0, c.squares.findIndex((q) => q.key === afterKey));
       const base = c.squares[at];
       if (!base) return c;
