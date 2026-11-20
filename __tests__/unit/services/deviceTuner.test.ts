@@ -1,5 +1,5 @@
 import { pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
-import { shouldOfferFirstTest, shouldSuggestTuning, useTuned } from '../../../src/atlasTools/speed';
+import { shouldOfferFirstTest, shouldSuggestTuning, useTuned, withModelMemory } from '../../../src/atlasTools/speed';
 
 const result = (id: string, threads: number, tps: number, error?: string): TuneResult =>
   ({ option: { id, label: id, backend: 'cpu' as any, threads }, tps, firstWordSec: 1, error });
@@ -67,5 +67,14 @@ describe('finding the best settings', () => {
     expect(useTuned.getState().accelerator.m).toBe('htp');
     useTuned.getState().mark('m');
     expect(useTuned.getState().accelerator.m).toBeUndefined();
+  });
+
+  it('applies what a model kept to that model only, and only while the setting the person chose has not changed since', () => {
+    useTuned.getState().setMemory('m1', { cacheType: 'f16', nBatch: 1024, from: { cacheType: 'q4_0', nBatch: 512 } });
+    expect(withModelMemory({ cacheType: 'q4_0', nBatch: 512, flashAttn: true }, 'm1')).toEqual({ cacheType: 'f16', nBatch: 1024, flashAttn: true });
+    expect(withModelMemory({ cacheType: 'q4_0', nBatch: 512 }, 'other').cacheType).toBe('q4_0');
+    // The person picked a cheaper cache afterwards: their choice wins for the cache, the saved batch size still applies.
+    expect(withModelMemory({ cacheType: 'q8_0', nBatch: 512 }, 'm1')).toEqual({ cacheType: 'q8_0', nBatch: 1024 });
+    useTuned.getState().setMemory('m1', undefined);
   });
 });

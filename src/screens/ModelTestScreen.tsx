@@ -1,3 +1,4 @@
+import { SPACING, TYPOGRAPHY } from '../constants';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,8 +21,8 @@ import { cancelTuning, tuneDevice, type TuneOutcome, type TuneProgress } from '.
 const COLOR_FFF = '#fff';
 const BORDERCOLOR_D4A017 = '#d4a017';
 const literalStyles = StyleSheet.create({
-  deepRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8 },
-  deepText: { flex: 1, fontSize: 13 },
+  deepRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginVertical: SPACING.sm },
+  deepText: { flex: 1, ...TYPOGRAPHY.bodySmall },
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   s3: { padding: 6 },

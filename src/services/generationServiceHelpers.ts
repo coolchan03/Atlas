@@ -1,5 +1,6 @@
 // GenerationService helpers (extracted to keep generationService.ts small). Each receives
 // the GenerationService instance as `svc: any` and mutates its internal state.
+import { withModelMemory } from '../atlasTools/speed';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { getActiveEngineService } from './engines';
@@ -129,7 +130,7 @@ function buildBaseGenerationMeta(svc: any): GenerationMeta {
     decodeTokensPerSecond: perf.lastDecodeTokensPerSecond,
     timeToFirstToken: perf.lastTimeToFirstToken,
     tokenCount: perf.lastTokenCount,
-    cacheType: effectiveCacheType(settings.inferenceBackend, settings.cacheType, llmService.getLoadedModelPath?.() ?? undefined),
+    cacheType: effectiveCacheType(settings.inferenceBackend, withModelMemory(settings, activeModelId ?? undefined).cacheType, llmService.getLoadedModelPath?.() ?? undefined),
     truncated: perf.lastTruncated,
   };
 }

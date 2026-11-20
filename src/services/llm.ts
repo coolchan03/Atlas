@@ -3,7 +3,7 @@ import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers } from './gpuOffload';
-import { fastestBackend, setBackendProvider, useSpeedStats, useTuned } from '../atlasTools/speed';
+import { fastestBackend, setBackendProvider, useSpeedStats, useTuned, withModelMemory } from '../atlasTools/speed';
 import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './acceleratorSelection';
 import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
@@ -96,7 +96,7 @@ class LLMService {
     const baseSettings = useAppStore.getState().settings;
     // The memory settings that timed fastest for THIS model (Find the best settings) apply to it alone.
     const modelId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
-    const rawSettings = modelId ? { ...baseSettings, ...useTuned.getState().memory[modelId] } : baseSettings;
+    const rawSettings = withModelMemory(baseSettings, modelId);
     const backend = backendOverride ?? rawSettings.inferenceBackend;
     // HTP only accelerates selected quants. OpenCL can also support Q4_K
     // (subject to the actual native runtime); let its load probe decide.

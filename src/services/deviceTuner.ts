@@ -143,7 +143,6 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch };
   // What an earlier test saved for this model would hide the settings being timed, so it is set aside until the new result is known.
   const earlierMemory = useTuned.getState().memory[modelId];
-  useTuned.getState().setMemory(modelId, undefined);
   const [cores, recommended] = await Promise.all([hardwareService.getCpuCoreCount(), hardwareService.getRecommendedThreadCount()]);
   const options = tuneOptions(cores, recommended, await availableAccelerators(model));
   const results: TuneResult[] = [];
@@ -161,6 +160,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   let first: TuneResult | null = null;
   let chosen: TuneResult | null = null;
   try {
+    useTuned.getState().setMemory(modelId, undefined);
     await runList(options, { done: 0, total: options.length });
     first = cancelFlag ? null : pickBest(results);
     const refine = first ? refineOptions(first.option, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model) : [];
@@ -176,8 +176,9 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
       chosen = keepBatch(deepResults, chosen);
     }
   } finally {
-    // Whatever happens, the settings end as the best one (below) or as they were.
+    // Whatever happens, the settings end as the best one (below) or as they were, and an earlier saved result is not lost.
     restore();
+    if (cancelFlag || !chosen) useTuned.getState().setMemory(modelId, earlierMemory);
   }
   const best = cancelFlag ? null : chosen;
   if (best) {
@@ -188,14 +189,13 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
       ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads }
       : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
     // Cache type, flash attention and batch size are kept for this model only: the other models keep the global ones.
-    useTuned.getState().setMemory(modelId, best.option.extra);
+    useTuned.getState().setMemory(modelId, best.option.extra && { ...best.option.extra, from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch } });
     useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.
     useSpeedStats.setState((st) => ({ byModel: { ...st.byModel, [modelId]: { ...(st.byModel[modelId] ?? { prefill: 0, outLen: 0, samples: 1 }), decode: best.tps } } }));
     // Load it the way it was just measured, so the next chat starts at the winning speed.
     try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(modelId); } catch { /* the chat reloads it on demand */ }
   }
-  if (!best) useTuned.getState().setMemory(modelId, earlierMemory); // nothing was learned: what was saved before stays
   return { best, results: [...results, ...deepResults], applied: !!best, cancelled: cancelFlag };
 }
 

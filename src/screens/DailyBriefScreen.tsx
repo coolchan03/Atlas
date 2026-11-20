@@ -67,6 +67,7 @@ export const DailyBriefScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const wide = useWideLayout();
   const prefs = useBriefPrefs();
+  const [previewing, setPreviewing] = useState(false);
   const list = useStudyStore((s) => s.saved[BRIEF_PROJECT]) || EMPTY;
   const remove = useStudyStore((s) => s.remove);
   const today = list.find((r) => todayKey(new Date(r.createdAt)) === todayKey());
@@ -325,12 +326,13 @@ export const DailyBriefScreen: React.FC = () => {
             <Switch value={prefs.funFacts} onValueChange={(v) => prefs.set({ funFacts: v })} />
           </View>
           {prefs.funFacts && prefs.interests.length > 0 && (
-            <TouchableOpacity testID="brief-fact-preview" accessibilityLabel="Preview a fun fact" onPress={async () => {
-              const topic = prefs.interests[Math.floor(Math.random() * prefs.interests.length)];
-              const fact = await previewFunFact(topic).catch(() => null);
-              Alert.alert(fact ? `A fun fact about ${topic}` : 'No fun fact found', fact ? `From ${fact.page}\n\n${fact.text}` : `Nothing was found for ${topic} in the offline library or online. Press again for another interest.`);
+            <TouchableOpacity testID="brief-fact-preview" accessibilityLabel="Preview a fun fact" disabled={previewing} onPress={async () => {
+              setPreviewing(true);
+              const fact = await previewFunFact(prefs.interests).catch(() => null);
+              setPreviewing(false);
+              Alert.alert(fact ? `A fun fact about ${fact.topic}` : 'No fun fact found', fact ? `From ${fact.page}\n\n${fact.text}` : 'Nothing was found in the offline library or online. Press again to try another interest.');
             }}>
-              <Text style={styles.link}>Preview a fun fact (press again for another)</Text>
+              <Text style={styles.link}>{previewing ? 'Looking...' : 'Preview a fun fact (press again for another)'}</Text>
             </TouchableOpacity>
           )}
           <View style={styles.switchRow}>

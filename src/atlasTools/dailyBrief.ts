@@ -212,9 +212,11 @@ async function webFacts(topic: string, startN: number): Promise<Source[]> {
 }
 
 /** The source a fun fact would be told from for one interest right now (library first, then a related Wikipedia page), or null. For the preview on the briefing screen. */
-export async function previewFunFact(topic: string): Promise<{ page: string; text: string } | null> {
+export async function previewFunFact(interests: string[]): Promise<{ topic: string; page: string; text: string } | null> {
+  const topic = interests[Math.floor(Math.random() * interests.length)];
+  if (!topic) return null;
   const found = (await libraryFacts(topic, 1))[0] ?? (offGridNow() ? undefined : (await webFacts(topic, 1))[0]);
-  return found ? { page: found.doc, text: found.text.slice(0, 600) } : null;
+  return found ? { topic, page: found.doc, text: found.text.slice(0, 600) } : null;
 }
 
 type OutlineItem = { topic: string; sources: Source[]; always?: boolean };

@@ -70,7 +70,23 @@ interface TunedState {
   mark: (modelId: string, accelerator?: string) => void;
   setMemory: (modelId: string, memory?: ModelMemory) => void;
 }
-export interface ModelMemory { cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number }
+export interface ModelMemory {
+  cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number;
+  /** The global values in force when it was saved: if the person changes one in Settings afterwards, their choice wins over the saved one. */
+  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number };
+}
+
+/** The settings one model loads with: the global ones, with the memory settings its test kept (each only while the global one is unchanged since). */
+export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number }>(settings: T, modelId: string | undefined): T {
+  const kept = modelId ? useTuned.getState().memory[modelId] : undefined;
+  if (!kept) return settings;
+  const out: T = { ...settings };
+  for (const key of ['cacheType', 'flashAttn', 'nBatch'] as const) {
+    const wanted = kept[key];
+    if (wanted !== undefined && (!kept.from || kept.from[key] === settings[key])) (out as Record<string, unknown>)[key] = wanted;
+  }
+  return out;
+}
 export const useTuned = create<TunedState>()(persist((set) => ({
   at: {},
   accelerator: {},

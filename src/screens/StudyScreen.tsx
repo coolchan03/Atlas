@@ -379,8 +379,10 @@ export const StudyScreen: React.FC = () => {
   /** The briefing player's own account of its last run: the queue, each file it reached, anything the phone's player skipped. */
   const showBriefTrace = () => {
     const lines = briefTrace();
-    const text = lines.length ? lines.join('\n') : 'Nothing has been played yet. Press play, then look here.';
-    Alert.alert('What just happened', text.slice(-1500), [{ text: 'Close', style: 'cancel' }, { text: 'Share', onPress: () => { void shareItem({ title: 'Atlas briefing trace', text }); } }]);
+    const quality = lines.filter((l) => l.includes('[BRIEF]'));
+    const recent = lines.filter((l) => !l.includes('[BRIEF]')).slice(-18); // whole lines, newest last, the quality line first
+    const text = lines.length ? [...quality, ...recent].join('\n') : 'Nothing has been played yet. Press play, then look here.';
+    Alert.alert('What just happened', text, [{ text: 'Close', style: 'cancel' }, { text: 'Share', onPress: () => { void shareItem({ title: 'Atlas briefing trace', text }); } }]);
   };
   const playBrief = (from: number) => { const b = lastBrief.current; if (b) void play(b.items, from, b.source); };
   const briefLine = playing ?? resumeAt;
