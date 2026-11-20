@@ -3,6 +3,7 @@
  * asked for once more before giving up with a message the person can act on.
  */
 import { askModel } from '../study/engine';
+import { callLimitMs } from './timeLimit';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
@@ -26,10 +27,19 @@ import { supersededEditions } from '../standards/taxSources';
 
 const MAX_TRIES = 2;
 /** The most one model call may take. A call that hangs is stopped (the native model is told to stop), and the lesson fails with a message instead of staying on "Writing...". */
-const CALL_LIMIT_MS = 4 * 60 * 1000;
+const BASE_CALL_MS = 4 * 60 * 1000;
+/** The limit for the model in use, from the speed measured for it (a slow phone is given longer; see timeLimit.ts). */
+function callLimit(): number {
+  try {
+    const id = require('../stores').useAppStore.getState().activeModelId;
+    return callLimitMs(id ? require('../atlasTools/speed').useSpeedStats.getState().byModel[id] : undefined);
+  } catch { return BASE_CALL_MS; }
+}
+/** How much longer than the base limits the model in use needs (1 on a fast one). */
+const slowness = (): number => callLimit() / BASE_CALL_MS;
 /** The most one section's deepening may take, and all of a lesson's deepening together. A section that runs out keeps its short text. */
-const SECTION_LIMIT_MS = 90 * 1000;
-const EXPAND_LIMIT_MS = 6 * 60 * 1000;
+const SECTION_BASE_MS = 90 * 1000;
+const EXPAND_BASE_MS = 6 * 60 * 1000;
 
 /** Tells the phone's model to stop, so a call abandoned after its time limit does not leave the engine busy for the next lesson. */
 async function stopModel(): Promise<void> {
@@ -37,10 +47,10 @@ async function stopModel(): Promise<void> {
 }
 
 /** One model call that gives up after `ms`: the model is stopped and the call fails. */
-async function askBounded(system: string, user: string, ms = CALL_LIMIT_MS): Promise<string> {
+async function askBounded(system: string, user: string, ms = callLimit()): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => { void stopModel(); reject(new Error('The AI took too long to answer and was stopped.')); }, ms);
+    timer = setTimeout(() => { void stopModel(); reject(new Error(`The AI took too long to answer (over ${Math.round(ms / 60000)} minutes) and was stopped. This model is slow on this phone: try a smaller model, or a shorter lesson (rewrite it shorter).`)); }, ms);
     (timer as { unref?: () => void }).unref?.();
   });
   try { return await Promise.race([askModel(system, user), limit]); } finally { if (timer) clearTimeout(timer); }
@@ -217,7 +227,7 @@ export type Rewrite = keyof typeof REWRITES;
 export function squareContent(course: Course, key: string, opts: { background?: boolean; rewrite?: Rewrite } = {}): Promise<SquareContent> {
   const kept = course.content[key];
   if (kept) return Promise.resolve(kept);
-  return enqueue(`${course.id}:${key}`, (ctl) => writeSquare({ courseId: course.id, key, rewrite: opts.rewrite }, ctl), { priority: opts.background ? 0 : 1, limitMs: 2 * CALL_LIMIT_MS + 60_000, onAbort: stopModel });
+  return enqueue(`${course.id}:${key}`, (ctl) => writeSquare({ courseId: course.id, key, rewrite: opts.rewrite }, ctl), { priority: opts.background ? 0 : 1, limitMs: 2 * callLimit() + 60_000, onAbort: stopModel });
 }
 
 /** What a square's passages and textbook questions are matched on: its subject alone when it has one, else its title and focus. */
@@ -286,7 +296,7 @@ async function writeSquare(target: { courseId: string; key: string; rewrite?: Re
   if (excerpts.length) useTopics.getState().setCited(course.id, key, excerpts);
   // Not for a rewrite (shorter, simpler, another example) or an "Another look" lesson: those were asked to be less, or plainer, and widening them would undo that.
   if (content.kind === 'lesson' && shouldDeepen(course, square, rewrite)) {
-    enqueue(expandKey(course.id, key), () => expandSquare({ courseId: course.id, key, draft, title: square.title, excerpts, bank }), { priority: 0, limitMs: EXPAND_LIMIT_MS, onAbort: stopModel })
+    enqueue(expandKey(course.id, key), () => expandSquare({ courseId: course.id, key, draft, title: square.title, excerpts, bank }), { priority: 0, limitMs: EXPAND_BASE_MS * slowness(), onAbort: stopModel })
       .catch(() => undefined); // the saved draft stays as it is
   }
   return draft;
@@ -306,7 +316,7 @@ async function expandSquare(about: { courseId: string; key: string; draft: Squar
   const { courseId, key, draft } = about;
   const course = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!course || course.content[key] !== draft || draft.kind !== 'lesson') return;
-  const deeper = await deepenLesson(course, draft, { title: about.title, excerpts: about.excerpts, sectionMs: SECTION_LIMIT_MS, totalMs: EXPAND_LIMIT_MS - 30_000 });
+  const deeper = await deepenLesson(course, draft, { title: about.title, excerpts: about.excerpts, sectionMs: SECTION_BASE_MS * slowness(), totalMs: EXPAND_BASE_MS * slowness() - 30_000 });
   const now = useTopics.getState().courses.find((c) => c.id === courseId);
   if (!now || now.content[key] !== draft) return;
   const changedAny = deeper.kind === 'lesson' && deeper.sections.some((x, i) => x !== draft.sections[i]);
@@ -325,8 +335,8 @@ export async function deepenLesson(course: Course, lesson: Extract<SquareContent
   const { title, excerpts } = about;
   const limits = about;
   const passages = excerpts.map((e) => e.text).join('\n').slice(0, 1800);
-  const sectionMs = limits.sectionMs ?? SECTION_LIMIT_MS;
-  const deadline = Date.now() + (limits.totalMs ?? EXPAND_LIMIT_MS);
+  const sectionMs = limits.sectionMs ?? SECTION_BASE_MS * slowness();
+  const deadline = Date.now() + (limits.totalMs ?? EXPAND_BASE_MS * slowness());
   const sections = [];
   let failures = 0;
   for (const [i, section] of lesson.sections.slice(0, 8).entries()) {
