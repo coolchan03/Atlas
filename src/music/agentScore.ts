@@ -6,7 +6,7 @@
  * Every line is checked: unknown instruments, out-of-range pitches and impossible timings are dropped, and a tune that has too few good
  * notes is refused so the caller can fall back to the built-in composer. Nothing the model says is played unchecked.
  */
-import { instrumentById } from './catalog';
+import { INSTRUMENTS, instrumentById } from './catalog';
 import { isDrumKind } from './instruments';
 import { pitchNumber } from './composition';
 import type { DrumKind, MusicNote, MusicScore, Voice } from './types';
@@ -18,35 +18,50 @@ const DRUM_LENGTH: Record<DrumKind, number> = { kick: 0.25, snare: 0.25, hat: 0.
 
 export interface AgentScoreReport { score: MusicScore; instruments: string[]; drums: string[]; dropped: number }
 
-const clean = (raw: string): string[] => raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```[^\n]*\n?/g, '').split(/\r?\n/).map((l) => l.trim().replace(/^[-*]\s*/, '')).filter(Boolean);
+const clean = (raw: string): string[] => raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```[^\n]*\n?/g, '').split(/\r?\n/).map((l) => l.trim().replace(/\*\*/g, '').replace(/^(?:[-*•]|\d+[.)])\s*/, '')).filter(Boolean);
 
+/** Small models change the punctuation (NOTE: C4, 0, 1, 0.6, piano  or  NOTE | C4 | 0 ...): the commas, bars and brackets are spaces. */
+const fields = (line: string): string[] => line.replace(/[,|;()[\]]+/g, ' ').replace(/^(\w+):/, '$1 ').trim().split(/\s+/).filter(Boolean);
+const compact = (t: string): string => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+const isNumber = (t: string): boolean => t !== '' && Number.isFinite(Number(t));
+
+/** The instrument named in the leftover words of a NOTE line: its id, or its name ("Electric piano", "electric-piano"), in any case. */
+function instrumentIn(words: string[]) {
+  const named = compact(words.join(''));
+  return instrumentById(words[0]?.toLowerCase() ?? '') ?? INSTRUMENTS.find((i) => compact(i.id) === named || compact(i.label) === named);
+}
+
+/** NOTE <pitch> <start> <length> <loudness> <instrument>; the loudness may be left out or come after the instrument. */
 function parseNote(parts: string[]): MusicNote | null {
-  if (parts.length < 6) return null;
-  const pitch = pitchNumber(parts[1].replace(/[♯]/g, '#').replace(/[♭]/g, 'b'));
-  const beat = Number(parts[2]); const length = Number(parts[3]); const gain = Number(parts[4]); const voice = parts[5].toLowerCase();
-  const info = instrumentById(voice);
+  if (parts.length < 5) return null;
+  const pitch = pitchNumber(parts[1][0].toUpperCase() + parts[1].slice(1).replace(/[♯]/g, '#').replace(/[♭]/g, 'b'));
+  const beat = Number(parts[2]); const length = Number(parts[3]);
+  const rest = parts.slice(4);
+  const gainWord = rest.find(isNumber);
+  const gain = gainWord === undefined ? 0.5 : Number(gainWord);
+  const info = instrumentIn(rest.filter((t) => !isNumber(t)));
   if (pitch === null || !info || ![beat, length, gain].every(Number.isFinite)) return null;
   if (beat < 0 || beat >= MAX_BEATS || length < 0.125 || length > 16 || beat + length > MAX_BEATS + 8 || gain < 0.05 || gain > 1) return null;
   return { pitch, beat, length, gain, role: info.part === 'bass' ? 'bass' : info.part === 'harmony' ? 'pad' : 'melody', voice: info.id as Voice };
 }
 
 function parseDrum(parts: string[]): MusicNote | null {
-  if (parts.length < 4) return null;
-  const kind = parts[1].toLowerCase();
-  const beat = Number(parts[2]); const gain = Number(parts[3]);
+  if (parts.length < 3) return null;
+  const kind = parts[1].toLowerCase().replace(/[^a-z]/g, '');
+  const beat = Number(parts[2]); const gain = parts[3] === undefined ? 0.6 : Number(parts[3]);
   if (!isDrumKind(kind) || !Number.isFinite(beat) || !Number.isFinite(gain) || beat < 0 || beat >= MAX_BEATS || gain < 0.05 || gain > 1) return null;
   return { pitch: 48, beat, length: DRUM_LENGTH[kind], gain, role: 'perc', voice: kind };
 }
 
 /** The tune in a reply, checked line by line. Throws a readable message when there is not enough good music to play. */
-export function parseAgentScore(raw: string): AgentScoreReport {
+export function parseAgentScore(raw: string, minNotes = MIN_GOOD_NOTES): AgentScoreReport {
   let title = 'Original instrumental';
   let bpm = 96;
   const notes: MusicNote[] = [];
   let dropped = 0;
   for (const line of clean(raw)) {
-    const parts = line.split(/\s+/);
-    const head = parts[0].toUpperCase().replace(/:$/, '');
+    const parts = fields(line);
+    const head = (parts[0] ?? '').toUpperCase();
     if (head === 'TITLE') title = line.replace(/^title:?\s*/i, '').slice(0, 70) || title;
     else if (head === 'BPM') { const n = Number(parts[1]); if (Number.isInteger(n) && n >= 60 && n <= 165) bpm = n; }
     else if (head === 'NOTE' || head === 'DRUM') {
@@ -54,7 +69,10 @@ export function parseAgentScore(raw: string): AgentScoreReport {
       if (note && notes.length < MAX_NOTES) notes.push(note); else dropped++;
     }
   }
-  if (notes.length < MIN_GOOD_NOTES) throw new Error('The composer did not write enough playable notes.');
+  if (notes.length < minNotes) {
+    const said = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/\s+/g, ' ').trim().slice(0, 70);
+    throw new Error(`The composer did not write enough playable notes (${notes.length} usable${dropped ? `, ${dropped} lines it wrote could not be read` : ''}${notes.length || dropped ? '' : `; it replied "${said}"`}).`);
+  }
   const seconds = Math.max(...notes.map((n) => n.beat + n.length)) * 60 / bpm;
   if (seconds > 100) throw new Error('The tune is longer than the 100 seconds one pass may take.');
   if (!notes.some((n) => n.role !== 'perc')) throw new Error('The tune has only drums.');

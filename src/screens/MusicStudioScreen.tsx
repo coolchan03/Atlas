@@ -19,6 +19,7 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { fromBase64 } from '../music/soundfontFiles';
 import { fromMidi } from '../music/midiImport';
 import { SoundfontCard } from '../music/SoundfontCard';
+import { PRESETS } from '../music/presets';
 import { MakePanel, type MakeChoices, type Maker } from '../music/MakePanel';
 import { TrackList } from '../music/TrackList';
 import { AMBIENT, type AmbientKind } from '../music/ambient';
@@ -195,7 +196,7 @@ export function MusicStudioScreen() {
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
-        <MakePanel choices={choices} onChange={change} soundfontName={soundfont?.name} busy={busy} onMake={makeIt} onSurprise={surprise} onImport={() => { void importMidi(); }} />
+        <MakePanel choices={choices} onChange={change} soundfontName={soundfont?.name} busy={busy} onMake={makeIt} onSurprise={surprise} onImport={() => { void importMidi(); }} onOwn={(id) => { const preset = PRESETS.find((x) => x.id === id); if (preset) navigation.navigate('ScoreEditor', { score: preset.build() }); }} />
         {!!status && <View style={styles.statusRow} testID="music-status"><ActivityIndicator color={colors.primary} /><Text style={[styles.statusText, { color: colors.text }]}>{status}</Text></View>}
         {!!playback.error && <Text style={{ color: colors.error }} testID="music-playback-error">{playback.error}</Text>}
 

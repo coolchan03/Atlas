@@ -5,7 +5,7 @@
  * What it writes is checked line by line (agentScore.ts); if it cannot produce a playable tune the built-in composer makes one, so a
  * request for music always ends in music. This is a specialist prompt, not a separately trained model.
  */
-import { instrumentById, instrumentsForPrompt } from './catalog';
+import { INSTRUMENTS, instrumentById, instrumentsForPrompt } from './catalog';
 import { parseAgentScore, type AgentScoreReport } from './agentScore';
 import { composeStyled, specFor, type StyleMood } from './styles';
 import { seedFor } from './arrange';
@@ -17,6 +17,24 @@ import type { MusicScore } from './types';
 
 /** Not an entry in the agent store on purpose: nothing lists it, edits it or chats with it. */
 export const COMPOSER_AGENT = { id: '__atlas-composer__', hidden: true, name: 'Atlas composer' } as const;
+
+/** A much shorter instruction for the second try: a small model or a small context window loses the long one (the theory and the full instrument list). */
+function compactSystemPrompt(): string {
+  return `You write instrumental music as a score. Reply with score lines only, one per line, nothing else:
+TITLE: a short title
+BPM: 60 to 165
+NOTE <pitch like C4 or F#3> <start beat> <length in beats> <loudness 0.05-1> <instrument id>
+DRUM <kick|snare|hat|clap> <start beat> <loudness>
+Instruments: ${INSTRUMENTS.slice(0, 40).map((i) => i.id).join(', ')}.
+Beats count from 0; a bar is 4 beats. Use the key and chords you are given. Write a bass line, chords and a melody, and drums if the style needs them.
+Example:
+TITLE: Window Rain
+BPM: 84
+NOTE C3 0 4 0.45 upright
+NOTE C4 0 4 0.25 warmpad
+NOTE E5 0 1.5 0.55 flute
+DRUM hat 0 0.4`;
+}
 
 export function composerSystemPrompt(): string {
   return `You are a composer and arranger. You do one thing only: you write instrumental music as a score in the exact line format below. You never write lyrics, never chat, never explain. Reply with the score lines and nothing else.
@@ -129,8 +147,9 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
   let problem = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const raw = await ask(composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${problem}). Write it again using only TITLE, BPM, NOTE and DRUM lines.` : brief.text);
-      let report: AgentScoreReport = parseAgentScore(raw);
+      const raw = await ask(attempt ? compactSystemPrompt() : composerSystemPrompt(), attempt ? `${brief.text}\n\nYour last score could not be used (${problem}). Write it again using only TITLE, BPM, NOTE and DRUM lines, one per line, with no other words.` : brief.text);
+      const minNotes = Math.min(12, Math.max(6, brief.plan.bars.length * 2)); // a short tune needs fewer notes
+      let report: AgentScoreReport = parseAgentScore(raw, minNotes);
       // What the model wrote is held to the plan: out-of-key notes, off-beat timings and a bass that misses the chord root are put right.
       let fixed = conformScore(report.score, brief.plan);
       report.score = fixed.score;
@@ -139,7 +158,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
       // A weak tune goes back once with the list of what is wrong; the better of the two is kept.
       if (critique.score < REWRITE_BELOW && critique.issues.length) {
         try {
-          const second = parseAgentScore(await ask(composerSystemPrompt(), rewriteRequest(brief.text, critique)));
+          const second = parseAgentScore(await ask(composerSystemPrompt(), rewriteRequest(brief.text, critique)), minNotes);
           const secondFixed = conformScore(second.score, brief.plan);
           const secondCritique = critiqueScore(secondFixed.score, brief.plan);
           if (secondCritique.score > critique.score) { report = { ...second, score: secondFixed.score }; fixed = secondFixed; critique = secondCritique; rewrote = true; }

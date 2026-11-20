@@ -244,3 +244,26 @@ describe('the AI names the tune it made', () => {
     expect(out.score.title.length).toBeGreaterThan(2);
   });
 });
+
+describe('reading the ways a small model really writes a score', () => {
+  const four = (line: (b: number) => string) => ['TITLE: Test', 'BPM: 90', ...Array.from({ length: 14 }, (_, i) => line(i * 2))].join('\n');
+  it.each([
+    ['colons and commas', (b: number) => `NOTE: C4, ${b}, 1, 0.6, piano`],
+    ['bars between the fields', (b: number) => `NOTE | C4 | ${b} | 1 | 0.6 | piano`],
+    ['the loudness left out', (b: number) => `NOTE C4 ${b} 1 piano`],
+    ['the instrument before the loudness', (b: number) => `NOTE C4 ${b} 1 piano 0.6`],
+    ['the instrument by its name', (b: number) => `NOTE C4 ${b} 1 0.6 Electric piano`],
+    ['a lower case pitch and bold words', (b: number) => `**NOTE** c4 ${b} 1 0.6 PIANO`],
+    ['a numbered list', (b: number) => `${b / 2 + 1}. NOTE C4 ${b} 1 0.6 piano`],
+  ])('reads %s', (_name, line) => {
+    expect(parseAgentScore(four(line)).score.notes.length).toBe(14);
+  });
+  it('reads a drum line with a colon or without a loudness, and a short tune needs fewer notes', () => {
+    const r = parseAgentScore(['NOTE C4 0 1 0.5 piano', 'NOTE E4 1 1 0.5 piano', 'NOTE G4 2 1 0.5 piano', 'NOTE C5 3 1 0.5 piano', 'NOTE C3 0 4 0.5 upright', 'DRUM: kick 0 0.8', 'DRUM snare 1'].join('\n'), 6);
+    expect(r.score.notes).toHaveLength(7);
+  });
+  it('says what it found when there is not enough to play', () => {
+    expect(() => parseAgentScore('Sure! Here is a lovely song about the rain.')).toThrow(/replied "Sure! Here is a lovely song/);
+    expect(() => parseAgentScore('NOTE C4 0 1 0.5 piano\nNOTE X9 0 1 0.5 piano')).toThrow(/1 usable, 1 lines it wrote could not be read/);
+  });
+});

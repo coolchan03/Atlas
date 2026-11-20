@@ -7,6 +7,7 @@ import { STYLES, type Energy, type StyleMood } from './styles';
 import { INSTRUMENTS } from './catalog';
 import { AMBIENT, type AmbientKind } from './ambient';
 import { instrumentsOf } from './simple';
+import { PRESETS } from './presets';
 
 export type Maker = 'ai' | 'quick' | 'noise';
 type SoundChoice = 'synth' | 'soundfont';
@@ -33,8 +34,8 @@ const makeLabel = (maker: Maker): string => (maker === 'ai' ? 'Compose with AI' 
  * The one place to say what to make: what it should be like (words), and drop-downs for the style, how lively, how long, who makes it,
  * which instruments and which sound. "Background noise" swaps the style, liveliness and instrument choices for a list of noises.
  */
-export function MakePanel({ choices, onChange, soundfontName, busy, onMake, onSurprise, onImport }: {
-  choices: MakeChoices; onChange: (patch: Partial<MakeChoices>) => void; soundfontName?: string | null; busy: boolean; onMake: () => void; onSurprise: () => void; onImport: () => void;
+export function MakePanel({ choices, onChange, soundfontName, busy, onMake, onSurprise, onImport, onOwn }: {
+  choices: MakeChoices; onChange: (patch: Partial<MakeChoices>) => void; soundfontName?: string | null; busy: boolean; onMake: () => void; onSurprise: () => void; onImport: () => void; onOwn: (presetId: string) => void;
 }) {
   const { colors } = useTheme();
   const { maker, mood } = choices;
@@ -69,6 +70,7 @@ export function MakePanel({ choices, onChange, soundfontName, busy, onMake, onSu
         style={[styles.make, { backgroundColor: colors.primary }, busy && styles.busy]}>
         {busy ? <ActivityIndicator color={colors.background} /> : <Text style={{ color: colors.background }}>{makeLabel(maker)}</Text>}
       </TouchableOpacity>
+      <Select label="Make my own music" options={PRESETS.map((p) => ({ id: p.id, label: p.label, hint: p.hint }))} onChange={onOwn} disabled={busy} summary="Start from a blank page or a preset, then write the notes" testID="music-own" />
       <View style={styles.links}>
         {music && <TouchableOpacity onPress={onSurprise} disabled={busy} testID="music-surprise"><Text style={{ color: colors.primary }}>Surprise me</Text></TouchableOpacity>}
         <TouchableOpacity onPress={onImport} disabled={busy} testID="music-import-midi" accessibilityLabel="Import a MIDI file"><Text style={{ color: colors.primary }}>Import MIDI</Text></TouchableOpacity>
