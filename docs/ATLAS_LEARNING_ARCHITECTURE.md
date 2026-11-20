@@ -102,8 +102,9 @@ weights: this is external memory (stored cards, documents and tests), and the in
 ## Goal
 
 An AI that can accumulate, retrieve, correct and apply durable knowledge without unlimited context growth. Preserve existing chats,
-projects, models, downloads, encryption and offline-first behaviour. Do not weaken privacy, do not replace the release signing key,
-do not invent results, and do not call an unfinished feature finished.
+projects, models, downloads and offline-first behaviour, and keep data already stored (including projects that are already protected)
+readable after the change. Do not replace the release signing key, do not invent results, and do not call an unfinished feature
+finished. Privacy gating is not part of this work (see "Dropped by the owner" at the end).
 
 ## Architecture: two persistent levels and one temporary context
 
@@ -152,13 +153,13 @@ opened (spaced intervals exist in `masteryStore.ts`), never assuming Android run
 
 ## One-way Pi knowledge export (SLE v1)
 
-- Atlas may export selected, authorised deep-knowledge records to the Raspberry Pi central archive when the user asks. There is no
+- Atlas may export selected deep-knowledge records to the Raspberry Pi central archive when the user asks. There is no
   automatic sync, replication or download of the Pi archive.
-- Optional import of small approved knowledge cards, with the user's consent and provenance (where it came from, when, which export).
+- Optional import of small approved knowledge cards, with provenance (where it came from, when, which export).
 - The Pi validates and reviews imported candidates on its own. Atlas never says an upload means the Pi approved the content: the
   status shown is "sent", "received" or "reviewed by the Pi" only when the Pi says so.
 - Transfers are manual, encrypted and authenticated over any network, checksum-verified, recoverable after interruption and
-  non-destructive. Project boundaries and protected or private content are never crossed without an explicit choice.
+  non-destructive. Records keep their project label so lessons from different projects are not mixed on the Pi.
 - **Compatibility:** `ATLAS_LEARNING_INTERCHANGE.md` (atlas-learning-interchange/1.0) is not an SLE v1 or Street bundle and was never
   tested against one. The Street prototype exports immutable capsule JSON files, not full source documents. Before writing the
   exporter: get real sample bundles, confirm the capsule fields against them, then agree a versioned extension for richer evidence
@@ -174,7 +175,7 @@ what leaves the phone.
 ## Phases
 
 1. Audit and tests first: write failing tests for the gaps above (context bounds, relevant retrieval, persistence across restart,
-   Judge verdicts, hidden keys, interruption and resume, repeated import, privacy controls, project migration).
+   Judge verdicts, hidden keys, interruption and resume, repeated import, project migration).
 2. Hot cards: project scope, goals and corrections, index, caps.
 3. Judge: structured verdicts and hidden-key application questions; Manager priorities from measured data.
 4. Testing and mastery evidence on the learning screen; retests due on open.
@@ -184,11 +185,23 @@ what leaves the phone.
 ## Acceptance (every item needs an honest result, including "not done")
 
 TypeScript, lint, dependency and knip checks; the relevant Jest suites; Android packaging and signing verification with the existing
-release key; device acceptance on supported phones (chat, projects, downloads and encryption unchanged; offline run; interruption
+release key; device acceptance on supported phones (chat, projects and downloads unchanged, already-protected projects still open; offline run; interruption
 and resume; low-memory run). The final handoff lists code changes, test outcomes, the APK or release link, and remaining gaps.
 
 ## Questions for the owner
 
 - Sample SLE v1 or Street bundles, and the Pi's receiving address and authentication method.
-- Which records may leave the phone by default (verified only, or candidates too), and whether protected projects are excluded outright.
+- Which records may leave the phone by default (verified only, or candidates too).
 - Whether the Judge may run on a different model from the learner on your phones, and which models you want for each role.
+
+## Dropped by the owner
+
+The owner chose to scratch privacy gating from this work. Not required, not tested, and not built here:
+
+- Excluding protected or private projects and chats from the Pi export, and asking for consent per export or per card import.
+- Privacy-control tests, and any rule that a record may not leave the phone because of how it was protected.
+- A "do not silently weaken privacy" requirement for new learning features.
+
+Kept, because they are about not breaking things or about the safety of the data, not privacy: stored data stays readable after
+migration (already-protected projects still open), imports and transfers are checksum-verified and non-destructive, retrieved text is
+treated as untrusted data and never as instructions, and Atlas never says the Pi approved something it did not.
