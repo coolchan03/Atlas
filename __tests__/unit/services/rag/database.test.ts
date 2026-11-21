@@ -22,7 +22,7 @@ import { ragDatabase } from '../../../../src/services/rag/database';
 
 function expectDeleteCascade() {
   const deleteCalls = mockExecuteSync.mock.calls.filter(
-    (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
+    (c: any[]) => typeof c[0] === 'string' && /^\s*DELETE/.test(c[0])
   );
   expect(deleteCalls).toHaveLength(3);
   expect(deleteCalls[0][0]).toContain('rag_embeddings');
@@ -42,8 +42,8 @@ describe('RagDatabase', () => {
     it('opens the database and creates tables', async () => {
       await ragDatabase.ensureReady();
       expect(open).toHaveBeenCalledWith({ name: 'rag.db' });
-      // secure_delete first (deleted document text must be overwritten), then 3 tables
-      expect(mockExecuteSync).toHaveBeenCalledTimes(4);
+      // secure_delete first (deleted document text must be overwritten), then 3 tables, then the full-text index (not counted here: a build without it is fine)
+      expect(mockExecuteSync.mock.calls.length).toBeGreaterThanOrEqual(4);
       expect(mockExecuteSync.mock.calls[0][0]).toContain('secure_delete');
       expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_documents');
       expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_chunks');
@@ -180,7 +180,7 @@ describe('RagDatabase', () => {
       await ragDatabase.ensureReady();
       ragDatabase.toggleEnabled(42, false);
       const updateCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('UPDATE')
+        (c: any[]) => typeof c[0] === 'string' && /^\s*UPDATE/.test(c[0])
       );
       expect(updateCalls).toHaveLength(1);
       expect(updateCalls[0][1]).toEqual([0, 42]);

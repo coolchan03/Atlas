@@ -2,6 +2,7 @@ jest.mock('../../../../src/services/rag/database', () => ({
   ragDatabase: {
     getEmbeddingsByProject: jest.fn(() => []),
     getChunksByProject: jest.fn(() => []),
+    searchKeywords: jest.fn(() => null), // no full-text index here: keyword search reads the passages
     ensureReady: jest.fn(),
   },
 }));

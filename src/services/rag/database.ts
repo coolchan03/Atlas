@@ -1,5 +1,6 @@
 import { open } from '@op-engineering/op-sqlite';
 import type { DB } from '@op-engineering/op-sqlite';
+import { ftsMatchQuery } from './ftsQuery';
 import type { Chunk } from './chunking';
 import logger from '../../utils/logger';
 
@@ -29,6 +30,9 @@ interface StoredEmbedding {
   position: number;
   embedding: number[];
 }
+
+/** Goes up when the full-text index has to be filled again for passages already stored. */
+const FTS_VERSION = 1;
 
 class RagDatabase {
   private db: DB | null = null;
@@ -74,6 +78,7 @@ class RagDatabase {
           FOREIGN KEY (doc_id) REFERENCES rag_documents(id)
         )`
       );
+      this.setupFts();
       this.ready = true;
     } catch (error) {
       logger.error('[RagDB] Failed to initialize:', error);
@@ -229,6 +234,57 @@ class RagDatabase {
     this.bump();
     const db = this.getDb();
     db.executeSync('UPDATE rag_documents SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, docId]);
+  }
+
+  /** True when passages are also kept in a full-text index (SQLite FTS5), so a keyword search reads the matches, not every passage. */
+  private ftsReady = false;
+  get hasFullText(): boolean { return this.ftsReady; }
+
+  /**
+   * The full-text index follows rag_chunks by itself (triggers on insert, update and delete, so every way passages are written, restored or
+   * synced stays in step), and is filled once for passages that were stored before it existed. A build of SQLite without FTS5 leaves
+   * it off: nothing else changes, keyword search then reads the passages as before.
+   */
+  private setupFts(): void {
+    const db = this.getDb();
+    try {
+      db.executeSync(`CREATE VIRTUAL TABLE IF NOT EXISTS rag_fts USING fts5(content, content='rag_chunks', content_rowid='id', tokenize='porter unicode61')`);
+      db.executeSync(`CREATE TRIGGER IF NOT EXISTS rag_fts_ai AFTER INSERT ON rag_chunks BEGIN INSERT INTO rag_fts(rowid, content) VALUES (new.id, new.content); END`);
+      db.executeSync(`CREATE TRIGGER IF NOT EXISTS rag_fts_ad AFTER DELETE ON rag_chunks BEGIN INSERT INTO rag_fts(rag_fts, rowid, content) VALUES ('delete', old.id, old.content); END`);
+      db.executeSync(`CREATE TRIGGER IF NOT EXISTS rag_fts_au AFTER UPDATE ON rag_chunks BEGIN INSERT INTO rag_fts(rag_fts, rowid, content) VALUES ('delete', old.id, old.content); INSERT INTO rag_fts(rowid, content) VALUES (new.id, new.content); END`);
+      const version = Number((db.executeSync('PRAGMA user_version').rows?.[0] as { user_version?: number } | undefined)?.user_version ?? 0);
+      if (version < FTS_VERSION) {
+        db.executeSync(`INSERT INTO rag_fts(rag_fts) VALUES ('rebuild')`);
+        db.executeSync(`PRAGMA user_version = ${FTS_VERSION}`);
+      }
+      this.ftsReady = true;
+    } catch (error) {
+      this.ftsReady = false;
+      logger.warn('[RagDB] full-text search is not available in this build of SQLite; keyword search reads the passages instead:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Passages of a project that match the question's words, best first, read from the full-text index. null when there is no index (the caller
+   * reads the passages instead); an empty list means the index was asked and nothing matches. Disabled documents are left out.
+   */
+  searchKeywords(projectId: string, query: string, limit: number): RagSearchResult[] | null {
+    if (!this.ftsReady) return null;
+    const match = ftsMatchQuery(query);
+    if (!match) return [];
+    try {
+      const result = this.getDb().executeSync(
+        `SELECT c.doc_id AS doc_id, d.name AS name, c.content AS content, c.position AS position, -bm25(rag_fts) AS score
+         FROM rag_fts JOIN rag_chunks c ON c.id = rag_fts.rowid JOIN rag_documents d ON c.doc_id = d.id
+         WHERE rag_fts MATCH ? AND d.project_id = ? AND d.enabled = 1
+         ORDER BY bm25(rag_fts) LIMIT ?`,
+        [match, projectId, limit],
+      );
+      return (result.rows ?? []) as unknown as RagSearchResult[];
+    } catch (error) {
+      logger.warn('[RagDB] full-text search failed, reading the passages instead:', error instanceof Error ? error.message : String(error));
+      return null;
+    }
   }
 
   /** Chunks of a project's documents that contain any of the strings, most useful first (a chunk that opens with it before one that only mentions it is decided by the caller). */

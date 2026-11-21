@@ -6,6 +6,7 @@ import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
 import { lexicalRank } from './lexicalRank';
+import { mergeKeywordHits } from './keywordMerge';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -33,6 +34,13 @@ interface SearchResult {
 
 /** How many passages the keyword fallback reads per project. */
 const LEXICAL_POOL = 20000;
+
+/** Passages that match the question's words, from the full-text index; null for a protected project or a build without the index. */
+function keywordCandidates(projectId: string, query: string, limit = KEYWORD_CANDIDATES): RagSearchResult[] | null {
+  if (isProtectedProject(projectId)) return null;
+  return ragDatabase.searchKeywords(projectId, query, limit);
+}
+const KEYWORD_CANDIDATES = 400;
 
 /** Options for a search: how many passages, and which documents to look in (by name). */
 interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
@@ -68,7 +76,9 @@ class RetrievalService {
   /** Keyword-ranked passages from the project (and its folders): used only when meaning-based search cannot run. */
   private lexical(projectId: string, query: string, { include, topK = 5 }: SearchOptions): { chunks: RagSearchResult[]; kind: 'lexical' | 'none-matching' | 'none-indexed'; partial?: boolean } {
     try {
-      const perProject = scopeOf(projectId).map((id) => knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL));
+      // The full-text index finds the passages that contain the question's words in the whole project; without it (a protected project, or a
+      // build of SQLite without FTS5) the first passages are read and ranked, which can miss later ones (`partial`).
+      const perProject = scopeOf(projectId).map((id) => keywordCandidates(id, query) ?? knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL));
       const partial = perProject.some((rows) => rows.length >= LEXICAL_POOL);
       const pool = perProject.flat().filter((c) => !include || include(c.name));
       if (!pool.length) return { chunks: [], kind: 'none-indexed' };
@@ -131,8 +141,10 @@ class RetrievalService {
     }));
 
     scored.sort((a, b) => b.score - a.score);
-    // Take extra candidates, then keep the ones that are about the question and spread them over the documents.
-    const ranked = rankChunks(query, scored.slice(0, topK * 3), topK);
+    // Take extra candidates, add what only the question's own words find (a section number, a name), then keep the ones that are
+    // about the question and spread them over the documents.
+    const keyword = scopeOf(projectId).flatMap((id) => keywordCandidates(id, query, topK * 3) ?? []).filter((c) => !include || include(c.name));
+    const ranked = rankChunks(query, mergeKeywordHits(scored.slice(0, topK * 3), keyword, topK * 3), topK);
     return { chunks: ranked, kind: ranked.length ? 'semantic' : 'none-matching' };
   }
 

@@ -247,7 +247,7 @@ describe('RAG Flow Integration', () => {
       await ragService.toggleDocument(1, false);
 
       const updateCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('UPDATE')
+        (c: any[]) => typeof c[0] === 'string' && /^\s*UPDATE/.test(c[0])
       );
       expect(updateCalls.length).toBe(1);
       expect(updateCalls[0][1]).toEqual([0, 1]); // enabled=0, docId=1
@@ -257,7 +257,7 @@ describe('RAG Flow Integration', () => {
       await ragService.deleteDocument(42);
 
       const deleteCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
+        (c: any[]) => typeof c[0] === 'string' && /^\s*DELETE/.test(c[0])
       );
       expect(deleteCalls.length).toBe(3);
       expect(deleteCalls[0][0]).toContain('rag_embeddings');
@@ -269,7 +269,7 @@ describe('RAG Flow Integration', () => {
       await ragService.deleteProjectDocuments('proj-1');
 
       const deleteCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
+        (c: any[]) => typeof c[0] === 'string' && /^\s*DELETE/.test(c[0])
       );
       // 1 embeddings delete + 1 chunks delete + 1 docs delete
       expect(deleteCalls.length).toBe(3);
