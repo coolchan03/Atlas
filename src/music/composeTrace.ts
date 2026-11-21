@@ -59,7 +59,8 @@ export function recordAttempt(run: ComposeRun, a: { stage: ComposeStage; prompt:
 }
 
 /** The latest attempt of a stage was accepted or rejected, and why. */
-export function markLast(run: ComposeRun, stage: ComposeStage, outcome: 'accepted' | 'rejected', reason?: string): void {
+export function markLast(run: ComposeRun, verdict: { stage: ComposeStage; outcome: 'accepted' | 'rejected'; reason?: string }): void {
+  const { stage, outcome, reason } = verdict;
   for (let i = run.attempts.length - 1; i >= 0; i--) {
     if (run.attempts[i].stage === stage && run.attempts[i].outcome === 'pending') { run.attempts[i] = { ...run.attempts[i], outcome, ...(reason ? { reason: reason.slice(0, 200) } : {}) }; return; }
   }

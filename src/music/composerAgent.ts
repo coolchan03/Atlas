@@ -140,7 +140,7 @@ async function nameTune(o: { request: string; style: StyleMood; plan: HarmonyPla
     const about = `Style: ${styleLabel(o.style)}. ${harmonyLabel(o.plan)}, about ${Math.round(o.bpm)} beats per minute. Played by ${o.instruments}.${o.request.trim() ? ` The request was: "${o.request.trim().slice(0, 160)}".` : ''}`;
     const title = cleanTitle(await ask(NAMER_SYSTEM, `${about}\nGive it a title.`));
     const run = runOf(ask);
-    if (run) markLast(run, 'title', title ? 'accepted' : 'rejected', title ? undefined : 'not a usable title');
+    if (run) markLast(run, { stage: 'title', outcome: title ? 'accepted' : 'rejected', reason: title ? undefined : 'not a usable title' });
     return title;
   } catch { return ''; }
 }
@@ -190,7 +190,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: Ask, 
       return { score: report.score, instruments, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
     } catch (e: any) {
       problem = String(e?.message || e);
-      { const run = runOf(ask); if (run) markLast(run, 'score', 'rejected', problem); }
+      { const run = runOf(ask); if (run) markLast(run, { stage: 'score', outcome: 'rejected', reason: problem }); }
       logger.warn(`[MUSIC] composer attempt ${attempt + 1} unusable: ${problem}; reply began: ${raw.slice(0, 160).replace(/\s+/g, ' ')}`);
       if (/no model|could not be loaded|failed to load/i.test(problem)) break; // no point asking again
     }
@@ -212,12 +212,12 @@ async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { r
     if (!made) throw new Error(`only ${melody.notes.filter((n) => n.pitch !== null).length} readable notes`);
     const conformed = conformScore(made, brief.plan);
     const finished = finishScore(conformed.score, brief.plan, {});
-    { const run = runOf(ask); if (run) markLast(run, 'melody', 'accepted'); }
+    { const run = runOf(ask); if (run) markLast(run, { stage: 'melody', outcome: 'accepted' }); }
     const named = await nameTune({ request: ctx.request, style: ctx.style, plan: brief.plan, bpm: finished.bpm, instruments: instrumentsOf(ctx.style) }, ask);
     const title = named || cleanTitle(melody.title) || randomTitle(ctx.style, spec.group);
     return { score: { ...finished, title }, via: 'composer', instruments: instrumentsOf(ctx.style), style: ctx.style, note: `The composer's full score could not be read, so it wrote the melody only (${melody.notes.filter((n) => n.pitch !== null).length} notes) and the app added the bass and chords in ${harmonyLabel(brief.plan)}.` };
   } catch (e: any) {
-    { const run = runOf(ask); if (run) markLast(run, 'melody', 'rejected', String(e?.message || e)); }
+    { const run = runOf(ask); if (run) markLast(run, { stage: 'melody', outcome: 'rejected', reason: String(e?.message || e) }); }
     logger.warn(`[MUSIC] melody-only try unusable: ${String(e?.message || e)}; reply began: ${raw.slice(0, 160).replace(/\s+/g, ' ')}`);
     return null;
   }
