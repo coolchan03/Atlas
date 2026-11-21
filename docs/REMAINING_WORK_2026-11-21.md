@@ -48,6 +48,14 @@ Looked at and left alone, with the reason:
 
 Not done: 4.2 (full-response ranking across short, medium and long prompts), 4.3 to 4.5, 4.8, 4.10 (per-stage diagnostics), 5.1 (native batching, resumable indexing), 5.3 to 5.6, 3.4 large-library reprocessing, 3.5 backup size cap and multi-part format, 7.1 to 7.3 and 7.5 (needs a phone: 282 heavy text weights are only held from growing by `designWeightRatchet.test.ts`), 8.1 every-20th-version multi-architecture builds, 8.2 native engine artifact reuse, 8.5 fast development builds, 8.6, 8.7 size reduction (measurement added, no reduction made), 8.10 (the review bots have not been read), 9.2, 9.4 to 9.7.
 
+## Eighth pass (version 0.0.238, a deep audit)
+
+Looked at: lint warnings by rule (459, mostly style; the 26 hook-dependency warnings are deliberate narrow lists except one real stale callback, fixed), promises with no catch (39 candidates, one real, fixed), duplicate blocks (41 across files; the chat date formatter was copied four times, now one), stubs and TODOs (none that hide an unfinished feature), unused code (knip clean), dependency cycles (none), persisted-state parsing (three unguarded reads, all in import paths).
+
+Fixed: the call's stalled-speech recovery used a stale callback; Teach the AI knowledge room raised to 45 percent of the context; chat dates count calendar days; the thread-count read can no longer leave an unhandled rejection; duplicate branches and a component re-created on every draw; the model list names the CPU and thread count a model was tuned to.
+
+Not changed on purpose: the narrow hook-dependency lists in the chat model sync (they key on capabilities), the 361 nested-template-literal style warnings, the audio code's bitwise operations (needed), `ProjectChatsScreen` and `ProjectDetailScreen` still share a chat-row block (needs a shared row component with both screens' styles).
+
 ## Seventh pass (version 0.0.237, a polish pass)
 
 - Audit by reading (the review tool was at its usage limit): a stopped background job waits up to 15 minutes for the chat reply that stopped it; the reply's cache label uses the model's own backend; a multi-architecture build is never the latest release by a push; overlap trimming sees through the section path; titles need two words and a longer paragraph after them; the slow-reply hint reads the model's own backend and threads.
