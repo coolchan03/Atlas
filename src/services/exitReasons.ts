@@ -38,8 +38,12 @@ const PLAIN: Record<string, string> = {
 
 export const explainExit = (r: ExitReason): string => `${PLAIN[r.reason] ?? `the system reported ${r.reason || 'an unknown reason'}`}${r.description ? ` (${r.description})` : ''}`;
 
-/** Endings that say nothing about the model: the person (or the app) chose them. A model load cut short by one of these was not a model crash. */
-const BENIGN = new Set(['USER_REQUESTED', 'USER_STOPPED', 'EXIT_SELF', 'PERMISSION_CHANGE']);
+/**
+ * Endings that say nothing about the model: the person (or a permission change) chose them. A model load cut short by one of these was not a model
+ * crash. EXIT_SELF is deliberately NOT here: a native library that calls exit() while a model loads also reads as the app closing itself, and
+ * mistaking that for a harmless exit would let a crashing setup be tried again and again.
+ */
+const BENIGN = new Set(['USER_REQUESTED', 'USER_STOPPED', 'PERMISSION_CHANGE']);
 export const isBenignExit = (r: ExitReason): boolean => BENIGN.has(r.reason);
 
 /** Endings the app did not choose. */
