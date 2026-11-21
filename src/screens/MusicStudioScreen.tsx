@@ -86,7 +86,7 @@ export function MusicStudioScreen() {
       const composed = await composeMusic(`${prompt} ${STYLES[mood].label}`.trim(), { seconds: duration, style: mood, instruments });
       setStatus(composed.via === 'composer' ? 'The composer wrote the score. Checking it against the key and chords...' : 'The AI could not write a usable score; using the built-in composer...');
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer');
-      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
+      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', `${composed.note}${composed.diagnostics?.fallbackReason ? `\n\nWhy: ${composed.diagnostics.fallbackReason}` : ''}`);
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
@@ -131,7 +131,7 @@ export function MusicStudioScreen() {
       const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
       const composed = await composeVariation(saved as MusicScore, { mood: style, seconds: track.seconds });
       await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer', secondsOf(composed.score));
-      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', composed.note);
+      if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', `${composed.note}${composed.diagnostics?.fallbackReason ? `\n\nWhy: ${composed.diagnostics.fallbackReason}` : ''}`);
     } catch (error: any) { Alert.alert('Could not make a variation', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
