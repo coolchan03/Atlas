@@ -1,4 +1,4 @@
-import { terms } from './lexicalRank';
+import { terms } from './terms';
 
 /** The most words of a question sent to the index: a long question is matched on its rarest words, not all of them. */
 const MAX_TERMS = 12;

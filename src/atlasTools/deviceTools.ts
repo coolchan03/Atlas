@@ -134,7 +134,7 @@ export async function createWebPage(name: string, html: string): Promise<string>
  * Opens a saved page for preview and says what really happened, apart from the saving. "Opened" only when the phone accepted the request;
  * otherwise the file is still saved and the sentence says the preview did not open (and why when it is known).
  */
-export async function tryOpenPreview(path: string): Promise<string> {
+async function tryOpenPreview(path: string): Promise<string> {
   if (typeof Native?.openFile !== 'function') return 'The file is saved, but this phone could not open a preview (no viewer is available).';
   try {
     await Native.openFile(path);

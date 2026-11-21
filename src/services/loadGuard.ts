@@ -22,7 +22,7 @@ const MAX_FAILURES = 12;
 
 export type LoadStage = 'check' | 'init' | 'draft' | 'vision' | 'output-check' | 'vulkan';
 
-export const STAGE_LABEL: Record<LoadStage, string> = {
+const STAGE_LABEL: Record<LoadStage, string> = {
   check: 'checking the file',
   init: 'starting the model',
   draft: 'starting the MTP draft file',
@@ -39,7 +39,7 @@ export interface LoadConfig {
   vision: boolean;
 }
 
-export interface Breadcrumb extends LoadConfig {
+interface Breadcrumb extends LoadConfig {
   startedAt: number;
   stage: LoadStage;
   contextLength?: number;

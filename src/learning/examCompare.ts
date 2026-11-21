@@ -1,4 +1,7 @@
-import type { ExamMetrics } from './exams';
+/** Which questions, which subject, which model and which grading rules a run used. Runs are only compared when all of these match. */
+export interface ExamContext { subjectId: string; questionSet: string; model: string; grading: string }
+/** All that comparing two runs needs of them (defined here, not imported from exams.ts, so the two modules do not depend on each other). */
+export interface Comparable { context?: ExamContext }
 
 /** A short stable fingerprint of text (FNV-1a), so two runs can tell whether they asked the same questions with the same answer keys. */
 export function fingerprint(text: string): string {
@@ -8,7 +11,7 @@ export function fingerprint(text: string): string {
 }
 
 /** Null when two runs can be compared; otherwise why not. Runs saved before this was recorded can only be compared with each other. */
-export function whyNotComparable(a: ExamMetrics, b: ExamMetrics): string | null {
+export function whyNotComparable(a: Comparable, b: Comparable): string | null {
   if (!a.context && !b.context) return null;
   if (!a.context || !b.context) return 'One of the two runs was saved before Atlas recorded which questions, subject and model it used, so they cannot be shown to be the same exam. Run the exam again in both modes.';
   if (a.context.subjectId !== b.context.subjectId) return 'The two runs were for different subjects, so they cannot be compared. Run the exam again in both modes.';

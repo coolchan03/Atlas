@@ -15,9 +15,9 @@ export interface ExitReason {
   description: string;
   rssKb?: number;
 }
-export interface ExitInfo { supported: boolean; reasons: ExitReason[] }
+interface ExitInfo { supported: boolean; reasons: ExitReason[] }
 
-export const NO_EXIT_INFO: ExitInfo = { supported: false, reasons: [] };
+const NO_EXIT_INFO: ExitInfo = { supported: false, reasons: [] };
 
 const PLAIN: Record<string, string> = {
   LOW_MEMORY: 'Android closed Atlas because the phone ran out of memory',
@@ -46,12 +46,8 @@ export const explainExit = (r: ExitReason): string => `${PLAIN[r.reason] ?? `the
 const BENIGN = new Set(['USER_REQUESTED', 'USER_STOPPED', 'PERMISSION_CHANGE']);
 export const isBenignExit = (r: ExitReason): boolean => BENIGN.has(r.reason);
 
-/** Endings the app did not choose. */
-const UNCLEAN = new Set(['LOW_MEMORY', 'CRASH', 'CRASH_NATIVE', 'ANR', 'SIGNALED', 'EXCESSIVE_RESOURCE_USAGE', 'INITIALIZATION_FAILURE']);
-export const isUncleanExit = (r: ExitReason): boolean => UNCLEAN.has(r.reason);
-
 /** The recorded endings, newest first. Never throws: no module, an old Android, or a failed call all read as "no information". */
-export async function readExitInfo(max = 5): Promise<ExitInfo> {
+async function readExitInfo(max = 5): Promise<ExitInfo> {
   const mod = NativeModules?.DeviceMemoryModule;
   if (!mod?.getLastExitReasons) return NO_EXIT_INFO;
   try {

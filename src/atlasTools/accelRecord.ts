@@ -34,9 +34,9 @@ export const useAccelRecord = create<State>()(persist((set) => ({
 /** Answers needed on both accelerators before one is called faster. */
 export const MIN_ANSWERS = 3;
 /** The other accelerator must reach the first word at least this much sooner (a share of the current one's time). */
-export const CLEARLY_FASTER = 0.85;
+const CLEARLY_FASTER = 0.85;
 /** Failures at least this many, and at least as many as successful loads: the accelerator is not trusted for this model. */
-export const UNSTABLE_AT = 2;
+const UNSTABLE_AT = 2;
 
 const unstable = (r: BackendRecord | undefined): boolean => !!r && r.failures >= UNSTABLE_AT && r.failures >= r.loads;
 

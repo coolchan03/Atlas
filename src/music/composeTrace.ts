@@ -4,7 +4,7 @@
  * the last few tunes so "why did it fall back?" can be answered from facts instead of guessed. Pure data plus a tiny in-memory log.
  */
 export type ComposeStage = 'score' | 'melody' | 'title';
-export type AttemptOutcome = 'pending' | 'accepted' | 'rejected' | 'error';
+type AttemptOutcome = 'pending' | 'accepted' | 'rejected' | 'error';
 
 export interface ComposeAttempt {
   stage: ComposeStage;

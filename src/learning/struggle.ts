@@ -26,7 +26,7 @@ export function nextNotesBoost(current: number, outcomes: Outcome[]): number {
 export const restudyQuestion = (question: string): string => `In simple terms, what are the key facts needed to answer this: ${question}`;
 
 /** What kind of mistake an answer made, found by comparing it with the stored claims (no model). */
-export type MissKind = 'no-answer' | 'wrong-sign' | 'wrong-number' | 'wrong-unit' | 'opposite' | 'missing-fact';
+type MissKind = 'no-answer' | 'wrong-sign' | 'wrong-number' | 'wrong-unit' | 'opposite' | 'missing-fact';
 export interface Diagnosis { kind: MissKind; /** The stored claim the answer got wrong, shortened. */ claim?: string; /** What was different, in plain words. */ detail: string }
 
 const sentencesOf = (text: string): string[] => text.match(/[^.!?\n]+[.!?]*/g) ?? [text];

@@ -1,7 +1,7 @@
 import type { LearningKnowledgeDb } from './knowledgeDb';
 import { citedNumbers } from './evidenceGate';
 import { checkSupport, numbersIn, similarity, wordsToDigits } from './claimText';
-import { fingerprint, whyNotComparable } from './examCompare';
+import { fingerprint, whyNotComparable, type ExamContext } from './examCompare';
 export { whyNotComparable };
 
 /** The three ways the same questions are answered, so retrieval and memory can be measured against the model alone. */
@@ -52,10 +52,9 @@ interface ItemResult {
    */
   evidence?: ItemEvidence;
 }
-export type ItemEvidence = 'supported' | 'unsupported' | 'not-applicable';
+type ItemEvidence = 'supported' | 'unsupported' | 'not-applicable';
 
-/** Which questions, which subject, which model and which grading rules a run used. Runs are only compared when all of these match. */
-export interface ExamContext { subjectId: string; questionSet: string; model: string; grading: string }
+export type { ExamContext };
 export interface ExamMetrics {
   /** Questions asked. Accuracy is measured over the ones that could be graded (total minus ungraded). */
   total: number;
