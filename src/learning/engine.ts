@@ -45,7 +45,7 @@ import { stripInjection } from './sourceSafety';
 import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
-import { batchStruggled, isStruggling, nextNotesBoost, restudyQuestion, REST_DAYS } from './struggle';
+import { batchStruggled, diagnoseMiss, isStruggling, nextNotesBoost, restudyQuestion, restudyQuestionFor, REST_DAYS } from './struggle';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics, type SecondOpinion } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
@@ -394,7 +394,14 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
       const score = recallScore(answer, stored);
       outcome = score >= 0.7 ? 'correct' : score >= 0.4 ? 'partial' : 'wrong';
-      if (outcome === 'wrong') safely(() => memory.recordExperience({ topic: cfg.topic, attempt: `Recall: ${c.question}`, outcome: 'wrong', correction: stored.join(' ') }), undefined);
+      if (outcome === 'wrong') {
+        // Why it was missed, in words, and a study question aimed at that and explained a different way each time (not the same generic one again).
+        const why = diagnoseMiss(answer, stored);
+        const focused = restudyQuestionFor(c.question, why, c.attempts + 1);
+        if (!L().get(agent.id).bank.some((b) => b.q === focused)) L().addItems(agent.id, [newItem(focused, L().get(agent.id).round, 'approved')]);
+        L().log({ agentId: agent.id, kind: 'info', title: 'Why an answer was missed', body: `"${c.question.slice(0, 100)}": ${why.map((d) => d.detail).join('; ')}. It is studied again with that in mind.` });
+        safely(() => memory.recordExperience({ topic: cfg.topic, attempt: `Recall: ${c.question}`, outcome: 'wrong', correction: `${stored.join(' ')} (Mistake: ${why[0].detail}.)` }), undefined);
+      }
     }
     if (outcome === 'correct') recalled += 1;
     outcomes.push(outcome);
