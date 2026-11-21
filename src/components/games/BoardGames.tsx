@@ -142,7 +142,7 @@ export function JeopardyGame({ result, projectId, onOpenSource }: GameProps) {
     );
   }
   // Phones show one category column at a time; tablets show the whole board.
-  const Column = ({ c }: { c: number }) => (
+  const renderColumn = (c: number) => (
     <View style={literalStyles.s11}>
       <Text style={[{ color: colors.text }, literalStyles.s12]} numberOfLines={2}>{board[c].name}</Text>
       {board[c].clues.map((cl, k) => {
@@ -161,7 +161,7 @@ export function JeopardyGame({ result, projectId, onOpenSource }: GameProps) {
       <Text style={{ color: colors.textSecondary }}>{players.map((p, i) => `${p}: ${scores[i]}`).join('   ')}</Text>
       <Text style={[{ color: colors.text }, literalStyles.s15]}>{players[turn]}, pick a tile</Text>
       <View style={literalStyles.s16}>
-        {board.length <= 2 ? board.map((_, c) => <Column key={c} c={c} />) : <Column c={col} />}
+        {board.length <= 2 ? board.map((_, c) => <React.Fragment key={c}>{renderColumn(c)}</React.Fragment>) : renderColumn(col)}
       </View>
       {board.length > 2 && (
         <View style={literalStyles.s17}>
