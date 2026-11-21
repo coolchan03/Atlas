@@ -179,3 +179,9 @@ Not done: embeddings and search speed, chat rendering cost, background-work prio
 - The lint run reports 0 errors and about 86 warnings (mostly `sonarjs/no-nested-template-literals`) on the changed files.
 - A test written in this pass for the lesson split, `__tests__/integration/lessonInPieces.test.ts`, was changed from "two sections a call" to "three sections in one piece" because the plan now follows measured speed.
 - Jest quirks worth knowing: `jest.mock` factory variables must start with `mock`; fake timers and `setImmediate` do not mix; React batches updates inside one long `act`; a function named `useX` trips the hooks lint rule; ESLint limits are max-params 3, max-lines 500 (`engine.ts` exempt), complexity 20.
+
+## Ninth pass (0.0.239)
+
+- 1.2 Intro tune: cause found from a phone log. The first press of Play (lines not all rendered, so the JS player is used) decoded each file by plain path; the Android release build of react-native-audio-api reads a path with no `file://` as a bundled asset and throws "Failed to resolve asset for android release build". Every tune and line failed, so the show fell back to live speech with long gaps. Resuming from a card used the native queue, which has no such problem, which is why the tune appeared only after that. Fixed in `decode()` in `src/atlasVoice/podcastAudio.ts`.
+- Briefing wording: no clock time in the greeting, outlet named at most once per story and for about half of them, "The report details how..." lead-ins removed, deepening skipped for headline-only stories, fun facts taken from deeper search results and told as obscure details.
+- Learn a topic: lesson prompt asks for bold terms, lists and small tables; section headings, examples, mistakes and key points styled.

@@ -22,14 +22,22 @@ export function withoutTeasers(text: string): string {
   return kept.length === all.length ? text.trim() : kept.join(' ').trim();
 }
 
+/** "The report details how these groups help" is told as "These groups help": a small model opens line after line with the report, not the news. */
+const LEAD_IN = /^(?:the|this) (?:report|article|story|piece|coverage)(?: also)? (?:details|highlights|explains|describes|notes|says|states|outlines|covers|examines|discusses|shows|reveals|points out) (?:how|that) +/i;
+
+export function withoutLeadIn(text: string): string {
+  return sentences(text).map((s) => { const rest = s.replace(LEAD_IN, ''); return rest === s ? s : rest.charAt(0).toUpperCase() + rest.slice(1); }).join(' ');
+}
+
 export function scrubTeasers<L extends { text: string }>(lines: L[], starts: number[] = []): { lines: L[]; starts: number[]; keptStarts: number[]; removed: number } {
   const kept: L[] = [];
   const newIndex: number[] = []; // for each old line, the index of the first kept line at or after it
   const pending: number[] = [];
   let removed = 0;
   lines.forEach((l, i) => {
-    const text = withoutTeasers(l.text);
-    if (text !== l.text.trim()) removed += 1;
+    const cut = withoutTeasers(l.text);
+    if (cut !== l.text.trim()) removed += 1;
+    const text = withoutLeadIn(cut);
     if (!text) { pending.push(i); return; }
     pending.forEach((p) => { newIndex[p] = kept.length; });
     pending.length = 0;

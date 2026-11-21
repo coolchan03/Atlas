@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { Button } from '../components/Button';
 import { MarkdownText } from '../components/MarkdownText';
@@ -37,25 +38,35 @@ function useText() {
 
 function LessonView({ content, onDone }: ViewProps<'lesson'>) {
   const t = useText();
+  const { colors } = t;
+  /** A block title with its icon, so the end of a lesson (mistakes, key points) reads as parts and not as more text. */
+  const blockTitle = (icon: string, label: string) => (
+    <View style={styles.titleRow}><Icon name={icon} size={16} color={colors.primary} /><Text style={t.head}>{label}</Text></View>
+  );
   return (
     <View style={styles.gap} testID="square-lesson">
       {content.sections.map((s, i) => (
-        <View key={i} style={styles.gap}>
-          {!!s.heading && <Text style={t.head}>{s.heading}</Text>}
+        <View key={i} style={[styles.gap, styles.section]}>
+          {!!s.heading && <View style={[styles.sectionHead, { borderLeftColor: colors.primary }]}><Text style={t.head}>{s.heading}</Text></View>}
           <MarkdownText>{s.text}</MarkdownText>
-          {!!s.example && <View style={[styles.example, t.card]}><MarkdownText>{s.example}</MarkdownText></View>}
+          {!!s.example && (
+            <View style={[styles.example, t.card]}>
+              <Text style={[t.meta, styles.exampleLabel]}>EXAMPLE</Text>
+              <MarkdownText>{s.example}</MarkdownText>
+            </View>
+          )}
         </View>
       ))}
       {!!content.commonMistakes?.length && (
         <View style={[styles.box, t.card]} testID="lesson-mistakes">
-          <Text style={t.head}>Common mistakes</Text>
+          {blockTitle('alert-triangle', 'Common mistakes')}
           <MarkdownText>{content.commonMistakes.map((k) => `- ${k}`).join('\n')}</MarkdownText>
         </View>
       )}
       {!!content.quickCheck && <QuickCheck q={content.quickCheck.q} a={content.quickCheck.a} />}
       {!!content.keyPoints.length && (
         <View style={[styles.box, t.card]}>
-          <Text style={t.head}>Key points</Text>
+          {blockTitle('check-circle', 'Key points')}
           <MarkdownText>{content.keyPoints.map((k) => `- ${k}`).join('\n')}</MarkdownText>
         </View>
       )}
@@ -602,7 +613,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   flex: { flex: 1 },
   box: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
-  example: { borderWidth: 1, borderRadius: 8, padding: 10 },
+  example: { borderWidth: 1, borderRadius: 8, padding: 10, gap: 4 },
+  exampleLabel: { letterSpacing: 1 },
+  section: { marginTop: 6 },
+  sectionHead: { borderLeftWidth: 3, paddingLeft: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   flash: { borderWidth: 1, borderRadius: 14, minHeight: 160, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 10 },
   center: { textAlign: 'center' },
   step: { borderWidth: 1, borderRadius: 10, padding: 12 },

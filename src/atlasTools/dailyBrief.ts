@@ -175,7 +175,7 @@ function withoutDefinition(extract: string): string {
 
 /** A page title that would only repeat the topic or is a list, index or disambiguation page: not a fact worth telling. */
 const dullTitle = (title: string, topic: string): boolean =>
-  title.toLowerCase() === topic.toLowerCase() || /^(list|lists|outline|index|timeline|history) of\b|\(disambiguation\)|^portal:/i.test(title);
+  title.toLowerCase() === topic.toLowerCase() || /^(list|lists|outline|index|timeline|history) of\b|\(disambiguation\)|^portal:|^(president|vice president|prime minister|government|politics|economy|geography|demographics|culture) of\b/i.test(title);
 
 /**
  * Why a Wikipedia page cannot be the source of a fun fact, or '' when it can. Looked at by what the page SAYS, not only its title: a page that
@@ -211,8 +211,14 @@ async function webFacts(topic: string, startN: number): Promise<Source[]> {
     return text.length < 50 ? [] : [{ n: startN, doc: `Wikipedia: ${page.title}`, part: 1, text, origin: 'web' }];
   };
   try {
-    const found = JSON.parse(await fetchText(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=12&format=json&origin=*`, 8000));
-    const titles: string[] = (found?.query?.search ?? []).map((r: { title: string }) => r.title).filter((t: string) => !dullTitle(t, topic)).slice(0, 8);
+    // The best matches are the famous pages everyone knows, so the search starts a random way down its results (and falls back to the top when that is empty).
+    const search = async (offset: number): Promise<string[]> => {
+      const found = JSON.parse(await fetchText(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=12&sroffset=${offset}&format=json&origin=*`, 8000));
+      return (found?.query?.search ?? []).map((r: { title: string }) => r.title).filter((t: string) => !dullTitle(t, topic)).slice(0, 8);
+    };
+    const offset = Math.floor(Math.random() * 6) * 6;
+    let titles = await search(offset);
+    if (!titles.length && offset) titles = await search(0);
     for (let tries = 0; titles.length && tries < 3; tries++) {
       const [title] = titles.splice(Math.floor(Math.random() * titles.length), 1);
       try {
@@ -303,7 +309,7 @@ async function libraryItems(interests: string[], withNews: boolean, firstN: numb
     }
     if (!facts.length) continue;
     n += facts.length;
-    out.push({ topic: withNews ? `A surprising, specific fun fact from ${factSource}, connected to ${topic} (one detail such as a number, a date or a first; never a definition of what ${topic} or the page's subject is, and never something everyone already knows)` : `From the offline library: ${topic}`, sources: facts, always: true });
+    out.push({ topic: withNews ? `An obscure fun fact from ${factSource}, connected to ${topic}: a niche detail most people have never heard (an odd record, a forgotten first, a strange origin, a number that surprises). Never a definition of what ${topic} or the page's subject is, and never common knowledge such as who holds an office, a capital city, a famous person's job or what a well-known thing is` : `From the offline library: ${topic}`, sources: facts, always: true });
     if (withNews) break;
   }
   return out;
@@ -383,14 +389,13 @@ async function wantedInterests(all: string[], avoid: string[]): Promise<string[]
   return wanted.length ? wanted : ['world news'];
 }
 
-const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with a transition of one to four words ("Next.", "Also.", "In other news."). Never say what comes next, never talk about the show, the headlines or the stories as a whole, and never promise more detail, a video, a link or another segment: say what the story says and stop. Speak as a reporter relaying the news: attribute each story to its outlet in the third person ("According to Reuters...", "The BBC reports..."), never say "I" or "we" about what happened, and never read a headline out as if it were your own words or in quotation marks. Give every story its own two to four sentences of detail, never just the headline. Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
+const NO_WELCOME = 'Do not greet listeners, welcome them, name the show or say the date or the time of day: the opening greeting is added for you. Start straight into the first story, never repeat a line. Move between stories with a transition of one to four words ("Next.", "Also.", "In other news."). Never say what comes next, never talk about the show, the headlines or the stories as a whole, and never promise more detail, a video, a link or another segment: say what the story says and stop. Speak as a reporter relaying the news: name the outlet at most once per story, in its first line, and for only about half the stories (most just state the news), worded differently each time ("Reuters says...", "per the BBC", "as the Times reports"), never every story and never "according to" twice in a row. Never write "the report", "the article" or "the story" ("The report details how...") and never begin two lines in the same way. Never say "I" or "we" about what happened, and never read a headline out as if it were your own words or in quotation marks. Give every story its own two to four sentences of detail, never just the headline. Never tell the listener what to think or feel about a story. Skip items that are not genuine news: personal obituaries of private individuals, promotional announcements, and minor local notices with no wider significance.';
 
 /** The opening line, made here so the date is always said first (the model was leaving it out or putting it mid-show). */
 export function greetingLine(now = new Date()): string {
   const part = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
   const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return `Good ${part}. Today is ${date}, and it is ${time}. This is your briefing.`;
+  return `Good ${part}. Today is ${date}. This is your briefing.`;
 }
 /** Rules every part of the briefing must follow. */
 const briefingRules = (avoid: string[], gotNews: boolean): string | undefined =>
@@ -477,7 +482,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved) and name the outlet. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote}${calendarFlights.length ? ' Live flight status is included in the sources - read it and report the current status (on time, delayed, gate, etc.) when covering their flight.' : ''} Mention their travel naturally when relevant.` : ''}`
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved); name the outlet only now and then. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote}${calendarFlights.length ? ' Live flight status is included in the sources - read it and report the current status (on time, delayed, gate, etc.) when covering their flight.' : ''} Mention their travel naturally when relevant.` : ''}`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` Mention the listener's plans: ${calendarNote}` : ''}`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,
