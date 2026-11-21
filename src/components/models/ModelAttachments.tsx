@@ -6,12 +6,28 @@
  * Shows what is actually running for the loaded model (not what the model could do) and roughly what each part costs.
  */
 import React from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { useThemedStyles } from '../../theme';
+import type { ThemeColors } from '../../theme';
+import { SPACING, TYPOGRAPHY } from '../../constants';
 import { modelManager, llmService } from '../../services';
 import { attachmentStatus, attachmentMemoryMB, type AttachmentKind } from '../../services/modelManager/attachments';
 import type { LlamaDownloadedModel } from '../../types';
 import type { LoadReport } from '../../services/llmTypes';
+
+const createStyles = (colors: ThemeColors) => ({
+  row: { marginTop: SPACING.md },
+  title: { ...TYPOGRAPHY.bodySmall, fontWeight: '600' as const, color: colors.text },
+  note: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginTop: SPACING.xs },
+  actions: { flexDirection: 'row' as const, flexWrap: 'wrap' as const },
+  button: {
+    flexDirection: 'row' as const, borderWidth: 1, borderColor: colors.border, borderRadius: SPACING.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginRight: SPACING.sm, marginTop: SPACING.sm,
+  },
+  buttonDanger: { borderColor: colors.error },
+  buttonText: { ...TYPOGRAPHY.bodySmall, color: colors.text },
+  buttonTextDanger: { color: colors.error },
+});
 
 const KIND_LABEL: Record<AttachmentKind, string> = { vision: 'Picture file', draft: 'MTP file' };
 
@@ -34,9 +50,8 @@ export function runtimeLine(kind: AttachmentKind, report: LoadReport | null): st
 }
 
 export const ModelAttachments: React.FC<Props> = ({ model, loaded, busy, onAdd, onError }) => {
-  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const report = loaded ? llmService.getLoadReport() : null;
-  const btn = { flexDirection: 'row' as const, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, marginRight: 8, marginTop: 8 };
   const run = (fn: () => Promise<unknown>) => { fn().catch((e: unknown) => onError(e instanceof Error ? e.message : String(e))); };
 
   const confirmDelete = async (kind: AttachmentKind) => {
@@ -64,15 +79,15 @@ export const ModelAttachments: React.FC<Props> = ({ model, loaded, busy, onAdd, 
     }[status];
     const action = (a: { label: string; id: string; onPress: () => void; danger?: boolean }) => (
       <TouchableOpacity key={a.id} accessibilityRole="button" disabled={busy} testID={`${kind}-${a.id}-${model.id}`}
-        style={[btn, a.danger && { borderColor: colors.error }]} onPress={a.onPress}>
-        <Text style={[styles.btnText, { color: a.danger ? colors.error : colors.text }]}>{a.label}</Text>
+        style={[styles.button, a.danger && styles.buttonDanger]} onPress={a.onPress}>
+        <Text style={[styles.buttonText, a.danger && styles.buttonTextDanger]}>{a.label}</Text>
       </TouchableOpacity>
     );
     const live = runtimeLine(kind, report);
     return (
       <View key={kind} style={styles.row} testID={`attachment-${kind}-${model.id}`}>
-        <Text style={[styles.title, { color: colors.text }]}>{KIND_LABEL[kind]}</Text>
-        <Text style={[styles.note, { color: colors.textMuted }]}>{summary}{live ? ` ${live}` : ''}</Text>
+        <Text style={styles.title}>{KIND_LABEL[kind]}</Text>
+        <Text style={styles.note}>{summary}{live ? ` ${live}` : ''}</Text>
         <View style={styles.actions}>
           {status === 'none' && action({ label: 'Add file', id: 'add', onPress: () => onAdd(kind) })}
           {status === 'enabled' && action({ label: 'Disable', id: 'disable', onPress: () => run(() => modelManager.setAttachmentEnabled(model.id, kind, false)) })}
@@ -93,31 +108,23 @@ export const ModelAttachments: React.FC<Props> = ({ model, loaded, busy, onAdd, 
       {row('draft')}
       {!model.draftPath && (
         <View style={styles.row}>
-          <Text style={[styles.title, { color: colors.text }]}>MTP built into the model</Text>
-          <Text style={[styles.note, { color: colors.textMuted }]}>
+          <Text style={styles.title}>MTP built into the model</Text>
+          <Text style={styles.note}>
             {model.embeddedMtp ? 'On.' : 'Off.'} The layers live inside the model file, so this switch only turns drafting on or off.
             {mtpReport && mtpReport.kind === 'embedded' ? ` ${mtpReport.loaded ? 'Running now.' : `Not running: ${mtpReport.skippedBecause ?? 'it did not start'}.`}` : ''}
             {' '}It helps only if replies actually get faster; Find the best settings measures that.
           </Text>
           <View style={styles.actions}>
-            <TouchableOpacity accessibilityRole="button" disabled={busy} testID={`embedded-mtp-${model.id}`} style={btn}
+            <TouchableOpacity accessibilityRole="button" disabled={busy} testID={`embedded-mtp-${model.id}`} style={styles.button}
               onPress={() => run(() => modelManager.setEmbeddedMtp(model.id, !model.embeddedMtp))}>
-              <Text style={[styles.btnText, { color: colors.text }]}>{model.embeddedMtp ? 'Turn off' : 'Turn on'}</Text>
+              <Text style={styles.buttonText}>{model.embeddedMtp ? 'Turn off' : 'Turn on'}</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
       {loaded && (
-        <Text style={[styles.note, { color: colors.textMuted }]}>Changes apply the next time this model loads.</Text>
+        <Text style={styles.note}>Changes apply the next time this model loads.</Text>
       )}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  row: { marginTop: 10 },
-  title: { fontSize: 13, fontWeight: '600' },
-  note: { fontSize: 12, marginTop: 2 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap' },
-  btnText: { fontSize: 13 },
-});
