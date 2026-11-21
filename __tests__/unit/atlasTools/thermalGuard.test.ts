@@ -5,7 +5,7 @@ import { checkThermalNow } from '../../../src/atlasTools/thermal';
 import { NativeModules } from 'react-native';
 
 describe('heat guard', () => {
-  beforeEach(() => { useThermal.setState({ level: null, hot: false }); useLowPower.setState({ heatGuard: true, enabled: false, active: false }); });
+  beforeEach(() => { useThermal.setState({ level: null, hot: false, hotStreak: 0 }); useLowPower.setState({ heatGuard: true, enabled: false, active: false }); });
 
   it('turns on at severe and off only at light or below', () => {
     expect(nextHot(false, 2)).toBe(false);
@@ -37,11 +37,55 @@ describe('heat guard', () => {
   it('reads Android thermal status first, then the battery temperature', async () => {
     (NativeModules as any).AtlasDevice = { getThermalStatus: jest.fn().mockResolvedValue(3), getBatteryTemperature: jest.fn().mockResolvedValue(30) };
     await checkThermalNow();
+    expect(useThermal.getState().hot).toBe(false); // one SEVERE reading is not enough
+    await checkThermalNow();
     expect(useThermal.getState().hot).toBe(true);
     (NativeModules as any).AtlasDevice = { getThermalStatus: jest.fn().mockResolvedValue(-1), getBatteryTemperature: jest.fn().mockResolvedValue(30) };
     await checkThermalNow();
     expect(useThermal.getState().hot).toBe(false);
     delete (NativeModules as any).AtlasDevice;
+  });
+});
+
+describe('a transient reading does not interrupt work', () => {
+  beforeEach(() => { useThermal.setState({ level: null, hot: false, hotStreak: 0 }); useLowPower.setState({ heatGuard: true, enabled: false, active: false }); });
+
+  it('one SEVERE reading followed by a cool one never engages the guard', () => {
+    useThermal.getState().set(3);
+    expect(heatLimited()).toBe(false);
+    useThermal.getState().set(0);
+    useThermal.getState().set(3);
+    expect(heatLimited()).toBe(false); // the streak restarted: still only one reading in a row
+  });
+
+  it('SEVERE on two readings in a row engages it', () => {
+    useThermal.getState().set(3);
+    useThermal.getState().set(3);
+    expect(heatLimited()).toBe(true);
+  });
+
+  it('CRITICAL engages at once, because components are already shutting down', () => {
+    useThermal.getState().set(4);
+    expect(heatLimited()).toBe(true);
+  });
+
+  it('MODERATE never engages it, however long it lasts', () => {
+    for (let i = 0; i < 6; i += 1) useThermal.getState().set(2);
+    expect(heatLimited()).toBe(false);
+  });
+
+  it('once engaged it still releases only at light or below (no flicker near the line)', () => {
+    useThermal.getState().set(3); useThermal.getState().set(3);
+    useThermal.getState().set(2);
+    expect(heatLimited()).toBe(true);
+    useThermal.getState().set(1);
+    expect(heatLimited()).toBe(false);
+  });
+
+  it('the guard stays switched off when the person has not switched it on, whatever the reading', () => {
+    useLowPower.setState({ heatGuard: false });
+    useThermal.getState().set(4);
+    expect(heatLimited()).toBe(false);
   });
 });
 
