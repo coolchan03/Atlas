@@ -63,4 +63,4 @@ Not attempted, or only partly. None of these is started in code.
 
 - The workspace engineering contract named in `AGENTS.md` (`../.codex/ENGINEERING_CONTRACT.md`) was not available in this container, so only `rules.md` and `CLAUDE.md` were followed.
 - Gemini, Codecov and SonarCloud reviews (8.10) run on a pull request; their findings are not in this document.
-- Some Jest warnings about a worker that did not exit may remain; see the pull request description for what was and was not found.
+- Jest (1.12): one leak is fixed. Importing `App.tsx` started the battery and heat monitors, which nothing could stop; they now start with the app and stop with it (`monitorsStop.test.ts`). The full suite passes (995 suites, 10,339 tests), but the "worker process failed to exit gracefully" warning still appears once, so at least one more leaking suite remains. The leak is not in `unit`, `rntl`, `hardening`, `contracts` or `specs`; it is somewhere in `__tests__/integration`. Running `--detectOpenHandles` over the whole suite takes hours in-band, so narrow it by sub-directory.
