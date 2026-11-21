@@ -1,18 +1,21 @@
 import type { Conversation, Project } from '../types';
 
 /**
- * Searching the chat list. The text of every message is lower-cased once per message list and kept (a message list is replaced, not edited, when a
- * chat changes), so typing a longer query does not lower-case the whole history again on each key. Locked chats and chats in a protected project
+ * Searching the chat list. The text of every message is lower-cased once per message list and kept (checked against the list's length and last message, so a list
+ * that was added to or edited at its end is read again), so typing a longer query does not lower-case the whole history again on each key. Locked chats and chats in a protected project
  * are never searched by their text, only listed when their project's name matches.
  */
-const lowered = new WeakMap<object, string>();
+interface Kept { length: number; lastId: string; lastLength: number; text: string }
+const lowered = new WeakMap<object, Kept>();
 
 const transcriptOf = (chat: Conversation): string => {
-  let text = lowered.get(chat.messages);
-  if (text === undefined) {
-    text = chat.messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => m.content.toLocaleLowerCase()).join('\n');
-    lowered.set(chat.messages, text);
-  }
+  const messages = chat.messages;
+  const last = messages[messages.length - 1];
+  const kept = lowered.get(messages);
+  // Reused only while the list still has the same length and the same last message (a list edited in place would otherwise be searched as it was).
+  if (kept && kept.length === messages.length && kept.lastId === (last?.id ?? '') && kept.lastLength === (last?.content.length ?? 0)) return kept.text;
+  const text = messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => m.content.toLocaleLowerCase()).join('\n');
+  lowered.set(messages, { length: messages.length, lastId: last?.id ?? '', lastLength: last?.content.length ?? 0, text });
   return text;
 };
 

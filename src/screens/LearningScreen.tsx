@@ -73,11 +73,11 @@ export const LearningScreen: React.FC = () => {
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
   const clearAgent = useLearningStore((s) => s.clearAgent);
   const [running, setRunning] = useState(isLearning());
-  // Read from the ledger when something that changes it has (a report, a round, the run starting or stopping), not on every redraw.
-  const progress = useMemo(() => learningProgress(agentId), [agentId, st?.totalReports, st?.round, running]); // eslint-disable-line react-hooks/exhaustive-deps
   const [reviewing, setReviewing] = useState(false);
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
   const phase = phaseOf(statusText, isLearning());
+  // Read from the ledger when something that changes it has (a report, a round, the run starting or stopping, an exam finishing), not on every redraw.
+  const progress = useMemo(() => learningProgress(agentId), [agentId, st?.totalReports, st?.round, running, statusText]); // eslint-disable-line react-hooks/exhaustive-deps
   const [open, setOpen] = useState<string | null>(null);
   const [newQ, setNewQ] = useState('');
   const [advanced, setAdvanced] = useState(false);

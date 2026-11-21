@@ -44,6 +44,10 @@ export async function yieldToChat(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Runs one background model job at a time. A job must be a single model call (with the work to prepare it), so that asking again after a chat reply
+ * stopped it repeats nothing but that call: every caller today wraps exactly that.
+ */
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
   const run = tail.then(async () => {
     for (let attempt = 0; ; attempt += 1) {
@@ -54,9 +58,11 @@ export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: n
       try {
         const result = await asBackground(job);
         // Stopped for a chat reply: whatever came back is a cut-off answer, not the job's result, so it is asked again after the reply.
-        if (preemptions === mark || attempt >= MAX_RESTARTS) return result;
+        if (preemptions === mark) return result;
+        if (attempt >= MAX_RESTARTS) throw new Error('The AI was needed for chat replies too often for this background job to finish. It will be tried again later.');
       } catch (error) {
         if (preemptions === mark || attempt >= MAX_RESTARTS) throw error;
+        // a stopped call may reject: that is the stop, not a failure of the job, so it is asked again
       } finally { if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); }
     }
   });

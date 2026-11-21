@@ -32,4 +32,14 @@ describe('matchChats', () => {
     expect(matchChats(chats, 'lease', none).map((c) => c.id)).toEqual(first);
     expect(first).toEqual(['a']);
   });
+
+  it('reads a message list again when it was added to or edited at its end in place', () => {
+    const c = chat('f', 'Notes', ['first words']);
+    expect(matchChats([c], 'later', none)).toEqual([]);
+    c.messages.push({ id: 'f9', role: 'user', content: 'later words', timestamp: 0 }); // same array, one more message
+    expect(matchChats([c], 'later', none)).toHaveLength(1);
+    c.messages[c.messages.length - 1].content = 'edited text longer than before';
+    expect(matchChats([c], 'edited', none)).toHaveLength(1);
+    expect(matchChats([c], 'later', none)).toEqual([]);
+  });
 });

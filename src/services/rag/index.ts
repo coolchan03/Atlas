@@ -94,6 +94,14 @@ class RagService {
   }
 
   async indexDocument(params: IndexDocumentParams): Promise<number> {
+    this.indexing.set(params.projectId, (this.indexing.get(params.projectId) ?? 0) + 1);
+    try { return await this.indexDocumentNow(params); } finally {
+      const left = (this.indexing.get(params.projectId) ?? 1) - 1;
+      if (left <= 0) this.indexing.delete(params.projectId); else this.indexing.set(params.projectId, left);
+    }
+  }
+
+  private async indexDocumentNow(params: IndexDocumentParams): Promise<number> {
     const { projectId, filePath, fileName, fileSize, onProgress } = params;
     const isProtected = isProtectedProject(projectId);
     await this.ensureReady();
@@ -172,7 +180,18 @@ class RagService {
    * Embeds passages a slice at a time and saves each slice as soon as it is made, so an indexing that is cut off (the app closed, the phone out of
    * memory) keeps what it finished and the next run does only the rest. One embedding runs at a time: the engine is not safe to call twice at once.
    */
-  private async embedInSlices(docId: number, chunks: { id: number; content: string }[], onProgress?: (p: IndexProgress) => void): Promise<number> {
+  private embedChain: Promise<unknown> = Promise.resolve();
+  /** Projects with an indexDocument running: their half-indexed passages are not "interrupted work" and are left to it. */
+  private indexing = new Map<string, number>();
+
+  /** Embedding runs one batch at a time across the whole app (indexing, finishing an interrupted library): the engine must not be called twice at once. */
+  private embedInSlices(docId: number, chunks: { id: number; content: string }[], onProgress?: (p: IndexProgress) => void): Promise<number> {
+    const run = this.embedChain.then(() => this.embedSlices(docId, chunks, onProgress));
+    this.embedChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async embedSlices(docId: number, chunks: { id: number; content: string }[], onProgress?: (p: IndexProgress) => void): Promise<number> {
     let done = 0;
     for (let at = 0; at < chunks.length; at += EMBED_SLICE) {
       const slice = chunks.slice(at, at + EMBED_SLICE);
@@ -191,7 +210,7 @@ class RagService {
    * while a chat reply is being written (the reply goes first; it is tried again the next time the library is opened). Returns how many passages it embedded.
    */
   async resumeIndexing(projectId: string): Promise<number> {
-    if (this.resuming.has(projectId)) return 0;
+    if (this.resuming.has(projectId) || (this.indexing.get(projectId) ?? 0) > 0) return 0;
     try { if (require('../llm').llmService.isCurrentlyGenerating()) return 0; } catch { /* no engine to ask: carry on */ }
     this.resuming.add(projectId);
     try { return await this.backfillEmbeddings(projectId); } finally { this.resuming.delete(projectId); }

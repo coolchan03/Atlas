@@ -61,3 +61,25 @@ it('resumeIndexing finishes an interrupted document, runs once at a time, and le
   expect([first, second].sort()).toEqual([0, 2]); // one run did the work, the other did not start a second
   expect(db.getUnembeddedChunks(docId)).toHaveLength(0);
 });
+
+it('does not embed the passages of a document that is still being indexed, and embeds one batch at a time', async () => {
+  installRealSqlite();
+  let running = 0;
+  let overlapped = false;
+  jest.doMock('../../../src/services/llm', () => ({ llmService: { isCurrentlyGenerating: () => false } }));
+  jest.doMock('../../../src/services/rag/embedding', () => ({
+    embeddingService: { load: jest.fn(async () => undefined), isLoaded: () => true, embedBatch: jest.fn(async (texts: string[]) => { running += 1; if (running > 1) overlapped = true; await new Promise((r) => setTimeout(r, 15)); running -= 1; return texts.map(() => [1, 0, 0]); }) },
+  }));
+  jest.doMock('../../../src/services/documentService', () => ({ documentService: { processDocumentFromPath: jest.fn(async () => ({ id: '1', type: 'document', uri: '/new', fileName: 'new.txt', textContent: 'A sentence long enough to be indexed as a passage of its own. '.repeat(40), fileSize: 100 })) } }));
+  const { ragDatabase: db } = require('../../../src/services/rag/database');
+  const { ragService } = require('../../../src/services/rag');
+  await db.ensureReady();
+  const oldDoc = db.insertDocument({ projectId: 'p', name: 'old.txt', path: '/old', size: 1 });
+  db.insertChunks(oldDoc, [{ content: 'an interrupted passage', position: 0 }]);
+  const indexing = ragService.indexDocument({ projectId: 'p', filePath: '/new', fileName: 'new.txt', fileSize: 100 });
+  await new Promise((r) => setTimeout(r, 1));
+  expect(await ragService.resumeIndexing('p')).toBe(0); // the project is being indexed: its half-done passages are left to it
+  await indexing;
+  expect(await ragService.resumeIndexing('p')).toBe(1); // afterwards, the interrupted one is finished
+  expect(overlapped).toBe(false);
+});

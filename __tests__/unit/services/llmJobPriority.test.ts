@@ -44,9 +44,9 @@ it('stops a writing job for a chat reply, discards its cut-off answer and runs i
   expect(job).toHaveBeenCalledTimes(2);
 });
 
-it('gives up restarting after a few times rather than looping while chats keep arriving', async () => {
+it('gives up after a few restarts, and says so, rather than returning a cut-off answer as if it were whole', async () => {
   let calls = 0;
-  const job = jest.fn(async () => { calls += 1; state.generating = true; await new Promise((r) => setTimeout(r, 5)); await yieldToChat(); return `try ${calls}`; });
-  await expect(runBackgroundJob(job)).resolves.toMatch(/^try /);
-  expect(job.mock.calls.length).toBeLessThanOrEqual(4);
+  const job = jest.fn(async () => { calls += 1; state.generating = true; await new Promise((r) => setTimeout(r, 5)); await yieldToChat(); return `cut off ${calls}`; });
+  await expect(runBackgroundJob(job)).rejects.toThrow(/needed for chat replies too often/);
+  expect(job.mock.calls.length).toBe(4);
 });

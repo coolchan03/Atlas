@@ -236,7 +236,8 @@ export const ChatsListScreen: React.FC = () => {
     .filter(c => !!c.isArchived === showArchived), [conversations, hideLocked, vaultOpen, showArchived]);
   // The search runs once the typing pauses, and only again when the chats or the words change (not on every unrelated render).
   const settledSearch = useDebouncedValue(searchText, SEARCH_PAUSE_MS);
-  const query = settledSearch.trim().toLocaleLowerCase();
+  // Clearing the box shows the whole list at once; only typing waits for a pause.
+  const query = searchText.trim() === '' ? '' : settledSearch.trim().toLocaleLowerCase();
   const matchingConversations = useMemo(() => matchChats(sortedConversations, query, getProject), [sortedConversations, query, getProject]);
   const searchExpanded = new Set(expandedProjectIds);
   if (query) for (const chat of matchingConversations) if (chat.projectId && !searchCollapsedIds.includes(chat.projectId)) searchExpanded.add(chat.projectId);

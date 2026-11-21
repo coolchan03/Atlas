@@ -260,7 +260,6 @@ function keepBatch(deepResults: TuneResult[], chosen: TuneResult): TuneResult {
   return baseline && quickest && quickest.firstWordSec * REFINE_GAIN <= baseline.firstWordSec ? { ...quickest, tps: chosen.tps } : chosen;
 }
 
-/** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). */
 /**
  * Nothing won, or the test was cancelled: the last trial's model is still loaded with the trial's settings. Put back the model that was active
  * (with the settings it had), so no stale context or unexpected model is left running.
@@ -274,6 +273,7 @@ let tuning: Promise<unknown> | null = null;
 /** True while a speed test is running (only one may: each one loads and unloads the model, so two at once would fight over it). */
 export const isTuning = (): boolean => tuning !== null;
 
+/** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). One at a time. */
 export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean } = {}): Promise<TuneOutcome> {
   if (tuning) throw new Error('A speed test is already running. Wait for it to finish, or cancel it.');
   const run = runTuning(modelId, onProgress, opts);

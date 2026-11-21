@@ -752,7 +752,7 @@ class LLMService {
       const cr = completionResult as any;
       logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
-      noteStage('first word', firstTokenMs);
+      if (firstTokenMs > 0) noteStage('first word', firstTokenMs); // no word arrived (stopped, failed): nothing to time
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);

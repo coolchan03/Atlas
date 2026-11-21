@@ -22,6 +22,11 @@ describe('explaining a slow reply in plain words', () => {
   });
 
   it('explains both when both were slow', () => {
-    expect(explainDelay({ timeToFirstToken: 20, tokensPerSecond: 1 })).toMatch(/start answering.*words a minute/);
+    expect(explainDelay({ timeToFirstToken: 20, decodeTokensPerSecond: 1 })).toMatch(/start answering.*words a minute/);
+  });
+
+  it('does not call writing slow from a figure that includes the wait (decode speed only)', () => {
+    expect(explainDelay({ timeToFirstToken: 9, tokensPerSecond: 1 } as any)).toMatch(/start answering/);
+    expect(explainDelay({ timeToFirstToken: 9, tokensPerSecond: 1 } as any)).not.toContain('words a minute');
   });
 });
