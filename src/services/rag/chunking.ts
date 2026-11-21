@@ -71,7 +71,8 @@ export function withSectionContext(text: string, chunks: Chunk[]): Chunk[] {
   if (!heads.length) return chunks;
   let from = 0;
   return chunks.map((c) => {
-    const found = text.indexOf(c.content.slice(0, 80), from);
+    // Found by its first line: a heading is joined to its text with one line break where the document had a blank line, so the whole start would not match.
+    const found = text.indexOf(c.content.split('\n')[0].slice(0, 80), from);
     if (found >= 0) from = found;
     const stack: typeof heads = [];
     for (const h of heads) {
@@ -80,7 +81,12 @@ export function withSectionContext(text: string, chunks: Chunk[]): Chunk[] {
       stack.push(h);
     }
     const path = stack.map((h) => h.title).join(' > ');
-    return path && !/^#{1,6}\s/.test(c.content) ? { ...c, content: `[${path}]\n${c.content}` } : c;
+    if (!path) return c;
+    if (!/^#{1,6}\s/.test(c.content)) return { ...c, content: `[${path}]\n${c.content}` };
+    // A chunk that starts with its own heading (a heading stays with its text): when it sits inside other sections, the path replaces that line
+    // (the path ends with the same title), so the place is shown once. A top-level heading is left as it is.
+    const rest = c.content.slice(c.content.indexOf('\n') + 1);
+    return stack.length > 1 && c.content.includes('\n') && rest.trim() ? { ...c, content: `[${path}]\n${rest}` } : c;
   });
 }
 

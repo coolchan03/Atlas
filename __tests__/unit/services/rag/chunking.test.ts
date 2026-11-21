@@ -173,3 +173,17 @@ describe('section-aware chunks', () => {
     expect(softEnd('short', 0, 50)).toBe(5);
   });
 });
+
+describe('a heading that stays with its text keeps the place in the document', () => {
+  it('shows the section path once: it replaces the chunk\'s own heading line when the section sits inside others', () => {
+    const body = (k: string) => `${k} ${'a sentence about the topic. '.repeat(10)}`;
+    const text = `# Accounting\n\n${body('intro')}\n\n## Leases\n\n${body('lease')}\n\n### Classification\n\n${body('class')}`;
+    const chunks = chunkDocument(text, { chunkSize: 420, overlap: 40 });
+    const lease = chunks.find((c) => c.content.includes('lease a sentence'))!;
+    expect(lease.content.startsWith('[Accounting > Leases]\nlease a sentence')).toBe(true);
+    expect(lease.content).not.toContain('## Leases');
+    const cls = chunks.find((c) => c.content.includes('class a sentence'))!;
+    expect(cls.content.startsWith('[Accounting > Leases > Classification]\n')).toBe(true);
+    expect(chunks[0].content.startsWith('# Accounting\n')).toBe(true); // a top-level heading is left as it is
+  });
+});

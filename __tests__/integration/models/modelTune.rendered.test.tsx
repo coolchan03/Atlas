@@ -41,9 +41,12 @@ it('tries each option, lists the speeds and applies the fastest', async () => {
   expect(screen.getAllByText(/tok\/s|failed/).length).toBeGreaterThanOrEqual(3);
   const settings = useAppStore.getState().settings;
   expect(String(result.props.children)).toMatch(/^Using .* tok\/s\)/);
-  // The winner is kept as the person's choice, and the tuned model stops getting the slow-reply tip.
-  expect(settings.backendUserChosen).toBe(true);
-  expect(settings.nThreads).not.toBe(7);
+  // The winner is kept for THIS model only (the global settings are not changed, so no other model is affected), and the tuned model stops getting the slow-reply tip.
+  expect(settings.backendUserChosen).toBe(false);
+  expect(settings.nThreads).toBe(7);
+  expect(useTuned.getState().memory.llm?.nThreads).toBeDefined();
+  expect(useTuned.getState().memory.llm?.nThreads).not.toBe(7);
+  expect(useTuned.getState().memory.llm?.inferenceBackend).toBe('cpu');
   expect(useTuned.getState().at.llm).toBeGreaterThan(0);
   now.mockRestore();
 }, 70000);
