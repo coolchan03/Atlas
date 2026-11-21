@@ -1,4 +1,4 @@
-import { cosineSimilarity, dotProduct, topKSimilar } from '../../../../src/services/rag/vectorMath';
+import { cosineScorer, cosineSimilarity, dotProduct, topKSimilar } from '../../../../src/services/rag/vectorMath';
 
 describe('vectorMath', () => {
   describe('dotProduct', () => {
@@ -145,7 +145,6 @@ describe('vectorMath', () => {
 });
 
 describe('cosineScorer', () => {
-  const { cosineScorer, cosineSimilarity } = require('../../../../src/services/rag/vectorMath');
   it('gives the same numbers as cosineSimilarity, for plain arrays and 32-bit floats alike', () => {
     const q = [0.2, -0.5, 0.9, 0.1];
     const vectors = [[1, 0, 0, 0], [0.2, -0.5, 0.9, 0.1], [-1, 1, -1, 1], [0, 0, 0, 0]];
