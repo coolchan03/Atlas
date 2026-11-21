@@ -216,7 +216,7 @@ async function timeOption(ctx: { modelId: string; old: TuneBase; facts?: { mtpLa
     const tps = st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0;
     // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
     if (!option.extra && prompt === PROMPT) useSpeedStats.getState().record(modelId, { decode: tps, backend: String(option.backend) });
-    const firstWordSec = (st.lastTimeToFirstToken || 0) / 1000;
+    const firstWordSec = st.lastTimeToFirstToken || 0; // already in seconds (recordGenerationStats)
     return { option, tps, firstWordSec, samples: [tps], firstWords: [firstWordSec] };
   } catch (e: any) {
     logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);

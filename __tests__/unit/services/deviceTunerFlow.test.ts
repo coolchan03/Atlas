@@ -47,7 +47,7 @@ function runPhone(script: Script) {
     lastTps = readings[Math.min(seen[key], readings.length - 1)];
     return '';
   }) as any);
-  mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: lastTps, lastTokensPerSecond: lastTps, lastTimeToFirstToken: 500 })) as any);
+  mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: lastTps, lastTokensPerSecond: lastTps, lastTimeToFirstToken: 0.5 })) as any);
   return { seen, prompts };
 }
 
