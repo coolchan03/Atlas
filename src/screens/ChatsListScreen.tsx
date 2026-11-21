@@ -1,5 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { matchChats } from '../chats/chatSearch';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { View, Text, FlatList, TouchableOpacity, Platform, Modal, TextInput, StyleSheet } from 'react-native';
 import { unlockChat, onProtectedChatsRelocked } from '../stores/encryptedChatStorage';
@@ -39,6 +41,9 @@ type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+/** How long typing must pause before the chat list is searched. */
+const SEARCH_PAUSE_MS = 180;
 
 export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -227,18 +232,12 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   // Project chats are grouped into expandable folders; no duplicate top-level rows.
-  const sortedConversations = visibleConversations(conversations, hideLocked, vaultOpen)
-    .filter(c => !!c.isArchived === showArchived);
-  const query = searchText.trim().toLocaleLowerCase();
-  const matchingConversations = query ? sortedConversations.filter(chat => {
-    const project = chat.projectId ? getProject(chat.projectId) : null;
-    const projectMatch = project && !project.pinVerifier && project.name.toLowerCase().includes(query);
-    if (projectMatch) return true;
-    if (project?.pinVerifier || chat.pinVerifier) return false;
-    return chat.title.toLocaleLowerCase().includes(query) ||
-      chat.messages.some(message => (message.role === 'user' || message.role === 'assistant') &&
-        message.content.toLocaleLowerCase().includes(query));
-  }) : sortedConversations;
+  const sortedConversations = useMemo(() => visibleConversations(conversations, hideLocked, vaultOpen)
+    .filter(c => !!c.isArchived === showArchived), [conversations, hideLocked, vaultOpen, showArchived]);
+  // The search runs once the typing pauses, and only again when the chats or the words change (not on every unrelated render).
+  const settledSearch = useDebouncedValue(searchText, SEARCH_PAUSE_MS);
+  const query = settledSearch.trim().toLocaleLowerCase();
+  const matchingConversations = useMemo(() => matchChats(sortedConversations, query, getProject), [sortedConversations, query, getProject]);
   const searchExpanded = new Set(expandedProjectIds);
   if (query) for (const chat of matchingConversations) if (chat.projectId && !searchCollapsedIds.includes(chat.projectId)) searchExpanded.add(chat.projectId);
   const chatRows = buildChatListRows(matchingConversations, projects, searchExpanded);
