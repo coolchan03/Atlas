@@ -15,11 +15,18 @@ import { vulkanEngine } from './vulkanEngine';
 import { acceleratorCandidates, type TextAccelerator } from './acceleratorSelection';
 import { useSpeedStats, useTuned, type ModelMemory } from '../atlasTools/speed';
 import logger from '../utils/logger';
+import { robustValue, relativeSpread, tieBand, NEEDS_THIRD_RUN, CONFIRM_BELOW_GAIN } from './tuneStats';
 
 /** The model-memory settings a refinement changes on top of the winning backend and thread count. */
 interface TuneExtra { cacheType?: CacheType; flashAttn?: boolean; nBatch?: number; gpuLayers?: number; /** The model drafts with the multi-token-prediction layers built into it (see modelManager.setEmbeddedMtp). */ mtp?: boolean }
 export interface TuneOption { id: string; label: string; backend: InferenceBackend; threads: number; extra?: TuneExtra }
-export interface TuneResult { option: TuneOption; tps: number; firstWordSec: number; error?: string }
+export interface TuneResult {
+  option: TuneOption; tps: number; firstWordSec: number; error?: string;
+  /** Every timing behind `tps` and `firstWordSec` (they are medians of these, outliers removed). Absent for a single older-style result. */
+  samples?: number[]; firstWords?: number[];
+  /** How much the repeated timings disagreed, as a share of their median. */
+  spread?: number;
+}
 
 /**
  * What to try: automatic acceleration, each NPU or GPU backend the phone offers for this model, then the CPU with the
@@ -77,9 +84,13 @@ export function layerOptions(base: TuneOption, current: number): TuneOption[] {
   return counts.map((n) => ({ ...base, id: `${base.id}+layers-${n}`, label: `${base.label}, ${n >= 99 ? 'all' : n} GPU layers`, extra: { ...base.extra, gpuLayers: n } }));
 }
 
-/** Drafting with the layers built into the model, tried once for a model that has no draft file and is not marked as having them: kept only if clearly faster. */
-export function mtpOptions(base: TuneOption, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean }): TuneOption[] {
-  if (model.engine !== 'llama' || model.draftPath || model.embeddedMtp) return [];
+/**
+ * Drafting with the layers built into the model, tried once for a model that has no draft file and is not marked as having them: kept only
+ * if clearly faster. Only when the model file's own metadata shows MTP layers (`mtpLayers` > 0): unknown (null) and none (0) are never tried,
+ * because loading drafting on a file that cannot do it measures nothing useful and a model's name says nothing about its layers.
+ */
+export function mtpOptions(base: TuneOption, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean }, mtpLayers: number | null = null): TuneOption[] {
+  if (model.engine !== 'llama' || model.draftPath || model.embeddedMtp || !mtpLayers || mtpLayers <= 0) return [];
   return [{ ...base, id: `${base.id}+mtp`, label: `${base.label}, drafting with built-in MTP`, extra: { ...base.extra, mtp: true } }];
 }
 
@@ -100,8 +111,10 @@ const REFINE_GAIN = 1.08;
 export function pickBest(results: TuneResult[]): TuneResult | null {
   const ok = results.filter((r) => !r.error && r.tps > 0);
   if (!ok.length) return null;
-  const top = Math.max(...ok.map((r) => r.tps));
-  return ok.filter((r) => r.tps >= top * 0.95).sort((a, b) => a.option.threads - b.option.threads || b.tps - a.tps)[0];
+  const topResult = ok.reduce((a, b) => (b.tps > a.tps ? b : a));
+  // Two results closer than the noise in the timings are a tie, and a tie goes to the cooler, kinder setting (fewer threads).
+  const band = tieBand(topResult.spread ?? 0);
+  return ok.filter((r) => r.tps >= topResult.tps * (1 - band)).sort((a, b) => a.option.threads - b.option.threads || b.tps - a.tps)[0];
 }
 
 /** The NPU and GPU backends worth timing for this model on this phone (the same rule Automatic uses to choose). */
@@ -125,9 +138,50 @@ const PROMPT = 'Write one short paragraph (about 50 words) about rivers. No titl
 
 type TuneBase = { cacheType: CacheType; flashAttn: boolean; nBatch: number; gpuLayers: number };
 
+/** Results within this share of the fastest are too close to call from one timing each. */
+const CLOSE_TO_TOP = 0.85;
+
+/** The (up to three) fastest first-round results that are within noise of the best: they are timed again before one is picked. */
+export function contendersToConfirm(results: TuneResult[]): TuneResult[] {
+  const ok = results.filter((r) => !r.error && r.tps > 0);
+  const top = ok.reduce((m, r) => Math.max(m, r.tps), 0);
+  const close = ok.filter((r) => r.tps >= top * CLOSE_TO_TOP).sort((a, b) => b.tps - a.tps).slice(0, 3);
+  return close.length >= 2 ? close : [];
+}
+
+/** The plain winner and the best memory-setting refinement, when the refinement is neither clearly worse nor clearly better (so one timing cannot decide). */
+export function refinementToConfirm(first: TuneResult | null, results: TuneResult[]): TuneResult[] {
+  const refined = pickBest(results.filter((r) => r.option.extra));
+  const ambiguous = !!first && !!refined && refined.tps >= first.tps / CONFIRM_BELOW_GAIN && refined.tps < first.tps * CONFIRM_BELOW_GAIN;
+  return ambiguous && first && refined ? [first, refined] : [];
+}
+
+/** The batch size in use and the quickest alternative, when the alternative read the long prompt faster by less than CONFIRM_BELOW_GAIN. */
+export function batchesToConfirm(deepResults: TuneResult[]): TuneResult[] {
+  const baseline = deepResults.find((r) => !r.error && r.option.id.endsWith('batch-now'));
+  const quickest = deepResults.filter((r) => !r.error && !r.option.id.endsWith('batch-now') && r.firstWordSec > 0).sort((a, b) => a.firstWordSec - b.firstWordSec)[0];
+  return baseline && quickest && baseline.firstWordSec / quickest.firstWordSec < CONFIRM_BELOW_GAIN ? [baseline, quickest] : [];
+}
+
+/** The same result after it was timed again (matched by option), or the original. */
+const refreshed = (list: TuneResult[], result: TuneResult | null): TuneResult | null => (result ? list.find((r) => r.option.id === result.option.id) ?? result : null);
+
+/** A tiny reply that makes an accelerator compile its kernels and page the weights in, so the timed reply is not the first thing it ever ran. */
+const WARM_UP_PROMPT = 'Say hello.';
+
+/** Combines two timings of the same option into one: medians of all the samples, outliers removed. A failed timing never replaces a good one. */
+export function mergeResults(a: TuneResult, b: TuneResult): TuneResult {
+  if (a.error || a.tps <= 0) return b.error || b.tps <= 0 ? a : b;
+  if (b.error || b.tps <= 0) return a;
+  const samples = [...(a.samples ?? [a.tps]), ...(b.samples ?? [b.tps])];
+  const firstWords = [...(a.firstWords ?? [a.firstWordSec]), ...(b.firstWords ?? [b.firstWordSec])].filter((v) => v > 0);
+  return { option: a.option, tps: robustValue(samples), firstWordSec: firstWords.length ? robustValue(firstWords) : 0, samples, firstWords, spread: relativeSpread(samples) };
+}
+
 /** Loads the model with one option's settings (the rest as they were), writes one reply and reports how fast it went. */
-async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneOption, prompt: string): Promise<TuneResult> {
+async function timeOption(ctx: { modelId: string; old: TuneBase; facts?: { mtpLayers: number | null } }, option: TuneOption, run: { prompt: string; warmUp?: boolean }): Promise<TuneResult> {
   const { modelId, old } = ctx;
+  const { prompt, warmUp = false } = run;
   useAppStore.getState().updateSettings({ inferenceBackend: option.backend, nThreads: option.threads, backendUserChosen: true, cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers, ...memoryOf(option.extra) } as any);
   // Drafting with the model's own prediction layers: set on the model for this try (the engine loads without it if the model has none).
   if (option.extra?.mtp) markMtp(modelId, true);
@@ -135,12 +189,18 @@ async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneO
     // A fresh load each time: threads, acceleration and the cache are fixed when the model loads.
     await activeModelService.unloadTextModel(true);
     await activeModelService.loadTextModel(modelId);
+    // What the model file itself says about MTP, read while it is loaded (a property of the file, whichever accelerator is running).
+    if (ctx.facts) ctx.facts.mtpLayers = llmService.getEmbeddedMtpLayers() ?? ctx.facts.mtpLayers;
+    if (warmUp) {
+      try { await llmService.generateResponse([{ id: 'w', role: 'user', content: WARM_UP_PROMPT, timestamp: 0 }], { disableThinking: true }); } catch { /* a failed warm-up shows up in the timed reply */ }
+    }
     await llmService.generateResponse([{ id: 'u', role: 'user', content: prompt, timestamp: 0 }], { disableThinking: true });
     const st = llmService.getPerformanceStats();
     const tps = st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0;
     // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
     if (!option.extra && prompt === PROMPT) useSpeedStats.getState().record(modelId, { decode: tps, backend: String(option.backend) });
-    return { option, tps, firstWordSec: (st.lastTimeToFirstToken || 0) / 1000 };
+    const firstWordSec = (st.lastTimeToFirstToken || 0) / 1000;
+    return { option, tps, firstWordSec, samples: [tps], firstWords: [firstWordSec] };
   } catch (e: any) {
     logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
     return { option, tps: 0, firstWordSec: 0, error: String(e?.message || e) };
@@ -148,8 +208,8 @@ async function timeOption(ctx: { modelId: string; old: TuneBase }, option: TuneO
 }
 
 /** Everything tried on the winner of the first round: memory settings, how many layers go to the chip, and the model's built-in MTP drafting. */
-function secondRound(base: TuneOption, old: TuneBase, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean; filePath?: string; fileSize?: number }): TuneOption[] {
-  return [...refineOptions(base, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model), ...layerOptions(base, old.gpuLayers), ...mtpOptions(base, model)];
+function secondRound(base: TuneOption, old: TuneBase, model: { engine?: string; draftPath?: string; embeddedMtp?: boolean; filePath?: string; fileSize?: number; mtpLayers?: number | null }): TuneOption[] {
+  return [...refineOptions(base, { cacheType: old.cacheType, flashAttn: old.flashAttn }, model), ...layerOptions(base, old.gpuLayers), ...mtpOptions(base, model, model.mtpLayers ?? null)];
 }
 
 /** Marks (or unmarks) a model as drafting with its built-in MTP, in the app only: a try is not saved. */
@@ -199,12 +259,32 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   const restore = () => useAppStore.getState().updateSettings(old as any);
 
   const deepResults: TuneResult[] = [];
+  const facts: { mtpLayers: number | null } = { mtpLayers: null };
+  // An accelerator's first reply includes compiling its kernels: it gets a throw-away reply first so that cost is not held against it.
+  const needsWarmUp = (option: TuneOption) => option.backend !== INFERENCE_BACKENDS.CPU;
   const runList = async (list: TuneOption[], at: { done: number; total: number; prefix?: string; prompt?: string; into?: TuneResult[] }): Promise<void> => {
     const { prompt = PROMPT, into = results } = at;
     for (const [i, option] of list.entries()) {
       if (cancelFlag) break;
       onProgress({ step: at.done + i + 1, steps: at.total, label: `${at.prefix ?? ''}${option.label}`, results: [...results, ...deepResults] });
-      into.push(await timeOption({ modelId, old }, option, prompt));
+      into.push(await timeOption({ modelId, old, facts }, option, { prompt, warmUp: needsWarmUp(option) }));
+    }
+  };
+  /**
+   * Times the given results again (a fresh load each, like the first time) and replaces each with the merged, robust result. A third timing is
+   * taken only when the two disagree by more than NEEDS_THIRD_RUN. Only used for results too close to call, never for the whole list.
+   */
+  const confirm = async (subset: TuneResult[], at: { into: TuneResult[]; prompt: string; metric: 'tps' | 'firstWord'; prefix: string; done: number }): Promise<void> => {
+    const values = (r: TuneResult) => (at.metric === 'tps' ? r.samples ?? [r.tps] : r.firstWords ?? [r.firstWordSec]);
+    for (const [i, current] of subset.entries()) {
+      if (cancelFlag) return;
+      onProgress({ step: at.done + i + 1, steps: at.done + subset.length, label: `${at.prefix}${current.option.label}`, results: [...results, ...deepResults] });
+      // Every repeat starts differently from the first reading, so a cache of the earlier prompt's text cannot make the repeat look faster.
+      const again = (n: number) => timeOption({ modelId, old, facts }, current.option, { prompt: `Reading ${n + 1}. ${at.prompt}`, warmUp: needsWarmUp(current.option) });
+      let merged = mergeResults(current, await again(1));
+      if (!cancelFlag && values(merged).length === 2 && relativeSpread(values(merged)) > NEEDS_THIRD_RUN) merged = mergeResults(merged, await again(2));
+      const at0 = at.into.indexOf(current);
+      if (at0 >= 0) at.into[at0] = merged;
     }
   };
   let first: TuneResult | null = null;
@@ -212,9 +292,14 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   try {
     useTuned.getState().setMemory(modelId, undefined);
     await runList(options, { done: 0, total: options.length });
+    // The options within noise of the fastest are timed again before one is picked: a single reading must not decide between close ones.
+    await confirm(contendersToConfirm(results), { into: results, prompt: PROMPT, metric: 'tps', prefix: 'checking again: ', done: options.length });
     first = cancelFlag ? null : pickBest(results);
-    const refine = first ? secondRound(first.option, old, model) : [];
+    const refine = first ? secondRound(first.option, old, { ...model, mtpLayers: facts.mtpLayers }) : [];
     await runList(refine, { done: options.length, total: options.length + refine.length, prefix: 'memory: ' });
+    // A refinement that is only a little better (or worse) than the plain winner might be noise: both are timed again before the choice.
+    await confirm(refinementToConfirm(first, results), { into: results, prompt: PROMPT, metric: 'tps', prefix: 'checking again: ', done: options.length + refine.length });
+    first = refreshed(results, first);
     // A memory-setting refinement is kept only when clearly faster than the plain winner it was built from.
     chosen = cancelFlag ? null : keepRefinement(results, first);
     undoMtpTry(modelId, model, chosen); // a lost MTP try is undone before the batch round, which must not run with it
@@ -224,6 +309,8 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
       const batches = [{ ...base, id: `${base.id}+batch-now`, label: `${base.label}, batch ${old.nBatch} (as now)` }, ...batchOptions(base, old.nBatch)];
       const done = options.length + refine.length;
       await runList(batches, { done, total: done + batches.length, prefix: 'long prompt: ', prompt: LONG_PROMPT, into: deepResults });
+      // A batch size that read the long prompt only a little faster could be noise: that one and the size in use are read again before the choice.
+      await confirm(batchesToConfirm(deepResults), { into: deepResults, prompt: LONG_PROMPT, metric: 'firstWord', prefix: 'long prompt, again: ', done: done + batches.length });
       chosen = keepBatch(deepResults, chosen);
     }
   } finally {

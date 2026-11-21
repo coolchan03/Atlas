@@ -138,6 +138,33 @@ describe('optional components report what is really running', () => {
   });
 });
 
+describe('built-in MTP is reported from the model file, not from the switch', () => {
+  const withMetadata = (metadata: Record<string, unknown>) => createMockLlamaContext({ model: { metadata, chatTemplates: { jinja: {} } } });
+
+  it('is active when the file has MTP layers', async () => {
+    mockedInitLlama.mockResolvedValue(withMetadata({ 'general.architecture': 'qwen35', 'qwen35.nextn_predict_layers': 1 }) as any);
+    await llmService.loadModel(MODEL, undefined, { embeddedMtp: true });
+    expect(llmService.getLoadReport()!.mtp).toMatchObject({ kind: 'embedded', loaded: true });
+    expect(llmService.getEmbeddedMtpLayers()).toBe(1);
+  });
+
+  it('is NOT reported active when the file has no MTP layers, however the switch is set', async () => {
+    mockedInitLlama.mockResolvedValue(withMetadata({ 'general.architecture': 'llama', 'general.name': 'Totally-MTP-Model' }) as any);
+    await llmService.loadModel(MODEL, undefined, { embeddedMtp: true });
+    const report = llmService.getLoadReport()!;
+    expect(report.mtp).toMatchObject({ loaded: false, skippedBecause: 'this model file has no MTP layers built in' });
+    expect(report.notes.join(' ')).toMatch(/no MTP layers built in/);
+    expect(llmService.getEmbeddedMtpLayers()).toBe(0);
+  });
+
+  it('leaves it as it was when the metadata cannot be read (unknown is not "none")', async () => {
+    mockedInitLlama.mockResolvedValue(createMockLlamaContext() as any);
+    await llmService.loadModel(MODEL, undefined, { embeddedMtp: true });
+    expect(llmService.getLoadReport()!.mtp.loaded).toBe(true);
+    expect(llmService.getEmbeddedMtpLayers()).toBeNull();
+  });
+});
+
 describe('a configuration that crashed the process is not repeated', () => {
   async function crashDuring(stage: 'draft' | 'vision' | 'init', mtp: boolean, vision: boolean) {
     await enterStage({ modelPath: MODEL, backend: 'cpu', mtp, vision, stage });

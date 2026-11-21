@@ -13,6 +13,18 @@ export function modelLayerTotal(metadata: Record<string, unknown> | null | undef
   return Number.isFinite(blocks) && blocks > 0 ? Math.floor(blocks) + 1 : -1;
 }
 
+/**
+ * How many multi-token-prediction layers the model file itself contains, read from its GGUF metadata (`<architecture>.nextn_predict_layers`).
+ * null when the metadata could not be read, so "unknown" is never confused with "none". Never guessed from a model's name or family.
+ */
+export function embeddedMtpLayers(metadata: Record<string, unknown> | null | undefined): number | null {
+  if (!metadata || !Object.keys(metadata).length) return null;
+  const key = Object.keys(metadata).find((k) => k.endsWith('.nextn_predict_layers'));
+  if (!key) return 0;
+  const layers = Number(metadata[key]);
+  return Number.isFinite(layers) && layers > 0 ? Math.floor(layers) : 0;
+}
+
 /** Layers actually placed on the accelerator; unchanged when the total is unknown. */
 export function effectiveOffloadedLayers(requested: number, totalLayers: number): number {
   if (!Number.isFinite(requested) || requested <= 0) return 0;

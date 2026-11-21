@@ -2,7 +2,7 @@ import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
-import { modelLayerTotal, effectiveOffloadedLayers } from './gpuOffload';
+import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
 import { fastestBackend, setBackendProvider, useSpeedStats, useTuned, withModelMemory } from '../atlasTools/speed';
 import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './acceleratorSelection';
 import type { InferenceBackend } from '../types';
@@ -204,6 +204,10 @@ class LLMService {
   }
   /** What the last load really started, for the model card: loaded or not, and roughly what each optional part costs. */
   getLoadReport(): LoadReport | null { return this.loadReport; }
+  /** MTP layers inside the loaded model file, from its metadata; null when no model is loaded or its metadata is unreadable. */
+  getEmbeddedMtpLayers(): number | null {
+    return this.context ? embeddedMtpLayers((this.context as any).model?.metadata) : null;
+  }
   async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
     const epoch = this.loadEpoch;
     const mutex = this.acquireContextMutex();
@@ -297,6 +301,7 @@ class LLMService {
           this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
           logger.log(`[LLM] Trying ${backend}: ctx=${ctxLen}, file=${(fileSize / (1024 * 1024)).toFixed(0)}MB, RAM=${memCheck.availableMB.toFixed(0)}MB`);
           let mtpStarted = false;
+          let mtpLayersMissing = false;
           if (backend === INFERENCE_BACKENDS.VULKAN) {
             attempt = { mtp: false, vision: false };
             const runtime = await vulkanEngine.runtimeStatus();
@@ -413,6 +418,13 @@ class LLMService {
               await this.discardContext(context);
               throw error;
             }
+            // "Built-in MTP" is only real when the model file contains MTP layers. Say so honestly when it does not (the engine may have
+            // started without error and simply have nothing to draft with); unreadable metadata is left as unknown, not as a "no".
+            if (mtpStarted && embeddedOn && !draftFile && embeddedMtpLayers((context as any).model?.metadata) === 0) {
+              mtpStarted = false;
+              mtpLayersMissing = true;
+              notes.push('MTP drafting is switched on, but this model file has no MTP layers built in, so nothing is drafting. Attach an MTP file or turn the switch off.');
+            }
             this.mtpActive = mtpStarted;
             attempt = { mtp: mtpStarted, vision: this.multimodalInitialized };
           }
@@ -430,7 +442,7 @@ class LLMService {
             mtp: {
               kind: mtpKind, requested: mtpWanted, loaded: this.mtpActive,
               estimatedMB: this.mtpActive && draftFile ? await this.fileMB(draftFile) : 0,
-              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : 'it could not start' } : opts?.switchedOff?.mtp ? { skippedBecause: 'switched off for this model' } : {}),
+              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : mtpLayersMissing ? 'this model file has no MTP layers built in' : 'it could not start' } : opts?.switchedOff?.mtp ? { skippedBecause: 'switched off for this model' } : {}),
             },
           };
           return;
