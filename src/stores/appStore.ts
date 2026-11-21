@@ -96,6 +96,8 @@ type AppSettings = {
   warmUpAfterLoad?: boolean;
   /** Use a model's attached MTP file to draft tokens (on unless set to false). */
   useMtp?: boolean;
+  /** Safe Model Loading: load every model on the CPU with no MTP drafting and no picture file. Nothing is deleted; turn it off to go back. */
+  safeModelLoading?: boolean;
   /** A model used for writing in the background (lessons, music, the briefing); the chat model is used when none is chosen. */
   backgroundModelId?: string;
   /** CPU only: false turns off llama.cpp's ARM-optimized repacked weight kernels (a diagnostic for a model that writes noise on the CPU). Default on. */

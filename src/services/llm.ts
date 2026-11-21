@@ -28,7 +28,9 @@ import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import { fitMessagesToContext } from './contextWindow';
 import type { ToolCall } from './tools/types';
-import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats, LoadReport } from './llmTypes';
+import { recentNativeLog } from './llmNativeLog';
+import { recoverFromPreviousRun, enterStage, leaveStage, recordLoadSuccess, recordLoadFailure, planLoad, type LoadStage } from './loadGuard';
 import logger from '../utils/logger';
 import { resolveReplyTokens } from './contextWindow';
 import { isGemma4Path, knownVerdict, recordVerdict, runOutputCheck, logOutputReport, describeBadOutput, primeFirstWord, estimatePromptTokens, scanPromptLengths, SHORT_PROMPT_TOKENS, type OutputCheck } from './outputHealth';
@@ -57,6 +59,10 @@ class LLMService {
   /** How very short prompts behave on this accelerated load: fine, fine with the workaround, or still wrong. */
   private shortPromptStatus: 'ok' | 'workaround' | 'unreliable' = 'ok';
   private mtpActive = false;
+  /** What the last load really started (picture file, MTP), why anything was left out, and whether Safe Model Loading was on. */
+  private loadReport: LoadReport | null = null;
+  /** Bumped when a caller gives up on a load that is still running; that load then releases what it built instead of publishing it. */
+  private loadEpoch = 0;
   private currentModelPath: string | null = null;
   private isGenerating: boolean = false;
   private activeCompletionPromise: Promise<void> | null = null;
@@ -152,7 +158,7 @@ class LLMService {
     logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
   }
-  private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; requestedGpuLayers: number; modelPath: string; mmProjPath?: string }): Promise<void> {
+  private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; requestedGpuLayers: number; modelPath: string; mmProjPath?: string; epoch?: number }): Promise<void> {
     const { context, actualLength, gpuAttemptFailed, nGpuLayers, requestedGpuLayers, modelPath, mmProjPath } = opts;
     logContextMetadata(context, actualLength);
     logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
@@ -166,6 +172,8 @@ class LLMService {
       : { initialized: false, support: await checkContextMultimodal(context) };
     const toolCallingSupported = this.deriveToolCallingSupport(context);
     const thinkingSupported = supportsNativeThinking(context);
+    // Nothing awaits between this check and the publish below, so a load that was given up on can never become the live context.
+    if (opts.epoch !== undefined) this.assertNotAbandoned(opts.epoch);
     this.context = context;
     this.currentModelPath = modelPath;
     if (actualLength !== this.currentSettings.contextLength) this.currentSettings.contextLength = actualLength;
@@ -180,18 +188,50 @@ class LLMService {
     useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
+  /** A caller gave up on a load that is still running (it timed out): that load releases what it built instead of publishing it. */
+  abandonPendingLoad(): void { this.loadEpoch++; }
+  private assertNotAbandoned(epoch: number): void {
+    if (epoch !== this.loadEpoch) throw new Error('The model load was cancelled before it finished (it took too long), so what it had started was released.');
+  }
+  /** Release a context that will not be used, and wait for its memory to actually come back (a failed load must not leave an allocation behind). */
+  private async discardContext(context: LlamaContext): Promise<void> {
+    try { await context.release(); } catch (e) { logger.warn('[LLM] Error releasing a context that was not used:', e); }
+    await awaitMemoryReclaim(() => hardwareService.getProcessMemory()).catch(() => {});
+  }
+  private async fileMB(path?: string): Promise<number> {
+    if (!path) return 0;
+    try { return Math.round(Number((await RNFS.stat(path)).size) / (1024 * 1024)); } catch { return 0; }
+  }
+  /** What the last load really started, for the model card: loaded or not, and roughly what each optional part costs. */
+  getLoadReport(): LoadReport | null { return this.loadReport; }
   async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean }): Promise<void> {
+    const epoch = this.loadEpoch;
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
-      const requested: InferenceBackend = opts?.forceCpu
-        ? INFERENCE_BACKENDS.CPU : useAppStore.getState().settings.inferenceBackend;
+      this.assertNotAbandoned(epoch);
+      await recoverFromPreviousRun();
+      const settings = useAppStore.getState().settings;
+      const safeMode = settings.safeModelLoading === true;
+      const notes: string[] = [];
+      const requested: InferenceBackend = (opts?.forceCpu || safeMode)
+        ? INFERENCE_BACKENDS.CPU : settings.inferenceBackend;
       if (mmProjPath && !await RNFS.exists(mmProjPath)) {
         logger.warn('[LLM] MMProj file not found, disabling vision support');
         mmProjPath = undefined;
       }
+      const visionAttached = !!mmProjPath;
+      const mtpAttached = !!opts?.draftPath || !!opts?.embeddedMtp;
+      if (safeMode) {
+        notes.push('Safe Model Loading is on: this model runs on the CPU, without the picture file and without MTP drafting.');
+        mmProjPath = undefined;
+      }
+      const wantsMtp = !safeMode && settings.useMtp !== false;
+      const mtpWanted = wantsMtp && mtpAttached;
       if (this.currentModelPath === modelPath && this.requestedBackendAtLoad === requested &&
-          (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized)) return;
+          (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized) &&
+          // A part that is running but has since been switched off must be reloaded away so its memory is freed.
+          (mmProjPath || !this.multimodalInitialized) && (mtpWanted || !this.mtpActive)) return;
       if (this.context || this.vulkanLoaded) await this.doUnloadModel();
       this.vulkanFallbackReason = null;
       this.lastOutputCheck = null;
@@ -200,6 +240,8 @@ class LLMService {
       this.acceleratorAttempts = [];
       this.selectedBackend = INFERENCE_BACKENDS.CPU;
       this.requestedBackendAtLoad = null;
+      this.mtpActive = false;
+      this.loadReport = null;
 
       const auto = Platform.OS === 'android' && requested === INFERENCE_BACKENDS.AUTO;
       let candidates: InferenceBackend[] = [requested];
@@ -225,14 +267,38 @@ class LLMService {
       // selections fail visibly rather than silently running on CPU.
       const failures: string[] = [];
       for (const backend of candidates) {
+        this.assertNotAbandoned(epoch);
+        // Where the load is, for the breadcrumb and for the failure record. `attempt` is what this try really switches on.
+        let stage: LoadStage = 'check';
+        let attempt = { mtp: false, vision: false };
+        let refused = false;
         try {
+          const draftCandidate = wantsMtp && opts?.draftPath && await RNFS.exists(opts.draftPath) ? opts.draftPath : undefined;
+          const embeddedCandidate = wantsMtp && !!opts?.embeddedMtp;
+          // A configuration that killed the app last time is not repeated: leave out the optional parts, then the accelerator.
+          const plan = planLoad(
+            { modelPath, backend, mtp: !!draftCandidate || embeddedCandidate, vision: !!mmProjPath },
+            { explicitBackend: !auto, cpuBackend: INFERENCE_BACKENDS.CPU },
+          );
+          notes.push(...plan.notes);
+          if (plan.blocked || plan.backend !== backend) {
+            refused = true;
+            throw new Error(plan.notes[0] ?? 'This setup crashed Atlas before.');
+          }
+          const attemptMmProj = plan.vision ? mmProjPath : undefined;
+          const draftFile = plan.mtp ? draftCandidate : undefined;
+          const embeddedOn = plan.mtp && embeddedCandidate;
+          const draftOn = !!draftFile || embeddedOn;
+          attempt = { mtp: draftOn, vision: !!attemptMmProj };
           const { fileSize, memCheck, params } = await this.validateAndPrepareModel(
             modelPath, opts?.override, backend,
           );
           const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
           this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
           logger.log(`[LLM] Trying ${backend}: ctx=${ctxLen}, file=${(fileSize / (1024 * 1024)).toFixed(0)}MB, RAM=${memCheck.availableMB.toFixed(0)}MB`);
+          let mtpStarted = false;
           if (backend === INFERENCE_BACKENDS.VULKAN) {
+            attempt = { mtp: false, vision: false };
             const runtime = await vulkanEngine.runtimeStatus();
             if (runtime.status !== 'ok') throw new Error(describeVulkanStatus(runtime));
             // Same device-RAM cap as OpenCL; 99 means "all layers that are safe here".
@@ -242,8 +308,12 @@ class LLMService {
               { modelBytes: fileSize, availableBytes: deviceInfo.availableMemory });
             requireGpuLayers('vulkan', requestedLayers);
             const contextLength = Math.min(ctxLen, 32768);
+            stage = 'vulkan';
+            await enterStage({ modelPath, backend, ...attempt, stage, contextLength, gpuLayers: requestedLayers });
             // nThreads already counts only the fast cores on a big.LITTLE chip (see getRecommendedThreadCount).
             const loaded = await vulkanEngine.loadModel(modelPath, { gpuLayers: requestedLayers, context: contextLength, threads: nThreads });
+            await leaveStage();
+            this.assertNotAbandoned(epoch);
             if (!/vulkan/i.test(loaded.backend)) throw new Error(
               `Native model reported ${loaded.backend}, not Vulkan`,
             );
@@ -258,7 +328,7 @@ class LLMService {
             this.gpuReason = loaded.offloadedGpuLayers > 0 ? ''
               : 'Model header unreadable; showing the requested Vulkan layer count';
             // The Vulkan engine (llama.kt) is text only: a model's picture file is not loaded.
-            if (mmProjPath) {
+            if (attemptMmProj) {
               this.gpuReason = 'Pictures are off on the Vulkan GPU engine (text only). Choose CPU for pictures.';
               logger.log('[LLM] Vulkan: loaded text only; the picture file is not used on this engine');
             }
@@ -272,72 +342,103 @@ class LLMService {
             // Auto may try other candidate engines, including CPU, and report the choice.
             const requireAcceleration = Platform.OS === 'android' &&
               backend !== INFERENCE_BACKENDS.CPU;
-            // An attached MTP file speeds replies up; if the engine cannot start with it, load without it.
-            const wantsMtp = useAppStore.getState().settings.useMtp !== false;
-            const draftFile = opts?.draftPath && wantsMtp && await RNFS.exists(opts.draftPath) ? opts.draftPath : undefined;
-            const draftOn = !!draftFile || (!!opts?.embeddedMtp && wantsMtp);
             const checkOutput = isGemma4Path(modelPath);
-            const verdictKey = { model: modelPath, size: fileSize, backend, gpuLayers: nGpuLayers, variant: `batch ${nBatch}${useAppStore.getState().settings.cpuRepack === false ? ', CPU kernels off' : ''}` };
+            const verdictKey = { model: modelPath, size: fileSize, backend, gpuLayers: nGpuLayers, variant: `batch ${nBatch}${settings.cpuRepack === false ? ', CPU kernels off' : ''}` };
             if (checkOutput) {
               const known = await knownVerdict(verdictKey);
               if (known && !known.ok) throw new Error(describeBadOutput(backend, `${known.reason}; found by an earlier test on this phone`, !auto));
             }
             let init;
+            stage = draftOn ? 'draft' : 'init';
+            // Saved BEFORE the native call: if the process dies inside it, the next launch knows where.
+            await enterStage({ modelPath, backend, ...attempt, stage, contextLength: ctxLen, gpuLayers: nGpuLayers });
             try {
               init = await this.initWithAutoContext(
-                { baseParams: { ...baseParams, ...mtpParams(draftFile, draftOn, !!opts?.embeddedMtp) }, ctxLen, nGpuLayers, fileSize },
+                { baseParams: { ...baseParams, ...mtpParams(draftFile, draftOn, embeddedOn) }, ctxLen, nGpuLayers, fileSize },
                 backend, requireAcceleration,
               );
-              this.mtpActive = draftOn;
+              mtpStarted = draftOn;
             } catch (mtpError) {
+              // An attached MTP file speeds replies up; if the engine cannot start with it, load without it.
               if (!draftOn || isOverridableMemoryError(mtpError)) throw mtpError;
               logger.warn('[LLM] MTP file could not be used, loading without it:', mtpError);
+              notes.push('MTP drafting could not start on this model, so it loaded without it.');
+              attempt = { mtp: false, vision: attempt.vision };
+              stage = 'init';
+              await enterStage({ modelPath, backend, ...attempt, stage, contextLength: ctxLen, gpuLayers: nGpuLayers });
               init = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers, fileSize }, backend, requireAcceleration);
-              this.mtpActive = false;
+              mtpStarted = false;
             }
+            await leaveStage();
             const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = init;
-            // Gemma 4 has produced noise ("<unused19><unused10>...", "<pad><pad>...") on a phone from a file that decodes correctly elsewhere.
-            // Look at one short reply before anything else (pictures included) is set up on top of it; a bad one is a failed load.
-            if (checkOutput) {
-              // 1. The check that decides: a reply to a prompt of realistic length (a real chat always has a system prompt).
-              const check = await runOutputCheck(context, { isGemma4: true, long: true });
-              this.lastOutputCheck = check;
-              logOutputReport(check, { model: modelPath.split('/').pop(), backend, gpuLayers: attemptedGpuLayers, context: actualLength, kvCache: 'f16', devices: String((context as any).devices ?? '') });
-              await recordVerdict(verdictKey, check);
-              if (!check.ok) {
-                try { await context.release(); } catch { /* load failed */ }
-                throw new Error(describeBadOutput(backend, check.reason, !auto));
-              }
-              // 2. Very short prompts (a phone report: a 14-token prompt got a wrong first word on the OpenCL GPU while real chats
-              //    were fine). That never blocks the load; if the first-word workaround fixes it, short prompts use it.
-              this.shortPromptStatus = 'ok';
-              if (context.gpu) {
-                const short = await runOutputCheck(context, { isGemma4: true, strictAnswer: true });
-                if (!short.ok) {
-                  const primedShort = await runOutputCheck(context, { isGemma4: true, primed: true, strictAnswer: true });
-                  this.shortPromptStatus = primedShort.ok ? 'workaround' : 'unreliable';
-                  logger.warn(`[LLM][OUTPUT-CHECK] very short prompts: ${short.reason}; ${primedShort.ok ? `the first-word workaround fixes it and is on for prompts under ~${SHORT_PROMPT_TOKENS} tokens` : 'the workaround does not fix it, so very short prompts may start with a wrong word'}`);
-                }
-              }
-              this.firstWordWorkaround = this.shortPromptStatus === 'workaround';
-            }
+            // From here a context exists. Whatever goes wrong next, it is released (never left half-initialized behind).
             try {
+              this.assertNotAbandoned(epoch);
+              // Gemma 4 has produced noise ("<unused19><unused10>...", "<pad><pad>...") on a phone from a file that decodes correctly elsewhere.
+              // Look at one short reply before anything else (pictures included) is set up on top of it; a bad one is a failed load.
+              if (checkOutput) {
+                stage = 'output-check';
+                await enterStage({ modelPath, backend, ...attempt, stage, contextLength: actualLength, gpuLayers: attemptedGpuLayers });
+                // 1. The check that decides: a reply to a prompt of realistic length (a real chat always has a system prompt).
+                const check = await runOutputCheck(context, { isGemma4: true, long: true });
+                this.lastOutputCheck = check;
+                logOutputReport(check, { model: modelPath.split('/').pop(), backend, gpuLayers: attemptedGpuLayers, context: actualLength, kvCache: 'f16', devices: String((context as any).devices ?? '') });
+                await recordVerdict(verdictKey, check);
+                if (!check.ok) throw new Error(describeBadOutput(backend, check.reason, !auto));
+                // 2. Very short prompts (a phone report: a 14-token prompt got a wrong first word on the OpenCL GPU while real chats
+                //    were fine). That never blocks the load; if the first-word workaround fixes it, short prompts use it.
+                this.shortPromptStatus = 'ok';
+                if (context.gpu) {
+                  const short = await runOutputCheck(context, { isGemma4: true, strictAnswer: true });
+                  if (!short.ok) {
+                    const primedShort = await runOutputCheck(context, { isGemma4: true, primed: true, strictAnswer: true });
+                    this.shortPromptStatus = primedShort.ok ? 'workaround' : 'unreliable';
+                    logger.warn(`[LLM][OUTPUT-CHECK] very short prompts: ${short.reason}; ${primedShort.ok ? `the first-word workaround fixes it and is on for prompts under ~${SHORT_PROMPT_TOKENS} tokens` : 'the workaround does not fix it, so very short prompts may start with a wrong word'}`);
+                  }
+                }
+                this.firstWordWorkaround = this.shortPromptStatus === 'workaround';
+                await leaveStage();
+              }
+              if (attemptMmProj) {
+                stage = 'vision';
+                await enterStage({ modelPath, backend, ...attempt, stage, contextLength: actualLength, gpuLayers: attemptedGpuLayers });
+              }
               await this.applyLoadedContext({
                 context, actualLength, gpuAttemptFailed,
                 nGpuLayers: attemptedGpuLayers, requestedGpuLayers: nGpuLayers,
-                modelPath, mmProjPath,
+                modelPath, mmProjPath: attemptMmProj, epoch,
               });
+              if (attemptMmProj) await leaveStage();
             } catch (error) {
-              try { await context.release(); } catch { /* load failed */ }
+              await this.discardContext(context);
               throw error;
             }
+            this.mtpActive = mtpStarted;
+            attempt = { mtp: mtpStarted, vision: this.multimodalInitialized };
           }
           this.selectedBackend = backend;
           this.requestedBackendAtLoad = requested;
           this.acceleratorAttempts = failures;
+          await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
+          const visionNote = !this.multimodalInitialized && visionAttached
+            ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
+            : undefined;
+          const mtpKind: 'file' | 'embedded' | 'none' = draftFile ? 'file' : embeddedOn ? 'embedded' : 'none';
+          this.loadReport = {
+            safeMode, backend, notes,
+            vision: { requested: visionAttached && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : {}) },
+            mtp: {
+              kind: mtpKind, requested: mtpWanted, loaded: this.mtpActive,
+              estimatedMB: this.mtpActive && draftFile ? await this.fileMB(draftFile) : 0,
+              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : 'it could not start' } : {}),
+            },
+          };
           return;
         } catch (error: any) {
           const message = String(error?.message || error || 'Native load failed');
+          if (!refused) {
+            await recordLoadFailure({ modelPath, backend, ...attempt, stage, message, nativeTail: recentNativeLog(6) || undefined });
+          }
           // A memory refusal is about the model, not the backend: keep its type so the UI
           // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
           if (backend === INFERENCE_BACKENDS.VULKAN) {
@@ -345,7 +446,7 @@ class LLMService {
             this.vulkanFallbackReason = message;
           }
           this.context = null; this.vulkanLoaded = false; this.currentModelPath = null; this.firstWordWorkaround = false;
-          this.multimodalSupport = null; this.multimodalInitialized = false;
+          this.multimodalSupport = null; this.multimodalInitialized = false; this.mtpActive = false;
           this.toolCallingSupported = false; this.thinkingSupported = false;
           Object.assign(this, {
             gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, totalModelLayers: -1,
@@ -429,7 +530,19 @@ class LLMService {
     if (targetCtx <= initial.actualLength) return initial;
     logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
     try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
-    return { ...await initContextWithFallback(resolvedBaseParams, targetCtx, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    try {
+      return { ...await initContextWithFallback(resolvedBaseParams, targetCtx, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    } catch (scaleError) {
+      // The bigger size was only an upgrade over a load that already worked. Do not turn it into a failed load:
+      // go back to the size that worked (a timed-out or memory-refused upgrade must not take the model away).
+      if (isOverridableMemoryError(scaleError) || /timed out after/i.test(String((scaleError as Error)?.message ?? scaleError))) {
+        logger.warn(`[LLM] Scaling context to ${targetCtx} failed (${(scaleError as Error)?.message}); restoring ${initial.actualLength}`);
+      } else {
+        logger.warn(`[LLM] Scaling context to ${targetCtx} failed; restoring ${initial.actualLength}:`, scaleError);
+      }
+      await awaitMemoryReclaim(() => hardwareService.getProcessMemory()).catch(() => {});
+      return { ...await initContextWithFallback(resolvedBaseParams, initial.actualLength, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    }
   }
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */
   private async deriveMultimodalFromProjector(context: LlamaContext, modelPath: string, mmProjPath: string): Promise<{ initialized: boolean; support: MultimodalSupport }> {
@@ -499,6 +612,8 @@ class LLMService {
       this.gpuReason = '';
       this.activeGpuLayers = 0;
       this.requestedGpuLayers = 0;
+      this.loadReport = null;
+      this.mtpActive = false;
       useAppStore.getState().setModelMaxContext(null);
       return;
     }
@@ -513,11 +628,18 @@ class LLMService {
     // context.release() returns before the OS frees those pages, so a reload that immediately loaded the
     // new context stacked BOTH models' memory at once → OOM/crash under pressure (device 2026-07-14: a
     // reload with ~2GB free ground to 0 tok/s then died). Wait (bounded) for the process footprint to drop.
-    await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
-    useAppStore.getState().setModelMaxContext(null);
-    Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false });
-    this.selectedBackend = INFERENCE_BACKENDS.CPU;
-    this.requestedBackendAtLoad = null;
+    try {
+      await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
+    } catch (e) {
+      logger.warn('[LLM] Memory-reclaim wait failed after release:', e);
+    } finally {
+      // The context was released above, so the service must forget it even if the wait threw:
+      // keeping a released context as "loaded" makes the next generation call into freed native memory.
+      useAppStore.getState().setModelMaxContext(null);
+      Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false, mtpActive: false, loadReport: null });
+      this.selectedBackend = INFERENCE_BACKENDS.CPU;
+      this.requestedBackendAtLoad = null;
+    }
   }
   async unloadModel(): Promise<void> {
     const mutex = this.acquireContextMutex();

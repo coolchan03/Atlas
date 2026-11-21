@@ -209,13 +209,17 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
-        () =>
+        () => {
+          // The native load keeps running after we stop waiting. Tell the service to release what it builds
+          // instead of publishing a model nobody is tracking (that stray context held the memory for the next load).
+          llmService.abandonPendingLoad();
           reject(
             new Error(
               `Text model loading timed out after ${ctx.timeoutMs / 1000}s. ` +
                 'Try a smaller model or reduce context length in settings.',
             ),
-          ),
+          );
+        },
         ctx.timeoutMs,
       );
     });
@@ -238,7 +242,10 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     // The Vulkan engine is text only by design, so it reports no picture support for a model whose
     // picture file is fine: leave the link in place for the engines that can use it.
     const onVulkan = /vulkan/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
-    if (ctx.model.mmProjPath && !multimodalSupport?.vision && !onVulkan) {
+    // A picture file that was left out on purpose (Safe Model Loading, a crash last time, switched off) is not a broken
+    // link: only forget the association when the engine really tried it and could not use it.
+    const visionLeftOut = !!llmService.getLoadReport?.()?.vision.skippedBecause && llmService.getLoadReport?.()?.vision.skippedBecause !== 'the engine could not start it';
+    if (ctx.model.mmProjPath && !multimodalSupport?.vision && !onVulkan && !visionLeftOut) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 
