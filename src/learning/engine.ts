@@ -42,7 +42,7 @@ import { MemoryLedger } from './memoryLedger';
 import { conflictReason, isStandaloneClaim, recallScore } from './claimText';
 import { holdBackgroundWork, holdScreenOnly, refreshPower } from '../atlasTools/runtimePower';
 import { stripInjection } from './sourceSafety';
-import { budgetFor, buildWorkingContext } from './workingContext';
+import { KNOWLEDGE_SHARE, budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
 import { batchStruggled, diagnoseMiss, isStruggling, nextNotesBoost, restudyQuestion, restudyQuestionFor, REST_DAYS } from './struggle';
@@ -84,6 +84,9 @@ type Role = 'learner' | 'judge' | 'manager';
 let roleModels: Record<Role, string> = { learner: '', judge: '', manager: '' };
 let baseModel = '';
 
+/** The share of the context a practice step gives stored notes after a batch that mostly failed (widened by `boost`, never past half the context). */
+const boostedShare = (boost: number): number => Math.min(0.5, KNOWLEDGE_SHARE * boost);
+
 /** The room a step has for stored notes and passages: a share of the loaded model's context, halved while the phone is saving power or hot. */
 function stepBudget(share: number): number {
   return budgetFor(llmService.getPerformanceSettings().contextLength || 2048, share, underPressure());
@@ -93,7 +96,7 @@ const underPressure = (): boolean => { try { return !!require('../atlasTools/low
 /** What a step can hold right now, for the screen: the model's context, the room for stored knowledge, and whether the phone is saving power. */
 export function learningLoad(): { contextTokens: number; knowledgeTokens: number; pressure: boolean } {
   const contextTokens = llmService.getPerformanceSettings().contextLength || 2048;
-  return { contextTokens, knowledgeTokens: budgetFor(contextTokens, 0.2, underPressure()), pressure: underPressure() };
+  return { contextTokens, knowledgeTokens: budgetFor(contextTokens, KNOWLEDGE_SHARE, underPressure()), pressure: underPressure() };
 }
 
 async function ensureModel(): Promise<void> {
@@ -329,7 +332,7 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   }
   status('Learner is writing a report...');
   // What is already stored about this question: background to avoid repeating or contradicting it, never a source to cite.
-  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: cardNotes(await loadCards(cfg.topic, agent.id).catch(() => [])), budgetTokens: stepBudget(0.12) }).text;
+  const known = buildWorkingContext({ question: item.q, topic: cfg.topic, notes: cardNotes(await loadCards(cfg.topic, agent.id).catch(() => [])), budgetTokens: stepBudget(KNOWLEDGE_SHARE) }).text;
   const report = await ask(
     learnerSystem(agent, st, cfg),
     `${src ? `SOURCES:\n${src}\n\n` : 'No sources found: use what you know, and say so.\n\n'}${known ? `ALREADY STORED (background only, NOT a source: do not cite it, and say if the sources contradict it):\n${known}\n\n` : ''}TASK: ${cfg.topic}\nQUESTION: ${item.q}\n${item.feedback ? `Judge feedback on your last try: ${item.feedback}\n` : ''}\nWrite a simple report:\nANSWER: 2-5 plain sentences.\nKEY POINTS: 2-4 short bullets.\nREASONING: why this is right, step by step, and which source supports it. Cite each source you use by its number in square brackets, like [1]. Draw on as many of the available sources as fit - do not rely on only one.\nUNSURE: anything you could not confirm (or "nothing").`,
@@ -399,7 +402,7 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
     const stored = safely(() => learningKnowledgeDb.claimsForQuestion(c.question), []);
     // Only the stored notes that bear on this question, from the claims and the reviewed findings, within a small budget (see workingContext.ts).
     const cards = await loadCards(c.topic, agent.id).catch(() => []);
-    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(0.15 * (notesBoost.get(agent.id) ?? 1)) }).text.split('\n').filter(Boolean);
+    const notes = buildWorkingContext({ question: c.question, topic: c.topic, notes: cardNotes(cards), budgetTokens: stepBudget(boostedShare(notesBoost.get(agent.id) ?? 1)) }).text.split('\n').filter(Boolean);
     let outcome: 'correct' | 'partial' | 'wrong' = 'partial'; // nothing stored to test against: leave it for later
     if (stored.length) {
       const answer = notes.length ? await ask('You answer only from the notes you are given. If they do not answer the question, say so.', `NOTES:\n${notes.join('\n')}\n\nQUESTION: ${c.question}\nAnswer in 2 to 4 plain sentences.`, 'learner') : '';
@@ -422,7 +425,7 @@ async function practiceDue(agent: Agent, cfg: LearnConfig, due: DueConcept[]): P
   const after = nextNotesBoost(before, outcomes);
   notesBoost.set(agent.id, after);
   // Said only when the budget really grows (it is capped on a phone with plenty of memory).
-  if (batchStruggled(outcomes) && stepBudget(0.15 * after) > stepBudget(0.15 * before)) L().log({ agentId: agent.id, kind: 'info', title: 'Most practice answers were wrong', body: 'The learner is given more of the stored notes for the next practice.' });
+  if (batchStruggled(outcomes) && stepBudget(boostedShare(after)) > stepBudget(boostedShare(before))) L().log({ agentId: agent.id, kind: 'info', title: 'Most practice answers were wrong', body: 'The learner is given more of the stored notes for the next practice.' });
   L().log({ agentId: agent.id, kind: 'info', title: `Practice: ${recalled} of ${due.length} recalled`, body: 'Graded by comparing each answer with what was stored, not by the model.' });
 }
 
@@ -589,7 +592,7 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
     // Only reviewed and approved knowledge (from both the claims ledger and the reviewed findings), and only cards that have a source on file.
     const known = mode === 'memory' ? approvedCards(await loadCards(cfg.topic, subjectId && !isNoAgent(subjectId) ? subjectId : undefined)) : [];
     // Only the approved notes that bear on this question, within a small budget, from this subject's topic; dropped after the answer.
-    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: cardNotes(known, true), budgetTokens: stepBudget(0.2) });
+    const working = buildWorkingContext({ question: item.question, topic: cfg.topic, notes: cardNotes(known, true), budgetTokens: stepBudget(KNOWLEDGE_SHARE) });
     const notes = working.usedNotes;
     const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
