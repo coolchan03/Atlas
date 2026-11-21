@@ -14,7 +14,7 @@ const keyOf = (c: { doc_id: number; position: number }): string => `${c.doc_id}:
  */
 export function mergeKeywordHits<T extends Scored>(semantic: T[], keyword: T[], limit: number): T[] {
   const best = semantic.reduce((m, c) => Math.max(m, c.score), 0);
-  if (!(best > 0) || !keyword.length) return semantic;
+  if (!Number.isFinite(best) || best <= 0 || !keyword.length) return semantic;
   const have = new Set(semantic.map(keyOf));
   const extra = keyword.slice(0, limit).filter((c) => !have.has(keyOf(c)))
     .map((c, i) => ({ ...c, score: best * KEYWORD_ONLY * (1 - STEP * i) }));
