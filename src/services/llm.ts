@@ -2,6 +2,8 @@ import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { useAccelRecord } from '../atlasTools/accelRecord';
 import { useSpecBenefit } from '../atlasTools/specBenefit';
+import { noteStage } from '../atlasTools/stageTimes';
+import { loadFallbackNotes } from './fallbackNotes';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -386,6 +388,7 @@ class LLMService {
             }
             await leaveStage();
             const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = init;
+            notes.push(...loadFallbackNotes({ requestedContext: ctxLen, actualContext: actualLength, gpuAttemptFailed, backend, requestedGpuLayers: nGpuLayers, attemptedGpuLayers }));
             // From here a context exists. Whatever goes wrong next, it is released (never left half-initialized behind).
             try {
               this.assertNotAbandoned(epoch);
@@ -444,6 +447,7 @@ class LLMService {
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
           useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
+          noteStage('loading', Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
             ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
             : undefined;
@@ -748,6 +752,7 @@ class LLMService {
       const cr = completionResult as any;
       logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
+      if (firstTokenMs > 0) noteStage('first word', firstTokenMs); // no word arrived (stopped, failed): nothing to time
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);

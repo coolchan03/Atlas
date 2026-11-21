@@ -107,14 +107,27 @@ function batchOptions(base: TuneOption, current: number): TuneOption[] {
 /** A refinement must beat the plain winner by this much to be kept: smaller differences are measuring noise. */
 const REFINE_GAIN = 1.08;
 
-/** The fastest result; when two are within 5%, the one with fewer threads (cooler and kinder to the battery). */
+/** A typical chat reply, in tokens: what "the whole reply" means when options are ranked. */
+const TYPICAL_REPLY_TOKENS = 150;
+
+/**
+ * Speed over a whole reply: tokens written divided by the time from asking to the last word (the wait for the first word plus the writing).
+ * Ranking by writing speed alone prefers an accelerator that starts slowly but writes fast, which is slower for the replies people read.
+ * With no first-word time recorded it is the writing speed, as before.
+ */
+export function wholeReplySpeed(r: { tps: number; firstWordSec: number }): number {
+  if (!Number.isFinite(r.tps) || r.tps <= 0) return 0;
+  return r.firstWordSec > 0 ? TYPICAL_REPLY_TOKENS / (r.firstWordSec + TYPICAL_REPLY_TOKENS / r.tps) : r.tps;
+}
+
+/** The result that finishes a typical reply soonest; when two are within the timing noise, the one with fewer threads (cooler and kinder to the battery). */
 export function pickBest(results: TuneResult[]): TuneResult | null {
   const ok = results.filter((r) => !r.error && r.tps > 0);
   if (!ok.length) return null;
-  const topResult = ok.reduce((a, b) => (b.tps > a.tps ? b : a));
+  const topResult = ok.reduce((a, b) => (wholeReplySpeed(b) > wholeReplySpeed(a) ? b : a));
   // Two results closer than the noise in the timings are a tie, and a tie goes to the cooler, kinder setting (fewer threads).
   const band = tieBand(topResult.spread ?? 0);
-  return ok.filter((r) => r.tps >= topResult.tps * (1 - band)).sort((a, b) => a.option.threads - b.option.threads || b.tps - a.tps)[0];
+  return ok.filter((r) => wholeReplySpeed(r) >= wholeReplySpeed(topResult) * (1 - band)).sort((a, b) => a.option.threads - b.option.threads || wholeReplySpeed(b) - wholeReplySpeed(a))[0];
 }
 
 /** The NPU and GPU backends worth timing for this model on this phone (the same rule Automatic uses to choose). */
@@ -203,7 +216,7 @@ async function timeOption(ctx: { modelId: string; old: TuneBase; facts?: { mtpLa
     const tps = st.lastDecodeTokensPerSecond || st.lastTokensPerSecond || 0;
     // Keep what each backend measured, apart from the others (speed.ts), so the history says which backend is faster on this phone.
     if (!option.extra && prompt === PROMPT) useSpeedStats.getState().record(modelId, { decode: tps, backend: String(option.backend) });
-    const firstWordSec = (st.lastTimeToFirstToken || 0) / 1000;
+    const firstWordSec = st.lastTimeToFirstToken || 0; // already in seconds (recordGenerationStats)
     return { option, tps, firstWordSec, samples: [tps], firstWords: [firstWordSec] };
   } catch (e: any) {
     logger.warn(`[TUNE] ${option.id} failed: ${e?.message || e}`);
@@ -247,13 +260,34 @@ function keepBatch(deepResults: TuneResult[], chosen: TuneResult): TuneResult {
   return baseline && quickest && quickest.firstWordSec * REFINE_GAIN <= baseline.firstWordSec ? { ...quickest, tps: chosen.tps } : chosen;
 }
 
-/** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). */
+/**
+ * Nothing won, or the test was cancelled: the last trial's model is still loaded with the trial's settings. Put back the model that was active
+ * (with the settings it had), so no stale context or unexpected model is left running.
+ */
+async function reloadOriginal(modelId: string | null | undefined): Promise<void> {
+  if (!modelId) return;
+  try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(modelId); } catch (e) { logger.warn(`[TUNE] could not reload the model that was active before the test: ${String((e as Error)?.message || e)}`); }
+}
+
+let tuning: Promise<unknown> | null = null;
+/** True while a speed test is running (only one may: each one loads and unloads the model, so two at once would fight over it). */
+export const isTuning = (): boolean => tuning !== null;
+
+/** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). One at a time. */
 export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean } = {}): Promise<TuneOutcome> {
+  if (tuning) throw new Error('A speed test is already running. Wait for it to finish, or cancel it.');
+  const run = runTuning(modelId, onProgress, opts);
+  tuning = run;
+  try { return await run; } finally { tuning = null; }
+}
+
+async function runTuning(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean }): Promise<TuneOutcome> {
   cancelFlag = false;
   const store = useAppStore.getState();
   const model = store.downloadedModels.find((m) => m.id === modelId);
   if (!model || model.engine !== 'llama') throw new Error('Pick a downloaded GGUF text model to tune.');
   if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still being written. Wait for it to finish, then try again.');
+  const originallyActive = store.activeModelId;
   const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch, gpuLayers: store.settings.gpuLayers };
   // What an earlier test saved for this model would hide the settings being timed, so it is set aside until the new result is known.
   const earlierMemory = useTuned.getState().memory[modelId];
@@ -325,6 +359,7 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   }
   const best = cancelFlag ? null : chosen;
   await restoreMtp(modelId, model, best);
+  if (!best) await reloadOriginal(originallyActive);
   if (best) {
     // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
     // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.

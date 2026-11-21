@@ -71,7 +71,9 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
   useEffect(() => {
     loadKbDocs();
-  }, [loadKbDocs]);
+    // Passages whose indexing was cut off are finished quietly, and the list is read again if any were.
+    void ragService.resumeIndexing(projectId).then((n) => { if (n > 0) loadKbDocs(); }).catch(() => undefined);
+  }, [loadKbDocs, projectId]);
 
   // Reload when coming back from writing or editing a shared document.
   const firstFocus = useRef(true);

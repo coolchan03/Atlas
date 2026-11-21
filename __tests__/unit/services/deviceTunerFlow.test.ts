@@ -22,7 +22,7 @@ jest.mock('../../../src/services/vulkanEngine', () => ({ vulkanEngine: { isAvail
 import { llmService } from '../../../src/services/llm';
 import { activeModelService } from '../../../src/services/activeModelService';
 import { useAppStore } from '../../../src/stores/appStore';
-import { tuneDevice } from '../../../src/services/deviceTuner';
+import { cancelTuning, isTuning, tuneDevice } from '../../../src/services/deviceTuner';
 import { resetStores } from '../../utils/testHelpers';
 
 const mockedLlm = llmService as jest.Mocked<typeof llmService>;
@@ -47,7 +47,7 @@ function runPhone(script: Script) {
     lastTps = readings[Math.min(seen[key], readings.length - 1)];
     return '';
   }) as any);
-  mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: lastTps, lastTokensPerSecond: lastTps, lastTimeToFirstToken: 500 })) as any);
+  mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: lastTps, lastTokensPerSecond: lastTps, lastTimeToFirstToken: 0.5 })) as any);
   return { seen, prompts };
 }
 
@@ -147,5 +147,24 @@ describe('tuneDevice with noisy timings', () => {
     expect(after.flashAttn).toBe(before.flashAttn);
     expect(after.nBatch).toBe(before.nBatch);
     expect(mockedActive.loadTextModel).toHaveBeenCalled();
+  });
+  it('puts back the model that was active, with its own settings, when cancelled', async () => {
+    useAppStore.setState({ activeModelId: 'other' });
+    runPhone({ 'cpu:4': [5.0, 5.0] });
+    let first = true;
+    const outcome = await tuneDevice('m1', () => { if (first) { first = false; cancelTuning(); } });
+    expect(outcome.cancelled).toBe(true);
+    expect(mockedActive.loadTextModel).toHaveBeenLastCalledWith('other');
+  });
+
+  it('refuses a second speed test while one is running, and allows one after it ends', async () => {
+    runPhone({ 'cpu:4': [5.0, 5.0] });
+    let second: Promise<unknown> | null = null;
+    const first = tuneDevice('m1', () => { if (!second) { expect(isTuning()).toBe(true); second = tuneDevice('m1', () => undefined); second.catch(() => undefined); } });
+    await first;
+    await expect(second).rejects.toThrow(/already running/);
+    expect(isTuning()).toBe(false);
+    runPhone({ 'cpu:4': [5.0, 5.0] });
+    await expect(tuneDevice('m1', () => undefined)).resolves.toBeTruthy();
   });
 });

@@ -18,6 +18,7 @@ import { useWideLayout } from '../../hooks/useWideLayout';
 import { MessageAttachments } from './components/MessageAttachments';
 import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
+import { explainDelay } from '../../atlasTools/delayNote';
 import { ToolsSentCollapsible } from './components/ToolsSentCollapsible';
 import { MessageOverlays } from './components/MessageOverlays';
 import { MarkdownText } from '../MarkdownText';
@@ -331,6 +332,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       metaExtra={metaExtra}
     />
 
+    {!isUser && !showGenerationDetails && !!explainDelay(message.generationMeta) && (
+      <Text style={styles.generationMetaText} testID="delay-note">{explainDelay(message.generationMeta)}</Text>
+    )}
     {showGenerationDetails && !isUser && message.generationMeta && (
       <GenerationMeta generationMeta={message.generationMeta} styles={styles} />
     )}

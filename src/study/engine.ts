@@ -109,7 +109,7 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
   // One line per background call: what it was for, how big the prompt was, how long it read, how much it wrote and how fast.
   try {
     const perf = llmService.getPerformanceStats();
-    logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${(perf.lastTimeToFirstToken / 1000).toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars${reuseNote()}`);
+    logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${perf.lastTimeToFirstToken.toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars${reuseNote()}`);
   } catch { /* the line is a convenience */ }
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   }).finally(() => { if (onBackground) scheduleChatModelRestore(); }); // also after a failure: the chat model comes back

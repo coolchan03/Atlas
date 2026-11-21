@@ -1,4 +1,4 @@
-import { layerOptions, mtpOptions, pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
+import { layerOptions, mtpOptions, pickBest, refineOptions, tuneOptions, wholeReplySpeed, type TuneResult } from '../../../src/services/deviceTuner';
 import { shouldOfferFirstTest, shouldSuggestTuning, useTuned, withModelMemory } from '../../../src/atlasTools/speed';
 
 const result = (id: string, threads: number, tps: number, error?: string): TuneResult =>
@@ -100,5 +100,24 @@ describe('finding the best settings', () => {
     expect(mtpOptions(base, { engine: 'llama' }, 0)).toEqual([]); // the file says none
     expect(mtpOptions(base, { engine: 'llama' }, null)).toEqual([]); // could not be read: not assumed
     expect(mtpOptions(base, { engine: 'llama' })).toEqual([]);
+  });
+});
+
+describe('ranking by the whole reply', () => {
+  const opt = (id: string, threads = 4) => ({ id, label: id, backend: 'cpu', threads } as any);
+
+  it('prefers the option that finishes a typical reply sooner, even when another writes faster', () => {
+    const fastWriterSlowStart = { option: opt('npu'), tps: 20, firstWordSec: 12 }; // 150 tokens: 12 + 7.5 = 19.5 s
+    const slowWriterQuickStart = { option: opt('cpu'), tps: 12, firstWordSec: 1 };  // 150 tokens: 1 + 12.5 = 13.5 s
+    expect(pickBest([fastWriterSlowStart, slowWriterQuickStart])!.option.id).toBe('cpu');
+  });
+
+  it('is the writing speed when no first-word time was recorded, so older results rank as before', () => {
+    expect(wholeReplySpeed({ tps: 9, firstWordSec: 0 })).toBe(9);
+    expect(pickBest([{ option: opt('a'), tps: 5, firstWordSec: 0 }, { option: opt('b'), tps: 9, firstWordSec: 0 }])!.option.id).toBe('b');
+  });
+
+  it('gives a failed option nothing', () => {
+    expect(wholeReplySpeed({ tps: 0, firstWordSec: 3 })).toBe(0);
   });
 });

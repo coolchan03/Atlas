@@ -10,7 +10,7 @@ jest.mock('../../../../src/services/rag/database', () => ({
     getChunksByProject: jest.fn(() => []),
     getEmbeddingsByProject: jest.fn(() => []),
     insertEmbeddingsBatch: jest.fn(),
-    hasEmbeddingsForDocument: jest.fn(() => false),
+    getUnembeddedChunks: jest.fn(() => []),
     getChunksByDocument: jest.fn(() => []),
     deleteDocumentsByProject: jest.fn(),
   },
@@ -135,8 +135,7 @@ describe('RagService', () => {
       mockDb.getDocumentsByProject.mockReturnValue([
         { id: 1, project_id: 'proj1', name: 'a.txt', path: '/a', size: 100, created_at: '', enabled: 1 },
       ]);
-      mockDb.hasEmbeddingsForDocument.mockReturnValue(false);
-      mockDb.getChunksByDocument.mockReturnValue([
+      mockDb.getUnembeddedChunks.mockReturnValue([
         { id: 10, content: 'chunk one', position: 0 },
         { id: 11, content: 'chunk two', position: 1 },
       ]);
@@ -147,11 +146,11 @@ describe('RagService', () => {
       expect(mockDb.insertEmbeddingsBatch).toHaveBeenCalled();
     });
 
-    it('skips documents that already have embeddings', async () => {
+    it('skips documents whose passages all have embeddings', async () => {
       mockDb.getDocumentsByProject.mockReturnValue([
         { id: 1, project_id: 'proj1', name: 'a.txt', path: '/a', size: 100, created_at: '', enabled: 1 },
       ]);
-      mockDb.hasEmbeddingsForDocument.mockReturnValue(true);
+      mockDb.getUnembeddedChunks.mockReturnValue([]);
 
       const total = await ragService.backfillEmbeddings('proj1');
       expect(total).toBe(0);

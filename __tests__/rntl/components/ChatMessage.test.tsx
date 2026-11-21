@@ -697,6 +697,16 @@ describe('ChatMessage', () => {
       expect(getByText('Metal')).toBeTruthy();
     });
 
+    it('says in plain words why a slow reply was slow, without turning on the generation details, and says nothing for a normal one', () => {
+      const slow = createAssistantMessage('A slow answer', { generationMeta: createGenerationMeta({ gpu: false, timeToFirstToken: 15, decodeTokensPerSecond: 2 }) });
+      const view = render(<ChatMessage message={slow} />);
+      expect(view.getByTestId('delay-note').props.children).toMatch(/15 s to start answering.*words a minute/);
+      expect(view.queryByTestId('generation-meta')).toBeNull();
+      view.unmount();
+      const normal = createAssistantMessage('A quick answer', { generationMeta: createGenerationMeta({ gpu: false, timeToFirstToken: 0.8, decodeTokensPerSecond: 20 }) });
+      expect(render(<ChatMessage message={normal} />).queryByTestId('delay-note')).toBeNull();
+    });
+
     it('shows GPU backend when GPU was used', () => {
       const meta = createGenerationMeta({
         gpu: true,

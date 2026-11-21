@@ -12,6 +12,7 @@ export interface LLMPerformanceSettings {
 export interface LLMPerformanceStats {
   lastTokensPerSecond: number;
   lastDecodeTokensPerSecond: number;
+  /** Seconds from asking to the first word. */
   lastTimeToFirstToken: number;
   lastGenerationTime: number;
   lastTokenCount: number;

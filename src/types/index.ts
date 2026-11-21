@@ -213,7 +213,7 @@ export interface GenerationMeta {
   decodeTokensPerSecond?: number;
   /** Tokens per second — prefill/prompt processing speed (LiteRT only) */
   prefillTokensPerSecond?: number;
-  /** Time to first token in milliseconds (text generation only) */
+  /** Time to first token in SECONDS (text generation only) */
   timeToFirstToken?: number;
   /** Token count (text generation only) */
   tokenCount?: number;
