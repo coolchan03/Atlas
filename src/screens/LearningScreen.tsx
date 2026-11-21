@@ -264,7 +264,7 @@ export const LearningScreen: React.FC = () => {
         <Text style={[styles.phase, { color: phase.phase === 'blocked' ? colors.error : phase.phase === 'idle' || phase.phase === 'paused' ? colors.textMuted : colors.primary }]} testID="learn-phase">{phase.label}</Text>
         <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
         <Text style={styles.counts} testID="learn-load">
-          {(() => { const l = learningLoad(); return `Context ${l.contextTokens} tokens · room for stored knowledge ~${l.knowledgeTokens}${l.pressure ? ' (halved: saving power)' : ''}`; })()}
+          {(() => { const l = learningLoad(); return `Context ${l.contextTokens} tokens · room for stored knowledge ~${l.knowledgeTokens}${l.pressure ? ' (halved: saving power)' : ''}${l.knowledgeTokens < 2000 && !l.pressure ? '. A larger context length in Chat settings gives it more room.' : ''}`; })()}
         </Text>
         <LearningProgressCard sections={progress} />
         <Text style={styles.counts}>

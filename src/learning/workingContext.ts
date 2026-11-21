@@ -18,8 +18,8 @@ export interface WorkingContext {
   approxTokens: number;
 }
 
-/** The share of the model's context that stored notes and passages may fill in a step. The rest is for the task, the instructions and the reply. */
-export const KNOWLEDGE_SHARE = 0.3;
+/** The share of the model's context that stored notes and passages may fill in a step. The rest is for the task, the instructions and the reply (a step's own text is about 1200 tokens). */
+export const KNOWLEDGE_SHARE = 0.45;
 /** The most a step is ever given, however large the context: a very long context is for the reply and the passages being studied too. */
 const MAX_KNOWLEDGE_TOKENS = 12000;
 
