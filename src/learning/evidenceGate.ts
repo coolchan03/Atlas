@@ -121,8 +121,10 @@ function citationGate(input: { invalid: number[]; cited: number; support: { chec
   // Strict: any one problem fails. Looser levels fail only when more than a share of the citations or cited sentences are wrong.
   const invalidFails = input.invalid.length > 0 && input.invalid.length / Math.max(1, input.cited + input.invalid.length) > limits.invalidShare;
   const unsupportedFails = input.support.failed.length > 0 && input.support.failed.length / Math.max(1, input.support.checked) > limits.unsupportedShare;
-  // A passage that says the opposite fails the gate at every strictness: it is not a matter of how many sentences are wrong.
-  if (invalidFails || unsupportedFails || input.support.contradicted.length > 0 || markState === 'fail') return 'fail';
+  // A passage that says the opposite fails the gate, whatever the judge said and however few sentences are wrong. Only the lenient setting (which trusts
+  // the judge, for small models) keeps it as a listed reason instead, because the check is a wording heuristic and can misread a scoped statement.
+  const contradicts = input.support.contradicted.length > 0 && !limits.trustVerdict;
+  if (invalidFails || unsupportedFails || contradicts || markState === 'fail') return 'fail';
   return input.support.checked > 0 || markState === 'pass' ? 'pass' : 'unknown';
 }
 

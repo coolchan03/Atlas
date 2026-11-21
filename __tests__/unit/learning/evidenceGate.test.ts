@@ -86,17 +86,20 @@ describe('a cited passage that says the opposite', () => {
   const passage = [{ n: 1, title: 'Guide', kind: 'guide', passage: 'A home office expense is not deductible for an employee. The limit for a business meal is 50 percent.', locator: 'p1' }];
   const judged = { judgeLine: '1: PASS 10/10', judgePass: true };
 
-  it('disputes the report at every strictness, whatever the judge said', () => {
-    for (const strictness of ['lenient', 'balanced', 'strict'] as const) {
+  it('disputes the report whatever the judge said, except at the lenient setting, which keeps it as a listed reason', () => {
+    for (const strictness of ['balanced', 'strict'] as const) {
       const r = assessReport({ text: 'ANSWER: A home office expense is deductible for an employee [1].', sources: passage, strictness, ...judged });
       expect(r.gates.citations).toBe('fail');
       expect(r.status).toBe('disputed');
       expect(r.reasons.join(' ')).toContain('is contradicted by the cited passage');
     }
+    const lenient = assessReport({ text: 'ANSWER: A home office expense is deductible for an employee [1].', sources: passage, strictness: 'lenient', ...judged });
+    expect(lenient.gates.citations).not.toBe('fail');
+    expect(lenient.reasons.join(' ')).toContain('is contradicted by the cited passage');
   });
 
   it('disputes a figure given in a different unit than the passage', () => {
-    const r = assessReport({ text: 'ANSWER: The limit for a business meal is 50 dollars [1].', sources: passage, strictness: 'lenient', ...judged });
+    const r = assessReport({ text: 'ANSWER: The limit for a business meal is 50 dollars [1].', sources: passage, strictness: 'balanced', ...judged });
     expect(r.gates.citations).toBe('fail');
   });
 

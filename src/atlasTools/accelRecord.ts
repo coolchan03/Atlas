@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * corrected by these measurements: an accelerator that keeps failing for a model is not picked again, and one clearly slower to the first word
  * than another that has been tried is replaced. A backend the person picked themselves is never touched (the caller checks that).
  */
-export interface BackendRecord { loads: number; loadMs: number; answers: number; firstWordMs: number; failures: number }
+export interface BackendRecord { loads: number; loadMs: number; answers: number; firstWordMs: number /* ms to read 1000 prompt tokens */; failures: number }
 const blank = (): BackendRecord => ({ loads: 0, loadMs: 0, answers: 0, firstWordMs: 0, failures: 0 });
 const ema = (old: number, n: number, v: number): number => (n > 0 ? old * 0.7 + v * 0.3 : v);
 
@@ -60,5 +60,5 @@ export function chooseBackend(input: { file: string; suggested: string; candidat
   if (!now || now.answers < MIN_ANSWERS) return { backend: suggested };
   const better = pool.filter((b) => b !== suggested && !unstable(rec(b)) && (rec(b)?.answers ?? 0) >= MIN_ANSWERS && (rec(b)!.firstWordMs) <= now.firstWordMs * CLEARLY_FASTER)
     .sort((a, b) => rec(a)!.firstWordMs - rec(b)!.firstWordMs)[0];
-  return better ? { backend: better, why: `${better} reaches the first word in ${(rec(better)!.firstWordMs / 1000).toFixed(1)} s with this model, against ${(now.firstWordMs / 1000).toFixed(1)} s on ${suggested}` } : { backend: suggested };
+  return better ? { backend: better, why: `${better} reads a prompt faster with this model (${(rec(better)!.firstWordMs / 1000).toFixed(1)} s per 1000 tokens, against ${(now.firstWordMs / 1000).toFixed(1)} s on ${suggested})` } : { backend: suggested };
 }
