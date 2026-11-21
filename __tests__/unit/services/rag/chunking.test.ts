@@ -146,10 +146,8 @@ describe('section-aware chunks', () => {
   const { joinHeadings, softEnd } = require('../../../../src/services/rag/chunking');
 
   it('keeps a heading with the text it introduces, so a title is never left at the end of a chunk', () => {
-    expect(joinHeadings(['Intro text here.', 'Lease classification', 'A lease is a finance lease when it transfers ownership.'])).toEqual([
-      'Intro text here.',
-      'Lease classification\nA lease is a finance lease when it transfers ownership.',
-    ]);
+    const longBody = 'A lease is a finance lease when it transfers ownership of the asset to the lessee by the end of the lease term, or when the term covers most of its life.';
+    expect(joinHeadings(['Intro text here.', 'Lease classification', longBody])).toEqual(['Intro text here.', `Lease classification\n${longBody}`]);
     expect(joinHeadings(['## Cash', 'Cash is money.', '## Debts'])).toEqual(['## Cash\nCash is money.', '## Debts']);
     const filler = 'Revenue is recognised when control of a good or service passes to the customer. '.repeat(5).trim();
     const chunks = chunkDocument(`${filler}\n\nLease classification\n\n${filler}`, { chunkSize: 500, overlap: 50 });
@@ -185,5 +183,18 @@ describe('a heading that stays with its text keeps the place in the document', (
     const cls = chunks.find((c) => c.content.includes('class a sentence'))!;
     expect(cls.content.startsWith('[Accounting > Leases > Classification]\n')).toBe(true);
     expect(chunks[0].content.startsWith('# Accounting\n')).toBe(true); // a top-level heading is left as it is
+  });
+});
+
+describe('what is not a title', () => {
+  const { joinHeadings } = require('../../../../src/services/rag/chunking');
+  const body = 'The lessee recognises a right-of-use asset and a lease liability at the commencement date, measured at the present value of the lease payments not yet paid.';
+
+  it('leaves a one-word reply, a number, a date and a list item as paragraphs of their own', () => {
+    for (const short of ['Yes', '42', 'Tuesday 3 March.', 'Net 30 days,']) expect(joinHeadings([short, body])).toEqual([short, body]);
+  });
+
+  it('does not join a short line to a paragraph that is not clearly longer than it', () => {
+    expect(joinHeadings(['Lease classification', 'Short note here'])).toEqual(['Lease classification', 'Short note here']);
   });
 });

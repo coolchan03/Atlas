@@ -4,7 +4,7 @@
 const ARM64 = 'arm64-v8a';
 const ALL = 'arm64-v8a,armeabi-v7a,x86_64,x86';
 /** Files whose change means native code was rebuilt, so the other CPU types must be rebuilt with it. */
-const NATIVE_CHANGE = /^(android\/patches\/|android\/app\/src\/main\/cpp\/|android\/app\/src\/main\/jni\/|scripts\/prepare-llamakt-vulkan\.cjs$)/;
+const NATIVE_CHANGE = /^(android\/patches\/|android\/app\/src\/main\/cpp\/|android\/app\/src\/main\/jni\/|vendor\/llama-kt|android\/app\/(CMakeLists\.txt|src\/main\/CMakeLists\.txt)|scripts\/prepare-llamakt-vulkan\.cjs$)/;
 
 function architecturesFor({ build, every = 20, manualFull = false, changedFiles = [] }) {
   const n = Number(every) === 10 ? 10 : 20; // only the two documented intervals: a typo cannot turn this off or on every build

@@ -25,6 +25,7 @@ describe('architecturesFor', () => {
     expect(architecturesFor({ build: 241, changedFiles: ['android/patches/llama.patch'] })).toMatchObject({ abis: ALL, why: expect.stringContaining('native code changed') });
     expect(architecturesFor({ build: 241, changedFiles: ['src/screens/HomeScreen.tsx', 'docs/x.md'] }).abis).toBe(ARM64);
     expect(architecturesFor({ build: 241, manualFull: true }).abis).toBe(ALL);
+    expect(architecturesFor({ build: 241, changedFiles: ['vendor/llama-kt'] }).abis).toBe(ALL); // the native engine source moved
   });
 
   it('ignores a build number that is not a positive whole number', () => {
@@ -48,6 +49,14 @@ describe('atlas-apk.yml', () => {
     expect(choose).toBeLessThan(steps.indexOf(named(/Get natural-voice engine/)));
     expect(named(/Build release APK/).run).toContain('-PreactNativeArchitectures=${{ steps.abis.outputs.abis }}');
     expect(named(/Get natural-voice engine/).run).toContain('steps.abis.outputs.multiarch');
+  });
+
+  it('never publishes a multi-architecture build as the latest release by a push, and saves it under its own name', () => {
+    const publish = named(/Publish release/);
+    expect(publish.if).toContain("steps.abis.outputs.multiarch != 'true'");
+    expect(publish.if).toMatch(/inputs\.publish == true \|\| \(steps\.abis\.outputs\.multiarch != 'true'/); // a manual publish by a person is still allowed
+    const upload = steps.find((s) => s.uses?.startsWith('actions/upload-artifact') && s.with?.name?.includes('Atlas-apk'));
+    expect(upload.with.name).toContain("'Atlas-apk-MULTIARCH'");
   });
 
   it('keeps the quick compile gate and the ARM64 checks as they were', () => {

@@ -183,6 +183,15 @@ describe('tuneDevice with noisy timings', () => {
     expect(withModelMemory(after, 'm2')).toMatchObject({ inferenceBackend: before.inferenceBackend, nThreads: before.nThreads });
   });
 
+  it('keeps working when the global backend was never set (no "undefined" text is stored)', async () => {
+    const { useTuned, withModelMemory } = require('../../../src/atlasTools/speed');
+    useAppStore.setState({ settings: { ...useAppStore.getState().settings, inferenceBackend: undefined as any } });
+    runPhone({ 'cpu:4': [8.0], 'cpu:3': [3.5], 'cpu:6': [4.0] });
+    await tuneDevice('m1', () => undefined);
+    expect(useTuned.getState().memory.m1?.from?.inferenceBackend).toBeUndefined();
+    expect(withModelMemory(useAppStore.getState().settings, 'm1').nThreads).toBe(useTuned.getState().memory.m1?.nThreads);
+  });
+
   it('lets a change made in Settings afterwards win over the saved per-model choice', async () => {
     const { withModelMemory } = require('../../../src/atlasTools/speed');
     runPhone({ 'auto:4': [3.0], 'cpu:4': [8.0], 'cpu:3': [3.5], 'cpu:6': [4.0] });

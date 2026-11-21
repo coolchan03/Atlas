@@ -94,25 +94,30 @@ export function chunkDocument(text: string, options?: ChunkOptions): Chunk[] {
   return withSectionContext(text, plainChunks(text, options));
 }
 
-/** A short title-like line: a Markdown heading, or a line with no sentence ending such as "Lease classification" or "ASC 842-20-25". */
-function isHeading(paragraph: string): boolean {
+/** A Markdown heading. */
+const isMarkdownHeading = (p: string): boolean => /^#{1,6}\s/.test(p) && !p.includes('\n');
+
+/**
+ * A short title-like line with no sentence ending, such as "Lease classification" or "ASC 842-20-25": two or more words, at least one of them a
+ * word, and followed by a paragraph clearly longer than itself. A one-word reply, a number, a date or a list item is not a title.
+ */
+function isTitleLike(paragraph: string, next: string | undefined): boolean {
   const p = paragraph.trim();
-  if (!p || p.includes('\n')) return false;
-  if (/^#{1,6}\s/.test(p)) return true;
-  return p.length <= 80 && !/[.!?:;,]$/.test(p) && /^[A-Z0-9\u00A7(]/.test(p);
+  if (!next || p.includes('\n') || p.length > 80 || /[.!?:;,]$/.test(p) || !/^[A-Z0-9\u00A7(]/.test(p)) return false;
+  const words = p.split(/\s+/).filter(Boolean);
+  return words.length >= 2 && /\p{L}{3,}/u.test(p) && next.trim().length >= Math.max(120, p.length * 2);
 }
 
 /** A heading stays with the text it introduces: it is joined to the paragraph after it, so packing never leaves a title at the end of one chunk and its text in the next. */
 export function joinHeadings(paragraphs: string[]): string[] {
+  const list = paragraphs.map((x) => x.trim()).filter(Boolean);
   const out: string[] = [];
   let lead = '';
-  for (const raw of paragraphs) {
-    const p = raw.trim();
-    if (!p) continue;
-    if (isHeading(p)) { lead = lead ? `${lead}\n${p}` : p; continue; }
+  list.forEach((p, i) => {
+    if (isMarkdownHeading(p) || isTitleLike(p, list[i + 1])) { lead = lead ? `${lead}\n${p}` : p; return; }
     out.push(lead ? `${lead}\n${p}` : p);
     lead = '';
-  }
+  });
   if (lead) out.push(lead);
   return out;
 }

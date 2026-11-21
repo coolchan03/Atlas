@@ -439,7 +439,7 @@ jobs:
         if: github.event_name != 'schedule'
         with:
           # A shrunk trial build gets its own name so the official-publish workflow (which takes Atlas-apk) can never pick it up.
-          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || 'Atlas-apk' }}
+          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || (steps.abis.outputs.multiarch == 'true' && 'Atlas-apk-MULTIARCH') || 'Atlas-apk' }}
           path: out/*.apk
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
@@ -459,7 +459,9 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets')))
+        # A multi-architecture build is a larger file for old phones and emulators: it is saved as its own build file (Atlas-apk-MULTIARCH) and is
+        # never published as the latest release by a push; only a person who ticks publish on a manual run publishes it.
+        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.abis.outputs.multiarch != 'true' && (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets'))))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

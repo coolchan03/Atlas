@@ -369,7 +369,7 @@ async function runTuning(modelId: string, onProgress: (p: TuneProgress) => void,
     const kept = memoryOf(best.option.extra);
     useTuned.getState().setMemory(modelId, {
       ...kept, nThreads: best.option.threads, inferenceBackend: accelerated ? INFERENCE_BACKENDS.AUTO : String(best.option.backend),
-      from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers, nThreads: old.nThreads, inferenceBackend: String(old.inferenceBackend) },
+      from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers, nThreads: old.nThreads, inferenceBackend: old.inferenceBackend },
     });
     useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.

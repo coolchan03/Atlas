@@ -12,9 +12,15 @@ import logger from '../../utils/logger';
 
 /** The passage with its first characters dropped when they repeat the end of the passage before it (the overlap between two windows). Kept whole when the overlap is short. */
 export function withoutSharedStart(previous: string, current: string): string {
-  const max = Math.min(previous.length, current.length, 400);
+  // Stored passages may start with their section path ("[Lease > Classification]" and a line break): that is compared without it, and put back.
+  const head = /^\[[^\]\n]+\]\n/.exec(current)?.[0] ?? '';
+  const body = current.slice(head.length);
+  const max = Math.min(previous.length, body.length, 400);
   for (let n = max; n >= 30; n -= 1) {
-    if (previous.endsWith(current.slice(0, n))) return current.slice(n).replace(/^\s+/, '');
+    if (previous.endsWith(body.slice(0, n))) {
+      const rest = body.slice(n).replace(/^\s+/, '');
+      return rest.trim() ? `${head}${rest}` : current; // a passage that is only the overlap is kept whole, never sent empty
+    }
   }
   return current;
 }

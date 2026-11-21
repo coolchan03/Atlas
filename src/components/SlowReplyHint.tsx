@@ -6,7 +6,7 @@ import { useTheme } from '../theme';
 import { useAppStore } from '../stores/appStore';
 import { useChatStore } from '../stores/chatStore';
 import { useNudges } from '../atlasTools/nudges';
-import { shouldOfferFirstTest, shouldSuggestTuning, useSlowHint, useSpeedStats, useTuned } from '../atlasTools/speed';
+import { shouldOfferFirstTest, shouldSuggestTuning, useSlowHint, useSpeedStats, useTuned, withModelMemory } from '../atlasTools/speed';
 import { slowCause, type SlowCause } from '../atlasTools/slowCause';
 import { hardwareService } from '../services/hardware';
 import { vulkanEngine } from '../services/vulkanEngine';
@@ -27,8 +27,11 @@ export const SlowReplyHint: React.FC = () => {
   const writing = useChatStore((s) => s.isStreaming || s.isThinking);
   const tipsOn = useNudges((s) => s.speedTips);
   const busy = writing || !tipsOn; // while a reply is being written, or when tips are switched off, nothing is offered
-  const threads = useAppStore((s) => s.settings.nThreads ?? 0);
-  const backend = useAppStore((s) => s.settings.inferenceBackend);
+  // What THIS model runs with: the global settings, with the threads and backend its own speed test kept (withModelMemory), as the load does.
+  const memory = useTuned((s) => (modelId ? s.memory[modelId] : undefined));
+  const threads = useAppStore((s) => withModelMemory(s.settings, modelId ?? undefined).nThreads ?? 0);
+  const backend = useAppStore((s) => withModelMemory(s.settings, modelId ?? undefined).inferenceBackend);
+  void memory; // read so the hint follows a change to the model's own result
   const [cause, setCause] = useState<SlowCause | null>(null);
   const slow = !busy && !!modelId && shouldSuggestTuning({ modelId, speed, tuned, dismissed });
   // First time on this model: offer the speed test once, in a calmer voice than the slow-reply warning.
