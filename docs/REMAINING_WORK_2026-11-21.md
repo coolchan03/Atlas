@@ -48,6 +48,13 @@ Looked at and left alone, with the reason:
 
 Not done: 4.2 (full-response ranking across short, medium and long prompts), 4.3 to 4.5, 4.8, 4.10 (per-stage diagnostics), 5.1 (native batching, resumable indexing), 5.3 to 5.6, 3.4 large-library reprocessing, 3.5 backup size cap and multi-part format, 7.1 to 7.3 and 7.5 (needs a phone: 282 heavy text weights are only held from growing by `designWeightRatchet.test.ts`), 8.1 every-20th-version multi-architecture builds, 8.2 native engine artifact reuse, 8.5 fast development builds, 8.6, 8.7 size reduction (measurement added, no reduction made), 8.10 (the review bots have not been read), 9.2, 9.4 to 9.7.
 
+## Seventh pass (version 0.0.237, a polish pass)
+
+- Audit by reading (the review tool was at its usage limit): a stopped background job waits up to 15 minutes for the chat reply that stopped it; the reply's cache label uses the model's own backend; a multi-architecture build is never the latest release by a push; overlap trimming sees through the section path; titles need two words and a longer paragraph after them; the slow-reply hint reads the model's own backend and threads.
+- Builds: run #244 and #245 of "Build Atlas APK" on the branch completed green (about 80 and 35 minutes). Not published.
+
+Open: the cause of the missing briefing intro tune (1.2), the 35 MB cap on an encrypted backup (3.5), tablet layouts and the visual audit (7), APK size reduction (8.7), 4.5, 4.7, 9.5.
+
 ## Sixth pass (version 0.0.236)
 
 - Teach the AI knowledge budget: 30 percent of the context, ceiling 12000 tokens (was 12 to 20 percent, ceiling 1800).
