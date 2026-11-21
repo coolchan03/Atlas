@@ -104,7 +104,7 @@ describe('finding the best settings', () => {
 });
 
 describe('ranking by the whole reply', () => {
-  const opt = (id: string, threads = 4) => ({ id, label: id, backend: 'cpu', threads });
+  const opt = (id: string, threads = 4) => ({ id, label: id, backend: 'cpu', threads } as any);
 
   it('prefers the option that finishes a typical reply sooner, even when another writes faster', () => {
     const fastWriterSlowStart = { option: opt('npu'), tps: 20, firstWordSec: 12 }; // 150 tokens: 12 + 7.5 = 19.5 s
