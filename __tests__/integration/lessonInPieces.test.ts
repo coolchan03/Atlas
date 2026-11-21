@@ -1,4 +1,4 @@
-/** A slow model writes a lesson in pieces: an outline, the sections two at a time, then the key points. Only the AI is faked. */
+/** A slow model writes a lesson in pieces: an outline, the sections in as few safe pieces as its measured speed allows, then the key points. Only the AI is faked. */
 export {};
 
 const mockCalls: string[] = [];
@@ -13,7 +13,7 @@ jest.mock('../../src/study/engine', () => ({
   gatherSources: jest.fn(async () => []),
 }));
 
-it('writes a lesson with an outline call, two section calls and a key-points call on a slow model, and saves it', async () => {
+it('writes a lesson with an outline call, one section call (all three fit a safe piece at this speed) and a key-points call on a slow model, and saves it', async () => {
   jest.resetModules();
   mockCalls.length = 0;
   require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true });
@@ -31,6 +31,6 @@ it('writes a lesson with an outline call, two section calls and a key-points cal
   expect(lesson.sections.map((s: any) => s.heading)).toEqual(['Cash', 'Debts', 'Leases']);
   expect(lesson.keyPoints).toEqual(['Cash is money']);
   expect(lesson.commonMistakes).toEqual(['Mixing up cash and profit']);
-  expect(mockCalls).toHaveLength(4); // outline, two sections, two sections' remainder (one), key points
+  expect(mockCalls).toHaveLength(3); // outline, the three sections together (about 4 min at 4.4 tokens a second), key points
   expect(course().content.a1.sections).toHaveLength(3);
 }, 20000);

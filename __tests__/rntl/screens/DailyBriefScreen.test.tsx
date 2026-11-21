@@ -112,3 +112,66 @@ it('offers to avoid the kind of story, or stop following its interest, from a st
   expect(screen.queryByText('New battery doubles phone life')).toBeNull();
   expect(useBriefPrefs.getState().avoid).toEqual(['Sports']);
 });
+
+describe('Preview a fun fact (rendered)', () => {
+  const { Alert } = require('react-native');
+  const { useBriefPrefs } = require('../../../src/atlasTools/dailyBrief');
+  const funFact = require('../../../src/atlasTools/dailyBrief');
+
+  beforeEach(() => {
+    useBriefPrefs.setState({ funFacts: true, interests: ['sea life'] });
+    jest.restoreAllMocks();
+  });
+
+  it('shows the fact and the page it came from', async () => {
+    jest.spyOn(funFact, 'funFactAttempt').mockResolvedValue({ kind: 'found', fact: { topic: 'sea life', page: 'Wikipedia: Octopus', text: 'The octopus has three hearts.' } });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = renderScreen();
+    await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(alert.mock.calls[0][0]).toBe('A fun fact about sea life');
+    expect(alert.mock.calls[0][1]).toMatch(/From Wikipedia: Octopus[\s\S]*three hearts/);
+  });
+
+  it.each([
+    ['off-grid', /Off-grid mode is on/],
+    ['offline', /could not reach Wikipedia/],
+    ['nothing-suitable', /none was a suitable article/],
+  ] as const)('says the real reason when nothing comes back (%s)', async (why, message) => {
+    jest.spyOn(funFact, 'funFactAttempt').mockResolvedValue({ kind: 'none', why, tried: ['sea life'] });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = renderScreen();
+    await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(alert.mock.calls[0][0]).toBe('No fun fact found');
+    expect(alert.mock.calls[0][1]).toMatch(message);
+  });
+
+  it('a lookup that throws is reported as a connection problem, not as "nothing found" and not as a crash', async () => {
+    jest.spyOn(funFact, 'funFactAttempt').mockRejectedValue(new Error('boom'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = renderScreen();
+    await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(alert.mock.calls[0][1]).toMatch(/could not reach Wikipedia/);
+  });
+
+  it('the button is not shown without interests, or with fun facts switched off', () => {
+    useBriefPrefs.setState({ interests: [] });
+    expect(renderScreen().queryByTestId('brief-fact-preview')).toBeNull();
+    useBriefPrefs.setState({ interests: ['sea life'], funFacts: false });
+    expect(renderScreen().queryByTestId('brief-fact-preview')).toBeNull();
+  });
+
+  it('is disabled while looking, so a second press cannot start a second lookup', async () => {
+    let finish: (r: unknown) => void = (_r) => undefined;
+    const attempt = jest.spyOn(funFact, 'funFactAttempt').mockImplementation(() => new Promise((resolve) => { finish = resolve as (r: unknown) => void; }));
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = renderScreen();
+    await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
+    expect(screen.getByText('Looking...')).toBeTruthy();
+    await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
+    expect(attempt).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ kind: 'none', why: 'nothing-suitable', tried: [] }); });
+  });
+});

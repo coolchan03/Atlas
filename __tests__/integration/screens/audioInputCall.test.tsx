@@ -84,3 +84,28 @@ describe('the voice call screen', () => {
     expect(callStatus(base).status).toBe('Tap to talk.');
   });
 });
+
+describe('a microphone that never starts', () => {
+  it('is retried after a wait instead of leaving the call deaf, and says it gave up only after several tries', async () => {
+    // Real timers with tiny delays (setup() cannot run under fake timers): the logic is the same, only the waits are shorter.
+    jest.resetModules();
+    jest.doMock('../../../src/atlasVoice/callLifecycle', () => ({ ...jest.requireActual('../../../src/atlasVoice/callLifecycle'), LISTEN_DELAY_MS: 2, START_CHECK_MS: 15, RECOVERY_COOLDOWN_MS: 20 }));
+    const { props, view, rtl } = await setup({ handsFree: true });
+    const { callTrace, clearCallTrace } = require('../../../src/atlasVoice/callLifecycle');
+    clearCallTrace();
+    // Many short acts, not one long one: React holds state updates back until an act ends, so a cascade of retries needs the act to end often.
+    const wait = async (ms: number) => { for (let t = 0; t < ms; t += 10) await rtl.act(async () => { await new Promise((r) => setTimeout(r, 10)); }); };
+    await wait(150); // three failed starts have happened (each is counted 15 ms after it starts)
+    expect(props.onStartRecording.mock.calls.length).toBeGreaterThanOrEqual(3);
+    await wait(200); // the first wait is over, so it tried again by itself
+    expect(callTrace().some((l: string) => /\[CALL-RECOVER\] .*attempt 1/.test(l))).toBe(true);
+    await wait(1500); // every cycle has failed
+    expect(view.queryByText(/could not start after several tries/)).toBeTruthy();
+    const atGiveUp = props.onStartRecording.mock.calls.length;
+    await wait(400);
+    expect(props.onStartRecording.mock.calls.length).toBe(atGiveUp); // not looping for ever
+    expect(callTrace().some((l: string) => /gave up after 3 waits/.test(l))).toBe(true);
+    view.unmount();
+    jest.dontMock('../../../src/atlasVoice/callLifecycle');
+  }, 30000);
+});

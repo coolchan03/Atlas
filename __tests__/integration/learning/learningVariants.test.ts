@@ -107,16 +107,81 @@ describe('learning under less friendly conditions', () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 
-  it('keeps a session: lessons only, nothing auto-verified, and says what happened', async () => {
+  it('keeps nothing on its own: a session only proposes, and an unreviewed Keep leaves the proposal for review', async () => {
     mockReplies = happyModel();
     const { engine, store } = load();
     cfg(store, { mode: 'session', continuous: false });
     await engine.startLearning(AGENT);
+    expect(typeof (await engine.keepSession(AGENT))).toBe('string');
+    store.getState().patch(AGENT, { sessionLessons: 'Check numbers\nCheck numbers\nBe brief', notes: [{ q: 'How long?', answer: 'One minute' }] });
     const message = await engine.keepSession(AGENT);
-    expect(typeof message).toBe('string');
-    store.getState().patch(AGENT, { sessionLessons: 'Check numbers\nCheck numbers\nBe brief', notes: [] });
-    expect(await engine.keepSession(AGENT)).toMatch(/Kept \d+ lessons|preserved/);
+    expect(message).toMatch(/preserved for review \(2 lessons, 1 answers\)/);
+    expect(store.getState().get(AGENT).sessionLessons).toBe('Check numbers\nCheck numbers\nBe brief'); // untouched
+    expect(store.getState().get(AGENT).lessons ?? '').not.toContain('Be brief'); // and not kept
     expect(await engine.keepSession('no-such-agent')).toBeTruthy();
+  });
+
+  it('shows the proposal without repeats, with each answer numbered for review', () => {
+    const { engine, store } = load();
+    store.getState().patch(AGENT, { sessionLessons: 'Check numbers\nCheck numbers\n\n Be brief ', notes: [{ q: 'How long?', answer: 'One minute' }, { q: 'Cool?', answer: 'Yes' }] });
+    expect(engine.sessionProposal(AGENT)).toEqual({
+      lessons: ['Check numbers', 'Be brief'],
+      answers: [{ index: 0, q: 'How long?', answer: 'One minute' }, { index: 1, q: 'Cool?', answer: 'Yes' }],
+    });
+  });
+
+  it('keeps exactly what the person approved: those lessons join the agent, those answers go to the project, the rest stays proposed', async () => {
+    const { engine, store } = load();
+    const { ragService } = require('../../../src/services/rag');
+    ragService.indexDocument.mockClear();
+    store.getState().patch(AGENT, { sessionLessons: 'Check numbers\nBe brief\nGuess when unsure', notes: [{ q: 'How long?', answer: 'One minute' }, { q: 'Cool?', answer: 'Yes' }], lessons: 'Old lesson' });
+    const message = await engine.keepSession(AGENT, { lessons: ['Check numbers', 'Be brief'], answers: [1] });
+    expect(message).toBe("Kept 2 lessons and 1 answer (saved to the project's knowledge base).");
+    const after = store.getState().get(AGENT);
+    expect(after.lessons.split('\n')).toEqual(['Old lesson', 'Check numbers', 'Be brief']);
+    expect(ragService.indexDocument).toHaveBeenCalledTimes(1);
+    expect(ragService.indexDocument.mock.calls[0][0]).toMatchObject({ projectId: 'p1' });
+    expect(after.sessionLessons).toBe('Guess when unsure'); // not approved: still proposed, not dropped
+    expect(after.notes).toEqual([{ q: 'How long?', answer: 'One minute' }]); // the approved answer is out of the proposal, the other stays
+  });
+
+  it('does not keep a lesson the session never proposed', async () => {
+    const { engine, store } = load();
+    store.getState().patch(AGENT, { sessionLessons: 'Be brief', notes: [], lessons: '' });
+    await engine.keepSession(AGENT, { lessons: ['Something I made up'] });
+    expect(store.getState().get(AGENT).lessons).toBe('');
+    expect(store.getState().get(AGENT).sessionLessons).toBe('Be brief');
+  });
+
+  it('an approved answer without a project is left proposed, and the message says why', async () => {
+    const { engine, store } = load();
+    cfg(store, { projectId: undefined });
+    const { ragService } = require('../../../src/services/rag');
+    ragService.indexDocument.mockClear();
+    store.getState().patch(AGENT, { sessionLessons: '', notes: [{ q: 'How long?', answer: 'One minute' }] });
+    const message = await engine.keepSession(AGENT, { answers: [0] });
+    expect(message).toMatch(/needs a project to be saved in, so it was left proposed/);
+    expect(ragService.indexDocument).not.toHaveBeenCalled();
+    expect(store.getState().get(AGENT).notes).toHaveLength(1);
+  });
+
+  it('keeping the same lesson twice does not repeat it, and the agent keeps at most the newest sixteen', async () => {
+    const { engine, store } = load();
+    const many = Array.from({ length: 20 }, (_, i) => `Lesson ${i + 1}`);
+    store.getState().patch(AGENT, { sessionLessons: many.join('\n'), notes: [], lessons: 'Lesson 1' });
+    await engine.keepSession(AGENT, { lessons: many });
+    const kept = store.getState().get(AGENT).lessons.split('\n');
+    expect(kept).toHaveLength(16);
+    expect(new Set(kept).size).toBe(16);
+    expect(kept[kept.length - 1]).toBe('Lesson 20');
+  });
+
+  it('can throw a session away, and an empty session says there is nothing to keep', async () => {
+    const { engine, store } = load();
+    store.getState().patch(AGENT, { sessionLessons: 'Be brief', notes: [{ q: 'q', answer: 'a' }] });
+    engine.discardSession(AGENT);
+    expect(engine.sessionProposal(AGENT)).toEqual({ lessons: [], answers: [] });
+    expect(await engine.keepSession(AGENT, { lessons: ['Be brief'] })).toMatch(/proposed nothing to keep/);
   });
 
   it('starts a new round and runs the manager on demand', async () => {

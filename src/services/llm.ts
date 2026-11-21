@@ -33,7 +33,7 @@ import { recentNativeLog } from './llmNativeLog';
 import { recoverFromPreviousRun, enterStage, leaveStage, recordLoadSuccess, recordLoadFailure, planLoad, type LoadStage } from './loadGuard';
 import logger from '../utils/logger';
 import { resolveReplyTokens } from './contextWindow';
-import { isGemma4Path, knownVerdict, recordVerdict, runOutputCheck, logOutputReport, describeBadOutput, primeFirstWord, estimatePromptTokens, scanPromptLengths, SHORT_PROMPT_TOKENS, type OutputCheck } from './outputHealth';
+import { isGemma4Path, knownVerdict, recordVerdict, runOutputCheck, logOutputReport, describeBadOutput, primeFirstWord, estimatePromptTokens, scanPromptLengths, SHORT_PROMPT_TOKENS, createNoiseWatch, describeBadReply, judgeText, type OutputCheck, type VerdictKey } from './outputHealth';
 ;
 import type { StreamToken } from './llmStreamTypes';
 export type { StreamToken };
@@ -59,6 +59,8 @@ class LLMService {
   /** How very short prompts behave on this accelerated load: fine, fine with the workaround, or still wrong. */
   private shortPromptStatus: 'ok' | 'workaround' | 'unreliable' = 'ok';
   private mtpActive = false;
+  /** What identifies the loaded setup in the saved output verdicts (set when a Gemma 4 file loads), so a reply that turns out to be noise can mark it. */
+  private verdictKey: VerdictKey | null = null;
   /** What the last load really started (picture file, MTP), why anything was left out, and whether Safe Model Loading was on. */
   private loadReport: LoadReport | null = null;
   /** Bumped when a caller gives up on a load that is still running; that load then releases what it built instead of publishing it. */
@@ -426,6 +428,7 @@ class LLMService {
               notes.push('MTP drafting is switched on, but this model file has no MTP layers built in, so nothing is drafting. Attach an MTP file or turn the switch off.');
             }
             this.mtpActive = mtpStarted;
+            this.verdictKey = verdictKey;
             attempt = { mtp: mtpStarted, vision: this.multimodalInitialized };
           }
           this.selectedBackend = backend;
@@ -713,8 +716,10 @@ class LLMService {
       // development logcat output may outlive private/PIN-protected conversations.
       logger.log(`[LLM] Native completion settings: thinking=${thinkingOn}, contextShiftDisabled=${this.shouldDisableCtxShift()}`);
       if (!hasImages && this.shouldPrime(oaiMessages)) await primeFirstWord(ctx, completionParams);
+      const noiseWatch = createNoiseWatch();
+      let noise = '';
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
-        if (!this.isGenerating || !data.token) return;
+        if (!this.isGenerating || !data.token || noise) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log('[LLM] First token received'); }
         tokenCount++;
         const content = getStreamingDelta(nextStreamedContent(data, streamedContentSoFar), streamedContentSoFar);
@@ -724,6 +729,9 @@ class LLMService {
         if (reasoningContent) streamedReasoningSoFar += reasoningContent;
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
+        // A reply made of placeholder tokens is stopped as soon as that is clear, instead of running to the length limit.
+        noise = noiseWatch.check(fullContent, tokenCount);
+        if (noise) { logger.error(`[LLM][OUTPUT-CHECK] reply stopped: ${noise}`); void ctx.stopCompletion().catch(() => undefined); return; }
         onStream?.({ reasoningContent, content });
       }), 'generateResponse');
       const cr = completionResult as any;
@@ -735,6 +743,13 @@ class LLMService {
       recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
       const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent, parsedContent: typeof cr?.content === 'string' ? cr.content : undefined };
+      // Noise is not an answer. It is reported (with the cause) instead of being shown or saved as one, and the setup is marked so it is not trusted again.
+      const badReply = noise || judgeText(result.content);
+      if (badReply) {
+        logger.error(`[LLM][OUTPUT-CHECK] the reply was noise (${badReply}); no answer is kept`);
+        if (this.verdictKey && isGemma4Path(this.currentModelPath ?? '')) void recordVerdict(this.verdictKey, { ok: false, reason: `a chat reply was placeholder tokens: ${badReply}` }).catch(() => undefined);
+        throw new Error(describeBadReply(this.selectedBackend, badReply));
+      }
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);
       onComplete?.(result);
       return result.content;

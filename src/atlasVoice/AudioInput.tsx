@@ -13,7 +13,7 @@ import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
 import { Alert } from 'react-native';
-import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, stallNote, type CallPhase, type CallSnapshot } from './callLifecycle';
+import { LISTEN_DELAY_MS, RECOVERY_COOLDOWN_MS, START_CHECK_MS, callPhase, describePhaseChange, micFailureNote, noteCallTrace, recoveryStep, shouldStartListening, stallNote, type CallPhase, type CallSnapshot } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import { callTrace } from './callLifecycle';
 import { shareItem } from '../utils/shareItem';
@@ -77,6 +77,8 @@ export function AtlasAudioInput(props: any) {
   const [paused, setPaused] = useState(false);
   // Listening starts that did not lead to a recording; after a few the call says so instead of retrying forever.
   const [failedStarts, setFailedStarts] = useState(0);
+  /** How many times the call has waited and tried again after the microphone kept failing to start (see recoveryStep). */
+  const [recoveryCycles, setRecoveryCycles] = useState(0);
   const callerName = useCallerName();
   // Where the time of the last turn went (see turnTiming.ts): shown under the status and logged.
   const times = useRef<TurnTimes>({});
@@ -178,11 +180,11 @@ export function AtlasAudioInput(props: any) {
   const doneTickSeen = useRef(doneTick);
   doneTickSeen.current = doneTick;
   useEffect(() => {
-    if (isRecording) { if (failedStarts) setFailedStarts(0); return undefined; }
+    if (isRecording) { if (failedStarts) setFailedStarts(0); if (recoveryCycles) setRecoveryCycles(0); return undefined; }
     const snapshot = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
     if (!shouldStartListening(snapshot)) {
-      if (handsFree && failedStarts >= MAX_FAILED_STARTS) setNote('The microphone did not start. Tap the button to try again.');
-      return undefined;
+      return undefined; // a stuck microphone is handled by the recovery effect below
+
     }
     let check: ReturnType<typeof setTimeout> | undefined;
     const start = setTimeout(() => {
@@ -192,6 +194,22 @@ export function AtlasAudioInput(props: any) {
     }, LISTEN_DELAY_MS);
     return () => { clearTimeout(start); if (check) clearTimeout(check); };
   }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]);
+
+  // A microphone that keeps failing to start is retried after a wait (and the wait grows), a few times, and only then reported as stopped.
+  // Without this the call looked active but could not hear the person until they tapped.
+  useEffect(() => {
+    const snap = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
+    const step = recoveryStep(snap, recoveryCycles, RECOVERY_COOLDOWN_MS);
+    if (step.action === 'none') return undefined;
+    setNote(micFailureNote(recoveryCycles));
+    if (step.action === 'give-up') { noteCallTrace(`[CALL-RECOVER] gave up after ${recoveryCycles} waits; the person must tap to listen again`); return undefined; }
+    const timer = setTimeout(() => {
+      noteCallTrace(`[CALL-RECOVER] the microphone failed ${failedStarts} starts; trying again after ${Math.round(step.afterMs / 1000)} s (attempt ${recoveryCycles + 1})`);
+      setRecoveryCycles((n) => n + 1);
+      setFailedStarts(0);
+    }, step.afterMs);
+    return () => clearTimeout(timer);
+  }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, recoveryCycles]);
 
   // Every change of what the call is doing is logged with how long the last stage took, plus the events that explain a stall
   // (an error from the recorder or speech engine, a muted or paused call), so a failed call can be read back afterwards.
@@ -228,6 +246,7 @@ export function AtlasAudioInput(props: any) {
     setMuted(next);
     setPaused(false);
     setFailedStarts(0);
+    setRecoveryCycles(0);
     if (next && isRecording) onCancelRecording?.();
     setNote(next ? 'Muted - Atlas is not listening.' : null);
   };
@@ -242,6 +261,7 @@ export function AtlasAudioInput(props: any) {
     setNote(null);
     setPaused(false);
     setFailedStarts(0);
+    setRecoveryCycles(0);
     if (muted) setMuted(false);
     if (speakingKey) { stopSpeech(); return; }
     if (isRecording) { onStopRecording?.(); return; }

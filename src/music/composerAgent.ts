@@ -17,6 +17,7 @@ import type { MusicScore } from './types';
 import logger from '../utils/logger';
 import { SLOW_WRITER_TPS, activeWritingSpeed } from '../atlasTools/speed';
 import { melodySystemPrompt, parseMelody, scoreFromMelody } from './melodyFallback';
+import { describeRun, finishRun, markLast, recordAttempt, startRun, type ComposeRun, type ComposeStage } from './composeTrace';
 
 /** Not an entry in the agent store on purpose: nothing lists it, edits it or chats with it. */
 export const COMPOSER_AGENT = { id: '__atlas-composer__', hidden: true, name: 'Atlas composer' } as const;
@@ -84,7 +85,11 @@ DRUM hat 0.5 0.3`;
 const harmonyLabel = (plan: HarmonyPlan): string => planText(plan).split('.')[0].replace('KEY: ', '');
 
 export interface ComposeOptions { seconds?: number; /** Instrument ids the person chose; the composer uses these (and drums only if the style needs them). */ instruments?: string[]; /** Replaces the model call (tests, and callers that already hold a model). */ ask?: (system: string, user: string) => Promise<string>; style?: StyleMood }
-export interface Composed { score: MusicScore; via: 'composer' | 'built-in'; instruments: string; style: StyleMood; note: string }
+export interface Composed { score: MusicScore; via: 'composer' | 'built-in'; instruments: string; style: StyleMood; note: string; /** What happened while the AI tried: the model, each question and answer, and why a built-in result was used. */ diagnostics?: ComposeRun }
+
+/** A question to the model that also carries the record of this tune's attempt (see composeTrace.ts). */
+type Ask = ((system: string, user: string) => Promise<string>) & { run?: ComposeRun };
+const runOf = (ask: Ask): ComposeRun | undefined => ask.run;
 
 const clampSeconds = (s: number | undefined) => Math.max(20, Math.min(120, Math.round(s ?? 60)));
 
@@ -130,11 +135,21 @@ export function cleanTitle(raw: string): string {
 }
 
 /** Asks the model for a name for a finished tune (one short reply). Returns the title, or '' to keep the one the tune has. */
-async function nameTune(o: { request: string; style: StyleMood; plan: HarmonyPlan; bpm: number; instruments: string }, ask: (system: string, user: string) => Promise<string>): Promise<string> {
+async function nameTune(o: { request: string; style: StyleMood; plan: HarmonyPlan; bpm: number; instruments: string }, ask: Ask): Promise<string> {
   try {
     const about = `Style: ${styleLabel(o.style)}. ${harmonyLabel(o.plan)}, about ${Math.round(o.bpm)} beats per minute. Played by ${o.instruments}.${o.request.trim() ? ` The request was: "${o.request.trim().slice(0, 160)}".` : ''}`;
-    return cleanTitle(await ask(NAMER_SYSTEM, `${about}\nGive it a title.`));
+    const title = cleanTitle(await ask(NAMER_SYSTEM, `${about}\nGive it a title.`));
+    const run = runOf(ask);
+    if (run) markLast(run, { stage: 'title', outcome: title ? 'accepted' : 'rejected', reason: title ? undefined : 'not a usable title' });
+    return title;
   } catch { return ''; }
+}
+
+/** The score that was kept is accepted; any earlier one still waiting (replaced by a better rewrite) is recorded as rejected. */
+function acceptScore(run: ComposeRun | undefined): void {
+  if (!run) return;
+  const pending = run.attempts.map((a, i) => ({ a, i })).filter((x) => x.a.stage === 'score' && x.a.outcome === 'pending');
+  pending.forEach((x, k) => { run.attempts[x.i] = { ...x.a, outcome: k === pending.length - 1 ? 'accepted' : 'rejected', ...(k === pending.length - 1 ? {} : { reason: 'replaced by a better rewrite' }) }; });
 }
 
 /** True for the placeholder a tune gets when the composer wrote no title of its own. */
@@ -146,7 +161,7 @@ interface Written { score: MusicScore; instruments: string; note: string }
  * The composer's whole pass for one brief: ask (twice if the first score is unusable), put the notes in key, listen to the result and
  * send a weak tune back once, then end it on the home note with fades. Throws the last problem when no usable score came back.
  */
-async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (system: string, user: string) => Promise<string>, finish: { fadeIn?: boolean } = {}): Promise<Written> {
+async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: Ask, finish: { fadeIn?: boolean } = {}): Promise<Written> {
   let problem = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     let raw = '';
@@ -169,11 +184,13 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
         } catch { /* keep the first tune */ }
       }
       report.score = finishScore(report.score, brief.plan, finish);
+      acceptScore(runOf(ask));
       const instruments = [...report.instruments, ...report.drums.map((d) => `${d} drum`)].join(', ');
       const total = Object.values(fixed.changed).reduce((a, b) => a + b, 0);
       return { score: report.score, instruments, note: `Written by the composer with ${instruments}, in ${harmonyLabel(brief.plan)}${total ? `; ${total} note${total === 1 ? '' : 's'} adjusted to fit the key and chords` : ''}${rewrote ? '; rewritten once after a listening check' : ''}. Quality check: ${critique.score}/100.` };
     } catch (e: any) {
       problem = String(e?.message || e);
+      { const run = runOf(ask); if (run) markLast(run, { stage: 'score', outcome: 'rejected', reason: problem }); }
       logger.warn(`[MUSIC] composer attempt ${attempt + 1} unusable: ${problem}; reply began: ${raw.slice(0, 160).replace(/\s+/g, ' ')}`);
       if (/no model|could not be loaded|failed to load/i.test(problem)) break; // no point asking again
     }
@@ -185,7 +202,7 @@ async function writeScore(brief: { text: string; plan: HarmonyPlan }, ask: (syst
  * The composer's last try: only the melody (melodyFallback.ts), with the bass and chords made from the plan. Returns null when the model's
  * reply has too few notes, so the built-in composer takes over. The title is the AI's own, else a random one for the style.
  */
-async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { request: string; style: StyleMood }, ask: (system: string, user: string) => Promise<string>): Promise<Composed | null> {
+async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { request: string; style: StyleMood }, ask: Ask): Promise<Composed | null> {
   let raw = '';
   try {
     raw = await ask(melodySystemPrompt(), `${brief.text}\n\nWrite only the melody, in the format given.`);
@@ -195,10 +212,12 @@ async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { r
     if (!made) throw new Error(`only ${melody.notes.filter((n) => n.pitch !== null).length} readable notes`);
     const conformed = conformScore(made, brief.plan);
     const finished = finishScore(conformed.score, brief.plan, {});
+    { const run = runOf(ask); if (run) markLast(run, { stage: 'melody', outcome: 'accepted' }); }
     const named = await nameTune({ request: ctx.request, style: ctx.style, plan: brief.plan, bpm: finished.bpm, instruments: instrumentsOf(ctx.style) }, ask);
     const title = named || cleanTitle(melody.title) || randomTitle(ctx.style, spec.group);
     return { score: { ...finished, title }, via: 'composer', instruments: instrumentsOf(ctx.style), style: ctx.style, note: `The composer's full score could not be read, so it wrote the melody only (${melody.notes.filter((n) => n.pitch !== null).length} notes) and the app added the bass and chords in ${harmonyLabel(brief.plan)}.` };
   } catch (e: any) {
+    { const run = runOf(ask); if (run) markLast(run, { stage: 'melody', outcome: 'rejected', reason: String(e?.message || e) }); }
     logger.warn(`[MUSIC] melody-only try unusable: ${String(e?.message || e)}; reply began: ${raw.slice(0, 160).replace(/\s+/g, ' ')}`);
     return null;
   }
@@ -206,7 +225,13 @@ async function writeMelodyOnly(brief: ReturnType<typeof composerBrief>, ctx: { r
 
 /** Writes a tune for a request: the composer agent first, then its melody alone, then the built-in composer when neither works. */
 export async function composeMusic(request: string, options: ComposeOptions = {}): Promise<Composed> {
-  return withScreenOn(() => composeMusicNow(request, options));
+  const style = options.style ?? styleFromText(request) ?? 'focus';
+  const run = startRun({ request, style, model: writerName(), writingSpeed: activeWritingSpeed() || undefined });
+  const result = await withScreenOn(() => composeMusicNow(request, options, run));
+  finishRun(run, result);
+  // One readable record per tune in the log (and kept for the diagnostics screen), so a fallback is explained by what actually happened.
+  logger.log(describeRun(run));
+  return { ...result, diagnostics: run };
 }
 
 /** The screen stays on while the AI writes the tune (it can take minutes on a slow phone). */
@@ -219,22 +244,40 @@ async function withScreenOn<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /** Times each question to the model, so the log says where the minutes went. */
-function timed(ask: (system: string, user: string) => Promise<string>): (system: string, user: string) => Promise<string> {
-  return async (system, user) => {
+function timed(ask: (system: string, user: string) => Promise<string>, run?: ComposeRun): Ask {
+  const wrapped: Ask = async (system, user) => {
     const at = Date.now();
+    const stage: ComposeStage = system === NAMER_SYSTEM ? 'title' : system === melodySystemPrompt() ? 'melody' : 'score';
     try {
       const reply = await ask(system, user);
       logger.log(`[MUSIC] the model answered in ${((Date.now() - at) / 1000).toFixed(0)} s: ${reply.length} characters for a prompt of ${system.length + user.length}`);
+      if (run) recordAttempt(run, { stage, prompt: system + user, reply, ms: Date.now() - at });
       return reply;
-    } catch (e) { logger.warn(`[MUSIC] the model failed after ${((Date.now() - at) / 1000).toFixed(0)} s: ${String((e as Error)?.message || e).slice(0, 200)}`); throw e; }
+    } catch (e) {
+      logger.warn(`[MUSIC] the model failed after ${((Date.now() - at) / 1000).toFixed(0)} s: ${String((e as Error)?.message || e).slice(0, 200)}`);
+      if (run) recordAttempt(run, { stage, prompt: system + user, ms: Date.now() - at, error: String((e as Error)?.message || e) });
+      throw e;
+    }
   };
+  wrapped.run = run;
+  return wrapped;
 }
 
-async function composeMusicNow(request: string, options: ComposeOptions): Promise<Composed> {
+/** The name of the model that writes, for the record. */
+function writerName(): string {
+  try {
+    const { useAppStore } = require('../stores/appStore');
+    const st = useAppStore.getState();
+    const id: string | undefined = st.settings?.backgroundModelId && st.downloadedModels.some((m: { id: string }) => m.id === st.settings.backgroundModelId) ? st.settings.backgroundModelId : st.loadedTextModelId || st.activeModelId;
+    return st.downloadedModels.find((m: { id: string }) => m.id === id)?.name ?? id ?? '';
+  } catch { return ''; }
+}
+
+async function composeMusicNow(request: string, options: ComposeOptions, run?: ComposeRun): Promise<Composed> {
   const seconds = clampSeconds(options.seconds);
   const style = options.style ?? styleFromText(request) ?? 'focus';
   const brief = composerBrief(request, style, { seconds, instruments: options.instruments });
-  const ask = timed(options.ask ?? askModelDefault);
+  const ask = timed(options.ask ?? askModelDefault, run);
   // A slow writer (a big model on this phone) needs minutes for a whole score, and up to four questions: it is asked for the melody alone,
   // one short question, and the app builds the rest. The built-in composer takes over if that cannot be read.
   const speed = activeWritingSpeed();

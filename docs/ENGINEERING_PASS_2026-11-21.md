@@ -75,6 +75,21 @@ More items finished, each with tests; none run on a device.
 
 Still not done: everything under "Not done" above except the items listed here.
 
+## Third pass (same day, after the second merge)
+
+Each item has tests; none was run on a device.
+
+- 1.1 Call-mode microphone: a microphone that keeps failing to start is retried after 10, 20 and 30 seconds (`recoveryStep` in `callLifecycle.ts`), then the call says plainly that the microphone could not be started. The retry count resets when recording starts, on mute, and on a press. Transcription or recognizer stalls are not covered.
+- 1.2 Briefing audio: a line is made in the voice it needs (`withVoice` loads the voice and renders the line as one queued step), and the long silence at the end of a rendered line is trimmed once (`wavTrim.ts`) so the background player does not add it to the story pause. The cause of "the intro tune does not play" was not found; a hypothesis is `intro: playing === null` in `StudyScreen.tsx`.
+- 1.3 AI composer: every AI-written tune keeps a record of what was asked, answered and decided (`composeTrace.ts`), and the fallback alert says why it fell back.
+- 1.4 / 1.5 Lessons: whether a lesson is written whole or in pieces, and how many sections go in a piece, follow the measured reading and writing speed of the active model (`lessonPlan.ts`). Prefix and KV reuse of prompt context is not done.
+- 1.6 Gemma 4 placeholder output: a reply made of placeholder tokens is stopped early, reported with its cause, and never kept as an answer (`createNoiseWatch`).
+- 1.13 Fun facts: judged by what the page says, several interests are tried, and a failed preview says the real reason. Rendered coverage added for the Assistant settings screen.
+- 2.8 Keep what it learned: the person reviews what a session would add and approves it (`SessionReviewSheet`) before it is kept.
+- 2.9 / 9.3 A missed practice answer is diagnosed (no answer, wrong sign, wrong number, wrong unit, opposite, missing fact) and studied again with that in mind, explained a different way each time (`struggle.ts`).
+
+Still not done: 1.1 beyond the microphone, 1.2 intro tune, 1.5 prefix reuse, 1.10 screen wake, 1.11 native exit reasons, 1.12 the last Jest leak, 2.10 Judge, 3.2 to 3.5, Part 4, Part 5, 6.4, Part 7 beyond 7.4, Part 8 except 8.9, Part 9.
+
 ## Needs attention from a person
 
 - The workspace engineering contract named in `AGENTS.md` (`../.codex/ENGINEERING_CONTRACT.md`) was not available in this container, so only `rules.md` and `CLAUDE.md` were followed.

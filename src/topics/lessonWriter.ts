@@ -6,6 +6,7 @@
 import { contentMessages, parseContent, type SquareContent, type SquareRequest } from './formats';
 import { FINISH_SHAPE, OUTLINE_SHAPE, PART_SHAPE, PIECE_MAX_CHARS, finishPart, groupsOf, outlinePart, parseFinish, parseOutline, passagesFor, sectionsPart } from './lessonParts';
 import logger from '../utils/logger';
+import { sectionsPerCall, type LessonSpeeds } from './lessonPlan';
 
 type Lesson = Extract<SquareContent, { kind: 'lesson' }>;
 export interface LessonIO {
@@ -16,15 +17,17 @@ export interface LessonIO {
   stopped: () => boolean;
 }
 
-export async function writeLessonInPieces(base: SquareRequest, io: LessonIO): Promise<Lesson> {
-  try { return await pieces(base, io); } catch (e) { io.discard(); throw e; } // a half-written lesson must not stand in for a finished one
+export async function writeLessonInPieces(base: SquareRequest, io: LessonIO, speeds: LessonSpeeds = {}): Promise<Lesson> {
+  try { return await pieces(base, io, speeds); } catch (e) { io.discard(); throw e; } // a half-written lesson must not stand in for a finished one
 }
 
-async function pieces(base: SquareRequest, io: LessonIO): Promise<Lesson> {
+async function pieces(base: SquareRequest, io: LessonIO, speeds: LessonSpeeds): Promise<Lesson> {
   const outline = await io.ask(contentMessages({ ...base, shape: OUTLINE_SHAPE, part: outlinePart, excerpts: base.excerpts?.slice(0, 3) }), parseOutline, { what: 'the outline of the lesson', maxChars: 3000 });
-  logger.log(`[LESSON] in pieces: ${outline.length} sections, ${Math.ceil(outline.length / 2)} calls for them`);
+  // Now that the outline says how many sections there are, the number per call is the one that finishes the whole lesson soonest (see lessonPlan.ts).
+  const perCall = speeds.decode ? sectionsPerCall(outline.length, speeds) : undefined;
+  logger.log(`[LESSON] in pieces: ${outline.length} sections, ${perCall ?? 2} per call, ${Math.ceil(outline.length / (perCall ?? 2))} calls for them`);
   const sections: Lesson['sections'] = [];
-  for (const group of groupsOf(outline)) {
+  for (const group of groupsOf(outline, perCall)) {
     if (io.stopped()) throw new Error('Stopped.');
     try {
       const part = await io.ask(contentMessages({ ...base, shape: PART_SHAPE, part: sectionsPart(group, outline), excerpts: passagesFor(base.excerpts, group) }),

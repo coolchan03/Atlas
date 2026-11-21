@@ -11,7 +11,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
-import { BRIEF_PROJECT, makeBriefing, previewFunFact, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
+import { BRIEF_PROJECT, funFactAttempt, makeBriefing, noFunFactMessage, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { AVOID_SUGGESTIONS } from '../atlasTools/newsSources';
 import { useStoryReview } from './BriefStorySheet';
 import { listVoices, keepScreenOn } from '../atlasVoice/tts';
@@ -328,9 +328,9 @@ export const DailyBriefScreen: React.FC = () => {
           {prefs.funFacts && prefs.interests.length > 0 && (
             <TouchableOpacity testID="brief-fact-preview" accessibilityLabel="Preview a fun fact" disabled={previewing} onPress={async () => {
               setPreviewing(true);
-              const fact = await previewFunFact(prefs.interests).catch(() => null);
+              const result = await funFactAttempt(prefs.interests).catch((): Awaited<ReturnType<typeof funFactAttempt>> => ({ kind: 'none', why: 'offline', tried: [] }));
               setPreviewing(false);
-              Alert.alert(fact ? `A fun fact about ${fact.topic}` : 'No fun fact found', fact ? `From ${fact.page}\n\n${fact.text}` : 'Nothing was found in the offline library or online. Press again to try another interest.');
+              Alert.alert(result.kind === 'found' ? `A fun fact about ${result.fact.topic}` : 'No fun fact found', result.kind === 'found' ? `From ${result.fact.page}\n\n${result.fact.text}` : noFunFactMessage(result));
             }}>
               <Text style={styles.link}>{previewing ? 'Looking...' : 'Preview a fun fact (press again for another)'}</Text>
             </TouchableOpacity>

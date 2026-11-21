@@ -45,6 +45,29 @@ export function callPhase(s: CallSnapshot): CallPhase {
 /** True when the call should open the microphone now (after LISTEN_DELAY_MS of staying idle). */
 export const shouldStartListening = (s: CallSnapshot): boolean => callPhase(s) === 'idle' && s.failedStarts < MAX_FAILED_STARTS;
 
+/** After this many failed starts the call waits, then tries again, instead of staying silent for good. Each wait is longer than the last. */
+export const RECOVERY_COOLDOWN_MS = 10_000;
+export const MAX_RECOVERY_CYCLES = 3;
+
+export type RecoveryStep = { action: 'none' } | { action: 'retry'; afterMs: number } | { action: 'give-up' };
+
+/**
+ * What to do about a microphone that keeps failing to start. The call never sits deaf while looking alive: after MAX_FAILED_STARTS it waits
+ * (10 s, then 20 s, then 30 s) and tries again, up to MAX_RECOVERY_CYCLES times, then stops and says so. The person's own choices (muted,
+ * paused) and a call that is busy doing something else are never "recovered": there is nothing wrong. Pure.
+ */
+export function recoveryStep(s: CallSnapshot, cycles: number, cooldownMs: number = RECOVERY_COOLDOWN_MS): RecoveryStep {
+  if (!s.handsFree || s.failedStarts < MAX_FAILED_STARTS) return { action: 'none' };
+  const phase = callPhase(s);
+  if (phase !== 'idle') return { action: 'none' }; // muted, paused, busy, or already listening: not a recorder problem
+  return cycles < MAX_RECOVERY_CYCLES ? { action: 'retry', afterMs: cooldownMs * (cycles + 1) } : { action: 'give-up' };
+}
+
+/** What the screen says about a microphone that did not start: still trying, or stopped and waiting for the person. */
+export const micFailureNote = (cycles: number): string => (cycles < MAX_RECOVERY_CYCLES
+  ? 'The microphone did not start. Trying again shortly...'
+  : 'The microphone could not start after several tries. Tap the button to try again, or check that no other app is using it.');
+
 /** One line for the call log when the phase changes: what it was, what it is, and how long the last phase lasted. */
 export function describePhaseChange(change: { prev: CallPhase; next: CallPhase }, sinceMs: number, extra = ''): string {
   return `[CALL-STATE] ${change.prev} -> ${change.next} after ${(Math.max(0, sinceMs) / 1000).toFixed(1)} s${extra ? ` (${extra})` : ''}`;
