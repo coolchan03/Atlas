@@ -1,4 +1,4 @@
-import { scrubTeasers, withoutTeasers } from '../../src/atlasTools/briefingScrub';
+import { scrubTeasers, withoutTeasers, withoutLeadIn } from '../../src/atlasTools/briefingScrub';
 
 describe('teasers the model makes up', () => {
   it.each([
@@ -21,6 +21,16 @@ describe('teasers the model makes up', () => {
     expect(out.starts).toEqual([1]);
     expect(out.removed).toBe(1);
     expect(scrubTeasers([{ text: 'Only a teaser: stay tuned.' }, { text: 'Real story.' }], [1]).starts).toEqual([0]);
+  });
+});
+
+describe('lines that open with the report instead of the news', () => {
+  it('tells the news directly', () => {
+    expect(withoutLeadIn('The report details how these groups are assisting families across North Texas.')).toBe('These groups are assisting families across North Texas.');
+    expect(withoutLeadIn('The article notes that prices rose. The council met on Monday.')).toBe('Prices rose. The council met on Monday.');
+  });
+  it('leaves a sentence that has no clause after it', () => {
+    expect(withoutLeadIn('The report highlights the responsibilities of the captain.')).toBe('The report highlights the responsibilities of the captain.');
   });
 });
 

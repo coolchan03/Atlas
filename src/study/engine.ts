@@ -440,7 +440,7 @@ export function withoutRepeats(fresh: PodcastLine[], before: PodcastLine[]): Pod
       if (s.n === n) return true;
       if (w.size < 5 || s.w.size < 5) return false;
       let shared = 0; w.forEach((x) => { if (s.w.has(x)) shared++; });
-      return shared / Math.min(w.size, s.w.size) >= 0.8;
+      return shared / Math.min(w.size, s.w.size) >= 0.7;
     });
     if (same) continue;
     seen.push({ n, w }); out.push(l);
@@ -517,14 +517,18 @@ async function writeOutlinedEpisode(
         if (opts.shouldStop?.() || wordCount() >= opts.targetWords * 0.95) break;
         const part = outline[seg.item];
         if (part.always) continue;
+        // A story can only be deepened as far as its source goes: a headline with a sentence of detail told again and again is where the repeats came from.
+        const room = Math.floor(part.sources.reduce((k, x) => k + x.text.length, 0) / 90) - seg.lines.length;
+        if (room < 2) continue;
         onStep(`Adding more detail to story ${segments.indexOf(seg) + 1}...`);
-        const missing = Math.max(2, Math.min(6, Math.ceil((opts.targetWords - wordCount()) / 20 / Math.max(1, segments.length))));
+        const missing = Math.min(room, Math.max(2, Math.min(6, Math.ceil((opts.targetWords - wordCount()) / 20 / Math.max(1, segments.length)))));
         try {
           const t = await ask(
             'You write natural spoken scripts from sources. Say ONLY what the sources say: never add names, numbers, dates, places or quotes that are not in them. Never tell the listener what to feel or think. Never mention source numbers.',
-            `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${opts.castFor?.(seg.item) ?? cfg.cast}.\nThis item: ${part.topic}\nThe item was already covered with these lines:\n${seg.lines.map((l) => `${l.host}: ${l.text}`).join('\n')}\n\nGo deeper: write ${missing} MORE lines that continue straight on, adding the background, who is affected and what to watch for, using only details the sources give. Do not repeat or greet.${opts.rules ? `\n${opts.rules}` : ''}\nExactly this format:\n${cfg.fmt}`,
+            `SOURCES:\n${sourceBlock(part.sources)}\n\nEpisode: "${title}". Style: ${cfg.style}. Cast: ${opts.castFor?.(seg.item) ?? cfg.cast}.\nThis item: ${part.topic}\nThe item was already covered with these lines:\n${seg.lines.map((l) => `${l.host}: ${l.text}`).join('\n')}\n\nGo deeper: write ${missing} MORE lines that continue straight on, adding the background, who is affected and what to watch for, using only details the sources give. Add only facts the lines above have not said; if the sources hold nothing more, write fewer lines. Do not repeat or greet.${opts.rules ? `\n${opts.rules}` : ''}\nExactly this format:\n${cfg.fmt}`,
           );
-          const more = withoutRepeats(parseLines(t, cfg.hosts).slice(0, missing + 1), lines);
+          // Against everything written so far, in every story, not only the first pass: a deepening pass repeated the one before it.
+          const more = withoutRepeats(parseLines(t, cfg.hosts).slice(0, missing + 1), segments.flatMap((s) => s.lines));
           if (more.length) seg.lines.push(...more);
         } catch { /* the story keeps the lines it has */ }
       }

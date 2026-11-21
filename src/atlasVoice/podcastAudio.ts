@@ -188,7 +188,8 @@ function audioContext(): any {
 function decode(path: string): Promise<any> {
   let d = decoded.get(path);
   if (!d) {
-    d = Promise.resolve(audioContext().decodeAudioData(path));
+    // A release build on Android reads any path without "file://" as a bundled asset and fails ("Failed to resolve asset").
+    d = Promise.resolve(audioContext().decodeAudioData(path.startsWith('file://') ? path : `file://${path}`));
     decoded.set(path, d);
     d.catch(() => decoded.delete(path)); // a file that cannot be decoded is tried again, and fails for real, when played
     if (decoded.size > 6) decoded.delete(decoded.keys().next().value as string);

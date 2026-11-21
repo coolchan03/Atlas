@@ -64,7 +64,8 @@ it('plays each line from a file rendered ahead in its host voice, without render
   expect(mockRendered).toEqual([
     'sid:0:Welcome to the news.', 'sid:9:Thanks, here is the first story.', 'sid:0:And the second one.', 'sid:9:Goodbye.',
   ]);
-  expect(mockPlayed[0]).toMatch(/^\/cache\/podcast-audio\/daily-brief-1\/0-/);
+  // A release build on Android reads a path with no "file://" as a bundled asset ("Failed to resolve asset"), so every file is decoded as a file URL.
+  expect(mockPlayed[0]).toMatch(/^file:\/\/\/cache\/podcast-audio\/daily-brief-1\/0-/);
   expect(await playLine('daily-brief-1', items, 1)).toBe(true);
   await new Promise((r) => setTimeout(r, 10));
   expect(mockRendered).toHaveLength(5); // only the new line ahead (4) was rendered

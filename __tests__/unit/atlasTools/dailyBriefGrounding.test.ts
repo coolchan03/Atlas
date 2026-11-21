@@ -41,11 +41,10 @@ it('writes one part per real story, keeps the headlines, and never shows the mod
   expect(r.headlines?.map(h => h.source)).toEqual(['Reuters', 'BBC']);
   const all = mockPrompts.join('\n');
   expect(all).not.toMatch(/Acme|webinar|PR Newswire/);
-  // Two news parts plus one library fun fact; each part sees only its own story. The model wrote short, so the
-  // stories are then gone back over for more depth (never the fun fact).
-  expect(mockPrompts.slice(0, 3)).toHaveLength(3);
-  expect(mockPrompts.slice(3).length).toBeGreaterThan(0);
-  expect(mockPrompts.slice(3).every((x) => x.includes('Go deeper') && !x.includes('three hearts'))).toBe(true);
+  // Two news parts plus one library fun fact; each part sees only its own story. These stories are a headline and nothing more,
+  // so they are not gone back over for "more depth": that padding is what said the same thing in new words.
+  expect(mockPrompts).toHaveLength(3);
+  expect(mockPrompts.some((x) => x.includes('Go deeper'))).toBe(false);
   expect(mockPrompts[0]).toContain('Senate passes funding bill');
   expect(mockPrompts[0]).not.toContain('Ceasefire');
   expect(mockPrompts[2]).toContain('three hearts');

@@ -13,7 +13,7 @@ describe('briefing fixes', () => {
     expect(withoutRepeats(fresh, before).map((l) => l.text)).toEqual([fresh[1].text]);
   });
   it('opens with the weekday, date and year', () => {
-    expect(greetingLine(new Date(2026, 10, 4, 8))).toBe('Good morning. Today is Wednesday, November 4, 2026, and it is 8:00 AM. This is your briefing.');
+    expect(greetingLine(new Date(2026, 10, 4, 8))).toBe('Good morning. Today is Wednesday, November 4, 2026. This is your briefing.');
   });
   it('sizes a 15 minute briefing to about 15 minutes of words', () => {
     const stories = storyBudget(15, true);
