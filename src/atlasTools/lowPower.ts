@@ -57,4 +57,10 @@ export function startLowPowerMonitor(): void {
   timer = setInterval(() => { void check(); }, 60000);
 }
 
+/** Stops watching the battery. Safe to call when not running. */
+export function stopLowPowerMonitor(): void {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
 export const checkBatteryNow = check;

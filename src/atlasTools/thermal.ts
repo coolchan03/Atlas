@@ -38,3 +38,9 @@ export function startThermalMonitor(): void {
   void checkThermalNow();
   timer = setInterval(() => { void checkThermalNow(); }, 30000);
 }
+
+/** Stops reading the heat level (the app is closing or its screen tree was unmounted). Safe to call when not running. */
+export function stopThermalMonitor(): void {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
