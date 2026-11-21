@@ -177,10 +177,27 @@ function withoutDefinition(extract: string): string {
 const dullTitle = (title: string, topic: string): boolean =>
   title.toLowerCase() === topic.toLowerCase() || /^(list|lists|outline|index|timeline|history) of\b|\(disambiguation\)|^portal:/i.test(title);
 
+/**
+ * Why a Wikipedia page cannot be the source of a fun fact, or '' when it can. Looked at by what the page SAYS, not only its title: a page that
+ * "may refer to" several things, a stub, a redirect notice, a page that is not an article, or text that is mostly not words tells nothing true or specific.
+ */
+export function unsuitableExtract(title: string, text: string): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (/^(?:category|template|file|help|wikipedia|portal|draft|talk|user|module):/i.test(title)) return 'it is not an article';
+  if (t.length < 50) return 'it is too short to hold a fact';
+  if (/\b(?:may|can) (?:also )?refer to\b|\brefers to:?\s*$|^this is a disambiguation/i.test(t.slice(0, 220))) return 'it is a page that lists several meanings';
+  if (/\b(?:is a redirect|redirects here|this (?:article|page) is a stub)\b/i.test(t.slice(0, 300))) return 'it is a redirect or stub';
+  const letters = (t.match(/\p{L}/gu) ?? []).length;
+  if (letters < t.length * 0.5) return 'it is mostly numbers or symbols, not sentences';
+  if (!/[.!?]/.test(t)) return 'it has no complete sentence';
+  return '';
+}
+
 async function wikiSummary(title: string): Promise<{ title: string; text: string } | null> {
   const json = JSON.parse(await fetchText(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, 8000));
   if (json.type === 'disambiguation') return null;
-  return { title: json.title || title, text: (json.extract || '').trim() };
+  const page = { title: json.title || title, text: (json.extract || '').trim() };
+  return unsuitableExtract(page.title, page.text) ? null : page; // an unsuitable page is passed over, so another one is tried
 }
 
 /**
@@ -213,10 +230,44 @@ async function webFacts(topic: string, startN: number): Promise<Source[]> {
 
 /** The source a fun fact would be told from for one interest right now (library first, then a related Wikipedia page), or null. For the preview on the briefing screen. */
 export async function previewFunFact(interests: string[]): Promise<{ topic: string; page: string; text: string } | null> {
-  const topic = interests[Math.floor(Math.random() * interests.length)];
-  if (!topic) return null;
-  const found = (await libraryFacts(topic, 1))[0] ?? (offGridNow() ? undefined : (await webFacts(topic, 1))[0]);
-  return found ? { topic, page: found.doc, text: found.text.slice(0, 600) } : null;
+  const result = await funFactAttempt(interests);
+  return result.kind === 'found' ? result.fact : null;
+}
+
+export type FunFactResult =
+  | { kind: 'found'; fact: { topic: string; page: string; text: string } }
+  | { kind: 'none'; why: 'no-interests' | 'off-grid' | 'offline' | 'nothing-suitable'; tried: string[] };
+
+/**
+ * One fun fact for the preview. Several interests are tried (in random order, up to three) before giving up, and when nothing comes back the
+ * result says why: no interests, off-grid mode, no connection, or pages that were found but were not suitable.
+ */
+export async function funFactAttempt(interests: string[], tries = 3): Promise<FunFactResult> {
+  const order = interests.map((t) => t.trim()).filter(Boolean).map((t) => ({ t, r: Math.random() })).sort((a, b) => a.r - b.r).map((x) => x.t);
+  if (!order.length) return { kind: 'none', why: 'no-interests', tried: [] };
+  const tried: string[] = [];
+  let connectionFailed = false;
+  for (const topic of order.slice(0, Math.max(1, tries))) {
+    tried.push(topic);
+    const fromLibrary = (await libraryFacts(topic, 1))[0];
+    if (fromLibrary) return { kind: 'found', fact: { topic, page: fromLibrary.doc, text: fromLibrary.text.slice(0, 600) } };
+    if (offGridNow()) continue;
+    try {
+      const fromWeb = (await webFacts(topic, 1))[0];
+      if (fromWeb) return { kind: 'found', fact: { topic, page: fromWeb.doc, text: fromWeb.text.slice(0, 600) } };
+    } catch { connectionFailed = true; }
+  }
+  return { kind: 'none', why: offGridNow() ? 'off-grid' : connectionFailed ? 'offline' : 'nothing-suitable', tried };
+}
+
+/** The sentence the preview shows when no fact came back: the real reason, and what the person can do. */
+export function noFunFactMessage(result: Extract<FunFactResult, { kind: 'none' }>): string {
+  switch (result.why) {
+    case 'no-interests': return 'Add at least one interest first: the fun fact is chosen from them.';
+    case 'off-grid': return 'Off-grid mode is on, so Wikipedia is not used. Only the offline library was searched, and it had nothing on these interests.';
+    case 'offline': return 'The phone could not reach Wikipedia. Check the connection and press again.';
+    default: return `Pages were found for ${result.tried.join(', ')}, but none was a suitable article for a fun fact. Press again to try other pages or interests.`;
+  }
 }
 
 type OutlineItem = { topic: string; sources: Source[]; always?: boolean };
