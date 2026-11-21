@@ -1,4 +1,4 @@
-import { layerOptions, mtpOptions, pickBest, refineOptions, tuneOptions, type TuneResult } from '../../../src/services/deviceTuner';
+import { layerOptions, mtpOptions, pickBest, refineOptions, tuneOptions, wholeReplySpeed, type TuneResult } from '../../../src/services/deviceTuner';
 import { shouldOfferFirstTest, shouldSuggestTuning, useTuned, withModelMemory } from '../../../src/atlasTools/speed';
 
 const result = (id: string, threads: number, tps: number, error?: string): TuneResult =>
@@ -104,7 +104,6 @@ describe('finding the best settings', () => {
 });
 
 describe('ranking by the whole reply', () => {
-  const { pickBest, wholeReplySpeed } = require('../../../src/services/deviceTuner');
   const opt = (id: string, threads = 4) => ({ id, label: id, backend: 'cpu', threads });
 
   it('prefers the option that finishes a typical reply sooner, even when another writes faster', () => {
