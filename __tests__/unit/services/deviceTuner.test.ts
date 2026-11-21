@@ -109,12 +109,12 @@ describe('ranking by the whole reply', () => {
   it('prefers the option that finishes a typical reply sooner, even when another writes faster', () => {
     const fastWriterSlowStart = { option: opt('npu'), tps: 20, firstWordSec: 12 }; // 150 tokens: 12 + 7.5 = 19.5 s
     const slowWriterQuickStart = { option: opt('cpu'), tps: 12, firstWordSec: 1 };  // 150 tokens: 1 + 12.5 = 13.5 s
-    expect(pickBest([fastWriterSlowStart, slowWriterQuickStart]).option.id).toBe('cpu');
+    expect(pickBest([fastWriterSlowStart, slowWriterQuickStart])!.option.id).toBe('cpu');
   });
 
   it('is the writing speed when no first-word time was recorded, so older results rank as before', () => {
     expect(wholeReplySpeed({ tps: 9, firstWordSec: 0 })).toBe(9);
-    expect(pickBest([{ option: opt('a'), tps: 5, firstWordSec: 0 }, { option: opt('b'), tps: 9, firstWordSec: 0 }]).option.id).toBe('b');
+    expect(pickBest([{ option: opt('a'), tps: 5, firstWordSec: 0 }, { option: opt('b'), tps: 9, firstWordSec: 0 }])!.option.id).toBe('b');
   });
 
   it('gives a failed option nothing', () => {
