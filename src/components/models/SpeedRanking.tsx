@@ -19,7 +19,8 @@ interface RankedModel { id: string; name: string; decode: number; prefill: numbe
 function tunedLine(tuned: { at: number | undefined; accelerator: string | undefined; memory: ModelMemory | undefined }): string {
   if (!tuned.at) return '';
   const m = tuned.memory;
-  const parts = [`tested: ${tuned.accelerator ?? 'CPU or automatic'}`, m?.cacheType && `${m.cacheType} cache`, m?.flashAttn === false && 'no flash attention', m?.nBatch && `batch ${m.nBatch}`];
+  const where = tuned.accelerator ?? (m?.inferenceBackend === 'cpu' ? 'CPU' : 'CPU or automatic');
+  const parts = [`tested: ${where}`, m?.nThreads && `${m.nThreads} threads`, m?.cacheType && `${m.cacheType} cache`, m?.flashAttn === false && 'no flash attention', m?.nBatch && `batch ${m.nBatch}`];
   return parts.filter(Boolean).join(', ');
 }
 

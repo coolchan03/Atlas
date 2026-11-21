@@ -28,6 +28,13 @@ describe('SpeedRankingCard', () => {
     expect(view.getByTestId('speed-tuned-a').props.children).toMatch(/Not tested yet/);
   });
 
+  it('says the CPU and the thread count a model was tuned to, now that they belong to that model', () => {
+    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'b', name: 'Quick One' })] });
+    useSpeedStats.setState({ byModel: { b: { decode: 18, prefill: 120, outLen: 0, samples: 2 } } as any });
+    useTuned.setState({ at: { b: 1 }, accelerator: {}, memory: { b: { inferenceBackend: 'cpu', nThreads: 4, nBatch: 1024 } } });
+    expect(render(<SpeedRankingCard />).getByTestId('speed-tuned-b').props.children).toBe('tested: CPU, 4 threads, batch 1024');
+  });
+
   it('shows nothing before any model was measured', () => {
     useSpeedStats.setState({ byModel: {} });
     expect(render(<SpeedRankingCard />).toJSON()).toBeNull();
