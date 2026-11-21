@@ -13,6 +13,7 @@ import { startStallWatchdog } from './generationWatchdog';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { remoteServerManager } from './remoteServerManager';
+import { yieldToChat } from './llmJobQueue';
 import { logIgnored } from '../utils/logIgnored';
 import {
   buildGenerationMetaImpl,
@@ -198,6 +199,7 @@ class GenerationService {
     if (this.isUsingRemoteProvider()) {
       return this.generateRemoteResponse(conversationId, messages, onFirstToken);
     }
+    await yieldToChat(); // a background lesson or report that is writing steps aside for this reply
     return generateResponseImpl(this, { conversationId, messages, onFirstToken });
   }
 
@@ -220,6 +222,7 @@ class GenerationService {
     }
     // Local generation with tools
     const { enabledToolIds, projectId, ...callbacks } = options;
+    await yieldToChat(); // a background lesson or report that is writing steps aside for this reply
     if (!(await this.prepareGeneration(conversationId))) return;
 
     try {

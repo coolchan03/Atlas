@@ -24,13 +24,41 @@ async function waitForChat(maxMs: number, shouldStop?: () => boolean): Promise<v
 
 /** How many background jobs are running: the screen stays on from the first to the last (a lesson, music, the briefing, learning, an exam). */
 let jobsInFlight = 0;
+/** Goes up each time a chat reply stops a background model call to take its place. */
+let preemptions = 0;
+/** A job whose model call was stopped for a chat reply is run again, up to this many times, after the reply. */
+const MAX_RESTARTS = 3;
+
+/**
+ * A chat reply the person asked for goes before background work. If a background job is writing right now, that call is stopped and the reply
+ * starts at once (it used to fail with "Generation already in progress"); the job notices, waits for the reply to end and asks again.
+ * Returns true when it stopped a background call.
+ */
+export async function yieldToChat(): Promise<boolean> {
+  if (jobsInFlight === 0) return false;
+  const { llmService } = require('./llm');
+  if (!llmService.isCurrentlyGenerating()) return false;
+  preemptions += 1;
+  await llmService.stopGeneration();
+  await llmService.waitForIdle(5000);
+  return true;
+}
 
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
   const run = tail.then(async () => {
-    await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
-    // The screen is held while a job really runs (not while it waits its turn).
-    if (jobsInFlight++ === 0) holdScreenAwake('background-ai');
-    try { return await asBackground(job); } finally { if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); }
+    for (let attempt = 0; ; attempt += 1) {
+      await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
+      const mark = preemptions;
+      // The screen is held while a job really runs (not while it waits its turn).
+      if (jobsInFlight++ === 0) holdScreenAwake('background-ai');
+      try {
+        const result = await asBackground(job);
+        // Stopped for a chat reply: whatever came back is a cut-off answer, not the job's result, so it is asked again after the reply.
+        if (preemptions === mark || attempt >= MAX_RESTARTS) return result;
+      } catch (error) {
+        if (preemptions === mark || attempt >= MAX_RESTARTS) throw error;
+      } finally { if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); }
+    }
   });
   tail = run.catch(() => undefined);
   return run;
