@@ -13,6 +13,22 @@ const DEFAULT_CHUNK_SIZE = 500;
 const DEFAULT_OVERLAP = 100;
 const DEFAULT_MIN_CHUNK_LENGTH = 20;
 
+/** Where a window that would end at `end` should really end: just after the last sentence end, else the last space, within the last fifth of the window. */
+export function softEnd(text: string, start: number, end: number): number {
+  if (end >= text.length) return text.length;
+  const floor = end - Math.floor((end - start) * 0.2);
+  for (let i = end; i > floor; i -= 1) if (/[.!?\n]/.test(text[i - 1]) && /\s/.test(text[i] ?? ' ')) return i;
+  for (let i = end; i > floor; i -= 1) if (/\s/.test(text[i - 1])) return i;
+  return end;
+}
+
+/** The next window starts at the start of a word, not in the middle of one (moving on by at most 30 characters; text with no spaces is left as it is). */
+function wordStart(text: string, at: number): number {
+  const limit = Math.min(text.length, at + 30);
+  for (let i = Math.max(1, at); i < limit; i += 1) if (/\s/.test(text[i - 1])) return i;
+  return Math.max(0, at);
+}
+
 function slidingWindowChunks(
   params: { text: string; chunkSize: number; overlap: number; minLength: number },
   chunks: Chunk[], startPosition: number,
@@ -21,11 +37,14 @@ function slidingWindowChunks(
   let pos = startPosition;
   let start = 0;
   while (start < text.length) {
-    const slice = text.slice(start, start + chunkSize);
+    // Windows end at a sentence (or at least a word), so a fact is not cut in half where it can be avoided.
+    const end = softEnd(text, start, start + chunkSize);
+    const slice = text.slice(start, end);
     if (slice.trim().length >= minLength) {
       chunks.push({ content: slice.trim(), position: pos++ });
     }
-    start += chunkSize - overlap;
+    if (end >= text.length) break;
+    start = Math.max(start + 1, wordStart(text, end - overlap));
   }
   return pos;
 }
@@ -69,6 +88,29 @@ export function chunkDocument(text: string, options?: ChunkOptions): Chunk[] {
   return withSectionContext(text, plainChunks(text, options));
 }
 
+/** A short title-like line: a Markdown heading, or a line with no sentence ending such as "Lease classification" or "ASC 842-20-25". */
+function isHeading(paragraph: string): boolean {
+  const p = paragraph.trim();
+  if (!p || p.includes('\n')) return false;
+  if (/^#{1,6}\s/.test(p)) return true;
+  return p.length <= 80 && !/[.!?:;,]$/.test(p) && /^[A-Z0-9\u00A7(]/.test(p);
+}
+
+/** A heading stays with the text it introduces: it is joined to the paragraph after it, so packing never leaves a title at the end of one chunk and its text in the next. */
+export function joinHeadings(paragraphs: string[]): string[] {
+  const out: string[] = [];
+  let lead = '';
+  for (const raw of paragraphs) {
+    const p = raw.trim();
+    if (!p) continue;
+    if (isHeading(p)) { lead = lead ? `${lead}\n${p}` : p; continue; }
+    out.push(lead ? `${lead}\n${p}` : p);
+    lead = '';
+  }
+  if (lead) out.push(lead);
+  return out;
+}
+
 function plainChunks(text: string, options?: ChunkOptions): Chunk[] {
   const chunkSize = options?.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const overlap = options?.overlap ?? DEFAULT_OVERLAP;
@@ -76,7 +118,7 @@ function plainChunks(text: string, options?: ChunkOptions): Chunk[] {
 
   if (!text || text.trim().length < minLength) return [];
 
-  const paragraphs = text.split(/\n\n+/);
+  const paragraphs = joinHeadings(text.split(/\n\n+/));
   const chunks: Chunk[] = [];
   let currentChunk = '';
   let position = 0;

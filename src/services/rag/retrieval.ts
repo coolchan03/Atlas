@@ -10,6 +10,15 @@ import { mergeKeywordHits } from './keywordMerge';
 import { noteStage } from '../../atlasTools/stageTimes';
 import logger from '../../utils/logger';
 
+/** The passage with its first characters dropped when they repeat the end of the passage before it (the overlap between two windows). Kept whole when the overlap is short. */
+export function withoutSharedStart(previous: string, current: string): string {
+  const max = Math.min(previous.length, current.length, 400);
+  for (let n = max; n >= 30; n -= 1) {
+    if (previous.endsWith(current.slice(0, n))) return current.slice(n).replace(/^\s+/, '');
+  }
+  return current;
+}
+
 /** Strip HTML-like tags without regex backtracking risk. */
 function stripAngleBracketTags(text: string): string {
   let result = '';
@@ -170,7 +179,9 @@ class RetrievalService {
     const sections = result.chunks.map((chunk, index) => {
       // Sanitize content to prevent prompt injection from user-uploaded documents
       const safeName = chunk.name.replaceAll(/[<>]/g, '');
-      const safeContent = stripAngleBracketTags(chunk.content);
+      // Two neighbouring passages of one document share the overlap their windows were cut with: it is sent once, not twice.
+      const before = result.chunks.find((c) => c.doc_id === chunk.doc_id && c.position === chunk.position - 1);
+      const safeContent = stripAngleBracketTags(before ? withoutSharedStart(before.content, chunk.content) : chunk.content);
       return `[Source ${index + 1}: ${safeName} (part ${chunk.position + 1})]\n${safeContent}`;
     });
 

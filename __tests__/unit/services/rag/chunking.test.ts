@@ -141,3 +141,35 @@ describe('chunkDocument', () => {
     expect(chunkDocument(null as any)).toEqual([]);
   });
 });
+
+describe('section-aware chunks', () => {
+  const { joinHeadings, softEnd } = require('../../../../src/services/rag/chunking');
+
+  it('keeps a heading with the text it introduces, so a title is never left at the end of a chunk', () => {
+    expect(joinHeadings(['Intro text here.', 'Lease classification', 'A lease is a finance lease when it transfers ownership.'])).toEqual([
+      'Intro text here.',
+      'Lease classification\nA lease is a finance lease when it transfers ownership.',
+    ]);
+    expect(joinHeadings(['## Cash', 'Cash is money.', '## Debts'])).toEqual(['## Cash\nCash is money.', '## Debts']);
+    const filler = 'Revenue is recognised when control of a good or service passes to the customer. '.repeat(5).trim();
+    const chunks = chunkDocument(`${filler}\n\nLease classification\n\n${filler}`, { chunkSize: 500, overlap: 50 });
+    expect(chunks.every((c) => !c.content.trimEnd().endsWith('Lease classification'))).toBe(true);
+    expect(chunks.some((c) => c.content.includes('Lease classification\nRevenue'))).toBe(true);
+  });
+
+  it('ends a long paragraph\'s windows at a sentence, not in the middle of a word', () => {
+    const sentence = 'The lessee records a right-of-use asset at the start. ';
+    const chunks = chunkDocument(sentence.repeat(30).trim(), { chunkSize: 200, overlap: 40 });
+    expect(chunks.length).toBeGreaterThan(3);
+    for (const c of chunks) expect(c.content).toMatch(/\.$/);
+    const words = new Set(sentence.split(/\s+/).filter(Boolean));
+    for (const c of chunks) expect(words.has(c.content.split(/\s+/)[0])).toBe(true); // every window starts on a whole word
+  });
+
+  it('moves a window end back only within its last fifth, and leaves text with no spaces alone', () => {
+    expect(softEnd('aaa bbb ccc ddd', 0, 13)).toBe(12); // after the space, inside the last fifth
+    expect(softEnd('aaa bbb ccc ddd', 0, 10)).toBe(10); // the nearest space is further back than a fifth: not moved
+    expect(softEnd('x'.repeat(100), 0, 50)).toBe(50);
+    expect(softEnd('short', 0, 50)).toBe(5);
+  });
+});
