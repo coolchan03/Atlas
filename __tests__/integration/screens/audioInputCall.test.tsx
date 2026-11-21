@@ -123,4 +123,17 @@ describe('a speech engine that never answers', () => {
     view.unmount();
     jest.dontMock('../../../src/atlasVoice/callLifecycle');
   }, 30000);
+  it('cancels through the newest callback, not the one from the render the call started in', async () => {
+    jest.resetModules();
+    jest.doMock('../../../src/atlasVoice/callLifecycle', () => ({ ...jest.requireActual('../../../src/atlasVoice/callLifecycle'), TRANSCRIBE_GIVE_UP_MS: 1 }));
+    const { props, view, rtl, React, AtlasAudioInput } = await setup({ handsFree: true, isTranscribing: true });
+    const newer = jest.fn();
+    // The chat input hands over a new callback each render (it reads the recorder's current state): the call must use the latest one.
+    view.rerender(React.createElement(AtlasAudioInput, { ...props, onCancelRecording: newer }));
+    for (let t = 0; t < 2400; t += 200) await rtl.act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+    expect(newer).toHaveBeenCalledTimes(1);
+    expect(props.onCancelRecording).not.toHaveBeenCalled();
+    view.unmount();
+    jest.dontMock('../../../src/atlasVoice/callLifecycle');
+  }, 30000);
 });
