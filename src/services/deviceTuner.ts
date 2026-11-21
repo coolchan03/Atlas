@@ -107,14 +107,27 @@ function batchOptions(base: TuneOption, current: number): TuneOption[] {
 /** A refinement must beat the plain winner by this much to be kept: smaller differences are measuring noise. */
 const REFINE_GAIN = 1.08;
 
-/** The fastest result; when two are within 5%, the one with fewer threads (cooler and kinder to the battery). */
+/** A typical chat reply, in tokens: what "the whole reply" means when options are ranked. */
+export const TYPICAL_REPLY_TOKENS = 150;
+
+/**
+ * Speed over a whole reply: tokens written divided by the time from asking to the last word (the wait for the first word plus the writing).
+ * Ranking by writing speed alone prefers an accelerator that starts slowly but writes fast, which is slower for the replies people read.
+ * With no first-word time recorded it is the writing speed, as before.
+ */
+export function wholeReplySpeed(r: { tps: number; firstWordSec: number }): number {
+  if (!(r.tps > 0)) return 0;
+  return r.firstWordSec > 0 ? TYPICAL_REPLY_TOKENS / (r.firstWordSec + TYPICAL_REPLY_TOKENS / r.tps) : r.tps;
+}
+
+/** The result that finishes a typical reply soonest; when two are within the timing noise, the one with fewer threads (cooler and kinder to the battery). */
 export function pickBest(results: TuneResult[]): TuneResult | null {
   const ok = results.filter((r) => !r.error && r.tps > 0);
   if (!ok.length) return null;
-  const topResult = ok.reduce((a, b) => (b.tps > a.tps ? b : a));
+  const topResult = ok.reduce((a, b) => (wholeReplySpeed(b) > wholeReplySpeed(a) ? b : a));
   // Two results closer than the noise in the timings are a tie, and a tie goes to the cooler, kinder setting (fewer threads).
   const band = tieBand(topResult.spread ?? 0);
-  return ok.filter((r) => r.tps >= topResult.tps * (1 - band)).sort((a, b) => a.option.threads - b.option.threads || b.tps - a.tps)[0];
+  return ok.filter((r) => wholeReplySpeed(r) >= wholeReplySpeed(topResult) * (1 - band)).sort((a, b) => a.option.threads - b.option.threads || wholeReplySpeed(b) - wholeReplySpeed(a))[0];
 }
 
 /** The NPU and GPU backends worth timing for this model on this phone (the same rule Automatic uses to choose). */
