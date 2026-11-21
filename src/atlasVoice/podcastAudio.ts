@@ -10,6 +10,7 @@ import { sha256 } from 'js-sha256';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { canPreRender, speakAndWait, synthesizeLineToFile } from './tts';
 import { hostVoices, pickedHostVoice, restoreSavedVoice, withVoice } from './neural';
+import { fromBase64, trimWavSilence } from './wavTrim';
 import { useVoiceProfiles } from './profiles';
 import { profileCacheKey, profileForKey } from './hostVoiceKeys';
 import { makeJingle, wavBytes, toBase64, jingleSeconds, JINGLE_PEAK, type JingleKind, type JingleVolume } from './jingles';
@@ -117,7 +118,8 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
           profile ? { id: profile.voiceId, sid: profile.sid, referenceId: profile.referenceId } : null,
           () => synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch }),
         );
-        podNote('log', `[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")`);
+        const saved = await trimRenderedLine(out);
+        podNote('log', `[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")${saved ? `, ${saved.toFixed(2)}s of silence trimmed` : ''}`);
         return out;
       } catch (e: any) {
         podNote('warn', `[POD] could not render line ${i}: ${e?.message ?? e}`);
@@ -129,6 +131,25 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
   schedulePump();
   return result;
 }
+
+/**
+ * Cuts the silence a voice leaves at both ends of a rendered line, once, when it is made, so the background player (which plays whole files) does
+ * not stack it on the designed pause between stories. Returns the seconds saved. Best effort: any problem leaves the line as the voice made it.
+ */
+async function trimRenderedLine(path: string): Promise<number> {
+  try {
+    const bytes = fromBase64(await RNFS.readFile(path, 'base64'));
+    const trimmed = trimWavSilence(bytes);
+    if (!trimmed) return 0;
+    const tmp = `${path}.trim`;
+    await RNFS.writeFile(tmp, toBase64(trimmed), 'base64');
+    await RNFS.unlink(path);
+    try { await RNFS.moveFile(tmp, path); } catch { await RNFS.copyFile(tmp, path); await RNFS.unlink(tmp).catch(() => undefined); }
+    const rate = u32LE(bytes, 24) || 22050;
+    return (bytes.length - trimmed.length) / (rate * 2);
+  } catch { return 0; }
+}
+const u32LE = (b: Uint8Array, at: number): number => (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0;
 
 /** Deletes the audio of all but the newest episodes, so the cache does not grow forever. */
 export async function pruneEpisodes(keepKey: string): Promise<void> {
