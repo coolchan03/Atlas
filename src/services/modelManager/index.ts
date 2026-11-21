@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import logger from '../../utils/logger';
+import { useSpecBenefit } from '../../atlasTools/specBenefit';
 import { getMmProjFileSize } from '../../utils/modelHelpers';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
@@ -462,6 +463,8 @@ class ModelManager {
   /** Atlas: Enable or Disable an attached picture/MTP file. Disabled keeps the file but the engine never starts it. */
   async setAttachmentEnabled(modelId: string, kind: AttachmentKind, enabled: boolean): Promise<void> {
     await this.changeLlama(modelId, m => applyEnabled(m, kind, enabled));
+    // Switching MTP on by hand is the person overruling a measured slowdown: the measuring starts over, so the new replies decide.
+    if (enabled && kind === 'draft') useSpecBenefit.getState().forget(modelId);
   }
 
   /** Atlas: Detach. The model forgets the file; the file stays on the phone and is not attached again by the folder scan. */

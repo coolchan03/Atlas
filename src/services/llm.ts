@@ -1,6 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { useAccelRecord } from '../atlasTools/accelRecord';
+import { useSpecBenefit } from '../atlasTools/specBenefit';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -234,7 +235,10 @@ class LLMService {
         notes.push('Safe Model Loading is on: this model runs on the CPU, without the picture file and without MTP drafting.');
         mmProjPath = undefined;
       }
-      const wantsMtp = !safeMode && settings.useMtp !== false;
+      // Speculative decoding that has been measured slower for this model on this phone is left off (and said so). Switching it on again by hand starts the measuring over.
+      const speed = mtpAttached && !safeMode && settings.useMtp !== false ? useSpecBenefit.getState().decide(useAppStore.getState().activeModelId ?? '') : { off: false } as { off: boolean; note?: string };
+      if (speed.off && speed.note) notes.push(speed.note);
+      const wantsMtp = !safeMode && settings.useMtp !== false && !speed.off;
       const mtpWanted = wantsMtp && mtpAttached;
       if (this.currentModelPath === modelPath && this.requestedBackendAtLoad === requested &&
           (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized) &&
