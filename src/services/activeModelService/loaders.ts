@@ -14,13 +14,10 @@ import { modelManager } from '../modelManager';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
 import logger from '../../utils/logger';
+import { beginLoad, loadWorked, loadFailed } from '../../atlasTools/ctxGuard';
 import RNFS from 'react-native-fs';
-import {
-  canKeepMmProjLink,
-  isMMProjFile,
-  pickMmProjForModel,
-} from '../mmproj';
-import { sizeToBytes } from '../../utils/fileSize';
+import { isMMProjFile, mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
+import { isAttachmentActive, mayAutoAttach } from '../modelManager/attachments';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
@@ -35,6 +32,9 @@ export async function resolveMmProjPath(
   model: LlamaDownloadedModel,
   modelId: string,
 ): Promise<string | undefined> {
+  // A picture file that is switched off, detached or archived is not started and not looked for: the folder scan
+  // below would otherwise attach it again behind the user's back.
+  if (model.mmProjPath ? !isAttachmentActive(model, 'vision') : !mayAutoAttach(model, 'vision')) return undefined;
   // Fast path: a persisted mmProjPath that still exists AND actually belongs to this model. The old
   // first-match scan could persist a MISMATCHED projector (E2B model → E4B mmproj); without the belongs-to
   // check the fast path would keep returning that stale wrong path forever, so the vision fix never lands on
@@ -42,7 +42,7 @@ export async function resolveMmProjPath(
   if (model.mmProjPath && (await RNFS.exists(model.mmProjPath))) {
     const persistedName = model.mmProjPath.substring(model.mmProjPath.lastIndexOf('/') + 1);
     const modelName = model.filePath.substring(model.filePath.lastIndexOf('/') + 1);
-    if (canKeepMmProjLink(modelName, persistedName)) {
+    if ((model as any).mmProjManual || modelId.startsWith('local_import/') || mmProjBelongsToModel(modelName, persistedName)) {
       return model.mmProjPath;
     }
     logger.warn(`[LLM] persisted mmproj "${persistedName}" does not belong to model "${modelName}" — rescanning`);
@@ -63,7 +63,10 @@ export async function resolveMmProjPath(
         ...m,
         mmProjPath: mmProjFile.path,
         mmProjFileName: mmProjFile.name,
-        mmProjFileSize: sizeToBytes(mmProjFile.size),
+        mmProjFileSize:
+          typeof mmProjFile.size === 'string'
+            ? Number.parseInt(mmProjFile.size, 10)
+            : mmProjFile.size,
         isVisionModel: true,
       };
     });
@@ -106,7 +109,8 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
 
     const preferredBackend = ctx.store.settings.liteRTBackend;
 
-    const maxTokens = ctx.store.settings.liteRTMaxTokens ?? 4096;
+    await beginLoad('litert', ctx.modelId);
+    const maxTokens = useAppStore.getState().settings.liteRTMaxTokens ?? 4096;
     const contextScalar = Math.max(1, maxTokens / 4096);
     const baseTimeoutMs = 90_000;
     const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
@@ -132,7 +136,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     if (actualBackend !== preferredBackend) {
       if (preferredBackend === 'gpu' && actualBackend === 'cpu' && maxTokens > 8192 && Platform.OS === 'android') {
         ToastAndroid.showWithGravity(
-          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU — reduce context length to use GPU.`,
+          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU - reduce context length to use GPU.`,
           ToastAndroid.LONG,
           ToastAndroid.BOTTOM,
         );
@@ -153,7 +157,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     // instant a LiteRT model loads, with nothing actually changed.
     ctx.store.setLoadedSettings({
       liteRTBackend: ctx.store.settings.liteRTBackend,
-      liteRTMaxTokens: ctx.store.settings.liteRTMaxTokens,
+      liteRTMaxTokens: useAppStore.getState().settings.liteRTMaxTokens,
       // Fields not used by LiteRT — set to current values so llama checks don't misfire
       contextLength: ctx.store.settings.contextLength,
       enableGpu: ctx.store.settings.enableGpu,
@@ -161,26 +165,54 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       nThreads: ctx.store.settings.nThreads,
       nBatch: ctx.store.settings.nBatch,
       flashAttn: ctx.store.settings.flashAttn,
-      speculativeDecoding: ctx.store.settings.speculativeDecoding,
       cacheType: ctx.store.settings.cacheType,
     });
 
+    await loadWorked('litert', ctx.modelId);
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    ctx.store.setActiveModelId(null); // load FAILED → no active model, consistently (never a stale selection)
+    // Preserve selection on failed load; a retry after correcting backend settings
+    // must not require re-selecting the model or hide the chat composer.
     throw error;
   } finally {
     ctx.onFinally();
   }
 }
 
+/** Atlas: if a bigger memory size (context) broke the load, go back to the last size that worked and try once more. */
+/** The MTP options of a model, only the ones it has (so a model without MTP loads exactly as before). */
+function mtpOptions(model: DownloadedModel): { draftPath?: string; embeddedMtp?: boolean } {
+  if (model.engine !== 'llama') return {};
+  // A draft file that is switched off stays attached but is not handed to the engine, so no draft runtime or memory is set up.
+  const draftOn = model.draftPath && isAttachmentActive(model, 'draft');
+  return { ...(draftOn ? { draftPath: model.draftPath } : {}), ...(model.embeddedMtp ? { embeddedMtp: true } : {}) };
+}
+
+/** The attached parts the user has switched off for this model, so the load report can say why they are not running. */
+function switchedOffOption(model: LlamaDownloadedModel): { switchedOff?: { vision?: boolean; mtp?: boolean } } {
+  const switchedOff = {
+    ...(model.mmProjPath && model.mmProjDisabled ? { vision: true } : {}),
+    ...(model.draftPath && model.draftDisabled ? { mtp: true } : {}),
+  };
+  // Left out entirely when nothing is switched off, so a model with no disabled parts loads exactly as it always did.
+  return Object.keys(switchedOff).length ? { switchedOff } : {};
+}
+
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
-  // Route LiteRT models to the LiteRT loader — existing llama path is untouched below
-  if (ctx.model.engine === 'litert') {
-    return doLoadLiteRTModel(ctx);
+  const engine = ctx.model.engine === 'litert' ? 'litert' : 'llama';
+  try {
+    return await (engine === 'litert' ? doLoadLiteRTModel(ctx) : doLoadTextModelOnce(ctx));
+  } catch (error) {
+    const back = await loadFailed(engine, ctx.modelId);
+    if (back === null) throw error;
+    return engine === 'litert' ? doLoadLiteRTModel(ctx) : doLoadTextModelOnce(ctx);
   }
+}
+
+async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
+  if (ctx.model.engine === 'litert') return doLoadLiteRTModel(ctx); // (narrows the type below)
 
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
@@ -193,20 +225,25 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
-        () =>
+        () => {
+          // The native load keeps running after we stop waiting. Tell the service to release what it builds
+          // instead of publishing a model nobody is tracking (that stray context held the memory for the next load).
+          llmService.abandonPendingLoad();
           reject(
             new Error(
               `Text model loading timed out after ${ctx.timeoutMs / 1000}s. ` +
                 'Try a smaller model or reduce context length in settings.',
             ),
-          ),
+          );
+        },
         ctx.timeoutMs,
       );
     });
 
+    await beginLoad('llama', ctx.modelId);
     try {
       await Promise.race([
-        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override }),
+        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), ...switchedOffOption(ctx.model) }),
         timeoutPromise,
       ]);
     } finally {
@@ -218,12 +255,19 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     // (incompatible file), clear it so the eye icon reappears for repair.
     // Only applies when the link was already persisted before this load attempt — not
     // when resolveMmProjPath just discovered the file via directory scan.
-    if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
+    // The Vulkan engine is text only by design, so it reports no picture support for a model whose
+    // picture file is fine: leave the link in place for the engines that can use it.
+    const onVulkan = /vulkan/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
+    // A picture file that was left out on purpose (Safe Model Loading, a crash last time, switched off) is not a broken
+    // link: only forget the association when the engine really tried it and could not use it.
+    const visionLeftOut = !!llmService.getLoadReport?.()?.vision.skippedBecause && llmService.getLoadReport?.()?.vision.skippedBecause !== 'the engine could not start it';
+    if (ctx.model.mmProjPath && isAttachmentActive(ctx.model, 'vision') && !multimodalSupport?.vision && !onVulkan && !visionLeftOut) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 
-    // Capture settings that require model reload
-    const { settings } = ctx.store;
+    await loadWorked('llama', ctx.modelId);
+    // Capture settings that require model reload (read fresh: the memory-size guard may have changed them)
+    const settings = useAppStore.getState().settings;
     const reloadSettings = {
       enableGpu: settings.enableGpu,
       inferenceBackend: settings.inferenceBackend,
@@ -232,7 +276,6 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       nBatch: settings.nBatch,
       contextLength: settings.contextLength,
       flashAttn: settings.flashAttn,
-      speculativeDecoding: settings.speculativeDecoding,
       // Store the effective cache type (f16 may be forced for OpenCL) so the
       // banner doesn't show a false mismatch when the user setting differs.
       cacheType: settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType,
@@ -243,7 +286,8 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    ctx.store.setActiveModelId(null); // load FAILED → no active model, consistently (never a stale selection)
+    // Preserve selection on failed load; a retry after correcting backend settings
+    // must not require re-selecting the model or hide the chat composer.
     throw error;
   } finally {
     ctx.onFinally();
@@ -294,7 +338,7 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
           ctx.model.modelPath,
           ctx.imageThreads,
           {
-            backend: 'auto',
+            backend: ctx.model.backend === 'sdcpp' ? 'sdcpp' : (ctx.cpuOnly ? 'mnn' : (ctx.model.backend === 'mnn' || ctx.model.backend === 'qnn' ? ctx.model.backend : 'auto')),
             cpuOnly: ctx.cpuOnly,
             attentionVariant: ctx.model.attentionVariant,
             preferGpu: ctx.preferGpu,
@@ -309,6 +353,10 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
     ctx.onLoaded(ctx.modelId, ctx.imageThreads);
     ctx.store.setActiveImageModelId(ctx.modelId);
   } catch (error) {
+    // If the outer JS timeout/error wins a race with native startup, explicitly
+    // tear native state down before clearing JS bookkeeping. This prevents a
+    // late native success from leaving an unmanaged image model resident.
+    await onnxImageGeneratorService.unloadModel().catch(() => {});
     ctx.onError();
     throw error;
   } finally {

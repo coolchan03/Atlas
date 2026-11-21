@@ -1,36 +1,21 @@
-let fallbackSequence = 0;
-
-function randomBytes(): Uint8Array {
-  const bytes = new Uint8Array(16);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-    return bytes;
-  }
-
-  // App bootstrap installs react-native-get-random-values. This fallback keeps
-  // isolated JS environments functional without weakening the persisted format.
-  fallbackSequence += 1;
-  let seed = ((Date.now() >>> 0) ^ fallbackSequence) >>> 0;
-  for (let index = 0; index < bytes.length; index += 1) {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; // NOSONAR
-    bytes[index] = seed % 256;
-  }
-  return bytes;
-}
-
-/** Generate an RFC 4122 version-4 UUID for persisted cross-device identity. */
+/**
+ * Generate a unique ID using crypto.getRandomValues when available,
+ * with a Date.now()-based fallback for environments where the Web Crypto
+ * API is not exposed (e.g. older Hermes builds on Android).
+ */
+let sequence = 0;
 export function generateId(): string {
-  const bytes = randomBytes();
-  bytes[6] = (bytes[6] % 16) + 64;
-  bytes[8] = (bytes[8] % 64) + 128;
-  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0'));
-  return [
-    hex.slice(0, 4).join(''),
-    hex.slice(4, 6).join(''),
-    hex.slice(6, 8).join(''),
-    hex.slice(8, 10).join(''),
-    hex.slice(10, 16).join(''),
-  ].join('-');
+  let random: string;
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    random = array[0].toString(36);
+  } else {
+    // Fallback (Hermes on Android has no Web Crypto): random bits plus a counter that never repeats, so two ids made in the same
+    // millisecond (a loop adding voices, messages or widgets) can never be the same. Not cryptographically secure, but fine for local IDs.
+    random = `${Math.floor(Math.random() * 2 ** 30).toString(36)}${(sequence++).toString(36)}`; // NOSONAR
+  }
+  return `${Date.now()}-${random}`;
 }
 
 /**
@@ -43,7 +28,6 @@ export function generateRandomSeed(): number {
     return a[0] % 2147483647;
   }
   // Fallback for environments without crypto API
-  return Math.floor(
-    (((Date.now() * 9301 + 49297) % 233280) / 233280) * 2147483647,
-  ); // NOSONAR
+  // Not derived from the clock: seeds asked for in the same millisecond (a batch of images) would be identical.
+  return Math.floor(Math.random() * 2147483647); // NOSONAR
 }

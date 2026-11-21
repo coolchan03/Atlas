@@ -6,16 +6,17 @@
  * model are already configured ('hit continue, it skipped onboarding — good UX')." This locks that happy
  * path as a regression guard.
  *
- * Product-correct outcome (OGAM user's view): Auto Setup is the default onboarding step. A user who
- * chooses "Configure it yourself" reaches Advanced Setup. If the user connects to a network server
- * that has a model, tapping "Continue" on the "Connected!" sheet drops them into the main app.
+ * Product-correct outcome (OGAM user's view): while on the ModelDownload onboarding step (the "remaining
+ * onboarding"), if the user connects to a network server that has a model, tapping "Continue" on the
+ * "Connected!" sheet drops them into the main app (the tab bar / Home) and does NOT leave them on — or
+ * bounce them back to — the ModelDownload onboarding step.
  *
  * Entry point + gestures (real, arrive-via-UI):
  *  - Mount the REAL AppNavigator inside a REAL NavigationContainer. With onboarding already completed but
- *    NO downloaded on-device model, the initial route is Auto Setup.
- *  - Tap "Configure it yourself" to reach Advanced Setup.
- *  - Add a server the real way: tap "Add manually", type a name + endpoint into the real modal, tap "Test
- *    Connection" (the real probe runs over the faked /v1/models), then tap the modal's "Add manually" save.
+ *    NO downloaded on-device model, the initial route is 'ModelDownload' — i.e. the remaining onboarding
+ *    step the user still sees.
+ *  - Add a server the real way: tap "Add Server", type a name + endpoint into the real modal, tap "Test
+ *    Connection" (the real probe runs over the faked /v1/models), then tap the modal's "Add Server" save.
  *  - Back on the onboarding screen the real health check marks the server reachable and renders its
  *    "Connect" button. Tap Connect → the real handleConnectServer runs testConnection + sets the active
  *    remote text model, then shows the "Connected!" sheet with a "Continue" button.
@@ -36,7 +37,6 @@
  */
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-jest.unmock('@react-navigation/native');
 import { NavigationContainer } from '@react-navigation/native';
 
 // Safe-area infra (jsdom has no native safe-area). Presentation-only shim, not app logic — the same
@@ -71,27 +71,23 @@ function installFetch(reachable: boolean) {
   });
 }
 
-/** Enter Advanced Setup from Auto Setup, then add and connect a server through the real modal. */
+/** Arrive-via-UI on the ModelDownload onboarding step, then add + connect a server through the real modal. */
 async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
-  fireEvent.press(await waitFor(() => ui.getByTestId('auto-setup-advanced'), { timeout: 4000 }));
-  await waitFor(() => { expect(ui.queryByTestId('model-download-screen')).not.toBeNull(); }, { timeout: 4000 });
-
   // Real gesture: open the Add Server modal from the onboarding screen.
-  // The onboarding screen's own button, which is not the Remote Servers screen's one.
   fireEvent.press(await waitFor(() => ui.getByText('Add Server')));
 
   // Fill the real modal (targeted by placeholders, like the RemoteServersScreen flow).
-  fireEvent.changeText(await waitFor(() => ui.getByPlaceholderText('Off Grid AI Desktop')), 'My Desktop');
-  fireEvent.changeText(ui.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
+  fireEvent.changeText(await waitFor(() => ui.getByPlaceholderText('e.g., My laptop')), 'My Desktop');
+  fireEvent.changeText(ui.getByPlaceholderText('https://server.example:7878'), 'http://localhost:1234');
 
   // Test Connection first — the real probe runs over the faked /v1/models. Save stays disabled until it
   // succeeds, so this is a required real step (mirrors the real add-server UX).
-  fireEvent.press(ui.getByTestId('test-connection'));
+  fireEvent.press(ui.getByText('Test Connection'));
   await waitFor(() => { expect(ui.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
 
-  // Save the server (the modal's "Add manually", the last such text).
-  fireEvent.press(ui.getByTestId('save-server'));
-  await waitFor(() => { expect(ui.queryByTestId('server-name')).toBeNull(); }, { timeout: 4000 });
+  // Save the server (the modal's "Add Server", the last such text).
+  const addButtons = ui.getAllByText('Add Server');
+  fireEvent.press(addButtons[addButtons.length - 1]);
 
   // The onboarding screen's real health check now marks the server reachable → its Connect button renders.
   const connect = await waitFor(() => ui.getByTestId(/^discovered-server-.*-connect$/), { timeout: 4000 });
@@ -105,12 +101,12 @@ describe('T095 — server + model configured → tap Continue → routes into th
     // Fresh remote-server slate so the added server is the only row.
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
     // Onboarding slides already done + NO on-device model downloaded → the initial route is the remaining
-    // onboarding step, Auto Setup (per AppNavigator's initial-route logic). This is BOOT state, not a
+    // onboarding step, 'ModelDownload' (per AppNavigator's initial-route logic). This is BOOT state, not a
     // fabrication of the tested outcome — the outcome (skipping to Main) is produced by the gestures below.
     useAppStore.setState({ hasCompletedOnboarding: true, downloadedModels: [], deviceInfo: createDeviceInfo() });
   });
 
-  it('moves from Auto Setup through Advanced Setup and lands on Home after a server connects', async () => {
+  it('lands on the main app (Home) and the ModelDownload onboarding step is gone after Continue', async () => {
     installFetch(true); // a reachable server with a model exists on the network
     const ui = render(
       <NavigationContainer>
@@ -118,9 +114,8 @@ describe('T095 — server + model configured → tap Continue → routes into th
       </NavigationContainer>,
     );
 
-    // Auto Setup is the default. Advanced Setup is not shown until the user asks for it.
-    await waitFor(() => { expect(ui.queryByTestId('auto-setup-screen')).not.toBeNull(); }, { timeout: 4000 });
-    expect(ui.queryByTestId('model-download-screen')).toBeNull();
+    // Pre-condition: we ARE on the remaining onboarding step and NOT yet in the app.
+    await waitFor(() => { expect(ui.queryByTestId('model-download-screen')).not.toBeNull(); }, { timeout: 4000 });
     expect(ui.queryByTestId('home-tab')).toBeNull();
 
     await addAndConnectServerViaUI(ui);

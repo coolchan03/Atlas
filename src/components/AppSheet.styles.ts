@@ -14,12 +14,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     bottom: 0,
     backgroundColor: '#000000',
   },
-  keyboardUnderlay: {
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   sheet: {
     overflow: 'hidden' as const,
     ...shadows.large,
@@ -43,14 +37,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.text,
     flex: 1,
     marginRight: SPACING.md,
-  },
-  headerBack: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    marginRight: SPACING.md,
-  },
-  headerBackIcon: {
-    color: colors.primary,
   },
   headerClose: {
     ...TYPOGRAPHY.body,

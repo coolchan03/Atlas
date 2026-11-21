@@ -1,7 +1,6 @@
 package ai.offgridmobile.download
 
 import android.app.Application
-import kotlin.io.path.createTempFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -106,7 +105,7 @@ class DownloadManagerModuleTest {
         assertTrue(values.contains("COMPLETED"))
         assertTrue(values.contains("FAILED"))
         assertTrue(values.contains("CANCELLED"))
-        assertTrue(values.contains("PAUSED"))
+        assertFalse("PAUSED must not exist in V2", values.contains("PAUSED"))
     }
 
     @Test
@@ -151,7 +150,7 @@ class DownloadManagerModuleTest {
     @Test
     fun computeFileSha256MatchesKnownHash() {
         // echo -n "hello" | sha256sum = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
-        val tmp = createTempFile("sha256test", ".bin").toFile()
+        val tmp = createTempFile("sha256test", ".bin")
         try {
             tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
             assertEquals(
@@ -166,7 +165,7 @@ class DownloadManagerModuleTest {
     @Test
     fun computeFileSha256EmptyFileReturnsKnownHash() {
         // sha256 of empty input = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-        val tmp = createTempFile("sha256empty", ".bin").toFile()
+        val tmp = createTempFile("sha256empty", ".bin")
         try {
             tmp.writeBytes(ByteArray(0))
             assertEquals(
@@ -180,7 +179,7 @@ class DownloadManagerModuleTest {
 
     @Test
     fun computeFileSha256IsCaseInsensitiveCompatible() {
-        val tmp = createTempFile("sha256case", ".bin").toFile()
+        val tmp = createTempFile("sha256case", ".bin")
         try {
             tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
             val hash = WorkerDownload.computeFileSha256(tmp)
@@ -304,4 +303,37 @@ class DownloadManagerModuleTest {
             as android.app.NotificationManager
         assertNotNull(mgr.getNotificationChannel("model_downloads"))
     }
+
+    // ── DownloadManagerModule.isStrandedWork ──────────────────────────────────
+
+    @Test
+    fun strandedWhenWorkManagerHasNoRecord() {
+        assertTrue(DownloadManagerModule.isStrandedWork(emptyList()))
+    }
+
+    @Test
+    fun strandedWhenAllWorkCancelledOrFailed() {
+        assertTrue(DownloadManagerModule.isStrandedWork(listOf(androidx.work.WorkInfo.State.CANCELLED)))
+        assertTrue(
+            DownloadManagerModule.isStrandedWork(
+                listOf(androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED),
+            ),
+        )
+    }
+
+    @Test
+    fun notStrandedWhileWorkIsLive() {
+        assertFalse(DownloadManagerModule.isStrandedWork(listOf(androidx.work.WorkInfo.State.RUNNING)))
+        assertFalse(DownloadManagerModule.isStrandedWork(listOf(androidx.work.WorkInfo.State.ENQUEUED)))
+        assertFalse(DownloadManagerModule.isStrandedWork(listOf(androidx.work.WorkInfo.State.BLOCKED)))
+    }
+
+    @Test
+    fun retryingAndWaitingRowsAreTreatedAsActive() {
+        assertTrue(DownloadStatus.RETRYING in DownloadManagerModule.ACTIVE_STATUSES)
+        assertTrue(DownloadStatus.WAITING_FOR_NETWORK in DownloadManagerModule.ACTIVE_STATUSES)
+        assertFalse(DownloadStatus.CANCELLED in DownloadManagerModule.ACTIVE_STATUSES)
+        assertFalse(DownloadStatus.COMPLETED in DownloadManagerModule.ACTIVE_STATUSES)
+    }
 }
+

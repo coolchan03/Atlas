@@ -2,12 +2,6 @@
  * HTTP Client Utilities - image conversion, network validation, endpoint testing
  */
 
-import { isTailscaleIPv4 } from '../utils/network';
-import {
-  REMOTE_FETCH_REDIRECT_POLICY,
-  remoteAuthorizationHeaders,
-} from './remoteTransportPolicy';
-
 function mimeTypeFromExtension(ext: string | undefined): string {
   if (ext === 'png') return 'image/png';
   if (ext === 'gif') return 'image/gif';
@@ -65,8 +59,8 @@ export async function imageToBase64DataUrl(uri: string): Promise<string> {
 }
 
 /**
- * Validate that an endpoint is on a private network or a private Tailscale tailnet.
- * Returns true for private endpoints, false for public internet addresses.
+ * Validate that an endpoint is on a private network
+ * Returns true for private IPs, false for public internet addresses
  */
 export function isPrivateNetworkEndpoint(endpoint: string): boolean {
   try {
@@ -85,10 +79,7 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // Private IP ranges
     // 10.0.0.0 - 10.255.255.255
-    if (
-      hostname.startsWith('10.') ||
-      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-    ) {
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
       return true;
     }
 
@@ -111,11 +102,6 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
       return true;
     }
 
-    // 100.64.0.0 - 100.127.255.255 (Tailscale CGNAT tailnet addresses)
-    if (isTailscaleIPv4(hostname)) {
-      return true;
-    }
-
     // .local (mDNS/Bonjour)
     return hostname.endsWith('.local');
   } catch {
@@ -133,43 +119,42 @@ export async function testEndpoint(
   apiKey?: string,
 ): Promise<{ success: boolean; error?: string; latency?: number }> {
   const startTime = Date.now();
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   try {
     // Normalize endpoint (remove trailing slashes)
     let url = endpoint;
     while (url.endsWith('/')) url = url.slice(0, -1);
 
-    const authHeaders: Record<string, string> = {
-      Accept: 'application/json',
-      ...remoteAuthorizationHeaders(url, apiKey),
+    const authHeaders: Record<string, string> = { Accept: 'application/json' };
+    if (apiKey) authHeaders.Authorization = `Bearer ${apiKey}`;
+
+    const fetchHealth = async (target: string) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      try {
+        return await fetch(target, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: authHeaders,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
     };
 
-    // Try to reach the base URL first
-    const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    const response = await fetch(`${url}/v1/models`, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: authHeaders,
-      redirect: REMOTE_FETCH_REDIRECT_POLICY,
-    });
+    // Try the OpenAI-compatible model endpoint first.
+    const response = await fetchHealth(`${url}/v1/models`);
     const latency = Date.now() - startTime;
 
     if (!response.ok) {
-      // Try alternate health endpoints
+      // Try alternate health endpoints. Each fallback gets a fresh controller;
+      // an aborted controller cannot be reused and every fallback needs its own timeout.
       const altUrls = ['/api/tags', '/health', '/'];
       for (const alt of altUrls) {
         try {
-          const altResponse = await fetch(`${url}${alt}`, {
-            method: 'GET',
-            signal: controller.signal,
-            headers: authHeaders,
-            redirect: REMOTE_FETCH_REDIRECT_POLICY,
-          });
+          const altResponse = await fetchHealth(`${url}${alt}`);
           if (altResponse.ok) {
-            return { success: true, latency };
+            return { success: true, latency: Date.now() - startTime };
           }
         } catch {
           // Continue to next
@@ -191,8 +176,6 @@ export async function testEndpoint(
       error: error instanceof Error ? error.message : 'Unknown error',
       latency,
     };
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -201,24 +184,22 @@ async function checkOllamaEndpoint(
   timeout: number,
   apiKey?: string,
 ): Promise<{ type: string } | null> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
     // Use origin only to avoid double-path when endpoint already has a prefix (e.g. /api)
     const origin = new URL(url).origin;
-    const headers = remoteAuthorizationHeaders(origin, apiKey);
-    const response = await fetch(`${origin}/api/tags`, {
-      signal: controller.signal,
-      headers,
-      redirect: REMOTE_FETCH_REDIRECT_POLICY,
-    });
-    clearTimeout(timeoutId);
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    let response: Response;
+    try {
+      response = await fetch(`${origin}/api/tags`, { signal: controller.signal, headers });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (response.ok) return { type: 'ollama' };
   } catch {
     // Not Ollama
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
   return null;
 }
@@ -228,17 +209,17 @@ async function checkLmStudioEndpoint(
   timeout: number,
   apiKey?: string,
 ): Promise<{ type: string } | null> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), timeout);
-    const headers = remoteAuthorizationHeaders(url, apiKey);
-    const response = await fetch(`${url}/v1/models`, {
-      signal: controller.signal,
-      headers,
-      redirect: REMOTE_FETCH_REDIRECT_POLICY,
-    });
-    clearTimeout(timeoutId);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    let response: Response;
+    try {
+      response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (response.ok) {
       const data = await response.json();
       if (data?.data?.some?.((m: { id: string }) => m.id?.includes('gguf'))) {
@@ -247,8 +228,6 @@ async function checkLmStudioEndpoint(
     }
   } catch {
     // Not LM Studio
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
   return null;
 }
@@ -270,12 +249,9 @@ export async function detectServerType(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const headers = remoteAuthorizationHeaders(url, apiKey);
-      const response = await fetch(`${url}/v1/models`, {
-        signal: controller.signal,
-        headers,
-        redirect: REMOTE_FETCH_REDIRECT_POLICY,
-      });
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
       clearTimeout(timeoutId);
 
       if (response.ok) {

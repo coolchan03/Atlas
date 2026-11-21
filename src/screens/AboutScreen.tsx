@@ -1,31 +1,63 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet, Clipboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { MadeWithLove } from '../components/MadeWithLove';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL } from '../utils/sharePrompt';
-import { withUtm } from '../utils/utm';
-import { appVersion } from '../utils/appVersion';
+import packageJson from '../../package.json';
+import { appVersionLabel } from '../utils/appVersion';
+import { useSecretTaps } from '../hooks/useSecretTaps';
+import { gatherDiagnostics } from '../atlasTools/diagnostics';
+import { gatherSupportReport, shareSupportReport } from '../atlasTools/supportReport';
+import { BuildInfo, getBackendDevicesInfo } from 'llama.rn';
+import { ModelGpuTest } from '../components/ModelGpuTest';
+import { AppUpdateCard } from '../components/settings/AppUpdateCard';
 
-const WEDNESDAY_MOBILE_URL = withUtm('https://wednesday.is', 'about');
 
 export const AboutScreen: React.FC = () => {
   const navigation = useNavigation();
+  // Seven quick taps on the version open the cloning voice's hidden lab.
+  const secretTap = useSecretTaps(7, () => (navigation as unknown as { navigate: (name: string) => void }).navigate('VoiceLab'));
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const focusTrigger = useFocusTrigger();
+  const [llamaRuntimeStatus, setLlamaRuntimeStatus] = useState('Checking native runtime…');
+  const [copied, setCopied] = useState<string | null>(null);
+  const shareLogs = () => {
+    shareSupportReport().then((ok) => setCopied(ok ? 'Logs ready to share.' : 'Could not share the logs.')).catch(() => setCopied('Could not share the logs.'));
+  };
+  const copyLogs = () => {
+    gatherSupportReport().then((text) => { Clipboard.setString(text); setCopied('All logs copied. Paste them into a message.'); })
+      .catch(() => setCopied('Could not read the logs.'));
+  };
+  const copyDiagnostics = () => {
+    gatherDiagnostics().then((text) => { Clipboard.setString(text); setCopied('Copied. Paste it into a message.'); })
+      .catch(() => setCopied('Could not read the diagnostics.'));
+  };
+
+  useEffect(() => {
+    let active = true;
+    getBackendDevicesInfo()
+      .then(devices => {
+        if (!active) return;
+        setLlamaRuntimeStatus(`Available (${devices.length} backend${devices.length === 1 ? '' : 's'} detected)`);
+      })
+      .catch(error => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setLlamaRuntimeStatus(`Unavailable: ${message}`);
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>About</Text>
@@ -33,13 +65,31 @@ export const AboutScreen: React.FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={staticStyles.diag}>
+          <TouchableOpacity onPress={copyDiagnostics} testID="copy-diagnostics" accessibilityLabel="Copy diagnostics" style={styles.backButton}>
+            <Icon name="copy" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={shareLogs} testID="share-logs" accessibilityLabel="Share all logs" style={styles.backButton}>
+            <Icon name="share-2" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={copyLogs} testID="copy-logs" accessibilityLabel="Copy all logs" style={styles.backButton}>
+            <Icon name="file-text" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          <Text style={styles.runtimeInfo} testID="copy-diagnostics-note">{copied ?? 'Copy diagnostics: a summary of this phone and its speeds, with nothing personal in it. Share all logs (the arrow) or copy them (the page) sends everything the app wrote down about what went wrong; it can name files and topics.'}</Text>
+        </View>
+        <ModelGpuTest />
+
         {/* App identity */}
         <View style={styles.heroSection}>
           <Image source={require('../assets/logo.png')} style={staticStyles.appIcon} />
-          <Text style={styles.appName}>Off Grid AI</Text>
-          <Text style={styles.version}>Version {appVersion()}</Text>
+          <Text style={styles.appName}>Atlas</Text>
+          <TouchableOpacity activeOpacity={1} onPress={secretTap} accessible={false} testID="about-version-tap">
+            <Text style={styles.version} testID="about-version">Version {appVersionLabel()}</Text>
+          </TouchableOpacity>
+          <Text style={styles.runtimeInfo}>llama.rn {packageJson.dependencies['llama.rn']} · llama.rn build {BuildInfo.number}</Text>
+          <Text style={styles.runtimeInfo}>LLM runtime: {llamaRuntimeStatus}</Text>
           <Text style={styles.description}>
-            Local AI that runs entirely on your phone. No cloud, no telemetry, nothing leaves the device.
+            Your offline assistant, library and field guide. Runs on this device and keeps working with no internet.
           </Text>
         </View>
 
@@ -50,7 +100,7 @@ export const AboutScreen: React.FC = () => {
             staggerMs={40}
             trigger={focusTrigger}
             style={[styles.navItem, styles.navItemLast]}
-            onPress={() => Linking.openURL(GITHUB_URL)}
+            onPress={() => Linking.openURL('https://github.com/coolchan03/Atlas')}
           >
             <View style={styles.navItemIcon}>
               <Icon name="github" size={16} color={colors.textSecondary} />
@@ -63,73 +113,17 @@ export const AboutScreen: React.FC = () => {
           </AnimatedListItem>
         </View>
 
-        {/* Follow / Community */}
-        <View style={styles.navSection}>
-          <AnimatedListItem
-            index={1}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={styles.navItem}
-            testID="about-follow-on-x"
-            onPress={() => Linking.openURL(FOLLOW_X_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <Icon name="twitter" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Follow @alichherawalla on X</Text>
-              <Text style={styles.navItemDesc}>New features first, promo discounts, roadmap</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-          <AnimatedListItem
-            index={2}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={[styles.navItem, styles.navItemLast]}
-            testID="about-join-slack"
-            onPress={() => Linking.openURL(SLACK_INVITE_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <IconMC name="slack" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Join the Slack community</Text>
-              <Text style={styles.navItemDesc}>Issues fixed fast, debug together, early access</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-        </View>
-
-        {/* Built by Wednesday row */}
-        <View style={styles.navSection}>
-          <AnimatedListItem
-            index={3}
-            staggerMs={40}
-            trigger={focusTrigger}
-            style={[styles.navItem, styles.navItemLast]}
-            onPress={() => Linking.openURL(WEDNESDAY_MOBILE_URL)}
-          >
-            <View style={styles.navItemIcon}>
-              <Image source={require('../assets/wednesday_logo.png')} style={styles.wednesdayLogo} />
-            </View>
-            <View style={styles.navItemContent}>
-              <Text style={styles.navItemTitle}>Built by Wednesday</Text>
-              <Text style={styles.navItemDesc}>We build mobile apps for enterprise teams</Text>
-            </View>
-            <Icon name="external-link" size={14} color={colors.textMuted} />
-          </AnimatedListItem>
-        </View>
+        <AppUpdateCard />
       </ScrollView>
 
-      {/* Pinned footer */}
-      <MadeWithLove />
+
     </SafeAreaView>
   );
 };
 
 const staticStyles = StyleSheet.create({
   appIcon: { width: 72, height: 72, borderRadius: 16, marginBottom: SPACING.md },
+  diag: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.lg },
 });
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
@@ -167,7 +161,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   version: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  runtimeInfo: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    textAlign: 'center' as const,
+    marginBottom: SPACING.xs,
   },
   description: {
     ...TYPOGRAPHY.body,
@@ -202,5 +202,4 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   navItemContent: { flex: 1 },
   navItemTitle: { ...TYPOGRAPHY.body, color: colors.text },
   navItemDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
-  wednesdayLogo: { width: 24, height: 24, resizeMode: 'contain' as const },
 });

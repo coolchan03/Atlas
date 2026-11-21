@@ -1,26 +1,16 @@
-import { MediaAttachment, Message } from '../../types';
+import { Message } from '../../types';
 
 export interface ChatMessageProps {
-  /**
-   * Suppress the assistant's PROSE, keeping thinking and tool cards.
-   *
-   * Voice mode: the words are delivered as a voice note, so printing them as chat text says the
-   * same thing twice and turns a spoken turn into a wall of text. Tool calls still show, because
-   * what the assistant DID is not something you want to listen to.
-   */
-  hideProse?: boolean;
   message: Message;
-  /** Display-only context owned by this result and rendered at the top of its bubble. */
-  supportingContext?: Message;
   isStreaming?: boolean;
   onImagePress?: (uri: string) => void;
   onCopy?: (content: string) => void;
   onRetry?: (message: Message) => void;
-  onEdit?: (message: Message, newContent: string) => void;
-  onTranscribeAgain?: (
-    message: Message,
-    attachment: MediaAttachment,
-  ) => Promise<void>;
+  onEdit?: (message: Message, newContent: string, opts?: { resend?: boolean }) => void;
+  onDelete?: (message: Message) => void;
+  /** Ask the model to check this reply claim by claim. */
+  onCheckAnswer?: (message: Message) => void;
+  onSaveToProject?: (message: Message) => void;
   onGenerateImage?: (prompt: string) => void;
   showActions?: boolean;
   canGenerateImage?: boolean;

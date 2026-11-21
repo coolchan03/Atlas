@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme } from '../../../theme';
 import { CustomAlert, AlertState } from '../../CustomAlert';
-import { ActionMenuSheet, EditSheet } from './ActionMenuSheet';
+import { ActionMenuSheet, EditSheet, SelectTextSheet } from './ActionMenuSheet';
 import { createStyles } from '../styles';
 import type { Message } from '../../../types';
 
@@ -12,30 +12,41 @@ interface MessageOverlaysProps {
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
   showActionMenu: boolean;
+  showSelectText: boolean;
   isEditing: boolean;
   isUser: boolean;
   canEdit: boolean;
   canRetry: boolean;
+  canDelete: boolean;
+  canSaveToProject: boolean;
   canGenerateImage: boolean;
   canSpeak: boolean;
+  showSelectTextAction: boolean;
   displayContent: string;
   alertState: AlertState;
   onCloseActionMenu: () => void;
+  onCloseSelectText: () => void;
+  onChangeEditText: (text: string) => void;
   onCopy: () => void;
   onEdit: () => void;
   onRetry: () => void;
+  onDelete: () => void;
+  onSaveToProject: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
-  onSaveEdit: (text: string) => void;
+  onSelectText: () => void;
+  onSaveEdit: () => void;
+  onSaveEditOnly?: () => void;
   onCancelEdit: () => void;
   onCloseAlert: () => void;
+  extras?: { pinned: boolean; onPin: () => void; onSlides?: () => void; onCheck?: () => void; onWhy?: () => void; onAsk?: () => void };
 }
 
 export const MessageOverlays: React.FC<MessageOverlaysProps> = ({
-  message, styles, colors, showActionMenu, isEditing, isUser,
-  canEdit, canRetry, canGenerateImage, canSpeak, displayContent,
-  alertState, onCloseActionMenu, onCopy, onEdit,
-  onRetry, onGenerateImage, onSpeak, onSaveEdit, onCancelEdit, onCloseAlert,
+  message, styles, colors, showActionMenu, showSelectText, isEditing, isUser,
+  canEdit, canRetry, canDelete, canSaveToProject, canGenerateImage, canSpeak, showSelectTextAction, displayContent,
+  alertState, onCloseActionMenu, onCloseSelectText, onChangeEditText, onCopy, onEdit,
+  onRetry, onDelete, onSaveToProject, onGenerateImage, onSpeak, onSelectText, onSaveEdit, onSaveEditOnly, onCancelEdit, onCloseAlert, extras,
 }) => (
   <>
     <ActionMenuSheet
@@ -44,22 +55,35 @@ export const MessageOverlays: React.FC<MessageOverlaysProps> = ({
       isUser={isUser}
       canEdit={canEdit}
       canRetry={canRetry}
+      canDelete={canDelete}
+      canSaveToProject={canSaveToProject}
       canGenerateImage={canGenerateImage}
       canSpeak={canSpeak}
       styles={styles}
       onCopy={onCopy}
       onEdit={onEdit}
       onRetry={onRetry}
+      onDelete={onDelete}
+      onSaveToProject={onSaveToProject}
       onGenerateImage={onGenerateImage}
       onSpeak={onSpeak}
+      onSelectText={showSelectTextAction ? onSelectText : undefined}
+      extras={extras}
+    />
+    <SelectTextSheet
+      visible={showSelectText}
+      onClose={onCloseSelectText}
+      content={displayContent}
+      styles={styles}
     />
     <EditSheet
       visible={isEditing}
       onClose={onCancelEdit}
-      defaultValue={isUser ? message.content : displayContent}
+      defaultValue={message.content}
+      onChangeText={onChangeEditText}
       onSave={onSaveEdit}
+      onSaveOnly={onSaveEditOnly}
       onCancel={onCancelEdit}
-      resendsAfterSave={isUser}
       styles={styles}
       colors={colors}
     />

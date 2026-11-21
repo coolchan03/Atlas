@@ -7,23 +7,12 @@
  * - Provider creation and management
  */
 
-import {
-  RemoteServer,
-  RemoteModel,
-  RemoteModelCategory,
-  ServerTestResult,
-} from '../types';
+import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { useAppStore } from '../stores/appStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
-import {
-  discoverLANServers,
-  type DiscoveredServer,
-  type DiscoveryOptions,
-} from './networkDiscovery';
-import { shouldAutoDiscoverRemoteModels } from '../utils/remoteAutoDiscovery';
 import logger from '../utils/logger';
+import { fetchModelsFromServer, testServerConnection } from '../stores/remoteServerHelpers';
 import {
   storeApiKeyImpl,
   getApiKeyImpl,
@@ -33,39 +22,35 @@ import {
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
 } from './remoteServerManagerUtils';
-import { remoteAuthorizationHeaders } from './remoteTransportPolicy';
-import { activateOffGridDesktopModel } from './offGridDesktopModels';
-
-/** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
-const trimSlash = (url: string): string => {
-  let s = url.toLowerCase();
-  while (s.endsWith('/')) s = s.slice(0, -1);
-  return s;
-};
 
 class RemoteServerManager {
   /**
    * Add a new remote server
    */
   async addServer(
-    config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string },
-    stableId?: string,
+    config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string }
   ): Promise<RemoteServer> {
     const store = useRemoteServerStore.getState();
 
     // Deduplicate: if a server with the same endpoint already exists, return it
-    const normalizedEndpoint = trimSlash(config.endpoint);
+    const trimSlashes = (url: string) => { let s = url.toLowerCase(); while (s.endsWith('/')) s = s.slice(0, -1); return s; };
+    const normalizedEndpoint = trimSlashes(config.endpoint);
     const existing = store.servers.find(
-      s => trimSlash(s.endpoint) === normalizedEndpoint,
+      (s) => trimSlashes(s.endpoint) === normalizedEndpoint
     );
     if (existing) {
-      logger.log('[RemoteServerManager] Server already exists:', existing.name);
-      return existing;
+      logger.log('[RemoteServerManager] Server already exists; refreshing configuration:', existing.name);
+      // A LAN scan may have auto-added this endpoint without credentials. Re-adding it
+      // manually must persist the supplied API key instead of silently returning the
+      // credential-less record.
+      await this.updateServer(existing.id, config);
+      return store.getServerById(existing.id) || existing;
     }
 
-    // Credentials belong only in Keychain. Never put them in the persisted Zustand server record.
-    const { apiKey, ...publicConfig } = config;
-    const id = store.addServer(publicConfig, stableId);
+    // Secrets belong in Keychain only. Never pass apiKey across the store
+    // boundary because the Zustand store is persisted to AsyncStorage.
+    const { apiKey, ...persistableConfig } = config;
+    const id = store.addServer(persistableConfig);
     if (apiKey) {
       await this.storeApiKey(id, apiKey);
     }
@@ -83,7 +68,7 @@ class RemoteServerManager {
    */
   async updateServer(
     id: string,
-    updates: Partial<Omit<RemoteServer, 'id' | 'createdAt'>>,
+    updates: Partial<Omit<RemoteServer, 'id' | 'createdAt'>>
   ): Promise<void> {
     const store = useRemoteServerStore.getState();
     const existingServer = store.getServerById(id);
@@ -104,11 +89,9 @@ class RemoteServerManager {
     const provider = providerRegistry.getProvider(id);
     if (provider && 'updateConfig' in provider) {
       const apiKey = await this.getApiKey(id);
-      const endpoint = updates.endpoint || existingServer.endpoint;
-      const authorization = remoteAuthorizationHeaders(endpoint, apiKey);
       (provider as OpenAICompatibleProvider).updateConfig({
-        endpoint,
-        apiKey: authorization.Authorization?.replace(/^Bearer /, ''),
+        endpoint: updates.endpoint || existingServer.endpoint,
+        apiKey: apiKey || undefined,
       });
     }
 
@@ -136,9 +119,7 @@ class RemoteServerManager {
   }
 
   /** Get server with API key (for provider) */
-  async getServerWithApiKey(
-    id: string,
-  ): Promise<(RemoteServer & { apiKey?: string }) | null> {
+  async getServerWithApiKey(id: string): Promise<(RemoteServer & { apiKey?: string }) | null> {
     const server = this.getServer(id);
     if (!server) return null;
     const apiKey = await this.getApiKey(id);
@@ -148,22 +129,23 @@ class RemoteServerManager {
   /**
    * Test server connection
    */
-  async testConnection(
-    id: string,
-  ): Promise<{ success: boolean; error?: string; models?: RemoteModel[] }> {
+  async testConnection(id: string): Promise<ServerTestResult> {
     const store = useRemoteServerStore.getState();
-    const apiKey = await this.getApiKey(id);
-    return store.testConnection(id, apiKey || undefined);
+    const server = await this.getServerWithApiKey(id);
+    if (!server) return { success: false, error: 'Server not found' };
+
+    const result = await testServerConnection(server);
+    store.updateServerHealth(id, result.success);
+    if (result.success && result.models) store.setDiscoveredModels(id, result.models);
+    return result;
   }
 
   /** Test connection to a server by endpoint (before adding) */
   async testConnectionByEndpoint(
     endpoint: string,
-    apiKey?: string,
+    apiKey?: string
   ): Promise<ServerTestResult> {
-    return useRemoteServerStore
-      .getState()
-      .testConnectionByEndpoint(endpoint, apiKey);
+    return useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey);
   }
 
   /**
@@ -171,11 +153,12 @@ class RemoteServerManager {
    */
   async discoverModels(id: string): Promise<RemoteModel[]> {
     const store = useRemoteServerStore.getState();
-    const server = store.getServerById(id);
+    const server = await this.getServerWithApiKey(id);
     if (!server) throw new Error(`Server not found: ${id}`);
 
-    const apiKey = await this.getApiKey(id);
-    return store.discoverModels(id, apiKey || undefined);
+    const models = await fetchModelsFromServer(server);
+    store.setDiscoveredModels(id, models);
+    return models;
   }
 
   /**
@@ -188,58 +171,13 @@ class RemoteServerManager {
   }
 
   /** Set the active remote text model */
-  async setActiveRemoteTextModel(
-    serverId: string,
-    modelId: string,
-  ): Promise<void> {
+  async setActiveRemoteTextModel(serverId: string, modelId: string): Promise<void> {
     return setActiveRemoteTextModelImpl(serverId, modelId);
   }
 
   /** Set the active remote vision/image model */
-  async setActiveRemoteImageModel(
-    serverId: string,
-    modelId: string,
-  ): Promise<void> {
-    const server = useRemoteServerStore.getState().getServerById(serverId);
-    return server?.modelManagement === 'offgrid-desktop-v1'
-      ? this.setActiveRemoteMediaModel(serverId, 'image', modelId)
-      : setActiveRemoteImageModelImpl(serverId, modelId);
-  }
-
-  /** Select one remote model for image, transcription, or voice work. */
-  async setActiveRemoteMediaModel(
-    serverId: string,
-    category: Exclude<RemoteModelCategory, 'text'>,
-    modelId: string,
-  ): Promise<void> {
-    const store = useRemoteServerStore.getState();
-    const server = store.getServerById(serverId);
-    if (!server) throw new Error(`Server not found: ${serverId}`);
-    const confirmedState =
-      server.modelManagement === 'offgrid-desktop-v1'
-        ? await activateOffGridDesktopModel(
-            {
-              ...server,
-              apiKey: (await this.getApiKey(serverId)) ?? undefined,
-            },
-            category,
-            modelId,
-          )
-        : null;
-    const confirmedModels = confirmedState?.active ?? {
-      ...server.mediaModels,
-      [category]: modelId,
-    };
-    store.updateServer(serverId, {
-      mediaModels: confirmedModels,
-    });
-    store.setActiveRemoteMediaServerId(category, serverId);
-    if (category === 'image') store.setActiveRemoteImageModelId(modelId);
-    logger.log('[RemoteServerManager] Active remote media model set:', {
-      serverId,
-      category,
-      modelId,
-    });
+  async setActiveRemoteImageModel(serverId: string, modelId: string): Promise<void> {
+    return setActiveRemoteImageModelImpl(serverId, modelId);
   }
 
   /**
@@ -250,26 +188,8 @@ class RemoteServerManager {
     store.setActiveServerId(null);
     store.setActiveRemoteTextModelId(null);
     store.setActiveRemoteImageModelId(null);
-    store.setActiveRemoteMediaServerId('image', null);
-    store.setActiveRemoteMediaServerId('transcription', null);
-    store.setActiveRemoteMediaServerId('voice', null);
     providerRegistry.setActiveProvider('local');
     logger.log('[RemoteServerManager] Cleared active remote model');
-  }
-
-  clearActiveRemoteTextModel(): void {
-    const store = useRemoteServerStore.getState();
-    store.setActiveServerId(null);
-    store.setActiveRemoteTextModelId(null);
-    providerRegistry.setActiveProvider('local');
-  }
-
-  clearActiveRemoteMediaModel(
-    category: Exclude<RemoteModelCategory, 'text'>,
-  ): void {
-    const store = useRemoteServerStore.getState();
-    store.setActiveRemoteMediaServerId(category, null);
-    if (category === 'image') store.setActiveRemoteImageModelId(null);
   }
 
   /** Get the active server */
@@ -284,77 +204,6 @@ class RemoteServerManager {
    */
   async initializeProviders(): Promise<void> {
     return initializeProvidersImpl(() => this.getServers());
-  }
-
-  /**
-   * Scan the LAN and report endpoints not already saved. A matching port does not prove server
-   * identity, so a scan must never move a saved server or its credentials to a new host.
-   */
-  async scanAndReconcile(options: DiscoveryOptions = {}): Promise<{
-    moved: string[];
-    found: DiscoveredServer[];
-  }> {
-    let discovered: DiscoveredServer[];
-    const savedEndpoints = new Set(
-      useRemoteServerStore.getState().servers.map(server => trimSlash(server.endpoint)),
-    );
-    try {
-      discovered = await discoverLANServers(undefined, {
-        ...options,
-        onFound: server => {
-          if (!savedEndpoints.has(trimSlash(server.endpoint))) options.onFound?.(server);
-        },
-      });
-    } catch (error) {
-      logger.warn(
-        '[RemoteServerManager] LAN scan failed:',
-        (error as Error).message,
-      );
-      return { moved: [], found: [] };
-    }
-    return {
-      moved: [],
-      found: discovered.filter(server => !savedEndpoints.has(trimSlash(server.endpoint))),
-    };
-  }
-
-  /**
-   * Recover the active remote connection after a network change. Cheap-first: if there is an active
-   * server and it is still reachable at its known endpoint, do nothing. Only when it is unreachable
-   * (or the user has enabled auto-discovery) do we scan the LAN to find where it moved and reconnect.
-   * This keeps LAN scanning off unless the user is actually relying on a remote server, and makes the
-   * "connected" state honest again after the peer's IP changes.
-   */
-  async recoverActiveConnection(): Promise<void> {
-    const activeId = useRemoteServerStore.getState().activeServerId;
-    const autoDiscover = shouldAutoDiscoverRemoteModels(
-      useAppStore.getState().settings,
-    );
-
-    if (activeId) {
-      const result = await this.testConnection(activeId).catch(() => ({
-        success: false,
-      }));
-      if (result.success && !autoDiscover) {
-        logger.log(
-          '[RemoteServerManager] Active server still reachable; no rescan needed',
-        );
-        return;
-      }
-      logger.log(
-        result.success
-          ? '[RemoteServerManager] Active server reachable; scanning because auto-discovery is enabled'
-          : '[RemoteServerManager] Active server unreachable; rescanning to recover',
-      );
-    }
-
-    const allowScan = autoDiscover || !!activeId;
-    if (!allowScan) return;
-
-    const { moved, found } = await this.scanAndReconcile();
-    logger.log(
-      `[RemoteServerManager] Recovery scan complete: ${moved.length} moved, ${found.length} new`,
-    );
   }
 
   /**
@@ -383,6 +232,7 @@ class RemoteServerManager {
   private async removeApiKey(serverId: string): Promise<void> {
     return removeApiKeyImpl(serverId);
   }
+
 }
 
 /** Singleton instance */

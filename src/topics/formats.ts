@@ -1,0 +1,430 @@
+/**
+ * Learning any topic on a board. The AI plans the course (how many squares, and which kind of square each one is, to fit
+ * the subject and how the person likes to learn), then writes each square when it is first opened. This file is the
+ * contract between the AI and the app: the kinds of square, the questions the AI is asked, and a strict reader for what it
+ * answers. Pure, so it is tested without a device.
+ */
+import { difficultyNote, readingNote, type Difficulty } from '../study/difficulty';
+import { expandLessons } from './chapterSequence';
+import { parseJsonLoose, str } from '../study/games/json';
+import { evalExpression } from '../study/mathTools';
+import { DRILL_LABELS } from '../study/drills';
+import type { Exercise } from '../study/exercises';
+import type { PeriodicQuestion } from '../study/periodicQuiz';
+
+import type { PlannedSquare, SquareFormat } from './plannedSquare';
+export type { PlannedSquare, SquareFormat };
+
+/** The games a course can have as a square: each is played from a list of terms with a clue. */
+const TERM_GAMES = ['crossword', 'wordsearch', 'scramble', 'memory', 'hangman'] as const;
+export type TermGame = (typeof TERM_GAMES)[number];
+export const isTermGame = (f: string): f is TermGame => (TERM_GAMES as readonly string[]).includes(f);
+const DRILL_TOPICS = Object.values(DRILL_LABELS).join(', ');
+export const FORMATS: { id: SquareFormat; label: string; icon: string; use: string }[] = [
+  { id: 'drill', label: 'Exact drill', icon: 'cpu', use: `practice problems the app makes and marks itself with exact arithmetic, for ONLY these topics: ${DRILL_TOPICS}. Put the topic words in the title or focus. Use it for accounting, finance and statistics practice` },
+  { id: 'periodic', label: 'Periodic table', icon: 'grid', use: 'a real periodic table the learner taps to answer: find an element by symbol, number, name, group and period, or family (halogen, noble gas...). The app makes and marks it. Use it in chemistry and science courses' },
+  { id: 'crossword', label: 'Crossword', icon: 'grid', use: 'a crossword made from the key terms of the topic, each with a clue: vocabulary, definitions, names, parts of a system, any subject with terms to learn' },
+  { id: 'wordsearch', label: 'Word search', icon: 'search', use: 'a word search hiding the key terms of the topic, found by their clues: a light way to learn the vocabulary' },
+  { id: 'scramble', label: 'Word scramble', icon: 'shuffle', use: 'key terms with their letters mixed up, unscrambled using a clue: spelling and recall of terms' },
+  { id: 'memory', label: 'Memory match', icon: 'copy', use: 'flip cards to find each term and its definition, like the matching games in flashcard apps: terms to meanings' },
+  { id: 'hangman', label: 'Guess the term', icon: 'type', use: 'guess a term letter by letter from its clue: vocabulary and definitions' },
+  { id: 'lesson', label: 'Lesson', icon: 'book-open', use: 'a short explanation with sections, an example and key points: for new ideas, rules, worked examples, code to read' },
+  { id: 'quiz', label: 'Quiz', icon: 'help-circle', use: 'multiple choice questions with a reason for each answer: to check understanding, scenarios, case studies' },
+  { id: 'cards', label: 'Flashcards', icon: 'layers', use: 'terms and definitions, formulas, syntax, vocabulary: to memorise' },
+  { id: 'match', label: 'Match', icon: 'link', use: 'pairs to join: terms to meanings, causes to effects, accounts to types, functions to results' },
+  { id: 'order', label: 'Put in order', icon: 'list', use: 'steps or events to put in the right order: procedures, algorithms, timelines, processes' },
+  { id: 'practice', label: 'Practice', icon: 'edit-3', use: 'an open task the learner answers in their own words or code, which the AI then checks: problems, exercises, short writing' },
+  { id: 'fill', label: 'Fill the gap', icon: 'minus-square', use: 'sentences, formulas or code lines with one gap to fill from options: terminology, syntax, key facts' },
+  { id: 'truefalse', label: 'True or false', icon: 'check-circle', use: 'quick statements to judge, with the reason: spotting common mistakes and myths' },
+  { id: 'scenario', label: 'Scenario', icon: 'git-branch', use: 'a short real-world situation with a decision to make: applying a rule, ethics, judgement calls, troubleshooting' },
+  { id: 'numeric', label: 'Calculate', icon: 'hash', use: 'a problem with a numeric answer the learner works out, then sees the working: accounting, maths, physics, finance, statistics' },
+  { id: 'worked', label: 'Worked example', icon: 'layers', use: 'one problem solved step by step, each step revealed with its reason: procedures, proofs, debugging, case analysis' },
+  { id: 'table', label: 'Table', icon: 'grid', use: 'a comparison or reference table to read and copy: differences between things, formulas, syntax cheat sheets, timelines' },
+  { id: 'recall', label: 'Type the answer', icon: 'type', use: 'a prompt the learner answers by typing the term, word, formula or short fact from memory: vocabulary, definitions, spelling, symbols' },
+  { id: 'fix', label: 'Fix the mistake', icon: 'tool', use: 'something with a mistake in it that the learner corrects by typing: grammar and punctuation, a wrong calculation line, a bug in one line of code' },
+  { id: 'tablefill', label: 'Fill the table', icon: 'columns', use: 'a table with blank cells to fill in: accounting journal entries and ledgers, truth tables, conjugations, unit conversions, periodic-table facts, schedules' },
+  { id: 'sort', label: 'Sort into groups', icon: 'filter', use: 'items to sort into two to four groups: acids and bases, assets and liabilities, nouns and verbs, mammals and reptiles, fact and opinion' },
+  { id: 'dictation', label: 'Listen and type', icon: 'volume-2', use: 'sentences read aloud that the learner types: spelling, listening in English or another language, medical or technical terms' },
+  { id: 'reading', label: 'Read and answer', icon: 'file-text', use: 'a short passage (a text, a case, a data description) followed by questions on it: reading comprehension, case studies, source analysis, word problems' },
+  { id: 'predict', label: 'Predict the result', icon: 'terminal', use: 'a piece of code, a circuit, an experiment setup or a formula, with a question about what happens or what it gives: programming, physics, chemistry, spreadsheets' },
+];
+
+/**
+ * How the best teachers of a few big subject areas mix the kinds of square. Added to the AI's instructions when the subject
+ * matches, so one prompt can teach maths as well as English or accounting. The AI still decides; this is its starting point.
+ */
+const PLAYBOOKS: { match: RegExp; name: string; advice: string }[] = [
+  { match: /\b(math|maths|algebra|geometry|calculus|trigonometry|arithmetic|fractions?|statistics|probability|equations?|physics|chemistry stoichiometry)\b/i, name: 'mathematics',
+    advice: 'For arithmetic, algebra, geometry, percents, probability, units and basic statistics use exact-drill squares (format drill) with the topic words in the title: linear equations, quadratic equations, adding fractions, percent change, area and perimeter, Pythagoras, slope, mean and median, unit conversion, combinations. Teach maths by doing: a worked example first, then calculate squares with numbers, fill-the-gap and fix-the-mistake squares on steps, predict-the-result squares for graphs and formulas, and a final mixed set. Write maths in plain text with symbols like ², √, ÷, ×, π and fractions as a/b.' },
+  { match: /\b(science|biology|chemistry|physics|astronomy|geology|ecology|anatomy|physiology|earth science|environmental)\b/i, name: 'science',
+    advice: 'For chemistry add periodic-table squares (format periodic) and exact-drill squares (format drill) for molar mass, moles, pH, and for physics speed, force, kinetic energy, Ohm\'s law, density and the gas law. Teach science with a lesson that uses an everyday analogy, then sort-into-groups, put-in-order for processes and cycles, scenario squares for experiments, true-or-false for common myths, predict-the-result for what happens, and calculate squares for formulas.' },
+  { match: /\b(accounting|bookkeeping|finance|financial|tax|audit|economics|budget|investing|payroll|ledger)\b/i, name: 'accounting and finance',
+    advice: 'Use exact-drill squares (format drill) for balance sheets, income statements, cash flow statements, trial balances, journal entries, compound interest, loans, bonds, leases, inventory, depreciation, ratios, break-even and NPV: the app makes the numbers, supplies account dropdowns with amounts to type, and marks every line. Teach accounting with worked examples using real numbers, fill-the-table squares for journal entries and ledgers, calculate squares for ratios and depreciation, sort-into-groups for assets, liabilities, income and expenses, scenario squares for judgement calls, and flashcards for terms.' },
+  { match: /\b(english|grammar|writing|essay|reading|literature|vocabulary|spelling|punctuation|composition|poetry|esl|ielts|toefl)\b/i, name: 'English and writing',
+    advice: 'Teach English with read-and-answer squares on short passages, fix-the-mistake for grammar and punctuation, type-the-answer for vocabulary and spelling, listen-and-type dictation, sort-into-groups for parts of speech, and practice squares where the learner writes a sentence or paragraph for the AI to mark.' },
+  { match: /\b(programming|coding|code|python|javascript|java|c\+\+|html|css|sql|software|algorithm|computer science|excel|spreadsheet|data structures?)\b/i, name: 'programming',
+    advice: 'Teach programming with a short lesson with a code example, predict-the-result squares on small snippets, fix-the-mistake on one line, practice squares where the learner writes code for the AI to mark, put-in-order for algorithms, and fill-the-gap for syntax.' },
+  { match: /\b(history|geography|civics|politics|government|social studies|law|religion|philosophy|anthropology|sociology|psychology)\b/i, name: 'history and social studies',
+    advice: 'Teach it with a lesson that tells the story, put-in-order timelines, match for people, places and events, read-and-answer on a short source, scenario squares asking what would you do, and practice squares for a short written argument.' },
+  { match: /\b(music|guitar|piano|drawing|painting|art|design|photography|cooking|baking|sport|fitness|yoga|chess|knitting|woodwork|gardening)\b/i, name: 'a skill or craft',
+    advice: 'Teach a skill with worked examples of the technique, put-in-order for the steps, true-or-false for common mistakes, scenario squares for what to do when it goes wrong, flashcards for terms, and practice squares describing what the learner did for the AI to give feedback on.' },
+  { match: /\b(medicine|medical|nursing|health|nutrition|first aid|pharmacology|dental|veterinary)\b/i, name: 'health',
+    advice: 'Teach health with lessons on the body and why, scenario squares with patient situations, sort-into-groups for symptoms and causes, type-the-answer for terms, calculate squares for doses and values, and always say this is for learning, not for treating anyone.' },
+];
+
+/** The teaching advice that fits the subject (empty when no big area matches: the AI then works it out itself). */
+export function subjectAdvice(topic: string): string {
+  const hit = PLAYBOOKS.find((p) => p.match.test(topic));
+  return hit ? `Subject area: ${hit.name}. ${hit.advice}` : '';
+}
+export const FORMAT_IDS = FORMATS.map((f) => f.id);
+
+export interface CoursePlan { title: string; summary: string; style: string; theme: string; squares: PlannedSquare[] }
+
+/**
+ * A board has no size limit: every chapter of every book is kept. Only a board the AI plans is held to this many squares, so a model that
+ * loops and repeats units cannot fill the phone.
+ */
+const MAX_AI_PLAN_SQUARES = 400;
+const asFormat = (v: unknown): SquareFormat => (FORMAT_IDS.includes(String(v).toLowerCase() as SquareFormat) ? (String(v).toLowerCase() as SquareFormat) : 'lesson');
+
+/** What the person asked for, passed to the AI. */
+export interface CourseRequest { topic: string; goal: string; level: string; how: string; minutes: number }
+/** The learner's own material the course should be built around (titles and the start of each). */
+export type PlanSources = { title: string; text: string }[];
+
+export function planMessages(r: CourseRequest, sources: PlanSources = []) {
+  const menu = FORMATS.map((f) => `- ${f.id}: ${f.use}`).join('\n');
+  return {
+    system: 'You are an expert teacher and course designer who can teach any subject. You design a course as a path of squares on a board game. Reply with ONLY JSON.',
+    user: `Design a course.
+Subject: ${r.topic}
+What the learner wants to be able to do: ${r.goal || '(not said: choose a sensible goal for the subject)'}
+Their level now: ${r.level}
+How they like to learn: ${r.how || '(not said: choose what suits this subject best)'}
+Each sitting should take about ${r.minutes} minutes.
+${sources.length ? `The learner has gathered this material; build the course around what it covers, in a sensible order:\n${sources.map((x) => `- ${x.title}: ${x.text.slice(0, 220).replace(/\s+/g, ' ')}`).join('\n')}\n` : ''}
+
+Every square is one sitting, and has a format chosen to suit the subject and the learner:
+${menu}
+
+${subjectAdvice(r.topic) ? `${subjectAdvice(r.topic)}\n` : ''}Choose the formats yourself. Teach the way this subject is really learned: for example accounting needs worked examples and practice with numbers; coding needs short explanations with code and practice tasks; history suits timelines (put in order) and scenarios; a language-like subject needs flashcards and match. Mix formats so it does not feel the same every square; start with a lesson, put a quiz or practice after every one or two lessons, and finish with a quiz that covers everything.
+Use 12 to 30 squares in 2 to 6 units for a narrow topic. When the subject is a whole school or university subject (for example algebra, biology, accounting, English), cover EVERY major part of it from the basics up: use 30 to 60 squares in 6 to 10 units. Order from the basics up, sized to the goal. Use many different formats across the course (at least five), not just lessons and quizzes.
+
+Reply with ONLY this JSON:
+{"title": "course title", "summary": "one sentence on what the learner will be able to do", "style": "one sentence on how you will teach it", "theme": "a short fun name for the board journey",
+ "units": [{"title": "unit title", "squares": [{"format": "lesson|quiz|cards|match|order|practice", "title": "short square title", "focus": "exactly what this square covers"}]}]}`,
+  };
+}
+
+/** Reads the AI's course plan; null when it is not usable. Keys are made here, the last square is always a covering quiz. */
+export function parsePlan(raw: string): CoursePlan | null {
+  const json = parseJsonLoose<any>(raw);
+  const units: any[] = Array.isArray(json?.units) ? json.units : [];
+  const squares: PlannedSquare[] = [];
+  units.forEach((u, ui) => {
+    const unit = str(u?.title, 80) || `Unit ${ui + 1}`;
+    (Array.isArray(u?.squares) ? u.squares : []).forEach((s: any) => {
+      const title = str(s?.title, 60);
+      if (!title || squares.length >= MAX_AI_PLAN_SQUARES) return;
+      squares.push({ key: `s${squares.length + 1}`, format: asFormat(s?.format), title, focus: str(s?.focus, 240) || title, unit });
+    });
+  });
+  if (squares.length < 3) return null;
+  const planned = expandLessons(squares, MAX_AI_PLAN_SQUARES - 1);
+  squares.splice(0, squares.length, ...planned);
+  const last = squares[squares.length - 1];
+  if (last.format !== 'quiz') {
+    squares.push({ key: `s${squares.length + 1}`, format: 'quiz', title: 'Final quiz', focus: 'Everything in the course', unit: last.unit, checkpoint: true });
+  } else last.checkpoint = true;
+  return {
+    title: str(json?.title, 80) || 'My course', summary: str(json?.summary, 200), style: str(json?.style, 200),
+    theme: str(json?.theme, 60), squares,
+  };
+}
+
+/** Square content, by format. */
+export type SquareContent =
+  | { kind: 'lesson'; sections: { heading: string; text: string; example?: string }[]; keyPoints: string[]; commonMistakes?: string[]; quickCheck?: { q: string; a: string } }
+  | { kind: 'quiz'; questions: { q: string; options: string[]; answer: number; why: string; /** Set when the right answer has a number that none of the learner's sources (or the question) show. */ check?: string }[]; passage?: string }
+  | { kind: 'cards'; cards: { front: string; back: string }[] }
+  | { kind: 'match'; pairs: { left: string; right: string }[] }
+  | { kind: 'order'; prompt: string; steps: string[] }
+  | { kind: 'practice'; task: string; hint?: string; model: string; rubric: string[]; code?: boolean }
+  | { kind: 'numeric'; task: string; answer: number; tolerance: number; unit: string; working: string[]; checked?: boolean }
+  | { kind: 'drill'; exercises: Exercise[] }
+  | { kind: 'periodic'; questions: PeriodicQuestion[] }
+  | { kind: 'worked'; problem: string; steps: { step: string; why: string }[]; takeaway: string }
+  | { kind: 'table'; title: string; markdown: string }
+  | { kind: 'typed'; items: { prompt: string; answer: string; alternatives: string[]; why: string }[]; mode: 'recall' | 'fix' }
+  | { kind: 'tablefill'; title: string; columns: string[]; rows: (string | null)[][]; answers: string[][]; why: string }
+  | { kind: 'sort'; groups: string[]; items: { text: string; group: number }[] }
+  | { kind: 'dictation'; lang: string; sentences: string[] }
+  | { kind: 'terms'; game: TermGame; terms: { answer: string; clue: string }[] };
+
+export interface SquareRequest { /** Written in pieces (lessonParts.ts): the JSON shape asked for instead of the whole square's, and what this piece is. */ shape?: string; part?: string; courseTitle: string; topic: string; level: string; how: string; style: string; square: PlannedSquare; before: string[]; minutes: number; excerpts?: { source: string; url?: string; docId?: number; where?: string; rank?: number; label?: string; role?: 'teach' | 'reference'; text: string }[]; /** Questions the learner's own textbook already has on this square's topic (study/bookQuestions.ts). */ bookQuestions?: string; /** Questions the learner got wrong earlier in this course: a quiz asks about the same ideas again in new words. */ retry?: string[]; /** How to rewrite a square the learner found unclear. */ rewrite?: string; /** What to check about the controlling authority for this subject (standards/controlling.ts): a missing, wrong or out-of-year document. */ standardsFlags?: string; difficulty?: Difficulty }
+
+const SHAPES: Record<SquareFormat, string> = {
+  drill: '{}  (made by the app, not written by the AI)',
+  periodic: '{}  (made by the app, not written by the AI)',
+  lesson: '{"sections": [{"heading": "...", "text": "plain explanation, 2 to 4 sentences (under 80 words), may use short code or numbers", "example": "a worked example or code (optional)"}], "commonMistakes": ["a mistake learners make here and how to avoid it"], "quickCheck": {"q": "one question to test yourself", "a": "its answer"}, "keyPoints": ["..."]}  (4 to 7 sections that together cover the whole topic, 2 or 3 common mistakes, 3 to 6 key points; the whole answer under 1200 words, tables included, and stop when the JSON is complete)',
+  quiz: '{"questions": [{"q": "...", "options": ["A", "B", "C", "D"], "answer": 0, "why": "one sentence on why that answer is right"}]}  (5 to 8 questions, "answer" is the index of the right option, vary where it is)',
+  cards: '{"cards": [{"front": "term or question", "back": "short definition or answer"}]}  (8 to 14 cards)',
+  match: '{"pairs": [{"left": "...", "right": "..."}]}  (5 or 6 pairs, every left and every right different)',
+  order: '{"prompt": "what to put in order", "steps": ["first step", "second step", "..."]}  (4 to 7 steps, listed in the CORRECT order)',
+  practice: '{"task": "a real assignment: something to explain, work out, compare or write in their own words or numbers (at least two sentences of answer), self-contained, and never something finished by pressing Next", "hint": "a nudge (optional)", "model": "a good answer", "rubric": ["what a good answer must include"], "code": true if the answer is code}',
+  fill: '{"questions": [{"q": "a sentence, formula or code line with ____ where the gap is", "options": ["A", "B", "C"], "answer": 0, "why": "..."}]}  (6 to 8 items, "answer" is the index of the right option)',
+  truefalse: '{"questions": [{"q": "a statement", "options": ["True", "False"], "answer": 0, "why": "the reason it is true or false"}]}  (6 to 8 statements; "answer" is 0 for True or 1 for False; about half false)',
+  scenario: '{"questions": [{"q": "a short situation, then the decision to make", "options": ["choice 1", "choice 2", "choice 3"], "answer": 0, "why": "why that is the best choice"}]}  (3 to 5 different situations)',
+  numeric: '{"task": "a problem with all the numbers it needs and a single numeric answer", "expression": "the sum as plain arithmetic the app can calculate, e.g. 1000*(1+0.05)^3", "answer": 1250.5, "tolerance": 0.5, "unit": "unit or currency (empty if none)", "working": ["step 1 of the working", "step 2"]}',
+  worked: '{"problem": "the problem being solved", "steps": [{"step": "what is done", "why": "the reason"}], "takeaway": "the one thing to remember"}  (4 to 8 steps)',
+  recall: '{"items": [{"prompt": "a definition, picture-in-words or question", "answer": "the term or short answer", "alternatives": ["other accepted answers"], "why": "optional note"}]}  (8 to 12 items, answers short)',
+  fix: '{"items": [{"prompt": "the text with ONE mistake in it", "answer": "the corrected text", "why": "what was wrong"}]}  (6 to 8 items)',
+  crossword: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 14 terms; each answer is ONE word of 4 to 12 letters, letters only, no spaces or hyphens; the clue explains it in your own words)',
+  wordsearch: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 4 to 10 letters, letters only, no spaces or hyphens)',
+  scramble: '{"terms": [{"answer": "ONEWORD", "clue": "a hint that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 5 to 12 letters, letters only)',
+  memory: '{"terms": [{"answer": "term", "clue": "its short definition"}]}  (6 to 8 terms; the answer may be a short phrase)',
+  hangman: '{"terms": [{"answer": "ONEWORD", "clue": "a clue that does not contain the answer"}]}  (8 to 12 terms; each answer is ONE word of 5 to 12 letters, letters only)',
+  tablefill: '{"title": "...", "columns": ["Account", "Debit", "Credit"], "rows": [["Cash", "", "500"], ["Sales", "500", ""]], "blank": [[0, 1], [1, 2]], "why": "short explanation"}  (3 to 8 rows; "rows" holds the FULL correct table; "blank" lists [row, column] cells to hide for the learner, 3 to 8 of them, never the first column)',
+  sort: '{"groups": ["Group A", "Group B"], "items": [{"text": "item", "group": 0}]}  (2 to 4 groups, 8 to 14 items, "group" is the index of the right group)',
+  dictation: '{"lang": "en-US", "sentences": ["a sentence to be read aloud", "..."]}  (5 to 8 sentences of rising difficulty; "lang" is a BCP-47 code for the language spoken)',
+  reading: '{"passage": "a passage of 80 to 200 words, or a case with the facts needed", "questions": [{"q": "...", "options": ["A", "B", "C"], "answer": 0, "why": "..."}]}  (3 to 5 questions that need the passage)',
+  predict: '{"questions": [{"q": "a code snippet in a ``` fence, a setup or a formula, then: what does it print / give / happen?", "options": ["A", "B", "C"], "answer": 0, "why": "the reasoning step by step"}]}  (4 to 6 items)',
+  table: '{"title": "table title", "columns": ["Column 1", "Column 2"], "rows": [["cell", "cell"]]}  (2 to 5 columns, 3 to 10 rows, short cells)',
+};
+
+export function contentMessages(r: SquareRequest) {
+  return {
+    system: `You are an expert teacher of ${r.topic}. ${r.style ? `Teaching style: ${r.style}.` : ''} Write exactly what is asked, accurately, at the learner's level. Write maths and science in plain text with symbols (², √, ÷, ×, π, fractions as a/b). Reply with ONLY JSON.${subjectAdvice(r.topic) ? ` ${subjectAdvice(r.topic)}` : ''}`,
+    user: `Course: ${r.courseTitle}. Learner level: ${r.level}.${r.how ? ` They like to learn: ${r.how}.` : ''}
+${r.before.length ? `Squares already done: ${r.before.slice(-8).join('; ')}.\n` : ''}Write the next square: "${r.square.title}" (${r.square.format}). It covers: ${r.square.focus}.${r.square.checkpoint ? ' This is a check, not new teaching: draw only on what it covers (above) and on what came before it, and cover all of it.' : ''}
+It should take about ${r.minutes} minutes. Do not repeat earlier squares.
+${difficultyNote(r.difficulty)}${r.square.format === 'lesson' ? readingNote(r.difficulty) + LESSON_STYLE : ''}${r.square.format === 'practice' ? ASSIGNMENT_NOTE : ''}${standardsNote(`${r.topic} ${r.courseTitle} ${r.square.title}`)}${r.standardsFlags ?? ''}${r.bookQuestions ?? ''}${r.excerpts?.length ? `Use these passages from the learner's own sources for the facts they cover, and do not name the source in the text (it is shown separately as a link). Where they say nothing, teach from what you know.\n${authorityNote(r.excerpts)}${r.excerpts.map((e) => `[${e.source}${e.role === 'reference' ? ` (REFERENCE: ${e.label ?? 'standard'})` : e.label && e.label !== 'textbook' ? ` (${e.label})` : ''}] ${e.text}`).join('\n')}\n` : ''}${r.retry?.length ? `The learner got these wrong earlier. Include a new question on the same idea as each one, in different words and with different numbers; do not repeat the wording:\n${r.retry.map((q) => `- ${q}`).join('\n')}\n` : ''}${r.rewrite ? `${r.rewrite}\n` : ''}${r.square.remedial ? 'The learner struggled with this before: explain it again in a different way, in simpler words, with a new example.\n' : ''}${r.part ? `${r.part}\n` : ''}Reply with ONLY JSON in this shape: ${r.shape ?? SHAPES[r.square.format]}`,
+  };
+}
+
+/**
+ * Accounting standards change. A textbook can predate an Accounting Standards Update, and a model asked to remember the update will
+ * invent numbers and dates, so a lesson never states one from memory: it marks the point to check, and the learner checks it with the
+ * latest-standards lookup, whose answer overrules the textbook.
+ */
+const ACCOUNTING = /\b(far|gaap|fasb|asc\s*\d{3}|financial accounting|accounting|cpa)\b/i;
+export const standardsNote = (text: string): string => (ACCOUNTING.test(text)
+  ? 'Accounting standards change, and a textbook can be older than the latest FASB update. Teach the rule as the excerpts give it. Where a rule is one that FASB has been changing (leases, revenue, credit losses, segment reporting, income taxes, crypto assets and so on), add a line starting "Check:" telling the learner to confirm it with the latest-standards check, because a newer standard overrules the book. Never state an ASU number or an effective date from memory.\n'
+  : '');
+
+/** Text cut only where a sentence or a word ends, never in the middle of one, with "..." when something was left off. @public */
+export function tidy(v: unknown, max: number): string {
+  const t = str(v, 100000);
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const sentence = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+  if (sentence > max * 0.5) return cut.slice(0, sentence + 1);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 1)).trim()}...`;
+}
+
+/** Text that must be whole to make sense (a question, an answer choice): null when it is longer than allowed, so the caller drops it instead of showing it cut off. @public */
+export const whole = (v: unknown, max: number): string | null => { const t = str(v, 100000); return t && t.length <= max ? t : null; };
+
+/** An assignment has to give real work: something to write, work out or explain, with a good answer to compare with. A task answered by pressing a button ("click next") is not one. */
+function isRealAssignment(task: string, model: string, rubric: string[]): boolean {
+  // Short is fine ("Translate this sentence", "Write a function that reverses a string"); a task answered by pressing a button, or with nothing to compare an answer to, is not.
+  return task.length >= 30 && model.length >= 10 && rubric.length >= 1 && !/\b(click|tap|press)\b[^.]{0,20}\b(next|continue|done|finish|ok)\b/i.test(task);
+}
+
+/** Text that keeps its paragraph breaks (str() squeezes everything onto one line): lines tidied, blank lines at most one, so a lesson can have space between paragraphs. */
+export const prose = (v: unknown, max = 1600): string => String(v ?? '').replace(/\r/g, '').split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
+
+/** An example that poses a problem must also give its answer. One that asks something and never answers it is left out of the lesson. */
+export function exampleIsComplete(example: string): boolean {
+  const poses = /\?|\b(calculate|compute|find|determine|what is|how much|how many)\b/i.test(example);
+  const answers = /[=]|→|\b(answer|solution|result|therefore|thus|so the|equals|is recorded|would be)\b/i.test(example);
+  return !poses || answers;
+}
+
+/** What an assignment must be: work the learner does, with a good answer to compare with, and what a good answer includes. */
+const ASSIGNMENT_NOTE = 'This is an ASSIGNMENT: real work for the learner to do in their own words or numbers (explain, calculate, compare, write or analyse something from this topic), with a model answer of several sentences and at least two things a good answer must include. Never a task that is done by pressing Next or Continue, and never a question that only needs one word.\n';
+
+/** What a lesson\'s writing should look like: spaced paragraphs, bold key terms, and examples that are worked to the answer. Sources are shown as links, not written into the text. */
+const LESSON_STYLE = 'Format the text of each section as short paragraphs with a blank line between them (put \\n\\n inside the JSON string); use "- " lines for lists. Put **double asterisks** around each key term where it is first defined, and around a rule or figure the learner must remember; never bold a whole sentence. Every example must be complete: state the problem and then its answer with the working, never a question left unanswered. Use a Markdown table (a header row, a |---|---| row, then the rows, each on its own line) for anything with columns: comparisons, schedules, amortisation or depreciation tables, rate and threshold lists, and journal entries. Write a journal entry as a table with the columns Account | Debit | Credit, the debit line first, the credit line after it with "to" before the account name (for example "to Revenue"), and a short date or description line above it. Never write HTML (no <table>, <br> or other tags): tables are Markdown only. Do not name or cite a book, document or website anywhere in the text: the sources are shown to the learner as links.\n';
+
+/** When passages come from several books, and some are a standard or the law: combine what the books agree on, and let the standard win where it differs. */
+export function authorityNote(excerpts: Array<{ source: string; rank?: number; role?: string }> | undefined): string {
+  if (!excerpts?.length) return '';
+  const books = new Set(excerpts.map((e) => e.source)).size;
+  const official = excerpts.some((e) => (e.rank ?? 5) < 5);
+  const parts = [];
+  if (books > 1) parts.push('The passages come from different books: combine what they agree on, and where they differ say so briefly.');
+  if (excerpts.some((e) => e.role === 'reference')) parts.push('Passages marked REFERENCE are the law or a standard. Do not copy their wording into the lesson: teach from the other passages, and use the REFERENCE ones to check every rule, figure and threshold, correcting a book where they differ.');
+  if (official) parts.push('A passage marked STANDARD (or as the law, a regulation or a bulletin) outranks a textbook: where it differs from a textbook, teach the standard and say in one sentence that older books may still show the old rule.');
+  return parts.length ? `${parts.join(' ')}\n` : '';
+}
+
+const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+
+/**
+ * The position of the right option, read strictly. A whole number, digits in a string, a letter (A, B, "option C") or the text of one option all
+ * name an answer. A missing, empty, null, boolean, fractional or out-of-range key names none: it is never read as 0, because that made option A
+ * the right answer for every question the model forgot to key. Undefined when the key cannot be trusted.
+ */
+export function answerIndex(raw: unknown, options: string[]): number | undefined {
+  let index: number | undefined;
+  if (typeof raw === 'number') index = Number.isInteger(raw) ? raw : undefined;
+  else if (typeof raw === 'string') {
+    const t = raw.trim();
+    const letter = /^(?:option\s+)?([A-Ea-e])[.):]?$/.exec(t);
+    if (/^\d+$/.test(t)) index = Number(t);
+    else if (letter) index = letter[1].toUpperCase().charCodeAt(0) - 65;
+    else {
+      const matching = options.map((o, i) => (o.trim().toLowerCase() === t.toLowerCase() ? i : -1)).filter((i) => i >= 0);
+      index = matching.length === 1 ? matching[0] : undefined;
+    }
+  }
+  return index !== undefined && index >= 0 && index < options.length ? index : undefined;
+}
+
+/** Reads the AI's content for a square; null when it is not usable. */
+export function parseContent(format: SquareFormat, raw: string): SquareContent | null {
+  const j = parseJsonLoose<any>(raw);
+  if (!j) return null;
+  if (format === 'lesson') {
+    const sections = list(j.sections).map((s) => ({ heading: str(s?.heading, 80), text: prose(s?.text, 4500), example: (() => { const e = prose(s?.example, 1800); return e && exampleIsComplete(e) ? e : undefined; })() })).filter((s) => s.text);
+    const keyPoints = list(j.keyPoints).map((k) => str(k, 200)).filter(Boolean).slice(0, 8);
+    const commonMistakes = list(j.commonMistakes).map((m) => str(m, 240)).filter(Boolean).slice(0, 4);
+    const check = j.quickCheck && str(j.quickCheck.q, 240) && str(j.quickCheck.a, 240) ? { q: str(j.quickCheck.q, 240), a: str(j.quickCheck.a, 240) } : undefined;
+    return sections.length ? { kind: 'lesson', sections: sections.slice(0, 12), keyPoints, ...(commonMistakes.length ? { commonMistakes } : {}), ...(check ? { quickCheck: check } : {}) } : null;
+  }
+  if (format === 'quiz' || format === 'fill' || format === 'truefalse' || format === 'scenario' || format === 'reading' || format === 'predict') {
+    const questions = list(j.questions).map((q) => {
+      // A question or a choice that is too long is dropped whole: a quiz must never show one cut off in the middle.
+      const choices = list(q?.options).slice(0, 5).map((o) => whole(o, 400));
+      const options = choices.filter((o): o is string => !!o);
+      const answer = answerIndex(q?.answer, options);
+      return { q: whole(q?.q, 900) ?? '', options, answer, why: tidy(q?.why, 900), whole: choices.every(Boolean) };
+    });
+    const usable = questions.filter((q): q is typeof q & { answer: number } => q.whole && !!q.q && q.options.length >= 2 && q.answer !== undefined);
+    // Questions whose answer key was missing or unusable are left out. When several are (the model lost track of its own keys), the rest are not
+    // trusted either and the whole thing is asked for again (one bad key among several is just dropped).
+    const keyless = questions.filter((q) => q.whole && !!q.q && q.options.length >= 2 && q.answer === undefined).length;
+    if (keyless >= 2 && keyless * 2 >= questions.length) return null;
+    const passage = format === 'reading' ? str(j.passage, 2000) : '';
+    if (format === 'reading' && !passage) return null;
+    return usable.length >= 2 ? { kind: 'quiz', questions: usable.slice(0, 10).map(({ whole: _w, ...q }) => q), ...(passage ? { passage } : {}) } : null;
+  }
+  if (format === 'cards') {
+    const cards = list(j.cards).map((c) => ({ front: whole(c?.front, 400) ?? '', back: tidy(c?.back, 700) })).filter((c) => c.front && c.back);
+    return cards.length >= 3 ? { kind: 'cards', cards: cards.slice(0, 16) } : null;
+  }
+  if (format === 'match') {
+    const seenL = new Set<string>(); const seenR = new Set<string>();
+    const pairs = list(j.pairs).map((p) => ({ left: str(p?.left, 100), right: str(p?.right, 140) })).filter((p) => {
+      if (!p.left || !p.right || seenL.has(p.left.toLowerCase()) || seenR.has(p.right.toLowerCase())) return false;
+      seenL.add(p.left.toLowerCase()); seenR.add(p.right.toLowerCase());
+      return true;
+    });
+    return pairs.length >= 3 ? { kind: 'match', pairs: pairs.slice(0, 7) } : null;
+  }
+  if (format === 'order') {
+    const steps = list(j.steps).map((s) => str(s, 200)).filter(Boolean);
+    return steps.length >= 3 ? { kind: 'order', prompt: str(j.prompt, 200) || 'Put these in the right order.', steps: steps.slice(0, 8) } : null;
+  }
+  if (isTermGame(format)) {
+    const phrase = format === 'memory';
+    const seen = new Set<string>();
+    const terms = list(j.terms).map((x) => ({ answer: str(x?.answer, 40), clue: str(x?.clue, 200) })).map((x) => ({ ...x, answer: phrase ? x.answer : x.answer.replace(/[^A-Za-z]/g, '') })).filter((x) => {
+      const key = x.answer.toLowerCase();
+      const long = x.answer.length >= (format === 'scramble' || format === 'hangman' ? 5 : phrase ? 2 : 4) && x.answer.length <= (phrase ? 40 : 12);
+      // A clue that gives the answer away is no clue.
+      if (!x.answer || !x.clue || !long || seen.has(key) || x.clue.toLowerCase().includes(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return terms.length >= (phrase ? 4 : 5) ? { kind: 'terms', game: format, terms: terms.slice(0, 14) } : null;
+  }
+  if (format === 'recall' || format === 'fix') {
+    const items = list(j.items).map((x) => ({ prompt: str(x?.prompt, 300), answer: str(x?.answer, 300), alternatives: list(x?.alternatives).map((a) => str(a, 200)).filter(Boolean).slice(0, 4), why: str(x?.why, 240) })).filter((x) => x.prompt && x.answer);
+    return items.length >= 3 ? { kind: 'typed', mode: format, items: items.slice(0, 14) } : null;
+  }
+  if (format === 'tablefill') {
+    const columns = list(j.columns).map((c) => str(c, 40)).filter(Boolean).slice(0, 6);
+    const full = list(j.rows).map((r) => list(r).slice(0, columns.length).map((c) => str(c, 60))).filter((r) => r.length === columns.length).slice(0, 10);
+    const hide = new Set(list(j.blank).map((b) => `${Number(b?.[0])}:${Number(b?.[1])}`));
+    const rows = full.map((r, ri) => r.map((c, ci) => (ci > 0 && hide.has(`${ri}:${ci}`) ? null : c)));
+    const blanks = rows.flat().filter((c) => c === null).length;
+    if (columns.length < 2 || full.length < 2 || blanks < 2) return null;
+    return { kind: 'tablefill', title: str(j.title, 80), columns, rows, answers: full, why: str(j.why, 300) };
+  }
+  if (format === 'sort') {
+    const groups = list(j.groups).map((g) => str(g, 40)).filter(Boolean).slice(0, 4);
+    const items = list(j.items).map((x) => ({ text: str(x?.text, 80), group: Number(x?.group) })).filter((x) => x.text && Number.isInteger(x.group) && x.group >= 0 && x.group < groups.length).slice(0, 16);
+    return groups.length >= 2 && items.length >= 4 ? { kind: 'sort', groups, items } : null;
+  }
+  if (format === 'dictation') {
+    const sentences = list(j.sentences).map((x) => str(x, 200)).filter(Boolean).slice(0, 8);
+    return sentences.length >= 3 ? { kind: 'dictation', lang: /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(String(j.lang)) ? String(j.lang) : 'en-US', sentences } : null;
+  }
+  if (format === 'numeric') {
+    const task = tidy(j.task, 1400);
+    const answer = Number(j.answer);
+    if (!task || !Number.isFinite(answer)) return null;
+    const tolerance = Number.isFinite(Number(j.tolerance)) && Number(j.tolerance) >= 0 ? Number(j.tolerance) : Math.abs(answer) * 0.01;
+    // The AI also writes the sum as a plain expression; the app works it out itself. If the two disagree, the app's number is used.
+    let checked = false; let final = answer;
+    try { const computed = evalExpression(String(j.expression ?? '')); checked = true; if (Math.abs(computed - answer) > Math.max(tolerance, Math.abs(computed) * 0.001)) final = Math.round(computed * 1e6) / 1e6; } catch { /* no usable expression: the answer is the AI's own and is labelled so */ }
+    return { kind: 'numeric', task, answer: final, tolerance, unit: str(j.unit, 20), working: list(j.working).map((w) => tidy(w, 600)).filter(Boolean).slice(0, 10), checked };
+  }
+  if (format === 'worked') {
+    const steps = list(j.steps).map((x) => ({ step: tidy(x?.step, 800), why: tidy(x?.why, 600) })).filter((x) => x.step);
+    const problem = tidy(j.problem, 1000);
+    return problem && steps.length >= 2 ? { kind: 'worked', problem, steps: steps.slice(0, 10), takeaway: tidy(j.takeaway, 600) } : null;
+  }
+  if (format === 'table') {
+    const columns = list(j.columns).map((c) => str(c, 40)).filter(Boolean).slice(0, 5);
+    const rows = list(j.rows).map((r) => list(r).slice(0, columns.length).map((c) => str(c, 80).replace(/\|/g, '/'))).filter((r) => r.length === columns.length && r.some(Boolean)).slice(0, 12);
+    if (columns.length < 2 || rows.length < 2) return null;
+    const line = (cells: string[]) => `| ${cells.join(' | ')} |`;
+    return { kind: 'table', title: str(j.title, 80), markdown: [line(columns), line(columns.map(() => '---')), ...rows.map(line)].join('\n') };
+  }
+  const task = tidy(j.task, 1400);
+  const model = tidy(j.model, 2400);
+  const rubric = list(j.rubric).map((r) => tidy(r, 400)).filter(Boolean).slice(0, 6);
+  // Not a real assignment (for example "click next"): unusable, so the AI is asked again.
+  if (!isRealAssignment(task, model, rubric)) return null;
+  return { kind: 'practice', task, hint: tidy(j.hint, 600) || undefined, model, rubric, code: j.code === true || undefined };
+}
+
+export function gradeMessages({ task, model, rubric, answer }: { task: string; model: string; rubric: string[]; answer: string }) {
+  return {
+    system: 'You are a fair, encouraging teacher marking a learner\'s answer. Reply with ONLY JSON.',
+    user: `Task: ${task}\nA good answer: ${model}\nIt should include: ${rubric.join('; ') || '(see the good answer)'}\nLearner's answer:\n${answer}\n\nReply with ONLY: {"score": 0 to 100, "feedback": "2 to 4 sentences: what is right, what is missing or wrong, how to improve"}`,
+  };
+}
+
+export function parseGrade(raw: string): { score: number; feedback: string } | null {
+  const j = parseJsonLoose<any>(raw);
+  const score = Number(j?.score);
+  const feedback = str(j?.feedback, 700);
+  return Number.isFinite(score) && feedback ? { score: Math.max(0, Math.min(100, Math.round(score))), feedback } : null;
+}
+
+/** Stars (1 to 3) for a score between 0 and 1: finishing always earns one. */
+export const starsForShare = (share: number): 1 | 2 | 3 => (share >= 0.9 ? 3 : share >= 0.65 ? 2 : 1);
+
+
+/**
+ * The second pass of a reading written in depth: one section at a time is written out as full textbook paragraphs (what it is, why, how it works,
+ * the cases and exceptions), from the same passages. The first pass plans what the sections are; this is what makes the reading long.
+ */
+export function deepenMessages(r: { courseTitle: string; topic: string; squareTitle: string; heading: string; text: string; example?: string; others: string[]; excerpts?: string; difficulty?: Difficulty }): { system: string; user: string } {
+  return {
+    system: 'You are an excellent textbook author. You write clear, accurate, in-depth teaching text. Reply with ONLY the section text, no title, no JSON.',
+    user: `Course: ${r.courseTitle} (${r.topic}). Reading: "${r.squareTitle}".
+${difficultyNote(r.difficulty)}The other sections of this reading are: ${r.others.join('; ') || '(none)'}. Do not repeat them.
+
+Section: "${r.heading}"
+What the section says now:
+${r.text}${r.example ? `\n\nIts example (kept as it is; do not include it):\n${r.example}` : ''}
+${r.excerpts ? `\nUse these passages from the learner's own sources for the facts they cover, and do not name the source:\n${r.excerpts}\n` : ''}
+Write this section again IN DEPTH, as it would appear in a textbook: 4 to 7 paragraphs, each of 3 to 5 sentences, separated by a blank line. Explain what each idea is, why it matters, how it works step by step, the rules and the exceptions, and how it connects to the other ideas. Define every term the first time it appears and put it in **double asterisks**. Use "- " lines or a Markdown table where a list or comparison is clearer. Say only what is true; do not invent figures, dates or quotations, and never name a book, document or website.`,
+  };
+}

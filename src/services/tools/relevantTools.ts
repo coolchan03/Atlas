@@ -1,0 +1,62 @@
+/**
+ * Sending fewer tools makes the first reply faster: the model has to read every tool's description before it can start
+ * answering. Of the tools you have switched on, this keeps the ones the message could plausibly need, plus any tool used
+ * earlier in the chat (a follow-up like "and tomorrow?" needs the same tool again). Tools it knows nothing about (added by
+ * servers) are always kept: they are routed separately. A message that needs no tool sends none of the built-in ones.
+ */
+const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|today|tonight|now|current|price|cost|score|weather|forecast|search|look up|find out|google|http|www\.|\.com)\b/i;
+
+/**
+ * Whether a message means to reach another person: "text my wife", "email Sam", "send a message to...", "tell him I am late", "call mum", "reply to Dana".
+ * Not "tell me something", "text me the steps", "message me back" or "how to call a function": those ask the assistant to answer in the chat.
+ */
+const WHO = String.raw`(?![Mm]e\b|[Uu]s\b|[Yy]ou\b|[Ii]t\b|[Bb]ack\b)(?:my|mum|mom|dad|him|her|them|his|their|our|the (?:landlord|doctor|dentist|school|office|boss|team|plumber|bank)|\d|\+|[A-Z][a-z]+)`;
+const REACH_VERB = new RegExp(String.raw`\b(?:[Tt]ext|[Ss][Mm][Ss]|[Ee]-?mail|[Mm]essage|[Dd][Mm]|[Cc]all|[Pp]hone|[Dd]ial|[Rr]ing|[Tt]ell|[Rr]eply to|[Rr]espond to)\s+${WHO}`);
+const SEND_MESSAGE = /\b(?:send|write|draft)\s+(?:a |an |my |the )?(?:quick |short )?(?:text|sms|e-?mail|message)\b/i;
+function reachesSomeone(message: string): boolean {
+  return SEND_MESSAGE.test(message) || REACH_VERB.test(message);
+}
+
+const TRIGGERS: Record<string, RegExp> = {
+  web_search: ASKS_FACT,
+  read_url: /\b(http|www\.|\.com|\.org|link|url|article|page|website|site)\b/i,
+  calculator: /\d|\b(calculate|compute|sum|total|percent|percentage|average|divide|multiply|plus|minus|times|tip|convert|squared|root)\b/i,
+  study_math: /\b(mean|median|standard deviation|variance|t-?test|p-?value|regression|correlation|sample size|margin of error|convert|present value|future value|annuity|amortiz\w*|interest|compound|loan|mortgage|days (between|until)|how many days|npv|irr|solve|equation|quadratic|factor\w*|gcd|lcm|prime|permutation|combination|percent\w*|fraction|area|perimeter|volume|circumference|hypotenuse|pythag\w*|calculate|compute)\b/i,
+  science_data: /\b(element|periodic table|atomic (mass|number|weight)|molar|mole|moles|molecul\w*|formula|ph of|acid|chemistry|chemical|avogadro|speed of light|gravitational|planck|boltzmann)\b/i,
+  study_helpers: /\b(study plan|exam|rubric|apa|mla|reference list|references|citation|cite|literature (review|matrix)|dissertation|syllabus|schedule my studying|readab\w*|reading level|grade level|word count|essay|paragraph|grammar|proofread)\b/i,
+  find_image: /\b(picture|image|photo|diagram|map of|illustration|show me (a|an|the)|what does .* look like)\b/i,
+  get_current_datetime: /\b(time|date|day|today|tomorrow|yesterday|week|month|year|now|when|o'clock|am|pm|deadline|age|old)\b/i,
+  get_device_info: /\b(battery|storage|memory|ram|device|phone|space|charging|free)\b/i,
+  search_knowledge_base: /./, // handled below: kept whenever the project has documents
+  update_project_document: /\b(update|add|note|log|progress|document|append|write down|record)\b/i,
+  list_files: /\b(file|files|folder|directory|document|documents|download|downloads|list|show me what)\b/i,
+  read_file: /\b(file|read|open|document|pdf|txt|csv|note|notes|contents?)\b/i,
+  write_file: /\b(write|save|create|make|edit|file|document|markdown|csv|note|export|draft)\b/i,
+  create_web_page: /\b(web ?page|website|html|landing|site|page)\b/i,
+  open_file: /\b(open|show|view|display)\b/i,
+  calendar_events: /\b(calendar|event|events|meeting|schedule|agenda|appointment|busy|free|plans|week|tomorrow|today)\b/i,
+  add_calendar_event: /\b(calendar|event|meeting|appointment|schedule|remind|reminder|book|add)\b/i,
+  my_location: /\b(where am i|location|gps|near|nearby|how far|direction|which way|camp|car|waypoint|coordinates|altitude)\b/i,
+  learned_knowledge: /./, // kept whenever it is switched on: only the talk chat with a learning AI switches it on
+  standards_check: /\b(fasb|asu|asc\s*\d{3}|gaap|accounting standards?|standard update|codification|ifrs|out ?of ?date|outdated|latest (rule|standard|guidance)|new (rule|standard)|textbook)\b/i,
+  drug_label: /\b(medicine|medication|drug|dose|dosage|ibuprofen|acetaminophen|tylenol|advil|aspirin|antibiotic|side effects?|interact(s|ion|ions)?|prescription|over[- ]the[- ]counter|otc|mg)\b/i,
+  make_music: /\b(music|song|tune|melody|compose|composer|instrumental|soundtrack|beat|jingle|lullaby|ambient|jazz|lo-?fi|play me|background (music|sound))\b/i,
+  list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
+  map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
+  remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
+  make_helper: /\b(make|build|create|set up|write)\b.{0,30}\b(helper|multi-?step|workflow|template|reusable|repeatable)\b|\b(helper|multi-?step)\b.{0,20}\b(for|that|which)\b/i,
+  schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
+  draft_message: { test: reachesSomeone } as RegExp,
+};
+
+/** Tools worth sending with this message. `used` are tool names already used in the chat. */
+export function relevantTools(message: string, enabled: string[], opts: { used?: string[]; projectHasDocs?: boolean } = {}): string[] {
+  const used = new Set(opts.used ?? []);
+  return enabled.filter((tool) => {
+    if (used.has(tool)) return true;
+    const trigger = TRIGGERS[tool];
+    if (!trigger) return true; // not a built-in tool: kept (servers' tools are routed on their own)
+    if (tool === 'search_knowledge_base' || tool === 'update_project_document') return !!opts.projectHasDocs; // in a project they are always on offer
+    return trigger.test(message);
+  });
+}

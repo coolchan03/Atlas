@@ -281,7 +281,14 @@ class CoreMLDiffusionModule: RCTEventEmitter {
     pipelineQueue.async { [weak self] in
       guard let self = self else { return }
 
-      defer { self.generating = false }
+      defer {
+        self.generating = false
+        // The CoreML pipeline is intentionally one-shot: it holds 1–2 GB+ while
+        // idle. Release it on every terminal path (success, cancel, no image,
+        // encode/write error), not only the happy path.
+        self.pipeline = nil
+        self.loadedModelPath = nil
+      }
 
       // Re-check that pipeline hasn't been released (e.g. by a memory warning)
       guard self.pipeline != nil else {

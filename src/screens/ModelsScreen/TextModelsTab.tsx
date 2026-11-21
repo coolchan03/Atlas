@@ -1,14 +1,14 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
-import { LoadingDots } from '../../components/LoadingDots';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { ScreenHeader } from '../../components/ScreenHeader';
 import { fileExceedsBudget } from '../../services/memoryBudget';
+import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { CustomAlert, hideAlert, showAlert, AlertState } from '../../components/CustomAlert';
+import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
+import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
@@ -23,13 +23,11 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
+import { curatedLiteRTDownloadWarning, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { modelManager } from '../../services';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
-import { fetchModelFiles } from '../../services/modelCatalogFiles';
-import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -57,13 +55,12 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
-  | 'handleImportLocalModel' | 'isImporting'
   | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
   | 'isModelDownloaded' | 'getDownloadedModel' | 'isRepairingVisionModel'
-> & { onboarding?: boolean };
+>;
 
 type DetailProps = Pick<Props,
   | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
@@ -104,9 +101,20 @@ const ModelDetailView: React.FC<DetailProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { goTo } = useSpotlightTour();
 
+  // If user arrived here via onboarding spotlight flow, show file card spotlight
   // Pre-set the next pending (Download Manager icon) so it fires regardless of
   // how the user dismisses step 9 (button or backdrop tap).
+  useEffect(() => {
+    const pending = consumePendingSpotlight();
+    if (pending !== null) {
+      setPendingSpotlight(DOWNLOAD_MANAGER_STEP_INDEX);
+      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+      return () => task.cancel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Heal the durable vision flag from the authoritative catalog: this screen KNOWS a model is vision (its
   // repo ships an mmproj → modelFiles carry mmProjFile), so persist isVisionModel:true onto any downloaded
@@ -116,9 +124,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     for (const f of modelFiles) {
       if (!f.mmProjFile) continue;
       const rec = getDownloadedModel(selectedModel.id, f.name);
-      if (rec?.engine === 'llama' && !rec.isVisionModel) {
-        modelManager.markVisionModel(rec.id).catch(() => undefined);
-      }
+      if (rec?.engine === 'llama' && !rec.isVisionModel) void modelManager.markVisionModel(rec.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel.id, modelFiles]);
@@ -137,7 +143,6 @@ const ModelDetailView: React.FC<DetailProps> = ({
         progress: entry.progress,
         bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
         totalBytes: entry.combinedTotalBytes,
-        bytesPerSecond: entry.bytesPerSecond,
         status: entry.status,
       }
       : undefined;
@@ -146,7 +151,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
       progress = undefined;
     }
-    const canCancel   = !!entry && (isActiveStatus(entry.status) || entry.status === 'paused');
+    const canCancel   = !!entry && isActiveStatus(entry.status);
     const hasFailed   = entry?.status === 'failed';
     const errorMessage = hasFailed ? (entry?.errorMessage ?? 'Download failed') : undefined;
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel, hasFailed, errorMessage };
@@ -156,6 +161,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const s = getFileCardState(item);
     const proceedDownload = () => {
       handleDownload(selectedModel, item);
+      if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
     const onDownload = buildFileDownloadHandler({ s, fileName: item.name, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
@@ -175,67 +181,44 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onRemove: () => handleCancelDownload(s.downloadKey),
       }
       : undefined;
-    return <ModelCard
+    const inner = (
+      <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        capabilities={item.name.toLowerCase().endsWith('.gguf') ? {
-          ...predictGgufCapabilities({ id: selectedModel.id, name: selectedModel.name, fileName: item.name }),
-          vision: !!item.mmProjFile,
-          predicted: true,
-        } : undefined}
-        isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'paused' && !isQueuedStatus(s.progress.status)}
+        isDownloading={!!s.progress && !s.hasFailed && !isQueuedStatus(s.progress.status)}
         isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
-        isPaused={s.progress?.status === 'paused'}
         downloadProgress={s.progress?.progress}
-        downloadBytes={s.progress && !s.hasFailed ? {
-          downloaded: s.progress.bytesDownloaded,
-          total: s.progress.totalBytes,
-          bytesPerSecond: s.progress.bytesPerSecond,
-        } : undefined}
+        downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
         isCompatible={!fileExceedsBudget(item.size, ramGB)} testID={`file-card-${index}`}
         onDownload={onDownload}
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
-        onPause={storeEntry?.downloadId && s.progress?.status === 'running' ? () => {
-          modelDownloadService.pause(uniformDownloadId('text', s.downloadKey)).catch(error =>
-            setAlertState(showAlert('Pause failed', error instanceof Error ? error.message : 'Try again.')),
-          );
-        } : undefined}
-        onResume={storeEntry?.downloadId && s.progress?.status === 'paused' ? () => {
-          modelDownloadService.resume(uniformDownloadId('text', s.downloadKey)).catch(error =>
-            setAlertState(showAlert('Resume failed', error instanceof Error ? error.message : 'Try again.')),
-          );
-        } : undefined}
-        compact
         recommended={recommended}
         supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}
         failedState={failedState}
-      />;
+      />
+    );
+    return index === 0 ? <AttachStep index={9} fill>{inner}</AttachStep> : inner;
   };
 
   return (
     <View testID="model-detail-screen" style={styles.flex1}>
-      <ScreenHeader
-        title={selectedModel.name}
-        onBack={onBack}
-        testID="model-detail-header"
-      />
+      <View style={styles.header}>
+        <TouchableOpacity accessibilityLabel="Back" onPress={onBack} testID="model-detail-back" style={styles.backButton}>
+          <Icon name="arrow-left" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, styles.flex1]} numberOfLines={1}>{selectedModel.name}</Text>
+      </View>
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
-          {selectedModel.author !== 'Unknown' && <Text style={styles.modelAuthor}>{selectedModel.author}</Text>}
-          {selectedModel.credibility && (selectedModel.credibility.source === 'official' || selectedModel.credibility.source === 'verified-quantizer') && (
-            <MaterialIcon
-              name="verified"
-              size={14}
-              color={colors.primary}
-              accessibilityLabel={CREDIBILITY_LABELS[selectedModel.credibility.source].label}
-            />
-          )}
-          {selectedModel.credibility?.source === 'lmstudio' && (
+          <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
+          {selectedModel.credibility && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color}25` }]}>
               {selectedModel.credibility.source === 'lmstudio' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>}
+              {selectedModel.credibility.source === 'official' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>✓</Text>}
+              {selectedModel.credibility.source === 'verified-quantizer' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>◆</Text>}
               <Text style={[styles.credibilityText, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>
                 {CREDIBILITY_LABELS[selectedModel.credibility.source].label}
               </Text>
@@ -268,7 +251,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         </Text>
       )}
       {isLoadingFiles ? (
-        <View style={styles.loadingContainer}><LoadingDots color={colors.primary} size={8} /></View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
           data={modelFiles
@@ -294,7 +277,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
   <View>
-    <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
+    <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM - models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
     {showTitle && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
   </View>
 );
@@ -302,9 +285,8 @@ const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; reco
 interface ModelListItemProps {
   item: ModelInfo; index: number; focusTrigger: number;
   isDownloaded: boolean; isTrending: boolean; onPress: () => void;
-  onDownload?: () => void;
 }
-const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress, onDownload }) => {
+const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
@@ -315,17 +297,15 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const capabilities = isLiteRTParent ? undefined : {
-    ...predictGgufCapabilities({ id: item.id, name: item.name }),
-    vision: item.modelType === 'vision',
-    predicted: true,
-  };
-  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} onDownload={isCompatible ? onDownload : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} capabilities={capabilities} /></AnimatedEntry>;
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
+  return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 
-function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void): void {
+function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void, goTo: (step: number) => void): void {
+  const pending = consumePendingSpotlight();
   setSelectedModel(null);
   setModelFiles([]);
+  if (pending !== null) { InteractionManager.runAfterInteractions(() => goTo(pending)); }
 }
 
 interface SortPanelProps {
@@ -355,10 +335,10 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleImportLocalModel, isImporting, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
+    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel, isRepairingVisionModel, onboarding = false,
+    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
   } = props;
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
   const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
@@ -368,62 +348,13 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { goTo } = useSpotlightTour();
 
-  const downloadRecommendedFile = async (item: ModelInfo) => {
-    const files = await fetchModelFiles([item]);
-    const file = files[item.id]?.[0];
-    if (!file) {
-      setAlertState(showAlert('Download unavailable', 'No compatible Q4_K_M file was found.'));
-      return;
-    }
-    await handleDownload(item, file);
-  };
+  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => (
+    <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={() => handleSelectModel(item)} />
+  );
 
-  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
-    const directDownload = onboarding
-      ? () => { downloadRecommendedFile(item).catch(() => undefined); }
-      : undefined;
-    // A disk scan can restore a file under a recovered_ id. The detail rows
-    // recognize it by filename, so the family row must use those same files.
-    const isDownloaded = downloadedModels.some(model =>
-      model.id.startsWith(`${item.id}/`) ||
-      item.files.some(file => file.name === model.fileName),
-    );
-    return (
-      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={isDownloaded} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
-    );
-  };
-
-  const onboardingLiteRTCards = onboarding && Platform.OS === 'android'
-    ? buildCuratedLiteRTFiles().map((file, index) => {
-        const entry = getCuratedLiteRTEntry(file.name);
-        const model = { ...LITERT_RECOMMENDED_MODEL, name: entry?.displayName ?? file.name };
-        const proceedDownload = () => { handleDownload(model, file); };
-        const onDownload = buildFileDownloadHandler({
-          s: { downloaded: false, progress: undefined, hasFailed: false },
-          fileName: file.name,
-          sizeBytes: file.size,
-          ramGB,
-          proceedDownload,
-          setAlertState,
-        });
-        return (
-          <ModelCard
-            key={file.name}
-            compact
-            model={model}
-            file={file}
-            recommended={{ pillLabel: 'Recommended' }}
-            supportsAcceleration
-            testID={`onboarding-litert-model-${index}`}
-            onPress={onDownload}
-            onDownload={onDownload}
-          />
-        );
-      })
-    : null;
-
-  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles);
+  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles, goTo);
 
   if (selectedModel) {
     return (
@@ -449,7 +380,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   return (
     <>
-      <View style={styles.searchContainer} testID="text-model-search-row">
+      <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
           placeholder="Search Hugging Face models..."
@@ -469,7 +400,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           <Icon name={currentSort.icon} size={14} color={sortToggleActive ? colors.primary : colors.textMuted} />
           {isSortActive && <View style={styles.filterDot} />}
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Settings"
           style={[styles.filterToggle, filterToggleActive && styles.filterToggleActive]}
           onPress={() => setTextFiltersVisible(v => !v)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
@@ -478,18 +409,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           <Icon name="sliders" size={14} color={filterToggleActive ? colors.primary : colors.textMuted} />
           {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
-        {!onboarding && (
-          <TouchableOpacity
-            style={styles.filterToggle}
-            onPress={handleImportLocalModel}
-            disabled={isImporting}
-            accessibilityRole="button"
-            accessibilityLabel="Import local file"
-            testID="import-local-model"
-          >
-            <Icon name="upload" size={14} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
       </View>
 
       {filterState.expandedDimension === 'sort' && <SortPanel filterState={filterState} setSortOption={setSortOption} styles={styles} colors={colors} />}
@@ -510,22 +429,19 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <LoadingDots color={colors.primary} size={8} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading models...</Text>
         </View>
       ) : (
         <FlatList
-          data={hasSearched ? filteredResults : [...(!onboarding && Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo]}
+          data={hasSearched ? filteredResults : [...(Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo]}
           renderItem={renderModelItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           testID="models-list"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           ListHeaderComponent={hasSearched ? null : (
-            <>
-              <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
-              {onboardingLiteRTCards}
-            </>
+            <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
           )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>

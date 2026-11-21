@@ -1,15 +1,22 @@
+import { randomNumber, rollDice } from './randomTool';
 import { Platform } from 'react-native';
+import { runStudyTool } from '../../study/studyTools';
 import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../rag';
 import logger from '../../utils/logger';
+import { searchWeb } from './webSearchProviders';
+import { libraryToolAnswer } from '../../atlasTools/offlineLibrary';
+import * as DT from '../../atlasTools/deviceTools';
+import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
+import { arg, requireString, EMPTY_WRITE } from './toolArgs';
+import { braveSearch } from './braveSearch';
+export { braveSearch };
+import { forceHttps, isBlockedUrl } from './urlSafety';
+import { evaluateExpression } from '../../utils/arithmetic';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
-}
-function requireString(call: ToolCall, param: string): string | null {
-  const val = call.arguments[param];
-  return (val && typeof val === 'string' && val.trim()) ? val.trim() : null;
 }
 
 export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
@@ -24,6 +31,12 @@ export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
 }
 
 async function dispatchTool(call: ToolCall): Promise<string> {
+  // Off-grid mode is enforced here, where tools actually run, not only when a
+  // chat builds its tool list (remote providers, learning and other callers too).
+  if (call.signal?.aborted) throw new Error(`The "${call.name}" tool was cancelled before it ran.`);
+  if (NETWORK_TOOLS.includes(call.name) && offGridOn()) {
+    return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
+  }
   switch (call.name) {
     case 'web_search': {
       const q = requireString(call, 'query');
@@ -32,6 +45,15 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'calculator':
       return handleCalculator(call.arguments.expression);
+    case 'random_number':
+      return randomNumber(call.arguments as Record<string, unknown>);
+    case 'roll_dice':
+      return rollDice(call.arguments as Record<string, unknown>);
+    case 'find_image':
+    case 'study_helpers':
+    case 'study_math':
+    case 'science_data':
+      return runStudyTool(call.name, call.arguments as Record<string, unknown>);
     case 'get_current_datetime':
       return handleGetDatetime(call.arguments.timezone);
     case 'get_device_info':
@@ -41,10 +63,119 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: query');
       return handleSearchKnowledgeBase(q, call.context?.projectId);
     }
+    case 'update_project_document': {
+      const name = requireString(call, 'name');
+      const content = requireString(call, 'content');
+      if (!name || !content) throw new Error('Missing required parameter: name and content');
+      return handleUpdateProjectDocument({ name, content, mode: call.arguments?.mode, projectId: call.context?.projectId, signal: call.signal });
+    }
+    case 'search_offline_library': {
+      const q = requireString(call, 'query');
+      if (!q) throw new Error('Missing required parameter: query');
+      return libraryToolAnswer(q);
+    }
+    case 'list_files':
+      return DT.listFiles(call.arguments?.path);
+    case 'read_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      return DT.readFile(p, Number(call.arguments?.offset) || 0);
+    }
+    case 'write_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      const body = arg(call, 'content');
+      if (typeof body !== 'string' || !body.trim()) return EMPTY_WRITE;
+      return DT.writeFile(p, body, call.arguments?.append === true || call.arguments?.append === 'true');
+    }
+    case 'create_web_page':
+      return DT.createWebPage(String(call.arguments?.name ?? 'site'), String(call.arguments?.html ?? ''));
+    case 'open_file': {
+      const p = requireString(call, 'path');
+      if (!p) throw new Error('Missing required parameter: path');
+      return DT.openFile(p);
+    }
+    case 'calendar_events':
+      return DT.calendarEvents(Math.max(1, parseInt(String(call.arguments?.days_ahead ?? 7), 10) || 7), Math.max(0, parseInt(String(call.arguments?.days_back ?? 0), 10) || 0));
+    case 'add_calendar_event':
+      return DT.addCalendarEvent(String(call.arguments?.title ?? 'Event'), String(call.arguments?.start ?? ''), { end: call.arguments?.end, location: call.arguments?.location ?? '' });
+    case 'draft_message': {
+      const kind = String(call.arguments?.kind ?? 'text');
+      const body = String(call.arguments?.body ?? '');
+      if (kind !== 'call' && !body.trim()) throw new Error('Missing required parameter: body');
+      return DT.draftMessage(kind, body, { to: String(call.arguments?.to ?? ''), subject: String(call.arguments?.subject ?? '') });
+    }
+    case 'make_helper': {
+      const { saveHelperFromTool } = require('../../workflows/helperFromTool');
+      return saveHelperFromTool({ title: String(call.arguments?.title ?? ''), steps: String(call.arguments?.steps ?? ''), summary: String(call.arguments?.summary ?? '') });
+    }
+    case 'schedule_task': {
+      const { createScheduledTask } = require('../../schedule/createFromTool');
+      return createScheduledTask(call.arguments ?? {});
+    }
+    case 'learned_knowledge': {
+      const q = requireString(call, 'question');
+      if (!q) throw new Error('Missing required parameter: question');
+      return require('../../learning/askLearned').askLearned(q, call.context?.projectId);
+    }
+    case 'standards_check': {
+      const topic = requireString(call, 'topic');
+      if (!topic) throw new Error('Missing required parameter: topic');
+      const { standardsCheck } = require('../../standards/lookup');
+      return standardsCheck(topic, async (q: string) => (await searchWeb(q, braveSearch)).results);
+    }
+    case 'drug_label': {
+      const name = requireString(call, 'name');
+      if (!name) throw new Error('Missing required parameter: name');
+      return require('../../drugs/store').drugLabelsForChat(name);
+    }
+    case 'make_music':
+      return require('../../music/composerAgent').makeMusicForChat(call.arguments ?? {});
+    case 'list_maps':
+      return require('../../atlasMaps/mapQuery').describeMaps();
+    case 'map_places': {
+      const num = (v: unknown) => (v === undefined || v === null || String(v).trim() === '' ? undefined : Number(v));
+      return require('../../atlasMaps/mapQuery').placesNear({
+        query: typeof call.arguments?.query === 'string' ? call.arguments.query : '', lat: num(call.arguments?.lat), lon: num(call.arguments?.lon),
+        radiusKm: num(call.arguments?.radius_km), limit: num(call.arguments?.limit),
+      });
+    }
+    case 'my_location': {
+      const M = require('../../atlasMaps/maps');
+      let fix = M.useMaps.getState().lastFix;
+      try {
+        const { NativeModules } = require('react-native');
+        const fresh = await NativeModules.AtlasDevice?.lastLocation?.();
+        if (fresh && (!fix || fresh.time > fix.time)) fix = fresh;
+      } catch { /* no permission yet */ }
+      const imperial = M.useMaps.getState().imperial;
+      const places = M.useMaps.getState().waypoints;
+      if (!fix) return `No GPS position yet. Ask the user to open the Maps screen (Home > Maps) and allow location; GPS works without internet.${places.length ? ` Saved places: ${places.map((w: any) => `${w.name} (${M.fmtCoord(w.lat, w.lon)})`).join('; ')}` : ''}`;
+      const age = Math.round((Date.now() - fix.time) / 60000);
+      const lines = ['Known: the coordinates, the saved places below, and the nearest large cities (a built-in list, not every town). Do not name airports, roads or landmarks you were not given; for a small town, say the user is near the closest city.', `Position: ${M.fmtCoord(fix.lat, fix.lon)} (decimal ${fix.lat.toFixed(6)}, ${fix.lon.toFixed(6)}), accuracy about ${M.fmtDistance(fix.accuracy, imperial)}, ${age <= 1 ? 'just now' : `${age} minutes ago`}.`];
+      if (fix.altitude > -99999) lines.push(`Altitude: ${imperial ? `${Math.round(fix.altitude * 3.28084)} ft` : `${Math.round(fix.altitude)} m`}.`);
+      const spot = require('../../atlasMaps/whereAmI').describePlace(fix.lat, fix.lon);
+      if (spot) lines.push(`Nearest cities: the user is ${spot.sentence}.`);
+      for (const w of places.slice(0, 20)) {
+        const b = M.bearingDeg(fix, w);
+        lines.push(`${w.name}: ${M.fmtDistance(M.distanceM(fix, w), imperial)} to the ${M.compassName(b)} (bearing ${Math.round(b)}° from true north).`);
+      }
+      return lines.join('\n');
+    }
+    case 'remember': {
+      const f = requireString(call, 'fact');
+      if (!f) throw new Error('Missing required parameter: fact');
+      return DT.rememberFact(f);
+    }
     case 'read_url': {
       const url = requireString(call, 'url');
       if (!url) throw new Error('Missing required parameter: url');
-      return handleReadUrl(url);
+      // If a file on the phone was just read, double-check before anything is sent to the web.
+      if (Date.now() - DT.lastFileRead < 10 * 60 * 1000) {
+        const ok = await DT.confirm('Open this web page?', `The assistant read a file on your phone and now wants to open:\n\n${url.slice(0, 300)}\n\nOnly allow this if you expected it (a web page could try to trick the assistant into sending your file's contents).`, 'Open');
+        if (!ok) return 'The user declined to open this page.';
+      }
+      return handleReadUrl(url, 4000, call.signal);
     }
     default:
       throw new Error(`Unknown tool: ${call.name}`);
@@ -52,169 +183,29 @@ async function dispatchTool(call: ToolCall): Promise<string> {
 }
 
 async function handleWebSearch(query: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html',
-      },
-    });
-    const html = await response.text();
-    const results = parseBraveResults(html);
-
-    if (results.length === 0) {
-      return `No results found for "${query}".`;
-    }
-
-    return results
-      .slice(0, 5)
-      .map((r, i) => {
-        const heading = r.url ? `[${r.title}](${r.url})` : r.title;
-        return `${i + 1}. ${heading}\n   ${r.snippet}`;
-      })
-      .join('\n\n');
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-type SearchResult = { title: string; snippet: string; url?: string };
-
-function stripHtmlTags(html: string): string {
-  let result = '';
-  let inTag = false;
-  for (const ch of html) {
-    if (ch === '<') { inTag = true; continue; }
-    if (ch === '>') { inTag = false; continue; }
-    if (!inTag) result += ch;
-  }
-  return result;
-}
-
-function parseResultBlock(block: string): SearchResult | null {
-  const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
-  const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
-
-  const titleMatch = block.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</) ||
-                     block.match(/<a[^>]*href="https?:\/\/[^"]*"[^>]*>\s*<span[^>]*>([^<]+)/);
-  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
-
-  const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
-                       block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-  const snippet = snippetMatch
-    ? decodeHTMLEntities(stripHtmlTags(snippetMatch[1]).trim())
-    : '';
-
-  if (!title && !snippet) return null;
-  return { title: title || '(no title)', snippet: snippet || '(no snippet)', url };
-}
-
-function parseBraveResults(html: string): SearchResult[] {
-  const results: SearchResult[] = [];
-  const blocks = html.split(/class="result-wrapper/).slice(1);
-
-  for (const block of blocks) {
-    if (results.length >= 5) break;
-    const parsed = parseResultBlock(block);
-    if (parsed) results.push(parsed);
-  }
-
+  // Atlas: provider chosen on the Tools screen (SearXNG, DuckDuckGo, Exa, Parallel, Tavily, Brave).
+  const { results, provider, notes } = await searchWeb(query, braveSearch);
   if (results.length === 0) {
-    const linkPattern = /<a[^>]*href="(https?:\/\/(?!search\.brave)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
-    let match;
-    while ((match = linkPattern.exec(html)) !== null && results.length < 5) {
-      const title = decodeHTMLEntities(match[2].trim());
-      if (!title.includes('Brave')) {
-        results.push({ title, snippet: '', url: match[1] });
-      }
-    }
+    // Every provider failed: report it as a failure so the model says it could not
+    // search, instead of treating it as "nothing exists" (audit C7).
+    const failed = notes.filter((n) => !/: no results$/.test(n));
+    if (failed.length && failed.length === notes.length) throw new Error(`Search failed (offline or blocked): ${failed.join('; ')}`);
+    return `No results found for "${query}".`;
   }
-
-  return results;
+  return `Results from ${provider}:\n\n${results
+    .map((r, i) => {
+      const heading = r.url ? `[${r.title}](${r.url})` : r.title;
+      return `${i + 1}. ${heading}\n   ${r.snippet}`;
+    })
+    .join('\n\n')}`;
 }
 
-const NAMED_HTML_ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
-};
-
-function decodeHTMLEntities(text: string): string {
-  return text.replaceAll(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (entity, body: string) => {
-    if (body.startsWith('#x')) return String.fromCodePoint(Number.parseInt(body.slice(2), 16));
-    if (body.startsWith('#')) return String.fromCodePoint(Number(body.slice(1)));
-    return NAMED_HTML_ENTITIES[body] ?? entity;
-  });
-}
 
 /**
  * Safe math expression evaluator using recursive descent parsing.
  * Supports: +, -, *, /, %, ^ (exponentiation), parentheses, decimals.
  * No dynamic code execution (no eval/new Function).
  */
-function evaluateExpression(expr: string): number {
-  let pos = 0;
-  const str = expr.replaceAll(/\s/g, '');
-
-  function parseExpr(): number {
-    let left = parseTerm();
-    while (pos < str.length && (str[pos] === '+' || str[pos] === '-')) {
-      const op = str[pos++];
-      const right = parseTerm();
-      left = op === '+' ? left + right : left - right;
-    }
-    return left;
-  }
-
-  function parseTerm(): number {
-    let left = parsePower();
-    while (pos < str.length && (str[pos] === '*' || str[pos] === '/' || str[pos] === '%')) {
-      const op = str[pos++];
-      const right = parsePower();
-      if (op === '*') left *= right;
-      else if (op === '/') left /= right;
-      else left %= right;
-    }
-    return left;
-  }
-
-  function parsePower(): number {
-    let base = parseUnary();
-    if (pos < str.length && str[pos] === '^') {
-      pos++;
-      const exp = parsePower(); // right-associative
-      base = Math.pow(base, exp);
-    }
-    return base;
-  }
-
-  function parseUnary(): number {
-    if (str[pos] === '-') { pos++; return -parseAtom(); }
-    if (str[pos] === '+') { pos++; return parseAtom(); }
-    return parseAtom();
-  }
-
-  function parseAtom(): number {
-    if (str[pos] === '(') {
-      pos++; // skip '('
-      const val = parseExpr();
-      if (str[pos] !== ')') throw new Error('Mismatched parentheses');
-      pos++; // skip ')'
-      return val;
-    }
-    const start = pos;
-    while (pos < str.length && (str[pos] >= '0' && str[pos] <= '9' || str[pos] === '.')) pos++;
-    if (pos === start) throw new Error('Unexpected character');
-    return Number(str.substring(start, pos));
-  }
-
-  const result = parseExpr();
-  if (pos < str.length) throw new Error('Unexpected character');
-  return result;
-}
 
 function handleCalculator(expression: string): string {
   const sanitized = expression.replaceAll(/\s/g, '');
@@ -294,14 +285,6 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
 }
 
 /** Block SSRF: reject private/loopback/link-local/cloud-metadata URLs. */
-function isPrivateUrl(url: string): boolean {
-  const m = url.match(/^https?:\/\/([^/:]+)/i);
-  if (!m) return false;
-  const h = m[1].toLowerCase();
-  return h === 'localhost' || h === '[::1]' || h === 'metadata.google.internal'
-    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
-}
-
 function nodeToText(node: any): string {
   if (node.nodeType === 3) return node.text ?? '';
   const tag = (node.tagName ?? '').toLowerCase();
@@ -340,17 +323,21 @@ function htmlToMarkdown(html: string): string {
     .trim();
 }
 
-async function handleReadUrl(rawUrl: string): Promise<string> {
-  const MAX_CHARS = 4000;
+/** Read a web page as plain text (used by the daily briefing too). */
+export async function readPage(rawUrl: string, maxChars = 4000): Promise<string> { return handleReadUrl(rawUrl, maxChars); }
+
+async function handleReadUrl(rawUrl: string, MAX_CHARS = 4000, signal?: AbortSignal): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
   let url = rawUrl.trim();
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
   while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
-  if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  if (isBlockedUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  url = forceHttps(url);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
+  signal?.addEventListener?.('abort', () => controller.abort());
   try {
     // On-device fetch + parse (privacy-preserving — no third-party proxy)
     const response = await fetch(url, {
@@ -360,6 +347,8 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
         'Accept': 'text/html, text/plain, */*',
       },
     });
+    // A public page can redirect to a private address: refuse what came from there.
+    if (response.url && isBlockedUrl(response.url)) throw new Error('Blocked: the page redirected to a private or local network address');
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     const html = await response.text();
     const text = htmlToMarkdown(html);
@@ -381,6 +370,15 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   return result.chunks
     .map((c: RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
     .join('\n\n---\n\n');
+}
+
+async function handleUpdateProjectDocument(p: { name: string; content: string; mode?: string; projectId?: string; signal?: AbortSignal }): Promise<string> {
+  if (!p.projectId) return 'This chat is not in a project, so there is no shared document to update.';
+  const mode = p.mode === 'replace' ? 'replace' : 'append';
+  const { ragService } = require('../rag'); // NOSONAR
+  if (p.signal?.aborted) throw new Error('The update was cancelled, so nothing was written.'); // no writes after a timeout or cancel
+  await ragService.saveProjectNote({ projectId: p.projectId, name: p.name, text: p.content, mode });
+  return `${mode === 'replace' ? 'Rewrote' : 'Added to'} the project document "${p.name}". Every chat in this project can now use it.`;
 }
 
 function formatBytes(bytes: number): string {

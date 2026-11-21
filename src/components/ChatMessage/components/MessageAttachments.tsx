@@ -12,13 +12,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-// Imported directly, not through the barrel: a component that reaches its sibling via the index
-// resolves undefined at render time.
-import { LoadingDots } from '../../LoadingDots';
 import { MediaAttachment } from '../../../types';
 import { viewDocument } from '@react-native-documents/viewer';
 import logger from '../../../utils/logger';
-import { resolveDocumentPath } from '../../../utils/resolveDocumentPath';
 
 interface FadeInImageProps {
   uri: string;
@@ -28,16 +24,9 @@ interface FadeInImageProps {
   onPress?: () => void;
 }
 
-function resolveMediaUri(uri: string): string {
-  return uri.includes('/Documents/') ? `file://${resolveDocumentPath(uri)}` : uri;
-}
-
 function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeInImageProps) {
-  const displayUri = resolveMediaUri(uri);
   const opacity = useSharedValue(0);
-  const [loaded, setLoaded] = React.useState(false);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  const isGeneratedImage = wrapperTestID === 'generated-image';
   return (
     <Animated.View style={[fadeInImageStyles.wrapper, fadeStyle]}>
       <TouchableOpacity
@@ -45,20 +34,13 @@ function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeIn
         style={fadeInImageStyles.wrapper}
         onPress={onPress}
         activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel={
-          isGeneratedImage ? `Generated image ${loaded ? 'loaded' : 'loading'}` : undefined
-        }
       >
         <Image
           testID={testID}
-          source={{ uri: displayUri }}
+          source={{ uri }}
           style={imageStyle}
           resizeMode="cover"
-          onLoad={() => {
-            setLoaded(true);
-            opacity.value = withTiming(1, { duration: 300 });
-          }}
+          onLoad={() => { opacity.value = withTiming(1, { duration: 300 }); }}
         />
       </TouchableOpacity>
     </Animated.View>
@@ -71,18 +53,6 @@ const fadeInImageStyles = StyleSheet.create({
     overflow: 'hidden',
   },
 });
-
-/**
- * The shape to draw an image at, from the only thing that knows it.
- *
- * Square when the sender did not say: a wrong guess at least fills the space evenly, whereas a fixed
- * height crops every picture that is not the shape the height assumed. The dimensions travel with a
- * shared file, so an image from another device has them too.
- */
-function imageAspectRatio(attachment: MediaAttachment): number {
-  const { width, height } = attachment;
-  return width && height && width > 0 && height > 0 ? width / height : 1;
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) { return `${bytes}B`; }
@@ -98,83 +68,6 @@ interface MessageAttachmentsProps {
   onImagePress?: (uri: string) => void;
 }
 
-function AudioAttachment({
-  index,
-  isUser,
-  styles,
-  colors,
-}: {
-  index: number;
-  isUser: boolean;
-  styles: any;
-  colors: any;
-}) {
-  return (
-    <View
-      testID={`audio-badge-${index}`}
-      style={[
-        styles.audioBadge,
-        isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
-      ]}
-    >
-      <View style={styles.audioBadgeHeader}>
-        <Icon name="mic" size={14} color={isUser ? colors.background : colors.textSecondary} />
-        <Text
-          style={[styles.documentBadgeText, isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant]}
-        >
-          Voice message
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/**
- * A file a peer has NAMED whose bytes have not arrived.
- *
- * Its own component, not a branch in the map: everything below reads `uri`, and this is the one case
- * that has none. Keeping it separate also keeps the row list readable - the map was one expression
- * deciding audio, document, image AND this.
- */
-function ArrivingAttachment({
-  attachment,
-  index,
-  isUser,
-  styles,
-  colors,
-}: {
-  attachment: MediaAttachment;
-  index: number;
-  isUser: boolean;
-  styles: any;
-  colors: any;
-}) {
-  return (
-    <View
-      testID={`attachment-pending-${index}`}
-      style={[
-        styles.documentBadge,
-        isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
-      ]}
-    >
-      <LoadingDots
-        size={5}
-        color={isUser ? colors.background : colors.textSecondary}
-        testID={`attachment-pending-dots-${index}`}
-      />
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.documentBadgeText,
-          isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant,
-        ]}
-      >
-        {attachment.fileName || 'Arriving'}
-      </Text>
-    </View>
-  );
-}
-
 export function MessageAttachments({
   attachments,
   isUser,
@@ -185,26 +78,32 @@ export function MessageAttachments({
   return (
     <View testID="message-attachments" style={styles.attachmentsContainer}>
       {attachments.map((attachment, index) =>
-        // Announced, not yet here. Checked FIRST, before any branch that reads `uri`: a pending
-        // attachment has no local file, and every branch below assumes one. The name and size come
-        // from the announcement, so the row reads as the file it will become.
-        attachment.pending ? (
-          <ArrivingAttachment
+        attachment.type === 'audio' ? (
+          <View
             key={attachment.id}
-            attachment={attachment}
-            index={index}
-            isUser={isUser}
-            styles={styles}
-            colors={colors}
-          />
-        ) : attachment.type === 'audio' ? (
-          <AudioAttachment
-            key={attachment.id}
-            index={index}
-            isUser={isUser}
-            styles={styles}
-            colors={colors}
-          />
+            testID={`audio-badge-${index}`}
+            style={[
+              styles.audioBadge,
+              isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
+            ]}
+          >
+            <View style={styles.audioBadgeHeader}>
+              <Icon name="mic" size={14} color={isUser ? colors.background : colors.textSecondary} />
+              <Text
+                style={[styles.documentBadgeText, isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant]}
+              >
+                Voice message
+              </Text>
+            </View>
+            {attachment.textContent ? (
+              <Text
+                testID={`audio-transcription-${index}`}
+                style={[styles.audioTranscription, isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant]}
+              >
+                {attachment.textContent}
+              </Text>
+            ) : null}
+          </View>
         ) : attachment.type === 'document' ? (
           <TouchableOpacity
             key={attachment.id}
@@ -267,13 +166,10 @@ export function MessageAttachments({
           <FadeInImage
             key={attachment.id}
             uri={attachment.uri}
-            imageStyle={[
-              styles.attachmentImage,
-              { aspectRatio: imageAspectRatio(attachment) },
-            ]}
+            imageStyle={styles.attachmentImage}
             wrapperTestID={isUser ? `message-attachment-${index}` : 'generated-image'}
             testID={isUser ? `message-image-${index}` : 'generated-image-content'}
-            onPress={() => onImagePress?.(resolveMediaUri(attachment.uri))}
+            onPress={() => onImagePress?.(attachment.uri)}
           />
         )
       )}

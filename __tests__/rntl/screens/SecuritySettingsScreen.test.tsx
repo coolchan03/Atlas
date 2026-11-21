@@ -185,14 +185,14 @@ describe('SecuritySettingsScreen', () => {
     it('shows info card about passphrase behavior', () => {
       const { getByText } = render(<SecuritySettingsScreen />);
       expect(
-        getByText(/the app will lock automatically/i)
+        getByText(/app lock is separate from individual chat protection/i)
       ).toBeTruthy();
     });
 
     it('shows info about passphrase being stored on device', () => {
       const { getByText } = render(<SecuritySettingsScreen />);
       expect(
-        getByText(/stored securely on device and never transmitted/i)
+        getByText(/encrypted with its own Android Keystore key/i)
       ).toBeTruthy();
     });
   });

@@ -129,7 +129,6 @@ type DeltaShape = {
   reasoning_content?: string;
   reasoning?: string;
   thinking?: string;
-  reasoning_details?: Array<Record<string, unknown>>;
   tool_calls?: Array<{
     index?: number; id?: string; type?: string;
     function?: { name?: string; arguments?: string };
@@ -161,7 +160,7 @@ export function processDelta(
   state: OpenAIStreamState,
   ctx: DeltaCtx,
 ): void {
-  logger.log(`[WIRE-REMOTE] ${JSON.stringify(delta)}`); // [WIRE] raw OpenAI-compatible/Ollama delta from-device
+  logger.log(`[WIRE-REMOTE] keys=${Object.keys((delta ?? {}) as object).join(',')}`); // [WIRE] raw OpenAI-compatible/Ollama delta from-device
   if (delta.content) {
     ctx.thinkTagParser.process(
       delta.content,
@@ -179,16 +178,7 @@ export function processDelta(
   // - delta.reasoning_content (LM Studio)
   // - delta.reasoning         (Ollama /v1/chat/completions)
   // - delta.thinking          (kept as fallback)
-  if (delta.reasoning_details?.length) {
-    (state.reasoningDetails ??= []).push(...delta.reasoning_details);
-  }
-  const structuredReasoning = (delta.reasoning_details || [])
-    .map(detail => typeof detail.text === 'string'
-      ? detail.text
-      : typeof detail.summary === 'string' ? detail.summary : '')
-    .filter(Boolean)
-    .join('');
-  const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || structuredReasoning;
+  const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking;
   // A DEDICATED reasoning field means the remote model chose to emit reasoning — surface
   // it regardless of the local thinkingEnabled toggle. Remote has no thinking toggle, so
   // gating on it dropped reasoning LM Studio actually sent (B16); providers that CAN be
@@ -238,7 +228,7 @@ function handleOllamaChatLine(
   req: { callbacks: StreamCallbacks; signal: AbortSignal; abort: () => void },
 ): void {
   if (req.signal.aborted) return;
-  logger.log(`[WIRE-OLLAMA] ${JSON.stringify(line)}`); // [WIRE] raw Ollama /api/chat NDJSON line from-device
+  logger.log(`[WIRE-OLLAMA] chars=${JSON.stringify(line).length}`); // [WIRE] raw Ollama /api/chat NDJSON line from-device
 
   if (line.error) {
     streamState.streamErrorOccurred = true;
@@ -257,7 +247,7 @@ function handleOllamaChatLine(
     if (msg.tool_calls) {
       for (const tc of msg.tool_calls) {
         if (tc.function?.name) {
-          logger.log(`[OllamaChat] tool_call: ${tc.function.name}(${typeof tc.function.arguments === 'string' ? tc.function.arguments.substring(0, 100) : JSON.stringify(tc.function.arguments).substring(0, 100)})`);
+          logger.log(`[OllamaChat] tool_call: ${tc.function.name}(args ${(typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments)).length} chars)`);
           streamState.accumulatedToolCalls.push(tc);
         }
       }
@@ -279,13 +269,8 @@ export async function generateOllamaChatImpl(
   openaiMessages: OpenAIChatMessage[],
   req: OllamaChatRequest,
 ): Promise<void> {
-  const { options, callbacks, signal, endpoint, modelId, abort } = req;
+  const { options, callbacks, signal, endpoint, modelId, apiKey, abort } = req;
   const thinkingEnabled = options.enableThinking !== false;
-  const think = req.thinkingLevelsOnly
-    ? !options.reasoningBudget ? 'medium'
-      : options.reasoningBudget <= 1024 ? 'low'
-        : options.reasoningBudget <= 4096 ? 'medium' : 'high'
-    : thinkingEnabled;
 
   // Convert to Ollama message format
   // Convert tool_calls arguments from JSON strings to objects for Ollama's native format
@@ -331,7 +316,7 @@ export async function generateOllamaChatImpl(
   });
 
   const requestBody: Record<string, unknown> = {
-    model: modelId, messages: ollamaMessages, stream: true, think,
+    model: modelId, messages: ollamaMessages, stream: true, think: thinkingEnabled,
     ...(options.tools && options.tools.length > 0 && { tools: options.tools }),
     options: {
       ...(options.temperature !== undefined && { temperature: options.temperature }),
@@ -354,7 +339,9 @@ export async function generateOllamaChatImpl(
   };
 
   try {
-    await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, signal }, (line) => {
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    await createNDJSONStreamingRequest(url, { body: requestBody, headers, timeout: 300000, signal }, (line) => {
       handleOllamaChatLine(line, streamState, { callbacks, signal, abort });
     });
 

@@ -15,11 +15,17 @@ jest.mock('../../../src/services/rag', () => ({
   ragService: { deleteProjectDocuments: (id: string) => mockDeleteProjectDocuments(id) },
 }));
 
+// Project CRUD tests run without the Android Keystore; encrypted persistence
+// behavior is tested independently in encryptedChatStorage.test.ts.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({ encryptedChatStorage: {
+  getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined),
+} }));
 import { useProjectStore } from '../../../src/stores/projectStore';
+
+require('../../utils/registerStores').registerStoreRefs();
 
 describe('projectStore', () => {
   beforeEach(() => {
-    mockDeleteProjectDocuments.mockReset().mockResolvedValue(undefined);
     // Reset to default projects
     useProjectStore.setState({
       projects: [
@@ -33,6 +39,21 @@ describe('projectStore', () => {
           updatedAt: new Date().toISOString(),
         },
       ],
+    });
+  });
+
+  describe('project protection boundaries', () => {
+    it('rejects direct tampering with PIN metadata', () => {
+      const project = useProjectStore.getState().projects[0];
+      expect(() => useProjectStore.getState().updateProject(project.id, { pinVerifier: undefined })).toThrow(/PIN verification/);
+      expect(() => useProjectStore.getState().updateProject(project.id, { protectedBlob: undefined })).toThrow(/PIN verification/);
+    });
+    it('refuses to edit or delete locked project content without unlocking', () => {
+      const original = useProjectStore.getState().projects[0];
+      useProjectStore.setState({ projects: [{ ...original, pinVerifier: 'pin:v1:protected', protectedBlob: 'atlasitem:v1:test' }] });
+      expect(() => useProjectStore.getState().updateProject(original.id, { name: 'Tampered' })).toThrow(/Unlock this project/);
+      expect(() => useProjectStore.getState().deleteProject(original.id)).toThrow(/Unlock this protected project/);
+      expect(useProjectStore.getState().projects).toHaveLength(1);
     });
   });
 
@@ -282,7 +303,7 @@ describe('projectStore', () => {
   // deleteProject
   // ============================================================================
   describe('deleteProject', () => {
-    it('removes the project from the store', async () => {
+    it('removes the project from the store', () => {
       const { createProject, deleteProject } = useProjectStore.getState();
       const project = createProject({
         name: 'To Delete',
@@ -291,13 +312,13 @@ describe('projectStore', () => {
         icon: '#000',
       });
 
-      await deleteProject(project.id);
+      deleteProject(project.id);
 
       const found = useProjectStore.getState().getProject(project.id);
       expect(found).toBeUndefined();
     });
 
-    it('reduces the projects count by one', async () => {
+    it('reduces the projects count by one', () => {
       const { createProject, deleteProject } = useProjectStore.getState();
       const project = createProject({
         name: 'To Delete',
@@ -307,13 +328,13 @@ describe('projectStore', () => {
       });
 
       const beforeCount = useProjectStore.getState().projects.length;
-      await deleteProject(project.id);
+      deleteProject(project.id);
       const afterCount = useProjectStore.getState().projects.length;
 
       expect(afterCount).toBe(beforeCount - 1);
     });
 
-    it('does not affect other projects', async () => {
+    it('does not affect other projects', () => {
       const { createProject, deleteProject } = useProjectStore.getState();
       const p1 = createProject({
         name: 'Keep',
@@ -328,15 +349,15 @@ describe('projectStore', () => {
         icon: '#222',
       });
 
-      await deleteProject(p2.id);
+      deleteProject(p2.id);
 
       const kept = useProjectStore.getState().getProject(p1.id);
       expect(kept?.name).toBe('Keep');
     });
 
-    it('handles deleting non-existent project gracefully', async () => {
+    it('handles deleting non-existent project gracefully', () => {
       const initialCount = useProjectStore.getState().projects.length;
-      await useProjectStore.getState().deleteProject('non-existent');
+      useProjectStore.getState().deleteProject('non-existent');
       expect(useProjectStore.getState().projects.length).toBe(initialCount);
     });
   });
@@ -481,22 +502,19 @@ describe('projectStore', () => {
   // RAG cleanup on delete
   // ============================================================================
   describe('RAG cleanup on deleteProject', () => {
-    it('calls ragService.deleteProjectDocuments when deleting a project', async () => {
+    it('calls ragService.deleteProjectDocuments when deleting a project', () => {
       const { deleteProject } = useProjectStore.getState();
-      await deleteProject('default-assistant');
-      expect(mockDeleteProjectDocuments).toHaveBeenCalledWith(
-        'default-assistant',
-      );
+      deleteProject('default-assistant');
+      expect(mockDeleteProjectDocuments).toHaveBeenCalledWith('default-assistant');
     });
 
-    it('preserves the project and returns a refusal if RAG cleanup fails', async () => {
+    it('removes the project even if RAG cleanup fails', () => {
       mockDeleteProjectDocuments.mockRejectedValueOnce(new Error('DB error'));
       const { deleteProject } = useProjectStore.getState();
       const beforeCount = useProjectStore.getState().projects.length;
-      const outcome = await deleteProject('default-assistant');
+      deleteProject('default-assistant');
       const afterCount = useProjectStore.getState().projects.length;
-      expect(outcome).toEqual({ ok: false, reason: 'DB error' });
-      expect(afterCount).toBe(beforeCount);
+      expect(afterCount).toBe(beforeCount - 1);
     });
   });
 });

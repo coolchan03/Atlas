@@ -20,6 +20,35 @@ describe('HardwareService', () => {
     (hardwareService as any).cachedImageRecommendation = null;
   });
 
+  describe('native multi-component image memory', () => {
+    const GB = 1024 * 1024 * 1024;
+    it('adds enabled Anima text encoder and VAE to the checkpoint memory estimate', () => {
+      const weights = 4 * GB;
+      const qwen = 1.2 * GB;
+      const vae = 0.25 * GB;
+      const model = {
+        backend: 'sdcpp',
+        size: weights,
+        supportFiles: [
+          { kind: 'llm', size: qwen, enabled: true },
+          { kind: 'vae', size: vae, enabled: true },
+          { kind: 'lora', size: 0.3 * GB, enabled: false },
+          { kind: 'upscaler', size: 0.2 * GB, enabled: true },
+        ],
+      };
+      const before = hardwareService.estimateImageModelRam({ backend: 'sdcpp', size: weights });
+      const after = hardwareService.estimateImageModelRam(model);
+      expect(after - before).toBeCloseTo((qwen + vae) * 1.25, -5);
+    });
+    it('does not change the existing mobile model estimate', () => {
+      const legacy = { backend: 'mnn', size: 500 * 1024 * 1024 };
+      // Platform.OS can be mocked as iOS by other HardwareService tests;
+      // either platform must use its existing multiplier for MNN models.
+      expect(hardwareService.estimateImageModelRam(legacy))
+        .toEqual(hardwareService.estimateImageModelRam({ size: legacy.size }));
+    });
+  });
+
   // ========================================================================
   // getDeviceInfo
   // ========================================================================
@@ -834,13 +863,10 @@ describe('HardwareService', () => {
         ['SM8635-AB', 'min', 'Snapdragon 8s Gen 3'],
         ['SM8535-AB', 'min', 'Snapdragon 8s Gen 2'],
         ['SM8350-AC', 'min', 'Snapdragon 888'],
-        ['SM8250-AB', 'min', 'Snapdragon 870'],
         ['SM7450-AB', 'min', 'Snapdragon 7 Gen 1'],
         ['SM7475-AB', 'min', 'Snapdragon 7+ Gen 2'],
         ['SM7550-AB', 'min', 'Snapdragon 7 Gen 3'],
         ['SM7675-AB', 'min', 'Snapdragon 7+ Gen 3'],
-        ['SM7225-AB', 'min', 'Snapdragon 750G'],
-        ['SM6375-AB', 'min', 'Snapdragon 695'],
       ] as const)(
         'returns %s variant for %s (%s)',
         async (socModel, expected, _desc) => {
@@ -850,6 +876,13 @@ describe('HardwareService', () => {
           expect(soc.hasNPU).toBe(true);
         },
       );
+
+      it.each(['SM8250-AB', 'SM7225-AB', 'SM6375-AB', 'SM9999'])('does not assume an NPU for %s (older or unknown Snapdragon)', async (socModel) => {
+        await setupQualcommWithSoC(socModel);
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBeUndefined();
+        expect(soc.hasNPU).toBe(false);
+      });
     });
 
     it('caches SoC info after first call', async () => {
@@ -902,8 +935,7 @@ describe('HardwareService', () => {
     });
 
     describe('iOS recommendations', () => {
-      it('recommends SD 2.1 Palettized (NOT SDXL) for high-end devices (A17Pro+, 6GB+)', async () => {
-        // SDXL jetsams even top-tier iOS devices (~7 GB dirty Core ML) → never recommended/offered.
+      it('recommends SDXL for high-end devices (A17Pro+, 6GB+)', async () => {
         await setupDevice({
           totalGB: 8,
           platform: 'ios',
@@ -912,11 +944,9 @@ describe('HardwareService', () => {
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('coreml');
         expect(rec.recommendedModels).toEqual(
-          expect.arrayContaining(['2-1-base-palettized', 'v1-5-palettized']),
+          expect.arrayContaining(['sdxl', 'xl-base']),
         );
-        expect(rec.recommendedModels).not.toContain('sdxl');
-        expect(rec.recommendedModels).not.toContain('xl-base');
-        expect(rec.bannerText).not.toContain('SDXL');
+        expect(rec.bannerText).toContain('SDXL');
       });
 
       it('recommends SD 1.5/2.1 palettized for mid-range (A15/A16, 6GB+)', async () => {
@@ -1196,6 +1226,14 @@ describe('HardwareService', () => {
       expect(await hardwareService.getAccelerationCapability()).toEqual({ hasNpu: true, hasGpu: true });
     });
 
+    it('reports no NPU on a Snapdragon when the runtime exposes no Hexagon device', async () => {
+      Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({ vendor: 'qualcomm', hasNPU: true } as any);
+      jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+      jest.spyOn(hardwareService, 'hasHtpDevice').mockResolvedValue(false);
+      expect(await hardwareService.getAccelerationCapability()).toEqual({ hasNpu: false, hasGpu: true });
+    });
+
     it('has no acceleration on a device with neither', async () => {
       Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
       jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({ vendor: 'other', hasNPU: false } as any);
@@ -1206,6 +1244,19 @@ describe('HardwareService', () => {
     it('reports nothing on iOS (llama.rn HTP/OpenCL are Android-only)', async () => {
       Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
       expect(await hardwareService.getAccelerationCapability()).toEqual({ hasNpu: false, hasGpu: false });
+    });
+  });
+
+  describe('fast core count', () => {
+    const cores = (parts: string[]) => parts.map((part, i) => `processor\t: ${i}\nCPU implementer\t: 0x41\nCPU part\t: ${part}\n`).join('\n');
+    it('counts only the fast cores of a 4 + 4 chip (the onn tablet), so inference does not use the slow ones', () => {
+      const { countFastCores } = require('../../../src/services/hardware');
+      expect(countFastCores(cores(['0xd05', '0xd05', '0xd05', '0xd05', '0xd41', '0xd41', '0xd41', '0xd41']))).toBe(4);
+    });
+    it('counts every core when none is the small kind (Snapdragon 8 Elite), and nothing when there are no ids', () => {
+      const { countFastCores } = require('../../../src/services/hardware');
+      expect(countFastCores(cores(Array(8).fill('0x001')))).toBe(8);
+      expect(countFastCores('processor\t: 0\n')).toBeNull();
     });
   });
 });

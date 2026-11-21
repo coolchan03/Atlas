@@ -1,10 +1,4 @@
-import React, {
-  useRef,
-  useEffect,
-  useLayoutEffect,
-  useState,
-  useCallback,
-} from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,16 +8,16 @@ import {
   Animated,
   Easing,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
   Platform,
   Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './AppSheet.styles';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+/** On a wide window (a tablet, an unfolded phone) the sheet stays this wide and centered instead of stretching across the screen. */
+export const SHEET_MAX_WIDTH = 640;
 
 export interface AppSheetProps {
   visible: boolean;
@@ -35,7 +29,6 @@ export interface AppSheetProps {
    */
   onClosed?: () => void;
   onHeaderClosePress?: () => void;
-  onBackPress?: () => void;
   snapPoints?: (string | number)[];
   enableDynamicSizing?: boolean;
   title?: string;
@@ -43,17 +36,15 @@ export interface AppSheetProps {
   showHeader?: boolean;
   showHandle?: boolean;
   elevation?: 'level3' | 'level4';
-  /** Prevent every user-driven dismissal path while a critical action runs. */
-  dismissible?: boolean;
   children: React.ReactNode;
 }
 
-function resolveSnapPoint(snap: string | number): number {
+export function resolveSnapPoint(snap: string | number, windowHeight: number): number {
   if (typeof snap === 'number') return snap;
   if (typeof snap === 'string' && snap.endsWith('%')) {
-    return (Number.parseFloat(snap) / 100) * SCREEN_HEIGHT;
+    return (Number.parseFloat(snap) / 100) * windowHeight;
   }
-  return SCREEN_HEIGHT * 0.5;
+  return windowHeight * 0.5;
 }
 
 function createSheetPanResponder({
@@ -61,37 +52,27 @@ function createSheetPanResponder({
   backdropOpacity,
   setModalVisible,
   onCloseRef,
-  dismissibleRef,
+  heightRef,
 }: {
+  heightRef: React.MutableRefObject<number>;
   translateY: Animated.Value;
   backdropOpacity: Animated.Value;
   setModalVisible: (v: boolean) => void;
   onCloseRef: React.MutableRefObject<() => void>;
-  dismissibleRef: React.MutableRefObject<boolean>;
 }) {
   return PanResponder.create({
     onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, { dy }) =>
-      dismissibleRef.current && Math.abs(dy) > 8,
+    onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 8,
     onPanResponderMove: (_, { dy }) => {
-      if (dismissibleRef.current && dy > 0) {
+      if (dy > 0) {
         translateY.setValue(dy);
       }
     },
     onPanResponderRelease: (_, { dy, vy }) => {
-      if (!dismissibleRef.current) {
-        Animated.spring(translateY, {
-          toValue: 0,
-          damping: 28,
-          stiffness: 300,
-          useNativeDriver: true,
-        }).start();
-        return;
-      }
       if (dy > 80 || vy > 0.5) {
         Animated.parallel([
           Animated.timing(translateY, {
-            toValue: SCREEN_HEIGHT,
+            toValue: heightRef.current,
             duration: 150,
             useNativeDriver: true,
           }),
@@ -121,7 +102,6 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   onClose,
   onClosed,
   onHeaderClosePress,
-  onBackPress,
   snapPoints,
   enableDynamicSizing = false,
   title,
@@ -129,28 +109,29 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   showHeader = true,
   showHandle = true,
   elevation = 'level3',
-  dismissible = true,
   children,
 }) => {
   const { elevation: elevationTokens } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { bottom: bottomInset } = useSafeAreaInsets();
+  // The window as it is NOW: it changes when the phone is rotated or unfolded, so it is read on every render, not once at start-up.
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const heightRef = useRef(windowHeight);
+  heightRef.current = windowHeight;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const translateY = useRef(new Animated.Value(windowHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  // Stable dismissal handlers read only committed props. Render-phase writes can
-  // leak values from a concurrent render that React later discards.
+  // Keep onClose ref current for PanResponder
   const onCloseRef = useRef(onClose);
-  const dismissibleRef = useRef(dismissible);
+  onCloseRef.current = onClose;
+
+  // Keep onClosed ref current so the animateOut completion always calls the
+  // latest callback without recreating the close handlers.
   const onClosedRef = useRef(onClosed);
-  useLayoutEffect(() => {
-    dismissibleRef.current = dismissible;
-    onCloseRef.current = onClose;
-    onClosedRef.current = onClosed;
-  }, [dismissible, onClose, onClosed]);
+  onClosedRef.current = onClosed;
 
   // Guards backdrop-tap dismiss during animate-in.
   // Using a ref (not state) so there are zero re-renders — a state-based
@@ -158,20 +139,22 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // to route to the backdrop and close the sheet before any button was tapped.
   //
   // Starts TRUE: when the modal first renders the sheet is still off-screen
-  // (translateY=SCREEN_HEIGHT) so there is nothing to guard against.
+  // (translateY = window height) so there is nothing to guard against.
   // animateIn() sets it to false, then back to true on completion.
   const backdropEnabled = useRef(true);
 
   // Calculate sheet max height from largest snap point
   const sheetMaxHeight = enableDynamicSizing
-    ? SCREEN_HEIGHT * 0.85
-    : resolveSnapPoint(snapPoints?.[snapPoints.length - 1] || '50%');
+    ? windowHeight * 0.85
+    : resolveSnapPoint(
+      snapPoints?.[snapPoints.length - 1] || '50%', windowHeight,
+    );
 
   const levelTokens = elevationTokens[elevation];
 
   // Animate in — use timing (not spring) so the .start() callback fires at a
   // guaranteed time. A spring only calls its callback when displacement <
-  // restDisplacementThreshold (0.001px); from SCREEN_HEIGHT that can take
+  // restDisplacementThreshold (0.001px); from the full window height that can take
   // 1–2 s, leaving backdropEnabled=false the whole time and silently eating
   // every tap that lands even slightly outside a button's hit area.
   const animateIn = useCallback(() => {
@@ -199,7 +182,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       backdropEnabled.current = false;
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: SCREEN_HEIGHT,
+          toValue: heightRef.current,
           duration: 200,
           useNativeDriver: true,
         }),
@@ -215,41 +198,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Track whether we should animate on next onShow
   const pendingAnimateIn = useRef(false);
-  const pendingAnimationFrame = useRef<ReturnType<
-    typeof requestAnimationFrame
-  > | null>(null);
-
-  const animateInIfPending = useCallback(() => {
-    if (!pendingAnimateIn.current) return;
-    pendingAnimateIn.current = false;
-    animateIn();
-  }, [animateIn]);
-
-  const showModal = useCallback(() => {
-    setModalVisible(true);
-    // Modal.onShow is not guaranteed when a transparent modal is reused.
-    if (pendingAnimationFrame.current !== null) {
-      cancelAnimationFrame(pendingAnimationFrame.current);
-    }
-    pendingAnimationFrame.current = requestAnimationFrame(() => {
-      pendingAnimationFrame.current = null;
-      animateInIfPending();
-    });
-  }, [animateInIfPending]);
-
-  useEffect(
-    () => () => {
-      if (pendingAnimationFrame.current !== null) {
-        cancelAnimationFrame(pendingAnimationFrame.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     if (visible) {
-      // A presented sheet must not dismiss the keyboard after its input takes focus.
-      if (modalVisible) return;
       pendingAnimateIn.current = true;
       // Dismiss keyboard first, then open — prevents animation conflict
       const keyboardVisible = Keyboard.isVisible?.() ?? false;
@@ -259,7 +210,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
         const openOnce = () => {
           if (opened) return;
           opened = true;
-          showModal();
+          setModalVisible(true);
         };
         const sub = Keyboard.addListener('keyboardDidHide', () => {
           sub.remove();
@@ -275,41 +226,37 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           sub.remove();
         };
       }
-      showModal();
+      setModalVisible(true);
+
     } else if (modalVisible) {
       animateOut(() => {
         setModalVisible(false);
         onClosedRef.current?.();
       });
     }
-  }, [animateOut, modalVisible, showModal, visible]);
+  }, [visible]);
 
   // Track keyboard height so the sheet lifts above the keyboard
   useEffect(() => {
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, e =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
     const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
   // Called by Modal when the Dialog is fully rendered and ready for touch
   const handleModalShow = useCallback(() => {
-    animateInIfPending();
-  }, [animateInIfPending]);
+    if (pendingAnimateIn.current) {
+      pendingAnimateIn.current = false;
+      animateIn();
+    }
+  }, [animateIn]);
 
   // User-initiated dismiss (backdrop tap, Done button, swipe).
   // Backdrop taps are gated by backdropEnabled to prevent the long-press
   // finger-up event from closing the sheet before any action can be taken.
   const dismiss = useCallback(() => {
-    if (!dismissibleRef.current) return;
     animateOut(() => {
       setModalVisible(false);
       onCloseRef.current();
@@ -318,20 +265,14 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   }, [animateOut]);
 
   const handleBackdropPress = useCallback(() => {
-    if (dismissibleRef.current && backdropEnabled.current) {
+    if (backdropEnabled.current) {
       dismiss();
     }
   }, [dismiss]);
 
   // Swipe-to-dismiss on handle
   const panResponder = useRef(
-    createSheetPanResponder({
-      translateY,
-      backdropOpacity,
-      setModalVisible,
-      onCloseRef,
-      dismissibleRef,
-    }),
+    createSheetPanResponder({ translateY, backdropOpacity, setModalVisible, onCloseRef, heightRef }),
   ).current;
 
   if (!modalVisible && !visible) {
@@ -340,10 +281,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   return (
     <Modal
-      // The controlled prop owns native visibility. If an exit animation is
-      // interrupted, a stale internal flag must not keep an invisible native
-      // modal above the current screen and consume its touches.
-      visible={visible && modalVisible}
+      visible={modalVisible}
       transparent
       animationType="none"
       onRequestClose={dismiss}
@@ -352,7 +290,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       hardwareAccelerated
     >
       <View style={styles.container}>
-        {/* Backdrop — gated by backdropEnabled ref so the long-press
+        {/* Backdrop - gated by backdropEnabled ref so the long-press
             finger-up can't close the sheet during animate-in */}
         <TouchableWithoutFeedback onPress={handleBackdropPress}>
           <Animated.View
@@ -360,25 +298,15 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           />
         </TouchableWithoutFeedback>
 
-        {keyboardHeight > 0 && (
-          <View
-            testID="app-sheet-keyboard-underlay"
-            pointerEvents="none"
-            style={[
-              styles.keyboardUnderlay,
-              { height: keyboardHeight, backgroundColor: levelTokens.backgroundColor },
-            ]}
-          />
-        )}
-
         {/* Sheet */}
         <Animated.View
           style={[
             styles.sheet,
             {
               ...(enableDynamicSizing
-                ? { maxHeight: SCREEN_HEIGHT * 0.85 - keyboardHeight }
+                ? { maxHeight: windowHeight * 0.85 - keyboardHeight }
                 : { height: sheetMaxHeight - keyboardHeight }),
+              ...(windowWidth > SHEET_MAX_WIDTH ? { width: SHEET_MAX_WIDTH, alignSelf: 'center' as const } : null),
               backgroundColor: levelTokens.backgroundColor,
               borderTopLeftRadius: levelTokens.borderRadius,
               borderTopRightRadius: levelTokens.borderRadius,
@@ -389,7 +317,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
             },
           ]}
         >
-          {/* Handle — swipe target */}
+          {/* Handle - swipe target */}
           {showHandle && (
             <View {...panResponder.panHandlers} style={styles.handleContainer}>
               <View
@@ -409,27 +337,11 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           {/* Header */}
           {showHeader && title ? (
             <View style={styles.header}>
-              {onBackPress ? (
-                <TouchableOpacity
-                  testID="app-sheet-back"
-                  onPress={onBackPress}
-                  style={styles.headerBack}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to all models"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Icon name="chevron-left" size={18} style={styles.headerBackIcon} />
-                </TouchableOpacity>
-              ) : null}
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {title}
               </Text>
               <TouchableOpacity
-                testID="app-sheet-close"
-                onPress={() => {
-                  if (!dismissibleRef.current) return;
-                  (onHeaderClosePress || dismiss)();
-                }}
+                onPress={onHeaderClosePress || dismiss}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.headerClose}>{closeLabel}</Text>
@@ -440,12 +352,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           {/* Content */}
           {children}
 
-          {/* Bottom safe area spacer — hidden when keyboard is up (keyboard height includes it) */}
+          {/* Bottom safe area spacer - hidden when keyboard is up (keyboard height includes it) */}
           {bottomInset > 0 && keyboardHeight === 0 && (
-            <View
-              testID="bottom-safe-area-spacer"
-              style={{ height: bottomInset }}
-            />
+            <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
           )}
         </Animated.View>
       </View>

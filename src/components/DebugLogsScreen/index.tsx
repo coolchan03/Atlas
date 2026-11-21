@@ -3,7 +3,7 @@
  * Simple modal showing captured debug logs with copy and clear options
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -22,24 +22,15 @@ import { createStyles } from './styles';
 interface DebugLogsScreenProps {
   visible: boolean;
   onClose: () => void;
-  syncOnly?: boolean;
 }
 
-export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClose, syncOnly = false }) => {
+export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClose }) => {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { logs, clearLogs } = useDebugLogsStore();
-  const [syncFilter, setSyncFilter] = React.useState<'state' | 'files' | 'startup' | 'all'>('state');
-  const syncLogs = syncOnly
-    ? logs.filter(log => /\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(log.message))
-    : logs;
-  const visibleLogs = !syncOnly || syncFilter === 'all'
-    ? syncLogs
-    : syncLogs.filter(log => {
-        if (syncFilter === 'state') return /\[StateSync\]/i.test(log.message);
-        if (syncFilter === 'files') return /\[SYNC_DIAGNOSTIC\]/i.test(log.message);
-        return /\[(?:BOOT-SYNC|REPAIR)\]/i.test(log.message);
-      });
+  const { logs: allLogs, clearLogs } = useDebugLogsStore();
+  const [level, setLevel] = useState<'all' | 'warn' | 'error'>('all');
+  // 'warn' shows warnings and errors; 'error' only errors.
+  const logs = allLogs.filter(l => level === 'all' || l.level === 'error' || (level === 'warn' && l.level === 'warn'));
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -51,8 +42,8 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
     });
   };
 
-  const getLogColor = (level: string) => {
-    switch (level) {
+  const getLogColor = (logLevel: string) => {
+    switch (logLevel) {
       case 'error':
         return theme.colors.error;
       case 'warn':
@@ -62,35 +53,22 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
     }
   };
 
-  const handleCopyAllLogs = async () => {
-    const logsText = visibleLogs
-      .map(
-        (log: any) =>
-          `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
-      )
+  const logsText = () =>
+    logs
+      .map((log: any) => `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`)
       .join('\n');
 
+  const handleCopyAllLogs = async () => {
     try {
-      await Clipboard.setString(logsText);
-      // Show feedback (could use toast here)
+      await Clipboard.setString(logsText());
     } catch {
       // Failed to copy
     }
   };
 
   const handleShare = async () => {
-    const logsText = visibleLogs
-      .map(
-        (log: any) =>
-          `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
-      )
-      .join('\n');
-
     try {
-      await Share.share({
-        message: logsText,
-        title: 'Debug Logs',
-      });
+      await Share.share({ message: logsText(), title: 'Debug Logs' });
     } catch {
       // Cancelled
     }
@@ -102,31 +80,23 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>{syncOnly ? 'Sync Debug Logs' : 'Debug Logs'}</Text>
-            <Text style={styles.subtitle}>{visibleLogs.length} log entries</Text>
+            <Text style={styles.title}>Debug Logs</Text>
+            <Text style={styles.subtitle}>{logs.length} entries{level === 'all' ? '' : ` (of ${allLogs.length})`}</Text>
           </View>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+          <TouchableOpacity accessibilityLabel="Close" onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Icon name="x" size={24} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
 
-        {syncOnly && (
-          <View style={styles.actionBar}>
-            {(['state', 'files', 'startup', 'all'] as const).map(filter => (
-              <TouchableOpacity
-                key={filter}
-                accessibilityRole="button"
-                accessibilityState={{ selected: syncFilter === filter }}
-                onPress={() => setSyncFilter(filter)}
-                style={[styles.actionButton, syncFilter === filter && styles.filterSelected]}
-              >
-                <Text style={styles.actionButtonText}>
-                  {{ state: 'State ops', files: 'Files', startup: 'Startup', all: 'All' }[filter]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        <View style={styles.actionBar}>
+          {(['all', 'warn', 'error'] as const).map(l => (
+            <TouchableOpacity key={l} accessibilityLabel={`Show ${l === 'all' ? 'all logs' : l === 'warn' ? 'warnings and errors' : 'errors only'}`} accessibilityState={{ selected: level === l }} style={styles.actionButton} onPress={() => setLevel(l)}>
+              <Text style={[styles.actionButtonText, level !== l && { color: theme.colors.textSecondary }]}>
+                {l === 'all' ? 'All' : l === 'warn' ? 'Warnings' : 'Errors'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Action Buttons */}
         <View style={styles.actionBar}>
@@ -140,20 +110,20 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
             <Text style={styles.actionButtonText}>Share</Text>
           </TouchableOpacity>
 
-          {!syncOnly && <TouchableOpacity style={styles.actionButton} onPress={clearLogs}>
+          <TouchableOpacity style={styles.actionButton} onPress={clearLogs}>
             <Icon name="trash-2" size={16} color={theme.colors.error} style={styles.actionIcon} />
             <Text style={[styles.actionButtonText, { color: theme.colors.error }]}>Clear</Text>
-          </TouchableOpacity>}
+          </TouchableOpacity>
         </View>
 
         {/* Logs List */}
-        {visibleLogs.length === 0 ? (
+        {logs.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{syncOnly ? 'No sync debug logs yet' : 'No logs yet'}</Text>
+            <Text style={styles.emptyText}>No logs yet</Text>
           </View>
         ) : (
           <FlatList
-            data={visibleLogs}
+            data={logs}
             keyExtractor={(_, index) => `${index}`}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }: { item: any }) => (

@@ -47,7 +47,7 @@ describe('ChatMessage', () => {
   describe('basic rendering', () => {
     it('renders user message', () => {
       const { getByText } = render(
-        <ChatMessage message={createUserMessage('Hello from user')} />,
+        <ChatMessage message={createUserMessage('Hello from user')} />
       );
 
       expect(getByText('Hello from user')).toBeTruthy();
@@ -55,9 +55,7 @@ describe('ChatMessage', () => {
 
     it('renders assistant message', () => {
       const { getByText } = render(
-        <ChatMessage
-          message={createAssistantMessage('Hello from assistant')}
-        />,
+        <ChatMessage message={createAssistantMessage('Hello from assistant')} />
       );
 
       expect(getByText('Hello from assistant')).toBeTruthy();
@@ -65,7 +63,7 @@ describe('ChatMessage', () => {
 
     it('renders system message', () => {
       const { getByText } = render(
-        <ChatMessage message={createSystemMessage('System notification')} />,
+        <ChatMessage message={createSystemMessage('System notification')} />
       );
 
       expect(getByText('System notification')).toBeTruthy();
@@ -78,9 +76,7 @@ describe('ChatMessage', () => {
         isSystemInfo: true,
       });
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('system-info-message')).toBeTruthy();
       expect(getByText('Model loaded successfully')).toBeTruthy();
@@ -88,13 +84,10 @@ describe('ChatMessage', () => {
 
     it('renders empty content gracefully', () => {
       const message = createMessage({ content: '' });
-      const { queryByText, getByTestId } = render(
-        <ChatMessage message={message} />,
-      );
+      const { queryByText, getByTestId } = render(<ChatMessage message={message} />);
 
       // Should not crash and should render container
-      const containerId =
-        message.role === 'user' ? 'user-message' : 'assistant-message';
+      const containerId = message.role === 'user' ? 'user-message' : 'assistant-message';
       expect(getByTestId(containerId)).toBeTruthy();
       // Should not show "undefined" or "null" as text
       expect(queryByText('undefined')).toBeNull();
@@ -125,55 +118,6 @@ describe('ChatMessage', () => {
 
       expect(getByTestId('assistant-message')).toBeTruthy();
     });
-
-    it('renders synced tool results before the assistant bubble', () => {
-      const message = createMessage({
-        role: 'assistant',
-        content: 'Here is what I found.',
-        toolArtifacts: [
-          { name: 'web_search', result: 'A result from the web.' },
-        ],
-      });
-      const view = render(<ChatMessage message={message} />);
-      const tree = JSON.stringify(view.toJSON());
-
-      expect(tree.indexOf('tool-message')).toBeLessThan(
-        tree.indexOf('message-bubble'),
-      );
-    });
-
-    it('renders a running synced tool before the partial assistant bubble', () => {
-      const message = createMessage({
-        role: 'assistant',
-        content: 'I will make that image.',
-        isStreaming: true,
-        toolArtifacts: [
-          { name: 'generate_image', result: '', status: 'running' },
-        ],
-      });
-      const view = render(<ChatMessage message={message} isStreaming />);
-      const tree = JSON.stringify(view.toJSON());
-
-      expect(view.getByText('Using Generated image...')).toBeTruthy();
-      expect(tree.indexOf('tool-message')).toBeLessThan(
-        tree.indexOf('message-bubble'),
-      );
-    });
-
-    it('keeps synced tool rows below active thinking', () => {
-      const message = createMessage({
-        role: 'assistant',
-        content: '',
-        reasoningContent: 'I am deciding which source to use next.',
-        isStreaming: true,
-        toolArtifacts: [{ name: 'web_search', result: 'Search complete.' }],
-      });
-      const view = render(<ChatMessage message={message} isStreaming />);
-
-      expect(view.getAllByText('Thinking...').length).toBeGreaterThan(0);
-      expect(view.getByText('I am deciding which source to use next.')).toBeTruthy();
-      expect(view.getByTestId('tool-message')).toBeTruthy();
-    });
   });
 
   // ============================================================================
@@ -184,7 +128,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Generating...');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       expect(getByTestId('streaming-cursor')).toBeTruthy();
@@ -194,7 +138,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Complete response');
 
       const { queryByTestId } = render(
-        <ChatMessage message={message} isStreaming={false} />,
+        <ChatMessage message={message} isStreaming={false} />
       );
 
       expect(queryByTestId('streaming-cursor')).toBeNull();
@@ -204,7 +148,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Partial cont');
 
       const { getByText } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       expect(getByText(/Partial cont/)).toBeTruthy();
@@ -214,7 +158,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       expect(getByTestId('streaming-cursor')).toBeTruthy();
@@ -227,13 +171,10 @@ describe('ChatMessage', () => {
   describe('thinking blocks', () => {
     it('renders thinking block from <think> tags', () => {
       const message = createAssistantMessage(
-        '<think>Let me analyze this problem step by step...</think>The answer is 42.',
+        '<think>Let me analyze this problem step by step...</think>The answer is 42.'
       );
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByText, getByTestId } = render(<ChatMessage message={message} />);
 
       // Main content should be visible
       expect(getByText(/The answer is 42/)).toBeTruthy();
@@ -243,42 +184,21 @@ describe('ChatMessage', () => {
 
     it('shows Thought process header when thinking is complete', () => {
       const message = createAssistantMessage(
-        '<think>Internal reasoning here</think>Final answer.',
+        '<think>Internal reasoning here</think>Final answer.'
       );
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('thinking-block-title')).toBeTruthy();
       expect(getByText('Thought process')).toBeTruthy();
     });
 
-    it('renders Markdown in the collapsed thinking preview', () => {
-      const message = createAssistantMessage(
-        '<think>**Drafting Email Response**\nI am composing a direct reply.</think>Done.',
-      );
-
-      const { getByTestId, getByText, queryByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
-
-      expect(getByTestId('thinking-block-preview')).toBeTruthy();
-      expect(getByText('Drafting Email Response')).toBeTruthy();
-      expect(queryByText(/\*\*Drafting Email Response\*\*/)).toBeNull();
-    });
-
     it('expands thinking block when toggle is pressed', () => {
       const message = createAssistantMessage(
-        '<think>Step 1: Check input\nStep 2: Process</think>Done!',
+        '<think>Step 1: Check input\nStep 2: Process</think>Done!'
       );
 
-      const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
 
       // Initially collapsed
       expect(queryByTestId('thinking-block-content')).toBeNull();
@@ -291,14 +211,12 @@ describe('ChatMessage', () => {
     });
 
     it('shows Thinking... header when thinking is incomplete', () => {
-      const message = createMessage({
-        role: 'assistant',
-        content: '<think>Thinking in progress...',
-        isStreaming: true,
-      });
+      const message = createAssistantMessage(
+        '<think>Thinking in progress...'
+      );
 
       const { getByTestId, getAllByText } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       // Thinking block exists and shows "Thinking..." in the title
@@ -315,33 +233,27 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       expect(getByTestId('thinking-indicator')).toBeTruthy();
     });
 
     it('handles unclosed think tag gracefully', () => {
-      const message = createAssistantMessage(
-        '<think>Still thinking about this...',
-      );
+      const message = createAssistantMessage('<think>Still thinking about this...');
 
       // Should not crash
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       expect(getByTestId('thinking-block')).toBeTruthy();
     });
 
     it('handles empty think tags', () => {
-      const message = createAssistantMessage(
-        '<think></think>Here is the answer.',
-      );
+      const message = createAssistantMessage('<think></think>Here is the answer.');
 
-      const { getByText, queryByTestId: _queryByTestId } = render(
-        <ChatMessage message={message} />,
-      );
+      const { getByText, queryByTestId: _queryByTestId } = render(<ChatMessage message={message} />);
 
       // Should show the response
       expect(getByText(/Here is the answer/)).toBeTruthy();
@@ -350,7 +262,7 @@ describe('ChatMessage', () => {
 
     it('handles multiple think tags by using first one', () => {
       const message = createAssistantMessage(
-        '<think>First thought</think>Response<think>Second thought</think>',
+        '<think>First thought</think>Response<think>Second thought</think>'
       );
 
       const { getByText } = render(<ChatMessage message={message} />);
@@ -386,9 +298,7 @@ describe('ChatMessage', () => {
       ];
       const message = createUserMessage('Multiple images', { attachments });
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByText('Multiple images')).toBeTruthy();
       expect(getByTestId('message-image-0')).toBeTruthy();
@@ -404,7 +314,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Image', { attachments: [attachment] });
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onImagePress={onImagePress} />,
+        <ChatMessage message={message} onImagePress={onImagePress} />
       );
 
       fireEvent.press(getByTestId('message-attachment-0'));
@@ -423,7 +333,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText, queryByTestId } = render(
-        <ChatMessage message={message} />,
+        <ChatMessage message={message} />
       );
 
       expect(getByTestId('message-attachments')).toBeTruthy();
@@ -445,7 +355,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
+        <ChatMessage message={message} />
       );
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
@@ -486,7 +396,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText, queryByText } = render(
-        <ChatMessage message={message} />,
+        <ChatMessage message={message} />
       );
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
@@ -514,21 +424,13 @@ describe('ChatMessage', () => {
     });
 
     it('renders multiple document attachments', () => {
-      const doc1 = createDocumentAttachment({
-        fileName: 'file1.txt',
-        fileSize: 100,
-      });
-      const doc2 = createDocumentAttachment({
-        fileName: 'file2.csv',
-        fileSize: 2048,
-      });
+      const doc1 = createDocumentAttachment({ fileName: 'file1.txt', fileSize: 100 });
+      const doc2 = createDocumentAttachment({ fileName: 'file2.csv', fileSize: 2048 });
       const message = createUserMessage('Two docs', {
         attachments: [doc1, doc2],
       });
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
       expect(getByTestId('document-badge-1')).toBeTruthy();
@@ -545,40 +447,28 @@ describe('ChatMessage', () => {
     });
 
     it('formats KB file sizes', () => {
-      const doc = createDocumentAttachment({
-        fileName: 'b.txt',
-        fileSize: 1024,
-      });
+      const doc = createDocumentAttachment({ fileName: 'b.txt', fileSize: 1024 });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('1KB')).toBeTruthy();
     });
 
     it('formats MB file sizes', () => {
-      const doc = createDocumentAttachment({
-        fileName: 'c.txt',
-        fileSize: 1024 * 1024,
-      });
+      const doc = createDocumentAttachment({ fileName: 'c.txt', fileSize: 1024 * 1024 });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('1.0MB')).toBeTruthy();
     });
 
     it('formats sub-KB file sizes as bytes', () => {
-      const doc = createDocumentAttachment({
-        fileName: 'd.txt',
-        fileSize: 500,
-      });
+      const doc = createDocumentAttachment({ fileName: 'd.txt', fileSize: 500 });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('500B')).toBeTruthy();
     });
 
     it('formats fractional MB correctly', () => {
-      const doc = createDocumentAttachment({
-        fileName: 'e.txt',
-        fileSize: 2.5 * 1024 * 1024,
-      });
+      const doc = createDocumentAttachment({ fileName: 'e.txt', fileSize: 2.5 * 1024 * 1024 });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('2.5MB')).toBeTruthy();
@@ -594,9 +484,7 @@ describe('ChatMessage', () => {
         attachments: [attachment],
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} />,
-      );
+      const { getByText, getByTestId } = render(<ChatMessage message={message} />);
 
       expect(getByText(/Here is your image/)).toBeTruthy();
       expect(getByTestId('generated-image')).toBeTruthy();
@@ -611,7 +499,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Long press me');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />,
+        <ChatMessage message={message} showActions={true} />
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -625,7 +513,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('No actions');
 
       const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} showActions={false} />,
+        <ChatMessage message={message} showActions={false} />
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -638,7 +526,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Streaming...');
 
       const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} showActions={true} isStreaming={true} />,
+        <ChatMessage message={message} showActions={true} isStreaming={true} />
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -651,7 +539,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Copy this text');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onCopy={onCopy} showActions={true} />,
+        <ChatMessage message={message} onCopy={onCopy} showActions={true} />
       );
 
       // Open menu
@@ -669,7 +557,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Retry this');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onRetry={onRetry} showActions={true} />,
+        <ChatMessage message={message} onRetry={onRetry} showActions={true} />
       );
 
       // Open menu
@@ -686,7 +574,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Edit me');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open menu
@@ -696,17 +584,19 @@ describe('ChatMessage', () => {
       expect(getByTestId('action-edit')).toBeTruthy();
     });
 
-    it('shows edit option for assistant messages', () => {
-      const message = createAssistantMessage('Edit me');
+    it('does not show edit option for assistant messages', () => {
+      const onEdit = jest.fn();
+      const message = createAssistantMessage('Cannot edit me');
 
-      const { getByTestId } = render(
-        <ChatMessage message={message} onEdit={() => {}} showActions={true} />,
+      const { getByTestId, queryByTestId } = render(
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open menu
       fireEvent(getByTestId('assistant-message'), 'longPress');
 
-      expect(getByTestId('action-edit')).toBeTruthy();
+      // Edit option should not be available
+      expect(queryByTestId('action-edit')).toBeNull();
     });
 
     it('shows generate image option when canGenerateImage is true', () => {
@@ -719,7 +609,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />,
+        />
       );
 
       // Open menu
@@ -738,7 +628,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={false}
           showActions={true}
-        />,
+        />
       );
 
       // Open menu
@@ -757,7 +647,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />,
+        />
       );
 
       // Open menu and generate
@@ -771,7 +661,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />,
+        <ChatMessage message={message} showActions={true} />
       );
 
       // Open menu
@@ -800,10 +690,9 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByTestId('generation-meta')).toBeTruthy();
       expect(getByText('Metal')).toBeTruthy();
     });
@@ -818,11 +707,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText(/Metal.*32L/)).toBeTruthy();
     });
 
@@ -835,11 +723,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('CPU')).toBeTruthy();
     });
 
@@ -852,12 +739,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
-      expect(getByText('22.3 tok/s')).toBeTruthy();
+      expect(getByText('22.3 tok/s (very fast)')).toBeTruthy();
     });
 
     it('displays time to first token', () => {
@@ -868,11 +754,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText(/TTFT.*0\.45s/)).toBeTruthy();
     });
 
@@ -884,11 +769,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('Phi-3-mini-Q4_K_M')).toBeTruthy();
     });
 
@@ -902,11 +786,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('20 steps')).toBeTruthy();
       expect(getByText('cfg 7.5')).toBeTruthy();
       expect(getByText('512x512')).toBeTruthy();
@@ -922,7 +805,7 @@ describe('ChatMessage', () => {
       });
 
       const { queryByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={false} />,
+        <ChatMessage message={message} showGenerationDetails={false} />
       );
 
       expect(queryByTestId('generation-meta')).toBeNull();
@@ -932,7 +815,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('No metadata');
 
       const { getByText, queryByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
       // Should not crash, just show message without metadata
@@ -971,9 +854,7 @@ describe('ChatMessage', () => {
     });
 
     it('handles code blocks', () => {
-      const message = createAssistantMessage(
-        '```javascript\nconst x = 1;\n```',
-      );
+      const message = createAssistantMessage('```javascript\nconst x = 1;\n```');
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1007,13 +888,10 @@ describe('ChatMessage', () => {
   describe('custom thinking label', () => {
     it('renders custom label from __LABEL:...__ marker', () => {
       const message = createAssistantMessage(
-        '<think>__LABEL:Analysis__\nStep 1: Analyzing input data\nStep 2: Processing</think>The result is 42.',
+        '<think>__LABEL:Analysis__\nStep 1: Analyzing input data\nStep 2: Processing</think>The result is 42.'
       );
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('thinking-block')).toBeTruthy();
       expect(getByText('Analysis')).toBeTruthy();
@@ -1033,7 +911,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
       expect(getByText(/2m 5s/)).toBeTruthy();
@@ -1044,7 +922,7 @@ describe('ChatMessage', () => {
     it('uses parsedContent.response for assistant messages', () => {
       const onGenerateImage = jest.fn();
       const message = createAssistantMessage(
-        '<think>Internal reasoning</think>A beautiful mountain landscape',
+        '<think>Internal reasoning</think>A beautiful mountain landscape'
       );
 
       const { getByTestId } = render(
@@ -1053,7 +931,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />,
+        />
       );
 
       // Open menu
@@ -1063,9 +941,7 @@ describe('ChatMessage', () => {
       fireEvent.press(getByTestId('action-generate-image'));
 
       // Should use the response part (not the thinking block)
-      expect(onGenerateImage).toHaveBeenCalledWith(
-        'A beautiful mountain landscape',
-      );
+      expect(onGenerateImage).toHaveBeenCalledWith('A beautiful mountain landscape');
     });
   });
 
@@ -1081,11 +957,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('150 tokens')).toBeTruthy();
     });
 
@@ -1100,7 +975,7 @@ describe('ChatMessage', () => {
       });
 
       const { queryByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
       expect(queryByText(/\d+ tokens/)).toBeNull();
@@ -1117,7 +992,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open action menu
@@ -1145,7 +1020,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText, getByPlaceholderText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open action menu and press edit
@@ -1179,7 +1054,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open action menu and press edit
@@ -1205,7 +1080,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
       );
 
       // Open action menu and press edit
@@ -1250,7 +1125,7 @@ describe('ChatMessage', () => {
           uri: 'file:///path/to/report.pdf',
           mimeType: 'application/pdf',
           grantPermissions: 'read',
-        }),
+        })
       );
     });
 
@@ -1273,7 +1148,7 @@ describe('ChatMessage', () => {
         expect.objectContaining({
           uri: 'file:///already/prefixed.txt',
           mimeType: 'text/plain',
-        }),
+        })
       );
     });
 
@@ -1296,7 +1171,7 @@ describe('ChatMessage', () => {
         expect.objectContaining({
           uri: 'file://relative/path/to/data.json',
           mimeType: 'application/json',
-        }),
+        })
       );
     });
 
@@ -1339,7 +1214,7 @@ describe('ChatMessage', () => {
       expect(viewDocument).toHaveBeenCalledWith(
         expect.objectContaining({
           mimeType: 'application/octet-stream',
-        }),
+        })
       );
     });
 
@@ -1359,9 +1234,7 @@ describe('ChatMessage', () => {
       const { getByTestId } = render(<ChatMessage message={message} />);
 
       // Should not throw
-      expect(() =>
-        fireEvent.press(getByTestId('document-badge-0')),
-      ).not.toThrow();
+      expect(() => fireEvent.press(getByTestId('document-badge-0'))).not.toThrow();
     });
 
     it('maps known extensions correctly (md, csv, py, js, ts, html, xml)', () => {
@@ -1387,13 +1260,11 @@ describe('ChatMessage', () => {
           attachments: [attachment],
         });
 
-        const { getByTestId, unmount } = render(
-          <ChatMessage message={message} />,
-        );
+        const { getByTestId, unmount } = render(<ChatMessage message={message} />);
         fireEvent.press(getByTestId('document-badge-0'));
 
         expect(viewDocument).toHaveBeenCalledWith(
-          expect.objectContaining({ mimeType: mime }),
+          expect.objectContaining({ mimeType: mime })
         );
         unmount();
       }
@@ -1408,7 +1279,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test message');
 
       const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showActions={true} />,
+        <ChatMessage message={message} showActions={true} />
       );
 
       // Press the ••• button
@@ -1466,7 +1337,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Animated message');
 
       const { getByText } = render(
-        <ChatMessage message={message} animateEntry={true} />,
+        <ChatMessage message={message} animateEntry={true} />
       );
 
       expect(getByText('Animated message')).toBeTruthy();
@@ -1482,7 +1353,9 @@ describe('ChatMessage', () => {
         generationTimeMs: 750,
       });
 
-      const { getByText } = render(<ChatMessage message={message} />);
+      const { getByText } = render(
+        <ChatMessage message={message} />
+      );
 
       expect(getByText('750ms')).toBeTruthy();
     });
@@ -1496,7 +1369,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test message');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />,
+        <ChatMessage message={message} showActions={true} />
       );
 
       // Open action menu
@@ -1521,7 +1394,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Copy me');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onCopy={onCopy} showActions={true} />,
+        <ChatMessage message={message} onCopy={onCopy} showActions={true} />
       );
 
       // Open menu and copy
@@ -1543,13 +1416,10 @@ describe('ChatMessage', () => {
   describe('thinking block Enhanced label', () => {
     it('shows E icon for Enhanced thinking label', () => {
       const message = createAssistantMessage(
-        '<think>__LABEL:Enhanced Reasoning__\nDeep analysis here</think>The enhanced answer.',
+        '<think>__LABEL:Enhanced Reasoning__\nDeep analysis here</think>The enhanced answer.'
       );
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('thinking-block')).toBeTruthy();
       expect(getByText('Enhanced Reasoning')).toBeTruthy();
@@ -1570,11 +1440,10 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />,
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('GPU')).toBeTruthy();
     });
   });
@@ -1600,9 +1469,7 @@ describe('ChatMessage', () => {
     });
 
     it('renders inline code in finalized assistant messages', () => {
-      const message = createAssistantMessage(
-        'Use `console.log()` for debugging',
-      );
+      const message = createAssistantMessage('Use `console.log()` for debugging');
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1611,7 +1478,7 @@ describe('ChatMessage', () => {
 
     it('renders code blocks in finalized assistant messages', () => {
       const message = createAssistantMessage(
-        '```\nfunction hello() {\n  return "world";\n}\n```',
+        '```\nfunction hello() {\n  return "world";\n}\n```'
       );
 
       const { getByText } = render(<ChatMessage message={message} />);
@@ -1629,9 +1496,7 @@ describe('ChatMessage', () => {
     });
 
     it('renders lists in finalized assistant messages', () => {
-      const message = createAssistantMessage(
-        '- Item one\n- Item two\n- Item three',
-      );
+      const message = createAssistantMessage('- Item one\n- Item two\n- Item three');
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1644,7 +1509,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('This is **bold** and *italic*');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} isStreaming={true} />,
+        <ChatMessage message={message} isStreaming={true} />
       );
 
       // During streaming, markdown is still rendered
@@ -1665,13 +1530,10 @@ describe('ChatMessage', () => {
 
     it('renders markdown in thinking block content when expanded', () => {
       const message = createAssistantMessage(
-        '<think>Step 1: Check the `input` value\nStep 2: **Process** it</think>Done!',
+        '<think>Step 1: Check the `input` value\nStep 2: **Process** it</think>Done!'
       );
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       // Expand thinking block
       fireEvent.press(getByTestId('thinking-block-toggle'));
@@ -1682,9 +1544,7 @@ describe('ChatMessage', () => {
     });
 
     it('renders blockquotes in finalized assistant messages', () => {
-      const message = createAssistantMessage(
-        '> This is a quote\n\nAfter the quote',
-      );
+      const message = createAssistantMessage('> This is a quote\n\nAfter the quote');
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1697,32 +1557,201 @@ describe('ChatMessage', () => {
   // Thinking preview text (collapsed - long thinking text)
   // ============================================================================
   describe('thinking preview text', () => {
-    it('keeps long preview content inside the bounded Markdown preview', () => {
+    it('shows truncated preview when thinking text is > 80 chars and collapsed', () => {
       const longThinking = 'A'.repeat(100);
       const message = createAssistantMessage(
-        `<think>${longThinking}</think>Response here.`,
+        `<think>${longThinking}</think>Response here.`
       );
 
-      const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />,
-      );
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByText } = render(<ChatMessage message={message} />);
 
-      expect(getByTestId('thinking-block-preview')).toBeTruthy();
-      expect(getByText(longThinking)).toBeTruthy();
+      // Preview should show first 80 chars + '...'
+      expect(getByText(/A{80}\.\.\./)).toBeTruthy();
     });
 
     it('shows full preview when thinking text is <= 80 chars', () => {
       const shortThinking = 'B'.repeat(50);
       const message = createAssistantMessage(
-        `<think>${shortThinking}</think>Response.`,
+        `<think>${shortThinking}</think>Response.`
       );
 
-      const { getByText, getByTestId } = render(<ChatMessage message={message} />);
-      fireEvent.press(getByTestId('assistant-work-toggle'));
+      const { getByText } = render(<ChatMessage message={message} />);
 
       // Preview should show the full text without '...'
       expect(getByText(shortThinking)).toBeTruthy();
     });
+  });
+});
+
+describe('chat layout', () => {
+  const { useAppStore } = require('../../../src/stores');
+  const flat = (node: any) => (Array.isArray(node.props.style) ? Object.assign({}, ...node.props.style.flat(Infinity).filter(Boolean)) : node.props.style ?? {});
+  const setLayout = (chatLayout?: 'clean' | 'bubbles') =>
+    useAppStore.getState().updateSettings({ appearance: { ...(useAppStore.getState().settings.appearance ?? {}), chatLayout } });
+
+  afterEach(() => setLayout(undefined));
+
+  it('shows a reply as plain text across the page by default, with a bubble only for your own message', () => {
+    const { getByTestId, getByText } = render(<ChatMessage message={createAssistantMessage('A plain answer')} />);
+    const bubble = getByText('A plain answer');
+    expect(bubble).toBeTruthy();
+    expect(flat(getByTestId('assistant-message')).marginVertical).toBe(4); // tighter than the 8 of the Bubbles look
+    expect(flat(getByTestId('assistant-message').children[0] as any).backgroundColor).toBe('transparent');
+    const user = render(<ChatMessage message={createUserMessage('My question')} />);
+    expect(user.getByText('My question')).toBeTruthy();
+    expect(flat(user.getByTestId('user-message').children[0] as any).borderRadius).toBe(18);
+  });
+
+  it('keeps every message in a box when Bubbles is chosen', () => {
+    setLayout('bubbles');
+    const { getByTestId } = render(<ChatMessage message={createAssistantMessage('A boxed answer')} />);
+    expect(flat(getByTestId('assistant-message').children[0] as any).backgroundColor).not.toBe('transparent');
+    expect(flat(getByTestId('assistant-message')).marginVertical).toBe(8);
+  });
+});
+
+describe('ChatMessage: fixing an old message without resending', () => {
+  it('SAVE keeps the conversation after it and says not to resend', () => {
+    jest.useFakeTimers();
+    const onEdit = jest.fn();
+    const { getByTestId, getByText, getByPlaceholderText } = render(
+      <ChatMessage message={createUserMessage('Original text')} onEdit={onEdit} showActions={true} />,
+    );
+    fireEvent(getByTestId('user-message'), 'longPress');
+    fireEvent.press(getByTestId('action-edit'));
+    act(() => { jest.advanceTimersByTime(400); });
+    fireEvent.changeText(getByPlaceholderText('Enter message...'), 'Fixed text');
+    fireEvent.press(getByText('SAVE'));
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ content: 'Original text' }), 'Fixed text', { resend: false });
+    jest.useRealTimers();
+  });
+});
+
+describe('ChatMessage: which lessons a reply used', () => {
+  const { useAppStore } = require('../../../src/stores/appStore');
+  it('shows a small note when the reply was written with learned lessons, and hides it when switched off', () => {
+    const message = { ...createAssistantMessage('Use the 15th.'), generationMeta: { gpu: false, lessonsUsed: ['General', 'Taxes'] } } as any;
+    useAppStore.getState().updateSettings({ showLessonsUsed: true });
+    const on = render(<ChatMessage message={message} />);
+    expect(on.getByText('Used: General and Taxes lessons')).toBeTruthy();
+    on.unmount();
+    useAppStore.getState().updateSettings({ showLessonsUsed: false });
+    const off = render(<ChatMessage message={message} />);
+    expect(off.queryByTestId('lessons-used')).toBeNull();
+    useAppStore.getState().updateSettings({ showLessonsUsed: undefined });
+  });
+});
+
+describe('ChatMessage: check this answer', () => {
+  it('offers the action on a reply and calls back with that message', () => {
+    jest.useFakeTimers();
+    const onCheckAnswer = jest.fn();
+    const message = createAssistantMessage('The penalty is 5%.');
+    const { getByTestId } = render(<ChatMessage message={message} onCheckAnswer={onCheckAnswer} showActions={true} />);
+    fireEvent(getByTestId('assistant-message'), 'longPress');
+    fireEvent.press(getByTestId('action-check-answer'));
+    act(() => { jest.advanceTimersByTime(400); });
+    expect(onCheckAnswer).toHaveBeenCalledWith(expect.objectContaining({ content: 'The penalty is 5%.' }));
+    jest.useRealTimers();
+  });
+  it('does not offer it on your own message', () => {
+    const { getByTestId, queryByTestId } = render(<ChatMessage message={createUserMessage('hi')} onCheckAnswer={jest.fn()} showActions={true} />);
+    fireEvent(getByTestId('user-message'), 'longPress');
+    expect(queryByTestId('action-check-answer')).toBeNull();
+  });
+});
+
+describe('ChatMessage: source numbers', () => {
+  const { useChatStore } = require('../../../src/stores/chatStore');
+  it('shows a small raised number where a search result was cited, and lists the sources under the reply', () => {
+    const search = 'Results from Brave:\n\n1. [Tax deadlines](https://irs.example/deadlines)\n   Returns are due April 15.\n2. [Penalties](https://irs.example/penalties)\n   The late fee is 5% a month.';
+    const reply = { ...createAssistantMessage('Due April 15 [1]. The fee is 5% [2].'), id: 'a1' };
+    useChatStore.setState({
+      activeConversationId: 'c1',
+      conversations: [{ id: 'c1', title: 't', modelId: 'm', createdAt: '', updatedAt: '', messages: [
+        { id: 'u1', role: 'user', content: 'When?', timestamp: 1 },
+        { id: 't1', role: 'tool', toolName: 'web_search', content: search, timestamp: 2 },
+        reply,
+      ] }],
+    });
+    const view = render(<ChatMessage message={reply} />);
+    expect(view.getByText(/Due April 15¹\. The fee is 5%²\./)).toBeTruthy();
+    expect(view.getByTestId('reply-sources')).toBeTruthy();
+    expect(view.getAllByTestId(/^chip-/).length).toBe(2);
+  });
+  it('adds nothing to a reply that cites nothing', () => {
+    const reply = createAssistantMessage('Plain answer.');
+    useChatStore.setState({ activeConversationId: 'c1', conversations: [{ id: 'c1', title: 't', modelId: 'm', createdAt: '', updatedAt: '', messages: [reply] }] });
+    const view = render(<ChatMessage message={reply} />);
+    expect(view.queryByTestId('reply-sources')).toBeNull();
+  });
+});
+
+describe('ChatMessage: pin', () => {
+  it('pins a reply from the action menu without crashing (it reads the open chat)', () => {
+    const { useChatStore } = require('../../../src/stores/chatStore');
+    const { usePins } = require('../../../src/pins/store');
+    const reply = { ...createAssistantMessage('Worth keeping.'), id: 'pin-1' };
+    useChatStore.setState({ activeConversationId: 'c9', conversations: [{ id: 'c9', title: 'Trip', modelId: 'm', createdAt: '', updatedAt: '', messages: [reply] }] });
+    const { getByTestId } = render(<ChatMessage message={reply} showActions={true} />);
+    fireEvent(getByTestId('assistant-message'), 'longPress');
+    fireEvent.press(getByTestId('action-pin'));
+    expect(usePins.getState().pins.some((p: { id: string }) => p.id === 'pin-1')).toBe(true);
+  });
+});
+
+describe('ChatMessage: messaging-app look shows the time', () => {
+  const { useAppStore } = require('../../../src/stores/appStore');
+  it('shows the time inside a bubble in the iMessage look, and not in the Clean look', () => {
+    const message = createUserMessage('hello');
+    useAppStore.getState().updateSettings({ appearance: { chatLayout: 'imessage' } });
+    const on = render(<ChatMessage message={message} />);
+    expect(on.getByTestId('look-time')).toBeTruthy();
+    on.unmount();
+    useAppStore.getState().updateSettings({ appearance: { chatLayout: 'clean' } });
+    const off = render(<ChatMessage message={message} />);
+    expect(off.queryByTestId('look-time')).toBeNull();
+    useAppStore.getState().updateSettings({ appearance: undefined });
+  });
+});
+
+describe('ChatMessage: source numbers for project documents', () => {
+  const { useChatStore } = require('../../../src/stores/chatStore');
+  it('lists the document excerpts a reply was written from and raises the numbers it cites', () => {
+    const reply = { ...createAssistantMessage('The deadline is April 15 [1], and late filing costs 5% [2].'), id: 'r1',
+      generationMeta: { gpu: false, sources: [{ title: 'tax-guide.pdf (part 3)', quote: 'Returns are due April 15.' }, { title: 'penalties.md (part 1)', quote: 'The late fee is 5% a month.' }] } } as any;
+    useChatStore.setState({ activeConversationId: 'c1', conversations: [{ id: 'c1', title: 't', modelId: 'm', createdAt: '', updatedAt: '', messages: [{ id: 'u1', role: 'user', content: 'When?', timestamp: 1 }, reply] }] });
+    const view = render(<ChatMessage message={reply} />);
+    expect(view.getByText(/April 15¹, and late filing costs 5%²\./)).toBeTruthy();
+    expect(view.getAllByTestId(/^chip-/).length).toBe(2);
+  });
+});
+
+describe('ChatMessage: why this reply', () => {
+  it('lists the lessons and numbered excerpts the reply was written from', () => {
+    const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
+    const message = { ...createAssistantMessage('The rate is 5% [1].'), generationMeta: { gpu: false, lessonsUsed: ['General'], sources: [{ title: 'Tax guide (part 2)', quote: 'The rate is 5%.' }] } } as any;
+    const { getByTestId } = render(<ChatMessage message={message} showActions={true} />);
+    fireEvent(getByTestId('assistant-message'), 'longPress');
+    fireEvent.press(getByTestId('action-why'));
+    expect(alert).toHaveBeenCalledWith('Why this reply', expect.stringContaining('1. Tax guide (part 2): "The rate is 5%."'));
+    expect(alert.mock.calls[0][1]).toContain('Lessons used: General');
+    alert.mockRestore();
+  });
+  it('is not offered on your own message', () => {
+    const { getByTestId, queryByTestId } = render(<ChatMessage message={createUserMessage('hi')} showActions={true} />);
+    fireEvent(getByTestId('user-message'), 'longPress');
+    expect(queryByTestId('action-why')).toBeNull();
+  });
+});
+
+describe('ChatMessage: ask about this', () => {
+  it('quotes the reply into the message box', () => {
+    const { useQuoteDraft } = require('../../../src/utils/quoteDraft');
+    const { getByTestId } = render(<ChatMessage message={createAssistantMessage('The rate is 5%.')} showActions={true} />);
+    fireEvent(getByTestId('assistant-message'), 'longPress');
+    fireEvent.press(getByTestId('action-ask'));
+    expect(useQuoteDraft.getState().text).toBe('> The rate is 5%.\n\n');
+    useQuoteDraft.getState().set('');
   });
 });

@@ -34,6 +34,10 @@ jest.mock('../../../../src/services/modelManager/copyFile', () => ({
 jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn(async (p: string) => `${p}/coreml-resolved`),
 }));
+jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
+  resolveImageModelDir: jest.fn(async (p: string, backend: string) => backend === 'mnn' ? p : null),
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+}));
 jest.mock('../../../../src/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -47,8 +51,8 @@ import {
   scanForUntrackedTextModels,
   scanForUntrackedImageModels,
   deleteOrphanedFile,
-  } from '../../../../src/services/modelManager/scan';
-import { importLocalModel } from '../../../../src/services/modelManager/importLocalModel';
+  importLocalModel,
+} from '../../../../src/services/modelManager/scan';
 import * as storage from '../../../../src/services/modelManager/storage';
 import { copyFileWithProgress } from '../../../../src/services/modelManager/copyFile';
 
@@ -92,7 +96,9 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
   it('skips registered paths and zero-size directories', async () => {
     const opts = base();
     opts.getImageModels = jest.fn(async () => [{ modelPath: '/img/known' } as any]);
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // empty dir has committed _ready
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('known', '/img/known'), dir('empty', '/img/empty'), file('loose.txt')])
       .mockResolvedValueOnce([]); // getDirSize of 'empty' -> 0
@@ -102,7 +108,9 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
 
   it('recovers a model and sums sizes recursively through a nested subdirectory', async () => {
     const opts = base();
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // recovery sentinel exists
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('Stable_Diffusion.zip', '/img/Stable_Diffusion.zip')]) // top scan
       // getDirSize on the model dir: one file + one nested directory (exercises recursion line 26-27)
@@ -115,13 +123,15 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
     expect(out).toHaveLength(1);
     expect(out[0].size).toBe(1500); // 1000 + nested 500
     expect(out[0].name).toBe('Stable Diffusion'); // .zip stripped, underscores->spaces
-    expect(out[0].id.startsWith('recovered_')).toBe(true);
+    expect(out[0].id).toBe('Stable_Diffusion.zip');
     expect(opts.addImageModel).toHaveBeenCalled();
   });
 
   it('getDirSize swallows a readDir error and returns 0 (dir skipped)', async () => {
     const opts = base();
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image root exists
+      .mockResolvedValueOnce(true); // recovery sentinel exists
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('Broken', '/img/Broken')])
       .mockRejectedValueOnce(new Error('cannot read'));
@@ -258,10 +268,7 @@ describe('reconcileFinishedImageDownloads', () => {
     expect(out).toEqual([]);
   });
 
-  // coreml-named dir → the mnn/qnn completeness gate is a no-op (coreml integrity is validated in
-  // coreMLModelUtils). The mnn completeness gate on the re-unzip path is covered by
-  // reconcilePartialUnzipG7.test.ts (B15). This test asserts the re-unzip→register recovery mechanics.
-  it('re-unzips when _zip_name present and zip valid (coreml — completeness-exempt)', async () => {
+  it('re-unzips when _zip_name present and zip valid', async () => {
     const opts = base();
     mockedRNFS.exists
       .mockResolvedValueOnce(true) // dir
@@ -269,13 +276,13 @@ describe('reconcileFinishedImageDownloads', () => {
       .mockResolvedValueOnce(true) // _zip_name present
       .mockResolvedValueOnce(true); // isValidZip: zip exists
     mockedRNFS.readDir
-      .mockResolvedValueOnce([dir('coreml_Zipped', '/img/coreml_Zipped')])
-      .mockResolvedValueOnce([file('archive.zip', '/img/archive.zip', 1024)])
-      .mockResolvedValueOnce([file('w', '/img/coreml_Zipped/w', 999)]); // getDirSize
+      .mockResolvedValueOnce([dir('Zipped', '/img/Zipped')])
+      .mockResolvedValueOnce([file('w', '/img/Zipped/w', 999)]); // getDirSize
     (mockedRNFS.readFile as jest.Mock).mockResolvedValueOnce('archive.zip');
+    (mockedRNFS.stat as jest.Mock).mockResolvedValueOnce({ size: 1024 });
     (mockedRNFS.read as jest.Mock).mockResolvedValueOnce('PK');
     const out = await reconcileFinishedImageDownloads(opts);
-    expect(unzip).toHaveBeenCalledWith('/img/archive.zip', '/img/coreml_Zipped');
+    expect(unzip).toHaveBeenCalledWith('/img/archive.zip', '/img/Zipped');
     expect(out).toHaveLength(1);
     expect(out[0].size).toBe(999);
   });
@@ -386,18 +393,21 @@ describe('importLocalModel', () => {
       .rejects.toThrow('Only .gguf and .litertlm files can be imported');
   });
 
-  it('rejects when destination already exists', async () => {
-    mockedRNFS.exists.mockResolvedValueOnce(true); // destExists
-    await expect(importLocalModel(baseOpts() as any))
-      .rejects.toThrow(/already exists/);
+  it('replaces a partial leftover file that is in the folder but not in the model list', async () => {
+    mockedRNFS.exists.mockResolvedValueOnce(true); // a file with this name is there
+    (mockedRNFS.stat as jest.Mock).mockResolvedValue({ size: 10 });
+    mockedRNFS.unlink.mockClear();
+    await importLocalModel(baseOpts() as any).catch(() => undefined);
+    expect(mockedRNFS.unlink).toHaveBeenCalledWith('/models/a b.gguf');
   });
 
-  it('rejects when mmproj destination already exists', async () => {
+  it('replaces a picture file that is already in the folder under that name instead of refusing', async () => {
     mockedRNFS.exists
       .mockResolvedValueOnce(false) // dest does not exist
       .mockResolvedValueOnce(true); // mmproj exists
-    await expect(importLocalModel({ ...baseOpts(), mmProjFileName: 'mmproj.gguf' } as any))
-      .rejects.toThrow('A file named "mmproj.gguf" already exists');
+    mockedRNFS.unlink.mockClear();
+    await importLocalModel({ ...baseOpts(), mmProjFileName: 'mmproj.gguf', mmProjSourceUri: 'file:///tmp/mm.gguf' } as any).catch(() => undefined);
+    expect(mockedRNFS.unlink).toHaveBeenCalledWith('/models/mmproj.gguf');
   });
 
   it('imports a llama gguf with mmproj, decoding file:// uri and scaling progress', async () => {

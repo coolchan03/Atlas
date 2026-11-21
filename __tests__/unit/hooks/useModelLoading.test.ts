@@ -12,8 +12,6 @@ import { useModelLoading } from '../../../src/screens/HomeScreen/hooks/useModelL
 
 jest.mock('../../../src/services', () => ({
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn().mockResolvedValue(undefined),
     unloadTextModel: jest.fn().mockResolvedValue(undefined),
     loadImageModel: jest.fn().mockResolvedValue(undefined),

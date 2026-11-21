@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { showAlert, hideAlert, AlertState } from '../../components/CustomAlert';
+import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
 import { fileExceedsBudget } from '../../services/memoryBudget';
@@ -86,8 +86,7 @@ function computeFilteredResults(
       }
     }
     const filesWithSize = (model.files || []).filter(f => f.size > 0);
-    if (filesWithSize.length > 0 && !filesWithSize.some(f => !fileExceedsBudget(f.size, ramGB))) return false;
-    return true;
+    return !(filesWithSize.length > 0 && !filesWithSize.some(f => !fileExceedsBudget(f.size, ramGB)));
   });
   return filtered.map(model => {
     const type = getModelType(model);
@@ -224,7 +223,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
     // mechanism + one duplicate guard. This screen owns only its completion/error UI.
     await startModelDownload(model.id, file, {
-      autoSelectIfEmpty: true,
       onRegistered: (dm) => {
         if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
           setAlertState(showAlert(
@@ -251,23 +249,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     } catch { /* ignore cancel errors */ }
   };
 
-  const handleDeleteModel = (modelId: string) => {
+  const handleDeleteModel = async (modelId: string) => {
     const model = downloadedModels.find(m => m.id === modelId);
     if (!model) return;
-    const sizeMB = Math.round(hardwareService.getModelTotalSize(model) / (1024 * 1024));
-    setAlertState(showAlert(
-      'Delete Model',
-      `Delete "${model.name}"? This will free up about ${sizeMB} MB.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => {
-          setAlertState(hideAlert());
-          if (activeModelId === model.id) await activeModelService.unloadTextModel().catch(() => {});
-          await modelManager.deleteModel(model.id);
-          removeDownloadedModel(model.id);
-        } },
-      ],
-    ));
+    if (activeModelId === model.id) await activeModelService.unloadTextModel().catch(() => {});
+    await modelManager.deleteModel(model.id);
+    removeDownloadedModel(model.id);
   };
   // Resolve a catalog file to its on-disk model by the FILE, not the composite id.
   // The download path registers `${modelId}/${fileName}`, but the restart catch-up /

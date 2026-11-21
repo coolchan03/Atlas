@@ -12,7 +12,7 @@
  */
 import { useAppStore, useWhisperStore } from '../stores';
 import { activeModelService } from './activeModelService';
-import { estimateTextModelMemoryMB } from './activeModelService/memory';
+import { hardwareService } from './hardware';
 import { WHISPER_MODELS } from './whisperService';
 import { modelResidencyManager } from './modelResidency';
 import { generationService } from './generationService';
@@ -40,21 +40,22 @@ function isGenerationActive(): boolean {
   );
 }
 
+const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
+
 async function preloadText(): Promise<void> {
-  const { downloadedModels } = useAppStore.getState();
-  // Same owner, same answer as chat and image generation.
-  const id = activeModelService.selectedTextModelId();
+  const { activeModelId, lastTextModelId, downloadedModels } = useAppStore.getState();
+  const id = activeModelId ?? lastTextModelId;
   if (!id || activeModelService.getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
-  const sizeMB = await estimateTextModelMemoryMB(model);
+  const sizeMB = toMB(hardwareService.estimateModelRam(model));
   if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
   await activeModelService.loadTextModel(id);
 }
 
 async function preloadTts(): Promise<void> {
-  // Pro implements the audio.preload hook (fits-gated + registers the engine);
-  // no-op in free builds.
+  // A voice feature can implement the audio.preload hook (fits-gated + registers the engine);
+  // no-op when none is registered.
   const pending = callHook<Promise<void>>(HOOKS.audioPreload);
   if (pending) await pending;
 }
@@ -67,7 +68,7 @@ async function preloadStt(): Promise<void> {
   await whisper.loadModel();
 }
 
-/** @public Optional warm-up entry point; startup intentionally leaves it dormant. */
+/** Warm selected models in priority order. Safe to call once at app launch. */
 export async function preloadSelectedModels(): Promise<void> {
   if (started) return;
   started = true;
@@ -94,7 +95,7 @@ export async function preloadSelectedModels(): Promise<void> {
   }
 }
 
-/** @public Test helper for an opt-in warm-up journey. */
+/** Test helper. */
 export function _resetPreloaderForTesting(): void {
   started = false;
   aborted = false;

@@ -68,6 +68,7 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
       {
         activeConversationId: convId,
         hasActiveModel: true,
+        activeConversation: useChatStore.getState().conversations.find(c => c.id === convId),
         deleteMessagesAfter,
         setDebugInfo: jest.fn(),
       },
@@ -99,6 +100,7 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
       {
         activeConversationId: convId,
         hasActiveModel: true,
+        activeConversation: useChatStore.getState().conversations.find(c => c.id === convId),
         deleteMessagesAfter,
         setDebugInfo: jest.fn(),
       },
@@ -120,6 +122,7 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
     const params = () => ({
       activeConversationId: convId,
       hasActiveModel: true,
+      activeConversation: useChatStore.getState().conversations.find(c => c.id === convId),
       deleteMessagesAfter: (c: string, m: string) => useChatStore.getState().deleteMessagesAfter(c, m),
       setDebugInfo: jest.fn(),
     });
@@ -141,6 +144,7 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
     await handleRetryMessageFn(userMsg, genDeps, {
       activeConversationId: convId,
       hasActiveModel: false,
+      activeConversation: useChatStore.getState().conversations.find(c => c.id === convId),
       deleteMessagesAfter: jest.fn(),
       setDebugInfo: jest.fn(),
     });

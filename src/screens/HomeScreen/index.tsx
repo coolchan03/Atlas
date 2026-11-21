@@ -1,66 +1,49 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { useWideLayout } from '../../hooks/useWideLayout';
+import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Button,
-  Card,
-  CustomAlert,
-  hideAlert,
-  ModelSelectorModal,
-} from '../../components';
+import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { BackupReminderCard } from '../../components/BackupReminderCard';
+import { ReviewDueCard } from '../../components/ReviewDueCard';
+import { ContinueCard } from './components/ContinueCard';
+import { HomeShortcutsCard } from './HomeShortcutsCard';
+import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
+import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
+import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
+import { AttachStep } from 'react-native-spotlight-tour';
 import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
+import { useHomeScreenSpotlight } from './hooks/useHomeScreenSpotlight';
 import { RecentConversations } from './components/RecentConversations';
+import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { DesktopPromoCard } from './components/DesktopPromoCard';
 import { ModelsSummaryRow } from '../../components/models/ModelsSummaryRow';
-import {
-  ModelsManagerSheet,
-  ModelRowType,
-} from '../../components/models/ModelsManagerSheet';
+import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
-import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
-import { useOpenSync } from '../../hooks/useOpenSync';
-import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
-import { openSupportEmail } from '../../utils/supportEmail';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
 };
 
-function homeModelLabels(input: {
-  text?: string;
-  image?: string;
-  voice?: string | null;
-  transcription?: string | null;
-  localVoice?: string | null;
-  localTranscription?: string;
-}): Record<ModelRowType, string> {
-  return {
-    text: input.text ?? '—',
-    image: input.image ?? '—',
-    voice: input.voice ?? input.localVoice ?? '—',
-    speech: input.transcription ?? input.localTranscription ?? '—',
-  };
-}
+// AttachStep wraps children in a View that otherwise shrinks to content width;
+// stretch it so the Models summary row fills the column like the other cards.
+const stretchStyle = { alignSelf: 'stretch' as const };
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const wide = useWideLayout();
   const styles = useThemedStyles(createStyles);
-  const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
-  const HomeNotificationsButton = useSlot(SLOTS.homeNotificationsButton);
-  const { isSyncUnlocked, openSync, openSyncNotifications } = useOpenSync();
+  const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
 
   const {
     pickerType,
@@ -69,18 +52,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     isEjecting,
     alertState,
     setAlertState,
+    memoryInfo,
     downloadedModels,
     activeModelId,
     downloadedImageModels,
     activeImageModelId,
     generatedImages,
-    conversationCount,
-    activeTextModelId,
-    activeTextModelName,
+    conversations,
+    activeTextModel,
     activeImageModel,
     recentConversations,
     // Remote model state
     remoteTextModels,
+    remoteImageModels,
     activeRemoteTextModelId,
     activeRemoteImageModelId,
     handleSelectTextModel,
@@ -88,11 +72,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     handleSelectImageModel,
     handleUnloadImageModel,
     // Remote model handlers
+    handleSelectRemoteTextModel,
+    handleUnloadRemoteTextModel,
+    handleSelectRemoteImageModel,
+    handleUnloadRemoteImageModel,
     handleEjectAll,
     startNewChat,
     continueChat,
-    handleDeleteConversation,
   } = useHomeScreen(navigation);
+
+  const { handleStepPress } = useHomeScreenSpotlight({
+    navigation,
+    closeSheet,
+    activeImageModelId,
+    downloadedImageModelsCount: downloadedImageModels.length,
+  });
 
   // ── Collapsed Models control ──────────────────────────────────────────────
   const [modelsManagerOpen, setModelsManagerOpen] = React.useState(false);
@@ -102,22 +96,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const pendingAfterCloseRef = React.useRef<(() => void) | null>(null);
   const [whisperOpen, setWhisperOpen] = React.useState(false);
   const [voiceOpen, setVoiceOpen] = React.useState(false);
-  const returnToModelsRef = React.useRef(false);
-  const whisperModelId = useWhisperStore(s => s.downloadedModelId);
-  const whisperPresentCount = useWhisperStore(
-    s => s.presentModelIds?.length ?? 0,
-  );
-  const voiceSummary = useUiModeStore(s => s.voiceSummary);
-  const remoteLabels = useActiveRemoteModelLabels();
+  const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
+  const whisperPresentCount = useWhisperStore((s) => s.presentModelIds?.length ?? 0);
+  const voiceSummary = useUiModeStore((s) => s.voiceSummary);
 
-  const modelLabels = homeModelLabels({
-    text: activeTextModelId ? activeTextModelName : undefined,
-    image: activeImageModel?.name,
-    voice: remoteLabels.voice,
-    transcription: remoteLabels.transcription,
-    localVoice: voiceSummary,
-    localTranscription: WHISPER_MODELS.find(m => m.id === whisperModelId)?.name,
-  });
+  const modelLabels: Record<ModelRowType, string> = {
+    text: activeTextModel?.name ?? '—',
+    image: activeImageModel?.name ?? '—',
+    voice: voiceSummary ?? '—',
+    speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
+  };
 
   // Downloaded-model counts shown in the Models card (replaces the old stats row).
   const modelCounts: Partial<Record<ModelRowType, number>> = {
@@ -135,14 +123,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setModelsManagerOpen(false);
   };
 
-  const presentModelSheet = (type: ModelRowType) => {
-    if (type === 'text') setPickerType('text');
-    else if (type === 'image') setPickerType('image');
-    else if (type === 'speech') setWhisperOpen(true);
-    else setVoiceOpen(true);
-  };
   const openModelRow = (type: ModelRowType) => {
-    closeManagerThen(() => presentModelSheet(type));
+    closeManagerThen(() => {
+      if (type === 'text') setPickerType('text');
+      else if (type === 'image') setPickerType('image');
+      else if (type === 'speech') setWhisperOpen(true);
+      else setVoiceOpen(true);
+    });
   };
 
   const runPendingAfterClose = () => {
@@ -151,135 +138,154 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     action?.();
   };
 
-  const reopenModelsAfterChildClose = () => {
-    if (!returnToModelsRef.current) return;
-    returnToModelsRef.current = false;
-    setModelsManagerOpen(true);
-  };
-  const closeChildForModels = (close: () => void) => {
-    returnToModelsRef.current = true;
-    close();
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View testID="home-screen" style={styles.scrollView}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, wide.column]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Image
-                source={
-                  isDark
-                    ? require('../../assets/home-logo-dark.png')
-                    : require('../../assets/home-logo-light.png')
-                }
-                style={styles.appLogo}
-                resizeMode="contain"
-                accessible={false}
-                testID="home-app-logo"
-              />
-              <Text style={styles.title}>Off Grid AI</Text>
-            </View>
-            <View style={styles.headerActions}>
-              {HomeNotificationsButton ? (
-                <HomeNotificationsButton onOpen={openSyncNotifications} />
-              ) : null}
-              <TouchableOpacity
-                onPress={() => navigation.navigate('ProDetail')}
-                hitSlop={8}
-                style={styles.crownButton}
-                accessibilityRole="button"
-                accessibilityLabel="Open Off Grid AI Pro"
-              >
-                <IconMC name="crown" size={16} color={colors.primary} />
-              </TouchableOpacity>
+              <Text style={styles.title}>Atlas</Text>
+              {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
           </View>
 
-          {/* Collapsed Models summary — tap to open the manager sheet. Both the
+          {/* Collapsed Models summary - tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}
           <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
-            <ModelsSummaryRow
-              labels={modelLabels}
-              counts={modelCounts}
-              isLoading={loadingState.isLoading}
-              onPress={() => setModelsManagerOpen(true)}
-              onPressType={presentModelSheet}
-            />
+            <AttachStep index={1} style={stretchStyle}>
+              <AttachStep index={13} style={stretchStyle}>
+                <ModelsSummaryRow
+                  labels={modelLabels}
+                  counts={modelCounts}
+                  isLoading={loadingState.isLoading}
+                  onPress={() => setModelsManagerOpen(true)}
+                />
+              </AttachStep>
+            </AttachStep>
           </AnimatedEntry>
 
-          {/* New Chat Button */}
-          {activeTextModelId || activeImageModelId ? (
-            <Button
-              title="New Chat"
-              onPress={startNewChat}
-              style={styles.newChatButton}
-              testID="new-chat-button"
-            />
-          ) : (
-            <Card style={styles.setupCard} testID="setup-card">
-              <Text style={styles.setupText}>
-                {downloadedModels.length > 0 || remoteTextModels.length > 0
-                  ? 'Select a text or image model to start'
-                  : 'Choose a model here or on your network.'}
-              </Text>
-              <View style={styles.setupActions}>
-                <Button
-                  title="Add Remote Server"
-                  variant="outline"
-                  size="small"
-                  onPress={() => navigation.navigate('RemoteServers')}
-                  testID="add-server-button"
-                />
-                <Button
-                  title={
-                    downloadedModels.length > 0 || remoteTextModels.length > 0
-                      ? 'Select Model'
-                      : 'Browse Models'
-                  }
-                  variant="outline"
-                  size="small"
-                  onPress={() =>
-                    downloadedModels.length > 0 || remoteTextModels.length > 0
-                      ? setPickerType('text')
-                      : navigation.navigate('ModelsTab', { initialTab: 'text' })
-                  }
-                  testID="browse-models-button"
-                />
-              </View>
-            </Card>
-          )}
+          <AnimatedPressable style={styles.galleryCard} onPress={() => navigation.navigate('Search')} hapticType="selection" testID="home-search">
+            <Icon name="search" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Search</Text>
+              <Text style={styles.galleryCardMeta}>Chats, settings, models and projects</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
 
-          {SyncHomeCard ? (
-            <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
-              <SyncHomeCard
-                isUnlocked={isSyncUnlocked}
-                onOpen={openSync}
-                onOpenClipboard={() =>
-                  isSyncUnlocked
-                    ? navigation.navigate('Clipboard' as never)
-                    : navigation.navigate('ProDetail')
-                }
+          {/* New Chat Button */}
+          {
+            (activeTextModel || activeImageModelId) ? (
+              <Button
+                title="New Chat"
+                onPress={startNewChat}
+                style={styles.newChatButton}
+                testID="new-chat-button"
               />
-            </AnimatedEntry>
-          ) : null}
+            ) : (
+              <Card style={styles.setupCard} testID="setup-card">
+                <Text style={styles.setupText}>
+                  {downloadedModels.length > 0 || remoteTextModels.length > 0
+                    ? 'Select a text or image model to start'
+                    : 'Add a remote server or download a model to start chatting'}
+                </Text>
+                <View style={styles.setupActions}>
+                  <Button
+                    title="Add Remote Server"
+                    variant="outline"
+                    size="small"
+                    onPress={() => navigation.navigate('RemoteServers')}
+                    testID="add-server-button"
+                  />
+                  <Button
+                    title={downloadedModels.length > 0 || remoteTextModels.length > 0 ? 'Select Model' : 'Browse Models'}
+                    variant="outline"
+                    size="small"
+                    onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab', { initialTab: 'text' })}
+                    testID="browse-models-button"
+                  />
+                </View>
+              </Card>
+            )
+          }
 
           {/* Recent Conversations */}
-          {recentConversations.length > 0 && (
-            <AnimatedEntry index={3} staggerMs={50} trigger={focusTrigger}>
-              <RecentConversations
-                conversations={recentConversations}
-                totalCount={conversationCount}
-                focusTrigger={focusTrigger}
-                onContinueChat={continueChat}
-                onDeleteConversation={handleDeleteConversation}
-                onSeeAll={() => navigation.navigate('ChatsTab')}
-              />
-            </AnimatedEntry>
-          )}
+          {
+            recentConversations.length > 0 && (
+              <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
+                <RecentConversations
+                  conversations={recentConversations}
+                  totalCount={conversations.length}
+                  focusTrigger={focusTrigger}
+                  onContinueChat={continueChat}
+                  onSeeAll={() => navigation.navigate('ChatsTab')}
+                />
+              </AnimatedEntry>
+            )
+          }
+
+          <ContinueCard navigation={navigation} />
+
+          <HomeShortcutsCard navigation={navigation} />
+
+          <ReviewDueCard onOpen={(projectId) => navigation.navigate('Study', { projectId })} />
+
+          <BackupReminderCard onOpenSettings={() => navigation.navigate('SettingsTab')} />
+
+          <AnimatedPressable style={styles.galleryCard} onPress={() => navigation.navigate('MusicStudio')}
+            hapticType="selection" testID="home-music-studio">
+            <Icon name="music" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Music Studio</Text>
+              <Text style={styles.galleryCardMeta}>Pick a style and a small band plays an original tune</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
+          {/* Recorder: record a conversation, get a transcript with speakers */}
+          <AnimatedPressable
+            style={styles.galleryCard}
+            onPress={() => navigation.navigate('Recorder')}
+            hapticType="selection"
+            testID="home-recorder"
+          >
+            <Icon name="mic" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Recorder</Text>
+              <Text style={styles.galleryCardMeta}>Record a conversation, get a transcript with speakers</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
+          {/* Learn a language: lessons, games and practice calls */}
+          <AnimatedPressable
+            style={styles.galleryCard}
+            onPress={() => navigation.navigate('Language')}
+            hapticType="selection"
+            testID="home-language"
+          >
+            <Icon name="book" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Learn a language</Text>
+              <Text style={styles.galleryCardMeta}>Lessons, games, stories and practice calls</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
+
+          {/* Learn any topic on a board the AI designs */}
+          <AnimatedPressable
+            style={styles.galleryCard}
+            onPress={() => navigation.navigate('Topics')}
+            hapticType="selection"
+            testID="home-topics"
+          >
+            <Icon name="compass" size={18} color={colors.primary} />
+            <View style={styles.galleryCardInfo}>
+              <Text style={styles.galleryCardTitle}>Learn a topic</Text>
+              <Text style={styles.galleryCardMeta}>Accounting, coding, history: a board designed for it</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </AnimatedPressable>
 
           {/* Image Gallery */}
           <AnimatedPressable
@@ -291,60 +297,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.galleryCardInfo}>
               <Text style={styles.galleryCardTitle}>Image Gallery</Text>
               <Text style={styles.galleryCardMeta}>
-                {generatedImages.length}{' '}
-                {generatedImages.length === 1 ? 'image' : 'images'}
+                {generatedImages.length} {generatedImages.length === 1 ? 'image' : 'images'}
               </Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
 
-          <AnimatedEntry index={5} staggerMs={50} trigger={focusTrigger}>
-            <Card style={styles.supportCard} testID="home-support-card">
-              <View style={styles.supportHeader}>
-                <Icon name="message-square" size={18} color={colors.primary} />
-                <Text style={styles.supportTitle}>
-                  What should we build next?
-                </Text>
-              </View>
-              <Text style={styles.supportDescription}>
-                Tell us what you would like to see in Off Grid AI Mobile.
-              </Text>
-              <Button
-                title="Write to us"
-                variant="outline"
-                size="small"
-                onPress={() =>
-                  openSupportEmail({
-                    subject: '[Idea] Off Grid AI Mobile',
-                    body: 'Hi,\n\nI would like to see this in Off Grid AI Mobile:\n\n',
-                  })
-                }
-                testID="home-support-email"
-              />
-            </Card>
-          </AnimatedEntry>
-
-          {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
-          <DesktopPromoCard />
-
-          {/* Model Stats row removed — the per-type counts now live in the Models
+          {/* Model Stats row removed - the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}
-        </ScrollView>
-      </View>
+        </ScrollView >
+      </View >
 
-      <ModelSelectorModal
-        visible={pickerType !== null}
-        initialTab={pickerType ?? 'text'}
+      {/* Model Picker Sheet */}
+      < ModelPickerSheet
+        pickerType={pickerType}
+        loadingState={loadingState}
+        downloadedModels={downloadedModels}
+        downloadedImageModels={downloadedImageModels}
+        activeModelId={activeModelId}
+        activeImageModelId={activeImageModelId}
+        memoryInfo={memoryInfo}
+        remoteTextModels={remoteTextModels}
+        remoteImageModels={remoteImageModels}
+        activeRemoteTextModelId={activeRemoteTextModelId}
+        activeRemoteImageModelId={activeRemoteImageModelId}
         onClose={() => setPickerType(null)}
-        onClosed={reopenModelsAfterChildClose}
-        onBackToModels={() => closeChildForModels(() => setPickerType(null))}
-        onSelectModel={handleSelectTextModel}
-        onUnloadModel={handleUnloadTextModel}
+        onSelectTextModel={handleSelectTextModel}
+        onUnloadTextModel={handleUnloadTextModel}
         onSelectImageModel={handleSelectImageModel}
         onUnloadImageModel={handleUnloadImageModel}
-        isLoading={loadingState.isLoading}
-        onSelectionComplete={() => setPickerType(null)}
-        onBrowseModels={tab => {
+        onSelectRemoteTextModel={handleSelectRemoteTextModel}
+        onUnloadRemoteTextModel={handleUnloadRemoteTextModel}
+        onSelectRemoteImageModel={handleSelectRemoteImageModel}
+        onUnloadRemoteImageModel={handleUnloadRemoteImageModel}
+        onBrowseModels={(tab) => {
           setPickerType(null);
           navigation.navigate('ModelsTab', { initialTab: tab });
         }}
@@ -357,37 +343,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         onClose={() => setModelsManagerOpen(false)}
         onClosed={runPendingAfterClose}
         labels={modelLabels}
-        remote={{
-          text: !!activeRemoteTextModelId,
-          image: !!activeRemoteImageModelId,
-          voice: !!remoteLabels.voice,
-          speech: !!remoteLabels.transcription,
-        }}
+        remote={{ text: !!activeRemoteTextModelId, image: !!activeRemoteImageModelId }}
         loadingState={loadingState}
         isEjecting={isEjecting}
-        hasActiveModel={
-          !!(
-            activeModelId ||
-            activeImageModelId ||
-            activeRemoteTextModelId ||
-            activeRemoteImageModelId
-          )
-        }
+        hasActiveModel={!!(activeModelId || activeImageModelId || activeRemoteTextModelId || activeRemoteImageModelId)}
         onOpenRow={openModelRow}
         onEject={() => closeManagerThen(handleEjectAll)}
       />
-      <WhisperPickerSheet
-        visible={whisperOpen}
-        onClose={() => setWhisperOpen(false)}
-        onClosed={reopenModelsAfterChildClose}
-        onBackToModels={() => closeChildForModels(() => setWhisperOpen(false))}
-      />
-      <VoiceModelsSheet
-        visible={voiceOpen}
-        onClose={() => setVoiceOpen(false)}
-        onClosed={reopenModelsAfterChildClose}
-        onBackToModels={() => closeChildForModels(() => setVoiceOpen(false))}
-      />
+      <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
+      <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
       {/* Full-screen model-loading overlay (animated progress + rotating tips). */}
       <LoadingOverlay loadingState={loadingState} />
@@ -400,6 +364,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
       />
-    </SafeAreaView>
+
+      <OnboardingSheet
+        visible={sheetVisible}
+        onClose={closeSheet}
+        onStepPress={handleStepPress}
+      />
+    </SafeAreaView >
   );
 };

@@ -9,10 +9,6 @@ declare module 'whisper.rn' {
 
   export interface TranscribeOptions {
     language?: string;
-    translate?: boolean;
-    temperature?: number;
-    beamSize?: number;
-    prompt?: string;
     maxLen?: number;
     onProgress?: (progress: number) => void;
   }
@@ -22,24 +18,16 @@ declare module 'whisper.rn' {
     maxLen?: number;
     realtimeAudioSec?: number;
     realtimeAudioSliceSec?: number;
-    /**
-     * Only transcribe slices that actually contain speech. The first check runs after 2s of
-     * recording. This gates WHAT is transcribed - it does not end the session; see
-     * AUTO_STOP_SILENCE_MS in whisperService for the endpointing that does.
-     */
-    useVad?: boolean;
-    /** Audio collected per VAD decision. Cannot be under 2000ms. (Default: 2000) */
-    vadMs?: number;
-    /** VAD threshold, 0-1. Higher needs louder speech. (Default: 0.6) */
-    vadThold?: number;
-    /** High-pass filter frequency applied before the VAD decision. (Default: 100.0) */
-    vadFreqThold?: number;
     audioSessionOnStartIos?: any;
     audioSessionOnStopIos?: any;
   }
 
   export interface TranscribeResult {
     result: string;
+    language?: string;
+    /** Timed segments; t0/t1 are in 10 ms steps. */
+    segments?: { text: string; t0: number; t1: number }[];
+    isAborted?: boolean;
   }
 
   export interface RealtimeTranscribeEvent {

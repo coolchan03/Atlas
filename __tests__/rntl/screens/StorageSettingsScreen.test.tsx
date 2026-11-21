@@ -6,8 +6,8 @@
  * - Back button navigation
  * - Storage info rendering
  * - Breakdown section with model counts
- * - Model category summary
- * - Auto Setup entry
+ * - LLM models list rendering
+ * - Image models list rendering
  * - Orphaned files section
  * - Stale downloads section
  * - Delete orphaned file flow
@@ -233,7 +233,7 @@ describe('StorageSettingsScreen', () => {
     expect(getByText('Model Storage')).toBeTruthy();
   });
 
-  // ---- Model summary tests ----
+  // ---- LLM Models section tests ----
 
   it('does not show LLM Models section when no models', () => {
     const { queryAllByText } = render(<StorageSettingsScreen />);
@@ -241,6 +241,10 @@ describe('StorageSettingsScreen', () => {
     const llmTexts = queryAllByText('LLM Models');
     expect(llmTexts.length).toBe(1); // Only breakdown, no separate section
   });
+
+  // ---- Image Models section tests ----
+
+  // ---- Orphaned files section tests ----
 
   it('shows "No orphaned files found" after scan completes', async () => {
     mockGetOrphanedFiles.mockResolvedValue([]);

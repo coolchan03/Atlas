@@ -1,39 +1,69 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
+import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { Platform } from 'react-native';
+import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
+import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
+import { fastestBackend, setBackendProvider, useSpeedStats, useTuned, withModelMemory } from '../atlasTools/speed';
+import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './acceleratorSelection';
+import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
-import { statFile } from '../utils/fileStat';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
+import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { useAppStore } from '../stores/appStore';
 import {
   initContextWithFallback, captureGpuInfo, logContextMetadata, getModelMaxContext,
-  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
+  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta, nextStreamedContent,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
-  getGpuLayersForDevice, BYTES_PER_GB,
+  getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
-  describeGpuFallback, isTruncatedResult,
+  describeGpuFallback, isTruncatedResult, mtpParams,
 } from './llmHelpers';
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
+import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
-import { dropMissingImageAttachments, modelImageAttachments } from './llmImageInput';
 import { generateWithToolsImpl } from './llmToolGeneration';
+import { fitMessagesToContext } from './contextWindow';
 import type { ToolCall } from './tools/types';
-import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats, LoadReport } from './llmTypes';
+import { recentNativeLog } from './llmNativeLog';
+import { recoverFromPreviousRun, enterStage, leaveStage, recordLoadSuccess, recordLoadFailure, planLoad, type LoadStage } from './loadGuard';
 import logger from '../utils/logger';
-import { resolveSpeculative } from './mtpDetection';
+import { resolveReplyTokens } from './contextWindow';
+import { isGemma4Path, knownVerdict, recordVerdict, runOutputCheck, logOutputReport, describeBadOutput, primeFirstWord, estimatePromptTokens, scanPromptLengths, SHORT_PROMPT_TOKENS, type OutputCheck } from './outputHealth';
+;
 import type { StreamToken } from './llmStreamTypes';
 export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
-type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
-const resolveGpuBackend = (enabled: boolean, devices: string[]): string =>
-  !enabled ? 'CPU' : (Platform.OS === 'ios' ? 'Metal' : (devices.join(', ') || 'OpenCL'));
+/** parsedContent: llama.rn's final parsed answer (no reasoning or tool markup), when it reported one. */
+type CompleteCallback = (result: { content: string; reasoningContent: string; parsedContent?: string }) => void;
+function resolveGpuBackend(enabled: boolean, devices: string[]): string {
+  if (!enabled) return 'CPU';
+  return Platform.OS === 'ios' ? 'Metal' : (devices.length > 0 ? devices.join(', ') : 'OpenCL');
+}
 class LLMService {
   private context: LlamaContext | null = null;
+  private vulkanLoaded = false;
+  private vulkanFallbackReason: string | null = null;
+  private selectedBackend: InferenceBackend = INFERENCE_BACKENDS.CPU;
+  private requestedBackendAtLoad: InferenceBackend | null = null;
+  private acceleratorAttempts: string[] = [];
+  private cpuForFileType = false;
+  /** True while the loaded context drafts with an attached MTP file. */
+  private lastOutputCheck: OutputCheck | null = null;
+  /** True when the GPU only writes this model's first word correctly after the prompt was run once (outputHealth.primeFirstWord). */
+  private firstWordWorkaround = false;
+  /** How very short prompts behave on this accelerated load: fine, fine with the workaround, or still wrong. */
+  private shortPromptStatus: 'ok' | 'workaround' | 'unreliable' = 'ok';
+  private mtpActive = false;
+  /** What the last load really started (picture file, MTP), why anything was left out, and whether Safe Model Loading was on. */
+  private loadReport: LoadReport | null = null;
+  /** Bumped when a caller gives up on a load that is still running; that load then releases what it built instead of publishing it. */
+  private loadEpoch = 0;
   private currentModelPath: string | null = null;
-  private nativeConversationId: string | null = null; // owns native KV/recurrent state
   private isGenerating: boolean = false;
   private activeCompletionPromise: Promise<void> | null = null;
   private multimodalSupport: MultimodalSupport | null = null;
@@ -44,6 +74,8 @@ class LLMService {
   private gpuReason: string = '';
   private gpuDevices: string[] = [];
   private activeGpuLayers: number = 0;
+  /** Offloadable layers in the loaded model (block_count + 1); -1 when unknown. */
+  private totalModelLayers: number = -1;
   private gpuAttemptFailed: boolean = false;
   private toolCallingSupported: boolean = false;
   private thinkingSupported: boolean = false;
@@ -62,28 +94,50 @@ class LLMService {
   private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
   private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
-  private async validateAndPrepareModel(modelPath: string, override: boolean = false): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
+  private async validateAndPrepareModel(modelPath: string, override: boolean = false, backendOverride?: InferenceBackend): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
     logger.log(`[LLM] validateAndPrepareModel: ${modelPath}`);
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
     const validation = await validateModelFile(modelPath);
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
-    const settings = useAppStore.getState().settings;
+    const baseSettings = useAppStore.getState().settings;
+    // The memory settings that timed fastest for THIS model (Find the best settings) apply to it alone.
+    const modelId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
+    const rawSettings = withModelMemory(baseSettings, modelId);
+    const backend = backendOverride ?? rawSettings.inferenceBackend;
+    // HTP only accelerates selected quants. OpenCL can also support Q4_K
+    // (subject to the actual native runtime); let its load probe decide.
+    const accelerated = backend === INFERENCE_BACKENDS.OPENCL || backend === INFERENCE_BACKENDS.HTP;
+    const quant = modelPath.split('/').pop() ?? '';
+    const htpEligible = /(?:^|[-_.])(q4_0|q8_0)(?:\.|-|_|$)/i.test(quant);
+    const openclEligible = htpEligible || /(?:^|[-_.])q4_k(?:_[sml])?(?:\.|-|$)/i.test(quant);
+    this.cpuForFileType = false;
+    if (Platform.OS === 'android' && accelerated && backend === INFERENCE_BACKENDS.HTP && !htpEligible) {
+      throw new Error('This quantization is not supported by the NPU. Choose Auto to try another accelerator or explicitly select CPU.');
+    }
+    // OpenCL supports more quants than the HTP list; let the actual native load decide.
+    void openclEligible;
+    const contextLength = rawSettings.contextMode === 'auto'
+      ? getMaxContextForDevice((await hardwareService.getDeviceInfo()).totalMemory)
+      : rawSettings.contextLength;
+    const settings = { ...rawSettings, inferenceBackend: backend, contextLength };
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
     // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
     // Any explicit user choice (1–12) is respected as-is.
     const effectiveNThreads = settings.nThreads === 0 ? recommendedThreads : settings.nThreads;
-    const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
-    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
+    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
-    const fileSize = (await statFile(modelPath))?.size ?? 0;
+    const fileStat = await RNFS.stat(modelPath);
+    const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
     // Use the EFFECTIVE cache type, not the raw setting: OpenCL/HTP coerce the KV cache
     // to f16 (see buildModelParams), so keying off settings.cacheType alone would let the
     // guard use the cheaper quantized estimate and approve a context that then OOMs.
     const quantizedCache = !params.usesF16Cache;
-    // This pre-load check can credit reclaimable pages for clean mmap-backed GGUF weights.
-    // The residency manager independently gates dirty/accelerator loads on live RAM.
-    // Policy comes from the residency manager (the authoritative owner).
+    // Feed the pre-load gate the SAME reclaim-aware available RAM the residency gate uses (the single owner,
+    // effectiveAvailableMB) so the two can never disagree. On Android the raw os_proc snapshot under-counts a
+    // foreground load (the LMK hands background apps' physical pages to us), so a raw gate REFUSED a model
+    // residency ADMITTED — 12GB Android Aggressive, device qwythos. iOS returns raw unchanged (no reclaim —
+    // jetsam kills us), so iOS is untouched. Policy comes from the residency manager (the authoritative owner).
     const getMem = async (): Promise<{ available: number; total: number; used: number }> => {
       const raw = await hardwareService.getAppMemoryUsage();
       const availableMB = effectiveAvailableMB(raw.available / (1024 * 1024), raw.total / (1024 * 1024), {
@@ -94,15 +148,17 @@ class LLMService {
     };
     let memCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: params.ctxLen, getAvailableMemory: getMem, quantizedCache });
     if (!memCheck.safe) {
-      // Keep the selected context. A failed estimate asks for Load Anyway; an explicit
-      // override passes the selected value to native init even when memory is tight.
-      const decision = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
-      memCheck = decision.memCheck;
+      // Don't just warn and load into a near-certain native allocator crash (the iOS
+      // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
+      // to the largest size that fits; only block when the weights alone can't fit.
+      const downgrade = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
+      params.ctxLen = downgrade.ctxLen;
+      memCheck = downgrade.memCheck;
     }
     logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
   }
-  private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; requestedGpuLayers: number; modelPath: string; mmProjPath?: string }): Promise<void> {
+  private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; requestedGpuLayers: number; modelPath: string; mmProjPath?: string; epoch?: number }): Promise<void> {
     const { context, actualLength, gpuAttemptFailed, nGpuLayers, requestedGpuLayers, modelPath, mmProjPath } = opts;
     logContextMetadata(context, actualLength);
     logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
@@ -116,9 +172,10 @@ class LLMService {
       : { initialized: false, support: await checkContextMultimodal(context) };
     const toolCallingSupported = this.deriveToolCallingSupport(context);
     const thinkingSupported = supportsNativeThinking(context);
+    // Nothing awaits between this check and the publish below, so a load that was given up on can never become the live context.
+    if (opts.epoch !== undefined) this.assertNotAbandoned(opts.epoch);
     this.context = context;
     this.currentModelPath = modelPath;
-    this.nativeConversationId = null;
     if (actualLength !== this.currentSettings.contextLength) this.currentSettings.contextLength = actualLength;
     this.multimodalInitialized = multimodal.initialized;
     this.multimodalSupport = multimodal.support;
@@ -126,40 +183,308 @@ class LLMService {
     this.thinkingSupported = thinkingSupported;
     this.requestedGpuLayers = requestedGpuLayers;
     Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+    this.totalModelLayers = modelLayerTotal((context as any).model?.metadata);
+    this.activeGpuLayers = effectiveOffloadedLayers(this.activeGpuLayers, this.totalModelLayers);
     useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
-  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean }): Promise<void> {
+  /** A caller gave up on a load that is still running (it timed out): that load releases what it built instead of publishing it. */
+  abandonPendingLoad(): void { this.loadEpoch++; }
+  private assertNotAbandoned(epoch: number): void {
+    if (epoch !== this.loadEpoch) throw new Error('The model load was cancelled before it finished (it took too long), so what it had started was released.');
+  }
+  /** Release a context that will not be used, and wait for its memory to actually come back (a failed load must not leave an allocation behind). */
+  private async discardContext(context: LlamaContext): Promise<void> {
+    try { await context.release(); } catch (e) { logger.warn('[LLM] Error releasing a context that was not used:', e); }
+    await awaitMemoryReclaim(() => hardwareService.getProcessMemory()).catch(() => {});
+  }
+  private async fileMB(path?: string): Promise<number> {
+    if (!path) return 0;
+    try { return Math.round(Number((await RNFS.stat(path)).size) / (1024 * 1024)); } catch { return 0; }
+  }
+  /** What the last load really started, for the model card: loaded or not, and roughly what each optional part costs. */
+  getLoadReport(): LoadReport | null { return this.loadReport; }
+  /** MTP layers inside the loaded model file, from its metadata; null when no model is loaded or its metadata is unreadable. */
+  getEmbeddedMtpLayers(): number | null {
+    return this.context ? embeddedMtpLayers((this.context as any).model?.metadata) : null;
+  }
+  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
+    const epoch = this.loadEpoch;
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
-      // Re-check after acquiring mutex — another call may have loaded the same model
-      if (this.context && this.currentModelPath === modelPath) return;
-      if (this.context && this.currentModelPath !== modelPath) {
-        logger.log('[LLM] Releasing previous context before loading new model');
-        await this.doUnloadModel();
+      this.assertNotAbandoned(epoch);
+      await recoverFromPreviousRun();
+      const settings = useAppStore.getState().settings;
+      const safeMode = settings.safeModelLoading === true;
+      const notes: string[] = [];
+      const requested: InferenceBackend = (opts?.forceCpu || safeMode)
+        ? INFERENCE_BACKENDS.CPU : settings.inferenceBackend;
+      if (mmProjPath && !await RNFS.exists(mmProjPath)) {
+        logger.warn('[LLM] MMProj file not found, disabling vision support');
+        mmProjPath = undefined;
       }
-      const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath, opts?.override);
-      if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
-      const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
-      this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
-      logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
-      try {
-        const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = await this.initConfiguredContext({ baseParams, ctxLen, nGpuLayers, fileSize });
-        // attemptedGpuLayers (post device-cap/backend resolution) is what the init actually offered the
-        // GPU — the truthful layer count for the meta; nGpuLayers is the raw settings request.
-        await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers: attemptedGpuLayers, requestedGpuLayers: nGpuLayers, modelPath, mmProjPath });
-      } catch (error: any) {
-        this.context = null; this.currentModelPath = null; this.nativeConversationId = null; this.multimodalSupport = null;
-        this.toolCallingSupported = false; this.thinkingSupported = false;
-        Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false });
-        throw new Error(error?.message || 'Unknown error loading model');
+      const visionAttached = !!mmProjPath;
+      const mtpAttached = !!opts?.draftPath || !!opts?.embeddedMtp;
+      if (safeMode) {
+        notes.push('Safe Model Loading is on: this model runs on the CPU, without the picture file and without MTP drafting.');
+        mmProjPath = undefined;
       }
+      const wantsMtp = !safeMode && settings.useMtp !== false;
+      const mtpWanted = wantsMtp && mtpAttached;
+      if (this.currentModelPath === modelPath && this.requestedBackendAtLoad === requested &&
+          (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized) &&
+          // A part that is running but has since been switched off must be reloaded away so its memory is freed.
+          (mmProjPath || !this.multimodalInitialized) && (mtpWanted || !this.mtpActive)) return;
+      if (this.context || this.vulkanLoaded) await this.doUnloadModel();
+      this.vulkanFallbackReason = null;
+      this.lastOutputCheck = null;
+      this.firstWordWorkaround = false;
+      this.shortPromptStatus = 'ok';
+      this.acceleratorAttempts = [];
+      this.selectedBackend = INFERENCE_BACKENDS.CPU;
+      this.requestedBackendAtLoad = null;
+      this.mtpActive = false;
+      this.loadReport = null;
+
+      const auto = Platform.OS === 'android' && requested === INFERENCE_BACKENDS.AUTO;
+      let candidates: InferenceBackend[] = [requested];
+      if (auto) {
+        const [acceleration, vulkanFound, slowGpu] = await Promise.all([
+          hardwareService.getAccelerationCapability(),
+          vulkanEngine.isAvailable(),
+          vulkanEngine.isSlowTextGpu(),
+        ]);
+        // The Mali-G57 runs text slower than the CPU (see isSlowTextGpu): Automatic uses the CPU there.
+        candidates = acceleratorCandidates(
+          { npu: acceleration.hasNpu, opencl: acceleration.hasGpu, vulkan: vulkanFound && !slowGpu },
+          modelPath, !!mmProjPath,
+        );
+        candidates.push(INFERENCE_BACKENDS.CPU);
+        // Measured speed on this phone beats a guess: the backend that wrote fastest for this model in real runs goes first.
+        try {
+          const id = useAppStore.getState().activeModelId;
+          if (id) candidates = preferMeasured(candidates, useTuned.getState().accelerator[id] ?? fastestBackend(useSpeedStats.getState().byConfig, id)?.backend);
+        } catch { /* no speed history: keep the default order */ }
+      }
+      // Only Auto may try a different engine. Explicit NPU, GPU, and Vulkan
+      // selections fail visibly rather than silently running on CPU.
+      const failures: string[] = [];
+      for (const backend of candidates) {
+        this.assertNotAbandoned(epoch);
+        // Where the load is, for the breadcrumb and for the failure record. `attempt` is what this try really switches on.
+        let stage: LoadStage = 'check';
+        let attempt = { mtp: false, vision: false };
+        let refused = false;
+        try {
+          const draftCandidate = wantsMtp && opts?.draftPath && await RNFS.exists(opts.draftPath) ? opts.draftPath : undefined;
+          const embeddedCandidate = wantsMtp && !!opts?.embeddedMtp;
+          // A configuration that killed the app last time is not repeated: leave out the optional parts, then the accelerator.
+          const plan = planLoad(
+            { modelPath, backend, mtp: !!draftCandidate || embeddedCandidate, vision: !!mmProjPath },
+            { explicitBackend: !auto, cpuBackend: INFERENCE_BACKENDS.CPU },
+          );
+          notes.push(...plan.notes);
+          if (plan.blocked || plan.backend !== backend) {
+            refused = true;
+            throw new Error(plan.notes[0] ?? 'This setup crashed Atlas before.');
+          }
+          const attemptMmProj = plan.vision ? mmProjPath : undefined;
+          const draftFile = plan.mtp ? draftCandidate : undefined;
+          const embeddedOn = plan.mtp && embeddedCandidate;
+          const draftOn = !!draftFile || embeddedOn;
+          attempt = { mtp: draftOn, vision: !!attemptMmProj };
+          const { fileSize, memCheck, params } = await this.validateAndPrepareModel(
+            modelPath, opts?.override, backend,
+          );
+          const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
+          this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
+          logger.log(`[LLM] Trying ${backend}: ctx=${ctxLen}, file=${(fileSize / (1024 * 1024)).toFixed(0)}MB, RAM=${memCheck.availableMB.toFixed(0)}MB`);
+          let mtpStarted = false;
+          let mtpLayersMissing = false;
+          if (backend === INFERENCE_BACKENDS.VULKAN) {
+            attempt = { mtp: false, vision: false };
+            const runtime = await vulkanEngine.runtimeStatus();
+            if (runtime.status !== 'ok') throw new Error(describeVulkanStatus(runtime));
+            // Same device-RAM cap as OpenCL; 99 means "all layers that are safe here".
+            const deviceInfo = await hardwareService.getDeviceInfo();
+            const requestedLayers = getGpuLayersForDevice(deviceInfo.totalMemory,
+              nGpuLayers || 99, // this model's own layer count (what its speed test kept), not only the global setting
+              { modelBytes: fileSize, availableBytes: deviceInfo.availableMemory });
+            requireGpuLayers('vulkan', requestedLayers);
+            const contextLength = Math.min(ctxLen, 32768);
+            stage = 'vulkan';
+            await enterStage({ modelPath, backend, ...attempt, stage, contextLength, gpuLayers: requestedLayers });
+            // nThreads already counts only the fast cores on a big.LITTLE chip (see getRecommendedThreadCount).
+            const loaded = await vulkanEngine.loadModel(modelPath, { gpuLayers: requestedLayers, context: contextLength, threads: nThreads });
+            await leaveStage();
+            this.assertNotAbandoned(epoch);
+            if (!/vulkan/i.test(loaded.backend)) throw new Error(
+              `Native model reported ${loaded.backend}, not Vulkan`,
+            );
+            if (loaded.offloadedGpuLayers === 0) throw new Error('Vulkan loaded the model with no GPU layers');
+            this.vulkanLoaded = true;
+            this.currentModelPath = modelPath;
+            this.gpuEnabled = true;
+            this.gpuDevices = [loaded.backend];
+            this.totalModelLayers = loaded.totalLayers;
+            this.requestedGpuLayers = requestedLayers;
+            this.activeGpuLayers = loaded.offloadedGpuLayers > 0 ? loaded.offloadedGpuLayers : requestedLayers;
+            this.gpuReason = loaded.offloadedGpuLayers > 0 ? ''
+              : 'Model header unreadable; showing the requested Vulkan layer count';
+            // The Vulkan engine (llama.kt) is text only: a model's picture file is not loaded.
+            if (attemptMmProj) {
+              this.gpuReason = 'Pictures are off on the Vulkan GPU engine (text only). Choose CPU for pictures.';
+              logger.log('[LLM] Vulkan: loaded text only; the picture file is not used on this engine');
+            }
+            this.currentSettings.contextLength = contextLength;
+            this.toolCallingSupported = false;
+            this.thinkingSupported = false;
+            this.multimodalInitialized = false;
+            this.multimodalSupport = null;
+          } else {
+            // An explicitly selected GPU/NPU must not silently initialize on CPU.
+            // Auto may try other candidate engines, including CPU, and report the choice.
+            const requireAcceleration = Platform.OS === 'android' &&
+              backend !== INFERENCE_BACKENDS.CPU;
+            const checkOutput = isGemma4Path(modelPath);
+            const verdictKey = { model: modelPath, size: fileSize, backend, gpuLayers: nGpuLayers, variant: `batch ${nBatch}${settings.cpuRepack === false ? ', CPU kernels off' : ''}` };
+            if (checkOutput) {
+              const known = await knownVerdict(verdictKey);
+              if (known && !known.ok) throw new Error(describeBadOutput(backend, `${known.reason}; found by an earlier test on this phone`, !auto));
+            }
+            let init;
+            stage = draftOn ? 'draft' : 'init';
+            // Saved BEFORE the native call: if the process dies inside it, the next launch knows where.
+            await enterStage({ modelPath, backend, ...attempt, stage, contextLength: ctxLen, gpuLayers: nGpuLayers });
+            try {
+              init = await this.initWithAutoContext(
+                { baseParams: { ...baseParams, ...mtpParams(draftFile, draftOn, embeddedOn) }, ctxLen, nGpuLayers, fileSize },
+                backend, requireAcceleration,
+              );
+              mtpStarted = draftOn;
+            } catch (mtpError) {
+              // An attached MTP file speeds replies up; if the engine cannot start with it, load without it.
+              if (!draftOn || isOverridableMemoryError(mtpError)) throw mtpError;
+              logger.warn('[LLM] MTP file could not be used, loading without it:', mtpError);
+              notes.push('MTP drafting could not start on this model, so it loaded without it.');
+              attempt = { mtp: false, vision: attempt.vision };
+              stage = 'init';
+              await enterStage({ modelPath, backend, ...attempt, stage, contextLength: ctxLen, gpuLayers: nGpuLayers });
+              init = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers, fileSize }, backend, requireAcceleration);
+              mtpStarted = false;
+            }
+            await leaveStage();
+            const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = init;
+            // From here a context exists. Whatever goes wrong next, it is released (never left half-initialized behind).
+            try {
+              this.assertNotAbandoned(epoch);
+              // Gemma 4 has produced noise ("<unused19><unused10>...", "<pad><pad>...") on a phone from a file that decodes correctly elsewhere.
+              // Look at one short reply before anything else (pictures included) is set up on top of it; a bad one is a failed load.
+              if (checkOutput) {
+                stage = 'output-check';
+                await enterStage({ modelPath, backend, ...attempt, stage, contextLength: actualLength, gpuLayers: attemptedGpuLayers });
+                // 1. The check that decides: a reply to a prompt of realistic length (a real chat always has a system prompt).
+                const check = await runOutputCheck(context, { isGemma4: true, long: true });
+                this.lastOutputCheck = check;
+                logOutputReport(check, { model: modelPath.split('/').pop(), backend, gpuLayers: attemptedGpuLayers, context: actualLength, kvCache: 'f16', devices: String((context as any).devices ?? '') });
+                await recordVerdict(verdictKey, check);
+                if (!check.ok) throw new Error(describeBadOutput(backend, check.reason, !auto));
+                // 2. Very short prompts (a phone report: a 14-token prompt got a wrong first word on the OpenCL GPU while real chats
+                //    were fine). That never blocks the load; if the first-word workaround fixes it, short prompts use it.
+                this.shortPromptStatus = 'ok';
+                if (context.gpu) {
+                  const short = await runOutputCheck(context, { isGemma4: true, strictAnswer: true });
+                  if (!short.ok) {
+                    const primedShort = await runOutputCheck(context, { isGemma4: true, primed: true, strictAnswer: true });
+                    this.shortPromptStatus = primedShort.ok ? 'workaround' : 'unreliable';
+                    logger.warn(`[LLM][OUTPUT-CHECK] very short prompts: ${short.reason}; ${primedShort.ok ? `the first-word workaround fixes it and is on for prompts under ~${SHORT_PROMPT_TOKENS} tokens` : 'the workaround does not fix it, so very short prompts may start with a wrong word'}`);
+                  }
+                }
+                this.firstWordWorkaround = this.shortPromptStatus === 'workaround';
+                await leaveStage();
+              }
+              if (attemptMmProj) {
+                stage = 'vision';
+                await enterStage({ modelPath, backend, ...attempt, stage, contextLength: actualLength, gpuLayers: attemptedGpuLayers });
+              }
+              await this.applyLoadedContext({
+                context, actualLength, gpuAttemptFailed,
+                nGpuLayers: attemptedGpuLayers, requestedGpuLayers: nGpuLayers,
+                modelPath, mmProjPath: attemptMmProj, epoch,
+              });
+              if (attemptMmProj) await leaveStage();
+            } catch (error) {
+              await this.discardContext(context);
+              throw error;
+            }
+            // "Built-in MTP" is only real when the model file contains MTP layers. Say so honestly when it does not (the engine may have
+            // started without error and simply have nothing to draft with); unreadable metadata is left as unknown, not as a "no".
+            if (mtpStarted && embeddedOn && !draftFile && embeddedMtpLayers((context as any).model?.metadata) === 0) {
+              mtpStarted = false;
+              mtpLayersMissing = true;
+              notes.push('MTP drafting is switched on, but this model file has no MTP layers built in, so nothing is drafting. Attach an MTP file or turn the switch off.');
+            }
+            this.mtpActive = mtpStarted;
+            attempt = { mtp: mtpStarted, vision: this.multimodalInitialized };
+          }
+          this.selectedBackend = backend;
+          this.requestedBackendAtLoad = requested;
+          this.acceleratorAttempts = failures;
+          await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
+          const visionNote = !this.multimodalInitialized && visionAttached
+            ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
+            : undefined;
+          const mtpKind: 'file' | 'embedded' | 'none' = draftFile ? 'file' : embeddedOn ? 'embedded' : 'none';
+          this.loadReport = {
+            safeMode, backend, notes,
+            vision: { requested: visionAttached && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : opts?.switchedOff?.vision ? { skippedBecause: 'switched off for this model' } : {}) },
+            mtp: {
+              kind: mtpKind, requested: mtpWanted, loaded: this.mtpActive,
+              estimatedMB: this.mtpActive && draftFile ? await this.fileMB(draftFile) : 0,
+              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : mtpLayersMissing ? 'this model file has no MTP layers built in' : 'it could not start' } : opts?.switchedOff?.mtp ? { skippedBecause: 'switched off for this model' } : {}),
+            },
+          };
+          return;
+        } catch (error: any) {
+          const message = String(error?.message || error || 'Native load failed');
+          if (!refused) {
+            await recordLoadFailure({ modelPath, backend, ...attempt, stage, message, nativeTail: recentNativeLog(6) || undefined });
+          }
+          // A memory refusal is about the model, not the backend: keep its type so the UI
+          // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
+          if (backend === INFERENCE_BACKENDS.VULKAN) {
+            try { await vulkanEngine.unload(); } catch { /* bridge may be unavailable */ }
+            this.vulkanFallbackReason = message;
+          }
+          this.context = null; this.vulkanLoaded = false; this.currentModelPath = null; this.firstWordWorkaround = false;
+          this.multimodalSupport = null; this.multimodalInitialized = false; this.mtpActive = false;
+          this.toolCallingSupported = false; this.thinkingSupported = false;
+          Object.assign(this, {
+            gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, totalModelLayers: -1,
+            gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false,
+          });
+          failures.push(`${backend}: ${message.slice(0, 180)}`);
+          // Preserve typed memory refusals through the backend loader. Wrapping
+          // them in a generic Error removed the Load Anyway action in chat.
+          if (isOverridableMemoryError(error)) throw error;
+          if (!auto) {
+            if (backend === INFERENCE_BACKENDS.VULKAN)
+              throw new Error(`Vulkan GPU unavailable: ${message}. To keep going, set the backend to Automatic or CPU in the chat's generation settings.`);
+            throw new Error(message);
+          }
+          // A timed-out native context may still be initializing; do not race a
+          // second native backend against that unresolved work.
+          if (/timed out after/i.test(message)) break;
+        }
+      }
+      this.acceleratorAttempts = failures;
+      throw new Error(`No compatible backend could load this model (including CPU). ${failures.join(' | ')}`);
     } finally {
       mutex.release();
     }
   }
-  private async initConfiguredContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number; attemptedGpuLayers: number }> {
+  private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }, selectedBackend?: InferenceBackend, strictAcceleration: boolean = false): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number; attemptedGpuLayers: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
     // Pass model size + free RAM so iOS Metal offload is capped to what fits (the
     // uncapped 99-layer offload was overflowing Metal → SIGSEGV on memory-tight devices).
@@ -171,45 +496,73 @@ class LLMService {
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
       const settings = useAppStore.getState().settings;
-      const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+      const backend = selectedBackend ?? (settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU);
       if (backend === INFERENCE_BACKENDS.HTP) {
-        // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
-        // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
-        safeGpuLayers = safeGpuLayers > 0 ? (settings?.gpuLayers ?? 99) : 0;
+        // HTP routes to the Hexagon NPU, so the Adreno GPU layer caps do not apply; only
+        // the ≤4GB floor does (the caps used to zero the NPU on 6GB phones too).
+        if (!(await hardwareService.getSoCInfo()).hasNPU && strictAcceleration)
+          throw new Error('HTP/NPU not supported by this device');
+        safeGpuLayers = deviceInfo.totalMemory / BYTES_PER_GB > 4 ? (params.nGpuLayers || 99) : 0;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
       } else if (backend === INFERENCE_BACKENDS.OPENCL) {
         const capability = await hardwareService.getOpenCLCapability();
         if (!capability.supported) {
-          logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);
+          if (strictAcceleration) throw new Error(`OpenCL GPU unavailable: ${capability.reason}`);
+          logger.warn(`[LLM] OpenCL unavailable: ${capability.reason}; CPU selected by legacy policy`);
           safeGpuLayers = 0;
         } else {
           // Respect the Adreno-specific RAM cap — safeGpuLayers already has it applied.
-          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+          // Name the OpenCL device: the default list can also include the Hexagon NPU.
+          if (capability.devices?.length) resolvedBaseParams = { ...params.baseParams, devices: capability.devices };
+          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU${capability.devices?.length ? ` (${capability.devices.join(', ')})` : ''}`);
         }
       } else {
         safeGpuLayers = 0;
         logger.log('[LLM] CPU backend selected');
       }
     }
-    // The model metadata and the user's setting own context length. Do not impose a
-    // second RAM-tier ceiling here. validateAndPrepareModel checks this exact
-    // model + cache + selected context against live memory without changing it.
-    return {
-      ...await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers),
-      attemptedGpuLayers: safeGpuLayers,
-    };
+    if (strictAcceleration) requireGpuLayers(
+      selectedBackend === INFERENCE_BACKENDS.HTP ? 'htp' : 'opencl', safeGpuLayers);
+    // Cap the INITIAL context by device RAM. The KV cache + compute buffers scale
+    // with n_ctx, so loading at the full 4096 on a 4GB phone spikes even a tiny
+    // model past the ~2GB per-process limit → jetsam kill (confirmed: 2098MB on a
+    // 4GB iPhone 12 mid-generation). The scale-down logic below never fired because
+    // it only ever RAISES context; do the floor here so the first load is safe.
+    const deviceCtxCap = getMaxContextForDevice(deviceInfo.totalMemory);
+    const safeCtx = Math.min(params.ctxLen, deviceCtxCap);
+    if (safeCtx !== params.ctxLen) logger.log(`[LLM] context capped for ${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM: ${params.ctxLen} → ${safeCtx}`);
+    const initial = { ...await initContextWithFallback(resolvedBaseParams, safeCtx, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    const modelMax = getModelMaxContext(initial.context);
+    const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
+    if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) return initial;
+    const deviceMaxCtx = getMaxContextForDevice(deviceInfo.totalMemory);
+    const targetCtx = Math.min(modelMax, 4096, deviceMaxCtx);
+    if (targetCtx <= initial.actualLength) return initial;
+    logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
+    try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
+    try {
+      return { ...await initContextWithFallback(resolvedBaseParams, targetCtx, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    } catch (scaleError) {
+      // The bigger size was only an upgrade over a load that already worked. Do not turn it into a failed load:
+      // go back to the size that worked (a timed-out or memory-refused upgrade must not take the model away).
+      if (isOverridableMemoryError(scaleError) || /timed out after/i.test(String((scaleError as Error)?.message ?? scaleError))) {
+        logger.warn(`[LLM] Scaling context to ${targetCtx} failed (${(scaleError as Error)?.message}); restoring ${initial.actualLength}`);
+      } else {
+        logger.warn(`[LLM] Scaling context to ${targetCtx} failed; restoring ${initial.actualLength}:`, scaleError);
+      }
+      await awaitMemoryReclaim(() => hardwareService.getProcessMemory()).catch(() => {});
+      return { ...await initContextWithFallback(resolvedBaseParams, initial.actualLength, { nGpuLayers: safeGpuLayers, allowCpuFallback: !strictAcceleration }), attemptedGpuLayers: safeGpuLayers };
+    }
   }
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */
   private async deriveMultimodalFromProjector(context: LlamaContext, modelPath: string, mmProjPath: string): Promise<{ initialized: boolean; support: MultimodalSupport }> {
     try {
-      const facts = await statFile(mmProjPath);
-      if (!facts) throw new Error('Projector file metadata is unavailable');
-      const sizeMB = facts.size / (1024 * 1024);
+      const sizeMB = Number((await RNFS.stat(mmProjPath)).size) / (1024 * 1024);
       logger.log(`[LLM] mmproj file size: ${sizeMB.toFixed(1)} MB`);
-      if (sizeMB < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
-    } catch (statErr) { console.error('[LLM] Failed to stat mmproj file:', statErr); }
+      if (sizeMB < 100) logger.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
+    } catch (statErr) { logger.error('[LLM] Failed to stat mmproj file:', statErr); }
     const devInfo = useAppStore.getState().deviceInfo;
     const useGpuForClip = Platform.OS === 'ios' && !devInfo?.isEmulator && (devInfo?.totalMemory ?? 0) > 4 * BYTES_PER_GB;
     const { initialized, support } = await initMultimodal(context, mmProjPath, useGpuForClip);
@@ -236,8 +589,15 @@ class LLMService {
     const path = this.currentModelPath?.toLowerCase() ?? '';
     return path.includes('gemma-4') || path.includes('gemma4');
   }
-  /** Disable ctx_shift on Android when GPU layers are active — the OpenCL backend SIGSEGVs on the ggml set op used by KV cache shifting. */
-  private shouldDisableCtxShift(): boolean { return Platform.OS === 'android' && this.activeGpuLayers > 0; }
+  /** Android OpenCL/HTP shifting can crash in KV-cache ggml ops. Backend selection
+   * is more reliable than reported layer count, which some drivers omit. */
+  private shouldDisableCtxShift(): boolean {
+    return Platform.OS === 'android' && (
+      this.selectedBackend === INFERENCE_BACKENDS.OPENCL ||
+      this.selectedBackend === INFERENCE_BACKENDS.HTP ||
+      this.activeGpuLayers > 0
+    );
+  }
   private deriveToolCallingSupport(context: LlamaContext): boolean {
     try {
       const jinja = (context as any)?.model?.chatTemplates?.jinja;
@@ -250,6 +610,25 @@ class LLMService {
   }
   /** Internal unload without acquiring the mutex (used by loadModel which already holds it). */
   private async doUnloadModel(): Promise<void> {
+    if (this.vulkanLoaded) {
+      await vulkanEngine.interrupt().catch(() => {});
+      await vulkanEngine.unload();
+      this.vulkanLoaded = false;
+      this.currentModelPath = null;
+      this.selectedBackend = INFERENCE_BACKENDS.CPU;
+      this.requestedBackendAtLoad = null;
+      this.isGenerating = false;
+      this.activeCompletionPromise = null;
+      this.gpuEnabled = false;
+      this.gpuDevices = [];
+      this.gpuReason = '';
+      this.activeGpuLayers = 0;
+      this.requestedGpuLayers = 0;
+      this.loadReport = null;
+      this.mtpActive = false;
+      useAppStore.getState().setModelMaxContext(null);
+      return;
+    }
     if (!this.context) return;
     if (this.isGenerating) {
       try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
@@ -261,67 +640,101 @@ class LLMService {
     // context.release() returns before the OS frees those pages, so a reload that immediately loaded the
     // new context stacked BOTH models' memory at once → OOM/crash under pressure (device 2026-07-14: a
     // reload with ~2GB free ground to 0 tok/s then died). Wait (bounded) for the process footprint to drop.
-    await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
-    useAppStore.getState().setModelMaxContext(null);
-    Object.assign(this, { context: null, currentModelPath: null, nativeConversationId: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false });
+    try {
+      await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
+    } catch (e) {
+      logger.warn('[LLM] Memory-reclaim wait failed after release:', e);
+    } finally {
+      // The context was released above, so the service must forget it even if the wait threw:
+      // keeping a released context as "loaded" makes the next generation call into freed native memory.
+      useAppStore.getState().setModelMaxContext(null);
+      Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false, mtpActive: false, loadReport: null });
+      this.selectedBackend = INFERENCE_BACKENDS.CPU;
+      this.requestedBackendAtLoad = null;
+    }
   }
   async unloadModel(): Promise<void> {
     const mutex = this.acquireContextMutex();
     try { await mutex.ready; await this.doUnloadModel(); } finally { mutex.release(); }
   }
-  isModelLoaded(): boolean { return this.context !== null; }
+  isModelLoaded(): boolean { return this.context !== null || this.vulkanLoaded; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
   async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean }): Promise<string> {
     const { onStream, onComplete, ...opts } = options ?? {};
+    if (this.vulkanLoaded) {
+      if (this.isGenerating) throw new Error('Generation already in progress');
+      this.isGenerating = true;
+      const started = Date.now();
+      let output = '';
+      let firstTokenMs = 0;
+      let tokenCount = 0;
+      const task = (async () => {
+        const { settings } = useAppStore.getState();
+        const maxTokens = Math.max(1, Math.min(settings.maxTokens || 512, 4096,
+          Math.floor(this.currentSettings.contextLength * 0.4)));
+        const managed = await this.manageContextWindow(messages, maxTokens);
+        const prompt = await vulkanEngine.formatChat(managed.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, { maxTokens, onToken: token => {
+          if (!this.isGenerating || !token) return;
+          if (!firstTokenMs) firstTokenMs = Date.now() - started;
+          tokenCount++;
+          output += token;
+          onStream?.({ content: token, reasoningContent: '' });
+        }, sampling: { temperature: settings.temperature, topP: settings.topP,
+          repeatPenalty: settings.repeatPenalty } });
+        this.performanceStats = recordGenerationStats(started, firstTokenMs, tokenCount);
+        onComplete?.({ content: output, reasoningContent: '' });
+        return output;
+      })();
+      this.activeCompletionPromise = task.then(() => {}, () => {});
+      try { return await task; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    }
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
     const ctx = this.context;
     const completionWork = (async () => {
-      const managed = await this.manageContextWindow(messages);
-      const usable = await this.dropMissingImageAttachments(managed);
-      const hasImages = usable.some(m => modelImageAttachments(m.attachments).length > 0);
+      const managed = await this.dropMissingImageAttachments(await this.manageContextWindow(messages));
+      const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
-      logger.log('[LLM] Generation mode:', this.hasVisionInputs(usable) ? 'VISION' : 'TEXT-ONLY');
-      const oaiMessages = this.convertToOAIMessages(usable);
+      logger.log('[LLM] Generation mode:', this.hasVisionInputs(managed) ? 'VISION' : 'TEXT-ONLY');
+      const oaiMessages = this.convertToOAIMessages(managed);
       const { settings } = useAppStore.getState();
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
-      const __wire: Array<Record<string, unknown>> = []; // [WIRE] capture raw per-token shape from-device
       // A caller may force thinking OFF (e.g. the image-prompt enhancement utility call),
       // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
       // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model(), settings.reasoningBudget) };
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), modelPath: this.currentModelPath, contextLength: this.currentSettings.contextLength }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model()) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
-      logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
+      // Never log chat prompts, streamed text, reasoning, or model file paths: even
+      // development logcat output may outlive private/PIN-protected conversations.
+      logger.log(`[LLM] Native completion settings: thinking=${thinkingOn}, contextShiftDisabled=${this.shouldDisableCtxShift()}`);
+      if (!hasImages && this.shouldPrime(oaiMessages)) await primeFirstWord(ctx, completionParams);
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
-        if (__wire.length < 500) __wire.push({ token: data.token, content: data.content, reasoning_content: data.reasoning_content, tool_calls: data.tool_calls }); // [WIRE]
         if (!this.isGenerating || !data.token) return;
-        if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log(`[LLM][THINKING] First token raw data — token: ${JSON.stringify(data.token)}, content: ${JSON.stringify(data.content)}, reasoning_content: ${JSON.stringify(data.reasoning_content)}`); }
+        if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log('[LLM] First token received'); }
         tokenCount++;
-        const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
+        const content = getStreamingDelta(nextStreamedContent(data, streamedContentSoFar), streamedContentSoFar);
         const reasoningContent = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
-        if (data.content) streamedContentSoFar = data.content;
-        else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
-        if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+        // Track what was displayed, not the parser's latest value (see getStreamingDelta).
+        if (content) streamedContentSoFar += content;
+        if (reasoningContent) streamedReasoningSoFar += reasoningContent;
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
       }), 'generateResponse');
       const cr = completionResult as any;
-      // [WIRE] Full raw stream + final result, so we can build fixtures from real Gemma/Qwen wire format.
-      logger.log(`[WIRE-LLAMA] ${JSON.stringify({ model: this.currentModelPath, stream: __wire, final: { content: cr?.content, text: cr?.text, reasoning_content: cr?.reasoning_content, tool_calls: cr?.tool_calls } })}`);
-      this.performanceStats = {
-        ...recordGenerationStats(startTime, firstTokenMs, tokenCount),
-        lastPromptTokenCount: cr?.tokens_evaluated,
-      };
+      logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
+      this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
+      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
-      const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent };
+      const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent, parsedContent: typeof cr?.content === 'string' ? cr.content : undefined };
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);
       onComplete?.(result);
       return result.content;
@@ -330,14 +743,20 @@ class LLMService {
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
   async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
+    if (this.vulkanLoaded) {
+      // Do not silently unload a GPU-only model and reload it on CPU for tools.
+      // A caller must explicitly select CPU (or an auto-fallback policy) first.
+      throw new Error('Tools are not available on the Vulkan GPU engine (llama.kt has no tool calling). Switch the text backend setting to OpenCL, Automatic or CPU to use tools. Atlas does not change your choice by itself.');
+    }
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
       isGemma4Model: this.isGemma4Model(),
       disableCtxShift: this.shouldDisableCtxShift(),
+      contextLength: this.currentSettings.contextLength,
+      modelPath: this.currentModelPath,
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
-      convertToOAIMessages: async msgs =>
-        this.convertToOAIMessages(await this.dropMissingImageAttachments(msgs)),
+      convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
       setPerformanceStats: (s) => { this.performanceStats = s; },
       setIsGenerating: (v) => { this.isGenerating = v; },
     }, messages, {
@@ -349,9 +768,24 @@ class LLMService {
     this.activeCompletionPromise = work.then(() => { }, () => { });
     try { return await work; } finally { this.activeCompletionPromise = null; }
   }
-  /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
-  private async manageContextWindow(messages: Message[], _extraReserve = 0): Promise<Message[]> {
-    return messages;
+  /** Bound the active prompt for every local backend. Saved chat history is untouched. */
+  private async manageContextWindow(messages: Message[], extraReserve = 0): Promise<Message[]> {
+    if (!this.context && !this.vulkanLoaded) return messages;
+    const { settings } = useAppStore.getState();
+    const managed = await fitMessagesToContext({
+      messages,
+      contextTokens: this.currentSettings.contextLength || APP_CONFIG.maxContextLength,
+      outputTokens: Math.max(resolveReplyTokens(settings, this.currentSettings.contextLength), extraReserve),
+      format: (items) => this.vulkanLoaded
+        ? vulkanEngine.formatChat(items.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })))
+        : this.formatMessages(items),
+      countTokens: (text) => this.getTokenCount(text),
+    });
+    if (managed.latestTruncated) callHook(HOOKS.messageCut, managed.latestTokens ?? managed.promptTokens, managed.budgetTokens);
+    if (managed.droppedMessages || managed.latestTruncated) {
+      logger.log(`[LLM] Active context window: ${managed.promptTokens}/${managed.budgetTokens} prompt tokens; ${managed.droppedMessages} older messages omitted, latestTruncated=${managed.latestTruncated}`);
+    }
+    return managed.messages;
   }
   /**
    * Drop image attachments whose files no longer exist before they reach the native
@@ -362,6 +796,23 @@ class LLMService {
    * this boundary is the generation layer's own responsibility — a missing image is
    * simply not sent, so the turn runs (TEXT-ONLY if none remain) instead of crashing.
    */
+  private async dropMissingImageAttachments(messages: Message[]): Promise<Message[]> {
+    const out: Message[] = [];
+    for (const m of messages) {
+      const attachments = m.attachments;
+      if (!attachments?.some(a => a.type === 'image')) { out.push(m); continue; }
+      const kept: typeof attachments = [];
+      for (const a of attachments) {
+        if (a.type !== 'image') { kept.push(a); continue; }
+        const path = (a.uri || '').replace(/^file:\/\//, '');
+        const exists = path.length > 0 && await RNFS.exists(path).catch(() => false);
+        if (exists) kept.push(a);
+        else logger.warn('[LLM] Dropping unavailable image attachment');
+      }
+      out.push(kept.length === attachments.length ? m : { ...m, attachments: kept });
+    }
+    return out;
+  }
   /**
    * Whether this turn should run in VISION mode: at least one message carries an
    * (already-existence-validated by {@link dropMissingImageAttachments}) image
@@ -375,40 +826,63 @@ class LLMService {
    */
   private hasVisionInputs(messages: Message[]): boolean {
     if (!this.multimodalInitialized) return false;
-    return messages.some(m => modelImageAttachments(m.attachments).length > 0);
+    return messages.some(m => m.attachments?.some(a => a.type === 'image'));
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+    if (this.vulkanLoaded) {
+      if (this.isGenerating) throw new Error('Generation already in progress');
+      this.isGenerating = true;
+      let response = '';
+      const task = (async () => {
+        const managed = await this.manageContextWindow(messages, maxTokens);
+        const prompt = await vulkanEngine.formatChat(managed.map(m => ({ role: m.role === 'tool' ? 'user' : m.role, content: m.content })));
+        await vulkanEngine.generate(prompt, { maxTokens: Math.max(1, Math.min(maxTokens, 4096)), onToken: token => { if (this.isGenerating) response += token; } });
+        return response.trim();
+      })();
+      this.activeCompletionPromise = task.then(() => {}, () => {});
+      try { return await task; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    }
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
-    const oaiMessages = this.convertToOAIMessages(
-      await this.dropMissingImageAttachments(messages),
-    );
+    const managed = await this.manageContextWindow(messages, maxTokens);
+    const oaiMessages = this.convertToOAIMessages(managed);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
+    const maxParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), modelPath: this.currentModelPath, contextLength: this.currentSettings.contextLength }), n_predict: maxTokens };
+    if (this.shouldPrime(oaiMessages)) await primeFirstWord(ctx, maxParams);
     const completionWork = safeCompletion(ctx, () => ctx.completion(
-      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
+      maxParams,
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
-    try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
+    try {
+      const result = await completionWork;
+      // Preserve the native prefill/decode timings for the existing model tester.
+      // Wall-clock prompt time includes generation and must not be labeled prefill.
+      recordLlamaTimings(result);
+      return fullResponse.trim();
+    } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
+
   /** Ephemeral, tools-free routing pass for two-pass tool selection (not user-facing). */
   async generateToolSelection(systemPrompt: string, userText: string): Promise<string> {
     const messages: Message[] = [
       { id: 'tool-select-sys', role: 'system', content: systemPrompt, timestamp: 0 },
       { id: 'tool-select-user', role: 'user', content: userText, timestamp: 0 },
     ];
-    try {
-      return await this.generateWithMaxTokens(messages, 64);
-    } finally {
-      // The router is not part of the chat. Remove its prompt and recurrent state.
-      await this.clearKVCache(true);
-    }
+    return this.generateWithMaxTokens(messages, 64);
   }
   async stopGeneration(): Promise<void> {
+    if (this.vulkanLoaded) {
+      await vulkanEngine.interrupt();
+      if (this.activeCompletionPromise) await this.activeCompletionPromise;
+      this.activeCompletionPromise = null;
+      this.isGenerating = false;
+      return;
+    }
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     // Declare idle only AFTER the in-flight completion actually unwinds — llama cannot honor a
     // stop during prefill (a 2.6k-token KB prefill unwound ~9s on-device), so clearing the flag
@@ -428,43 +902,58 @@ class LLMService {
     if (!this.context || this.isGenerating) return;
     try { await (this.context as any).clearCache(clearData); } catch (e) { logger.log('[LLM] Clear cache error:', e); }
   }
-  /** Awaited generation boundary: a new chat never inherits native KV/recurrent state. */
-  async prepareConversationBoundary(conversationId: string): Promise<void> {
-    if (this.nativeConversationId === conversationId) return;
-    if (!this.context) throw new Error('No model loaded');
-    if (this.isGenerating) throw new Error('Model is still finishing the previous reply');
-    await (this.context as any).clearCache(true);
-    this.nativeConversationId = conversationId;
-    logger.log(`[LLM] Native context reset for conversation ${conversationId}`);
-  }
   getEstimatedMemoryUsage() {
     const contextMemoryMB = this.context ? (this.currentSettings.contextLength || 2048) * 0.5 : 0;
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
-  getGpuInfo() {
-    return { gpu: this.gpuEnabled, gpuBackend: resolveGpuBackend(this.gpuEnabled, this.gpuDevices), gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
+  getSelectedBackend(): InferenceBackend { return this.selectedBackend; }
+  getAcceleratorAttempts(): string[] { return [...this.acceleratorAttempts]; }
+  getGpuInfo(): { gpu: boolean; gpuBackend: string; gpuLayers: number; totalLayers?: number; requestedLayers?: number; reasonNoGPU: string } {
+    if (this.vulkanLoaded) return { gpu: true, gpuBackend: 'Vulkan', gpuLayers: this.activeGpuLayers, totalLayers: this.totalModelLayers, requestedLayers: this.requestedGpuLayers, reasonNoGPU: this.gpuReason };
+    const name = this.gpuEnabled && this.selectedBackend === INFERENCE_BACKENDS.HTP
+      ? 'HTP / Hexagon NPU' : resolveGpuBackend(this.gpuEnabled, this.gpuDevices);
+    return { gpu: this.gpuEnabled, gpuBackend: name, gpuLayers: this.activeGpuLayers, totalLayers: this.totalModelLayers, requestedLayers: this.requestedGpuLayers, reasonNoGPU: this.vulkanFallbackReason ?? this.gpuReason };
   }
   /** The user-facing notice for a load that silently downgraded to CPU (GPU requested, 0 layers
    *  offloaded — init failure/timeout, capability refusal, or a RAM cap). Null when nothing to report. */
-  getBackendFallbackNotice(): string | null {
+  /** True when this model runs on the CPU on purpose (file type the GPU/NPU can't speed up). */
+  isCpuForFileType(): boolean { return this.cpuForFileType; }
+  /** True when the loaded model is drafting with its attached MTP file. */
+  isMtpActive(): boolean { return this.mtpActive; }
+  /** One short deterministic reply from the loaded model, judged for noise (see outputHealth.ts); null when nothing is loaded. */
+  getLastOutputCheck(): OutputCheck | null { return this.lastOutputCheck; }
+  /** True when replies run the prompt once first so the GPU's first word is right (see outputHealth.primeFirstWord). */
+  usesFirstWordWorkaround(): boolean { return this.firstWordWorkaround; }
+  getShortPromptStatus(): 'ok' | 'workaround' | 'unreliable' { return this.shortPromptStatus; }
+  /** How the loaded model does at several prompt lengths (a diagnostic; see outputHealth.scanPromptLengths). */
+  async scanPromptLengths(): Promise<string[]> { return this.context ? scanPromptLengths(this.context, this.isGemma4Model()) : []; }
+  /** The workaround applies to short prompts only: a longer one is not affected, and a long prompt may not be reusable from the cache. */
+  private shouldPrime(oaiMessages: Array<{ content?: unknown }>): boolean { return this.firstWordWorkaround && estimatePromptTokens(oaiMessages) < SHORT_PROMPT_TOKENS; }
+  async runOutputCheck(): Promise<OutputCheck | null> {
     if (!this.context) return null;
+    return runOutputCheck(this.context, { isGemma4: this.isGemma4Model() });
+  }
+  getBackendFallbackNotice(): string | null {
+    if (this.acceleratorAttempts.length && (this.context || this.vulkanLoaded)) {
+      const verb = this.requestedBackendAtLoad === INFERENCE_BACKENDS.AUTO ? 'Auto selected' : 'Running on';
+      return `${verb} ${this.selectedBackend.toUpperCase()} after: ${this.acceleratorAttempts.join(' | ')}`;
+    }
+    if (this.vulkanFallbackReason) return `Vulkan unavailable: ${this.vulkanFallbackReason}${this.context ? '. Auto chose another accelerator.' : '. GPU-only mode did not fall back to CPU.'}`;
+    if (!this.context) return null;
+    if (this.cpuForFileType) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }
-  /** Native file checks stay at this service boundary; conversion stays pure. */
-  private dropMissingImageAttachments(messages: Message[]): Promise<Message[]> {
-    return dropMissingImageAttachments(messages);
-  }
-  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
-    return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false);
-  }
-  async getModelInfo() { return this.context ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : null; }
+  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false); }
+  async getModelInfo() { return (this.vulkanLoaded || this.context) ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
+    if (this.vulkanLoaded) return vulkanEngine.tokenize(text);
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens || [];
   }
   async getTokenCount(text: string) {
+    if (this.vulkanLoaded) return (await vulkanEngine.tokenize(text)).length;
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens?.length || 0;
   }
@@ -496,3 +985,4 @@ class LLMService {
   getPerformanceStats(): LLMPerformanceStats { return { ...this.performanceStats }; }
 }
 export const llmService = new LLMService();
+setBackendProvider(() => llmService.getSelectedBackend());

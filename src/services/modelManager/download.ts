@@ -1,6 +1,5 @@
 /* eslint-disable max-lines */
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
 import { ModelFile, BackgroundDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
 import { backgroundDownloadService } from '../backgroundDownloadService';
@@ -25,19 +24,11 @@ import { extractBaseName } from './scan';
  */
 export function mmProjLocalName(ggufFileName: string, mmProjSourceName?: string): string {
   const base = extractBaseName(ggufFileName);
-  // Build the on-disk name as `<model-base>-mmproj-<precision>.gguf`, keeping ONLY the projector's own
-  // precision token from its source name and dropping every model-name token wherever it sits.
-  //  - `<model-base>` prefix → two repos that both ship `mmproj-F16.gguf` can't collide on disk.
+  // Keep the projector's OWN precision (mmproj-F16 / mmproj-BF16) from its source filename, but strip any
+  // model prefix the repo added — so the on-disk name is `<model-base>-mmproj-<precision>.gguf`:
+  //  - model-prefixed  → two repos that both ship `mmproj-F16.gguf` can't collide on disk (the original loss),
   //  - MODEL-quant-independent (extractBaseName drops the model quant) → every quant shares ONE projector file.
-  //  - precision-only projector portion → the on-disk stem always matches the model, so mmProjBelongsToModel
-  //    keeps the link. The old `/mmproj.*$/` swallowed a model name the repo put AFTER "mmproj"
-  //    (ggml-org ships `mmproj-<ModelName>-<quant>.gguf`), doubling the stem → the link was cleared and vision
-  //    never initialized ("Multimodal support not enabled" — device 2026-07-23, SmolVLM/Qwen2.5-VL on iOS).
-  // The projector's own precision is the token immediately before `.gguf`. Anchoring to `\.gguf$` makes the
-  // match LINEAR (no super-linear backtracking) and inherently takes the TRAILING token, so a precision-like
-  // token buried in a model name can never win.
-  const precision = mmProjSourceName?.match(/[-_.](iq\d[a-z0-9_]*|q\d[a-z0-9_]*|bf16|fp16|f16|f32)\.gguf$/i)?.[1];
-  const proj = precision ? `mmproj-${precision}.gguf` : 'mmproj.gguf';
+  const proj = mmProjSourceName?.match(/mmproj.*$/i)?.[0] ?? 'mmproj.gguf';
   return `${base}-${proj}`;
 }
 
@@ -45,7 +36,6 @@ export interface MmProjRepairDownloadOpts {
   modelId: string;
   file: ModelFile;
   modelsDir: string;
-  modelKey?: string;
   onProgress?: DownloadProgressCallback;
   onDownloadIdReady?: (id: string) => void;
 }
@@ -63,16 +53,7 @@ export async function performMmProjRepairDownload(opts: MmProjRepairDownloadOpts
   const mmProjFile = file.mmProjFile;
   if (!mmProjFile) throw new Error('Model file has no associated mmproj');
 
-  const modelKey = opts.modelKey ?? makeModelKey(modelId, file.name);
-  const existing = useDownloadStore.getState().downloads[modelKey];
-  if (existing) {
-    if (existing.status !== 'failed' && existing.status !== 'cancelled' && existing.status !== 'completed') {
-      throw new Error('A download for this model is already running');
-    }
-    // The model is installed, but a failed projector row from an earlier attempt
-    // may still own its key. Let the new repair own progress and cancel controls.
-    useDownloadStore.getState().remove(modelKey);
-  }
+  const modelKey = makeModelKey(modelId, file.name);
   // Same quant-independent name the normal download uses — repair and download must agree on the file.
   const mmProjLocalPath = `${modelsDir}/${mmProjLocalName(file.name, file.mmProjFile?.name)}`;
   const totalBytes = mmProjFile.size;
@@ -185,7 +166,8 @@ async function checkMmProjExists(path: string | null, expectedSize?: number): Pr
   const exists = await RNFS.exists(path);
   if (!exists || !expectedSize) return exists;
   try {
-    const actualSize = (await statFile(path))?.size ?? 0;
+    const stat = await RNFS.stat(path);
+    const actualSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
     if (actualSize < expectedSize) {
       logger.warn(`[ModelManager] mmproj partial (${actualSize}/${expectedSize}), re-downloading`);
       await RNFS.unlink(path).catch(() => {});

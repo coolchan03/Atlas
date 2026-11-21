@@ -27,7 +27,7 @@ class PDFExtractor {
 
     try {
       const __text = await PDFExtractorModule.extractText(filePath, maxChars);
-      logger.log(`[WIRE-PDF] ${JSON.stringify({ filePath, maxChars, textLength: __text?.length, sample: (__text ?? '').slice(0, 200) })}`); // [WIRE] native PDF→text extraction shape
+      logger.log(`[PDF] extracted ${__text?.length ?? 0} chars`);
       return __text;
     } catch (error: any) {
       // Guard against NullPointerException when bridge promise is rejected after teardown
@@ -40,3 +40,25 @@ class PDFExtractor {
 }
 
 export const pdfExtractor = new PDFExtractor();
+
+/**
+ * Page-by-page access (the same contract on both platforms): `pageCount` and `extractPages`. Unlike extractText, which joins pages
+ * into one capped string, this keeps each page separate so knowledge can cite page numbers and large documents can be read in
+ * small batches.
+ */
+export async function pdfPageCount(filePath: string): Promise<number> {
+  if (!PDFExtractorModule?.pageCount) throw new Error('PDF page reading is not available on this platform');
+  return Number(await PDFExtractorModule.pageCount(filePath));
+}
+
+/** The text of `count` pages starting at the 0-based `start`, one string per page; empty where a page has no text. */
+export async function pdfExtractPages(filePath: string, start: number, count: number): Promise<string[]> {
+  if (!PDFExtractorModule?.extractPages) throw new Error('PDF page reading is not available on this platform');
+  return (await PDFExtractorModule.extractPages(filePath, start, count)) as string[];
+}
+
+/** Draws one page (0-based) as a PNG file and returns its path, so a scanned page can be read by the vision model. */
+export async function pdfRenderPage(filePath: string, pageIndex: number, maxWidth = 1400): Promise<string> {
+  if (!PDFExtractorModule?.renderPage) throw new Error('Drawing PDF pages is not available on this platform');
+  return String(await PDFExtractorModule.renderPage(filePath, pageIndex, maxWidth));
+}

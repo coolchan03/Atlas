@@ -52,7 +52,7 @@ describe('T073 (rendered) — enhancement must stream / show live progress (DEV-
     h.render();
 
     await h.placeImageModel({ backend: 'coreml' });
-     
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { activeModelService } = require('../../../src/services/activeModelService');
     await activeModelService.loadImageModel('sd');
     await h.cycleImageMode(); // auto → ON(force): "draw a cat" routes to IMAGE
@@ -70,7 +70,7 @@ describe('T073 (rendered) — enhancement must stream / show live progress (DEV-
     // PRECONDITION (observe the transient present, so an absent assertion below can't false-green): the
     // enhancement is truly in flight — its static status card is on screen.
     await h.rtl.waitFor(
-      () => { expect(h.view!.queryByText(/Enhancing your prompt/i)).not.toBeNull(); },
+      () => { expect(h.view!.queryByText(/Enhancing prompt with AI/i)).not.toBeNull(); },
       { timeout: 6000 },
     );
 

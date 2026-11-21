@@ -47,7 +47,7 @@ function pressByWalkingUp(node: unknown): void {
 
 /** Arrive-via-UI: change the text inference backend on the real BackendSelector (Model Settings control). */
 function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, backendId: string) {
-   
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');
   const s = h.rtl.render(h.React.createElement(BackendSelector, {}));
   h.rtl.fireEvent.press(s.getByTestId(`backend-${backendId}-button`));
@@ -61,9 +61,11 @@ describe('reload race — a send during the load window keeps thinking (device 2
   it('renders the thinking block for a turn sent while the reload is still detecting capabilities', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     // Device boundary: an Adreno (Qualcomm) SoC so the OpenCL backend choice is allowed (as on device).
-     
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
+    const { hardwareService } = require('../../../src/services/hardware');
+    jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
     h.render();
 
     // GESTURE: turn Thinking ON the way the user does — quick settings → the Thinking row.
@@ -77,12 +79,7 @@ describe('reload race — a send during the load window keeps thinking (device 2
       thinkingText: `<think>${REASON_BEFORE}</think>The answer is 42.`,
     });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The answer is 42/)).not.toBeNull(); }, { timeout: 4000 });
-    await h.rtl.act(async () => {
-      pressByWalkingUp(h.view!.getByTestId('assistant-work-toggle'));
-    });
-    await h.rtl.waitFor(() => {
-      expect(h.view!.queryByText(new RegExp('six sevens are forty-two'))).not.toBeNull();
-    });
+    expect(h.view!.queryByText(new RegExp('six sevens are forty-two'))).not.toBeNull();
 
     // GESTURE: pick GPU/OpenCL → the settings-changed reload banner appears.
     selectBackendViaUI(h, 'opencl');
@@ -99,7 +96,6 @@ describe('reload race — a send during the load window keeps thinking (device 2
     // GESTURE: tap the reload banner. The reload parks inside the capability window (hold engaged).
     await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
     await h.rtl.waitFor(() => { expect(h.boundary.llama!.multimodalHoldActive()).toBe(true); }, { timeout: 4000 });
-    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); });
 
     // GESTURE: the user sends while the reload is still finishing (device: 18:50:27.733).
     await h.tapSend('is 17 prime');
@@ -111,13 +107,7 @@ describe('reload race — a send during the load window keeps thinking (device 2
     // ...WITH its reasoning — the racing turn must not silently lose thinking.
     // RED on HEAD: the turn ran with stale thinkingSupported=false → enable_thinking=false → the model
     // never reasoned → this text is nowhere on screen and the second turn has NO thinking block.
-    const workToggles = h.view!.getAllByTestId('assistant-work-toggle');
-    await h.rtl.act(async () => {
-      pressByWalkingUp(workToggles[workToggles.length - 1]);
-    });
-    await h.rtl.waitFor(() => {
-      expect(h.view!.queryByText(/seventeen has no divisors below its root/)).not.toBeNull();
-    });
+    expect(h.view!.queryByText(/seventeen has no divisors below its root/)).not.toBeNull();
     // BOTH turns carry the thinking affordance (the block collapses to its preview after completion).
     const blocks = h.view!.queryAllByTestId('thinking-block');
     expect(blocks.length).toBe(2);

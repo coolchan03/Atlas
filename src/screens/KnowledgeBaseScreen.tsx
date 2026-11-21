@@ -1,3 +1,7 @@
+import { OfficialStandardButton } from '../components/OfficialStandardButton';
+import { DocRoleLine } from '../components/DocRoleLine';
+import { describeLibrary, type LibraryStats } from '../services/rag/libraryStats';
+import { IndexStopped, gate, useIndexControl } from '../services/rag/indexControl';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -5,21 +9,23 @@ import {
   FlatList,
   TouchableOpacity,
   Switch,
+  ActivityIndicator,
   Alert,
   Platform,
 } from 'react-native';
-import { LoadingDots } from '../components/LoadingDots';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { pick, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
+import { importZipPack } from '../atlasTools/packImport';
 import logger from '../utils/logger';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
 import { useProjectStore } from '../stores';
 import { ragService } from '../services/rag';
+import { isTextDocument } from '../services/rag/textDocument';
 import type { RagDocument } from '../services/rag';
 import { RootStackParamList } from '../navigation/types';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
@@ -42,6 +48,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
+  const [stats, setStats] = useState<LibraryStats | null>(null);
+  const control = useIndexControl();
   const [isLoading, setIsLoading] = useState(true);
   const [isPicking, setIsPicking] = useState(false);
   const [indexError, setIndexError] = useState<{ fileName: string; message: string } | null>(null);
@@ -53,6 +61,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
     try {
       setIsLoading(true);
       setKbDocs(await ragService.getDocumentsByProject(projectId));
+      setStats(await ragService.libraryStats(projectId).catch(() => null));
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to load documents');
     } finally {
@@ -63,6 +72,13 @@ export const KnowledgeBaseScreen: React.FC = () => {
   useEffect(() => {
     loadKbDocs();
   }, [loadKbDocs]);
+
+  // Reload when coming back from writing or editing a shared document.
+  const firstFocus = useRef(true);
+  useFocusEffect(useCallback(() => {
+    if (firstFocus.current) { firstFocus.current = false; return; }
+    loadKbDocs();
+  }, [loadKbDocs]));
 
   const handleAddDocument = async () => {
     if (isPickingRef.current) {
@@ -85,7 +101,10 @@ export const KnowledgeBaseScreen: React.FC = () => {
       }
       logger.log(`[KnowledgeBase] picker returned ${files.length} file(s): ${files.map(f => `${f.name} (${f.size}b)`).join(', ')}`);
 
+      control.begin();
+      const notes: string[] = [];
       for (let i = 0; i < files.length; i++) {
+        if (!(await gate())) break; // paused here until resumed, or stopped: the files already added stay
         const file = files[i];
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
@@ -94,17 +113,22 @@ export const KnowledgeBaseScreen: React.FC = () => {
         logger.log(`[KnowledgeBase] indexing file ${i + 1}/${files.length} — name: ${fileName}, path: ${pathForDb?.substring(0, 80)}`);
 
         try {
-          await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
+          await ragService.indexDocument({
+            projectId, filePath: pathForDb, fileName, fileSize: file.size || 0, gate,
+            onProgress: (p) => { if (/scanned page/.test(p.message)) setIndexingFile(p.message); else if (p.stage === 'done' && p.message.length > 5) notes.push(`${fileName}: ${p.message.replace(/^Done\.\s*/, '')}`); },
+          });
           logger.log(`[KnowledgeBase] indexed successfully: ${fileName}`);
         } catch (indexErr: any) {
           // The index aborted mid-way and rolled back (ragService.indexDocument is atomic — no
           // half-indexed doc is left behind). Surface it as a persistent, retriable error card on
           // the screen rather than a fire-and-forget alert, so the user sees the failure and can retry.
+          if (indexErr instanceof IndexStopped) break; // the person pressed stop: not an error
           logger.error(`[KnowledgeBase] index failed for "${fileName}" — ${indexErr?.message}`);
           setIndexError({ fileName, message: indexErr?.message || 'Unknown error' });
         }
       }
       await loadKbDocs();
+      if (notes.length) Alert.alert('Added', notes.join('\n\n')); // pages read from pictures can have misread characters, and some may not have been readable
     } catch (err: any) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) {
         logger.log('[KnowledgeBase] picker cancelled by user');
@@ -121,7 +145,34 @@ export const KnowledgeBaseScreen: React.FC = () => {
       isPickingRef.current = false;
       setIsPicking(false);
       setIndexingFile(null);
+      control.end();
       logger.log('[KnowledgeBase] picker settled, lock released');
+    }
+  };
+
+  // Atlas: import a whole .zip pack of text files at once.
+  const handleImportPack = async () => {
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
+    setIsPicking(true);
+    setIndexError(null);
+    try {
+      const r = await importZipPack(projectId, (m) => setIndexingFile(m));
+      if (r) {
+        await loadKbDocs();
+        Alert.alert(
+          'Pack imported',
+          `${r.added} added, ${r.skipped} already here${r.failed.length ? `, ${r.failed.length} failed (${r.failed.slice(0, 3).map((f) => f.name).join(', ')}${r.failed.length > 3 ? '...' : ''})` : ''}${r.ignored.length ? `, ${r.ignored.length} not added because Atlas cannot read that kind of file (${r.ignored.slice(0, 3).join(', ')}${r.ignored.length > 3 ? '...' : ''})` : ''}.${r.total === 0 ? ' Nothing in the zip could be added.' : ''}`,
+        );
+      }
+    } catch (err: any) {
+      if (!(isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED)) {
+        Alert.alert('Import failed', err?.message || 'Could not import the pack');
+      }
+    } finally {
+      isPickingRef.current = false;
+      setIsPicking(false);
+      setIndexingFile(null);
     }
   };
 
@@ -156,56 +207,35 @@ export const KnowledgeBaseScreen: React.FC = () => {
     );
   };
 
-  // Three controls, not one.
-  //
-  // The row used to be a single accessible TouchableOpacity wrapping the switch and the delete
-  // button, so iOS merged all of it into one element named "Knowledge document <name>". The
-  // switch's own label - "Use <name>, ON" - was never exposed, which means VoiceOver could not tell
-  // whether a document was in use, and could not toggle it: the whole row read as one button that
-  // opens a preview. Opening, toggling and deleting are three different actions and each needs to
-  // be reachable on its own.
   const renderDoc = ({ item }: { item: RagDocument }) => (
-    <View style={styles.docRow}>
-      <TouchableOpacity
-        style={styles.docInfo}
-        onPress={() => navigation.navigate('DocumentPreview', { filePath: item.path, fileName: item.name, fileSize: item.size })}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={`Knowledge document ${item.name}`}
-        testID={`knowledge-document-row-${item.sync_id}`}
-      >
+    <TouchableOpacity
+      style={styles.docRow}
+      onPress={() => (isTextDocument(item)
+        ? navigation.navigate('ProjectDocument', { projectId, docId: item.id, name: item.name })
+        : navigation.navigate('DocumentPreview', { filePath: item.path, fileName: item.name, fileSize: item.size }))}
+      activeOpacity={0.7}
+    >
+      <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.docSize}>{formatFileSize(item.size)}</Text>
-      </TouchableOpacity>
+        <Text style={styles.docSize}>{formatFileSize(item.size)}{stats?.documents.find((d) => d.id === item.id) ? ` · ${stats.documents.find((d) => d.id === item.id)!.chunks.toLocaleString('en-US')} passages` : ''}</Text>
+        <DocRoleLine name={item.name} names={kbDocs.map((d) => d.name)} />
+      </View>
+      <OfficialStandardButton name={item.name} />
       <Switch
         value={item.enabled === 1}
         onValueChange={(val) => handleToggleDocument(item.id, val)}
-        accessibilityLabel={`Use ${item.name}, ${item.enabled === 1 ? 'ON' : 'OFF'}`}
-        testID={`knowledge-document-toggle-${item.sync_id}`}
         trackColor={{ false: colors.border, true: colors.primary }}
       />
-      <TouchableOpacity
-        style={styles.docDelete}
-        onPress={() => handleDeleteDocument(item)}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${item.name}`}
-        testID={`knowledge-document-remove-${item.sync_id}`}
-      >
+      <TouchableOpacity accessibilityLabel="Delete" style={styles.docDelete} onPress={() => handleDeleteDocument(item)}>
         <Icon name="trash-2" size={16} color={colors.error} />
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} testID="knowledge-base-screen">
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          testID="knowledge-base-back"
-        >
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -213,9 +243,15 @@ export const KnowledgeBaseScreen: React.FC = () => {
             {project?.name || 'Knowledge Base'}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
+        <TouchableOpacity onPress={() => navigation.navigate('ProjectDocument', { projectId })} style={styles.addButton} accessibilityLabel="Write a shared document">
+          <Icon name="edit-3" size={20} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleImportPack} style={styles.addButton} disabled={isPicking || !!indexingFile} accessibilityLabel="Import a .zip pack">
+          <Icon name="package" size={20} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Add" onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
           {indexingFile ? (
-            <LoadingDots color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <Icon name="plus" size={20} color={colors.primary} />
           )}
@@ -224,10 +260,14 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
       {indexingFile && (
         <View style={styles.indexingBanner}>
-          <LoadingDots color={colors.primary} />
-          <Text style={styles.indexingText}>Indexing {indexingFile}...</Text>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.indexingText}>{control.paused ? 'Pause asked: waits at the next file or scanned page. ' : ''}{/^(Adding|Copying|Unpacking|Reading)/.test(indexingFile) ? indexingFile : `Indexing ${indexingFile}...`}</Text>
+          <TouchableOpacity onPress={control.paused ? control.resume : control.pause} accessibilityRole="button" testID="kb-pause"><Text style={{ color: colors.primary }}>{control.paused ? 'Resume' : 'Pause'}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={control.stop} accessibilityRole="button" testID="kb-stop"><Text style={{ color: colors.error }}>Stop</Text></TouchableOpacity>
         </View>
       )}
+
+      {!!describeLibrary(stats) && !indexingFile && <Text style={styles.docSize} testID="kb-library-size">{describeLibrary(stats)}</Text>}
 
       {indexError && !indexingFile && (
         <View style={styles.errorCard} testID="kb-index-error-card">
@@ -251,7 +291,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <LoadingDots color={colors.primary} size={8} />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : kbDocs.length === 0 ? (
         <View style={styles.centered}>

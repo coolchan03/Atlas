@@ -1,0 +1,598 @@
+import React, { useEffect, useState } from 'react';
+import { shareItem } from '../utils/shareItem';
+import { StyleSheet, Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenBackground } from '../components/ScreenBackground';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
+import { useAgentStore } from '../stores/agentStore';
+import { NO_AGENT, isNoAgent, setLessons, expertName } from '../learning/agents';
+import { reportsMarkdown, writeReportsFile } from '../learning/lessonsFile';
+import { markSources, superscript } from '../study/replySources';
+import { useProjectStore, useAppStore } from '../stores';
+import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
+import { projectForSubject, pickAndAddFiles, addWorkspaceFolder, pickAndAddFolder, summarize } from '../learning/documents';
+import { refineTask } from '../learning/refineTask';
+import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
+import { startTalkChat } from '../learning/talk';
+import { askAsReport } from '../learning/askReport';
+import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound, learningLoad } from '../learning/engine';
+import { ModelChips } from '../components/ModelChips';
+import { QuestionImport } from './learningReliability/QuestionImport';
+import { ProjectZip } from './learningReliability/ProjectZip';
+import { phaseOf } from '../learning/phase';
+const literalStyles = StyleSheet.create({
+  s1: { marginTop: 0 },
+  s2: { fontWeight: '700' },
+  s3: { marginTop: 6 },
+  s4: { marginTop: 8, alignSelf: 'flex-start' },
+});
+
+
+const KIND_ICON: Record<string, string> = {
+  bank: 'list', appeal: 'message-square', question: 'help-circle', report: 'edit-3', judge: 'check-square', manager: 'briefcase', info: 'info', error: 'alert-triangle',
+};
+
+function Stepper({ label, value, onChange, colors, styles }: any) {
+  return (
+    <View style={styles.stepper}>
+      <Text style={styles.stepLabel}>{label}</Text>
+      <View style={styles.stepRow}>
+        <TouchableOpacity accessibilityLabel="Remove" onPress={() => onChange(Math.max(1, value - 1))} style={styles.stepBtn}><Icon name="minus" size={16} color={colors.text} /></TouchableOpacity>
+        <Text style={styles.stepValue}>{value}</Text>
+        <TouchableOpacity accessibilityLabel="Add" onPress={() => onChange(Math.min(20, value + 1))} style={styles.stepBtn}><Icon name="plus" size={16} color={colors.text} /></TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+/** Learning mode for one agent: learner -> judge -> manager loop, all on the phone. */
+export const LearningScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { width } = useWindowDimensions();
+  const wide = width >= 900; // tablets / unfolded screens: settings and feed side by side
+
+  const agents = useAgentStore((s) => s.agents);
+  // Each subject (an expert) learns on its own. General is always there; others are added below.
+  const removeExpert = useLearningStore((s) => s.removeExpert);
+  const agentId: string = route.params?.agentId || NO_AGENT;
+  const agent = agents.find((a) => a.id === agentId);
+  const projects = useProjectStore((s) => s.projects);
+  const rawCfg = useLearningStore((s) => s.config[agentId]);
+  const cfg = Object.assign(defaultLearnConfig(), rawCfg || {});
+  const setConfig = useLearningStore((s) => s.setConfig);
+  const st = useLearningStore((s) => s.state[agentId]);
+  const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
+  const clearAgent = useLearningStore((s) => s.clearAgent);
+  const [running, setRunning] = useState(isLearning());
+  const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
+  const phase = phaseOf(statusText, isLearning());
+  const [open, setOpen] = useState<string | null>(null);
+  const [newQ, setNewQ] = useState('');
+  const [advanced, setAdvanced] = useState(false);
+  const showLessons = useAppStore((s) => s.settings.showLessonsUsed !== false);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const [openReport, setOpenReport] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState(false);
+  const [lockedFor, setLockedFor] = useState(agentId);
+  if (lockedFor !== agentId) { setLockedFor(agentId); setUnlocked(false); }
+  const locked = ((st?.round ?? 0) > 0 || (st?.totalReports ?? 0) > 0) && !unlocked;
+  const unlockSetup = () => Alert.alert('Change the setup?', 'The task and knowledge base are what this expert has been learning from. Changing them part way through can mix sources. Change them only if you mean to.', [
+    { text: 'Keep it', style: 'cancel' }, { text: 'Change setup', onPress: () => setUnlocked(true) },
+  ]);
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
+  const fold = (key: string) => setFolded((f) => ({ ...f, [key]: !f[key] }));
+  const foldHead = (key: string, text: string) => (
+    <TouchableOpacity onPress={() => fold(key)} style={styles.foldHead} accessibilityRole="button" accessibilityState={{ expanded: !folded[key] }} testID={`fold-${key}`}>
+      <Text style={[styles.label, styles.grow]}>{text}</Text>
+      <Icon name={folded[key] ? 'chevron-down' : 'chevron-up'} size={16} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
+  const updateItem = useLearningStore((s) => s.updateItem);
+  const addItems = useLearningStore((s) => s.addItems);
+  const bank = st?.bank || [];
+  const count = (k: BankStatus) => bank.filter((b) => b.status === k).length;
+  const STATUS_COLOR: Record<string, string> = { pending: colors.textMuted, approved: colors.primary, answered: '#4D7C0F', uncertain: '#B45309', rejected: colors.error, failed: '#B45309', dropped: colors.textMuted };
+  // A tap on a question only opens it; approving, rejecting and removing are separate, labelled buttons.
+  const [openQ, setOpenQ] = useState<string | null>(null);
+  const decide = (id: string, status: 'approved' | 'rejected' | 'dropped') => {
+    if (status === 'approved') updateItem(agentId, id, { status, reason: undefined, tries: 0 });
+    else updateItem(agentId, id, { status, reason: status === 'dropped' ? 'Removed by you' : 'Rejected by you' });
+    setOpenQ(null);
+  };
+  // Documents the learner reads from: picked files, or the Atlas folder. They go into a project named after the subject.
+  const [docStatus, setDocStatus] = useState('');
+  const addDocuments = async (from: 'files' | 'folder' | 'pick-folder') => {
+    const projectId = cfg.projectId || projectForSubject(expertName(agentId));
+    if (!cfg.projectId) setConfig(agentId, { projectId });
+    setDocStatus('Starting...');
+    try {
+      if (from === 'files') {
+        const r = await pickAndAddFiles(projectId, setDocStatus);
+        if (r) Alert.alert('Documents', summarize(r));
+      } else if (from === 'pick-folder') {
+        const r = await pickAndAddFolder(projectId, setDocStatus);
+        if (r) Alert.alert('Documents', `${summarize(r.result)}\n\nFolder read: ${r.dir}`);
+      } else {
+        const { dir, result } = await addWorkspaceFolder(projectId, setDocStatus);
+        Alert.alert('Documents', `${summarize(result)}\n\nFolder read: ${dir}`);
+      }
+    } catch (e: any) { Alert.alert('Could not add documents', String(e?.message || e)); }
+    setDocStatus('');
+  };
+
+  useEffect(() => {
+    onLearningStatus((s) => { setStatusText(s); setRunning(isLearning()); });
+    const t = setInterval(() => setRunning(isLearning()), 1000);
+    return () => { onLearningStatus(null); clearInterval(t); };
+  }, []);
+
+  const shareReports = async () => {
+    const reports = st?.reportLog ?? [];
+    const name = expertName(agentId);
+    const path = await writeReportsFile(name, reports);
+    await shareItem({ title: `Reports on ${name}`, text: reportsMarkdown(name, reports) });
+    if (path) Alert.alert('Saved as a file too', path);
+  };
+  const [refining, setRefining] = useState(false);
+  const [suggestion, setSuggestion] = useState('');
+  const refine = async () => {
+    setRefining(true); setSuggestion('');
+    try {
+      const project = projects.find((p) => p.id === cfg.projectId)?.name;
+      setSuggestion(await refineTask(cfg.topic, (s, u) => require('../study/engine').askModel(s, u), { project }));
+    } catch (e: any) { Alert.alert('Could not refine the task', String(e?.message || e)); } finally { setRefining(false); }
+  };
+  const askReport = () => {
+    const r = askAsReport(agentId, newQ);
+    if (!r.queued) { Alert.alert('Ask for a report', r.why ?? 'Could not queue the question.'); return; }
+    setNewQ('');
+    Alert.alert('Question queued', `It is researched next and written up as a report. The judge and the manager review it as soon as it is written. Find it under "Reports it wrote".${r.started ? ' Learning has started.' : ''}`);
+  };
+  const talk = () => {
+    try {
+      const chat = startTalkChat(agentId);
+      navigation.navigate('Chat', { conversationId: chat.conversationId, ...(chat.projectId ? { projectId: chat.projectId } : {}), starter: chat.starter });
+    } catch (e: any) { Alert.alert('Could not start the chat', String(e?.message || e)); }
+  };
+  const start = () => { setRunning(true); setStatusText('Starting...'); startLearning(agentId).catch((e) => setStatusText(String(e?.message || e))).finally(() => setRunning(false)); };
+
+  const settings = (
+    <View>
+      <TouchableOpacity onPress={() => navigation.navigate('Knowledge')} style={styles.textbookCard} testID="open-textbook" accessibilityRole="button">
+        <Icon name="book-open" size={20} color={colors.primary} />
+        <View style={styles.grow}>
+          <Text style={styles.chipText}>Studying a textbook or a long PDF?</Text>
+          <Text style={styles.counts}>Add it under Knowledge. It is split into sections and studied piece by piece, with every finding tied to a quote and a page.</Text>
+        </View>
+        <Icon name="chevron-right" size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      <Text style={styles.subject} testID="subject-name">{expertName(agentId)}</Text>
+      <Text style={styles.note}>{agentId === NO_AGENT ? 'General is for anything that is not one field.' : `${expertName(agentId)}: `}Describe something to get good at. The AI researches it, writes reports, a judge checks them, and what it learns is kept as lessons for this subject.</Text>
+      {locked ? (
+        <View style={styles.lockCard} testID="setup-locked">
+          <Text style={styles.label}>Setup</Text>
+          <Text style={styles.counts}>Task: {cfg.topic || 'none'}</Text>
+          <Text style={styles.counts}>Knowledge base: {projects.find((p) => p.id === cfg.projectId)?.name ?? 'None'}</Text>
+          <Text style={styles.counts}>Offline library: {cfg.useLibrary ? 'on' : 'off'} · Web: {cfg.useWeb ? 'on' : 'off'}</Text>
+          <TouchableOpacity onPress={unlockSetup} style={styles.smallBtn} testID="unlock-setup" accessibilityRole="button">
+            <Text style={styles.smallBtnText}>Change setup</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.label}>Task to become an expert at</Text>
+          <TextInput
+            style={styles.input}
+            value={cfg.topic}
+            editable={!running}
+            onChangeText={(t) => setConfig(agentId, { topic: t })}
+            placeholder={'e.g. Treat wound infections without a hospital, and know when antibiotics are needed'}
+            placeholderTextColor={colors.textMuted}
+            multiline
+          />
+          <TouchableOpacity onPress={refine} disabled={running || refining || cfg.topic.trim().length < 3} testID="learning-refine" accessibilityRole="button">
+            <Text style={[styles.smallBtnText, { color: cfg.topic.trim().length < 3 ? colors.textMuted : colors.primary }]}>{refining ? 'Refining...' : 'Refine with AI'}</Text>
+          </TouchableOpacity>
+          {!!suggestion && (
+            <View testID="learning-suggestion" style={styles.row}>
+              <Text style={[styles.counts, styles.suggestionText]}>Suggested task: {suggestion}</Text>
+              <TouchableOpacity onPress={() => { setConfig(agentId, { topic: suggestion }); setSuggestion(''); }} testID="learning-suggestion-use"><Text style={styles.smallBtnText}>Use it</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setSuggestion('')} testID="learning-suggestion-keep"><Text style={styles.smallBtnText}>Keep mine</Text></TouchableOpacity>
+            </View>
+          )}
+
+          <Text style={styles.label}>Knowledge base (project)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[{ id: '', name: 'None' }, ...projects].map((p) => (
+              <TouchableOpacity key={p.id || 'none'} disabled={running} onPress={() => setConfig(agentId, { projectId: p.id })} style={[styles.chip, cfg.projectId === p.id && styles.chipOn]}>
+                <Text style={[styles.chipText, cfg.projectId === p.id && styles.chipTextOn]}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <Text style={styles.note}>The learner reads these documents first and cites them. Add your own: pick individual files, pick an entire folder (e.g. your tax documents), or put files in the Atlas folder and add the whole Atlas folder. They are added to the chosen project (one named after this subject is made if you chose none).</Text>
+          <View style={styles.row}>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('files')} style={styles.smallBtn} testID="learn-add-files" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add files</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('pick-folder')} style={styles.smallBtn} testID="learn-add-pick-folder" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add a folder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={running || !!docStatus} onPress={() => addDocuments('folder')} style={styles.smallBtn} testID="learn-add-folder" accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Add the Atlas folder</Text>
+            </TouchableOpacity>
+          </View>
+          {!!docStatus && <Text style={styles.counts} testID="learn-doc-status">{docStatus}</Text>}
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchText}>Also research in the offline library (WikiMed, Wikipedia...)</Text>
+            <Switch value={cfg.useLibrary} onValueChange={(v) => setConfig(agentId, { useLibrary: v })} disabled={running} />
+          </View>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchText}>Also research on the web (when online, not in off-grid mode)</Text>
+            <Switch value={cfg.useWeb} onValueChange={(v) => setConfig(agentId, { useWeb: v })} disabled={running} />
+          </View>
+          {cfg.useWeb && (
+            <TextInput
+              style={styles.input}
+              placeholder="Limit to domains (e.g. scholar.google.com, arxiv.org). Leave blank for all"
+              placeholderTextColor={colors.textSecondary}
+              value={cfg.webDomains || ''}
+              onChangeText={(t) => setConfig(agentId, { webDomains: t })}
+              editable={!running}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="web-domains-input"
+            />
+          )}
+        </>
+      )}
+
+      <View style={styles.statusBox}>
+        <Text style={[styles.phase, { color: phase.phase === 'blocked' ? colors.error : phase.phase === 'idle' || phase.phase === 'paused' ? colors.textMuted : colors.primary }]} testID="learn-phase">{phase.label}</Text>
+        <Text style={styles.statusText}>{running || !/^(Idle|Stopped|Running|Starting...)$/.test(statusText) ? statusText : 'Idle'}</Text>
+        <Text style={styles.counts} testID="learn-load">
+          {(() => { const l = learningLoad(); return `Context ${l.contextTokens} tokens · room for stored knowledge ~${l.knowledgeTokens}${l.pressure ? ' (halved: saving power)' : ''}`; })()}
+        </Text>
+        <Text style={styles.counts}>
+          Round {st?.round ?? 0} · {count('answered')} legacy judge approvals (unverified) · {count('uncertain')} awaiting verification · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
+        </Text>
+        <Text style={styles.counts}>
+          Until judge: {Math.max(0, cfg.reportsPerJudge - (st?.reportsSinceJudge ?? 0))} reports · until manager: {Math.max(0, cfg.judgesPerManager - (st?.judgesSinceManager ?? 0))} judge turns{st?.onTrack === false ? ' · manager says: drifting' : st?.onTrack ? ' · manager says: on track' : ''}
+        </Text>
+        {!!st?.scores?.length && (
+          <View style={styles.scoreRow}>
+            <Text style={styles.counts}>LLM judge opinions, not verified accuracy (last {Math.min(12, st.scores.length)}): </Text>
+            {st.scores.slice(-12).map((v, i) => (
+              <View key={i} style={[styles.bar, { height: 4 + v * 2.6, backgroundColor: v >= 7 ? colors.primary : v >= 5 ? '#D97706' : colors.error }]} />
+            ))}
+            <Text style={styles.counts}>  avg {(st.scores.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, st.scores.length)).toFixed(1)}/10</Text>
+          </View>
+        )}
+        {!!st?.direction && <Text style={styles.direction}>Direction: {st.direction}</Text>}
+      </View>
+
+      <Text style={styles.label}>How demanding the judge is</Text>
+      <View style={styles.chipRow} testID="learning-strictness">
+        {STRICTNESS_OPTIONS.map((o) => (
+          <TouchableOpacity key={o.id} disabled={running} onPress={() => setConfig(agentId, { judgeStrictness: o.id })} accessibilityRole="radio" accessibilityState={{ selected: (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id }} testID={`learning-strictness-${o.id}`}
+            style={[styles.chip, (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id && styles.chipOn]}>
+            <Text style={[styles.chipText, (cfg.judgeStrictness ?? DEFAULT_STRICTNESS) === o.id && styles.chipTextOn]}>{o.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.counts}>{STRICTNESS_OPTIONS.find((o) => o.id === (cfg.judgeStrictness ?? DEFAULT_STRICTNESS))?.hint}</Text>
+      <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
+        onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
+        <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />
+        <Text style={styles.counts}>  Keep the screen on while it learns. When the screen sleeps, Android pauses Atlas and learning stops.</Text>
+      </TouchableOpacity>
+      <View style={styles.row}>
+        <TouchableOpacity
+          onPress={running ? stopLearning : start}
+          disabled={!cfg.topic.trim() && !running}
+          style={[styles.bigBtn, { backgroundColor: running ? colors.error : colors.primary }, !cfg.topic.trim() && !running ? styles.dim : undefined]}
+        >
+          <Icon name={running ? 'square' : 'play'} size={16} color="#fff" />
+          <Text style={styles.bigBtnText}>{running ? 'Stop' : 'Start learning'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={talk} accessibilityRole="button" accessibilityLabel="Talk to the AI about what it has learned" testID="learning-talk"
+          style={[styles.bigBtn, styles.outlineBtn, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
+          <Icon name="message-circle" size={16} color={colors.primary} />
+          <Text style={[styles.bigBtnText, { color: colors.primary }]}>Talk to it</Text>
+        </TouchableOpacity>
+      </View>
+
+
+      <View style={styles.reportsHead}>
+        <View style={styles.grow}>{foldHead('reports', 'Reports it wrote')}</View>
+        {!folded.reports && (st?.reportLog ?? []).length > 0 && (
+          <TouchableOpacity onPress={shareReports} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
+            <Text style={styles.smallBtnText}>Share reports</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {!folded.reports && <Text style={styles.note}>Every report the AI writes while it learns, in full, with what the judge said. Tap one to read it.</Text>}
+      {!folded.reports && (st?.reportLog ?? []).length === 0 && <Text style={styles.counts}>No reports yet. Describe a task above and press Start: each report it writes appears here, with its numbered sources.</Text>}
+      {!folded.reports && (st?.reportLog ?? []).slice(0, 30).map((r) => {
+        const isOpen = openReport === r.id;
+        const color = r.status === 'pass' ? '#4D7C0F' : r.status === 'fail' ? colors.error : colors.textMuted;
+        return (
+          <TouchableOpacity key={r.id} onPress={() => setOpenReport(isOpen ? null : r.id)} style={styles.bankRow} testID={`learn-report-${r.id}`} accessibilityRole="button" accessibilityState={{ expanded: isOpen }}>
+            <View style={[styles.dot, { backgroundColor: color }]} />
+            <View style={styles.grow}>
+              <Text style={styles.chipText}>{r.q}</Text>
+              <Text style={[styles.counts, { color }]}>
+                {r.verificationStatus === 'disputed' ? 'Disputed - needs review' : r.verificationStatus === 'candidate' ? 'Judge reviewed - unverified' : r.status === 'pass' ? 'Legacy judge pass - unverified' : r.status === 'fail' ? 'Judge failed' : 'Pending'}{r.score !== undefined ? ` · ${r.score}/10` : ''} · {new Date(r.at).toLocaleString()}
+              </Text>
+              {!isOpen && !!r.sourceList?.length && <Text style={styles.counts}>{r.sourceList.length} sources</Text>}
+              {isOpen && <Text style={styles.eventBody} selectable>{markSources(r.text, r.sourceList?.length ?? 0)}</Text>}
+              {isOpen && !!r.sourceList?.length && (
+                <View testID={`report-sources-${r.id}`}>
+                  <Text style={styles.counts}>Sources</Text>
+                  {r.sourceList.map((s) => (
+                    <Text key={s.n} style={styles.counts} selectable>{superscript(s.n)} {s.title} ({s.kind}){s.url ? ` ${s.url}` : ''}</Text>
+                  ))}
+                </View>
+              )}
+              {isOpen && !!r.gates && <Text style={styles.direction} testID={`report-gates-${r.id}`}>Facts: {r.gates.facts}. Citations: {r.gates.citations}.{r.dimensions ? ` Scores: ${Object.entries(r.dimensions).map(([k, v]) => `${k} ${v}`).join(', ')}.` : ''}</Text>}
+              {isOpen && !!r.why && <Text style={styles.direction}>Judge: {r.why}</Text>}
+              {isOpen && !!r.verificationReasons?.length && <Text style={styles.direction}>Independent checks: {r.verificationReasons.join('; ')}</Text>}
+              {isOpen && !!r.sources && <Text style={styles.counts} selectable>Sources it had:{'\n'}{r.sources}</Text>}
+            </View>
+            <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        );
+      })}
+
+      {foldHead('lessons', isNoAgent(agentId) ? `${expertName(agentId)} lessons (used in chats about this subject, and saved as a file)` : 'Lessons this agent uses in every chat')}
+      {!folded.lessons && (
+        <>
+          <TextInput
+            style={[styles.input, styles.lessons]}
+            value={(isNoAgent(agentId) ? st?.lessons : agent?.lessons) || ''}
+            editable={!running}
+            onChangeText={(t) => setLessons(agentId, t)}
+            placeholder="None yet. The manager writes these after auditing the judge. You can edit them."
+            placeholderTextColor={colors.textMuted}
+            multiline
+            textAlignVertical="top"
+          />
+          <Text style={styles.note}>
+            Keep the app open while it learns (the screen stays on). Plugging in is a good idea. The model itself does not
+            change: the agent keeps its lessons (added to its instructions) and, in Keep mode with a project chosen, the
+            judge-checked answers are saved to that project's documents so chats can use them.
+          </Text>
+        </>
+      )}
+
+      <TouchableOpacity onPress={() => setAdvanced((v) => !v)} style={styles.advToggle} accessibilityRole="button" testID="learning-advanced">
+        <Text style={styles.label}>More options</Text>
+        <Icon name={advanced ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+      {advanced && (
+        <View>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchText}>Show which lessons a reply used (a small note under the reply)</Text>
+            <Switch value={showLessons} onValueChange={(v) => updateSettings({ showLessonsUsed: v })} testID="show-lessons-used" />
+          </View>
+      <Text style={styles.label}>Mode</Text>
+      <View style={[styles.row, literalStyles.s1]}>
+        {([['keep', 'Keep learning', 'Lessons go into the agent; checked answers are saved to the project'], ['session', 'Practice session', 'Temporary: nothing changes unless you tap Keep at the end']] as const).map(([m, t, d]) => (
+          <TouchableOpacity key={m} disabled={running} onPress={() => setConfig(agentId, { mode: m })} style={[styles.modeCard, cfg.mode === m && { borderColor: colors.primary }]}>
+            <Text style={[styles.chipText, literalStyles.s2]}>{t}</Text>
+            <Text style={styles.counts}>{d}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {cfg.mode === 'keep' && (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchText}>Keep going with new question rounds (constant learning)</Text>
+          <Switch value={cfg.continuous} onValueChange={(v) => setConfig(agentId, { continuous: v })} disabled={running} />
+        </View>
+      )}
+      <View style={styles.row}>
+        <Stepper label="Questions per round" value={cfg.bankSize} onChange={(v: number) => setConfig(agentId, { bankSize: v })} colors={colors} styles={styles} />
+        <Stepper label="Reports per judge" value={cfg.reportsPerJudge} onChange={(v: number) => setConfig(agentId, { reportsPerJudge: v })} colors={colors} styles={styles} />
+        <Stepper label="Judge turns per manager" value={cfg.judgesPerManager} onChange={(v: number) => setConfig(agentId, { judgesPerManager: v })} colors={colors} styles={styles} />
+      </View>
+
+      <Text style={styles.label}>Models for each role</Text>
+      <Text style={styles.note}>
+        Optional. A bigger model as judge or manager checks better. Different models mean the app swaps models at each hand-over, which is slower.
+      </Text>
+      {(['learner', 'judge', 'manager'] as const).map((role) => (
+        <View key={role} style={styles.roleRow}>
+          <Text style={styles.roleName}>{role[0].toUpperCase() + role.slice(1)}</Text>
+          <View style={styles.roleChips}>
+            <ModelChips
+              value={(cfg as any)[`${role}ModelId`] || ''}
+              onChange={(id) => setConfig(agentId, { [`${role}ModelId`]: id } as any)}
+              colors={colors}
+              disabled={running}
+            />
+          </View>
+        </View>
+      ))}
+
+          <TouchableOpacity disabled={running} onPress={() => auditNow(agentId)} style={styles.smallBtn}>
+          <Text style={styles.smallBtnText}>Manager audit now</Text>
+        </TouchableOpacity>
+      {foldHead('own-questions', 'Your own questions and tests')}
+      {!folded['own-questions'] && <QuestionImport subjectId={agentId} onAdded={() => undefined} />}
+      {foldHead('project-zip', 'Export or open this project as a ZIP')}
+      {!folded['project-zip'] && <ProjectZip projectId={cfg.projectId} />}
+
+      <Text style={styles.label}>Question bank</Text>
+      <Text style={styles.note}>The learner writes it, the judge approves or rejects (the learner can argue back once), the manager can drop or add questions. Tap a question to open it. You can then approve it, reject it or remove it yourself.</Text>
+      {bank.filter((b) => b.status !== 'dropped').slice(-40).map((b) => {
+        const isOpen = openQ === b.id;
+        return (
+          <View key={b.id}>
+            <TouchableOpacity onPress={() => setOpenQ(isOpen ? null : b.id)} style={styles.bankRow} testID={`bank-row-${b.id}`} accessibilityRole="button" accessibilityState={{ expanded: isOpen }}>
+              <View style={[styles.dot, { backgroundColor: STATUS_COLOR[b.status] || colors.textMuted }]} />
+              <View style={styles.grow}>
+                <Text style={styles.chipText}>{b.q}</Text>
+                <Text style={[styles.counts, { color: STATUS_COLOR[b.status] }]}>{b.status}{b.appealed ? ' (appealed)' : ''}{b.reason ? ` - ${b.reason}` : ''}</Text>
+              </View>
+              <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            {isOpen && (
+              <View style={styles.row}>
+                <TouchableOpacity disabled={running && b.status !== 'pending'} onPress={() => decide(b.id, 'approved')} style={styles.smallBtn} testID={`bank-approve-${b.id}`} accessibilityRole="button">
+                  <Text style={styles.smallBtnText}>Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={running && b.status !== 'pending'} onPress={() => decide(b.id, 'rejected')} style={styles.smallBtn} testID={`bank-reject-${b.id}`} accessibilityRole="button">
+                  <Text style={styles.smallBtnText}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={running && b.status !== 'pending'} onPress={() => decide(b.id, 'dropped')} style={styles.smallBtn} testID={`bank-remove-${b.id}`} accessibilityRole="button">
+                  <Text style={styles.smallBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        );
+      })}
+      <View style={[styles.row, literalStyles.s3]}>
+        <TextInput style={[styles.input, styles.grow]} value={newQ} onChangeText={setNewQ} placeholder="Add your own question" placeholderTextColor={colors.textMuted} />
+        <TouchableOpacity onPress={() => { if (newQ.trim()) { addItems(agentId, [newItem(newQ, st?.round || 1, 'approved')]); setNewQ(''); } }} style={styles.smallBtn}><Text style={styles.smallBtnText}>Add</Text></TouchableOpacity>
+        <TouchableOpacity onPress={askReport} style={styles.smallBtn} accessibilityRole="button" accessibilityLabel="Ask this as a report that the judge and manager review" testID="learning-ask-report"><Text style={styles.smallBtnText}>Ask as a report</Text></TouchableOpacity>
+        <TouchableOpacity disabled={running} onPress={() => newRound(agentId)} style={styles.smallBtn}><Text style={styles.smallBtnText}>New round</Text></TouchableOpacity>
+      </View>
+
+      {cfg.mode === 'session' && (
+        <View style={styles.statusBox}>
+          <Text style={styles.statusText}>This practice session</Text>
+          <Text style={styles.counts}>{st?.notes?.length ?? 0} checked answers{st?.sessionLessons ? `\nLessons so far:\n${st.sessionLessons}` : ''}</Text>
+          <TouchableOpacity disabled={running} onPress={async () => { try { Alert.alert('Done', await keepSession(agentId)); } catch (e: any) { Alert.alert('Could not keep it', String(e?.message || e)); } }} style={[styles.smallBtn, literalStyles.s4]}>
+            <Text style={styles.smallBtnText}>Keep what it learned</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+          <TouchableOpacity disabled={running} onPress={() => { clearAgent(agentId); setLessons(agentId, ''); }} style={styles.resetBtn}>
+            <Text style={styles.resetText}>Reset lessons and history</Text>
+          </TouchableOpacity>
+          {agentId !== NO_AGENT && isNoAgent(agentId) && (
+            <TouchableOpacity disabled={running} onPress={() => Alert.alert(`Delete the ${expertName(agentId)} expert?`, 'Its topic, reports and lessons are removed. This cannot be undone.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { removeExpert(agentId); navigation.goBack(); } }])} style={styles.resetBtn} testID="delete-expert">
+              <Text style={styles.resetText}>Delete this expert</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+
+  const feed = (
+    <View>
+      {foldHead('activity', 'Activity')}
+      {!folded.activity && events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
+      {!folded.activity && events.map((e: LearnEvent) => (
+        <TouchableOpacity key={e.id} onPress={() => setOpen(open === e.id ? null : e.id)} style={styles.event} accessibilityRole="button" accessibilityState={{ expanded: open === e.id }} testID={`learning-activity-${e.id}`}>
+          <View style={styles.eventHead}>
+            <Icon name={KIND_ICON[e.kind] || 'circle'} size={14} color={e.kind === 'error' ? colors.error : e.kind === 'manager' ? colors.primary : colors.textSecondary} />
+            <Text style={styles.eventTitle}>{e.title}</Text>
+            <Text style={styles.eventTime}>{new Date(e.at).toLocaleTimeString()}</Text>
+            <Icon name={open === e.id ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+          </View>
+          {open === e.id && !!e.body && <Text style={styles.eventBody} selectable>{e.body}</Text>}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScreenBackground screenKey="Learning" />
+      <View style={styles.header}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.back}><Icon name="arrow-left" size={20} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('LearningReliability')} style={styles.back}
+          accessibilityLabel="Learning reliability: evidence, mistakes and review" testID="learning-reliability-dashboard">
+          <Icon name="check-square" size={20} color={colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('Knowledge')} style={styles.back} accessibilityLabel="Knowledge: documents, experts, library, import and export" testID="open-knowledge">
+          <Icon name="book-open" size={20} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Teach the AI</Text>
+      </View>
+      {wide ? (
+        <View style={styles.wideRow}>
+          <ScrollView style={styles.wideLeft} contentContainerStyle={styles.pad}>{settings}</ScrollView>
+          <ScrollView style={styles.wideRight} contentContainerStyle={styles.pad}>{feed}</ScrollView>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">{settings}{feed}</ScrollView>
+      )}
+    </SafeAreaView>
+  );
+};
+
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  suggestionText: { flex: 1 },
+  chipRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginTop: 6 },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  back: { marginRight: SPACING.md },
+  title: { ...TYPOGRAPHY.h2, color: colors.text },
+  pad: { padding: SPACING.lg, paddingBottom: 120 },
+  wideRow: { flex: 1, flexDirection: 'row' as const },
+  wideLeft: { flex: 1, maxWidth: 560, borderRightWidth: 1, borderRightColor: colors.border },
+  wideRight: { flex: 1 },
+  label: { ...TYPOGRAPHY.label, color: colors.text, marginTop: SPACING.lg, marginBottom: SPACING.sm, textTransform: 'uppercase' as const },
+  input: { ...TYPOGRAPHY.body, backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, color: colors.text },
+  lessons: { minHeight: 120 },
+  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: colors.surface, marginRight: 8 },
+  chipOn: { backgroundColor: colors.primary },
+  chipText: { color: colors.text, fontSize: 13 },
+  chipTextOn: { color: colors.background },
+  row: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md, gap: 12, flexWrap: 'wrap' as const },
+  stepper: { flex: 1, minWidth: 140 },
+  stepLabel: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginBottom: 4 },
+  stepRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  stepBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center' as const, justifyContent: 'center' as const },
+  stepValue: { ...TYPOGRAPHY.body, color: colors.text, width: 36, textAlign: 'center' as const },
+  statusBox: { marginTop: SPACING.lg, padding: SPACING.md, borderRadius: 8, backgroundColor: colors.surface },
+  phase: { ...TYPOGRAPHY.meta, textTransform: 'uppercase' as const, letterSpacing: 1 },
+  statusText: { ...TYPOGRAPHY.body, color: colors.text, fontWeight: '600' as const },
+  counts: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: 4 },
+  roleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 6 },
+  roleName: { ...TYPOGRAPHY.bodySmall, color: colors.text, width: 70 },
+  roleChips: { flex: 1 },
+  scoreRow: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, marginTop: 6, flexWrap: 'wrap' as const },
+  bar: { width: 8, marginRight: 3, borderRadius: 2 },
+  direction: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: 6 },
+  outlineBtn: { borderWidth: 1 },
+  bigBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10, gap: 8 },
+  bigBtnText: { color: '#fff', fontWeight: '600' as const, fontSize: 15 },
+  smallBtn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  smallBtnText: { color: colors.text, fontSize: 13 },
+  textbookCard: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, borderWidth: 1, borderColor: colors.primary, borderRadius: 10, padding: SPACING.md, marginTop: SPACING.sm },
+  grow: { flex: 1 },
+  dim: { opacity: 0.5 },
+  lockCard: { marginTop: 12, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 4, alignItems: 'flex-start' as const },
+  subject: { ...TYPOGRAPHY.h2, color: colors.text, marginTop: SPACING.lg },
+  foldHead: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  reportsHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  expertRow: { marginTop: 4 },
+  advToggle: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  resetBtn: { marginTop: SPACING.sm, paddingVertical: 8 },
+  modeCard: { flex: 1, minWidth: 150, borderWidth: 2, borderColor: colors.border, borderRadius: 10, padding: SPACING.md, backgroundColor: colors.surface },
+  switchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: SPACING.md },
+  switchText: { ...TYPOGRAPHY.bodySmall, color: colors.text, flex: 1, paddingRight: 8 },
+  bankRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 10, backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, marginTop: 6 },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
+  resetText: { color: colors.error, fontSize: 13 },
+  note: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: SPACING.md, lineHeight: 18 },
+  event: { backgroundColor: colors.surface, borderRadius: 8, padding: SPACING.md, marginBottom: SPACING.sm, ...shadows.small },
+  eventHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
+  eventTitle: { ...TYPOGRAPHY.bodySmall, color: colors.text, fontWeight: '600' as const, flex: 1 },
+  eventTime: { fontSize: 11, color: colors.textMuted },
+  eventBody: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, marginTop: 6, lineHeight: 18 },
+});

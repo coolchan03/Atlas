@@ -12,7 +12,6 @@
 import { whisperService } from '../../whisperService';
 import { backgroundDownloadService } from '../../backgroundDownloadService';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
-import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
@@ -29,7 +28,7 @@ const STT_CAPABILITIES = {
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** The store keys STT models as `whisper-<id>`; the uniform id uses the bare id. */
 const bareId = (storeModelId: string): string => storeModelId.replace(/^whisper-/, '');
-const downloadId = (id: string): string => bareId(id.replace(/^stt:/, ''));
+const downloadId = (id: string): string => id.replace(/^stt:/, '');
 
 /** Find the in-flight store entry for a bare STT model id, if any. */
 function findEntry(modelId: string) {
@@ -40,11 +39,6 @@ function findEntry(modelId: string) {
 export const sttProvider: DownloadProvider = {
   modelType: 'stt',
 
-  async start(request): Promise<void> {
-    if (request.modelType !== 'stt') throw new Error('Invalid STT download request');
-    await useWhisperStore.getState().downloadModel(request.modelId);
-  },
-
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
     // In-flight (downloadStore).
@@ -54,7 +48,7 @@ export const sttProvider: DownloadProvider = {
       out.push({
         id: uniformDownloadId('stt', e.modelId), modelType: 'stt', name: e.fileName || bare,
         sizeBytes: e.totalBytes, bytesDownloaded: e.bytesDownloaded, progress: e.progress,
-        status: mapStoreStatus(e.status), capabilities: { ...STT_CAPABILITIES, pause: isActiveStatus(e.status), resume: e.status === 'paused' }, error: e.errorMessage,
+        status: mapStoreStatus(e.status), capabilities: STT_CAPABILITIES, error: e.errorMessage,
       });
     }
     // Completed (on disk) — skip ones that also have a live in-flight entry.
@@ -72,28 +66,11 @@ export const sttProvider: DownloadProvider = {
     return out;
   },
 
-  async pause(id: string): Promise<void> {
-    const entry = findEntry(downloadId(id));
-    if (!entry) return;
-    await backgroundDownloadService.pauseDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
-  },
-
-  async resume(id: string): Promise<void> {
-    const entry = findEntry(downloadId(id));
-    if (!entry) return;
-    await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
-    backgroundDownloadService.startProgressPolling();
-  },
-
   async cancel(id: string): Promise<void> {
-    const modelId = downloadId(id);
-    const entry = findEntry(modelId);
+    const entry = findEntry(downloadId(id));
     if (!entry) return;
     await backgroundDownloadService.cancelDownload(entry.downloadId)
       .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
-    await useWhisperStore.getState().cancelDownload(modelId);
     useDownloadStore.getState().remove(entry.modelKey);
   },
 
@@ -145,7 +122,7 @@ export const sttProvider: DownloadProvider = {
     for (const e of Object.values(store.downloads)) {
       if (e.modelType === 'stt' && isActiveStatus(e.status)) {
         logger.log(`[DL-SM] stt:${bareId(e.modelId)} reconcile: interrupted by app close → failed`);
-        store.setStatus(e.downloadId, 'failed', { message: 'Interrupted — app closed. Tap retry.' });
+        store.setStatus(e.downloadId, 'failed', { message: 'Interrupted - app closed. Tap retry.' });
       }
     }
   },

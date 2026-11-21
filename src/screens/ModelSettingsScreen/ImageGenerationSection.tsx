@@ -5,14 +5,11 @@ import { SliderSetting } from '../../components/SliderSetting';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { DEFAULT_SETTINGS } from '../../stores/appStore';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import {
-  defaultImageSteps,
-  MAX_IMAGE_STEPS,
-  SWEET_SPOT_SIZE,
-} from '../../utils/imageGenAdvice';
+import { getImageTuning, getImageSizeSlider, isDirectSDXL, getImageGuidance } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
+import { ImageBackendModePicker } from '../../components/ImageBackendModePicker';
+import { ImageStylePicker } from '../../components/ImageStylePicker';
 
 // ─── Advanced Sub-Components ─────────────────────────────────────────────────
 
@@ -52,35 +49,16 @@ const EnhanceImageToggle: React.FC = () => {
 };
 
 const ImageGpuSection: React.FC = () => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const model = downloadedImageModels.find(m => m.id === activeImageModelId);
   const { clearing, handleClearCache } = useClearGpuCache();
-  const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-  const isOpenCL = settings?.imageUseOpenCL ?? true;
-
   return (
     <>
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleInfo}>
-          <Text style={styles.toggleLabel}>OpenCL GPU Acceleration</Text>
-          <Text style={styles.toggleDesc}>
-            Use GPU for faster image generation. First run may be slower while optimizing for your device.
-          </Text>
-        </View>
-        <Switch
-          value={isOpenCL}
-          onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
-          trackColor={trackColor}
-          thumbColor={isOpenCL ? colors.primary : colors.textMuted}
-        />
-      </View>
-      {isOpenCL && (
-        <TouchableOpacity
-          style={[styles.toggleRow, styles.clearCacheRow]}
-          onPress={handleClearCache}
-          disabled={clearing}
-        >
+      <ImageBackendModePicker backend={model?.backend} />
+      {settings.imageBackendMode !== 'cpu' && model?.backend === 'mnn' && (
+        <TouchableOpacity style={[styles.toggleRow, styles.clearCacheRow]}
+          onPress={handleClearCache} disabled={clearing}>
           <Text style={styles.clearCacheText}>
             {clearing ? 'Clearing...' : 'Clear GPU Cache'}
           </Text>
@@ -129,7 +107,8 @@ const DetectionMethodRow: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
 
   return (
     <>
@@ -137,21 +116,24 @@ const ImageAdvancedSection: React.FC = () => {
         testID="image-guidance-scale"
         label="Guidance Scale"
         description="Higher = follows prompt more strictly"
-        value={settings?.imageGuidanceScale || 7.5}
+        value={getImageGuidance(imageModel, settings?.imageGuidanceScale)}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
 
-      <SliderSetting
-        testID="image-threads"
-        label="Image Threads"
-        description="CPU threads used for image generation (applies on next image model load)"
-        value={settings?.imageThreads ?? 4}
-        min={1} max={8} step={1}
-        onChange={(value) => updateSettings({ imageThreads: value })}
-      />
+      {(Platform.OS !== 'android' || imageModel?.backend === 'sdcpp') && (
+        <SliderSetting
+          testID="image-threads"
+          label="Image Threads"
+          description="CPU threads used for image generation (applies on next image model load)"
+          value={settings?.imageThreads ?? 4}
+          min={1} max={8} step={1}
+          onChange={(value) => updateSettings({ imageThreads: value })}
+        />
+      )}
 
       <DetectionMethodRow />
+      <ImageStylePicker />
       <EnhanceImageToggle />
 
       {Platform.OS === 'android' && <ImageGpuSection />}
@@ -164,7 +146,11 @@ const ImageAdvancedSection: React.FC = () => {
 export const ImageGenerationSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const preset = getImageTuning(imageModel, settings);
+  const sizeOptions = getImageSizeSlider(imageModel);
+  const isXL = isDirectSDXL(imageModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const isAutoMode = settings?.imageGenerationMode === 'auto';
@@ -205,21 +191,18 @@ export const ImageGenerationSection: React.FC = () => {
       <SliderSetting
         testID="image-steps"
         label="Image Steps"
-        description="More steps = better quality but slower (4-8 fast, 20-50 high quality)"
-        value={settings?.imageSteps || defaultImageSteps(Platform.OS)}
-        min={4} max={MAX_IMAGE_STEPS} step={1}
+        description={isXL ? "28 steps recommended for SDXL" : "More steps = better quality but slower (4-8 fast, 20-50 high quality)"}
+        value={preset.steps}
+        min={isXL ? 20 : 4} max={50} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 
       <SliderSetting
         testID="image-size"
         label="Image Size"
-        description="Output resolution. Default: 512x512."
-        // Single source of truth for the floor: SD-class models render garbage below the
-        // sweet spot (256), so both this screen and the chat modal (ImageQualitySliders) share
-        // the SAME min/fallback — the surfaces can't diverge and a sub-256 value is unreachable.
-        value={Math.max(SWEET_SPOT_SIZE, settings?.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
-        min={SWEET_SPOT_SIZE} max={512} step={64}
+        description={sizeOptions.description}
+        value={preset.width}
+        min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />

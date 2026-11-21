@@ -1,7 +1,10 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
 
 type CopyProgressOpts = { knownTotalBytes: number | null; onProgress?: (fraction: number) => void };
+
+function parseSizeInt(size: string | number): number {
+  return typeof size === 'string' ? Number.parseInt(size, 10) : size;
+}
 
 export async function copyFileWithProgress(
   source: string,
@@ -11,7 +14,8 @@ export async function copyFileWithProgress(
   let totalBytes = knownTotalBytes ?? 0;
   if (totalBytes === 0) {
     try {
-      totalBytes = (await statFile(source))?.size ?? 0;
+      const sourceStat = await RNFS.stat(source);
+      totalBytes = parseSizeInt(sourceStat.size);
     } catch {
       // stat failed — progress will be indeterminate (stuck at 0%), non-fatal
     }
@@ -24,7 +28,8 @@ export async function copyFileWithProgress(
     try {
       const exists = await RNFS.exists(dest);
       if (exists && totalBytes > 0) {
-        const written = (await statFile(dest))?.size ?? 0;
+        const stat = await RNFS.stat(dest);
+        const written = parseSizeInt(stat.size);
         const pct = Math.min(written / totalBytes, 0.99);
         onProgress?.(pct);
       }

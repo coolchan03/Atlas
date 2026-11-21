@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View,
+  StyleSheet, View,
   Text,
   ScrollView,
   TouchableOpacity,
@@ -10,6 +10,14 @@ import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { Project } from '../types';
+import { isProtectedProjectUnlocked } from '../stores/protectedProjectStorage';
+const literalStyles = StyleSheet.create({
+  s1: { opacity: 0.45 },
+});
+
+
+/** A protected project accepts chats only while it is unlocked. */
+const isLockedProject = (p: { id: string; pinVerifier?: string }) => !!p.pinVerifier && !isProtectedProjectUnlocked(p.id);
 
 interface ProjectSelectorSheetProps {
   visible: boolean;
@@ -40,10 +48,7 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
       snapPoints={['45%']}
       title="Select Project"
     >
-      <ScrollView
-        style={styles.projectList}
-        contentContainerStyle={styles.projectListContent}
-      >
+      <ScrollView style={styles.projectList}>
         {/* Default option */}
         <TouchableOpacity
           style={[
@@ -69,9 +74,11 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
         {projects.map((project) => (
           <TouchableOpacity
             key={project.id}
+            disabled={isLockedProject(project)}
             style={[
               styles.projectOption,
               activeProject?.id === project.id && styles.projectOptionSelected,
+              isLockedProject(project) && literalStyles.s1,
             ]}
             onPress={() => handleSelect(project)}
           >
@@ -83,7 +90,9 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
             <View style={styles.projectOptionInfo}>
               <Text style={styles.projectOptionName}>{project.name}</Text>
               <Text style={styles.projectOptionDesc} numberOfLines={1}>
-                {project.description}
+                {!project.pinVerifier ? project.description
+                  : isLockedProject(project) ? 'Protected project · unlock it to add chats'
+                    : 'Protected project · this chat will be encrypted with its PIN'}
               </Text>
             </View>
             {activeProject?.id === project.id && (
@@ -98,16 +107,7 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   projectList: {
-    // Deliberately unpadded. Padding on a ScrollView's `style` pads the VIEWPORT, not the content,
-    // so the last project sat flush against the bottom edge of the phone with nothing below it and
-    // its subtitle clipped by the frame. Inner spacing belongs to the content container.
-    flexGrow: 0,
-  },
-  projectListContent: {
-    padding: SPACING.lg,
-    // Room past the last row for the home indicator, so the final project is fully readable when
-    // the list is scrolled to the end.
-    paddingBottom: SPACING.xxl,
+    padding: 16,
   },
   projectOption: {
     flexDirection: 'row' as const,

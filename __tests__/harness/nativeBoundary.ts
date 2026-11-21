@@ -25,18 +25,6 @@
  * device-info) so the real budget math runs end-to-end from a mounted screen. Do not use both on one test.
  */
 
-import {
-  createNativeFileSystemBoundary,
-  type NativeFileSystemBoundary,
-} from './nativeFileSystem';
-
-// The hosted serial coverage gate loads more than 600 suites into one process. Near the end of that
-// run, instrumentation and garbage collection can delay any real native-boundary journey beyond the
-// normal ceiling even when it finishes in seconds alone. Keep every behavior wait strict, but give
-// the CI process one shared outer budget instead of adding per-suite exceptions as random suites
-// cross the default under load.
-jest.setTimeout(process.env.CI === 'true' ? 90_000 : 30_000);
-
 // ---------------------------------------------------------------------------
 // Fake: LiteRTModule (Android litert engine). Destructured at import in src/services/litert.ts.
 // A driveable event emitter + arg-recording methods. Native events: litert_token/thinking/complete/
@@ -56,13 +44,12 @@ export function requireRTL(): typeof import('@testing-library/react-native') {
   const prev = process.env.RNTL_SKIP_AUTO_CLEANUP;
   process.env.RNTL_SKIP_AUTO_CLEANUP = 'true';
   try {
+     
     const rtl = require('@testing-library/react-native');
     // Register THIS instance's cleanup on a global so jest.setup's afterEach can unmount the tree WITHOUT
     // requiring RTL fresh (requiring it fresh after a test's resetModules corrupts the module graph and
     // breaks the next test — a real regression). Only tests that render (call requireRTL) get cleaned up.
-    (
-      globalThis as unknown as { __RTL_CLEANUP__?: () => void }
-    ).__RTL_CLEANUP__ = rtl.cleanup;
+    (globalThis as unknown as { __RTL_CLEANUP__?: () => void }).__RTL_CLEANUP__ = rtl.cleanup;
     return rtl;
   } finally {
     if (prev === undefined) delete process.env.RNTL_SKIP_AUTO_CLEANUP;
@@ -85,7 +72,7 @@ function makeEmitterRegistry() {
   };
   const handle: FakeEmitterHandle = {
     emit: (event, payload) => listeners.get(event)?.forEach(cb => cb(payload)),
-    listenerCount: event => listeners.get(event)?.size ?? 0,
+    listenerCount: (event) => listeners.get(event)?.size ?? 0,
   };
   return { add, handle };
 }
@@ -93,11 +80,7 @@ function makeEmitterRegistry() {
 /** One scripted native turn: optional tool calls the model "emits", then the final content/reasoning. */
 export interface LiteRTTurn {
   /** Tool calls the native model emits (litert_tool_call). The REAL service runs them + respondToToolCall. */
-  toolCalls?: Array<{
-    id?: string;
-    name: string;
-    arguments: Record<string, unknown>;
-  }>;
+  toolCalls?: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>;
   /** Reasoning tokens emitted on the litert_thinking channel before completion. */
   reasoning?: string;
   /** Final content tokens emitted on litert_token before litert_complete. Empty ⇒ the model said nothing. */
@@ -108,14 +91,7 @@ export interface LiteRTFake {
   module: Record<string, jest.Mock>;
   events: FakeEmitterHandle;
   /** Records of every generateRaw / sendMessage* call for arg assertions. */
-  calls: {
-    loadModel: unknown[][];
-    generateRaw: unknown[][];
-    resetConversation: unknown[][];
-    sendMessage: unknown[][];
-    sendMessageWithMedia: unknown[][];
-    sendMessageWithImages: unknown[][];
-  };
+  calls: { generateRaw: unknown[][]; resetConversation: unknown[][]; sendMessage: unknown[][]; sendMessageWithMedia: unknown[][]; sendMessageWithImages: unknown[][] };
   /**
    * Script the native side of the NEXT turn: when our code calls sendMessage*, emit the tool calls
    * (which the real service dispatches to the real tool loop, then calls respondToToolCall), then on the
@@ -154,19 +130,10 @@ export interface LiteRTFake {
 }
 
 /** Run fn on a macrotask so it lands after the current async chain (native call → awaited resolve). */
-const defer = (fn: () => void) => {
-  setTimeout(fn, 0);
-};
+const defer = (fn: () => void) => { setTimeout(fn, 0); };
 
 function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
-  const calls: LiteRTFake['calls'] = {
-    loadModel: [],
-    generateRaw: [],
-    resetConversation: [],
-    sendMessage: [],
-    sendMessageWithMedia: [],
-    sendMessageWithImages: [],
-  };
+  const calls: LiteRTFake['calls'] = { generateRaw: [], resetConversation: [], sendMessage: [], sendMessageWithMedia: [], sendMessageWithImages: [] };
 
   // Scripted turn state — set by scriptTurn()/scriptTurns(), consumed by the send/respond methods below.
   let pending: LiteRTTurn | null = null;
@@ -175,8 +142,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   let toolCallsRemaining = 0;
   let pendingError: string | null = null; // one-shot: next send emits litert_error instead of completing
   let pendingHang = false; // one-shot: next send never completes (generation stays in-flight)
-  let pendingPartialHang: { content?: string; reasoning?: string } | null =
-    null; // one-shot: emit a partial token/reasoning then never complete
+  let pendingPartialHang: { content?: string; reasoning?: string } | null = null; // one-shot: emit a partial token/reasoning then never complete
 
   const emitCompletion = (turn: LiteRTTurn) => {
     if (turn.reasoning) handle.emit('litert_thinking', turn.reasoning);
@@ -185,101 +151,36 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   };
 
   const onSend = () => {
-    if (pendingPartialHang !== null) {
-      const p = pendingPartialHang;
-      pendingPartialHang = null;
-      defer(() => {
-        if (p.reasoning) handle.emit('litert_thinking', p.reasoning);
-        if (p.content) handle.emit('litert_token', p.content);
-      });
-      return;
-    } // partial (content and/or reasoning) shown, then in-flight
-    if (pendingHang) {
-      pendingHang = false;
-      return;
-    } // accepted, never completes → generation in-flight
-    if (pendingError) {
-      const m = pendingError;
-      pendingError = null;
-      defer(() => handle.emit('litert_error', m));
-      return;
-    }
+    if (pendingPartialHang !== null) { const p = pendingPartialHang; pendingPartialHang = null; defer(() => { if (p.reasoning) handle.emit('litert_thinking', p.reasoning); if (p.content) handle.emit('litert_token', p.content); }); return; } // partial (content and/or reasoning) shown, then in-flight
+    if (pendingHang) { pendingHang = false; return; } // accepted, never completes → generation in-flight
+    if (pendingError) { const m = pendingError; pendingError = null; defer(() => handle.emit('litert_error', m)); return; }
     const turn = queue.length ? queue.shift()! : pending;
     currentTurn = turn;
-    if (!turn) {
-      defer(() => handle.emit('litert_complete', '{}'));
-      return;
-    }
+    if (!turn) { defer(() => handle.emit('litert_complete', '{}')); return; }
     const tcs = turn.toolCalls ?? [];
     toolCallsRemaining = tcs.length;
-    if (tcs.length === 0) {
-      defer(() => emitCompletion(turn));
-      return;
-    }
+    if (tcs.length === 0) { defer(() => emitCompletion(turn)); return; }
     // Emit each tool call; the REAL service dispatches it and calls respondToToolCall.
-    defer(() =>
-      tcs.forEach((tc, i) =>
-        handle.emit(
-          'litert_tool_call',
-          JSON.stringify({
-            id: tc.id ?? `tc-${i}`,
-            name: tc.name,
-            arguments: tc.arguments,
-          }),
-        ),
-      ),
-    );
+    defer(() => tcs.forEach((tc, i) =>
+      handle.emit('litert_tool_call', JSON.stringify({ id: tc.id ?? `tc-${i}`, name: tc.name, arguments: tc.arguments }))));
   };
 
   const module: Record<string, jest.Mock> = {
-    loadModel: jest.fn((...args: unknown[]) => {
-      calls.loadModel.push(args);
-      return Promise.resolve({ backend: 'gpu', maxNumTokens: 4096 });
-    }),
-    resetConversation: jest.fn((...args: unknown[]) => {
-      calls.resetConversation.push(args);
-      return Promise.resolve();
-    }),
-    sendMessage: jest.fn((...args: unknown[]) => {
-      calls.sendMessage.push(args);
-      onSend();
-      return Promise.resolve();
-    }),
-    sendMessageWithImages: jest.fn((...args: unknown[]) => {
-      calls.sendMessageWithImages.push(args);
-      onSend();
-      return Promise.resolve();
-    }),
-    sendMessageWithAudio: jest.fn(() => {
-      onSend();
-      return Promise.resolve();
-    }),
-    sendMessageWithMedia: jest.fn((...args: unknown[]) => {
-      calls.sendMessageWithMedia.push(args);
-      onSend();
-      return Promise.resolve();
-    }),
+    loadModel: jest.fn().mockResolvedValue({ backend: 'gpu', maxNumTokens: 4096 }),
+    resetConversation: jest.fn((...args: unknown[]) => { calls.resetConversation.push(args); return Promise.resolve(); }),
+    sendMessage: jest.fn((...args: unknown[]) => { calls.sendMessage.push(args); onSend(); return Promise.resolve(); }),
+    sendMessageWithImages: jest.fn((...args: unknown[]) => { calls.sendMessageWithImages.push(args); onSend(); return Promise.resolve(); }),
+    sendMessageWithAudio: jest.fn(() => { onSend(); return Promise.resolve(); }),
+    sendMessageWithMedia: jest.fn((...args: unknown[]) => { calls.sendMessageWithMedia.push(args); onSend(); return Promise.resolve(); }),
     respondToToolCall: jest.fn(() => {
       // After the LAST tool result is delivered, the native model continues and completes.
-      if (currentTurn && --toolCallsRemaining <= 0) {
-        const turn = currentTurn;
-        defer(() => emitCompletion(turn));
-      }
+      if (currentTurn && --toolCallsRemaining <= 0) { const turn = currentTurn; defer(() => emitCompletion(turn)); }
       return Promise.resolve();
     }),
-    generateRaw: jest.fn((...args: unknown[]) => {
-      calls.generateRaw.push(args);
-      return Promise.resolve('');
-    }),
+    generateRaw: jest.fn((...args: unknown[]) => { calls.generateRaw.push(args); return Promise.resolve(''); }),
     stopGeneration: jest.fn().mockResolvedValue(undefined),
     unloadModel: jest.fn().mockResolvedValue(undefined),
-    getMemoryInfo: jest.fn().mockResolvedValue({
-      totalRamMb: 12000,
-      usedRamMb: 4000,
-      availRamMb: 8000,
-      gpuPrivateMb: 0,
-      lowMemory: false,
-    }),
+    getMemoryInfo: jest.fn().mockResolvedValue({ totalRamMb: 12000, usedRamMb: 4000, availRamMb: 8000, gpuPrivateMb: 0, lowMemory: false }),
     // RN's NativeEventEmitter constructor calls addListener/removeListeners on the module on iOS.
     addListener: jest.fn(),
     removeListeners: jest.fn(),
@@ -289,25 +190,12 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     module,
     events: handle,
     calls,
-    scriptTurn: (turn: LiteRTTurn) => {
-      pending = turn;
-    },
-    scriptTurns: (turns: LiteRTTurn[]) => {
-      queue.length = 0;
-      queue.push(...turns);
-    },
-    scriptError: (message: string) => {
-      pendingError = message;
-    },
-    scriptHang: () => {
-      pendingHang = true;
-    },
-    scriptPartialThenHang: (content: string) => {
-      pendingPartialHang = { content };
-    },
-    scriptThinkingThenHang: (reasoning: string) => {
-      pendingPartialHang = { reasoning };
-    },
+    scriptTurn: (turn: LiteRTTurn) => { pending = turn; },
+    scriptTurns: (turns: LiteRTTurn[]) => { queue.length = 0; queue.push(...turns); },
+    scriptError: (message: string) => { pendingError = message; },
+    scriptHang: () => { pendingHang = true; },
+    scriptPartialThenHang: (content: string) => { pendingPartialHang = { content }; },
+    scriptThinkingThenHang: (reasoning: string) => { pendingPartialHang = { reasoning }; },
   };
 }
 
@@ -322,24 +210,10 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
  *  llama.rn types). Lets a test script a TRUNCATED turn (hit the n_predict cap without EOS) so the
  *  cutoff is device-shaped, not hand-asserted. Defaults model a normal complete turn. */
 export interface CompletionMeta {
-  context_full?: boolean; // native completed with no room for this request
-  stopped_eos?: boolean; // false = did NOT stop on an end-of-sequence token
-  stopped_limit?: number; // 1 = hit the n_predict cap (B15's condition)
-  truncated?: boolean; // llama.rn's own truncation flag
-  tokens_predicted?: number; // == n_predict at the cap (device saw 1024)
-  tokens_evaluated?: number; // native prompt tokens, including offered tools
-}
-
-export interface LlamaCompletionScript {
-  text?: string;
-  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
-  throwMessage?: string;
-  throwAfter?: string;
-  pauseAfter?: string;
-  holdBeforeStream?: boolean;
-  thinkingText?: string;
-  reasoning?: string;
-  completionMeta?: CompletionMeta;
+  stopped_eos?: boolean;    // false = did NOT stop on an end-of-sequence token
+  stopped_limit?: number;   // 1 = hit the n_predict cap (B15's condition)
+  truncated?: boolean;      // llama.rn's own truncation flag
+  tokens_predicted?: number;// == n_predict at the cap (device saw 1024)
 }
 
 export interface LlamaFake {
@@ -349,9 +223,7 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: LlamaCompletionScript): void;
-  /** Queue one scripted result per native completion for a multi-round tool turn. */
-  scriptCompletions(results: LlamaCompletionScript[]): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta }): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -371,26 +243,12 @@ export interface LlamaFake {
   multimodalHoldActive(): boolean;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
-  calls: { completion: unknown[][]; clearCache: boolean[] };
+  calls: { completion: unknown[][] };
 }
 
-function makeLlamaFake(
-  onRelease?: () => void,
-  chatTemplate?: string,
-  modelInfo?: Record<string, unknown>,
-): LlamaFake {
-  const calls: LlamaFake['calls'] = { completion: [], clearCache: [] };
-  type PreparedCompletion = Omit<LlamaCompletionScript, 'text'> & {
-    text: string;
-  };
-  const prepareCompletion = (
-    result: LlamaCompletionScript,
-  ): PreparedCompletion => ({
-    ...result,
-    text: result.text ?? '',
-  });
-  let pending: PreparedCompletion = { text: '' };
-  const completionQueue: PreparedCompletion[] = [];
+function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake {
+  const calls: LlamaFake['calls'] = { completion: [] };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
   // streaming further tokens, releases a held pause, and the completion RESOLVES with
@@ -410,150 +268,95 @@ function makeLlamaFake(
     // resolving with the final result. This drives the REAL streaming render path (getStreamingDelta →
     // streamingMessage), not a single-shot final text. onToken stops being fed once isGenerating flips
     // false (a real stop), because the service's own callback guards on `data.token` + isGenerating.
-    completion: jest.fn(
-      async (
-        params: unknown,
-        onToken?: (data: {
-          token: string;
-          content?: string;
-          reasoning_content?: string;
-        }) => void,
-      ) => {
-        calls.completion.push([params]);
-        const scripted = completionQueue.shift() ?? pending;
-        if (completionQueue.length === 0) pending = { text: '' };
-        stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
-        if (scripted.throwMessage) throw new Error(scripted.throwMessage);
-        // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
-        // tokens. llama cannot honor a stop mid-prefill; on release-by-stop it resolves interrupted with
-        // nothing streamed — the exact device state whose empty result the tool loop mistook for a
-        // normal empty reply (firing the no-tools fallback zombie).
-        if (scripted.holdBeforeStream) {
-          await new Promise<void>(res => {
-            releaseFn = res;
-          });
-        }
-        const wantsThinking = !!(params as { enable_thinking?: boolean })
-          ?.enable_thinking;
-        // Device-faithful native reasoning (reasoning_format=auto): when the runtime reasons, it emits the
-        // reasoning on the reasoning_content channel and the CLEAN answer on content — separated, exactly as
-        // the on-device log showed (content:"Hello…", reasoning_content:"The user said…", text: raw <|channel>).
-        // The final `text` carries the raw combined markers, which the app must NOT surface as the answer.
-        if (
-          wantsThinking &&
-          scripted.reasoning != null &&
-          typeof onToken === 'function'
-        ) {
-          let accR = '';
-          for (const c of [...scripted.reasoning]) {
-            if (stopRequested) break;
-            accR += c;
-            onToken({ token: c, reasoning_content: accR });
-          }
-          let accC = '';
-          for (const c of [...scripted.text]) {
-            if (stopRequested) break;
-            accC += c;
-            onToken({ token: c, content: accC, reasoning_content: accR });
-          }
-          if (!stopRequested) {
-            const metaR = scripted.completionMeta ?? {};
-            return {
-              text: `<|channel>thought\n${scripted.reasoning}<channel|>${scripted.text}`,
-              content: scripted.text,
-              reasoning_content: scripted.reasoning,
-              tool_calls: scripted.toolCalls,
-              tokens_predicted: metaR.tokens_predicted ?? 8,
-              tokens_evaluated: metaR.tokens_evaluated ?? 4,
-              stopped_eos: metaR.stopped_eos ?? true,
-              stopped_limit: metaR.stopped_limit ?? 0,
-              truncated: metaR.truncated ?? false,
-              context_full: metaR.context_full ?? false,
-              timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
-            };
-          }
-        }
-        // Device-faithful: a reasoning model emits its reasoning-style output when thinking is on. If the
-        // caller left enable_thinking on for a request that shouldn't reason (B30 enhancement), it gets the
-        // reasoning dump; disabling thinking yields the clean text. Emergent from the caller's own decision.
-        const outText =
-          wantsThinking && scripted.thinkingText != null
-            ? scripted.thinkingText
-            : scripted.text;
-        if (outText && typeof onToken === 'function') {
-          // Char-by-char streaming so a pauseAfter lands EXACTLY (never spanning a delimiter like </think>).
-          const chars = [...outText];
-          let acc = '';
-          let paused = false;
-          for (const c of chars) {
-            if (stopRequested) break; // native abort: no further tokens after stopCompletion()
-            acc += c;
-            onToken({ token: c, content: acc });
-            if (
-              scripted.pauseAfter &&
-              !paused &&
-              acc.endsWith(scripted.pauseAfter)
-            ) {
-              paused = true;
-              await new Promise<void>(res => {
-                releaseFn = res;
-              }); // HOLD until releaseStream() or stopCompletion()
-            }
-          }
-        }
-        // Device-faithful mid/end-stream fatal decode failure: llama_decode fails AFTER some tokens
-        // streamed (B13 wire: tokens flow, then `llama_decode: failed to decode, ret = -1` →
-        // "Failed to evaluate chunks"). Distinct from throwMessage (fails at the very start): throwAfter
-        // reproduces the case where the spinner is already up + streaming when the runtime dies.
-        if (scripted.throwAfter) throw new Error(scripted.throwAfter);
-        // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
-        // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
-        const meta = scripted.completionMeta ?? {};
-        // An aborted completion carries the device wire shape: interrupted=true, no EOS, and only
-        // what streamed before the stop (tool_calls are dropped — the turn never finished them).
-        if (stopRequested) {
+    completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content?: string; reasoning_content?: string }) => void) => {
+      calls.completion.push([params]);
+      stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
+      if (pending.throwMessage) throw new Error(pending.throwMessage);
+      // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
+      // tokens. llama cannot honor a stop mid-prefill; on release-by-stop it resolves interrupted with
+      // nothing streamed — the exact device state whose empty result the tool loop mistook for a
+      // normal empty reply (firing the no-tools fallback zombie).
+      if (pending.holdBeforeStream) { await new Promise<void>((res) => { releaseFn = res; }); }
+      const wantsThinking = !!(params as { enable_thinking?: boolean })?.enable_thinking;
+      // Device-faithful native reasoning (reasoning_format=auto): when the runtime reasons, it emits the
+      // reasoning on the reasoning_content channel and the CLEAN answer on content — separated, exactly as
+      // the on-device log showed (content:"Hello…", reasoning_content:"The user said…", text: raw <|channel>).
+      // The final `text` carries the raw combined markers, which the app must NOT surface as the answer.
+      if (wantsThinking && pending.reasoning != null && typeof onToken === 'function') {
+        let accR = '';
+        for (const c of [...pending.reasoning]) { if (stopRequested) break; accR += c; onToken({ token: c, reasoning_content: accR }); }
+        let accC = '';
+        for (const c of [...pending.text]) { if (stopRequested) break; accC += c; onToken({ token: c, content: accC, reasoning_content: accR }); }
+        if (!stopRequested) {
+          const metaR = pending.completionMeta ?? {};
           return {
-            text: '',
-            content: '',
-            tool_calls: undefined,
-            interrupted: true,
-            tokens_predicted: 0,
-            tokens_evaluated: 4,
-            stopped_eos: false,
-            stopped_limit: 0,
-            truncated: false,
+            text: `<|channel>thought\n${pending.reasoning}<channel|>${pending.text}`,
+            content: pending.text,
+            reasoning_content: pending.reasoning,
+            tool_calls: pending.toolCalls,
+            tokens_predicted: metaR.tokens_predicted ?? 8, tokens_evaluated: 4,
+            stopped_eos: metaR.stopped_eos ?? true, stopped_limit: metaR.stopped_limit ?? 0, truncated: metaR.truncated ?? false,
             timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
           };
         }
+      }
+      // Device-faithful: a reasoning model emits its reasoning-style output when thinking is on. If the
+      // caller left enable_thinking on for a request that shouldn't reason (B30 enhancement), it gets the
+      // reasoning dump; disabling thinking yields the clean text. Emergent from the caller's own decision.
+      const outText = wantsThinking && pending.thinkingText != null ? pending.thinkingText : pending.text;
+      if (outText && typeof onToken === 'function') {
+        // Char-by-char streaming so a pauseAfter lands EXACTLY (never spanning a delimiter like </think>).
+        const chars = [...outText];
+        let acc = '';
+        let paused = false;
+        for (const c of chars) {
+          if (stopRequested) break; // native abort: no further tokens after stopCompletion()
+          acc += c;
+          onToken({ token: c, content: acc });
+          if (pending.pauseAfter && !paused && acc.endsWith(pending.pauseAfter)) {
+            paused = true;
+            await new Promise<void>((res) => { releaseFn = res; }); // HOLD until releaseStream() or stopCompletion()
+          }
+        }
+      }
+      // Device-faithful mid/end-stream fatal decode failure: llama_decode fails AFTER some tokens
+      // streamed (B13 wire: tokens flow, then `llama_decode: failed to decode, ret = -1` →
+      // "Failed to evaluate chunks"). Distinct from throwMessage (fails at the very start): throwAfter
+      // reproduces the case where the spinner is already up + streaming when the runtime dies.
+      if (pending.throwAfter) throw new Error(pending.throwAfter);
+      // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
+      // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
+      const meta = pending.completionMeta ?? {};
+      // An aborted completion carries the device wire shape: interrupted=true, no EOS, and only
+      // what streamed before the stop (tool_calls are dropped — the turn never finished them).
+      if (stopRequested) {
         return {
-          text: outText,
-          content: outText,
-          tool_calls: scripted.toolCalls,
-          tokens_predicted: meta.tokens_predicted ?? 8,
-          tokens_evaluated: meta.tokens_evaluated ?? 4,
-          stopped_eos: meta.stopped_eos ?? true,
-          stopped_limit: meta.stopped_limit ?? 0,
-          truncated: meta.truncated ?? false,
-          context_full: meta.context_full ?? false,
+          text: '', content: '', tool_calls: undefined,
+          interrupted: true,
+          tokens_predicted: 0, tokens_evaluated: 4,
+          stopped_eos: false, stopped_limit: 0, truncated: false,
           timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
         };
-      },
-    ),
+      }
+      return {
+        text: outText,
+        content: outText,
+        tool_calls: pending.toolCalls,
+        tokens_predicted: meta.tokens_predicted ?? 8, tokens_evaluated: 4,
+        stopped_eos: meta.stopped_eos ?? true,
+        stopped_limit: meta.stopped_limit ?? 0,
+        truncated: meta.truncated ?? false,
+        timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+      };
+    }),
     stopCompletion: jest.fn(async () => {
       stopRequested = true;
-      const f = releaseFn;
-      releaseFn = null;
-      f?.(); // release a held mid-stream pause so the abort lands
-    }),
-    clearCache: jest.fn(async (clearData: boolean = false) => {
-      calls.clearCache.push(clearData);
+      const f = releaseFn; releaseFn = null; f?.(); // release a held mid-stream pause so the abort lands
     }),
     // Releasing the native context frees its memory — but the OS reclaims it SHORTLY AFTER release()
     // returns (device-faithful), not synchronously. Defer the free so the reclaim barrier captures the
     // still-high footprint as its baseline and then observes the drop on a later poll (as on device).
-    release: jest.fn(async () => {
-      setTimeout(() => onRelease?.(), 50);
-    }),
+    release: jest.fn(async () => { setTimeout(() => onRelease?.(), 50); }),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
     initMultimodal: jest.fn().mockResolvedValue(false),
     // The post-init multimodal probe. A scripted hold parks the caller here — the real device's
@@ -562,9 +365,7 @@ function makeLlamaFake(
       if (mmHoldPending) {
         mmHoldPending = false;
         mmHoldEngaged = true;
-        await new Promise<void>(res => {
-          mmHoldRelease = res;
-        });
+        await new Promise<void>((res) => { mmHoldRelease = res; });
         mmHoldEngaged = false;
       }
       return { vision: false, audio: false };
@@ -572,34 +373,22 @@ function makeLlamaFake(
     // Embedding boundary (embedding-model contexts, initLlama({embedding:true})): return a device-shaped
     // 384-dim vector derived from the text so RAG cosine ranking is real. Matches all-MiniLM-L6-v2 (384).
     embedding: jest.fn(async (text: string) => ({
-      embedding: Array.from({ length: 384 }, (_v, i) =>
-        Math.sin(i + String(text).length * 0.1),
-      ),
+      embedding: Array.from({ length: 384 }, (_v, i) => Math.sin(i + String(text).length * 0.1)),
     })),
   };
   // The service reads context.model.chatTemplates.jinja to decide tool-calling support.
   (context as Record<string, unknown>).model = {
     nParams: 1_000_000,
-    chatTemplates: {
-      jinja: {
-        defaultCaps: { toolCalls: true },
-        toolUse: true,
-        toolUseCaps: { toolCalls: true },
-      },
-    },
+    chatTemplates: { jinja: { defaultCaps: { toolCalls: true }, toolUse: true, toolUseCaps: { toolCalls: true } } },
     // Device-faithful: a real llama.rn context exposes the GGUF chat_template in model.metadata.
     // supportsNativeThinking derives the Thinking capability from the reasoning delimiters in THIS
     // template — NOT from Jinja support. Default carries a <think> marker (reasoning-capable, matching
     // the prior harness default); a test passes a plain template (e.g. Mistral's tool-use template,
     // no markers) to assert the Thinking toggle stays hidden.
-    metadata: {
-      'tokenizer.chat_template':
-        chatTemplate ?? '{{bos}}<think>\n{{reasoning}}\n</think>{{content}}',
-    },
+    metadata: { 'tokenizer.chat_template': chatTemplate ?? '{{bos}}<think>\n{{reasoning}}\n</think>{{content}}' },
   };
 
   const module: Record<string, jest.Mock> = {
-    loadLlamaModelInfo: jest.fn(async () => modelInfo ?? {}),
     // Faithful to llama.rn/llama.cpp: the native loader reports gpu=true (+ the offload device
     // list) when it actually offloaded layers (n_gpu_layers > 0), and gpu=false for a pure-CPU
     // init. Echo that from the requested load params so the REAL captureGpuInfo → GenerationMeta
@@ -607,20 +396,22 @@ function makeLlamaFake(
     initLlama: jest.fn(async (params?: Record<string, unknown>) => {
       const n = Number((params?.n_gpu_layers as number) ?? 0);
       // A model that fails to load on EVERY backend (corrupt file / unsupported arch) — all 3 attempts reject.
-      if (initFails)
-        throw new Error('Failed to load model: unsupported architecture');
+      if (initFails) throw new Error('Failed to load model: unsupported architecture');
       // Device-faithful GPU/HTP init failure: a hung/timed-out accelerator init rejects, so the real
       // initContextWithFallback falls back to the CPU attempt (which requests n_gpu_layers:0 and succeeds).
-      if (gpuInitFails && n > 0)
-        throw new Error('GPU context init timed out after 8000ms');
-      const devices = Array.isArray(params?.devices)
-        ? (params!.devices as string[])
-        : [];
+      if (gpuInitFails && n > 0) throw new Error('GPU context init timed out after 8000ms');
+      const devices = Array.isArray(params?.devices) ? (params!.devices as string[]) : [];
       (context as Record<string, unknown>).gpu = n > 0;
       (context as Record<string, unknown>).devices = n > 0 ? devices : [];
-      (context as Record<string, unknown>).reasonNoGPU =
-        n > 0 ? '' : 'gpu layers not requested';
+      (context as Record<string, unknown>).reasonNoGPU = n > 0 ? '' : 'gpu layers not requested';
       return context;
+    }),
+    // Native backend devices, as the real llama.rn query reports them: an Adreno ('qcom')
+    // device exposes an OpenCL GPU and a Hexagon NPU; anything else only the CPU.
+    getBackendDevicesInfo: jest.fn(async () => {
+      let hw = '';
+      try { hw = String(await require('react-native-device-info').getHardware?.() ?? '').toLowerCase(); } catch { /* none */ }
+      return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }, { backend: 'HTP', type: 'gpu', deviceName: 'HTP0' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
     }),
     releaseContext: jest.fn().mockResolvedValue(undefined),
     completion: jest.fn().mockResolvedValue({ text: '' }),
@@ -630,36 +421,13 @@ function makeLlamaFake(
   };
 
   return {
-    module,
-    calls,
-    scriptCompletion: r => {
-      completionQueue.length = 0;
-      pending = prepareCompletion(r);
-    },
-    scriptCompletions: results => {
-      completionQueue.length = 0;
-      completionQueue.push(...results.map(prepareCompletion));
-      pending = { text: '' };
-    },
-    releaseStream: () => {
-      const f = releaseFn;
-      releaseFn = null;
-      f?.();
-    },
-    scriptGpuInitFailure: (fail = true) => {
-      gpuInitFails = fail;
-    },
-    scriptInitFailure: (fail = true) => {
-      initFails = fail;
-    },
-    scriptMultimodalHold: () => {
-      mmHoldPending = true;
-    },
-    releaseMultimodalHold: () => {
-      const f = mmHoldRelease;
-      mmHoldRelease = null;
-      f?.();
-    },
+    module, calls,
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, reasoning: r.reasoning, completionMeta: r.completionMeta }; },
+    releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
+    scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
+    scriptInitFailure: (fail = true) => { initFails = fail; },
+    scriptMultimodalHold: () => { mmHoldPending = true; },
+    releaseMultimodalHold: () => { const f = mmHoldRelease; mmHoldRelease = null; f?.(); },
     multimodalHoldActive: () => mmHoldEngaged,
   };
 }
@@ -675,74 +443,32 @@ export interface DiffusionFake {
   module: Record<string, jest.Mock>;
   /** Every generateImage nativeParams, for arg-level cross-checks if needed. */
   calls: { generateImage: Array<Record<string, unknown>> };
-  /** Hold the NEXT generateImage open (it stays in flight) until releaseGeneration(). Diffusion takes many
-   *  seconds on a device, and everything the user can do DURING it — press STOP, watch progress, tap send
-   *  again — is unreachable against a generate that resolves in the same tick. One-shot. */
-  holdNextGeneration(): void;
-  /** Release a generation held by holdNextGeneration(). No-op if nothing is held. */
-  releaseGeneration(): void;
-  /** True while a generation is parked inside native generateImage. */
-  generationHeld(): boolean;
-  /** How many times native cancelGeneration was asked for — the far side of the user's STOP. */
-  cancelCount(): number;
-  /** Images returned by the native gallery scan. Their stored path may name an older iOS container. */
-  seedGeneratedImages(images: Array<Record<string, unknown>>): void;
 }
 
-function makeDiffusionFake(
-  fs?: NativeFileSystemBoundary,
-): DiffusionFake {
+function makeDiffusionFake(seedFile?: (path: string, sizeBytes: number) => void): DiffusionFake {
   const calls: DiffusionFake['calls'] = { generateImage: [] };
   let seedCounter = 0;
-  let holdNext = false;
-  let held: (() => void) | null = null;
-  let cancels = 0;
-  let generatedImages: Array<Record<string, unknown>> = [];
   const module: Record<string, jest.Mock> = {
     isModelLoaded: jest.fn().mockResolvedValue(true),
     getLoadedModelPath: jest.fn().mockResolvedValue(null),
     loadModel: jest.fn().mockResolvedValue(true),
     unloadModel: jest.fn().mockResolvedValue(true),
-    // Faithful to native: cancel RELEASES an in-flight generation rather than rejecting it. The held
-    // promise then settles, which is how the app's own cancel path unwinds on a device.
-    cancelGeneration: jest.fn(() => {
-      cancels++;
-      held?.();
-      held = null;
-      return Promise.resolve(true);
-    }),
-    getGeneratedImages: jest.fn(async () => generatedImages),
-    deleteGeneratedImage: jest.fn(async (imageId: string) => {
-      if (!fs) return true;
-      const path = `${fs.DocumentDirectoryPath}/generated_images/${imageId}.png`;
-      if (!(await fs.exists(path))) return false;
-      await fs.module.unlink(path);
-      generatedImages = generatedImages.filter(image => image.id !== imageId);
-      return true;
-    }),
+    cancelGeneration: jest.fn().mockResolvedValue(true),
+    getGeneratedImages: jest.fn().mockResolvedValue([]),
+    deleteGeneratedImage: jest.fn().mockResolvedValue(true),
     hasOpenCLCache: jest.fn().mockResolvedValue(true),
     clearOpenCLCache: jest.fn().mockResolvedValue(0),
     getConstants: jest.fn().mockReturnValue({
-      DEFAULT_STEPS: 8,
-      DEFAULT_GUIDANCE_SCALE: 7.5,
-      DEFAULT_WIDTH: 512,
-      DEFAULT_HEIGHT: 512,
-      SUPPORTED_WIDTHS: [256, 512],
-      SUPPORTED_HEIGHTS: [256, 512],
+      DEFAULT_STEPS: 8, DEFAULT_GUIDANCE_SCALE: 7.5, DEFAULT_WIDTH: 512, DEFAULT_HEIGHT: 512,
+      SUPPORTED_WIDTHS: [256, 512], SUPPORTED_HEIGHTS: [256, 512],
     }),
-    generateImage: jest.fn(async (nativeParams: Record<string, unknown>) => {
+    generateImage: jest.fn((nativeParams: Record<string, unknown>) => {
       calls.generateImage.push(nativeParams);
-      if (holdNext) {
-        holdNext = false;
-        await new Promise<void>(resolve => {
-          held = resolve;
-        });
-      }
       seedCounter += 1;
       const imagePath = `/generated/img-${seedCounter}.png`;
       // The real native module writes the rendered PNG to disk — mirror that so the app's
       // downstream file reads (save-to-gallery, thumbnails) find a real file.
-      fs?.seedFile(imagePath, 1024);
+      seedFile?.(imagePath, 1024);
       // Native renders at exactly the requested size — echo it back so the meta reflects reality.
       return Promise.resolve({
         id: `img-${seedCounter}`,
@@ -755,22 +481,7 @@ function makeDiffusionFake(
     addListener: jest.fn(),
     removeListeners: jest.fn(),
   };
-  return {
-    module,
-    calls,
-    holdNextGeneration: () => {
-      holdNext = true;
-    },
-    releaseGeneration: () => {
-      held?.();
-      held = null;
-    },
-    generationHeld: () => held !== null,
-    cancelCount: () => cancels,
-    seedGeneratedImages: images => {
-      generatedImages = [...images];
-    },
-  };
+  return { module, calls };
 }
 
 // ---------------------------------------------------------------------------
@@ -781,14 +492,8 @@ function makeDiffusionFake(
 // ---------------------------------------------------------------------------
 
 export interface DownloadRow {
-  downloadId: string;
-  fileName?: string;
-  modelId?: string;
-  modelType?: string;
-  status?: string;
-  bytesDownloaded?: number;
-  totalBytes?: number;
-  reason?: string;
+  downloadId: string; fileName?: string; modelId?: string; modelType?: string;
+  status?: string; bytesDownloaded?: number; totalBytes?: number;
 }
 
 export interface DownloadFake {
@@ -806,34 +511,14 @@ function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
   const rows = new Map<string, DownloadRow>();
   const module: Record<string, jest.Mock> = {
     startDownload: jest.fn(async (params: DownloadRow) => {
-      const row: DownloadRow = {
-        status: 'running',
-        bytesDownloaded: 0,
-        totalBytes: 0,
-        ...params,
-        downloadId: params.downloadId ?? `dl-${rows.size + 1}`,
-      };
+      const row: DownloadRow = { status: 'running', bytesDownloaded: 0, totalBytes: 0, ...params, downloadId: params.downloadId ?? `dl-${rows.size + 1}` };
       rows.set(row.downloadId, row);
       return row;
     }),
-    cancelDownload: jest.fn(async (id: string) => {
-      rows.delete(id);
-    }),
-    pauseDownload: jest.fn(async (id: string) => {
-      const row = rows.get(id);
-      if (!row) throw new Error('Download not found');
-      rows.set(id, { ...row, status: 'paused' });
-    }),
-    resumeDownload: jest.fn(async (id: string) => {
-      const row = rows.get(id);
-      if (!row || row.status !== 'paused') throw new Error('Download is not paused');
-      rows.set(id, { ...row, status: 'running' });
-    }),
+    cancelDownload: jest.fn(async (id: string) => { rows.delete(id); }),
     retryDownload: jest.fn(async () => {}),
     getActiveDownloads: jest.fn(async () => [...rows.values()]),
-    moveCompletedDownload: jest.fn(
-      async (_id: string, target: string) => target,
-    ),
+    moveCompletedDownload: jest.fn(async (_id: string, target: string) => target),
     startProgressPolling: jest.fn(),
     stopProgressPolling: jest.fn(),
     requestNotificationPermission: jest.fn(),
@@ -846,13 +531,11 @@ function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
   return {
     module,
     events: handle,
-    seedActive: row => rows.set(row.downloadId, { status: 'running', ...row }),
+    seedActive: (row) => rows.set(row.downloadId, { status: 'running', ...row }),
     active: () => [...rows.values()],
-    simulateRelaunch: opts => {
+    simulateRelaunch: (opts) => {
       const survive = new Set(opts?.survive ?? []);
-      [...rows.keys()].forEach(k => {
-        if (!survive.has(k)) rows.delete(k);
-      });
+      [...rows.keys()].forEach(k => { if (!survive.has(k)) rows.delete(k); });
     },
   };
 }
@@ -869,12 +552,7 @@ export interface WhisperFake {
   module: Record<string, jest.Mock>;
   /** Emit a device-shaped realtime event to the LIVE subscriber (isCapturing:true = partial; false = final).
    *  Pass { noData: true } to model the B26 device symptom (spoke, but the mic captured no audio). */
-  emitRealtime(opts: {
-    text?: string;
-    isCapturing: boolean;
-    recordingTime?: number;
-    noData?: boolean;
-  }): void;
+  emitRealtime(opts: { text?: string; isCapturing: boolean; recordingTime?: number; noData?: boolean }): void;
   /** Set what the NEXT transcribeFile resolves with (voice-mode path). */
   setFileTranscript(text: string): void;
   /** True once whisperService has started a realtime session (subscribe wired). */
@@ -902,31 +580,17 @@ function makeWhisperFake(): WhisperFake {
     // { result, segments } — this is the method whisperService.transcribeFile (the voice-mode file path) drives.
     transcribe: jest.fn((_path: string) => ({
       stop: jest.fn(async () => {}),
-      promise: Promise.resolve({
-        result: fileTranscript,
-        segments: [{ text: fileTranscript, t0: 0, t1: 100 }],
-      }),
+      promise: Promise.resolve({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] }),
     })),
-    transcribeFile: jest.fn(async () => ({
-      result: fileTranscript,
-      segments: [{ text: fileTranscript, t0: 0, t1: 100 }],
-    })),
+    transcribeFile: jest.fn(async () => ({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] })),
     transcribeRealtime: jest.fn(async () => {
       rtActive = true; // native mic session starts capturing
       return {
-        stop: jest.fn(async () => {
-          rtActive =
-            false; /* native stop; test drives the final event explicitly */
-        }),
-        subscribe: (cb: (evt: unknown) => void) => {
-          realtimeCb = cb;
-        },
+        stop: jest.fn(async () => { rtActive = false; /* native stop; test drives the final event explicitly */ }),
+        subscribe: (cb: (evt: unknown) => void) => { realtimeCb = cb; },
       };
     }),
-    release: jest.fn(async () => {
-      realtimeCb = null;
-      rtActive = false;
-    }),
+    release: jest.fn(async () => { realtimeCb = null; rtActive = false; }),
     bench: jest.fn(async () => ''),
   };
   const module: Record<string, jest.Mock> = {
@@ -935,9 +599,7 @@ function makeWhisperFake(): WhisperFake {
       // in-flight window between the load intent and readiness — until releaseLoad().
       if (loadHoldPending) {
         loadHoldPending = false;
-        await new Promise<void>(res => {
-          loadHoldRelease = res;
-        });
+        await new Promise<void>((res) => { loadHoldRelease = res; });
       }
       return context;
     }),
@@ -951,29 +613,16 @@ function makeWhisperFake(): WhisperFake {
       if (!realtimeCb) return;
       realtimeCb({
         isCapturing,
-        data: noData
-          ? undefined
-          : {
-              result: text ?? '',
-              segments: text ? [{ text, t0: 0, t1: 100 }] : [],
-            },
+        data: noData ? undefined : { result: text ?? '', segments: text ? [{ text, t0: 0, t1: 100 }] : [] },
         processTime: 10,
         recordingTime: recordingTime ?? 500,
       });
     },
-    setFileTranscript: t => {
-      fileTranscript = t;
-    },
+    setFileTranscript: (t) => { fileTranscript = t; },
     hasRealtimeSubscriber: () => realtimeCb != null,
     realtimeActive: () => rtActive,
-    holdNextLoad: () => {
-      loadHoldPending = true;
-    },
-    releaseLoad: () => {
-      const f = loadHoldRelease;
-      loadHoldRelease = null;
-      f?.();
-    },
+    holdNextLoad: () => { loadHoldPending = true; },
+    releaseLoad: () => { const f = loadHoldRelease; loadHoldRelease = null; f?.(); },
   };
 }
 
@@ -1000,7 +649,119 @@ export const MB = 1024 * 1024;
 // so it never perturbs tests that don't touch the filesystem.
 // ---------------------------------------------------------------------------
 
-export type FsFake = NativeFileSystemBoundary;
+export interface FsFake {
+  module: Record<string, unknown>;
+  /** react-native-zip-archive over the same in-memory disk: zip(dir|files, target) and unzip(source, dir). */
+  zipModule: Record<string, unknown>;
+  /** Seed a file on the virtual disk with an exact byte size (for truncated/partial-file cases). */
+  seedFile(path: string, sizeBytes: number): void;
+  /** Seed a directory so exists()/readDir() see it even when empty. */
+  seedDir(path: string): void;
+  DocumentDirectoryPath: string;
+}
+
+function makeFsFake(): FsFake {
+  const DocumentDirectoryPath = '/docs';
+  // Backed by memfs — a REAL in-memory filesystem engine does the storage/tree work; this only maps the
+  // react-native-fs API onto it. (Off-the-shelf fake engine, per the plan, not a hand-rolled tree.)
+   
+  const { Volume } = require('memfs');
+  const vol = Volume.fromJSON({});
+  vol.mkdirSync(DocumentDirectoryPath, { recursive: true });
+  // Native boundary tests need realistic file sizes, not gigabytes of real JS heap.
+  // Store a tiny representative payload while returning device-faithful stat sizes.
+  const virtualFileSizes = new Map<string, number>();
+
+  const norm = (p: string) => p.replace(/^file:\/\//, '').replace(/\/+$/, '') || '/';
+  const base = (p: string) => norm(p).slice(norm(p).lastIndexOf('/') + 1);
+  const mkStat = (p: string, st: { size: number; isFile(): boolean; isDirectory(): boolean; mtime: Date }) => ({
+    path: norm(p), name: base(p), size: virtualFileSizes.get(norm(p)) ?? Number(st.size),
+    isFile: () => st.isFile(), isDirectory: () => st.isDirectory(), mtime: st.mtime,
+  });
+
+  const seedFile = (path: string, sizeBytes: number) => {
+    const p = norm(path);
+    vol.mkdirSync(p.slice(0, p.lastIndexOf('/')) || '/', { recursive: true });
+    virtualFileSizes.set(p, sizeBytes);
+    vol.writeFileSync(p, Buffer.alloc(Math.min(sizeBytes, 4096)));
+  };
+  const seedDir = (path: string) => vol.mkdirSync(norm(path), { recursive: true });
+
+  const module: Record<string, unknown> = {
+    DocumentDirectoryPath,
+    CachesDirectoryPath: '/caches',
+    exists: jest.fn(async (p: string) => vol.existsSync(norm(p))),
+    mkdir: jest.fn(async (p: string) => { vol.mkdirSync(norm(p), { recursive: true }); }),
+    readDir: jest.fn(async (p: string) => {
+      const dir = norm(p);
+      return (vol.readdirSync(dir) as string[]).map((name) => {
+        const full = `${dir}/${name}`;
+        return mkStat(full, vol.statSync(full) as never);
+      });
+    }),
+    stat: jest.fn(async (p: string) => mkStat(p, vol.statSync(norm(p)) as never)),
+    writeFile: jest.fn(async (p: string, contents: string, enc?: string) => {
+      const np = norm(p);
+      vol.mkdirSync(np.slice(0, np.lastIndexOf('/')) || '/', { recursive: true });
+      virtualFileSizes.delete(np);
+      vol.writeFileSync(np, enc === 'base64' ? Buffer.from(String(contents ?? ''), 'base64') : String(contents ?? ''));
+    }),
+    readFile: jest.fn(async (p: string, enc?: string) => vol.readFileSync(norm(p), enc === 'base64' ? 'base64' : 'utf8')),
+    appendFile: jest.fn(async (p: string, contents: string, enc?: string) => {
+      const np = norm(p);
+      vol.mkdirSync(np.slice(0, np.lastIndexOf('/')) || '/', { recursive: true });
+      vol.appendFileSync(np, enc === 'base64' ? Buffer.from(String(contents), 'base64') : String(contents ?? ''));
+    }),
+    read: jest.fn(async () => 'GGUF'),
+    unlink: jest.fn(async (p: string) => { virtualFileSizes.delete(norm(p)); vol.rmSync(norm(p), { recursive: true, force: true }); }),
+    moveFile: jest.fn(async (from: string, to: string) => {
+      const size = virtualFileSizes.get(norm(from));
+      virtualFileSizes.delete(norm(from));
+      if (size !== undefined) virtualFileSizes.set(norm(to), size);
+      vol.renameSync(norm(from), norm(to));
+    }),
+    copyFile: jest.fn(async (from: string, to: string) => {
+      const size = virtualFileSizes.get(norm(from));
+      if (size !== undefined) virtualFileSizes.set(norm(to), size);
+      vol.copyFileSync(norm(from), norm(to));
+    }),
+    // A real digest of the file's bytes (the device computes the same), so checksum logic is exercised, not stubbed.
+    hash: jest.fn(async (p: string, algo: string = 'sha256') => require('crypto').createHash(algo).update(vol.readFileSync(norm(p))).digest('hex')),
+    downloadFile: jest.fn(() => ({ jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 0 }) })),
+    stopDownload: jest.fn(),
+  };
+  const zipModule: Record<string, unknown> = {
+    zip: jest.fn(async (source: string | string[], target: string) => {
+      const files: Record<string, string> = {};
+      const walk = (dir: string, rel: string) => {
+        for (const name of vol.readdirSync(dir) as string[]) {
+          const full = `${dir}/${name}`;
+          const r = rel ? `${rel}/${name}` : name;
+          if (vol.statSync(full).isDirectory()) walk(full, r);
+          else files[r] = (vol.readFileSync(full) as Buffer).toString('base64');
+        }
+      };
+      for (const root of ([] as string[]).concat(source).map(norm)) {
+        if (vol.statSync(root).isDirectory()) walk(root, '');
+        else files[base(root)] = (vol.readFileSync(root) as Buffer).toString('base64');
+      }
+      const t = norm(target);
+      vol.mkdirSync(t.slice(0, t.lastIndexOf('/')) || '/', { recursive: true });
+      vol.writeFileSync(t, JSON.stringify({ zip: true, files }));
+      return target;
+    }),
+    unzip: jest.fn(async (source: string, dest: string) => {
+      const archive = JSON.parse(vol.readFileSync(norm(source), 'utf8') as string) as { files: Record<string, string> };
+      for (const [rel, b64] of Object.entries(archive.files)) {
+        const out = `${norm(dest)}/${rel}`;
+        vol.mkdirSync(out.slice(0, out.lastIndexOf('/')), { recursive: true });
+        vol.writeFileSync(out, Buffer.from(b64, 'base64'));
+      }
+      return dest;
+    }),
+  };
+  return { module, zipModule, seedFile, seedDir, DocumentDirectoryPath };
+}
 
 // ---------------------------------------------------------------------------
 // installNativeBoundary — seed the set, then freshly require services/stores on top.
@@ -1017,8 +778,6 @@ export interface InstallOpts {
    *  supportsNativeThinking (reasoning-delimiter detection). Omit for the reasoning-capable default;
    *  pass a marker-free template (e.g. Mistral's) to model a non-thinking model. */
   llamaChatTemplate?: string;
-  /** GGUF header fields returned by the native metadata reader. */
-  llamaModelInfo?: Record<string, unknown>;
   /** Seed a stateful background-download native module (boundary.download). */
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
@@ -1051,13 +810,11 @@ export interface NativeBoundary {
  * `require()` the screen/services you need so they capture the fakes.
  */
 export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
-  const ram: RamProfile = opts.ram ?? {
-    platform: 'android',
-    totalBytes: 12 * GB,
-    availBytes: 8 * GB,
-  };
+  const ram: RamProfile = opts.ram ?? { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB };
 
   jest.resetModules();
+  // The app wires its cross-layer hooks at start-up (App.tsx); a reset registry needs the same wiring.
+  require('../../src/bootstrap/atlasHooks').registerAtlasHooks();
 
   // A single emitter registry shared by every NativeEventEmitter built over our fake modules.
   const { add, handle } = makeEmitterRegistry();
@@ -1066,10 +823,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   // context FREES memory (footprint drops, available rises), so the post-unload reclaim barrier
   // (memoryBudget.awaitMemoryReclaim) observes the drop and resolves — instead of timing out on a
   // frozen snapshot. A released llama context frees roughly a heavy model's worth (~3GB).
-  const memState = {
-    availBytes: ram.availBytes,
-    footprintBytes: ram.totalBytes - ram.availBytes,
-  };
+  const memState = { availBytes: ram.availBytes, footprintBytes: ram.totalBytes - ram.availBytes };
   const freeModelMemory = () => {
     const freed = Math.min(memState.footprintBytes, 3 * GB);
     memState.footprintBytes -= freed;
@@ -1080,36 +834,32 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const downloadFake = opts.download ? makeDownloadFake(handle) : undefined;
 
   // Stateful FS: override the dumb global react-native-fs stub BEFORE any service requires it.
-  const fsFake = opts.fs ? createNativeFileSystemBoundary() : undefined;
-  if (fsFake) jest.doMock('react-native-fs', () => fsFake.module);
+  const fsFake = opts.fs ? makeFsFake() : undefined;
+  if (fsFake) { jest.doMock('react-native-fs', () => fsFake.module); jest.doMock('react-native-zip-archive', () => fsFake.zipModule); }
 
   // Diffusion writes its rendered PNG to the (memfs) disk when fs is present, like the native module.
-  const diffusion = makeDiffusionFake(fsFake);
+  const diffusion = makeDiffusionFake(fsFake?.seedFile);
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
-  const llamaFake = opts.llama
-    ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate, opts.llamaModelInfo)
-    : undefined;
+  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate) : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
   // Driveable whisper.rn: override the global stub so realtime/file transcription is under test control.
   const whisperFake = opts.whisper ? makeWhisperFake() : undefined;
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
 
+   
   const RN = require('react-native');
   RN.NativeModules.LiteRTModule = litert.module;
   // Both platform names point at the same fake; localDreamGenerator's Platform.select picks one.
   RN.NativeModules.LocalDreamModule = diffusion.module;
   RN.NativeModules.CoreMLDiffusionModule = diffusion.module;
-  if (downloadFake)
-    RN.NativeModules.DownloadManagerModule = downloadFake.module;
+  if (downloadFake) RN.NativeModules.DownloadManagerModule = downloadFake.module;
   // Mic permission is a device boundary: whisper STT refuses to start recording without RECORD_AUDIO
   // granted (whisperService.requestPermissions → PermissionsAndroid.request). Grant it when whisper is
   // installed so the real STT flow runs; the default jest PermissionsAndroid returns undefined (= denied).
   if (whisperFake && RN.PermissionsAndroid) {
-    RN.PermissionsAndroid.request = jest
-      .fn()
-      .mockResolvedValue(RN.PermissionsAndroid.RESULTS?.GRANTED ?? 'granted');
+    RN.PermissionsAndroid.request = jest.fn().mockResolvedValue(RN.PermissionsAndroid.RESULTS?.GRANTED ?? 'granted');
     RN.PermissionsAndroid.check = jest.fn().mockResolvedValue(true);
   }
   RN.NativeModules.DeviceMemoryModule = {
@@ -1120,17 +870,11 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
       footprintBytes: memState.footprintBytes,
     })),
   };
-  Object.defineProperty(RN.Platform, 'OS', {
-    value: ram.platform,
-    configurable: true,
-  });
+  Object.defineProperty(RN.Platform, 'OS', { value: ram.platform, configurable: true });
   // OS version leaf: a supported device (Android API 34 / iOS 17). Engines gate feature support on
   // Platform.Version (e.g. Kokoro TTS requires Android >= 26 / iOS >= 17); default undefined reads as
   // unsupported, so seed a real supported version.
-  Object.defineProperty(RN.Platform, 'Version', {
-    value: ram.platform === 'android' ? 34 : '17.0',
-    configurable: true,
-  });
+  Object.defineProperty(RN.Platform, 'Version', { value: ram.platform === 'android' ? 34 : '17.0', configurable: true });
 
   // NativeEventEmitter is constructed over the fake module; route its listeners through our registry
   // so the test can drive native events. Use defineProperty (a plain assignment can silently no-op —
@@ -1153,46 +897,25 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   Object.defineProperty(RN, 'AppState', {
     configurable: true,
     value: {
-      addEventListener: (event: string, cb: Listener) =>
-        appState.add(event, cb),
+      addEventListener: (event: string, cb: Listener) => appState.add(event, cb),
       removeEventListener: () => {},
       currentState: 'active',
     },
   });
 
   // react-native-device-info total-memory leaf (npm package, already jest.mock-ed in jest.setup).
-
+   
   const DeviceInfo = require('react-native-device-info');
   (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(ram.totalBytes);
-  (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(
-    ram.totalBytes - ram.availBytes,
-  );
+  (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(ram.totalBytes - ram.availBytes);
 
   const setRam = (profile: RamProfile) => {
     memState.availBytes = profile.availBytes;
     memState.footprintBytes = profile.totalBytes - profile.availBytes;
-    (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(
-      profile.totalBytes,
-    );
-    Object.defineProperty(RN.Platform, 'OS', {
-      value: profile.platform,
-      configurable: true,
-    });
-    Object.defineProperty(RN.Platform, 'Version', {
-      value: profile.platform === 'android' ? 34 : '17.0',
-      configurable: true,
-    });
+    (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(profile.totalBytes);
+    Object.defineProperty(RN.Platform, 'OS', { value: profile.platform, configurable: true });
+    Object.defineProperty(RN.Platform, 'Version', { value: profile.platform === 'android' ? 34 : '17.0', configurable: true });
   };
 
-  return {
-    litert,
-    litertEvents: handle,
-    diffusion,
-    fs: fsFake,
-    llama: llamaFake,
-    download: downloadFake,
-    whisper: whisperFake,
-    setRam,
-    emitMemoryWarning: () => appState.handle.emit('memoryWarning'),
-  };
+  return { litert, litertEvents: handle, diffusion, fs: fsFake, llama: llamaFake, download: downloadFake, whisper: whisperFake, setRam, emitMemoryWarning: () => appState.handle.emit('memoryWarning') };
 }

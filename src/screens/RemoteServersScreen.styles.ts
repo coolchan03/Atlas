@@ -1,142 +1,105 @@
 import type { ThemeColors, ThemeShadows } from '../theme/palettes';
 import { SPACING, TYPOGRAPHY } from '../constants';
 
-/**
- * Remote Servers, on the same tokens as the rest of the app.
- *
- * Every text style here used to carry a hardcoded fontSize and no fontFamily, so all of it
- * rendered in the platform sans while the app around it is Menlo - which is why the screen read
- * as belonging to a different product. TYPOGRAPHY tokens carry the family, so using them fixes
- * the typeface and the size at once. Cards use the shared surface, border, and subtle
- * elevation so this screen has the same depth as the other settings screens.
- */
-export function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
-  const card = {
-    padding: SPACING.md,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-  };
-
+export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
   return {
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
+    header: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    backButton: {
+      padding: 8,
+      marginRight: 8,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: '600' as const,
+      color: colors.text,
+      flex: 1,
+    },
     scrollView: {
       flex: 1,
     },
     content: {
-      padding: SPACING.lg,
-      paddingBottom: SPACING.xxl,
-      gap: SPACING.md,
+      padding: 16,
     },
-
-    /* What this screen gets you, before any control. */
-    intro: {
-      ...TYPOGRAPHY.bodySmall,
-      color: colors.textSecondary,
-      lineHeight: 20,
-    },
-
-    card,
-    cardRow: {
-      flexDirection: 'row' as const,
+    emptyState: {
       alignItems: 'center' as const,
-      gap: SPACING.md,
+      paddingVertical: 40,
+      gap: 12,
     },
-    cardTextCol: {
-      flex: 1,
-    },
-    scanKindRow: {
-      flexDirection: 'row' as const,
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.surfaceLight,
       alignItems: 'center' as const,
-      justifyContent: 'space-between' as const,
-      minHeight: 44,
-      gap: SPACING.md,
-    },
-    cardTitle: {
-      ...TYPOGRAPHY.h3,
-      color: colors.text,
-      marginBottom: SPACING.xs,
-    },
-    cardDesc: {
-      ...TYPOGRAPHY.meta,
-      color: colors.textSecondary,
-      lineHeight: 15,
-    },
-
-    /* Scan and Add sit side by side: they are two ways to do one job, not a ranked pair. */
-    actionRow: {
-      flexDirection: 'row' as const,
-      gap: SPACING.sm,
-    },
-    actionButton: {
-      flex: 1,
-    },
-    /* What the scan actually did, in place, instead of a modal that has to be dismissed. */
-    scanNote: {
-      ...TYPOGRAPHY.meta,
-      color: colors.textMuted,
-      lineHeight: 15,
-    },
-
-    sectionLabel: {
-      ...TYPOGRAPHY.label,
-      textTransform: 'uppercase' as const,
-      color: colors.textMuted,
-      marginTop: SPACING.sm,
-    },
-
-    empty: {
-      ...card,
-      alignItems: 'center' as const,
-      gap: SPACING.sm,
-      paddingVertical: SPACING.xl,
+      justifyContent: 'center' as const,
     },
     emptyTitle: {
-      ...TYPOGRAPHY.h3,
+      fontSize: 18,
+      fontWeight: '600' as const,
       color: colors.text,
     },
     emptyText: {
-      ...TYPOGRAPHY.meta,
+      fontSize: 14,
       color: colors.textSecondary,
       textAlign: 'center' as const,
-      lineHeight: 16,
+      paddingHorizontal: 32,
     },
     desktopLink: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: SPACING.sm,
+      marginTop: SPACING.md,
       paddingVertical: SPACING.xs,
     },
     desktopLinkText: {
-      ...TYPOGRAPHY.meta,
+      ...TYPOGRAPHY.body,
       color: colors.primary,
     },
-
-    serverCard: {
-      ...card,
-      gap: SPACING.sm,
+    serverItem: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
     },
-    /* The one in use is marked by its border, so the list reads at a glance. */
-    serverCardActive: {
-      borderColor: colors.primary,
-    },
-    serverIdentity: {
-      gap: SPACING.xs,
-    },
-    serverTopRow: {
+    serverHeader: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      gap: SPACING.sm,
+      justifyContent: 'space-between' as const,
+    },
+    serverInfo: {
+      flex: 1,
+    },
+    serverName: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.text,
+      marginBottom: 4,
+    },
+    serverEndpoint: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    statusContainer: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      marginTop: 8,
+      gap: 6,
     },
     statusDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
     statusDotActive: {
       backgroundColor: colors.success,
@@ -147,54 +110,92 @@ export function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     statusDotUnknown: {
       backgroundColor: colors.textMuted,
     },
-    serverName: {
-      ...TYPOGRAPHY.body,
-      color: colors.text,
-      flex: 1,
-    },
-    activeBadge: {
-      ...TYPOGRAPHY.label,
-      textTransform: 'uppercase' as const,
-      color: colors.primary,
-    },
-    useHint: {
-      ...TYPOGRAPHY.label,
-      textTransform: 'uppercase' as const,
-      color: colors.textMuted,
-    },
-    serverEndpoint: {
-      ...TYPOGRAPHY.meta,
+    statusText: {
+      fontSize: 12,
       color: colors.textSecondary,
     },
-    serverStatus: {
-      ...TYPOGRAPHY.meta,
-      color: colors.textMuted,
-    },
-
     serverActions: {
       flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: SPACING.lg,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      paddingTop: SPACING.sm,
+      marginTop: 12,
+      gap: 8,
     },
-    serverAction: {
+    actionButton: {
+      flex: 1,
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      gap: SPACING.xs,
-      paddingVertical: SPACING.xs,
+      justifyContent: 'center' as const,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceLight,
+      gap: 6,
     },
-    serverActionText: {
-      ...TYPOGRAPHY.meta,
-      color: colors.textSecondary,
+    actionButtonText: {
+      fontSize: 13,
+      color: colors.text,
     },
-    /* Destructive, so it sits at the far end and is the only coloured one. */
-    serverActionDanger: {
-      marginLeft: 'auto' as const,
+    deleteButton: {
+      backgroundColor: colors.errorBackground,
     },
-    serverActionDangerText: {
+    deleteButtonText: {
       color: colors.error,
+    },
+    selectButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceLight,
+    },
+    selectButtonActive: {
+      backgroundColor: colors.primary,
+    },
+    addButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      backgroundColor: colors.primary,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginTop: 16,
+      gap: 8,
+    },
+    addButtonText: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.background,
+    },
+    scanButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      backgroundColor: colors.surfaceLight,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginTop: 12,
+      gap: 8,
+    },
+    scanButtonText: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.text,
+    },
+    infoCard: {
+      backgroundColor: colors.surfaceLight,
+      borderRadius: 12,
+      padding: 16,
+      marginTop: 16,
+    },
+    infoTitle: {
+      fontSize: 14,
+      fontWeight: '600' as const,
+      color: colors.text,
+      marginBottom: 8,
+    },
+    infoText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 20,
     },
   };
 }

@@ -6,7 +6,6 @@
  * functions; their signatures and behavior are unchanged.
  */
 import RNFS from 'react-native-fs';
-import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
 
 /**
@@ -35,12 +34,7 @@ export async function isModelDownloaded(modelId: string): Promise<boolean> {
 
 /** List every downloaded ggml whisper model on disk (for the Download Manager). */
 export async function listDownloadedModels(): Promise<
-  Array<{
-    modelId: string;
-    fileName: string;
-    sizeBytes: number;
-    filePath: string;
-  }>
+  Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>
 > {
   const dir = getModelsDir();
   if (!(await RNFS.exists(dir))) return [];
@@ -81,46 +75,16 @@ export async function validateModelFile(modelPath: string): Promise<void> {
     throw new Error(`Whisper model file not found at: ${modelPath}`);
   }
 
-  const facts = await statFile(modelPath);
-  if (!facts) {
-    throw new Error(
-      'Could not read Whisper model file metadata. Please try again.',
-    );
-  }
-  const fileSize = facts.size;
+  const stat = await RNFS.stat(modelPath);
+  const fileSize = Number(stat.size);
   if (Number.isNaN(fileSize) || fileSize < MIN_MODEL_FILE_SIZE) {
     // Remove the corrupted file so the user can re-download
     await RNFS.unlink(modelPath).catch(() => {});
     throw new Error(
-      `Whisper model file is too small (${Math.round(
-        fileSize / 1024,
-      )} KB) and likely corrupted. ` +
-        'The file has been removed. Please re-download the model.',
+      `Whisper model file is too small (${Math.round(fileSize / 1024)} KB) and likely corrupted. ` +
+      'The file has been removed. Please re-download the model.'
     );
   }
 
-  logger.log(
-    `[Whisper] Model file validated: ${modelPath} (${Math.round(
-      fileSize / (1024 * 1024),
-    )} MB)`,
-  );
-}
-
-/**
- * Admit a transferred Whisper artifact into the disk-backed transcription catalog.
- * The catalog identity and destination filename must agree before native code can see it.
- */
-export async function registerTransferredModel(
-  filePath: string,
-  modelId: string,
-): Promise<void> {
-  if (
-    !modelId ||
-    modelId.includes('/') ||
-    modelId.includes('\\') ||
-    filePath !== getModelPath(modelId)
-  ) {
-    throw new Error('Transferred Whisper model identity is invalid');
-  }
-  await validateModelFile(filePath);
+  logger.log(`[Whisper] Model file validated: ${modelPath} (${Math.round(fileSize / (1024 * 1024))} MB)`);
 }

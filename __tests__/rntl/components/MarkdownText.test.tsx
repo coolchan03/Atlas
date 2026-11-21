@@ -10,15 +10,11 @@
  */
 
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
-import { Linking } from 'react-native';
+import { render, fireEvent } from '@testing-library/react-native';
+import { Clipboard } from 'react-native';
 import { MarkdownText, preprocessMarkdown } from '../../../src/components/MarkdownText';
 
 describe('MarkdownText', () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('renders plain text', () => {
     const { getByText } = render(<MarkdownText>Hello world</MarkdownText>);
     expect(getByText(/Hello world/)).toBeTruthy();
@@ -117,28 +113,40 @@ describe('MarkdownText', () => {
     const { toJSON } = render(<MarkdownText>{longUrl}</MarkdownText>);
     expect(toJSON()).toBeTruthy();
   });
+});
 
-  it('opens a Markdown link and refuses an unsafe destination', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
-    const rendered = render(
-      <MarkdownText>{'[Docs](https://example.com/docs) [Unsafe](ftp://example.com/file)'}</MarkdownText>,
-    );
+describe('tables written as HTML by a model', () => {
+  const html = '<table>\n<tr><th>Asset</th><th>Depreciation</th></tr>\n<tr><td>Building<br>new</td><td><b>$70,000</b> ($100k - $30k)</td></tr></table>';
+  it('becomes a Markdown table with the first row as the header, and shows as a table', () => {
+    expect(preprocessMarkdown(`Intro\n${html}\nAfter`)).toBe('Intro\n\n\n| Asset | Depreciation |\n| --- | --- |\n| Building new | $70,000 ($100k - $30k) |\n\n\nAfter');
+    const view = render(<MarkdownText>{html}</MarkdownText>);
+    expect(view.queryByText(/<table>/)).toBeNull();
+    expect(view.getByTestId('copy-table-copy-table')).toBeTruthy();
+  });
+  it('leaves text without a table alone', () => {
+    expect(preprocessMarkdown('a < b and <i>x</i>')).toBe('a < b and <i>x</i>');
+  });
+});
 
-    fireEvent.press(rendered.getByText('Docs'));
-    fireEvent.press(rendered.getByText('Unsafe'));
-    expect(openURL).toHaveBeenCalledTimes(1);
-    expect(openURL).toHaveBeenCalledWith('https://example.com/docs');
-    expect(rendered.getAllByRole('link')).toHaveLength(2);
+describe('tables written by a model', () => {
+  const dashes = '| Account | Debit | Credit |\n| :\u2014 | :\u2014 | :\u2014 |\n| Revenue | $30,000 | to Fund Balance |';
+
+  it('rewrites long-dash divider rows so the parser sees a table, keeping alignment colons', () => {
+    expect(preprocessMarkdown(dashes)).toBe('| Account | Debit | Credit |\n| :--- | :--- | :--- |\n| Revenue | $30,000 | to Fund Balance |');
+    expect(preprocessMarkdown('| a | b |\n| -: | :-: |\n| 1 | 2 |')).toContain('| ---: | :---: |');
   });
 
-  it('turns a plain web address into a safe clickable link', () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
-    const rendered = render(
-      <MarkdownText>{'Main page: https://github.com/off-grid-ai'}</MarkdownText>,
-    );
+  it('leaves a normal table alone', () => {
+    const t = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+    expect(preprocessMarkdown(t)).toBe(t);
+  });
 
-    fireEvent.press(rendered.getByRole('link'));
-    expect(openURL).toHaveBeenCalledWith('https://github.com/off-grid-ai');
+  it('puts a blank line between a sentence and the table that follows it', () => {
+    expect(preprocessMarkdown('Close revenues:\n| a | b |\n| --- | --- |\n| 1 | 2 |')).toBe('Close revenues:\n\n| a | b |\n| --- | --- |\n| 1 | 2 |');
+  });
+
+  it('does not touch text that only mentions a pipe', () => {
+    expect(preprocessMarkdown('use a | b to choose')).toBe('use a | b to choose');
   });
 });
 
@@ -163,5 +171,31 @@ describe('preprocessMarkdown', () => {
     expect(preprocessMarkdown('The result of 3*4 is *twelve*')).toBe(
       String.raw`The result of 3\*4 is *twelve*`
     );
+  });
+
+  it('copies a table as spreadsheet cells or as Markdown, and a code block as code', () => {
+    const set = jest.spyOn(Clipboard, 'setString').mockImplementation(() => undefined);
+    const view = render(<MarkdownText>{'| Day | Plan |\n| --- | --- |\n| Mon | Run |\n| Tue | Rest |\n\n```\nconst x = 42;\n```'}</MarkdownText>);
+    fireEvent.press(view.getByTestId('copy-table-copy-table'));
+    expect(set).toHaveBeenLastCalledWith('Day\tPlan\nMon\tRun\nTue\tRest');
+    fireEvent.press(view.getByTestId('copy-table-copy-as-markdown'));
+    expect(set).toHaveBeenLastCalledWith('| Day | Plan |\n| --- | --- |\n| Mon | Run |\n| Tue | Rest |');
+    fireEvent.press(view.getByTestId('copy-code-copy-code'));
+    expect(set).toHaveBeenLastCalledWith('const x = 42;');
+    set.mockRestore();
+  });
+
+  it('shows a table fitted to the screen by default, with a toggle to a wide scrolling view, and remembers the choice', () => {
+    const { useTablePrefs } = require('../../../src/components/tablePrefs');
+    useTablePrefs.setState({ fit: true });
+    const view = render(<MarkdownText>{'| A | B | C |\n| :\u2014 | :\u2014 | :\u2014 |\n| 1 | 2 | 3 |'}</MarkdownText>);
+    // The long-dash divider still makes a table, and in the fitted view there is no sideways scroller.
+    expect(view.getByText('Copy table')).toBeTruthy();
+    expect(view.UNSAFE_queryAllByType(require('react-native').ScrollView)).toHaveLength(0);
+    expect(view.getByText('Wide view')).toBeTruthy();
+    fireEvent.press(view.getByTestId('table-fit-toggle'));
+    expect(useTablePrefs.getState().fit).toBe(false);
+    expect(view.getByText('Fit to screen')).toBeTruthy();
+    expect(view.UNSAFE_queryAllByType(require('react-native').ScrollView)).toHaveLength(1);
   });
 });

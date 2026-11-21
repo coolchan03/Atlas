@@ -91,7 +91,6 @@ object DownloadReason {
         val normalizedCode = code?.ifBlank { null }
         return when (status) {
             DownloadStatus.RUNNING -> DownloadUiState(status = "running")
-            DownloadStatus.PAUSED -> DownloadUiState(status = "paused")
             DownloadStatus.COMPLETED -> DownloadUiState(status = "completed")
             DownloadStatus.CANCELLED -> DownloadUiState(
                 status = "cancelled",

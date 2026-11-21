@@ -177,6 +177,11 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn().mockResolvedValue('/resolved/model'),
 }));
 
+jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
+  ensureImageExtractionComplete: jest.fn().mockResolvedValue(undefined),
+  validateImageModelDir: jest.fn().mockResolvedValue({ complete: true, missing: [] }),
+}));
+
 describe('useModelsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -513,6 +518,7 @@ describe('useModelsScreen', () => {
     });
 
     it('sets active image model id when none is active', async () => {
+      (Platform as any).OS = 'ios';
       require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');

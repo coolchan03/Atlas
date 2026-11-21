@@ -10,7 +10,7 @@
  * match. Adding a new backend or setting means editing ONE place.
  */
 import React, { useEffect, useState } from 'react';
-import { Platform, View, Text } from 'react-native';
+import { Platform, View, Text, TouchableOpacity } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -22,16 +22,65 @@ import {
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
 import { hardwareService } from '../../services/hardware';
-import {
-  REASONING_BUDGET_AUTO,
-  REASONING_BUDGET_OPTIONS,
-  reasoningBudgetLabel,
-} from '@offgrid/models';
-import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
+import { isLocalModelLoaded, localGpuInfo } from '../../services/engines';
+import { describeOffload } from '../../services/gpuOffload';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
-import { SegmentedRow, BOOL_OPTIONS, type PillOption } from './segmentedRow';
+import { recoverFromPreviousRun, describeLoadHealth, clearCrashHistory } from '../../services/loadGuard';
 
 const isAndroid = Platform.OS === 'android';
+
+// ─── Reusable pill row ─────────────────────────────────────────────────────────
+
+interface PillOption<T extends string> {
+  id: T;
+  label: string;
+}
+
+/** A labelled segmented control: title + description + a row of pill buttons.
+ *  The one place the pill markup lives, so every setting renders identically. */
+function SegmentedRow<T extends string>(props: {
+  label: string;
+  description: string;
+  options: PillOption<T>[];
+  current: T;
+  onSelect: (id: T) => void;
+  testIdFor?: (id: T) => string;
+  isDisabled?: (id: T) => boolean;
+  children?: React.ReactNode;
+}): React.ReactElement {
+  const styles = useThemedStyles(createTextGenAdvancedStyles);
+  const { label, description, options, current, onSelect, testIdFor, isDisabled, children } = props;
+  return (
+    <View style={styles.container}>
+      <View style={styles.info}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.desc}>{description}</Text>
+      </View>
+      <View style={styles.buttons}>
+        {options.map(o => {
+          const active = current === o.id;
+          return (
+            <TouchableOpacity
+              key={o.id}
+              testID={testIdFor?.(o.id)}
+              style={[styles.button, active && styles.buttonActive]}
+              disabled={isDisabled?.(o.id)}
+              onPress={() => onSelect(o.id)}
+            >
+              <Text style={[styles.buttonText, active && styles.buttonTextActive]}>{o.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const BOOL_OPTIONS: PillOption<'off' | 'on'>[] = [
+  { id: 'off', label: 'Off' },
+  { id: 'on', label: 'On' },
+];
 
 // ─── Inference Backend ─────────────────────────────────────────────────────────
 
@@ -42,39 +91,35 @@ const IOS_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.METAL, label: 'Metal', desc: 'Offload layers to GPU via Metal. Faster for larger models. Requires model reload.' },
 ];
 
+// Automatic is the recommended choice; the others force one engine (each falls back to CPU
+// with a visible reason if it cannot load the model).
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
-  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  // Display label 'GPU' (users don't know OpenCL); id stays OPENCL.
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'GPU', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.AUTO, label: 'Automatic', desc: 'Recommended. Atlas tries the NPU, then the OpenCL GPU, then the Vulkan GPU, then the CPU for each model. Vulkan is skipped on the Mali-G57, where the CPU is faster.' },
+  { id: INFERENCE_BACKENDS.HTP, label: 'NPU', desc: 'Force the Snapdragon NPU. Needs a Q4_0 or Q8_0 text model; other formats are refused.' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Force the OpenCL GPU (Adreno). Keeps tools and pictures.' },
+  { id: INFERENCE_BACKENDS.VULKAN, label: 'Vulkan', desc: 'Force the Vulkan GPU (also Mali and other GPUs). Text chat only: no tools and no picture input, because llama.kt has neither. Use OpenCL (Adreno) or Automatic for those.' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU only', desc: 'Run without hardware acceleration. Always works, can be considerably slower.' },
 ];
 
-const HTP_BACKEND: BackendOption = {
-  id: INFERENCE_BACKENDS.HTP,
-  label: 'NPU (Beta)',
-  desc: 'Experimental — works best with Llama- and Qwen-style models. Some models (e.g. Gemma) fall back to CPU or produce invalid output. Requires model reload.',
-};
+/** What the currently loaded model actually got, never the requested number. */
+function describeLoadedOffload(): string {
+  if (!isLocalModelLoaded()) return 'Load a model to see how many layers run on the accelerator.';
+  const info = localGpuInfo();
+  if (!info.gpu) return 'Loaded model is running on the CPU (no accelerator layers).';
+  return `Loaded model: ${describeOffload(info.gpuLayers, info.totalLayers ?? -1)} on ${info.gpuBackend || 'the accelerator'}.`;
+}
 
 export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
   const { gpuLayersEffective } = useTextGenerationAdvanced();
-  const [hasNPU, setHasNPU] = useState(false);
-
-  useEffect(() => {
-    if (isAndroid) {
-      hardwareService.getSoCInfo().then(info => setHasNPU(info.hasNPU));
-    }
-  }, []);
-
-  const androidBackends = hasNPU && HTP_UI_ENABLED ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
-  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : androidBackends;
+  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : ANDROID_BASE_BACKENDS;
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
-  const current = settings.inferenceBackend ?? defaultBackend;
+  const savedBackend = settings.inferenceBackend ?? defaultBackend;
+  const current = savedBackend;
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
-  const layersLabel = current === INFERENCE_BACKENDS.HTP
-    ? 'NPU Layers'
-    : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'GPU Layers (OpenCL)';
+  const layersLabel = current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'Accelerator Layer Limit';
 
   return (
     <SegmentedRow<InferenceBackend>
@@ -82,7 +127,13 @@ export const BackendSelector: React.FC = () => {
       description={backends.find(b => b.id === current)?.desc ?? ''}
       options={backends}
       current={current}
-      onSelect={(id) => updateSettings({ inferenceBackend: id })}
+      onSelect={(id) => updateSettings({
+        inferenceBackend: id,
+        backendUserChosen: true,
+        ...(id !== INFERENCE_BACKENDS.CPU && (settings.gpuLayers ?? 0) <= 0
+          ? { gpuLayers: gpuLayersEffective }
+          : {}),
+      } as any)}
       testIdFor={(id) => `backend-${id}-button`}
     >
       {showLayers && (
@@ -90,11 +141,23 @@ export const BackendSelector: React.FC = () => {
           <SliderSetting
             testID="gpu-layers-stepper"
             label={layersLabel}
-            description="Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload."
+            description="Layers offloaded to the GPU/NPU. Higher is faster but uses more memory. Maximum safe offloads every layer this device's RAM allows. Requires model reload."
             value={gpuLayersEffective}
             min={1} max={GPU_LAYERS_MAX} step={1}
             onChange={(value) => updateSettings({ gpuLayers: value })}
           />
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              testID="gpu-layers-max-button"
+              style={[styles.button, gpuLayersEffective >= GPU_LAYERS_MAX && styles.buttonActive]}
+              onPress={() => updateSettings({ gpuLayers: GPU_LAYERS_MAX })}
+            >
+              <Text style={[styles.buttonText, gpuLayersEffective >= GPU_LAYERS_MAX && styles.buttonTextActive]}>
+                Maximum safe
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.desc} testID="gpu-layers-actual">{describeLoadedOffload()}</Text>
         </View>
       )}
     </SegmentedRow>
@@ -107,15 +170,19 @@ const LITERT_BACKENDS: { id: LiteRTBackend; label: string; desc: string }[] = [
   { id: 'gpu', label: 'GPU', desc: 'Run on GPU via OpenCL. Best performance on most devices.' },
   { id: 'cpu', label: 'CPU', desc: 'Always available. Use for battery savings or thermal relief.' },
 ];
+const LITERT_NPU = { id: 'npu' as LiteRTBackend, label: 'NPU', desc: 'Snapdragon NPU: fastest and most power-efficient for models built for it (falls back to GPU, then CPU, if the model or phone does not support it).' };
 
 export const LiteRTBackendSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const current = settings.liteRTBackend === 'cpu' ? 'cpu' : 'gpu';
+  const current = settings.liteRTBackend ?? 'gpu';
+  const [hasNPU, setHasNPU] = useState(false);
+  useEffect(() => { if (isAndroid) hardwareService.getSoCInfo().then(i => setHasNPU(i.hasNPU)).catch(() => undefined); }, []);
+  const options = hasNPU ? [...LITERT_BACKENDS, LITERT_NPU] : LITERT_BACKENDS;
   return (
     <SegmentedRow<LiteRTBackend>
       label="Acceleration"
-      description={LITERT_BACKENDS.find(b => b.id === current)?.desc ?? ''}
-      options={LITERT_BACKENDS}
+      description={options.find(b => b.id === current)?.desc ?? ''}
+      options={options}
       current={current}
       onSelect={(id) => updateSettings({ liteRTBackend: id })}
       testIdFor={(id) => `litert-backend-${id}-button`}
@@ -124,10 +191,6 @@ export const LiteRTBackendSelector: React.FC = () => {
 };
 
 // ─── Flash Attention ──────────────────────────────────────────────────────────
-
-/** Lives in its own module for the file-size budget; re-exported so every surface keeps ONE
- *  import path for the advanced text-generation controls. */
-export { SpeculativeDecodingToggle } from './SpeculativeDecodingToggle';
 
 export const FlashAttentionToggle: React.FC = () => {
   const { updateSettings } = useAppStore();
@@ -148,7 +211,7 @@ export const FlashAttentionToggle: React.FC = () => {
 
 export const KvCacheTypeToggle: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { isFlashAttnOn, cacheDisabled, displayCacheType, handleCacheTypeChange } = useTextGenerationAdvanced();
+  const { isFlashAttnOn, gpuForcesF16, displayCacheType, handleCacheTypeChange } = useTextGenerationAdvanced();
   return (
     <SegmentedRow<CacheType>
       label="KV Cache Type"
@@ -157,8 +220,10 @@ export const KvCacheTypeToggle: React.FC = () => {
       current={displayCacheType}
       onSelect={handleCacheTypeChange}
       testIdFor={(ct) => `cache-type-${ct}-button`}
-      isDisabled={(ct) => cacheDisabled && ct !== 'f16'}
     >
+      {gpuForcesF16 && displayCacheType !== 'f16' && (
+        <Text style={styles.warning}>Your choice is saved. The current GPU backend runs an f16 cache, so {displayCacheType} applies when you use the CPU. Gemma 3n and Gemma 4 models always use f16 (they crash with a smaller cache).</Text>
+      )}
       {!isFlashAttnOn && (
         <Text style={styles.warning}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
@@ -201,47 +266,6 @@ export const ModelLoadingModeSelector: React.FC = () => {
   );
 };
 
-// ─── Thinking Budget ─────────────────────────────────────────────────────────
-
-/** llama.rn path only: the cap rides the completion request as thinking_budget_tokens
- *  (shared rule: @offgrid/models thinkingBudgetPayload). LiteRT has no thinking channel. */
-export const ThinkingBudgetSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
-  const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { settings, updateSettings } = useAppStore();
-  const maxTokens = Math.max(1, settings.maxTokens);
-  const steps = [
-    REASONING_BUDGET_AUTO,
-    ...REASONING_BUDGET_OPTIONS.filter(value => value < maxTokens),
-    maxTokens,
-  ];
-  const budget = settings.reasoningBudget ?? REASONING_BUDGET_AUTO;
-  const shownBudget = budget > 0 ? Math.min(budget, maxTokens) : REASONING_BUDGET_AUTO;
-  const selectedStep = steps.indexOf(shownBudget);
-
-  useEffect(() => {
-    if (budget > maxTokens) updateSettings({ reasoningBudget: maxTokens });
-  }, [budget, maxTokens, updateSettings]);
-  return (
-    <View style={[styles.container, compact && styles.compactContainer]}>
-      <SliderSetting
-        testID="thinking-budget"
-        compact={compact}
-        label="Thinking Budget"
-        description="Auto uses up to Max Tokens. A cap ends thinking earlier so the answer arrives sooner. Applies when Thinking is on."
-        value={Math.max(0, selectedStep)}
-        min={0} max={steps.length - 1} step={1}
-        formatValue={(step) => steps[Math.round(step)] === REASONING_BUDGET_AUTO
-          ? 'Auto (up to Max Tokens)'
-          : steps[Math.round(step)] % 1024 !== 0 && steps[Math.round(step)] >= 1024
-            ? `${steps[Math.round(step)]} tokens`
-            : reasoningBudgetLabel(steps[Math.round(step)] ?? REASONING_BUDGET_AUTO)}
-        allowValueEditing={false}
-        onChange={(step) => updateSettings({ reasoningBudget: steps[step] })}
-      />
-    </View>
-  );
-};
-
 // ─── Show Generation Details ──────────────────────────────────────────────────
 
 export const ShowGenerationDetailsToggle: React.FC = () => {
@@ -250,7 +274,7 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
   return (
     <SegmentedRow<'off' | 'on'>
       label="Show Generation Details"
-      description="Show context use, model, speed, and image settings below each reply"
+      description="Display GPU, model, tok/s, and image settings below each message"
       options={BOOL_OPTIONS}
       current={on ? 'on' : 'off'}
       onSelect={(id) => updateSettings({ showGenerationDetails: id === 'on' })}
@@ -259,25 +283,116 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
   );
 };
 
+// ─── Warm-up after load ───────────────────────────────────────────────────────
+
+export const WarmUpToggle: React.FC = () => {
+  const { settings, updateSettings } = useAppStore();
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Warm up after loading"
+      description="After a model loads, run one tiny silent reply so a GPU does its one-time setup now instead of during your first question. Only used when the GPU is on. If you send a message while it runs (it can take a while the first time), wait a moment and send again."
+      options={BOOL_OPTIONS}
+      current={settings.warmUpAfterLoad ? 'on' : 'off'}
+      onSelect={(id) => updateSettings({ warmUpAfterLoad: id === 'on' })}
+      testIdFor={(id) => `warm-up-${id}-button`}
+    />
+  );
+};
+
+// ─── Trim tools ───────────────────────────────────────────────────────────────
+
+export const TrimToolsToggle: React.FC = () => {
+  const { settings, updateSettings } = useAppStore();
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Send only the tools a message needs"
+      description="The model reads every tool's description before it answers, which slows the first reply. With this on, only the tools your message could use (and ones already used in the chat) are sent. Turn it off to send every tool you have switched on, every time."
+      options={BOOL_OPTIONS}
+      current={settings.trimTools === false ? 'off' : 'on'}
+      onSelect={(id) => updateSettings({ trimTools: id === 'on' })}
+      testIdFor={(id) => `trim-tools-${id}-button`}
+    />
+  );
+};
+
+// ─── MTP (multi-token prediction) ─────────────────────────────────────────────
+
+export const MtpToggle: React.FC = () => {
+  const { settings, updateSettings } = useAppStore();
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Use MTP files"
+      description="A model with an MTP file attached (My models, Add MTP file) drafts a few words ahead with it and the main model checks them, so replies can come faster. If the engine cannot start with the file, the model loads without it. Requires model reload."
+      options={BOOL_OPTIONS}
+      current={settings.useMtp === false ? 'off' : 'on'}
+      onSelect={(id) => updateSettings({ useMtp: id === 'on' })}
+      testIdFor={(id) => `use-mtp-${id}-button`}
+    />
+  );
+};
+
+// ─── Safe Model Loading ───────────────────────────────────────────────────────
+
+/** Plain-language summary of the last model load, so nobody has to read raw logs to learn why a model closed the app. */
+export const SafeModelLoadingToggle: React.FC = () => {
+  const styles = useThemedStyles(createTextGenAdvancedStyles);
+  const { settings, updateSettings } = useAppStore();
+  const [health, setHealth] = useState(() => describeLoadHealth());
+  useEffect(() => {
+    let alive = true;
+    // The saved record is read once per launch; this also turns a crash from the previous run into a visible entry.
+    void recoverFromPreviousRun().then(() => { if (alive) setHealth(describeLoadHealth()); });
+    return () => { alive = false; };
+  }, []);
+  const forget = async () => {
+    await clearCrashHistory();
+    setHealth(describeLoadHealth());
+  };
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Safe Model Loading"
+      description="Loads models on the CPU with no picture file and no MTP drafting, which are the parts most likely to close the app while a model starts. Nothing is deleted; turn it off to go back. Requires model reload."
+      options={BOOL_OPTIONS}
+      current={settings.safeModelLoading === true ? 'on' : 'off'}
+      onSelect={(id) => updateSettings({ safeModelLoading: id === 'on' })}
+      testIdFor={(id) => `safe-model-loading-${id}-button`}
+    >
+      <Text style={styles.desc} testID="load-health-summary">{health.summary}</Text>
+      {health.crashes.length > 0 && (
+        <TouchableOpacity testID="forget-crash-history-button" style={styles.button} onPress={forget}>
+          <Text style={styles.buttonText}>Forget crash history</Text>
+        </TouchableOpacity>
+      )}
+    </SegmentedRow>
+  );
+};
+
 // ─── CPU Threads & Batch Size ────────────────────────────────────────────────
 
 export const CpuThreadsSlider: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { updateSettings } = useAppStore();
-  const { cpuThreadsSliderValue, cpuThreadsDisplayValue } = useTextGenerationAdvanced();
+  const { settings, updateSettings } = useAppStore();
+  const { cpuThreadsSliderValue, cpuThreadsDisplayValue, cpuCores } = useTextGenerationAdvanced();
+  const auto = settings?.nThreads === 0;
   return (
     <View style={styles.container}>
       <SliderSetting
         testID="cpu-threads-stepper"
         label="CPU Threads"
-        description="Parallel threads for inference"
+        description={`Parallel threads for inference: ${cpuThreadsDisplayValue}. More than the ${cpuCores} cores this device has only slows it down.`}
         value={cpuThreadsSliderValue}
-        // Unset means AUTO, and the slider's own minimum is 1 — so the screen read "1" while the
-        // engine was running the hardware-recommended count. Show what will actually be used.
-        formatValue={() => cpuThreadsDisplayValue}
-        min={1} max={12} step={1}
+        min={1} max={Math.max(1, cpuCores)} step={1}
         onChange={(v) => updateSettings({ nThreads: v })}
       />
+      <View style={styles.buttons}>
+        <TouchableOpacity
+          testID="cpu-threads-auto-button"
+          style={[styles.button, auto && styles.buttonActive]}
+          onPress={() => updateSettings({ nThreads: 0 })}
+        >
+          <Text style={[styles.buttonText, auto && styles.buttonTextActive]}>Auto</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };

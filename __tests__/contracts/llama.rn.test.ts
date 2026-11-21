@@ -61,12 +61,12 @@ describe('llama.rn Contract', () => {
 
     it('accepts performance optimization options', () => {
       const perfOptions = {
-        flash_attn: true,       // Flash attention
-        cache_type_k: 'q8_0',   // KV cache quantization
+        flash_attn_type: 'auto', // llama.rn 0.13+ string API
+        cache_type_k: 'q8_0',    // KV cache quantization
         cache_type_v: 'q8_0',
       };
 
-      expect(perfOptions.flash_attn).toBe(true);
+      expect(['auto', 'off']).toContain(perfOptions.flash_attn_type);
       expect(['q8_0', 'f16', 'f32']).toContain(perfOptions.cache_type_k);
     });
 

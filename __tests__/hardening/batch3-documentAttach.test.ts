@@ -7,7 +7,7 @@
  * validation / extension / size / decode logic runs for real — deleting the
  * implementation would fail these tests.
  *
- * On-device test-plan cases covered here (see the on-device test plan, Batch 3):
+ * Provit plan cases covered here (see provit/docs/mobile-test-plan.md, Batch 3):
  *  - #2  supported .txt accepted            (COVERED-REAL in existing suite; asserted end-to-end here for the accept-set)
  *  - #12 unsupported binary (.docx) rejected with a visible error
  *  - #13 file > 5MB rejected with a visible error
@@ -17,35 +17,39 @@
  *  - #34/#35 multiple document attachments queue as distinct attachments
  *
  * The accepted-extension set explicitly includes .csv and code files (.py/.ts),
- * which the on-device plan's "supported types" line enumerates but the existing unit suite
+ * which the Provit "supported types" line enumerates but the existing unit suite
  * does not exhaustively assert.
  */
 
-import { defaultNativeFileSystemBoundary } from '../harness/nativeFileSystem';
-
-jest.mock('react-native-fs', () => {
-  const { defaultNativeFileSystemBoundary: boundary } = require('../harness/nativeFileSystem');
-  return { __esModule: true, default: boundary.module, ...boundary.module };
-});
+import RNFS from 'react-native-fs';
 
 jest.mock('../../src/services/pdfExtractor', () => ({
   pdfExtractor: { isAvailable: jest.fn(() => false), extractText: jest.fn() },
 }));
 
+jest.mock('../../src/services/officeExtract', () => ({
+  OFFICE_EXTENSIONS: ['.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.rtf'],
+  extractOffice: jest.fn(async () => 'office body'),
+  extractOfficeMarkdown: jest.fn(async () => 'office body'),
+}));
+
 import { documentService } from '../../src/services/documentService';
 
-/** Put one readable file on the fake device, with independent stored bytes and reported metadata. */
-function seedReadableFile(
-  path: string,
-  content: string,
-  size = content.length,
-): void {
-  defaultNativeFileSystemBoundary.seedTextFile(path, content, size);
+const rnfs = RNFS as jest.Mocked<typeof RNFS>;
+
+/** Make RNFS behave as if `content` is a readable file of `size` bytes. */
+function stubReadableFile(content: string, size = content.length): void {
+  rnfs.exists.mockResolvedValue(true);
+  rnfs.stat.mockResolvedValue({ size, isFile: () => true } as any);
+  rnfs.readFile.mockResolvedValue(content);
+  rnfs.copyFile.mockResolvedValue(undefined as any);
+  rnfs.mkdir.mockResolvedValue(undefined as any);
+  rnfs.unlink.mockResolvedValue(undefined as any);
 }
 
 describe('Batch3 · document attach validation (real documentService)', () => {
   beforeEach(() => {
-    defaultNativeFileSystemBoundary.reset();
+    jest.clearAllMocks();
   });
 
   // ── #14/#15/#2 + csv/code: the full supported accept-set ───────────────────
@@ -54,7 +58,6 @@ describe('Batch3 · document attach validation (real documentService)', () => {
       'notes.txt',
       'readme.md',
       'data.json',
-      'table.csv',
       'script.py',
       'index.ts',
     ];
@@ -64,7 +67,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
 
     it.each(acceptedNames)('processDocumentFromPath() builds a document attachment for %s', async (name) => {
-      seedReadableFile(`/docs/${name}`, 'sample body', 11);
+      stubReadableFile('sample body', 11);
       const att = await documentService.processDocumentFromPath(`/docs/${name}`, name);
       expect(att).not.toBeNull();
       expect(att!.type).toBe('document');
@@ -74,20 +77,33 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
   });
 
-  // ── #12: unsupported binary format rejected with a visible error ────────────
-  describe('unsupported binary formats are rejected (#12)', () => {
-    it('isSupported() is false for a .docx binary', () => {
-      expect(documentService.isSupported('report.docx')).toBe(false);
+  // ── Office formats are supported; unrelated binary formats are still rejected ──
+  describe('office support and unsupported binary rejection', () => {
+    it('accepts supported Word and Excel files', () => {
+      expect(documentService.isSupported('report.docx')).toBe(true);
+      expect(documentService.isSupported('sheet.xlsx')).toBe(true);
     });
 
-    it('isSupported() is false for .xlsx and image binaries', () => {
-      expect(documentService.isSupported('sheet.xlsx')).toBe(false);
+    it('turns a CSV file into a Markdown table for the AI', async () => {
+      stubReadableFile('Item,Qty\nBandage,4', 19);
+      const att = await documentService.processDocumentFromPath('/docs/table.csv', 'table.csv');
+      expect(att!.textContent).toBe('| Item | Qty |\n| --- | --- |\n| Bandage | 4 |');
+      expect(documentService.isSupported('table.csv')).toBe(true);
+    });
+
+    it('extracts an Office file into a document attachment', async () => {
+      stubReadableFile('ignored');
+      const att = await documentService.processDocumentFromPath('/docs/report.docx', 'report.docx');
+      expect(att).not.toBeNull();
+      expect(att!.fileName).toBe('report.docx');
+      expect(att!.textContent).toBe('office body');
+    });
+
+    it('still rejects unrelated image/binary files', async () => {
       expect(documentService.isSupported('photo.png')).toBe(false);
-    });
-
-    it('processDocumentFromPath() throws an "Unsupported file type" error for .docx (no chip is added)', async () => {
+      expect(documentService.isSupported('archive.zip')).toBe(false);
       await expect(
-        documentService.processDocumentFromPath('/docs/report.docx', 'report.docx'),
+        documentService.processDocumentFromPath('/docs/photo.png', 'photo.png'),
       ).rejects.toThrow(/Unsupported file type/);
     });
   });
@@ -95,14 +111,14 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // ── #13: oversized (>5MB) file rejected with a visible error ────────────────
   describe('oversized files are rejected (#13)', () => {
     it('rejects a file at 5MB + 1 byte with a "too large" error', async () => {
-      seedReadableFile('/docs/huge.txt', 'x', 5 * 1024 * 1024 + 1);
+      stubReadableFile('x', 5 * 1024 * 1024 + 1);
       await expect(
         documentService.processDocumentFromPath('/docs/huge.txt', 'huge.txt'),
       ).rejects.toThrow(/too large/i);
     });
 
     it('accepts a file exactly at the 5MB boundary', async () => {
-      seedReadableFile('/docs/limit.txt', 'ok', 5 * 1024 * 1024);
+      stubReadableFile('ok', 5 * 1024 * 1024);
       const att = await documentService.processDocumentFromPath('/docs/limit.txt', 'limit.txt');
       expect(att).not.toBeNull();
     });
@@ -114,42 +130,38 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // for display (src/services/documentService.ts:156,190). It decodeURIComponent()s
   // only the file PATH inside resolveContentUri, never the display name. So a name
   // like 'my%20notes.txt' is surfaced to the attachment chip un-decoded, contrary
-  // to device case #17 ("shows the human-readable decoded filename, not the raw
+  // to Provit case #17 ("shows the human-readable decoded filename, not the raw
   // encoded string"). On device the picker usually hands back an already-decoded
   // name, which is why the E2E may still pass — but the service seam does not
   // guarantee it. Fixing this belongs in src (decode the display name once in the
   // service); per hardening rules we do NOT edit src, so the correct-behavior
   // assertion is skipped and the actual (buggy) behavior is pinned below.
   describe('URL-encoded filename display decode (#17)', () => {
-    it.skip('BUG-FOUND: display fileName should be decoded (my%20notes.txt -> "my notes.txt")', async () => {
-      seedReadableFile('/docs/my%20notes.txt', 'body');
+    it('displays decoded file names (my%20notes.txt -> "my notes.txt")', async () => {
+      stubReadableFile('body');
       const att = await documentService.processDocumentFromPath(
         '/docs/my%20notes.txt',
         'my%20notes.txt',
       );
-      // Desired behavior per device case #17: the chip shows the decoded, human-readable name.
+      // Desired behavior per Provit #17: the chip shows the decoded, human-readable name.
       expect(att!.fileName).toBe('my notes.txt');
     });
 
-    it.skip('pins ACTUAL behavior: the display fileName is returned un-decoded (documents the bug) — SKIP: do not enshrine the bug as passing; see the desired-behavior skip above', async () => {
-      seedReadableFile('/docs/my%20notes.txt', 'body');
+    it('keeps a malformed percent sequence readable instead of crashing', async () => {
+      stubReadableFile('body');
       const att = await documentService.processDocumentFromPath(
-        '/docs/my%20notes.txt',
-        'my%20notes.txt',
+        '/docs/my%bad.txt',
+        'my%bad.txt',
       );
-      // NOT decoded today — this is the current, incorrect behavior we are pinning.
-      expect(att!.fileName).toBe('my%20notes.txt');
+      expect(att!.fileName).toBe('my%bad.txt');
     });
 
     it('resolves the file even when the PATH is URL-encoded (path decode works)', async () => {
       // The path decode DOES happen (resolveContentUri), so a file whose path
       // carries %20 still reads without error — the attach itself succeeds.
-      seedReadableFile(
-        '/mock/documents/my notes.txt',
-        'decoded path body',
-      );
+      stubReadableFile('decoded path body');
       const att = await documentService.processDocumentFromPath(
-        '/mock/documents/my%20notes.txt',
+        '/docs/my%20notes.txt',
         'my%20notes.txt',
       );
       expect(att).not.toBeNull();
@@ -160,14 +172,14 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // ── #34/#35: multiple document attachments queue as distinct attachments ────
   describe('multiple document attachments queue (#34, #35)', () => {
     it('produces two distinct attachments with unique ids for two files', async () => {
-      seedReadableFile('/docs/a.py', 'py body');
+      stubReadableFile('py body');
       const first = await documentService.processDocumentFromPath('/docs/a.py', 'a.py');
 
       // Advance the clock so the second attachment gets a different id (id is Date.now()).
       const nowSpy = jest.spyOn(Date, 'now');
       const base = Date.now();
       nowSpy.mockReturnValue(base + 5);
-      seedReadableFile('/docs/b.ts', 'ts body');
+      rnfs.readFile.mockResolvedValue('ts body');
       const second = await documentService.processDocumentFromPath('/docs/b.ts', 'b.ts');
       nowSpy.mockRestore();
 

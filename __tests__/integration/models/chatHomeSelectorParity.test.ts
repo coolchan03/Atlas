@@ -187,10 +187,11 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
   });
 
   /**
-   * CHAT selection stays cheap. The first turn then uses the same measured
-   * residency loader as every other path.
+   * CHAT path (the bug): selecting the SAME model in chat must ALSO load it — not
+   * dead-end behind the predictive "Insufficient Memory" gate. Assert the OUTCOME:
+   * the native loadModel ran and the model is resident, identical to Home.
    */
-  it('CHAT: selection waits for first use before loading and evicting another model', async () => {
+  it('CHAT: selecting the same text model loads it too — no divergent predictive block (OD3)', async () => {
     await makeImageResident();
     const text = createDownloadedModel({ id: 'txt', engine: 'llama' as any, fileSize: TEXT_FILE_BYTES });
     useAppStore.setState({ ...useAppStore.getState(), downloadedModels: [text] });
@@ -198,14 +199,18 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     const deps = makeChatDeps(text);
 
     await handleModelSelectFn(deps, text);
-    expect(getAppState().activeModelId).toBe('txt');
-    expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(modelResidencyManager.isResident('image')).toBe(true);
+    // handleModelSelectFn dispatches the load behind waitForRenderFrame; flush it.
+    await new Promise(resolve => setTimeout(resolve, 400));
 
-    await activeModelService.loadTextModel('txt');
+    // The load actually happened — same outcome as Home.
     expect(mockLlmService.loadModel).toHaveBeenCalled();
+    expect(getAppState().activeModelId).toBe('txt');
     expect(modelResidencyManager.isResident('text')).toBe(true);
-    expect(modelResidencyManager.isResident('image')).toBe(false);
+    // And it was NOT blocked by a hard "Insufficient Memory" gate before loading.
+    const blocked = deps.setAlertState.mock.calls.find(
+      (c: any) => c[0]?.title === 'Insufficient Memory',
+    );
+    expect(blocked).toBeUndefined();
   });
 
   /**

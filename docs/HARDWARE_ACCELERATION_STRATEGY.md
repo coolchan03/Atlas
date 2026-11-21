@@ -59,8 +59,8 @@ These are load-bearing and evidence-verified. The architecture follows from them
 | **vLLM** (remote) | n/a (server) | optional BYO-server tier | Cloud TPU / GPU |
 
 **Ground truth - what is already wired (verified in code, 2026-07-06):**
-- **llama.rn** = text/VLM (GGUF) **and** the OuteTTS + Qwen3 TTS engines (`pro/audio/engine/tts/engines/{outetts,qwen3}` run on llama.rn). CPU/GPU.
-- **react-native-executorch `^0.8.1`** = **already a dependency**, powering **Kokoro TTS** (`pro/audio/engine/tts/engines/kokoro`, `useTextToSpeech` + `KOKORO_MEDIUM`). On iOS this already routes through CoreML (ANE-capable). Its embeddings/STT/vision hooks exist in the package but are not yet imported - extending to them is a small lift, iOS-NPU-only.
+- **llama.rn** = text/VLM (GGUF). CPU/GPU.
+- **react-native-executorch `^0.8.1`** = **already a dependency**, powering **Kokoro TTS** (`useTextToSpeech` + `KOKORO_MEDIUM`). On iOS this already routes through CoreML (ANE-capable). Its embeddings/STT/vision hooks exist in the package but are not yet imported - extending to them is a small lift, iOS-NPU-only.
 - **whisper.rn** = STT. **CoreMLDiffusionModule.swift** (iOS) + **LocalDreamModule.kt** (Android) = image-gen. The `ONNXImageModel` type / `onnxImageGeneratorService` name refers to the source model *format*; the runtimes are CoreML/LocalDream, **not** ONNX Runtime.
 - **onnxruntime-react-native is NOT in the app** - it is the one net-new engine this plan proposes, for fixed-shape breadth + the Android Hexagon path executorch cannot provide.
 
@@ -244,7 +244,7 @@ The existing remote `LLMProvider` registry already models this. A self-hosted vL
 ## 11. Phased adoption (each additive, behind the router, device-verified, rippable)
 
 1. **Foundation.** Build the Backend Router + Capability Service + uniform adapter interface. Wrap existing runtimes (llama.rn, LiteRT, whisper.rn, CoreML/LocalDream, TTS registry) in the adapter shape. No behaviour change; closes the local-text abstraction gap; gives every modality one entry point. Contract tests for the router guard both platforms at once.
-2. **First NPU win, iOS-first (cheapest): embeddings + vision on ANE.** iOS is a drop-in via executorch (already in app) or ONNX CoreML EP - no rebuild. Route embeddings + vision to ANE, capture NPU-landing telemetry, on-device journey per modality as the regression guard. Kokoro TTS already proves the iOS-ANE path.
+2. **First NPU win, iOS-first (cheapest): embeddings + vision on ANE.** iOS is a drop-in via executorch (already in app) or ONNX CoreML EP - no rebuild. Route embeddings + vision to ANE, capture NPU-landing telemetry, Provit journey per modality as the regression guard. Kokoro TTS already proves the iOS-ANE path.
 3. **Add ONNX Runtime as the fixed-shape breadth engine + Android NPU prototype.** Wire `onnxruntime-react-native` behind the router (iOS CoreML EP first). Then prototype the vendor-NPU paths on real devices to de-risk them before committing STT/embeddings: the Android QNN EP flag on a Snapdragon (rebuild + one per-SoC `ctx.onnx`), and - since it shares this plumbing - the **Tensor ML SDK (Beta) delegate under LiteRT on a Pixel 10**. Both are "heavy, prove-on-one-device-first"; fall back to CPU/GPU everywhere else.
 4. **Image-gen through the router.** Move the CoreML/LocalDream NPU-vs-GPU choice out of UI flags and behind the router as a capability decision. No new runtime.
 5. **Telemetry-driven routing.** Turn on per-device outcome logging; router prefers the empirically best path per SoC class (also catches NPU fall-backs).

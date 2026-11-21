@@ -9,7 +9,7 @@
  *
  * See docs/design/MODEL_ROUTING.md §5.1–5.2.
  */
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import {
@@ -17,7 +17,7 @@ import {
   computeBudgetMB,
   Resident,
 } from './policy';
-import { LoadPolicy } from '../memoryBudget';
+import { LoadPolicy, effectiveAvailableMB } from '../memoryBudget';
 import {
   formatMakeRoomForLine,
   formatOverrideForcingLine,
@@ -37,7 +37,6 @@ import {
 
 class ModelResidencyManager {
   private readonly residents = new Map<string, RegisteredResident>();
-  private readonly residentRegistrations = new Map<string, symbol>();
   private budgetOverrideMB: number | null = null;
   /**
    * Current load policy (single owner). The View (settings screen) dispatches an
@@ -208,12 +207,18 @@ class ModelResidencyManager {
       // weights page in even when instantaneous available is low).
       return Math.round(Math.max(MIN_BUDGET_MB, physicalCapMB));
     }
-    // Dirty/accelerator pages cannot rely on hypothetical OS reclamation. In particular,
-    // Android's physical-budget credit can turn 1GB of live available RAM into an 8GB
-    // admission budget while a diffusion model allocates several GB of anonymous memory.
-    // Use the fresh OS reading for dirty loads on both platforms; clean mmap weights above
-    // retain the physical-budget policy.
-    const availableMB = hardwareService.getAvailableMemoryGB() * 1024;
+    // Under dirty pressure: also gate on real free RAM (+ evictable residents − OS
+    // headroom). Use the reclaimable-aware availability (the SAME owner the override
+    // survival floor reads) — on Android a foreground load may commit up to the physical
+    // budget because the OS reclaims background apps, so a raw availMem snapshot here
+    // under-counted and refused a dirty model the override path then loaded fine (B1).
+    // iOS gets NO reclaim credit (jetsam kills US, not background apps) so this stays the
+    // raw snapshot there — which is what refuses a clean sidecar piled onto a dirty spike.
+    const availableMB = effectiveAvailableMB(
+      hardwareService.getAvailableMemoryGB() * 1024,
+      hardwareService.getTotalMemoryGB() * 1024,
+      { platform: Platform.OS, policy: this.loadPolicy },
+    );
     const residentMB = [...this.residents.values()].reduce(
       (sum, r) => sum + r.sizeMB,
       0,
@@ -226,9 +231,9 @@ class ModelResidencyManager {
         ? AGGRESSIVE_DIRTY_HEADROOM_MB
         : DIRTY_AVAILABILITY_HEADROOM_MB;
     const dynamicMB = availableMB + residentMB - dirtyHeadroomMB;
-    // The small-model floor is valid for clean, pageable weights, not dirty
-    // allocations: at critically low free RAM even a sub-1GB dirty load must wait.
-    return Math.round(Math.max(0, Math.min(physicalCapMB, dynamicMB)));
+    return Math.round(
+      Math.max(MIN_BUDGET_MB, Math.min(physicalCapMB, dynamicMB)),
+    );
   }
 
   getResidents(): Resident[] {
@@ -266,17 +271,8 @@ class ModelResidencyManager {
     spec: ResidentSpec,
     unload: UnloadFn,
     now: number = Date.now(),
-  ): symbol {
-    const registration = Symbol(spec.key);
+  ): void {
     this.residents.set(spec.key, { ...spec, lastUsedAt: now, unload });
-    this.residentRegistrations.set(spec.key, registration);
-    return registration;
-  }
-
-  /** Forget a capability-owned resident after that capability has released its native engine. */
-  unregister(key: string, registration: symbol): boolean {
-    if (this.residentRegistrations.get(key) !== registration) return false;
-    return this.residentRegistrations.delete(key) && this.residents.delete(key);
   }
 
   /**
@@ -331,13 +327,8 @@ class ModelResidencyManager {
     // INDEPENDENT of the total-budget check above, so it never changes the clean+dirty swap cases
     // (a large image still evicts a resident text via the total budget).
     const dirtyCeilingMB = computeBudgetMB(totalMB, { policy: 'balanced' });
-    // Sum the dirty residents that STAY — excluding the incoming's own same-key entry. On a reload
-    // (e.g. an image model re-loaded after a thread change) the incoming REPLACES that resident, so
-    // spec.sizeMB below already accounts for its footprint; counting the resident too double-charges
-    // the model and wrongly refuses one already sitting in RAM (G4). Mirrors planEviction's
-    // alreadyResident rule, which likewise charges the incoming 0 when it's already resident.
     const keptDirtyMB = residents
-      .filter(r => r.dirtyMemory && r.key !== spec.key && !plan.evict.some(e => e.key === r.key))
+      .filter(r => r.dirtyMemory && !plan.evict.some(e => e.key === r.key))
       .reduce((sum, r) => sum + r.sizeMB, 0);
     const dirtyFootprintMB = (spec.dirtyMemory ? spec.sizeMB : 0) + keptDirtyMB;
     const dirtyCeilingExceeded = !!spec.dirtyMemory && dirtyFootprintMB > dirtyCeilingMB;
@@ -433,7 +424,13 @@ class ModelResidencyManager {
     return this.runExclusive(`evict:${key}`, async () => {
       const r = this.residents.get(key);
       if (!r) return false;
-      await r.unload().catch(err => logger.log(`[ModelResidency] evict ${key} unload failed:`, err));
+      try {
+        await r.unload();
+      } catch (err) {
+        // Never count memory as free when native unload failed; retry is still possible.
+        logger.log(`[ModelResidency] evict ${key} unload failed:`, err);
+        return false;
+      }
       this.residents.delete(key);
       logger.log(`[ModelResidency] evicted ${r.type} (${key}) by user request`);
       return true;
@@ -483,7 +480,6 @@ class ModelResidencyManager {
   /** Test helper. */
   _reset(): void {
     this.residents.clear();
-    this.residentRegistrations.clear();
     this.budgetOverrideMB = null;
     this.opChain = Promise.resolve();
     this.sessionOverrides.clear();

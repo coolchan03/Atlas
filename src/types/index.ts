@@ -1,21 +1,11 @@
-import type {
-  RecordProvenance,
-  SyncedAssistantTimelineEntry,
-  SyncedToolArtifact,
-  SyncedTurnStatus,
-} from '@offgrid/sync';
 // Model source and credibility types
-export type ModelSource =
-  | 'lmstudio'
-  | 'official'
-  | 'verified-quantizer'
-  | 'community';
+export type ModelSource = 'lmstudio' | 'official' | 'verified-quantizer' | 'community';
 
 export interface ModelCredibility {
   source: ModelSource;
-  isOfficial: boolean; // From the original model creator (Meta, Microsoft, etc.)
+  isOfficial: boolean;        // From the original model creator (Meta, Microsoft, etc.)
   isVerifiedQuantizer: boolean; // From trusted quantization providers (LM Studio, TheBloke, etc.)
-  verifiedBy?: string; // Who verified this (e.g., "LM Studio", "Original Author")
+  verifiedBy?: string;        // Who verified this (e.g., "LM Studio", "Original Author")
 }
 // Model-related types
 export interface ModelInfo {
@@ -59,31 +49,9 @@ export interface ModelFile {
 
 export type ModelEngine = 'llama' | 'litert';
 
-/**
- * Where a model's files actually came from, recorded at the moment we fetched them.
- *
- * The `id` on a model record is a DISPLAY key (`repo/file`). It was doing double duty as a remote
- * address - vision repair rebuilt a Hugging Face repo id by splitting it at its last slash - which
- * works only for models whose id happens to be a repo path. A model that arrived by device
- * transfer, or was imported from local storage, produced a repo id Hugging Face has never heard of,
- * and HF answers an unknown repo with 401, so the user was shown a raw auth error for a file that
- * was simply never from HF.
- *
- * Provenance is a fact we are told at download time. Record it then; never re-derive it later.
- */
-export interface ModelOrigin {
-  /** Hugging Face repo id, e.g. "ggml-org/SmolVLM-500M-Instruct-GGUF". */
-  repoId: string;
-  /**
-   * The commit the files came from. A projector fetched from `main` months after the weights can be
-   * a different build than the weights it must match, so repair pins the same revision.
-   */
-  revision: string;
-  /** Path of the primary file inside the repo. */
-  path: string;
-}
-
 interface DownloadedModelBase {
+  /** Atlas: 'sd' when the user moved the model to the SD card. */
+  storage?: 'sd';
   id: string;
   name: string;
   author: string;
@@ -93,8 +61,6 @@ interface DownloadedModelBase {
   quantization: string;
   downloadedAt: string;
   credibility?: ModelCredibility;
-  /** Absent for local imports (no upstream) and for records written before this field existed. */
-  origin?: ModelOrigin;
 }
 
 export interface LlamaDownloadedModel extends DownloadedModelBase {
@@ -103,6 +69,32 @@ export interface LlamaDownloadedModel extends DownloadedModelBase {
   mmProjPath?: string;
   mmProjFileName?: string;
   mmProjFileSize?: number;
+  /** Atlas: the user attached this vision file themselves (keep it even if the names don't match). */
+  mmProjManual?: boolean;
+  /** Atlas: an MTP (multi-token prediction / draft) file the user attached; the engine drafts tokens with it to speed up replies. */
+  draftPath?: string;
+  draftFileName?: string;
+  draftFileSize?: number;
+  /** Atlas: the model file has MTP layers built in (a hybrid MTP GGUF), so no separate MTP file is needed. */
+  embeddedMtp?: boolean;
+  /** Atlas: the picture file stays attached but is not started (text-only run, no projector memory). */
+  mmProjDisabled?: boolean;
+  /** Atlas: the MTP draft file stays attached but is not started. */
+  draftDisabled?: boolean;
+  /** Atlas: the user removed the picture file from this model; the folder scan must not attach it again. */
+  mmProjDetached?: boolean;
+  /** Atlas: same for the MTP draft file. */
+  draftDetached?: boolean;
+  /** Atlas: attachments set aside for later. The files stay on the phone; the model does not use them. */
+  archivedAttachments?: { vision?: ArchivedAttachment; draft?: ArchivedAttachment };
+}
+
+/** A picture (mmproj) or MTP file that is kept on the phone but not attached to its model. */
+export interface ArchivedAttachment {
+  path: string;
+  fileName: string;
+  fileSize?: number;
+  archivedAt: string;
 }
 
 export interface LiteRTDownloadedModel extends DownloadedModelBase {
@@ -150,13 +142,7 @@ export interface DownloadProgress {
 }
 
 // SoC detection types
-export type SoCVendor =
-  | 'qualcomm'
-  | 'mediatek'
-  | 'exynos'
-  | 'tensor'
-  | 'apple'
-  | 'unknown';
+export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
 export interface SoCInfo {
   vendor: SoCVendor;
   hasNPU: boolean;
@@ -205,28 +191,16 @@ export interface MediaAttachment {
   fileSize?: number; // documents: file size in bytes
   audioFormat?: 'wav' | 'mp3'; // audio attachments: format for model input
   audioDurationSeconds?: number; // audio attachments: recorded duration in seconds
-  /**
-   * The peer has NAMED this file and its bytes have not arrived.
-   *
-   * A synced file is announced before it is sent, and until now the bubble showed nothing at all in
-   * that gap - so a generated image on its way from another device was indistinguishable from one
-   * that was never coming. Everything needed to draw it is already in the announcement: the name,
-   * the size, the type and the dimensions. Only `uri` is empty, which is why it must not be read
-   * while this is true.
-   */
-  pending?: boolean;
 }
 
 // Generation metadata - details about how a message was generated
 export interface GenerationMeta {
-  /**
-   * Whether GPU was used for inference.
-   *
-   * Optional because a message SYNCED from another device carries the facts that travel (which tools
-   * it was offered) and none of the local ones - this device did not run that inference, so claiming
-   * gpu:false would be inventing a measurement.
-   */
-  gpu?: boolean;
+  /** Which learned lessons the reply was written with (General, and the matching expert). */
+  lessonsUsed?: string[];
+  /** Project-document excerpts the reply was written from, numbered 1 to n as the model saw them. */
+  sources?: Array<{ title: string; quote: string; file?: { path: string; name: string; size: number } }>;
+  /** Whether GPU was used for inference */
+  gpu: boolean;
   /** GPU backend name (e.g., 'Metal', 'CPU') */
   gpuBackend?: string;
   /** Number of GPU layers offloaded */
@@ -243,10 +217,6 @@ export interface GenerationMeta {
   timeToFirstToken?: number;
   /** Token count (text generation only) */
   tokenCount?: number;
-  contextPromptTokens?: number;
-  contextWindowTokens?: number;
-  /** Prompt count is estimated rather than provider-reported. */
-  contextEstimate?: boolean;
   /** Model load/init time in seconds */
   modelLoadTimeSeconds?: number;
   /** Image generation steps */
@@ -265,28 +235,13 @@ export interface GenerationMeta {
 // Chat-related types
 export interface Message {
   id: string;
-  /**
-   * Stable cross-device identity. Persisted messages always carry this; transient
-   * prompt-only messages may omit it because they never enter the sync log.
-   */
-  uuid?: string;
-  /** Immutable device attribution for portable Sync records. */
-  provenance?: RecordProvenance;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   /** Reasoning/thinking content parsed by llama.rn (separate from response content) */
   reasoningContent?: string;
-  /** Transient provider reasoning used to continue a remote tool-call round. */
-  reasoningDetails?: Array<Record<string, unknown>>;
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;
-  /** USER messages only: the modality this turn was DISPATCHED as, stamped when the router decides.
-   *  A resend replays this fact instead of re-deriving the turn's kind from whatever replies survived —
-   *  a cancelled image turn leaves only the "Enhanced prompt" reply and no image, and inferring from
-   *  that made the retry a TEXT turn (device-confirmed on Android and iOS). Absent on turns recorded
-   *  before this field existed; those still fall back to the reply scan. */
-  turnKind?: 'text' | 'image';
   /** Indicates this is a system info message (model loaded/unloaded, etc.) */
   isSystemInfo?: boolean;
   attachments?: MediaAttachment[];
@@ -298,18 +253,12 @@ export interface Message {
   toolCallId?: string;
   /** Tool calls made by the assistant */
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
-  /** Completed, display-only tool artifacts admitted from synced message context. */
-  toolArtifacts?: SyncedToolArtifact[];
-  /** Ordered reasoning and tool events carried by a synced assistant turn. */
-  timeline?: SyncedAssistantTimelineEntry[];
-  /** Terminal outcome for this turn, including a deliberate user stop. */
-  turnStatus?: SyncedTurnStatus;
   /** Tool name (for tool result messages) */
   toolName?: string;
   /** True when this assistant message was generated while interfaceMode === 'audio' */
   isAudioModeMessage?: boolean;
   /** Audio-mode message payload (saved voice note / synthesized clip): the on-disk audio
-   *  file path, a precomputed waveform envelope, and the clip duration. Read by the pro
+   *  file path, a precomputed waveform envelope, and the clip duration. Read by the voice
    *  audio UI (MessageAudioMode / AudioMessageBubble) and set by the TTS save path.
    *  Optional — only audio-mode messages carry them. (Distinct from the same-named field
    *  on MediaAttachment above, which describes an inbound audio attachment.) */
@@ -320,9 +269,9 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  /** Immutable device attribution for portable Sync records. */
-  provenance?: RecordProvenance;
   title: string;
+  /** True while the title is only the start of the first message (not renamed by the person, not named by the AI yet): the AI may name it. */
+  titleAuto?: boolean;
   modelId: string;
   messages: Message[];
   createdAt: string;
@@ -330,7 +279,25 @@ export interface Conversation {
   projectId?: string;
   compactionSummary?: string;
   compactionCutoffMessageId?: string;
+  /** Atlas private chat: never written to storage, gone when the app closes. */
+  isPrivate?: boolean;
+  isArchived?: boolean;
+  isPinned?: boolean;
+  agentId?: string | null;
+  /** Present only on an individually protected conversation; a salted PIN verifier. */
+  pinVerifier?: string;
+  /** The protected conversation body, encrypted with this chat's own Keystore key. */
+  protectedBlob?: string;
+  /** Atlas: extra instructions just for this chat (added under the agent and project instructions). */
+  instructions?: string;
+  /** Basic per-chat style. Explicit agent style rules have precedence. */
+  tonePreset?: import('../services/chatTone').ChatTonePreset;
+  /** Override the per-agent voice on this specific chat. */
+  voiceProfileId?: string;
+  /** Atlas: tools chosen for this chat only; unset = the agent's (or app's) default tools. */
+  enabledTools?: string[];
 }
+
 
 // Hugging Face API types
 export interface HFModelSearchResult {
@@ -365,6 +332,7 @@ interface HFModelFile {
   };
 }
 
+
 export interface ONNXImageModel {
   id: string;
   name: string;
@@ -373,7 +341,10 @@ export interface ONNXImageModel {
   downloadedAt: string;
   size: number;
   style?: string;
-  backend?: 'mnn' | 'qnn' | 'coreml';
+  backend?: 'mnn' | 'qnn' | 'coreml' | 'sdcpp';
+  nativeImageFamily?: 'sd15' | 'sdxl' | 'flux' | 'z_image' | 'anima' | 'chroma' | 'auraflow' | 'unknown';
+  nativeImageVariant?: 'base' | 'turbo';
+  supportFiles?: Array<{ kind: 'lora' | 'vae' | 'clip_l' | 't5xxl' | 'llm' | 'upscaler' | 'config'; name: string; path: string; size: number; enabled: boolean; strength: number }>;
   attentionVariant?: 'split_einsum' | 'original';
 }
 
@@ -385,20 +356,13 @@ export interface ONNXImageModel {
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
-
-/**
- * How a voice turn begins and ends. Re-exported from @offgrid/speech, which OWNS it - desktop renders
- * the same modes, so a second definition here is how the two would drift.
- *
- * Voice mode only. Chat dictation is someone typing with their voice - they pause to think, and the
- * recorder must wait for them - so it always behaves as 'tap' regardless of this.
- */
-export type { VoiceTurnMode } from '@offgrid/speech';
-export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
+export type InferenceBackend = 'auto' | 'cpu' | 'opencl' | 'vulkan' | 'htp' | 'metal';
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 export const INFERENCE_BACKENDS = {
+  AUTO: 'auto' as InferenceBackend,
   CPU: 'cpu' as InferenceBackend,
   OPENCL: 'opencl' as InferenceBackend,
+  VULKAN: 'vulkan' as InferenceBackend,
   HTP: 'htp' as InferenceBackend,
   METAL: 'metal' as InferenceBackend,
 } as const;
@@ -407,21 +371,9 @@ export type ImageModeState = 'auto' | 'force' | 'disabled';
 
 export interface GeneratedImage {
   id: string;
-  /** Immutable device attribution for portable Sync records. */
-  provenance?: RecordProvenance;
   prompt: string;
   negativePrompt?: string;
   imagePath: string;
-  /**
-   * The file's own name, as every device knows it. NEVER derived from `imagePath`.
-   *
-   * A received file is stored under `<syncId>-<name>` so two files with one name cannot collide, and
-   * that is a LOCAL convention. Taking the portable name from the local path let the convention onto
-   * the wire, so the name gained another syncId on every hop - `<id>-<id>-img.png` - until it would
-   * have passed what a filesystem accepts. Message attachments always carried this; generated images
-   * did not, which is why only they grew.
-   */
-  fileName?: string;
   width: number;
   height: number;
   steps: number;
@@ -440,6 +392,8 @@ export interface ImageGenerationParams {
   guidanceScale?: number;
   seed?: number;
   useOpenCL?: boolean;
+  /** Imported (sd.cpp) checkpoints: which engine runs the diffusion. */
+  computeBackend?: 'vulkan' | 'opencl' | 'cpu';
 }
 export interface ImageGenerationProgress {
   step: number;
@@ -447,9 +401,30 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 export interface Project {
+  /** The project this one is inside (a folder), when it is inside one. Its documents are searched along with this project's. */
+  parentId?: string;
+  /** The agent new chats in this project start with (a chat can still pick another). */
+  defaultAgentId?: string;
+  /** 'short' keeps answers in this project's chats brief (a token cap); anything else leaves the length to the agent. */
+  answerLength?: 'short' | 'normal';
+  /** Answers from this project's books quote the passage and name the document, and say when something is not in the books. */
+  citeBooks?: boolean;
+  isPinned?: boolean;
+  /** Present only on explicitly protected projects; a salted PIN verifier. */
+  pinVerifier?: string;
+  /** Encrypted project metadata. Its knowledge-base documents live in an encrypted vault file (protectedProjectVault). */
+  protectedBlob?: string;
+  /** Optional project-level permission flags; omitted means ask before suggesting or generating. */
+  allowLearningActivities?: boolean;
+  /** Legacy flags retained only for reading older project records. */
+  allowGames?: boolean;
+  allowQuizzes?: boolean;
+  allowPodcasts?: boolean;
+  /** A built-in course shown on the project page (the Learn a language project). */
+  course?: 'language';
+  /** What the project is for (school, work...): sets its starting instructions and quick starts. Omitted = general. */
+  kind?: 'general' | 'school' | 'work';
   id: string;
-  /** Immutable device attribution for portable Sync records. */
-  provenance?: RecordProvenance;
   name: string;
   description: string;
   systemPrompt: string;
@@ -461,7 +436,6 @@ export type BackgroundDownloadStatus =
   | 'pending'
   | 'running'
   | 'retrying'
-  | 'paused'
   | 'waiting_for_network'
   | 'completed'
   | 'failed'
@@ -502,11 +476,9 @@ export interface DebugInfo {
   originalMessageCount: number;
   managedMessageCount: number;
   truncatedCount: number;
-  formattedPrompt: string;
-  estimatedTokens: number;
-  maxContextLength: number;
-  contextUsagePercent: number;
+  formattedPrompt: string; estimatedTokens: number;
+  maxContextLength: number; contextUsagePercent: number;
 }
 // Remote server types
-export type { RemoteServer, RemoteModel, ServerTestResult, RemoteMediaModelIds, RemoteModelCategory, RemoteModelOption, RemoteModelCatalog } from './remoteServer';
-export { remoteServerCapabilities } from './remoteServer';
+export type { RemoteServer, RemoteModel, ServerTestResult } from './remoteServer';
+;

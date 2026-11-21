@@ -14,7 +14,6 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -59,6 +58,29 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 return false
             }
             return soc.startsWith("SM")
+        }
+
+        /**
+         * The Hexagon (HTP) generation of a known Snapdragon chip ("V73"), or null when the chip is not in this table. The libraries for the
+         * other generations are not needed on this phone and are not copied; an unknown chip gets every generation, as before.
+         */
+        internal fun htpVariantFor(soc: String?): String? = when (soc?.trim()?.uppercase()) {
+            "SM8350", "SM8350-AC", "SM7325", "SM7325-AE" -> "V68"
+            "SM8450", "SM8475" -> "V69"
+            "SM8550", "SM8635", "SM7675" -> "V73"
+            "SM8650" -> "V75"
+            "SM8750", "SM8750-AB" -> "V79"
+            "SM8850" -> "V81"
+            else -> null
+        }
+
+        private val HTP_GENERATION_FILE = Regex("""^libQnnHtpV(\d+)(?:Skel|Stub)?\.so$""")
+
+        /** Whether an asset under qnnlibs/ is needed on a phone with the given HTP generation (null: unknown, so every file is). */
+        internal fun needsQnnLib(fileName: String, variant: String?): Boolean {
+            if (variant == null) return true
+            val generation = HTP_GENERATION_FILE.matchEntire(fileName)?.groupValues?.get(1) ?: return true // shared libraries are always needed
+            return "V$generation" == variant
         }
 
         internal fun resolveModelDir(dir: File, isCpu: Boolean): File? {
@@ -214,10 +236,13 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     private var serverProcess: Process? = null
     private var currentModelPath: String? = null
     private var currentBackend: String? = null
+    private val directDiffusion = AtlasNativeDiffusion(reactApplicationContext)
+    private var directModelDir: File? = null
     private var isServerReady = false
     private val coroutineScope = CoroutineScope(Dispatchers.Default + Job())
     private var monitorJob: Job? = null
     private val generationCancelled = AtomicBoolean(false)
+    private val generationInProgress = AtomicBoolean(false)
     private var activeGenerationConnection: HttpURLConnection? = null
 
     override fun getName(): String = MODULE_NAME
@@ -251,8 +276,15 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
         try {
             val qnnLibs = reactApplicationContext.assets.list("qnnlibs")
+            val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else null
+            val variant = htpVariantFor(soc)
             qnnLibs?.forEach { fileName ->
                 val targetLib = File(runtimeDir, fileName)
+                // Another chip generation's libraries are neither copied nor kept (a copy left by an earlier version is removed to give the space back).
+                if (!needsQnnLib(fileName, variant)) {
+                    if (targetLib.exists() && targetLib.delete()) Log.d(TAG, "Removed unneeded $fileName ($soc uses $variant)")
+                    return@forEach
+                }
 
                 val needsCopy = !targetLib.exists() || run {
                     val assetInputStream = reactApplicationContext.assets.open("qnnlibs/$fileName")
@@ -304,6 +336,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         return when (requestedBackend?.lowercase()) {
             "mnn", "cpu" -> "mnn"
             "qnn", "npu" -> "qnn"
+            "sdcpp" -> "sdcpp"
             "auto", null, "" -> "auto"
             else -> "auto"
         }
@@ -334,19 +367,10 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     private suspend fun startWithFallback(
         modelPath: String, backend: String, modelDir: File, cpuModelDir: File?,
     ): StartResult {
-        val result = tryStartServer(modelPath, modelDir, backend, backend == "mnn")
-        if (result.success) return result
-
-        if (backend != "qnn" || cpuModelDir == null) return result
-
-        Log.w(TAG, "QNN backend failed (${result.error}), falling back to MNN/CPU")
-        stopServer()
-        val fallbackResult = tryStartServer(modelPath, cpuModelDir, "mnn", true)
-        if (fallbackResult.success) {
-            Log.i(TAG, "Successfully fell back to MNN/CPU backend")
-            return fallbackResult
-        }
-        return StartResult(false, "QNN failed: ${result.error}. MNN fallback also failed: ${fallbackResult.error}")
+        // Loading NPU weights must not silently launch the CPU/MNN runtime.
+        // Model format-specific GPU fallback can be implemented only when a
+        // compatible MNN checkpoint is deliberately selected and probed.
+        return tryStartServer(modelPath, modelDir, backend, backend == "mnn")
     }
 
     @ReactMethod
@@ -366,6 +390,23 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 }
 
                 val normalizedBackend = normalizeBackend(params)
+                if (normalizedBackend == "sdcpp") {
+                    if (!directDiffusion.available()) {
+                        safeReject(promise, "IMAGE_RUNTIME_MISSING", "Atlas native SDXL/FLUX image engine is missing from this APK")
+                        return@launch
+                    }
+                    if (!File(rawModelDir, "atlas-image.json").isFile) {
+                        safeReject(promise, "MODEL_FILES_NOT_FOUND", "Directly imported image model manifest is missing")
+                        return@launch
+                    }
+                    stopServer()
+                    directModelDir = rawModelDir
+                    currentModelPath = modelPath
+                    currentBackend = "sdcpp"
+                    isServerReady = true
+                    safeResolve(promise, true)
+                    return@launch
+                }
                 val (backend, modelDir) = resolveBackendAndDir(normalizedBackend, rawModelDir) ?: run {
                     val contents = rawModelDir.listFiles()?.map { it.name }?.joinToString(", ") ?: "empty"
                     safeReject(promise,
@@ -557,6 +598,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     }
 
     private fun stopServer() {
+        directDiffusion.cancel()
+        directModelDir = null
         monitorJob?.cancel()
         monitorJob = null
 
@@ -578,6 +621,214 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         isServerReady = false
     }
 
+    // =====================================================================
+    // Atlas: turn a Stable Diffusion 1.5 .safetensors checkpoint into a CPU/GPU (MNN) model on the phone.
+    // Same method as Local Dream: copy the checkpoint + template graphs (assets/cvtbase) into a folder
+    // and run the engine's --convert mode, which writes the weights into the templates.
+    // =====================================================================
+    private val converting = AtomicBoolean(false)
+
+    private fun convertEvent(stage: String, fraction: Double, line: String? = null) {
+        val m = Arguments.createMap()
+        m.putString("stage", stage)
+        m.putDouble("fraction", fraction)
+        if (line != null) m.putString("line", line)
+        try { sendEvent("LocalDreamConvert", m) } catch (_: Exception) { }
+    }
+
+    @ReactMethod
+    fun inspectAtlasImageFile(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val info = AtlasImageFiles.inspect(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("fileName") ?: "")
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("kind", info.getString("kind"))
+                    putString("family", info.getString("family"))
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "INVALID_IMAGE_FILE", e.message ?: "Cannot inspect image model", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun importAtlasImageFile(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val info = AtlasImageFiles.importPrimary(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("modelDir") ?: "",
+                    params.getString("fileName") ?: "") { p -> convertEvent("copy", p) }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("modelDir", info.getString("modelDir"))
+                    putString("family", info.getString("family"))
+                    putString("variant", info.getString("variant"))
+                    putDouble("size", info.getDouble("size"))
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_IMPORT_FAILED", e.message ?: "Cannot import image model", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun attachAtlasImageSupport(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) throw IOException(
+                    "Finish or cancel image generation before replacing support files")
+                val support = AtlasImageFiles.attach(reactApplicationContext,
+                    params.getString("uri") ?: "", params.getString("modelDir") ?: "",
+                    params.getString("fileName") ?: "", params.getString("kind") ?: "",
+                    if (params.hasKey("strength")) params.getDouble("strength") else 0.75
+                ) { p -> convertEvent("copy", p) }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putString("kind", support.getString("kind"))
+                    putString("name", support.getString("name"))
+                    putString("path", support.getString("path"))
+                    putDouble("size", support.getDouble("size"))
+                    putDouble("strength", support.getDouble("strength"))
+                    putBoolean("enabled", true)
+                })
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_SUPPORT_FAILED", e.message ?: "Cannot attach image support", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun extractImageZip(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val archive = params.getString("zipPath") ?: throw IOException("zipPath is missing")
+                val modelDir = params.getString("modelDir") ?: throw IOException("modelDir is missing")
+                var last = 0L
+                val result = AtlasZipExtractor.extract(reactApplicationContext, archive, modelDir) { count, bytes ->
+                    if (bytes - last >= 16L * 1024 * 1024) {
+                        last = bytes
+                        convertEvent("extract", -1.0, "Extracted $count files")
+                    }
+                }
+                safeResolve(promise, Arguments.createMap().apply {
+                    putInt("files", result.files)
+                    putDouble("bytes", result.bytes.toDouble())
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "extractImageZip failed", e)
+                safeReject(promise, "IMAGE_UNZIP_FAILED", e.message ?: "Cannot extract image ZIP", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun isAtlasNativeDiffusionAvailable(promise: Promise) {
+        safeResolve(promise, directDiffusion.available())
+    }
+
+    @ReactMethod
+    fun modifyAtlasImageSupport(params: ReadableMap, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) throw IOException(
+                    "Finish or cancel image generation before changing support files")
+                AtlasImageFiles.modify(reactApplicationContext,
+                    params.getString("modelDir") ?: "",
+                    params.getString("kind") ?: "",
+                    params.getString("name") ?: "",
+                    params.hasKey("delete") && params.getBoolean("delete"),
+                    !params.hasKey("enabled") || params.getBoolean("enabled"),
+                    if (params.hasKey("strength")) params.getDouble("strength") else 0.75)
+                safeResolve(promise, true)
+            } catch (e: Exception) {
+                safeReject(promise, "IMAGE_SUPPORT_UPDATE_FAILED", e.message ?: "Cannot update support file", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun convertCheckpoint(params: ReadableMap, promise: Promise) {
+        val src = params.getString("uri") ?: return safeReject(promise, "BAD_ARGS", "No file")
+        val outDir = params.getString("modelDir") ?: return safeReject(promise, "BAD_ARGS", "No folder")
+        val clipSkip2 = params.hasKey("clipSkip2") && params.getBoolean("clipSkip2")
+        if (!converting.compareAndSet(false, true)) return safeReject(promise, "BUSY", "Already converting a model")
+        coroutineScope.launch(Dispatchers.IO) {
+            val dir = File(outDir)
+            try {
+                if (dir.exists()) dir.deleteRecursively()
+                dir.mkdirs()
+                val ctx = reactApplicationContext
+                val uri = android.net.Uri.parse(if (src.startsWith("/")) "file://$src" else src)
+                val total = try { ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L } catch (_: Exception) { -1L }
+                val free = dir.usableSpace
+                if (total > 0 && free < total * 2 + 300L * 1024 * 1024) {
+                    throw IOException("Not enough free space: needs about ${(total * 2) / (1024 * 1024)} MB, ${free / (1024 * 1024)} MB free.")
+                }
+                convertEvent("copy", 0.0)
+                val target = File(dir, "model.safetensors")
+                (ctx.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the file")).use { input ->
+                    FileOutputStream(target).use { out ->
+                        val buf = ByteArray(1 shl 20)
+                        var done = 0L; var last = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            if (total > 0 && done - last > 32L * 1024 * 1024) { last = done; convertEvent("copy", done.toDouble() / total) }
+                        }
+                    }
+                }
+                ctx.assets.list("cvtbase")?.forEach { name ->
+                    ctx.assets.open("cvtbase/$name").use { i -> FileOutputStream(File(dir, name)).use { o -> i.copyTo(o) } }
+                }
+                File(dir, if (clipSkip2) "clip_skip_2.mnn" else "clip_skip_1.mnn").copyTo(File(dir, "clip_v2.mnn"), overwrite = true)
+                val nativeDir = ctx.applicationInfo.nativeLibraryDir
+                val exe = File(nativeDir, EXECUTABLE_NAME)
+                if (!exe.exists()) throw IOException("Image engine not found")
+                val cmd = mutableListOf(exe.absolutePath, "--convert", dir.absolutePath)
+                if (clipSkip2) cmd.add("--clip_skip_2")
+                convertEvent("convert", 0.0)
+                val pb = ProcessBuilder(cmd).apply {
+                    directory(File(nativeDir))
+                    redirectErrorStream(true)
+                    environment()["LD_LIBRARY_PATH"] = listOf(nativeDir, "/system/lib64", "/vendor/lib64", "/vendor/lib64/egl").joinToString(":")
+                    environment()["DSP_LIBRARY_PATH"] = nativeDir
+                }
+                val proc = pb.start()
+                val tail = ArrayDeque<String>()
+                proc.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { l ->
+                        Log.i(TAG, "convert: $l")
+                        tail.addLast(l); if (tail.size > 6) tail.removeFirst()
+                        convertEvent("convert", -1.0, l.take(160))
+                    }
+                }
+                val code = proc.waitFor()
+                if (code != 0 || !File(dir, "finished").exists()) {
+                    val reason = when (code) {
+                        134 -> "Image converter aborted (code 134 / SIGABRT). This may be an unsupported checkpoint architecture, a LoRA/add-on supplied as a full model, or native memory exhaustion."
+                        137 -> "Image converter was killed (code 137). Check available RAM and close other applications."
+                        else -> "Image conversion failed (exit code $code). This importer currently only accepts complete Stable Diffusion 1.5 checkpoints."
+                    }
+                    throw IOException("$reason Converter output: ${tail.joinToString(" | ").take(1000)}")
+                }
+                listOf("model.safetensors", "clip_skip_1.mnn", "clip_skip_2.mnn").forEach { File(dir, it).delete() }
+                val size = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                convertEvent("done", 1.0)
+                val res = Arguments.createMap()
+                res.putString("modelDir", dir.absolutePath)
+                res.putDouble("size", size.toDouble())
+                safeResolve(promise, res)
+            } catch (e: Exception) {
+                Log.e(TAG, "convertCheckpoint failed", e)
+                try { dir.deleteRecursively() } catch (_: Exception) { }
+                safeReject(promise, "CONVERT_FAILED", e.message ?: "Conversion failed", e)
+            } finally {
+                converting.set(false)
+            }
+        }
+    }
+
     @ReactMethod
     fun unloadModel(promise: Promise) {
         try {
@@ -590,7 +841,8 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun isModelLoaded(promise: Promise) {
-        safeResolve(promise, serverProcess?.isAlive == true && isServerReady)
+        safeResolve(promise, (currentBackend == "sdcpp" && directModelDir?.isDirectory == true) ||
+            (serverProcess?.isAlive == true && isServerReady))
     }
 
     @ReactMethod
@@ -599,17 +851,63 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getLoadedBackend(promise: Promise) {
+        safeResolve(promise, currentBackend)
+    }
+
+    @ReactMethod
     fun isGenerating(promise: Promise) {
-        safeResolve(promise, activeGenerationConnection != null)
+        safeResolve(promise, generationInProgress.get())
+    }
+
+    /** Read-only status for the native image test screen, safe during generation. */
+    @ReactMethod
+    fun getAtlasImageRuntimeStatus(promise: Promise) {
+        safeResolve(promise, directDiffusion.status())
+    }
+
+    /** Check GPU hardware and native Vulkan enumeration before loading weights. */
+    @ReactMethod
+    fun getAtlasImageGpuDiagnostics(promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) {
+                    throw IOException("Finish or cancel image generation before probing the GPU")
+                }
+                safeResolve(promise, directDiffusion.probeGpu())
+            } catch (e: Exception) {
+                safeReject(promise, "ATLAS_GPU_PROBE_FAILED",
+                    e.message ?: "Vulkan diagnostic check failed", e)
+            }
+        }
+    }
+
+    /** Same check for a chosen GPU API: "vulkan" or "opencl". */
+    @ReactMethod
+    fun getAtlasImageGpuDiagnosticsFor(api: String, promise: Promise) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                if (generationInProgress.get()) {
+                    throw IOException("Finish or cancel image generation before probing the GPU")
+                }
+                safeResolve(promise, directDiffusion.probeGpu(if (api == "opencl") "opencl" else "vulkan"))
+            } catch (e: Exception) {
+                safeReject(promise, "ATLAS_GPU_PROBE_FAILED",
+                    e.message ?: "GPU diagnostic check failed", e)
+            }
+        }
     }
 
     @ReactMethod
     fun cancelGeneration(promise: Promise) {
         generationCancelled.set(true)
+        directDiffusion.cancel()
         activeGenerationConnection?.let {
             try { it.disconnect() } catch (_: Exception) {}
         }
-        activeGenerationConnection = null
+        // Do not clear the connection reference here. The owning generation's
+        // finally block clears only its own connection, preventing an old
+        // cancelled request from wiping a newer request's connection.
         safeResolve(promise, true)
     }
 
@@ -646,6 +944,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         put("height", if (params.hasKey("height")) params.getInt("height") else 512)
         put("scheduler", "dpm")
         put("show_diffusion_process", true)
+        put("use_opencl", if (params.hasKey("useOpenCL")) params.getBoolean("useOpenCL") else true)
         put("show_diffusion_stride", if (params.hasKey("previewInterval")) params.getInt("previewInterval") else 2)
     }
 
@@ -657,7 +956,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "text/event-stream")
             connectTimeout = 10000
-            readTimeout = 0 // Wait for generation or explicit cancellation, however long it takes.
+            readTimeout = 600000
         }
     }
 
@@ -789,21 +1088,41 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun generateImage(params: ReadableMap, promise: Promise) {
         coroutineScope.launch(Dispatchers.IO) {
-            if (!isServerReady || serverProcess?.isAlive != true) {
-                safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
-                return@launch
-            }
-            if (!checkServerHealth()) {
-                isServerReady = false
-                safeReject(promise, "SERVER_NOT_READY",
-                    "Server process is not responsive. Try unloading and reloading the model.")
+            if (!generationInProgress.compareAndSet(false, true)) {
+                safeReject(promise, "BUSY", "Image generation already in progress")
                 return@launch
             }
 
-            generationCancelled.set(false)
             var connection: HttpURLConnection? = null
-
             try {
+                if (currentBackend == "sdcpp") {
+                    val modelDir = directModelDir
+                        ?: throw IOException("No directly imported image model is loaded")
+                    generationCancelled.set(false)
+                    val result = directDiffusion.generate(modelDir.absolutePath, params,
+                        { generationCancelled.get() }, { step, total ->
+                            val m = Arguments.createMap()
+                            m.putInt("step", step)
+                            m.putInt("totalSteps", total)
+                            m.putDouble("progress", if (total > 0) step.toDouble() / total else 0.0)
+                            directDiffusion.latestPreview()?.let { m.putString("previewPath", it) }
+                            sendEvent(EVENT_PROGRESS, m)
+                        })
+                    safeResolve(promise, result)
+                    return@launch
+                }
+                if (!isServerReady || serverProcess?.isAlive != true) {
+                    safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
+                    return@launch
+                }
+                if (!checkServerHealth()) {
+                    isServerReady = false
+                    safeReject(promise, "SERVER_NOT_READY",
+                        "Server process is not responsive. Try unloading and reloading the model.")
+                    return@launch
+                }
+
+                generationCancelled.set(false)
                 val body = buildGenerationBody(params)
                 Log.d(TAG, "Starting generation: ${body.toString().take(200)}...")
 
@@ -831,8 +1150,11 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             } catch (e: Exception) {
                 handleGeneralException(e, promise)
             } finally {
-                activeGenerationConnection = null
+                if (activeGenerationConnection === connection) {
+                    activeGenerationConnection = null
+                }
                 connection?.disconnect()
+                generationInProgress.set(false)
             }
         }
     }
@@ -906,13 +1228,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                     putString("id", file.nameWithoutExtension)
                     putString("imagePath", file.absolutePath)
                     putDouble("size", file.length().toDouble())
-                    // ISO-8601, matching iOS and the screenshot watcher. Epoch milliseconds as text
-                    // satisfies the TypeScript `string` and nothing else: every sync peer reads this
-                    // with Date.parse, which answers NaN, and refuses the file.
-                    putString(
-                        "createdAt",
-                        Instant.ofEpochMilli(file.lastModified()).toString(),
-                    )
+                    putString("createdAt", file.lastModified().toString())
                 }
                 images.pushMap(imageMap)
             }

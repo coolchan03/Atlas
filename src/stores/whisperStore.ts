@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { whisperService, WHISPER_MODELS } from '../services/whisperService';
 import { modelResidencyManager } from '../services/modelResidency';
 import logger from '../utils/logger';
-import { createHydrationGatedStorage } from '../utils/hydrationGatedStorage';
 
 /**
  * Outcome of a whisper load, so callers can tell WHY it didn't load:
@@ -36,12 +36,9 @@ interface WhisperState {
   isModelLoading: boolean;
   isModelLoaded: boolean;
   error: string | null;
-  /** Language passed to every realtime and file transcription. */
-  transcriptionLanguage: string;
 
   // Actions
   downloadModel: (modelId: string) => Promise<void>;
-  cancelDownload: (modelId: string) => Promise<void>;
   /** Activate an already-downloaded model without re-downloading. */
   selectModel: (modelId: string) => Promise<void>;
   loadModel: () => Promise<WhisperLoadResult>;
@@ -52,10 +49,7 @@ interface WhisperState {
   /** Re-probe which models are present on disk. */
   refreshPresentModels: () => Promise<void>;
   clearError: () => void;
-  setTranscriptionLanguage: (language: string) => void;
 }
-
-type PersistedWhisperState = Pick<WhisperState, 'downloadedModelId' | 'transcriptionLanguage'>;
 
 type SetState = (partial: Partial<WhisperState> | ((s: WhisperState) => Partial<WhisperState>)) => void;
 
@@ -74,8 +68,6 @@ function clearProgress(set: SetState, modelId: string): void {
   });
 }
 
-const whisperStorage = createHydrationGatedStorage<PersistedWhisperState>();
-
 export const useWhisperStore = create<WhisperState>()(
   persist(
     (set, get) => ({
@@ -85,7 +77,6 @@ export const useWhisperStore = create<WhisperState>()(
       isModelLoading: false,
       isModelLoaded: false,
       error: null,
-      transcriptionLanguage: 'en',
 
       downloadModel: async (modelId: string) => {
         setProgress(set, modelId, 0);
@@ -96,12 +87,8 @@ export const useWhisperStore = create<WhisperState>()(
             setProgress(set, modelId, progress);
           });
 
-          const downloadedPath = whisperService.getModelPath(modelId);
           set((s) => ({
             downloadedModelId: modelId,
-            // Download selects the model but does not load it. If a different
-            // context is resident, do not project that old context as ready.
-            isModelLoaded: whisperService.getLoadedModelPath() === downloadedPath,
             presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
           }));
 
@@ -125,14 +112,6 @@ export const useWhisperStore = create<WhisperState>()(
         }
       },
 
-      cancelDownload: async (modelId: string) => {
-        try {
-          await whisperService.deleteModel(modelId);
-        } finally {
-          clearProgress(set, modelId);
-        }
-      },
-
       loadModel: async (): Promise<WhisperLoadResult> => {
         const { downloadedModelId, isModelLoading } = get();
         if (!downloadedModelId) {
@@ -142,8 +121,7 @@ export const useWhisperStore = create<WhisperState>()(
 
         // Prevent multiple simultaneous load attempts
         if (isModelLoading) {
-          const selectedPath = whisperService.getModelPath(downloadedModelId);
-          return whisperService.getLoadedModelPath() === selectedPath ? 'loaded' : 'error';
+          return get().isModelLoaded ? 'loaded' : 'error';
         }
 
         set({ isModelLoading: true, error: null });
@@ -176,14 +154,10 @@ export const useWhisperStore = create<WhisperState>()(
             );
             return true;
           });
-          const selectedModelIsLoaded = loaded &&
-            get().downloadedModelId === downloadedModelId &&
-            whisperService.getLoadedModelPath() === modelPath;
-          set({ isModelLoaded: selectedModelIsLoaded, isModelLoading: false, error: null });
+          set({ isModelLoaded: loaded, isModelLoading: false, error: null });
           // loaded=false means the single-model rule blocked it (not a failure) —
           // report 'blocked' so a caller can free the resident model and retry.
-          if (selectedModelIsLoaded) return 'loaded';
-          return loaded ? 'error' : 'blocked';
+          return loaded ? 'loaded' : 'blocked';
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state
@@ -231,13 +205,8 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       selectModel: async (modelId: string) => {
-        const modelPath = whisperService.getModelPath(modelId);
-        const selectedModelIsLoaded = whisperService.getLoadedModelPath() === modelPath;
-        if (get().downloadedModelId === modelId && selectedModelIsLoaded) {
-          set({ isModelLoaded: true, error: null });
-          return;
-        }
-        set({ downloadedModelId: modelId, isModelLoaded: selectedModelIsLoaded, error: null });
+        if (get().downloadedModelId === modelId && get().isModelLoaded) return;
+        set({ downloadedModelId: modelId, error: null });
         await get().loadModel();
       },
 
@@ -255,8 +224,10 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       refreshPresentModels: async () => {
-        const present = (await whisperService.listDownloadedModels())
-          .map(model => model.modelId);
+        const present: string[] = [];
+        for (const m of WHISPER_MODELS) {
+          if (await whisperService.isModelDownloaded(m.id)) present.push(m.id);
+        }
         // Reconcile the active pointer against disk too. Deleting from the
         // Download Manager goes through whisperService directly (bypassing this
         // store), so downloadedModelId can point at a model whose file is gone —
@@ -273,18 +244,12 @@ export const useWhisperStore = create<WhisperState>()(
       clearError: () => {
         set({ error: null });
       },
-
-      setTranscriptionLanguage: (transcriptionLanguage: string) => {
-        set({ transcriptionLanguage });
-      },
     }),
     {
       name: 'local-llm-whisper-storage',
-      storage: whisperStorage.storage,
-      onRehydrateStorage: () => () => whisperStorage.markHydrated(),
-      partialize: (state): PersistedWhisperState => ({
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
         downloadedModelId: state.downloadedModelId,
-        transcriptionLanguage: state.transcriptionLanguage,
       }),
     }
   )

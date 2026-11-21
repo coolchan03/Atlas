@@ -82,13 +82,6 @@ function reattach(downloadId: string): void {
 export const textProvider: DownloadProvider = {
   modelType: 'text',
 
-  async start(request): Promise<void> {
-    if (request.modelType !== 'text') throw new Error('Invalid text download request');
-    await startModelDownload(request.modelId, request.file, {
-      autoSelectIfEmpty: true,
-    });
-  },
-
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
     for (const e of textEntries()) {
@@ -97,7 +90,7 @@ export const textProvider: DownloadProvider = {
         sizeBytes: e.combinedTotalBytes || e.totalBytes,
         bytesDownloaded: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: { ...TEXT_CAPABILITIES, pause: isActiveStatus(e.status) && e.status !== 'processing', resume: e.status === 'paused' }, error: e.errorMessage,
+        capabilities: TEXT_CAPABILITIES, error: e.errorMessage,
       });
     }
     const inflight = new Set(out.map(d => d.id));
@@ -111,29 +104,6 @@ export const textProvider: DownloadProvider = {
       });
     }
     return out;
-  },
-
-  async pause(id: string): Promise<void> {
-    const entry = findEntry(keyOf(id));
-    if (!entry) return;
-    await backgroundDownloadService.pauseDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
-    if (entry.mmProjDownloadId && isActiveStatus(entry.mmProjStatus ?? 'completed')) {
-      await backgroundDownloadService.pauseDownload(entry.mmProjDownloadId);
-      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'paused');
-    }
-  },
-
-  async resume(id: string): Promise<void> {
-    const entry = findEntry(keyOf(id));
-    if (!entry) return;
-    await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
-    if (entry.mmProjDownloadId && entry.mmProjStatus === 'paused') {
-      await backgroundDownloadService.resumeDownload(entry.mmProjDownloadId);
-      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'running');
-    }
-    backgroundDownloadService.startProgressPolling();
   },
 
   async cancel(id: string): Promise<void> {
@@ -187,9 +157,8 @@ export const textProvider: DownloadProvider = {
         .catch(err => logger.log(`[DL-SM] ${id} remove: mmproj native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    // Disk is the first durable owner. Do not remove the registry row when deletion fails: doing so
-    // makes the UI claim success while startup discovery registers the same bytes again.
-    await modelManager.deleteModel(key);
+    await modelManager.deleteModel(key)
+      .catch(err => logger.log(`[DL-SM] ${id} remove: delete failed err=${msg(err)}`));
     useAppStore.getState().removeDownloadedModel(key);
   },
 
@@ -213,9 +182,7 @@ export const textProvider: DownloadProvider = {
       sha256: params.sha256,
       ...(mmProjFile ? { mmProjFile } : {}),
     };
-    await startModelDownload(params.modelId, file, {
-      autoSelectIfEmpty: true,
-    });
+    await startModelDownload(params.modelId, file);
   },
 
   async reconcile(): Promise<void> {

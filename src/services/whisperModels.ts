@@ -38,15 +38,9 @@ export function cleanTranscription(raw: string): string {
   const stripped = raw
     .replace(/\[[^\]]*\]/g, ' ') // [BLANK_AUDIO], [ Silence ], [MUSIC]
     .replace(/\([^)]*\)/g, ' ')  // (silence), (speaking foreign language)
-    .split(/\r?\n/)
-    .map(line => line.replace(/[^\S\r\n]+/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n')
+    .replace(/\s+/g, ' ')
     .trim();
   // Only markers / punctuation left → no real speech.
-  // Unicode letters/numbers are speech too. The old Latin-only check discarded
-  // valid Hindi, Japanese, Korean, Arabic, and other non-Latin transcripts as
-  // if they were silence.
-  if (!/[\p{L}\p{N}]/u.test(stripped)) return '';
+  if (!/[a-z0-9]/i.test(stripped)) return '';
   return stripped;
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,37 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useChatOptions } from '../components/ChatOptions';
+import { useChatPrefs, useVaultSession, visibleConversations } from '../atlasTools/chatPrefs';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
-import { formatWhen } from '../utils/localTime';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { isChatUnlocked } from '../stores/encryptedChatStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
-import { byRecentActivity } from '../utils/conversationOrdering';
-import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
+import { useActiveTextModel } from '../hooks/useActiveTextModel';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectChats'>;
 
-const formatDate = (dateString: string): string => formatWhen(dateString);
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' });
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
@@ -148,7 +161,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
 });
 
 export const ProjectChatsScreen: React.FC = () => {
-  const previewLine = useConversationPreviewLine();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { projectId } = route.params;
@@ -156,21 +168,21 @@ export const ProjectChatsScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const project = useProjectStore(state => state.projects.find(p => p.id === projectId));
-  const conversations = useChatStore(state => state.conversations);
-  const deleteConversation = useChatStore(state => state.deleteConversation);
-  const setActiveConversation = useChatStore(state => state.setActiveConversation);
-  const createConversation = useChatStore(state => state.createConversation);
-  const downloadedModels = useAppStore(state => state.downloadedModels);
-  const activeModelId = useAppStore(state => state.activeModelId);
+  const { getProject } = useProjectStore();
+  const { conversations, setActiveConversation, createConversation } = useChatStore();
+  const hideLocked = useChatPrefs(s => s.hideLockedChats);
+  const vaultOpen = useVaultSession(s => s.open);
+  const { downloadedModels, activeModelId } = useAppStore();
 
-  const hasModels = downloadedModels.length > 0;
+  const project = getProject(projectId);
+  // A connected remote model (Ollama, LM Studio...) counts, as it does on Home and in the chat list.
+  const { modelId: activeTextModelId } = useActiveTextModel();
+  const hasModels = downloadedModels.length > 0 || !!activeTextModelId;
 
   // Get chats for this project
-  const projectChats = useMemo(
-    () => byRecentActivity(conversations.filter(c => c.projectId === projectId)),
-    [conversations, projectId],
-  );
+  const projectChats = visibleConversations(conversations, hideLocked, vaultOpen)
+    .filter((c) => c.projectId === projectId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -182,49 +194,28 @@ export const ProjectChatsScreen: React.FC = () => {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = activeTextModelId || activeModelId || downloadedModels[0]?.id;
     if (modelId) {
-      const newConversationId = createConversation(modelId, undefined, projectId);
-      navigation.navigate('Chat', { conversationId: newConversationId, projectId });
+      try {
+        const newConversationId = createConversation(modelId, undefined, projectId);
+        navigation.navigate('Chat', { conversationId: newConversationId, projectId });
+      } catch (e) {
+        // A locked protected project refuses new chats until it is unlocked.
+        setAlertState(showAlert('Protected project', e instanceof Error ? e.message : String(e)));
+      }
     }
   };
 
-  const handleDeleteChat = (conversation: Conversation) => {
-    setAlertState(showAlert(
-      'Delete Chat',
-      `Delete "${conversation.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteConversation(conversation.id),
-        },
-      ]
-    ));
-  };
-
-  const renderChatRightActions = (conversation: Conversation) => (
-    <TouchableOpacity
-      style={styles.deleteAction}
-      onPress={() => handleDeleteChat(conversation)}
-    >
-      <Icon name="trash-2" size={16} color={colors.error} />
-    </TouchableOpacity>
-  );
+  const chatOptions = useChatOptions();
 
   const renderChat = ({ item }: { item: Conversation }) => {
-    const preview = previewLine(item.messages);
+    const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <Swipeable
-        renderRightActions={() => renderChatRightActions(item)}
-        overshootRight={false}
-        containerStyle={styles.swipeableContainer}
-      >
         <TouchableOpacity
           style={styles.chatItem}
           onPress={() => handleChatPress(item)}
+          onLongPress={() => chatOptions.open(item)}
         >
           <View style={styles.chatIcon}>
             <Icon name="message-circle" size={14} color={colors.textMuted} />
@@ -232,26 +223,25 @@ export const ProjectChatsScreen: React.FC = () => {
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.title}
+                {item.pinVerifier && !isChatUnlocked(item.id) ? 'Locked conversation' : item.title}
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {preview ? (
+            {item.pinVerifier && !isChatUnlocked(item.id) ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {preview}
+                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
               </Text>
-            ) : null}
+            )}
           </View>
           <Icon name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>
-      </Swipeable>
     );
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity accessibilityLabel="Go back" onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -259,7 +249,7 @@ export const ProjectChatsScreen: React.FC = () => {
             {project?.name || 'Chats'}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleNewChat} style={styles.addButton} disabled={!hasModels}>
+        <TouchableOpacity accessibilityLabel="New chat" onPress={handleNewChat} style={styles.addButton} disabled={!hasModels}>
           <Icon name="plus" size={20} color={hasModels ? colors.primary : colors.textMuted} />
         </TouchableOpacity>
       </View>
@@ -295,6 +285,7 @@ export const ProjectChatsScreen: React.FC = () => {
         />
       )}
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
+      {chatOptions.element}
     </SafeAreaView>
   );
 };

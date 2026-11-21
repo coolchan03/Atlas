@@ -11,6 +11,7 @@
  */
 
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
+import { recordSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
@@ -60,6 +61,7 @@ interface LiteRTGenerationCallbacks {
 
 class LiteRTService {
   private loaded = false;
+  private loadedModelPath: string | null = null;
   private modelSupportsAudio = false;
   private activeBackend: LiteRTBackend | null = null;
   private readonly emitter: NativeEventEmitter | null = null;
@@ -100,9 +102,6 @@ class LiteRTService {
 
   async loadModel(modelPath: string, preferredBackend: LiteRTBackend, opts: { supportsVision?: boolean; supportsAudio?: boolean; maxNumTokens?: number } = {}): Promise<void> {
     if (!this.isAvailable()) throw new Error('LiteRT is not available on this platform');
-    // NPU was exposed in a test build, but is not part of this release.
-    // Keep saved selections usable without attempting an unsupported native load.
-    if (preferredBackend === 'npu') preferredBackend = 'gpu';
     const { supportsVision = false, supportsAudio = false, maxNumTokens = 4096 } = opts;
     this.configuredMaxTokens = maxNumTokens;
     logger.log(TAG, `loadModel — path=${modelPath} backend=${preferredBackend} supportsVision=${supportsVision} supportsAudio=${supportsAudio} maxNumTokens=${maxNumTokens}`);
@@ -124,10 +123,12 @@ class LiteRTService {
       }
       this.activeBackend = actualBackend as LiteRTBackend;
       this.loaded = true;
+      this.loadedModelPath = modelPath;
       this.modelSupportsAudio = supportsAudio;
       logger.log(TAG, `loadModel — loaded on ${this.activeBackend}`);
     } catch (e) {
       this.loaded = false;
+      this.loadedModelPath = null;
       this.activeBackend = null;
       this.modelSupportsAudio = false;
       logger.log(TAG, `loadModel — failed: ${String(e)}`);
@@ -307,7 +308,6 @@ class LiteRTService {
     const sendStart = Date.now();
     let firstTokenTime: number | undefined;
     let jsDecodeTokenCount = 0;
-    const __wire: Array<{ ch: string; t: string }> = []; // [WIRE] raw per-event capture from-device
 
     // Register event listeners for this generation
     this.clearSubscriptions();
@@ -315,20 +315,16 @@ class LiteRTService {
       this.emitter!.addListener(EVENT_TOKEN, (token: string) => {
         firstTokenTime ??= Date.now();
         jsDecodeTokenCount++;
-        if (__wire.length < 500) __wire.push({ ch: 'token', t: token }); // [WIRE]
         this.currentContent += token;
         callbacks.onToken(token);
       }),
       this.emitter!.addListener(EVENT_THINKING, (token: string) => {
         firstTokenTime ??= Date.now();
-        if (__wire.length < 500) __wire.push({ ch: 'thinking', t: token }); // [WIRE]
         this.currentReasoning += token;
         callbacks.onReasoning(token);
       }),
       this.emitter!.addListener(EVENT_COMPLETE, (benchmarkJson: string) => {
         logger.log(TAG, `sendMessage — complete, content=${this.currentContent.length} chars`);
-        // [WIRE] Full raw event stream + accumulated content/reasoning, for real-format fixtures.
-        logger.log(`[WIRE-LITERT] ${JSON.stringify({ stream: __wire, content: this.currentContent, reasoning: this.currentReasoning })}`);
         this.clearSubscriptions();
 
         this.currentToolCallHandler = null;
@@ -372,6 +368,8 @@ class LiteRTService {
           initTimeSeconds: 0,
         };
 
+        if (ttft && ttft > 0 && wallClockStats.prefillTokenCount > 0) wallClockStats.prefillTokensPerSecond = wallClockStats.prefillTokenCount / ttft;
+        recordSpeed({ decode: wallClockStats.decodeTokensPerSecond, prefill: wallClockStats.prefillTokensPerSecond, promptTokens: wallClockStats.prefillTokenCount, outLen: wallClockStats.decodeTokenCount || jsDecodeTokenCount });
         callbacks.onComplete(this.currentContent, this.currentReasoning, wallClockStats);
       }),
       this.emitter!.addListener(EVENT_ERROR, (message: string) => {
@@ -382,8 +380,8 @@ class LiteRTService {
         callbacks.onError(new Error(message));
       }),
       this.emitter!.addListener(EVENT_TOOL_CALL, async (json: string) => {
-        logger.log(TAG, `sendMessage — tool call received: ${json.substring(0, 200)}`);
-        logger.log(`[WIRE-LITERT-TOOL] ${json}`); // [WIRE] full untruncated raw litert tool_call json from-device
+        // Never log tool arguments: they can contain message text or file contents.
+        logger.log(TAG, `sendMessage — tool call received (${json.length} chars)`);
         try {
           const { id, name, arguments: args } = JSON.parse(json) as {
             id: string;
@@ -514,6 +512,7 @@ class LiteRTService {
       logger.log(TAG, `unloadModel — error (ignored): ${String(e)}`);
     } finally {
       this.loaded = false;
+      this.loadedModelPath = null;
       this.modelSupportsAudio = false;
       this.activeBackend = null;
     }
@@ -525,6 +524,10 @@ class LiteRTService {
 
   isModelLoaded(): boolean {
     return this.loaded;
+  }
+
+  getLoadedModelPath(): string | null {
+    return this.loaded ? this.loadedModelPath : null;
   }
 
   isNPU(): boolean {

@@ -1,78 +1,71 @@
+
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import RNFS from 'react-native-fs';
-import type { RecordProvenance } from '@offgrid/sync';
-import {
-  DEFAULT_SILENCE_AFTER_SPEECH_MS,
-  DEFAULT_SPEAKER_DRAIN_MS,
-} from '@offgrid/speech';
-import { DEFAULT_MAX_TOOL_CALLS, REASONING_BUDGET_AUTO } from '@offgrid/models';
-import { APP_CONFIG } from '../constants';
-import { createHydrationGatedStorage } from '../utils/hydrationGatedStorage';
-import {
-  VoiceTurnMode,
-  DeviceInfo,
-  DownloadedModel,
-  ModelRecommendation,
-  ONNXImageModel,
-  ImageGenerationMode,
-  AutoDetectMethod,
-  CacheType,
-  InferenceBackend,
-  INFERENCE_BACKENDS,
-  LiteRTBackend,
-  GeneratedImage,
-} from '../types';
-import {
-  emitChangedModelSettings,
-  mobileModelSettingPatch,
-} from '../services/sync/mutation';
-import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
-import {
-  isExcludedTextModel,
-  isSuspiciousRecoveredImageModel,
-} from '../utils/modelSelectorFilters';
-import { migratePersistedState } from './appStoreMigrations';
-import { defaultImageSteps } from '../utils/imageGenAdvice';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function isSuspiciousRecoveredTextModel(model: DownloadedModel): boolean {
+  const isRecovered = model.id.startsWith('recovered_');
+  if (!isRecovered) return false;
+
+  const hasUnknownAuthor = isUnknownLike(model.author);
+  const hasUnknownQuantization = isUnknownLike(model.quantization);
+
+  return hasUnknownAuthor || hasUnknownQuantization;
+}
+
+function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean {
+  return model.id.startsWith('recovered_');
+}
+
+// Whisper STT models are managed by whisperService (modelId 'whisper-<id>',
+// file 'ggml-<id>.bin') and belong to the Voice/Speech surfaces. They were being
+// recovered into the text model store, so they appeared under Text in the model
+// selector and as text-icon entries in the Download Manager. Exclude them here so
+// the single downloadedModels source never carries them — which also clears the
+// phantom entries already persisted on devices on the next setDownloadedModels.
+function isWhisperTextModel(model: DownloadedModel): boolean {
+  return (
+    model.id.startsWith('whisper-') ||
+    (model.fileName?.startsWith('ggml-') === true && model.fileName.endsWith('.bin'))
+  );
+}
+
+function isExcludedTextModel(model: DownloadedModel): boolean {
+  return isSuspiciousRecoveredTextModel(model) || isWhisperTextModel(model);
+}
 
 type OnboardingChecklist = {
-  downloadedModel: boolean;
-  loadedModel: boolean;
-  sentMessage: boolean;
-  triedImageGen: boolean;
-  exploredSettings: boolean;
-  createdProject: boolean;
+  downloadedModel: boolean; loadedModel: boolean; sentMessage: boolean;
+  triedImageGen: boolean; exploredSettings: boolean; createdProject: boolean;
 };
 
-export type AppSettings = {
-  systemPrompt: string;
-  temperature: number;
-  maxTokens: number;
-  /** Emergency ceiling for tool calls made by one response. Shared by every text engine and UI. */
-  maxToolCalls: number;
-  topP: number;
-  repeatPenalty: number;
-  contextLength: number;
-  nThreads: number;
-  nBatch: number;
-  imageGenerationMode: ImageGenerationMode;
-  autoDetectMethod: AutoDetectMethod;
-  classifierModelId: string | null;
-  imageSteps: number;
-  imageGuidanceScale: number;
-  imageThreads: number;
-  imageWidth: number;
-  imageHeight: number;
+type AppSettings = {
+  systemPrompt: string; temperature: number; maxTokens: number;
+  /** Auto sizes the reply to the memory window; manual uses maxTokens. Unset counts as auto. */
+  maxTokensMode?: 'auto' | 'manual';
+  topP: number; repeatPenalty: number; contextLength: number;
+  /** Auto chooses a RAM-safe window; manual uses contextLength subject to memory checks. */
+  contextMode?: 'auto' | 'manual';
+  nThreads: number; nBatch: number;
+  imageGenerationMode: ImageGenerationMode; autoDetectMethod: AutoDetectMethod;
+  classifierModelId: string | null; imageSteps: number; imageGuidanceScale: number;
+  imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean;
+  imageBackendMode?: 'auto' | 'gpu' | 'cpu' | 'vulkan' | 'opencl';
+  imageAccelerationAutoMigrated?: boolean;
+  /** CPU fallback is much slower; require explicit user opt-in. */
+  imageAllowCpuFallback?: boolean;
   enhanceImagePrompts: boolean;
-  enableGpu: boolean;
-  gpuLayers: number;
-  flashAttn: boolean;
-  /** MTP speculative decoding: the model drafts several tokens per step and verifies them in one
-   *  pass. Only models carrying MTP draft layers benefit; the engine ignores it on the rest. */
-  speculativeDecoding: boolean;
+  /** The look every picture gets (services/imageStyles.ts); 'none' adds nothing. */
+  imageStyle?: string;
+  enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
    *  load (with a "Load Anyway" override when the budget still blocks). Off by
    *  default (behaviour-neutral). Single source of truth read by both the Settings
@@ -83,51 +76,72 @@ export type AppSettings = {
    *  'conservative' = one model at a time; 'balanced' = co-reside within budget;
    *  'aggressive' = co-reside with a larger RAM commitment. */
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
-  cacheType: CacheType;
-  showGenerationDetails: boolean;
-  /**
-   * How a voice turn begins and ends.
-   *
-   *  - 'tap'       you start it and you stop it
-   *  - 'silence'   you start it, it ends when you stop speaking
-   *  - 'handsfree' you start listening, it begins when you speak and ends when you stop
-   */
-  voiceTurnMode: VoiceTurnMode;
-  /** The pause that ends a spoken turn, in ms. The person's trade between lag and being cut off
-   *  mid-thought; defaults and choices live in @offgrid/speech. */
-  voiceSilenceAfterSpeechMs: number;
-  /** The wait after a reply finishes before the mic may reopen, in ms. Covers the speaker's
-   *  physical tail - too short and the recorder hears the assistant's own voice. */
-  voiceSpeakerDrainMs: number;
-  enabledTools: string[];
+  cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[]; studyToolsAdded?: boolean;
   thinkingEnabled: boolean;
-  /** Cap on the tokens the model may spend thinking per reply. REASONING_BUDGET_AUTO (0) sends no
-   *  cap so the model reasons for as long as it wants. Applies only while Thinking is on; the
-   *  answer still streams after the cap closes the thinking block. Optional so installs persisted
-   *  before this setting read as auto. */
-  reasoningBudget?: number;
+  /** Chat "Work through steps": a short plan is made and run step by step (see services/stepRunner.ts). Off by default. */
+  workThroughSteps?: boolean;
+  /** Name new chats with the AI after the first answer (on unless this is false). */
+  autoNameChats?: boolean;
+  /** Atlas: how much to think when thinking is on. */
+  thinkingLevel?: 'low' | 'medium' | 'high';
   inferenceBackend: InferenceBackend;
   /** True once the user has explicitly picked an inference backend in Settings.
    *  While false, the boot-time backendSync may upgrade the default to the GPU
    *  path when the device supports it; once true, that auto-selection never
    *  overrides the user's choice. Defaults to false (the current default was
    *  auto-selected). */
+  /** Atlas: the user picked the backend themselves (auto GPU never overrides it). */
+  backendUserChosen?: boolean;
+  /** Run one tiny silent reply after a model loads so a GPU backend does its one-time setup early (off by default). */
+  warmUpAfterLoad?: boolean;
+  /** Use a model's attached MTP file to draft tokens (on unless set to false). */
+  useMtp?: boolean;
+  /** Safe Model Loading: load every model on the CPU with no MTP drafting and no picture file. Nothing is deleted; turn it off to go back. */
+  safeModelLoading?: boolean;
+  /** A model used for writing in the background (lessons, music, the briefing); the chat model is used when none is chosen. */
+  backgroundModelId?: string;
+  /** CPU only: false turns off llama.cpp's ARM-optimized repacked weight kernels (a diagnostic for a model that writes noise on the CPU). Default on. */
+  cpuRepack?: boolean;
+  /** Send only the tools a message could need (on unless set to false): a faster first reply. */
+  trimTools?: boolean;
+  /** Tell the AI roughly where the user is (city and country, from the last GPS reading). On unless set to false. */
+  shareLocation?: boolean;
+  /** Set once the one-time move of automatic installs to the Auto backend has run. */
+  autoBackendMigrated?: boolean;
+  /** What agents call the user (fills {{name}} in agent prompts). */
+  userName?: string;
+  /** Temperatures are shown in Celsius unless this is 'f'. Distances follow the Maps miles/kilometers switch. */
+  temperatureUnit?: 'c' | 'f';
+  /** Home screen tiles the person hid or reordered. */
+  homeTiles?: { order?: string[]; hidden?: string[] };
+  /** Look for a newer Atlas release when the app opens. Unset counts as on. */
+  checkUpdates?: boolean;
+  /** Show "Used: Taxes lessons" under a reply that was written with learned lessons. Unset counts as on. */
+  showLessonsUsed?: boolean;
+  /** Read a message that is longer than the model's memory in parts, and answer from notes. Unset counts as on. */
+  readLongInParts?: boolean;
+  /** Turn documents (HTML, Word, PowerPoint, Excel, EPUB, CSV, PDF text) into Markdown for the AI. Unset counts as on. */
+  convertToMarkdown?: boolean;
+  /** Theme, accent color, font and text size (see theme/appearance). */
+  appearance?: import('../theme/appearance').Appearance;
+  /** Which destinations the bottom bar shows, their order and whether it has labels. */
+  navBar?: import('../utils/navBar').NavBarSetting;
+  /** Turns off the small vibrations on taps. */
+  hapticsOff?: boolean;
+  /** How every AI answers, whichever agent or project is active (see services/aiStyle). */
+  aiStyle?: import('../services/aiStyle').AiStyle;
+  atlasAccelChecked?: boolean;
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;
   liteRTTopP: number;
   liteRTMaxTokens: number;
-  /** Auto-discover remote LLMs: the background LAN scan that finds + auto-adds Ollama / LM Studio /
-   *  gateway servers. Fresh installs are OFF (never scan the network unprompted); a one-time
-   *  migration turns it ON for users who already had a gateway. `undefined` = never set (reads OFF).
-   *  Optional so the migration can distinguish "never set" from an explicit choice. */
-  autoDiscoverRemoteModels?: boolean;
-  /** LAN server types to probe when Scan network is used. */
-  remoteScanKinds?: Array<'gateway' | 'ollama' | 'lmstudio'>;
+  /** Per-screen background images, keyed by screen name (e.g. 'Home', 'Settings', 'Compass'). */
+  screenBackgrounds?: Record<string, { uri: string; blur: number; dim: number }>;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
 
-export interface AppState extends ProAccessSlice {
+interface AppState {
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
   hasCompletedOnboarding: boolean;
@@ -142,6 +156,8 @@ export interface AppState extends ProAccessSlice {
   setDeviceInfo: (info: DeviceInfo) => void;
   setModelRecommendation: (rec: ModelRecommendation) => void;
   downloadedModels: DownloadedModel[];
+  modelNicknames: Record<string, string>;
+  setModelNickname: (modelId: string, nickname: string) => void;
   setDownloadedModels: (models: DownloadedModel[]) => void;
   addDownloadedModel: (model: DownloadedModel) => void;
   removeDownloadedModel: (modelId: string) => void;
@@ -170,13 +186,7 @@ export interface AppState extends ProAccessSlice {
   modelMaxContext: number | null;
   setModelMaxContext: (ctx: number | null) => void;
   settings: AppSettings;
-  modelSettingProvenance: Record<string, RecordProvenance>;
   updateSettings: (settings: Partial<AppSettings>) => void;
-  applySyncedModelSetting: (
-    wireKey: string,
-    fields: Record<string, unknown>,
-    provenance?: RecordProvenance,
-  ) => void;
   resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
   activeImageModelId: string | null;
@@ -189,16 +199,24 @@ export interface AppState extends ProAccessSlice {
   imageGenerationStatus: string | null;
   imagePreviewPath: string | null;
   setIsGeneratingImage: (generating: boolean) => void;
-  setImageGenerationProgress: (
-    progress: { step: number; totalSteps: number } | null,
-  ) => void;
+  setImageGenerationProgress: (progress: { step: number; totalSteps: number } | null) => void;
   setImageGenerationStatus: (status: string | null) => void;
   setImagePreviewPath: (path: string | null) => void;
   generatedImages: GeneratedImage[];
+  /** Pictures made inside private or PIN-locked chats: kept out of the Gallery, the saved image list and backups. */
+  hiddenImages: Array<{ id: string; kind: 'private' | 'locked' }>;
+  hideGeneratedImage: (id: string, kind: 'private' | 'locked') => void;
+  /** Ids of pictures made in private chats (those chats no longer exist after a restart). */
+  privateImageIds: () => string[];
+  /** Stops tracking these ids, once their files are gone. */
+  forgetHiddenImages: (ids: string[]) => void;
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
+  shownSpotlights: Record<string, boolean>;
+  markSpotlightShown: (key: string) => void;
+  resetShownSpotlights: () => void;
   /** Image models that have completed at least one generation. The FIRST run for a
    *  model compiles/warms the backend (OpenCL kernels on Android, the CoreML model
    *  on iOS) and takes ~120s — this drives the one-time warm-up notice on BOTH
@@ -211,300 +229,331 @@ export interface AppState extends ProAccessSlice {
   incrementImageGenerationCount: () => number;
   hasEngagedSharePrompt: boolean;
   setHasEngagedSharePrompt: (v: boolean) => void;
+  desktopPromoDismissed: boolean;
+  setDesktopPromoDismissed: (v: boolean) => void;
   toolCountHintDismissed: boolean;
   setToolCountHintDismissed: () => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
 
+/** Tools that help teach: exact maths, science look-ups, planner/rubric/references, and pictures. They are only sent to the model when the message needs them. */
+export const STUDY_TOOL_IDS = ['study_math', 'science_data', 'study_helpers', 'find_image'];
+
 const DEFAULT_CHECKLIST: OnboardingChecklist = {
-  downloadedModel: false,
-  loadedModel: false,
-  sentMessage: false,
-  triedImageGen: false,
-  exploredSettings: false,
-  createdProject: false,
+  downloadedModel: false, loadedModel: false, sentMessage: false,
+  triedImageGen: false, exploredSettings: false, createdProject: false,
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  // ONE owner for the default persona. This was its own copy, and `projectStore` a third - three texts for
-  // one idea, all opening with the same sentence. That matters beyond tidiness: `systemPrompt` is a SYNCED
-  // model setting, so whichever copy a device happens to hold is the one that travels to its peers.
-  systemPrompt: APP_CONFIG.defaultSystemPrompt,
+  systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
   temperature: 0.7,
   maxTokens: 1024,
-  maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
+  maxTokensMode: 'auto',
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 4096,
+  contextMode: 'manual',
   nThreads: 0,
   nBatch: 512,
-  speculativeDecoding: false,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
-  imageSteps: defaultImageSteps(Platform.OS),
+  imageSteps: Platform.OS === 'ios' ? 20 : 8,
   imageGuidanceScale: 7.5,
   imageThreads: 4,
   imageWidth: 512,
   imageHeight: 512,
   imageUseOpenCL: true,
+  imageBackendMode: 'auto',
+  imageAccelerationAutoMigrated: true,
+  imageAllowCpuFallback: false,
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
-  inferenceBackend:
-    Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
+  inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
+  autoBackendMigrated: true,
   gpuLayers: 99,
   flashAttn: true,
   aggressiveModelLoading: false,
   modelLoadingMode: 'balanced',
-  cacheType: 'q8_0' as CacheType,
+  cacheType: 'q4_0' as CacheType,
   showGenerationDetails: false,
-  // Ends on silence by default: a turn that waits for a tap is the thing people ask us to fix.
-  // 'tap' is for anyone who pauses mid-thought and wants the recorder to keep waiting.
-  voiceTurnMode: 'silence' as VoiceTurnMode,
-  voiceSilenceAfterSpeechMs: DEFAULT_SILENCE_AFTER_SPEECH_MS,
-  voiceSpeakerDrainMs: DEFAULT_SPEAKER_DRAIN_MS,
-  enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
+  enabledTools: ['web_search', 'read_url', 'search_knowledge_base', ...STUDY_TOOL_IDS],
   thinkingEnabled: false,
-  reasoningBudget: REASONING_BUDGET_AUTO,
+  workThroughSteps: false,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
   liteRTMaxTokens: 4096,
 };
 
+function migrateEnabledTools(merged: any): void {
+  // Once: older installs get the study tools too, so no subject needs choosing for the tutor to calculate and look things up exactly.
+  if (merged.settings?.enabledTools && !merged.settings.studyToolsAdded) {
+    const have: string[] = merged.settings.enabledTools;
+    merged.settings = { ...merged.settings, enabledTools: [...have, ...STUDY_TOOL_IDS.filter((t) => !have.includes(t))], studyToolsAdded: true };
+  }
+  if (merged.settings?.enabledTools && !merged.settings.enabledTools.includes('search_knowledge_base')) {
+    merged.settings = { ...merged.settings, enabledTools: [...merged.settings.enabledTools, 'search_knowledge_base'] };
+  }
+}
+
+// The removed MCP context auto-boost pinned context to 32768 (and maxTokens to 8192 /
+// liteRTMaxTokens to 32768) on MCP enable and never restored it, causing OOM crashes
+// and tanked tok/s on flagship devices. Reset anyone left at the boost ceiling back to
+// the device-safe defaults. Idempotent: once reset, the values no longer match.
+const MCP_BOOST_CTX_CEILING = 32768;
+const MCP_BOOST_MAX_OUTPUT_TOKENS = 8192;
+function migrateBoostedContext(merged: any): void {
+  const s = merged.settings;
+  if (!s) return;
+  // Match the EXACT values the boost wrote, not `>=`. The boost set these to
+  // precise constants; a `>=` test also clobbers a user who legitimately chose a
+  // large context/maxTokens above the default, which this one-time migration must
+  // not touch.
+  if (s.contextLength === MCP_BOOST_CTX_CEILING) {
+    s.contextLength = DEFAULT_SETTINGS.contextLength;
+    // maxTokens was raised alongside contextLength by the boost; only reset it when the
+    // boost's exact value is present, so a legitimately-large user maxTokens isn't clobbered.
+    if (s.maxTokens === MCP_BOOST_MAX_OUTPUT_TOKENS) s.maxTokens = DEFAULT_SETTINGS.maxTokens;
+  }
+  if (s.liteRTMaxTokens === MCP_BOOST_CTX_CEILING) {
+    s.liteRTMaxTokens = DEFAULT_SETTINGS.liteRTMaxTokens;
+  }
+}
+function migratePersistedState(persistedState: any, currentState: AppState): AppState {
+  const merged = {
+    ...currentState,
+    ...persistedState,
+    settings: { ...DEFAULT_SETTINGS, ...persistedState?.settings },
+  };
+  // Drop legacy download tracking fields. The unified downloadStore (backed
+  // by the native Room DB) is now the source of truth. Persisted entries
+  // from old versions are silently ignored on rehydrate.
+  delete merged.downloadProgress;
+  delete merged.activeBackgroundDownloads;
+  delete merged.imageModelDownloading;
+  delete merged.imageModelDownloadIds;
+  delete merged.imageModelDownloadId;
+  // modelLoadingStrategy was removed (the residency manager owns swapping now).
+  if (merged.settings?.modelLoadingStrategy !== undefined) {
+    delete merged.settings.modelLoadingStrategy;
+  }
+  if (persistedState?.settings && !persistedState.settings.cacheType) {
+    merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };
+  }
+  if (persistedState?.settings && !persistedState.settings.imageBackendMode) {
+    merged.settings = { ...merged.settings,
+      imageBackendMode: persistedState.settings.imageUseOpenCL === false ? 'cpu' : 'auto' };
+  }
+  // Existing installs move to device-probed automatic image acceleration, except an engine the
+  // user picked (CPU, Vulkan or OpenCL), which is kept.
+  if (persistedState?.settings && !persistedState.settings.imageAccelerationAutoMigrated) {
+    const kept = ['cpu', 'vulkan', 'opencl'].includes(merged.settings?.imageBackendMode as string);
+    merged.settings = { ...merged.settings, imageAccelerationAutoMigrated: true,
+      ...(kept ? {} : { imageBackendMode: 'auto', imageUseOpenCL: true }) };
+  }
+  // One-time: upgrades whose backend was picked automatically (never by the user) move
+  // to Auto (NPU -> OpenCL GPU -> Vulkan GPU -> CPU), the same default as fresh installs.
+  // Fresh installs start with the flag set, so only older saved settings are touched.
+  if (Platform.OS === 'android' && persistedState?.settings && !persistedState.settings.autoBackendMigrated) {
+    merged.settings = { ...merged.settings, autoBackendMigrated: true,
+      ...(persistedState.settings.backendUserChosen ? {} : { inferenceBackend: INFERENCE_BACKENDS.AUTO }) } as any;
+  }
+  if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
+    merged.settings = {
+      ...merged.settings,
+      inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,
+    };
+  }
+
+  if (merged.checklistDismissed && merged.onboardingChecklist &&
+    !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
+  migrateEnabledTools(merged);
+  migrateBoostedContext(merged);
+  return merged as AppState;
+}
+
 export const selectIsLiteRT = (state: AppState): boolean =>
-  state.downloadedModels.find(m => m.id === state.activeModelId)?.engine ===
-  'litert';
-
-type PersistedAppState = ReturnType<typeof persistedAppState>;
-
-const appStorage = createHydrationGatedStorage<PersistedAppState>(
-  AsyncStorage,
-  (previous, next) =>
-    (Object.keys(next) as (keyof PersistedAppState)[]).every(
-      key => previous[key] === next[key],
-    ),
-);
+  state.downloadedModels.find(m => m.id === state.activeModelId)?.engine === 'litert';
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       themeMode: 'system' as ThemeMode,
-      setThemeMode: mode => set({ themeMode: mode }),
+      setThemeMode: (mode) => set({ themeMode: mode }),
       hasCompletedOnboarding: false,
-      setOnboardingComplete: complete =>
+      setOnboardingComplete: (complete) =>
         set({ hasCompletedOnboarding: complete }),
       onboardingChecklist: { ...DEFAULT_CHECKLIST },
       checklistDismissed: false,
-      completeChecklistStep: key =>
-        set(state => ({
-          onboardingChecklist: { ...state.onboardingChecklist, [key]: true },
-        })),
+      completeChecklistStep: (key) =>
+        set((state) => ({ onboardingChecklist: { ...state.onboardingChecklist, [key]: true } })),
       dismissChecklist: () => set({ checklistDismissed: true }),
-      resetChecklist: () =>
-        set({
-          checklistDismissed: false,
-          onboardingChecklist: { ...DEFAULT_CHECKLIST },
-        }),
+      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST }, shownSpotlights: {} }),
       deviceInfo: null,
       modelRecommendation: null,
-      setDeviceInfo: info => set({ deviceInfo: info }),
-      setModelRecommendation: rec => set({ modelRecommendation: rec }),
+      setDeviceInfo: (info) => set({ deviceInfo: info }),
+      setModelRecommendation: (rec) => set({ modelRecommendation: rec }),
       downloadedModels: [],
-      setDownloadedModels: models =>
-        set({ downloadedModels: models.filter(m => !isExcludedTextModel(m)) }),
-      addDownloadedModel: model =>
-        set(state => {
+      modelNicknames: {},
+      setModelNickname: (modelId, nickname) => set(state => {
+        const next = { ...state.modelNicknames };
+        const label = nickname.trim().slice(0, 80);
+        if (label) next[modelId] = label;
+        else delete next[modelId];
+        return { modelNicknames: next };
+      }),
+      setDownloadedModels: (models) => set({ downloadedModels: models.filter(m => !isExcludedTextModel(m)) }),
+      addDownloadedModel: (model) =>
+        set((state) => {
           if (isExcludedTextModel(model)) return state;
           return {
-            downloadedModels: [
-              ...state.downloadedModels.filter(m => m.id !== model.id),
-              model,
-            ],
+            downloadedModels: [...state.downloadedModels.filter(m => m.id !== model.id), model],
           };
         }),
-      removeDownloadedModel: modelId =>
-        set(state => ({
-          downloadedModels: state.downloadedModels.filter(
-            m => m.id !== modelId,
-          ),
-          activeModelId:
-            state.activeModelId === modelId ? null : state.activeModelId,
+      removeDownloadedModel: (modelId) =>
+        set((state) => ({
+          downloadedModels: state.downloadedModels.filter((m) => m.id !== modelId),
+          activeModelId: state.activeModelId === modelId ? null : state.activeModelId,
         })),
       activeModelId: null,
-      setActiveModelId: modelId => set({ activeModelId: modelId }),
+      setActiveModelId: (modelId) => set({ activeModelId: modelId }),
       loadedTextModelId: null,
-      setLoadedTextModelId: modelId => set({ loadedTextModelId: modelId }),
+      setLoadedTextModelId: (modelId) => set({ loadedTextModelId: modelId }),
       textModelEvicted: false,
-      setTextModelEvicted: evicted => set({ textModelEvicted: evicted }),
+      setTextModelEvicted: (evicted) => set({ textModelEvicted: evicted }),
       lastTextModelId: null,
-      setLastTextModelId: modelId => set({ lastTextModelId: modelId }),
+      setLastTextModelId: (modelId) => set({ lastTextModelId: modelId }),
       isLoadingModel: false,
-      setIsLoadingModel: loading => set({ isLoadingModel: loading }),
+      setIsLoadingModel: (loading) => set({ isLoadingModel: loading }),
       modelMaxContext: null,
-      setModelMaxContext: ctx => set({ modelMaxContext: ctx }),
+      setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
       settings: { ...DEFAULT_SETTINGS },
-      modelSettingProvenance: {},
-      updateSettings: newSettings => {
-        const before = get().settings;
-        const after = { ...before, ...newSettings };
-        set({ settings: after });
-        emitChangedModelSettings(before, after);
-      },
-      applySyncedModelSetting: (wireKey, fields, provenance) => {
-        const patch = mobileModelSettingPatch(wireKey, fields);
-        if (patch) {
-          set(state => ({
-            settings: { ...state.settings, ...(patch as Partial<AppSettings>) },
-            modelSettingProvenance: provenance
-              ? {
-                  ...state.modelSettingProvenance,
-                  [wireKey]:
-                    state.modelSettingProvenance[wireKey] ?? provenance,
-                }
-              : state.modelSettingProvenance,
-          }));
-        }
-      },
-      resetSettings: () => {
-        const before = get().settings;
-        const after = { ...DEFAULT_SETTINGS };
-        set({ settings: after });
-        emitChangedModelSettings(before, after);
-      },
+      updateSettings: (newSettings) =>
+        set((state) => ({
+          // Choosing a reply length by hand turns the automatic length off.
+          settings: { ...state.settings, ...(newSettings.maxTokens !== undefined && newSettings.maxTokensMode === undefined ? { maxTokensMode: 'manual' as const } : {}), ...newSettings },
+        })),
+      // Back to the defaults for every model setting. Personal choices that have no default (accent and
+      // font, bottom bar, name, tone, haptics) are not model settings and stay.
+      resetSettings: () => set((state) => ({
+        settings: {
+          ...Object.fromEntries(Object.entries(state.settings).filter(([key]) => !(key in DEFAULT_SETTINGS))),
+          ...DEFAULT_SETTINGS,
+        },
+      })),
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,
-      setDownloadedImageModels: models =>
-        set({
-          downloadedImageModels: models.filter(
-            m => !isSuspiciousRecoveredImageModel(m),
-          ),
-        }),
-      addDownloadedImageModel: model =>
-        set(state => {
+      setDownloadedImageModels: (models) => set({ downloadedImageModels: models.filter(m => !isSuspiciousRecoveredImageModel(m)) }),
+      addDownloadedImageModel: (model) =>
+        set((state) => {
           if (isSuspiciousRecoveredImageModel(model)) return state;
           return {
-            downloadedImageModels: [
-              ...state.downloadedImageModels.filter(m => m.id !== model.id),
-              model,
-            ],
+            downloadedImageModels: [...state.downloadedImageModels.filter(m => m.id !== model.id), model],
           };
         }),
-      removeDownloadedImageModel: modelId =>
-        set(state => ({
-          downloadedImageModels: state.downloadedImageModels.filter(
-            m => m.id !== modelId,
-          ),
-          activeImageModelId:
-            state.activeImageModelId === modelId
-              ? null
-              : state.activeImageModelId,
+      removeDownloadedImageModel: (modelId) =>
+        set((state) => ({
+          downloadedImageModels: state.downloadedImageModels.filter((m) => m.id !== modelId),
+          activeImageModelId: state.activeImageModelId === modelId ? null : state.activeImageModelId,
         })),
-      setActiveImageModelId: modelId => set({ activeImageModelId: modelId }),
+      setActiveImageModelId: (modelId) => set({ activeImageModelId: modelId }),
       // Image generation state
       isGeneratingImage: false,
       imageGenerationProgress: null,
       imageGenerationStatus: null,
       imagePreviewPath: null,
-      setIsGeneratingImage: generating =>
-        set({ isGeneratingImage: generating }),
-      setImageGenerationProgress: progress =>
-        set({ imageGenerationProgress: progress }),
-      setImageGenerationStatus: status =>
-        set({ imageGenerationStatus: status }),
-      setImagePreviewPath: path => set({ imagePreviewPath: path }),
+      setIsGeneratingImage: (generating) => set({ isGeneratingImage: generating }),
+      setImageGenerationProgress: (progress) => set({ imageGenerationProgress: progress }),
+      setImageGenerationStatus: (status) => set({ imageGenerationStatus: status }),
+      setImagePreviewPath: (path) => set({ imagePreviewPath: path }),
       // Gallery
       generatedImages: [],
-      addGeneratedImage: image =>
-        set(state => ({
+      hiddenImages: [],
+      hideGeneratedImage: (id, kind) =>
+        set((state) => (state.hiddenImages.some((h) => h.id === id) ? state : { hiddenImages: [...state.hiddenImages, { id, kind }] })),
+      privateImageIds: () => get().hiddenImages.filter((h) => h.kind === 'private').map((h) => h.id),
+      forgetHiddenImages: (ids) =>
+        set((state) => ({ hiddenImages: state.hiddenImages.filter((h) => !ids.includes(h.id)) })),
+      addGeneratedImage: (image) =>
+        set((state) => ({
           generatedImages: [image, ...state.generatedImages],
         })),
-      removeGeneratedImage: imageId =>
-        set(state => ({
-          generatedImages: state.generatedImages.filter(
-            img => img.id !== imageId,
-          ),
+      removeGeneratedImage: (imageId) =>
+        set((state) => ({
+          generatedImages: state.generatedImages.filter((img) => img.id !== imageId),
         })),
-      removeImagesByConversationId: conversationId => {
+      removeImagesByConversationId: (conversationId) => {
         const state = get();
         const imagesToRemove = state.generatedImages.filter(
-          img => img.conversationId === conversationId,
+          (img) => img.conversationId === conversationId
         );
-        const imageIds = imagesToRemove.map(img => img.id);
+        const imageIds = imagesToRemove.map((img) => img.id);
         set({
           generatedImages: state.generatedImages.filter(
-            img => img.conversationId !== conversationId,
+            (img) => img.conversationId !== conversationId
           ),
         });
         return imageIds;
       },
-      clearGeneratedImages: () => set({ generatedImages: [] }),
+      clearGeneratedImages: () =>
+        set({ generatedImages: [] }),
+      // Reactive spotlight tracking
+      shownSpotlights: {},
+      markSpotlightShown: (key) =>
+        set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
+      resetShownSpotlights: () => set({ shownSpotlights: {} }),
       warmedImageModels: [],
-      markImageModelWarmed: modelId =>
-        set(state =>
-          state.warmedImageModels.includes(modelId)
-            ? state
-            : { warmedImageModels: [...state.warmedImageModels, modelId] },
-        ),
+      markImageModelWarmed: (modelId) =>
+        set((state) => state.warmedImageModels.includes(modelId)
+          ? state
+          : { warmedImageModels: [...state.warmedImageModels, modelId] }),
       textGenerationCount: 0,
       imageGenerationCount: 0,
-      incrementTextGenerationCount: () => {
-        const c = get().textGenerationCount + 1;
-        set({ textGenerationCount: c });
-        return c;
-      },
-      incrementImageGenerationCount: () => {
-        const c = get().imageGenerationCount + 1;
-        set({ imageGenerationCount: c });
-        return c;
-      },
+      incrementTextGenerationCount: () => { const c = get().textGenerationCount + 1; set({ textGenerationCount: c }); return c; },
+      incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
       hasEngagedSharePrompt: false,
-      setHasEngagedSharePrompt: v => set({ hasEngagedSharePrompt: v }),
-      ...createProAccessSlice(state => set(state)),
+      setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
+      desktopPromoDismissed: false,
+      setDesktopPromoDismissed: (v) => set({ desktopPromoDismissed: v }),
       toolCountHintDismissed: false,
       setToolCountHintDismissed: () => set({ toolCountHintDismissed: true }),
       loadedSettings: null,
-      setLoadedSettings: settings => set({ loadedSettings: settings }),
+      setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),
     {
       name: 'local-llm-app-storage',
-      storage: appStorage.storage,
-      onRehydrateStorage: () => () => appStorage.markHydrated(),
-      merge: (persisted, current) =>
-        migratePersistedState(persisted, current, {
-          defaultSettings: DEFAULT_SETTINGS,
-          documentsPath: RNFS.DocumentDirectoryPath,
-        }),
-      partialize: persistedAppState,
-    },
-  ),
-);
-
-function persistedAppState(state: AppState) {
-  return {
+      storage: createJSONStorage(() => AsyncStorage),
+      merge: migratePersistedState,
+      partialize: (state) => ({
         themeMode: state.themeMode,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         onboardingChecklist: state.onboardingChecklist,
         checklistDismissed: state.checklistDismissed,
         activeModelId: state.activeModelId,
+        modelNicknames: state.modelNicknames,
         lastTextModelId: state.lastTextModelId,
         settings: state.settings,
-        modelSettingProvenance: state.modelSettingProvenance,
         activeImageModelId: state.activeImageModelId,
-        generatedImages: state.generatedImages,
+        // Pictures from private or locked chats are not written to the saved list.
+        generatedImages: state.generatedImages.filter((img) => !state.hiddenImages.some((h) => h.id === img.id)),
+        hiddenImages: state.hiddenImages,
+        shownSpotlights: state.shownSpotlights,
         warmedImageModels: state.warmedImageModels,
-        textGenerationCount: state.textGenerationCount,
-        imageGenerationCount: state.imageGenerationCount,
+        textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
-        hasRegisteredPro: state.hasRegisteredPro,
-        // Persist eviction so a relaunch cannot grant Pro while the roster is offline.
-        proDeviceAdmission: state.proDeviceAdmission,
-        devProDisabled: state.devProDisabled,
-        proBannerDismissed: state.proBannerDismissed,
         desktopPromoDismissed: state.desktopPromoDismissed,
-        proAhaTriggeredBy: state.proAhaTriggeredBy,
         loadedSettings: state.loadedSettings,
-  };
-}
+      }),
+    }
+  )
+);
+
+/** Pictures for the global Gallery and counts: never those from private or locked chats. */
+export const galleryImages = (images: GeneratedImage[], hidden?: Array<{ id: string }>): GeneratedImage[] => {
+  if (!hidden?.length) return images;
+  const skip = new Set(hidden.map((h) => h.id));
+  return images.filter((img) => !skip.has(img.id));
+};

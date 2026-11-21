@@ -18,15 +18,23 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-type Cfg = { label: string; backend: 'mnn' | 'qnn'; platform: 'ios' | 'android'; expected: string };
+type Cfg = { label: string; backend: 'mnn' | 'coreml'; platform: 'ios' | 'android'; expected: string };
 const CONFIGS: Cfg[] = [
-  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (GPU)' },
-  { label: 'Metal (Core ML, iOS)', backend: 'mnn', platform: 'ios', expected: 'Core ML (ANE)' },
+  { label: 'MNN GPU (Android)', backend: 'mnn', platform: 'android', expected: 'MNN (OpenCL requested; compute unverified)' },
+  { label: 'Metal (Core ML, iOS)', backend: 'coreml', platform: 'ios', expected: 'Core ML (accelerator selected by OS)' },
 ];
 
 describe('happy — image generation shows the correct backend label (heavy entry point)', () => {
   it.each(CONFIGS)('$label: produces an image and the details show "$expected"', async (cfg) => {
     const h = await setupChatScreen({ engine: 'litert', platform: cfg.platform });
+    // The GPU label needs a native OpenCL device: Auto now falls back to CPU without one.
+    (require('llama.rn') as any).getBackendDevicesInfo = jest.fn(() => Promise.resolve([{ backend: 'OpenCL', type: 'gpu', name: 'Adreno' }]));
+    (require('../../../src/services/hardware').hardwareService as any).cachedOpenCLCapability = null;
+    if (cfg.platform === 'ios') {
+      // iOS delegates Core ML scheduling to the OS; the Android-only CPU opt-in
+      // must not block a compatible iOS model.
+      require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ imageAllowCpuFallback: false });
+    }
     h.enableGenerationDetailsViaUI(); // turn details on BEFORE mounting the chat (separate render)
     h.render();
     await h.placeImageModel({ backend: cfg.backend });
@@ -38,7 +46,6 @@ describe('happy — image generation shows the correct backend label (heavy entr
     // A real image was produced through the real service + native generateImage...
     await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); });
     // ...and the user sees the correct backend label in the message details.
-    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByText('Generation details')));
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(new RegExp(cfg.expected.replace(/[()]/g, '\\$&')))).not.toBeNull(); });
-  });
+  }, 45000);
 });

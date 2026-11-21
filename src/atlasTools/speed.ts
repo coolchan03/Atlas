@@ -1,0 +1,222 @@
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppStore } from '../stores/appStore';
+
+/**
+ * Remembers how fast each model runs on THIS device (learned from real replies and the model tester),
+ * so chat can say "first words in about 6 s" and My models can show a speed.
+ * Units are tokens (word-pieces; ~0.75 words each).
+ */
+export interface ModelSpeed {
+  /** writing speed, tokens per second */
+  decode: number;
+  /** reading speed (prompt processing), tokens per second */
+  prefill: number;
+  /** typical reply length in tokens */
+  outLen: number;
+  samples: number;
+}
+
+interface SpeedState {
+  byModel: Record<string, ModelSpeed>;
+  /** The same measurements kept apart by the backend that produced them ("modelId|htp"), so a CPU run is never averaged with an NPU run. */
+  byConfig: Record<string, ModelSpeed>;
+  record: (modelId: string, s: { decode?: number; prefill?: number; outLen?: number; backend?: string }) => void;
+  forget: (modelId: string) => void;
+}
+
+/** The key for one model on one backend. */
+export const configKey = (modelId: string, backend: string): string => `${modelId}|${backend.toLowerCase()}`;
+
+const ema = (old: number, v: number, a: number) => (old > 0 ? old * (1 - a) + v * a : v);
+const sane = (v: number | undefined, max: number): v is number => typeof v === 'number' && isFinite(v) && v > 0 && v < max;
+
+export const useSpeedStats = create<SpeedState>()(persist((set) => ({
+  byModel: {},
+  byConfig: {},
+  record: (modelId, s) => set((st) => {
+    if (!modelId) return st;
+    const fold = (cur: ModelSpeed | undefined): ModelSpeed => {
+      const c = cur ?? { decode: 0, prefill: 0, outLen: 0, samples: 0 };
+      return {
+        decode: sane(s.decode, 2000) ? ema(c.decode, s.decode, 0.35) : c.decode,
+        prefill: sane(s.prefill, 50000) ? ema(c.prefill, s.prefill, 0.35) : c.prefill,
+        outLen: sane(s.outLen, 32768) && s.outLen >= 16 ? ema(c.outLen, s.outLen, 0.25) : c.outLen,
+        samples: c.samples + 1,
+      };
+    };
+    const byConfig = s.backend ? { ...st.byConfig, [configKey(modelId, s.backend)]: fold(st.byConfig[configKey(modelId, s.backend)]) } : st.byConfig;
+    return { byModel: { ...st.byModel, [modelId]: fold(st.byModel[modelId]) }, byConfig };
+  }),
+  forget: (modelId) => set((st) => {
+    const { [modelId]: _drop, ...rest } = st.byModel;
+    const byConfig = Object.fromEntries(Object.entries(st.byConfig).filter(([k]) => !k.startsWith(`${modelId}|`)));
+    return { byModel: rest, byConfig };
+  }),
+}), {
+  name: 'atlas-model-speed',
+  storage: createJSONStorage(() => AsyncStorage),
+  partialize: (s) => ({ byModel: s.byModel, byConfig: s.byConfig }),
+}));
+
+/** The writing speed (tokens a second) measured for the model that background work uses, or 0 when none is known. */
+export function activeWritingSpeed(): number {
+  const st = useAppStore.getState();
+  const id = st.settings.backgroundModelId && st.downloadedModels.some((m) => m.id === st.settings.backgroundModelId) ? st.settings.backgroundModelId : st.activeModelId; // background work uses its own model when one is chosen
+  return id ? Number(useSpeedStats.getState().byModel[id]?.decode) || 0 : 0;
+}
+
+/** Below this writing speed a model counts as slow: work is split into small pieces and asked in the shortest form. */
+export const SLOW_WRITER_TPS = 8;
+
+/** Models whose settings were tuned with "Find the best settings" (so the slow-reply hint stops suggesting it). */
+interface TunedState {
+  at: Record<string, number>;
+  /** The NPU or GPU backend that timed fastest in that test, when one did (Automatic tries it first for this model). */
+  accelerator: Record<string, string>;
+  /** Memory settings that timed fastest for one model (KV cache type, flash attention, batch size). They apply to that model only; others keep the global settings. */
+  memory: Record<string, ModelMemory>;
+  mark: (modelId: string, accelerator?: string) => void;
+  setMemory: (modelId: string, memory?: ModelMemory) => void;
+}
+export interface ModelMemory {
+  cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number; gpuLayers?: number;
+  /** The global values in force when it was saved: if the person changes one in Settings afterwards, their choice wins over the saved one. */
+  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number };
+}
+
+/** The settings one model loads with: the global ones, with the memory settings its test kept (each only while the global one is unchanged since). */
+export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number }>(settings: T, modelId: string | undefined): T {
+  const kept = modelId ? useTuned.getState().memory[modelId] : undefined;
+  if (!kept) return settings;
+  const out: T = { ...settings };
+  for (const key of ['cacheType', 'flashAttn', 'nBatch', 'gpuLayers'] as const) {
+    const wanted = kept[key];
+    if (wanted !== undefined && (!kept.from || kept.from[key] === settings[key])) (out as Record<string, unknown>)[key] = wanted;
+  }
+  return out;
+}
+export const useTuned = create<TunedState>()(persist((set) => ({
+  at: {},
+  accelerator: {},
+  memory: {},
+  setMemory: (modelId, memory) => set((st) => {
+    const { [modelId]: _old, ...rest } = st.memory;
+    return { memory: memory && Object.keys(memory).length ? { ...rest, [modelId]: memory } : rest };
+  }),
+  mark: (modelId, accelerator) => set((st) => {
+    const { [modelId]: _old, ...rest } = st.accelerator;
+    return { at: { ...st.at, [modelId]: Date.now() }, accelerator: accelerator ? { ...rest, [modelId]: accelerator } : rest };
+  }),
+}), { name: 'atlas-tuned-models', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ at: s.at, accelerator: s.accelerator, memory: s.memory }) }));
+
+/** Models whose slow-reply hint was dismissed. */
+interface HintState { off: Record<string, true>; dismiss: (modelId: string) => void }
+export const useSlowHint = create<HintState>()(persist((set) => ({
+  off: {},
+  dismiss: (modelId) => set((st) => ({ off: { ...st.off, [modelId]: true } })),
+}), { name: 'atlas-slow-hint', storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ off: s.off }) }));
+
+/** Below this writing speed (tokens per second) answers are a real wait. */
+const SLOW_TPS = 3;
+
+/** True when chat should suggest finding better settings: a local model that is slow on at least two replies, not tuned or dismissed yet. */
+export function shouldSuggestTuning(o: { modelId: string | null | undefined; speed: ModelSpeed | undefined; tuned: boolean; dismissed: boolean }): boolean {
+  const { modelId, speed } = o;
+  return !!modelId && !o.tuned && !o.dismissed && !!speed && speed.samples >= 2 && speed.decode > 0 && speed.decode < SLOW_TPS;
+}
+
+/**
+ * True once a local model has answered at least once and never been tested on this phone: chat offers the one-minute test that times the
+ * CPU, GPU and NPU and keeps the fastest. (Not for a model that is already slow: shouldSuggestTuning covers that with its own words.)
+ */
+export function shouldOfferFirstTest(o: { modelId: string | null | undefined; speed: ModelSpeed | undefined; tuned: boolean; dismissed: boolean }): boolean {
+  return !!o.modelId && !o.tuned && !o.dismissed && !!o.speed && o.speed.samples >= 1 && o.speed.decode > 0 && !shouldSuggestTuning(o);
+}
+
+const THINK_MULT: Record<string, number> = { low: 1.6, medium: 2.5, high: 4 };
+
+/** Who says which backend the model is running on. The text engine registers itself (this file must not import it: that would be a cycle). */
+let backendProvider: (() => string | undefined) | null = null;
+export const setBackendProvider = (fn: (() => string | undefined) | null): void => { backendProvider = fn; };
+const currentBackend = (): string | undefined => { try { return backendProvider?.() || undefined; } catch { return undefined; } };
+
+/** Record a finished generation for the model that's in use now. Never throws. */
+export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens?: number; outLen?: number }): void {
+  try {
+    const id = useAppStore.getState().activeModelId;
+    if (!id) return;
+    // Reading speed from a tiny prompt is mostly overhead - only trust real-sized ones.
+    const prefill = (s.promptTokens ?? 0) >= 64 ? s.prefill : undefined;
+    // Store the length of a plain answer; thinking replies are scaled back down (estimate scales them up again).
+    const st = useAppStore.getState().settings as any;
+    const mult = st?.thinkingEnabled ? THINK_MULT[st.thinkingLevel || 'medium'] ?? 1 : 1;
+    const outLen = s.outLen ? s.outLen / mult : undefined;
+    const backend = currentBackend();
+    useSpeedStats.getState().record(id, { decode: s.decode, prefill, outLen, backend });
+  } catch { /* stats are best-effort */ }
+}
+
+/** The backend that measured fastest for a model (writing speed), only when at least two backends each have `minSamples` real runs. Never a pooled guess. */
+export function fastestBackend(byConfig: Record<string, ModelSpeed>, modelId: string, minSamples = 3): { backend: string; decode: number } | null {
+  const rows = Object.entries(byConfig)
+    .filter(([k, v]) => k.startsWith(`${modelId}|`) && v.samples >= minSamples && v.decode > 0)
+    .map(([k, v]) => ({ backend: k.slice(modelId.length + 1), decode: v.decode }));
+  if (rows.length < 2) return null;
+  return rows.sort((a, b) => b.decode - a.decode)[0];
+}
+
+/** Rough token count for text (no model needed). */
+export const roughTokens = (chars: number) => Math.ceil(chars / 3.6);
+
+export type SpeedHealth = 'unknown' | 'slow' | 'usable' | 'good' | 'very-fast';
+
+/** Human-facing decode-speed bands for on-device chat. They describe usability,
+ * not a universal hardware benchmark: larger models naturally land lower. */
+export function classifyDecodeSpeed(tps: number | null | undefined): SpeedHealth {
+  if (!sane(tps ?? undefined, 2000)) return 'unknown';
+  if ((tps as number) < 3) return 'slow';
+  if ((tps as number) < 7) return 'usable';
+  if ((tps as number) < 20) return 'good';
+  return 'very-fast';
+}
+
+export function speedHealthLabel(tps: number | null | undefined): string {
+  const health = classifyDecodeSpeed(tps);
+  if (health === 'slow') return 'slow';
+  if (health === 'usable') return 'usable';
+  if (health === 'good') return 'good';
+  if (health === 'very-fast') return 'very fast';
+  return 'unknown';
+}
+
+export interface ReplyEstimate { firstWordsSec: number; totalSec: number; outTokens: number; decode: number }
+
+/** Estimate how long a reply takes. promptTokens = NEW text the model must read this turn. */
+export function estimateReply(modelId: string | null | undefined, promptTokens: number, thinking?: string | null): ReplyEstimate | null {
+  if (!modelId) return null;
+  const sp = useSpeedStats.getState().byModel[modelId];
+  if (!sp || !sp.decode) return null;
+  const prefill = sp.prefill || sp.decode * 8; // typical ratio when reading speed isn't known yet
+  const outTokens = Math.round((sp.outLen || 250) * (thinking ? THINK_MULT[thinking] ?? 1 : 1));
+  const firstWordsSec = 0.4 + promptTokens / prefill;
+  return { firstWordsSec, totalSec: firstWordsSec + outTokens / sp.decode, outTokens, decode: sp.decode };
+}
+
+export function fmtSec(s: number): string {
+  if (!isFinite(s) || s < 0) return '?';
+  if (s < 1.5) return 'a second';
+  if (s < 60) return `${Math.round(s)} s`;
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+
+/** A plain sentence about which backend measured faster for a model, or null when there is not enough to say. Never from one run, never from pooled figures. */
+export function backendAdvice(byConfig: Record<string, ModelSpeed>, modelId: string, minSamples = 3): string | null {
+  const best = fastestBackend(byConfig, modelId, minSamples);
+  if (!best) return null;
+  const others = Object.entries(byConfig).filter(([k, v]) => k.startsWith(`${modelId}|`) && k.slice(modelId.length + 1) !== best.backend && v.samples >= minSamples && v.decode > 0);
+  const slowest = others.map(([k, v]) => ({ backend: k.slice(modelId.length + 1), decode: v.decode })).sort((a, b) => a.decode - b.decode)[0];
+  return `${best.backend.toUpperCase()} wrote ${best.decode.toFixed(1)} per second here, against ${slowest.decode.toFixed(1)} on ${slowest.backend.toUpperCase()} (measured on this phone, ${minSamples}+ replies each).`;
+}

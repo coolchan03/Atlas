@@ -1,9 +1,8 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert } from '../../../components';
+import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
-import { useAppStore } from '../../../stores/appStore';
-import { shouldAutoDiscoverRemoteModels } from '../../../utils/remoteAutoDiscovery';
 import type { HomeScreenNavigationProp } from './types';
 import logger from '../../../utils/logger';
 
@@ -48,18 +47,27 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
   }, [navigation, setAlertState]);
 
   const runLANDiscovery = useCallback(async () => {
-    // The automatic LAN scan runs only when the user has enabled auto-discovery. Fresh installs are
-    // OFF — never scan the network unprompted. (The "Scan Network" button is a separate, explicit
-    // action and is NOT gated here.)
-    if (!shouldAutoDiscoverRemoteModels(useAppStore.getState().settings)) {
-      logger.log('[HomeScreen] LAN auto-discovery disabled in settings — skipping');
+    let discovered: Awaited<ReturnType<typeof discoverLANServers>>;
+    try {
+      discovered = await discoverLANServers();
+    } catch (error) {
+      logger.warn('[HomeScreen] LAN discovery skipped:', (error as Error).message);
       return;
     }
-    logger.log('[HomeScreen] LAN auto-discovery enabled — scanning');
-    // remoteServerManager owns the scan + moved-server reconciliation (one source of truth); the
-    // hook only surfaces the genuinely-new servers it finds.
-    const { found } = await remoteServerManager.scanAndReconcile();
-    await addNewServersAndNotify(found);
+    if (discovered.length === 0) return;
+
+    const existingServers = useRemoteServerStore.getState().servers;
+    const existingEndpoints = new Set(existingServers.map(s => s.endpoint.replace(/\/$/, '')));
+
+    // Port numbers are not server identity. Two legitimate LAN hosts commonly
+    // run Ollama on :11434 or LM Studio on :1234; treating "same port" as a
+    // moved server could overwrite an existing endpoint and send its API key
+    // to a different machine. Only exact endpoints are deduplicated.
+    const newServersToAdd = discovered.filter(
+      d => !existingEndpoints.has(d.endpoint.replace(/\/$/, '')),
+    );
+
+    await addNewServersAndNotify(newServersToAdd);
   }, [addNewServersAndNotify]);
 
   return { runLANDiscovery };

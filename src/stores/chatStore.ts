@@ -1,35 +1,82 @@
+/* eslint-disable max-params -- Existing createConversation API keeps its compatibility with private-chat callers. */
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { agentProjectFolder } from './agentFolder';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { encryptedChatStorage } from './encryptedChatStorage';
 import { Message, Conversation, GenerationMeta } from '../types';
-import {
-  stripStreamingControlTokens,
-} from '../utils/messageContent';
+import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
-import { createHydrationGatedStorage } from '../utils/hydrationGatedStorage';
-import {
-  finalizeStreamedReply,
-  type ReplyEnd,
-  type StreamingSnapshot,
-} from './chatStoreReplyFinalization';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
-import {
-  CHAT_STORAGE_VERSION,
-  createPersistedMessage,
-  migratePersistedChatState,
-  type PersistedChatState,
-} from './chatPersistence';
-import {
-  createMessageMutationActions,
-  nextUpdatedAt,
-  type ChatMessageMutationActions,
-} from './chatMessageMutationActions';
-import {
-  CORE_SYNC_ENTITIES,
-  conversationPutMutation,
-  deleteSyncMutation,
-  emitSyncMutation,
-  messagePutMutation,
-} from '../services/sync/mutation';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
+import { enforceForageSafety } from '../utils/forageSafety'; import { finishForCall, forCall } from './callText';
+import { registerChatStore } from './storeRefs';
+
+/** Field ID replies get the code-enforced foraging safety net. */
+function isFieldIdConversation(conv: Conversation | undefined): boolean {
+  if (conv?.agentId) return conv.agentId === 'field-id' || conv.agentId === 'atlas';
+  try {
+    const activeAgentId = require('./agentStore').useAgentStore.getState().activeAgentId;
+    return activeAgentId === 'field-id' || activeAgentId === 'atlas';
+  } catch { return false; }
+}
+
+type PersistedChats = { conversations: Conversation[]; activeConversationId: string | null };
+/**
+ * zustand's persist writes on EVERY state change, including each streamed token
+ * (streamingMessage), and each write serializes every saved chat. Saved chats only
+ * change when a message is added or edited, and those updates create new
+ * conversation objects, so an identity check of the persisted slice is enough to
+ * skip the token-by-token rewrites.
+ */
+export function skipUnchangedChatWrites(inner: PersistStorage<PersistedChats>): PersistStorage<PersistedChats> {
+  let last: { conversations: Conversation[]; activeConversationId: string | null } | null = null;
+  let writes: Promise<void> = Promise.resolve();
+  const enqueue = (write: () => Promise<void>): Promise<void> => {
+    const next = writes.then(write);
+    // A rejected write must reach the caller, but it must not block future saves.
+    writes = next.catch(() => undefined);
+    return next;
+  };
+  const same = (value: StorageValue<PersistedChats>) => !!last &&
+    last.activeConversationId === value.state.activeConversationId &&
+    last.conversations.length === value.state.conversations.length &&
+    last.conversations.every((c, i) => c === value.state.conversations[i]);
+  return {
+    getItem: (name) => writes.then(() => inner.getItem(name)),
+    setItem: (name, value) => enqueue(async () => {
+      if (same(value)) return;
+      await inner.setItem(name, value);
+      // Never mark a failed or still-pending write as safely persisted.
+      last = { conversations: value.state.conversations, activeConversationId: value.state.activeConversationId };
+    }),
+    removeItem: (name) => enqueue(async () => {
+      await inner.removeItem(name);
+      last = null;
+    }),
+  };
+}
+
+function nextUpdatedAt(previousUpdatedAt?: string): string {
+  const now = Date.now();
+  if (!previousUpdatedAt) return new Date(now).toISOString();
+  const previousTime = Date.parse(previousUpdatedAt);
+  const nextTime = Number.isNaN(previousTime) ? now : Math.max(now, previousTime + 1);
+  return new Date(nextTime).toISOString();
+}
+
+/** Update a single message inside a conversation's messages array. */
+function updateMessageInConv(
+  conv: Conversation,
+  messageId: string,
+  updater: (msg: Message) => Message,
+): Conversation {
+  return {
+    ...conv,
+    messages: conv.messages.map((msg) => (msg.id === messageId ? updater(msg) : msg)),
+    updatedAt: nextUpdatedAt(conv.updatedAt),
+  };
+}
+
 /**
  * The portion of the in-progress stream that is safe to SPEAK in voice mode —
  * never the reasoning/thinking. Models that stream reasoning on a separate
@@ -40,158 +87,97 @@ import {
  * sentence-by-sentence. onStreamingEnd still speaks the final answer if nothing
  * streamed.
  */
-function speakableStreamingAnswer(
-  streamingMessage: string,
-  streamingReasoning: string,
-): string {
+function speakableStreamingAnswer(streamingMessage: string, streamingReasoning: string): string {
   if (streamingReasoning.length > 0) return streamingMessage; // reasoning came separately
   const closeIdx = streamingMessage.toLowerCase().lastIndexOf('</think>');
-  if (closeIdx !== -1)
-    return streamingMessage.slice(closeIdx + '</think>'.length);
+  if (closeIdx !== -1) return streamingMessage.slice(closeIdx + '</think>'.length);
   // No close tag yet: inline reasoning may still be in progress. Withhold while
   // thinking is enabled; otherwise the content is the answer and is safe to speak.
   const { useAppStore } = require('./appStore');
-  return useAppStore.getState().settings?.thinkingEnabled
-    ? ''
-    : streamingMessage;
+  return useAppStore.getState().settings?.thinkingEnabled ? '' : streamingMessage;
 }
+
 /** Derive conversation title from the first user message. */
-function deriveTitle(
-  currentTitle: string,
-  role: string,
-  content: string,
-): string {
-  if (currentTitle !== 'New Conversation' || role !== 'user')
-    return currentTitle;
+function deriveTitle(currentTitle: string, role: string, content: string): string {
+  if (currentTitle !== 'New Conversation' || role !== 'user') return currentTitle;
   const truncated = content.slice(0, 50);
   return content.length > 50 ? `${truncated}...` : truncated;
 }
-export interface ChatState extends ChatMessageMutationActions {
+
+/** Map over conversations, applying `updater` only to the one matching `conversationId`. */
+function mapConversation(
+  conversations: Conversation[],
+  conversationId: string,
+  updater: (conv: Conversation) => Conversation,
+): Conversation[] {
+  return conversations.map((conv) => (conv.id === conversationId ? updater(conv) : conv));
+}
+
+interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
   streamingMessage: string;
   streamingReasoningContent: string;
   streamingForConversationId: string | null;
-  /**
-   * The uuid the reply being generated will be STORED under, minted before its first token.
-   *
-   * One reply, one identity. It used to be minted at the end, when the message was persisted, so a
-   * paired device streaming this reply live had to invent its own id for it - and then could not tell
-   * that the record which arrived moments later was the same answer. It drew both.
-   */
-  streamingMessageUuid: string | null;
   isStreaming: boolean;
   isThinking: boolean;
-  createConversation: (
-    modelId: string,
-    title?: string,
-    projectId?: string,
-  ) => string;
+  createConversation: (modelId: string, title?: string, projectId?: string, privateChat?: boolean) => string;
   deleteConversation: (conversationId: string) => void;
+  /** Put back a conversation that was just deleted (the Undo bar). */
+  restoreConversation: (conversation: Conversation) => void;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
-  setConversationProject: (
-    conversationId: string,
-    projectId: string | null,
-  ) => void;
+  setConversationProject: (conversationId: string, projectId: string | null) => void;
+  setConversationArchived: (conversationId: string, archived: boolean) => void;
+  setConversationPinned: (conversationId: string, pinned: boolean) => void;
+  renameConversation: (conversationId: string, title: string) => void;
+  setConversationPinVerifier: (conversationId: string, verifier: string | null) => void;
+  setConversationAgent: (conversationId: string, agentId: string | null) => void;
+  setConversationVoiceProfile: (conversationId: string, voiceProfileId: string | undefined) => void;
+  setConversationTone: (conversationId: string, tone: import('../services/chatTone').ChatTonePreset) => void;
+  /** Tools for this chat only; null = back to the agent's or app's defaults. */
+  setConversationTools: (conversationId: string, tools: string[] | null) => void;
   /** Unfile every conversation filed under a project (used when the project is deleted,
    *  so no chat is left pointing at a project that no longer exists). */
   unfileConversationsForProject: (projectId: string) => void;
-  addMessage: (
-    conversationId: string,
-    message: Omit<Message, 'id' | 'timestamp'>,
-  ) => Message;
+  addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => Message;
+  updateMessageContent: (conversationId: string, messageId: string, content: string) => void;
+  updateMessageThinking: (conversationId: string, messageId: string, isThinking: boolean) => void;
+  updateMessageAudio: (conversationId: string, messageId: string, audio: { audioPath?: string; waveformData?: number[]; audioDurationSeconds?: number; isGeneratingAudio?: boolean; isAudioModeMessage?: boolean }) => void;
+  deleteMessage: (conversationId: string, messageId: string) => void;
+  deleteMessagesAfter: (conversationId: string, messageId: string) => void;
   startStreaming: (conversationId: string) => void;
   setStreamingMessage: (content: string) => void;
   appendToStreamingMessage: (token: string) => void;
   appendToStreamingReasoningContent: (token: string) => void;
-  /** Start the next reasoning/answer segment without ending the reply or changing its identity. */
-  resetStreamingSegment: () => void;
   setIsStreaming: (streaming: boolean) => void;
   setIsThinking: (thinking: boolean) => void;
-  /**
-   * The text model is loading, and which one.
-   *
-   * Here rather than in ChatScreen's `useState`, which is where it used to live. A fact known only
-   * to a component is a fact sync cannot see: the phone showed "Loading Qwen3.5 2B" for tens of
-   * seconds while every paired device sat on "Preparing reply...", because the live-stream service
-   * subscribes to THIS store and there was nothing here to read. The image path never had the bug -
-   * its loading state was always a published phase.
-   */
-  isModelLoading: boolean;
-  loadingModelName: string | null;
-  setIsModelLoading: (loading: boolean) => void;
-  setLoadingModelName: (name: string | null) => void;
-  lastReplyEnd: ReplyEnd | null;
-  noteReplyEndHandled: () => void;
-  finalizeStreamingMessage: (
-    conversationId: string,
-    generationTimeMs?: number,
-    generationMeta?: GenerationMeta,
-    turnStatus?: Message['turnStatus'],
-  ) => void;
+  finalizeStreamingMessage: (conversationId: string, generationTimeMs?: number, generationMeta?: GenerationMeta) => void;
   clearStreamingMessage: () => void;
-  getStreamingState: () => StreamingSnapshot;
-  updateCompactionState: (
-    conversationId: string,
-    summary?: string,
-    cutoffMessageId?: string,
-  ) => void;
+  getStreamingState: () => { conversationId: string | null; content: string; reasoningContent: string; isStreaming: boolean; isThinking: boolean };
+  updateCompactionState: (conversationId: string, summary?: string, cutoffMessageId?: string) => void;
   clearAllConversations: () => void;
   getConversationMessages: (conversationId: string) => Message[];
 }
-
-/** The streaming fields, named so a caller can say WHICH state it means rather than list it. */
-type StreamingFields = Pick<
-  ChatState,
-  | 'streamingMessage'
-  | 'streamingReasoningContent'
-  | 'streamingForConversationId'
-  | 'streamingMessageUuid'
-  | 'isStreaming'
-  | 'isThinking'
->;
-
-/**
- * No reply is forming. ONE definition, because that is one fact.
- *
- * It used to be written out in four places - the initial state, the start of a stream, the end of
- * one, and a cancel - so every field added to the streaming state had to be remembered in all four,
- * and whichever copy was missed would leak that field into the next reply. The type is a `Pick`, so
- * adding a streaming field is a compile error here until it is given a cleared value.
- */
-const MODEL_NOT_LOADING = {
-  isModelLoading: false,
-  loadingModelName: null,
-};
-const NO_REPLY_ENDED = { lastReplyEnd: null };
-
-const NO_REPLY_FORMING: StreamingFields = {
-  streamingMessage: '',
-  streamingReasoningContent: '',
-  streamingForConversationId: null,
-  streamingMessageUuid: null,
-  isStreaming: false,
-  isThinking: false,
-};
-
-const chatStorage = createHydrationGatedStorage<PersistedChatState>(
-  undefined,
-  (previous, next) =>
-    previous.conversations === next.conversations &&
-    previous.activeConversationId === next.activeConversationId,
-);
 
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
       conversations: [],
       activeConversationId: null,
-      ...NO_REPLY_FORMING,
-      ...MODEL_NOT_LOADING,
-      ...NO_REPLY_ENDED,
+      streamingMessage: '',
+      streamingReasoningContent: '',
+      streamingForConversationId: null,
+      isStreaming: false,
+      isThinking: false,
 
-      createConversation: (modelId, title, projectId) => {
+      // Preserve the existing four-argument API until chat callers migrate to options.
+
+      createConversation: (modelId, title, projectId, privateChat = false) => {
+        const project = projectId ? require('./projectStore').useProjectStore.getState().getProject(projectId) : undefined; const protectedProject = !!project?.pinVerifier;
+        if (protectedProject && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {
+          throw new Error('Unlock this protected project to start a chat in it.');
+        }
         const id = generateId();
         const conversation: Conversation = {
           id,
@@ -201,265 +187,280 @@ export const useChatStore = create<ChatState>()(
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           projectId: projectId,
+          isPrivate: privateChat,
+          agentId: require('./projectDefaults').defaultAgentFor(project, require('./agentStore').useAgentStore.getState().agents.map((a: { id: string }) => a.id)),
         };
 
-        set(state => ({
+        set((state) => ({
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
         }));
-        emitSyncMutation(conversationPutMutation(conversation));
+        // A chat in a protected project is sealed with the project's PIN as soon as it is saved.
+        if (protectedProject && !privateChat) require('./protectedProjectStorage').sealNewProjectChat(id, projectId);
 
         return id;
       },
 
-      deleteConversation: conversationId => {
-        const removed = get().conversations.find(c => c.id === conversationId);
-        set(state => ({
-          conversations: state.conversations.filter(
-            c => c.id !== conversationId,
-          ),
-          activeConversationId:
-            state.activeConversationId === conversationId
-              ? null
-              : state.activeConversationId,
+      deleteConversation: (conversationId) => {
+        set((state) => ({
+          conversations: state.conversations.filter((c) => c.id !== conversationId),
+          activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
         }));
-        for (const message of removed?.messages ?? []) {
-          if (message.uuid)
-            emitSyncMutation(
-              deleteSyncMutation(CORE_SYNC_ENTITIES.message, message.uuid),
-            );
-        }
-        if (removed)
-          emitSyncMutation(
-            deleteSyncMutation(CORE_SYNC_ENTITIES.conversation, conversationId),
-          );
       },
 
-      setActiveConversation: conversationId => {
+      restoreConversation: (conversation) => {
+        set((state) => state.conversations.some((c) => c.id === conversation.id)
+          ? state
+          : { conversations: [conversation, ...state.conversations] });
+      },
+
+      setActiveConversation: (conversationId) => {
         set({ activeConversationId: conversationId });
       },
 
       getActiveConversation: () => {
         const state = get();
-        return (
-          state.conversations.find(c => c.id === state.activeConversationId) ||
-          null
-        );
+        return state.conversations.find((c) => c.id === state.activeConversationId) || null;
+      },
+
+      setConversationAgent: (conversationId, agentId) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, agentId: agentId ?? undefined, projectId: conv.projectId ?? agentProjectFolder(agentId), updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+
+      setConversationVoiceProfile: (conversationId, voiceProfileId) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, voiceProfileId, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationTone: (conversationId, tonePreset) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, tonePreset, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationTools: (conversationId, tools) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, enabledTools: tools ?? undefined, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+
+      setConversationPinVerifier: () => {
+        // Legacy API deliberately disabled: editing a verifier without
+        // authenticated encryption would turn a locked chat into plaintext.
+        throw new Error('Use protectChat or permanentlyUnprotectChat for an authenticated PIN change.');
+      },
+      renameConversation: (conversationId, title) => {
+        const clean = title.trim().slice(0, 100);
+        if (!clean) return;
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, title: clean, titleAuto: false, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationArchived: (conversationId, archived) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, isArchived: archived, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
+      },
+      setConversationPinned: (conversationId, pinned) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId,
+          (conv) => ({ ...conv, isPinned: pinned, updatedAt: nextUpdatedAt(conv.updatedAt) })) }));
       },
 
       setConversationProject: (conversationId, projectId) => {
-        set(state => ({
-          conversations: state.conversations.map(conv =>
-            conv.id !== conversationId
-              ? conv
-              : {
-                  ...conv,
-                  projectId: projectId || undefined,
-                  updatedAt: nextUpdatedAt(conv.updatedAt),
-                },
+        const into = !!projectId && !!require('./projectStore').useProjectStore.getState().getProject(projectId)?.pinVerifier;
+        const conv = get().conversations.find((c) => c.id === conversationId);
+        if (into && !require('./protectedProjectStorage').isProtectedProjectUnlocked(projectId)) {
+          throw new Error('Unlock this protected project to move a chat into it.');
+        }
+        if (into && conv?.isPrivate) throw new Error('Temporary private chats are not saved, so they cannot join a protected project.');
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id !== conversationId
+              ? c
+              : { ...c, projectId: projectId || undefined, updatedAt: nextUpdatedAt(c.updatedAt) }
           ),
         }));
-        const conversation = get().conversations.find(
-          conv => conv.id === conversationId,
-        );
-        if (conversation)
-          emitSyncMutation(conversationPutMutation(conversation));
+        // Joining a protected project: seal the chat with the project's PIN (a chat that already
+        // has its own PIN keeps it).
+        if (into && !conv?.pinVerifier) require('./protectedProjectStorage').sealNewProjectChat(conversationId, projectId);
       },
 
-      unfileConversationsForProject: projectId => {
-        const affected = get().conversations.filter(
-          conv => conv.projectId === projectId,
-        );
-        set(state => ({
-          conversations: state.conversations.map(conv =>
+      unfileConversationsForProject: (projectId) => {
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
             conv.projectId !== projectId
               ? conv
-              : {
-                  ...conv,
-                  projectId: undefined,
-                  updatedAt: nextUpdatedAt(conv.updatedAt),
-                },
+              : { ...conv, projectId: undefined, updatedAt: nextUpdatedAt(conv.updatedAt) }
           ),
         }));
-        for (const previous of affected) {
-          const conversation = get().conversations.find(
-            conv => conv.id === previous.id,
-          );
-          if (conversation)
-            emitSyncMutation(conversationPutMutation(conversation));
-        }
       },
 
       addMessage: (conversationId, messageData) => {
-        const message = createPersistedMessage(messageData);
+        const message: Message = {
+          id: generateId(),
+          ...messageData,
+          timestamp: Date.now(),
+        };
 
-        set(state => ({
-          conversations: state.conversations.map(conv =>
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
             conv.id === conversationId
               ? {
                   ...conv,
                   messages: [...conv.messages, message],
                   updatedAt: nextUpdatedAt(conv.updatedAt),
-                  title: deriveTitle(
-                    conv.title,
-                    messageData.role,
-                    messageData.content,
-                  ),
+                  title: deriveTitle(conv.title, messageData.role, messageData.content), ...(conv.title === 'New Conversation' && messageData.role === 'user' ? { titleAuto: true } : {}),
                 }
-              : conv,
+              : conv
           ),
         }));
-        emitSyncMutation(messagePutMutation(conversationId, message));
-        const conversation = get().conversations.find(
-          conv => conv.id === conversationId,
-        );
-        if (conversation)
-          emitSyncMutation(conversationPutMutation(conversation));
 
+        // Only scan user-authored plaintext from ordinary chats after the message is saved.
+        // Never scan PIN-locked or private conversations, and the feature is off by default.
+        if (messageData.role === 'user' && typeof messageData.content === 'string') {
+          const conv = get().conversations.find((x) => x.id === conversationId);
+          if (conv) require('./autoMemory').considerConversationMemory(conv, messageData.content);
+        }
         return message;
       },
 
-      ...createMessageMutationActions({
-        updateConversations: update =>
-          set(state => ({ conversations: update(state.conversations) })),
-        getConversationMessages: conversationId =>
-          get().getConversationMessages(conversationId),
-      }),
+      updateMessageContent: (conversationId, messageId, content) => {
+        set((state) => ({
+          conversations: mapConversation(state.conversations, conversationId, (conv) =>
+            updateMessageInConv(conv, messageId, (msg) => ({ ...msg, content }))
+          ),
+        }));
+      },
 
-      startStreaming: conversationId => {
+      updateMessageThinking: (conversationId, messageId, isThinking) => {
+        set((state) => ({
+          conversations: mapConversation(state.conversations, conversationId, (conv) =>
+            updateMessageInConv(conv, messageId, (msg) => ({ ...msg, isThinking }))
+          ),
+        }));
+      },
+
+      updateMessageAudio: (conversationId, messageId, audio) => {
+        set((state) => ({ conversations: mapConversation(state.conversations, conversationId, (conv) => updateMessageInConv(conv, messageId, (msg) => ({ ...msg, ...audio }))) }));
+      },
+
+      deleteMessage: (conversationId, messageId) => {
+        set((state) => ({
+          conversations: mapConversation(state.conversations, conversationId, (conv) => ({
+            ...conv,
+            messages: conv.messages.filter((msg) => msg.id !== messageId),
+            // A compacted summary may still contain facts from the deleted message.
+            compactionSummary: undefined,
+            compactionCutoffMessageId: undefined,
+            updatedAt: nextUpdatedAt(conv.updatedAt),
+          })),
+        }));
+      },
+
+      deleteMessagesAfter: (conversationId, messageId) => {
+        set((state) => ({
+          conversations: mapConversation(state.conversations, conversationId, (conv) => {
+            const messageIndex = conv.messages.findIndex((msg) => msg.id === messageId);
+            if (messageIndex === -1) return conv;
+            return {
+              ...conv,
+              messages: conv.messages.slice(0, messageIndex + 1),
+              updatedAt: nextUpdatedAt(conv.updatedAt),
+            };
+          }),
+        }));
+      },
+
+      startStreaming: (conversationId) => {
         set({
-          ...NO_REPLY_FORMING,
           streamingForConversationId: conversationId,
-          // Minted here, before the first token, and carried all the way to the stored row. This is
-          // the id a paired device sees on every live frame, so when the record arrives it recognises
-          // the answer it is already showing instead of drawing it a second time.
-          streamingMessageUuid: generateId(),
+          streamingMessage: '',
+          streamingReasoningContent: '',
+          isStreaming: false,
           isThinking: true,
         });
       },
 
-      setStreamingMessage: content => {
+      setStreamingMessage: (content) => {
         set({ streamingMessage: content });
       },
 
-      appendToStreamingMessage: token => {
-        set(state => ({
-          streamingMessage: stripStreamingControlTokens(
-            state.streamingMessage + token,
-          ),
+      appendToStreamingMessage: (token) => {
+        set((state) => ({
+          streamingMessage: forCall(stripStreamingControlTokens(state.streamingMessage + token)), // in a call no emoji reaches the screen or the voice
           isStreaming: true,
           isThinking: false,
         }));
-        // Feed only the ANSWER to pro audio for real-time sentence-by-sentence
+        // Feed only the ANSWER to the voice feature for real-time sentence-by-sentence
         // TTS (never the reasoning) — no-op unless voice mode + engine ready;
-        // free builds register nothing.
-        callHook(
-          HOOKS.audioOnStreamingToken,
-          speakableStreamingAnswer(
-            get().streamingMessage,
-            get().streamingReasoningContent,
-          ),
-        );
+        // nothing happens when no voice feature is registered.
+        callHook(HOOKS.audioOnStreamingToken, speakableStreamingAnswer(get().streamingMessage, get().streamingReasoningContent));
       },
 
-      appendToStreamingReasoningContent: token => {
-        set(state => ({
+      appendToStreamingReasoningContent: (token) => {
+        set((state) => ({
           streamingReasoningContent: state.streamingReasoningContent + token,
           isStreaming: true,
           isThinking: false,
         }));
       },
 
-      resetStreamingSegment: () => {
-        set({ streamingMessage: '', streamingReasoningContent: '' });
-      },
-
-      setIsStreaming: streaming => {
+      setIsStreaming: (streaming) => {
         set({ isStreaming: streaming, isThinking: false });
       },
 
-      setIsThinking: thinking => {
+      setIsThinking: (thinking) => {
         set({ isThinking: thinking });
       },
 
-      finalizeStreamingMessage: (
-        conversationId,
-        generationTimeMs,
-        generationMeta,
-        turnStatus,
-      ) => {
-        const {
-          streamingMessage,
-          streamingReasoningContent,
-          streamingForConversationId,
-          streamingMessageUuid,
-          addMessage,
-        } = get();
+      finalizeStreamingMessage: (conversationId, generationTimeMs, generationMeta) => {
+        const { streamingMessage, streamingReasoningContent, streamingForConversationId, addMessage } = get();
 
-        const finalized = finalizeStreamedReply({
-          streamingMessage,
-          streamingReasoningContent,
-          streamingForConversationId,
-          conversationId,
-        });
-        const { content, reasoningContent } = finalized;
-        const persisted =
-          finalized.persisted ||
-          ((turnStatus === 'failed' || turnStatus === 'cancelled') &&
-            streamingForConversationId === conversationId);
-        // End the ephemeral reply before the durable mutation leaves this device. Both use the same
-        // peer link. This order guarantees a receiver sees the final stream frame first and then the
-        // record that replaces it, never the reverse order that could recreate a retired preview.
-        set({ ...NO_REPLY_FORMING, lastReplyEnd: { conversationId, persisted } });
-        if (persisted) {
+        // Parse ONCE at this boundary through the single shared parser (SoC §A / DR1):
+        // split the raw stream into reasoning + a clean answer. The answer is stripped of
+        // control and tool-call markup BY CONSTRUCTION, so no raw markup can reach the
+        // stored message — and no renderer downstream re-parses message.content.
+        const streamReasoning = streamingReasoningContent.trim() || undefined;
+        const parsed = parseModelOutput(streamingMessage, streamReasoning);
+        const reasoningContent = parsed.reasoning ?? undefined;
+        const sanitizedMessage = finishForCall(isFieldIdConversation(get().conversations.find((c) => c.id === conversationId)) ? enforceForageSafety(parsed.answer) : parsed.answer);
+        if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {
             role: 'assistant',
-            content,
+            content: sanitizedMessage,
             reasoningContent,
             generationTimeMs,
             generationMeta,
-            turnStatus,
-            // The SAME id the live frames carried. `createPersistedMessage` keeps a supplied uuid, so
-            // the reply is stored under the identity its peers have already seen.
-            ...(streamingMessageUuid ? { uuid: streamingMessageUuid } : {}),
           });
         }
-      },
-
-      clearStreamingMessage: () => {
-        // Nothing was shown and nothing is stored, so any peer preview for this reply is orphaned.
-        const conversationId = get().streamingForConversationId;
         set({
-          ...NO_REPLY_FORMING,
-          ...(conversationId
-            ? { lastReplyEnd: { conversationId, persisted: false } }
-            : {}),
+          streamingMessage: '',
+          streamingReasoningContent: '',
+          streamingForConversationId: null,
+          isStreaming: false,
+          isThinking: false,
         });
       },
 
-      noteReplyEndHandled: () => set(NO_REPLY_ENDED),
-
-      setIsModelLoading: (loading: boolean) => set({ isModelLoading: loading }),
-      setLoadingModelName: (name: string | null) =>
-        set({ loadingModelName: name }),
+      clearStreamingMessage: () => {
+        set({
+          streamingMessage: '',
+          streamingReasoningContent: '',
+          streamingForConversationId: null,
+          isStreaming: false,
+          isThinking: false,
+        });
+      },
 
       getStreamingState: () => {
         const state = get();
         return {
           conversationId: state.streamingForConversationId,
-          messageId: state.streamingMessageUuid,
           content: state.streamingMessage,
           reasoningContent: state.streamingReasoningContent,
           isStreaming: state.isStreaming,
           isThinking: state.isThinking,
-          isModelLoading: state.isModelLoading,
-          loadingModelName: state.loadingModelName,
         };
       },
 
       updateCompactionState: (conversationId, summary, cutoffMessageId) => {
-        set(state => ({
-          conversations: state.conversations.map(conv =>
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
             conv.id === conversationId
               ? {
                   ...conv,
@@ -467,51 +468,32 @@ export const useChatStore = create<ChatState>()(
                   compactionCutoffMessageId: cutoffMessageId,
                   updatedAt: nextUpdatedAt(conv.updatedAt),
                 }
-              : conv,
+              : conv
           ),
         }));
       },
 
       clearAllConversations: () => {
-        const removed = get().conversations;
         set({ conversations: [], activeConversationId: null });
-        for (const conversation of removed) {
-          for (const message of conversation.messages) {
-            if (message.uuid)
-              emitSyncMutation(
-                deleteSyncMutation(CORE_SYNC_ENTITIES.message, message.uuid),
-              );
-          }
-          emitSyncMutation(
-            deleteSyncMutation(
-              CORE_SYNC_ENTITIES.conversation,
-              conversation.id,
-            ),
-          );
-        }
       },
 
-      getConversationMessages: conversationId => {
-        const conversation = get().conversations.find(
-          c => c.id === conversationId,
-        );
+      getConversationMessages: (conversationId) => {
+        const conversation = get().conversations.find((c) => c.id === conversationId);
         return conversation?.messages || [];
       },
     }),
     {
       name: 'local-llm-chat-storage',
-      storage: chatStorage.storage,
-      onRehydrateStorage: () => () => chatStorage.markHydrated(),
-      version: CHAT_STORAGE_VERSION,
-      migrate: migratePersistedChatState,
-      partialize: (state): PersistedChatState => ({
-        conversations: state.conversations,
-        activeConversationId: state.activeConversationId,
-      }),
-    },
-  ),
+      storage: skipUnchangedChatWrites(createJSONStorage(() => encryptedChatStorage)!),
+      partialize: (state) => {
+        // Atlas: private chats are never saved.
+        const conversations = state.conversations.filter((c) => !c.isPrivate);
+        const activeConversationId = conversations.some((c) => c.id === state.activeConversationId) ? state.activeConversationId : null;
+        return { conversations, activeConversationId };
+      },
+    }
+  )
 );
 
-/** Wait until the latest persisted chat projection is durable. */
-export const waitForChatPersistence = (): Promise<void> =>
-  chatStorage.waitForWrites();
+// The persist adapter and the vaults under this store reach it through this handle (no import cycle).
+registerChatStore(useChatStore);

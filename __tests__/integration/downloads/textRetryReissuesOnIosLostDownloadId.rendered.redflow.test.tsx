@@ -47,13 +47,13 @@ describe('iOS text retry re-issues a rehydrated failed download that lost its do
       },
     }));
 
-     
+    /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
     const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
-     
+    /* eslint-enable @typescript-eslint/no-var-requires */
 
     // Providers must be registered so modelDownloadService can route text retries to textProvider.
     registerCoreDownloadProviders();
@@ -83,7 +83,7 @@ describe('iOS text retry re-issues a rehydrated failed download that lost its do
     await hardwareService.refreshMemoryInfo();
 
     const utils = render(React.createElement(ModelsScreen, {}));
-    const { getByTestId, getByText, getByLabelText, queryByLabelText } = utils;
+    const { getByTestId, getByText, queryByText } = utils;
 
     // Arrive at the model detail via REAL gestures: type a search, then submit it (submit runs the
     // search immediately, past the 500ms debounce), tap the model card.
@@ -97,13 +97,13 @@ describe('iOS text retry re-issues a rehydrated failed download that lost its do
     await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy(), { timeout: 4000 });
 
     // The failed file card must expose a Retry control (a failed rehydrated entry the user must recover).
-    await waitFor(() => expect(getByLabelText('Retry download')).toBeTruthy(), { timeout: 4000 });
+    await waitFor(() => expect(getByText('Retry')).toBeTruthy(), { timeout: 4000 });
 
     // No native download exists yet (the row was lost on the kill).
     expect(boundary.download!.active().length).toBe(0);
 
     // Tap Retry.
-    await act(async () => { fireEvent.press(getByLabelText('Retry download')); });
+    await act(async () => { fireEvent.press(getByText('Retry')); });
 
     // TERMINAL artifact: the retry re-issued a fresh download. The status leaves 'failed' (the failed
     // section + its Retry button disappear) AND a real native download row now exists.
@@ -113,6 +113,6 @@ describe('iOS text retry re-issues a rehydrated failed download that lost its do
     await waitFor(() => {
       expect(boundary.download!.active().length).toBeGreaterThanOrEqual(1);
     }, { timeout: 4000 });
-    expect(queryByLabelText('Retry download')).toBeNull();
+    expect(queryByText('Retry')).toBeNull();
   }, 30000);
 });

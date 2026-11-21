@@ -1,0 +1,14 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const base = 'android/app/src/main/java/ai/offgridmobile/localdream/';
+const source = fs.readFileSync(path.join(root, base, 'AtlasImageCheckpointHeader.kt'), 'utf8');
+const engine = fs.readFileSync(path.join(root, base, 'AtlasNativeDiffusion.kt'), 'utf8');
+const test = fs.readFileSync(path.join(root, 'android/app/src/test/java/ai/offgridmobile/localdream/AtlasImageCheckpointHeaderTest.kt'), 'utf8');
+assert.match(source, /"gguf"/);
+assert.match(source, /"safetensors"/);
+assert.match(source, /headerLength > length - 8L/);
+assert.match(engine, /AtlasImageCheckpointHeader\.validate\(primary\)/);
+assert.match(test, /rejectsTruncatedSafetensorsHeader/);
+console.log('PASS image checkpoint header validation contract');

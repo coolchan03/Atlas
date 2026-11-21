@@ -1,11 +1,10 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
-import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
-import { loadDownloadedModels, saveModelsList } from './storage';
-import { basenameOf } from './reconcileStoredPaths';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ONNXImageModel, ModelEngine } from '../../types';
+import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
+import { copyFileWithProgress } from './copyFile';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
+import { resolveImageModelDir, validateImageModelDir } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
 import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
@@ -90,6 +89,25 @@ function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
   return 'mnn';
 }
 
+async function inspectImageModelDir(root: string, dirName: string): Promise<{ backend: 'mnn' | 'qnn' | 'coreml'; modelPath: string } | null> {
+  // File markers are authoritative. Folder names are user/download metadata and
+  // can be arbitrary, especially for local imports and recovered directories.
+  for (const backend of ['mnn', 'qnn'] as const) {
+    const modelPath = await resolveImageModelDir(root, backend);
+    if (!modelPath) continue;
+    const integrity = await validateImageModelDir(modelPath, backend);
+    if (integrity.complete) return { backend, modelPath };
+  }
+  if (dirName.toLowerCase().includes('coreml')) {
+    try {
+      return { backend: 'coreml', modelPath: await resolveCoreMLModelDir(root) };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
 
 function isUnknownLike(value: string): boolean {
@@ -98,10 +116,7 @@ function isUnknownLike(value: string): boolean {
 }
 
 function shouldSkipSuspiciousRecoveredTextModel(author: string, quantization: string): boolean {
-  if (isUnknownLike(author) || isUnknownLike(quantization)) {
-    return true;
-  }
-  return false;
+  return isUnknownLike(author) || isUnknownLike(quantization);
 }
 
 export interface ScanImageModelsOpts {
@@ -120,8 +135,8 @@ export interface ReconcileImageModelsOpts {
 async function isValidZip(zipPath: string): Promise<boolean> {
   if (!(await RNFS.exists(zipPath))) return false;
   try {
-    const stat = await statFile(zipPath);
-    const size = stat?.size ?? 0;
+    const stat = await RNFS.stat(zipPath);
+    const size = parseSizeInt(stat.size);
     if (!Number.isFinite(size) || size <= 0) return false;
   } catch {
     return false;
@@ -133,57 +148,6 @@ async function isValidZip(zipPath: string): Promise<boolean> {
     // header check is best-effort
   }
   return true;
-}
-
-/** Build the ONNXImageModel record for a recovered on-disk dir (coreml resolves its inner model dir). */
-async function buildRecoveredImageModel(
-  item: { name: string; path: string },
-  backend: 'mnn' | 'qnn' | 'coreml',
-): Promise<ONNXImageModel> {
-  let modelPath = item.path;
-  if (backend === 'coreml') modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
-  const totalSize = await getDirSize(item.path);
-  return {
-    id: item.name,
-    name: item.name.replaceAll('_', ' '),
-    description: '',
-    modelPath,
-    size: totalSize,
-    downloadedAt: new Date().toISOString(),
-    backend,
-  };
-}
-
-/**
- * Recover an image model from a `_zip_name` remnant (a mid-unzip kill): re-unzip and register it —
- * but ONLY if the extraction is complete. isValidZip checks the PK header + size>0 only, so a
- * truncated-but-PK zip yields a PARTIAL mnn/qnn tree that crashes natively at generation (G7). Run
- * the same completeness gate the live/resume paths run; on a still-incomplete extraction, clean up
- * and return null so the dir resurfaces as re-downloadable. Returns null (and cleans up) on any
- * unrecoverable state; never marks `_ready` for a partial model.
- */
-async function recoverImageModelFromZipRemnant(
-  item: { name: string; path: string },
-  imageModelsDir: string,
-): Promise<ONNXImageModel | null> {
-  const zipFileName = (await RNFS.readFile(`${item.path}/_zip_name`, 'utf8')).trim();
-  const zipPath = `${imageModelsDir}/${zipFileName}`;
-  if (!(await isValidZip(zipPath))) {
-    await RNFS.unlink(item.path).catch(() => {}); // zip gone or corrupt — partial dir unrecoverable
-    return null;
-  }
-  await unzip(zipPath, item.path);
-  const backend = detectBackend(item.name);
-  try {
-    await ensureImageExtractionComplete({ backend, modelDir: item.path, zipPath, modelId: item.name });
-  } catch {
-    await RNFS.unlink(item.path).catch(() => {});
-    await RNFS.unlink(zipPath).catch(() => {});
-    return null;
-  }
-  await RNFS.unlink(zipPath).catch(() => {});
-  await RNFS.writeFile(`${item.path}/_ready`, '', 'utf8').catch(() => {});
-  return buildRecoveredImageModel(item, backend);
 }
 
 export async function reconcileFinishedImageDownloads(opts: ReconcileImageModelsOpts): Promise<ONNXImageModel[]> {
@@ -240,20 +204,66 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
       const hasReady = await RNFS.exists(readyPath);
 
       if (hasReady) {
-        // Unzip completed but registerAndNotify was killed — register now.
-        const newModel = await buildRecoveredImageModel(item, detectBackend(item.name));
+        // Unzip/conversion completed but registration was killed — register only
+        // after validating the actual files. A stale/partial _ready must never
+        // resurrect a broken model.
+        const inspected = await inspectImageModelDir(item.path, item.name);
+        if (!inspected) {
+          await RNFS.unlink(readyPath).catch(() => {});
+          continue;
+        }
+        const totalSize = await getDirSize(item.path);
+        const newModel: ONNXImageModel = {
+          id: item.name,
+          name: item.name.replaceAll('_', ' '),
+          description: '',
+          modelPath: inspected.modelPath,
+          size: totalSize,
+          downloadedAt: new Date().toISOString(),
+          backend: inspected.backend,
+        };
         await addImageModel(newModel);
         recovered.push(newModel);
         continue;
       }
 
       // No _ready — check if a zip exists to re-unzip (mid-unzip kill).
-      if (await RNFS.exists(`${item.path}/_zip_name`)) {
-        // Non-fatal on unexpected error: leave the dir for the next startup attempt.
-        const model = await recoverImageModelFromZipRemnant(item, imageModelsDir).catch(() => null);
-        if (model) {
-          await addImageModel(model);
-          recovered.push(model);
+      const zipNamePath = `${item.path}/_zip_name`;
+      const hasZipName = await RNFS.exists(zipNamePath);
+
+      if (hasZipName) {
+        try {
+          const zipFileName = (await RNFS.readFile(zipNamePath, 'utf8')).trim();
+          const zipPath = `${imageModelsDir}/${zipFileName}`;
+          const zipOk = await isValidZip(zipPath);
+
+          if (zipOk) {
+            await unzip(zipPath, item.path);
+            const inspected = await inspectImageModelDir(item.path, item.name);
+            if (!inspected) {
+              await RNFS.unlink(item.path).catch(() => {});
+              continue;
+            }
+            await RNFS.unlink(zipPath).catch(() => {});
+            await RNFS.writeFile(readyPath, '', 'utf8');
+            const totalSize = await getDirSize(item.path);
+            const newModel: ONNXImageModel = {
+              id: item.name,
+              name: item.name.replaceAll('_', ' '),
+              description: '',
+              modelPath: inspected.modelPath,
+              size: totalSize,
+              downloadedAt: new Date().toISOString(),
+              backend: inspected.backend,
+            };
+            await addImageModel(newModel);
+            recovered.push(newModel);
+          } else {
+            // Zip is gone or corrupt — partial dir is unrecoverable, clean up.
+            await RNFS.unlink(item.path).catch(() => {});
+          }
+        } catch {
+          // Non-fatal: leave for the next startup attempt.
         }
       } else {
         // No _ready and no _zip_name — stale artifact from a cancelled or
@@ -272,16 +282,7 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
   const { imageModelsDir, getImageModels, addImageModel } = opts;
   const discoveredModels: ONNXImageModel[] = [];
   const registeredModels = await getImageModels();
-  /**
-   * Index by DIRECTORY NAME, not by absolute path — the same conclusion the text scan below reached.
-   *
-   * `loadDownloadedImageModels` rebases a stale container path onto the current dir, so the common
-   * reinstall case never reaches here. It cannot rebase a path that doesn't contain the current base
-   * dir name, and it returns nothing at all if the load threw. In both cases a path comparison calls a
-   * directory we already own "untracked" and adopts a second row for it. A directory name is unique
-   * within the models dir, so it is the identity that survives a container move.
-   */
-  const registeredDirNames = new Set(registeredModels.map(m => basenameOf(m.modelPath)));
+  const registeredPaths = new Set(registeredModels.map(m => m.modelPath));
 
   const dirExists = await RNFS.exists(imageModelsDir);
   if (!dirExists) return discoveredModels;
@@ -289,23 +290,25 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
   const items = await RNFS.readDir(imageModelsDir);
 
   for (const item of items) {
-    if (!item.isDirectory() || registeredDirNames.has(item.name)) continue;
+    if (!item.isDirectory() || registeredPaths.has(item.path)) continue;
+
+    // Generic scans must never register an extraction/conversion that has not
+    // committed its readiness sentinel. Reconciliation owns incomplete work.
+    if (!(await RNFS.exists(`${item.path}/_ready`))) continue;
+    const inspected = await inspectImageModelDir(item.path, item.name);
+    if (!inspected) continue;
 
     const totalSize = await getDirSize(item.path);
     if (totalSize === 0) continue;
 
     const newModel: ONNXImageModel = {
-      // Derived from the directory name and NOTHING else. `Date.now()` meant the same directory
-      // adopted twice produced two ids nothing downstream could reconcile, and anything holding the
-      // previous id (the selected image model) dangled. A name is unique here, so this id is stable
-      // across every scan, reinstall and container move.
-      id: `recovered_${item.name}`,
+      id: item.name,
       name: item.name.replaceAll('_', ' ').replaceAll(/\.(zip|tar|gz)$/gi, ''),
       description: `Recovered ${item.name} model`,
-      modelPath: item.path,
+      modelPath: inspected.modelPath,
       size: totalSize,
       downloadedAt: new Date().toISOString(),
-      backend: detectBackend(item.name),
+      backend: inspected.backend,
     };
 
     await addImageModel(newModel);
@@ -334,59 +337,19 @@ async function doScanForUntrackedTextModels(
 ): Promise<DownloadedModel[]> {
   const discoveredModels: DownloadedModel[] = [];
   const registeredModels = await getModels();
-  /**
-   * Index by FILE NAME, not by absolute path.
-   *
-   * The absolute path is not an identity. On iOS the models dir lives under
-   * /var/mobile/Containers/Data/Application/<UUID>/, and that UUID changes on every reinstall - so a
-   * path stored yesterday matches nothing today, this scan called the file untracked, and adopted it
-   * again under a fresh `recovered_<name>_<timestamp>` id while the old row stayed behind. One 508 MB
-   * download had accumulated 35 rows across 29 app starts before anyone opened the list.
-   *
-   * A file name is unique within the models dir, which is why it is the stable key - the same
-   * conclusion `useTextModels.ts` had already reached for its own display matching, applied here where
-   * the rows are actually created.
-   */
-  const registeredByFileName = new Map(
-    registeredModels
-      .filter(model => model.fileName)
-      .map(model => [model.fileName, model] as const),
-  );
-  let repairedPaths = false;
+  // A model's attached MTP file (stored beside it as `<stem>.mtp-<name>.gguf`) is a draft helper, not a model:
+  // listing it as a "recovered" model offered something that cannot be loaded.
+  const registeredPaths = new Set(registeredModels.flatMap(m => [m.filePath, (m as { draftPath?: string }).draftPath].filter((p): p is string => !!p)));
 
   const dirExists = await RNFS.exists(modelsDir);
   if (!dirExists) return discoveredModels;
 
   const items = await RNFS.readDir(modelsDir);
-  // The projectors sitting in this same directory. An adopted model has to be offered them, or a
-  // vision model comes back from recovery as text - the primary alone, 508 MB where the whole package
-  // is 706 MB, and a transfer that ships something which loads and cannot see.
-  const mmProjFiles = items.filter(entry => entry.isFile() && isMMProjFile(entry.name.toLowerCase()));
 
   for (const item of items) {
     const lowerName = item.name.toLowerCase();
     const isMmProj = isMMProjFile(lowerName);
-    if (!item.isFile() || !item.name.endsWith('.gguf') || isMmProj) {
-      continue;
-    }
-
-    // Already known. REPAIR the row's path rather than adding a second row for the same file: that is
-    // the whole difference between a registry that survives a reinstall and one that grows a duplicate
-    // on every launch.
-    const known = registeredByFileName.get(item.name);
-    if (known) {
-      if (known.filePath !== item.path) {
-        known.filePath = item.path;
-        repairedPaths = true;
-      }
-      // A row that arrived without its projector gets it here. linkMmProjToModel is a no-op when one is
-      // already linked, and only links a projector that STRICTLY belongs to this model by name and
-      // variant - the same rule the loader uses, so link time and load time cannot disagree.
-      // Narrowed because only a llama record has a projector at all; LiteRT has no such concept, and
-      // linkMmProjToModel returns early for it.
-      const hadProjector = known.engine === 'llama' && Boolean(known.mmProjPath);
-      linkMmProjToModel(known, mmProjFiles);
-      if (!hadProjector && known.engine === 'llama' && known.mmProjPath) repairedPaths = true;
+    if (!item.isFile() || !item.name.endsWith('.gguf') || registeredPaths.has(item.path) || isMmProj || lowerName.includes('.mtp-')) {
       continue;
     }
 
@@ -402,11 +365,7 @@ async function doScanForUntrackedTextModels(
     }
 
     const newModel: LlamaDownloadedModel = {
-      // Derived from the file name and NOTHING else. `Date.now()` in an id meant the same file adopted
-      // twice produced two different ids, so nothing downstream could ever tell them apart - and the
-      // registry had no way back to one row per file. A name is unique in this directory, so this id is
-      // stable across every scan, reinstall and container move.
-      id: `recovered_${item.name}`,
+      id: `recovered_${item.name}_${Date.now()}`,
       name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
       author,
       filePath: item.path,
@@ -418,17 +377,111 @@ async function doScanForUntrackedTextModels(
       engine: 'llama',
     };
 
-    // Adopted WITH its projector, so a recovered vision model is a vision model.
-    linkMmProjToModel(newModel, mmProjFiles);
-    registeredModels.push(newModel);
-    registeredByFileName.set(newModel.fileName, newModel);
-    repairedPaths = true;
+    const models = await getModels();
+    models.push(newModel);
+    await saveModelsList(models);
     discoveredModels.push(newModel);
   }
 
-  // One write for the whole scan. It used to re-read the list and save inside the loop, which is why a
-  // path repaired in memory could not survive: the next iteration reloaded the stored copy over it.
-  if (repairedPaths) await saveModelsList(registeredModels);
-
   return discoveredModels;
+}
+
+export interface ImportLocalModelOpts {
+  sourceUri: string;
+  fileName: string;
+  modelsDir: string;
+  sourceSize?: number | null;
+  engine?: ModelEngine;
+  liteRTVision?: boolean;
+  onProgress?: (progress: { fraction: number; fileName: string }) => void;
+  mmProjSourceUri?: string;
+  mmProjFileName?: string;
+  mmProjSourceSize?: number | null;
+}
+
+function resolveUri(uri: string): string {
+  // Android content:// URIs are passed directly to RNFS.copyFile — no cache copy needed.
+  // iOS file:// URIs need decoding (%20 → space) so RNFS can find the file on disk.
+  if (uri.startsWith('content://')) {
+    return uri;
+  }
+  return decodeURIComponent(uri);
+}
+
+
+export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
+  const { sourceUri, fileName, modelsDir, sourceSize, engine: _engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
+
+  const isLitert = fileName.toLowerCase().endsWith('.litertlm');
+  if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {
+    throw new Error('Only .gguf and .litertlm files can be imported');
+  }
+
+  const resolvedSource = resolveUri(sourceUri);
+  const resolvedMmProjSource = mmProjSourceUri ? resolveUri(mmProjSourceUri) : undefined;
+
+  const destPath = `${modelsDir}/${fileName}`;
+  // Importing a file is an explicit request, so it REPLACES whatever is already under that name: an earlier copy that is still
+  // in the models folder, and/or an entry in the saved list that My Models no longer shows. Refusing ("already in your models
+  // list") left people unable to import a model they had removed, and keeping a same-size leftover left a damaged copy in
+  // place (the same size does not mean the same bytes). The entry is keyed by file name, so it is replaced, never duplicated.
+  const alreadyCopied = resolvedSource === destPath; // picked from the models folder itself: nothing to copy
+  if (!alreadyCopied && await RNFS.exists(destPath)) await RNFS.unlink(destPath);
+  if (mmProjFileName && resolvedMmProjSource !== `${modelsDir}/${mmProjFileName}` && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
+    await RNFS.unlink(`${modelsDir}/${mmProjFileName}`);
+  }
+
+  // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
+  const mainProgressScale = mmProjFileName ? 0.5 : 1;
+  if (!alreadyCopied) {
+    await copyFileWithProgress(resolvedSource, destPath, {
+      knownTotalBytes: sourceSize ?? null,
+      onProgress: onProgress ? (fraction: number) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
+    });
+  }
+
+  const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
+  const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+  const modelName = fileName.replace(/\.gguf$/i, '').replace(/\.litertlm$/i, '').replace(/[_-]Q\d+.*/i, '');
+  const destStat = await RNFS.stat(destPath);
+  const fileSize = parseSizeInt(destStat.size);
+
+  const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
+  const baseModel = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
+  const baseFields = {
+    id: `local_import/${fileName}`,
+    name: modelName,
+    author: 'Local Import',
+    credibility: { source: 'community' as const, isOfficial: false, isVerifiedQuantizer: false },
+  };
+
+  if (isLitert) {
+    const liteRTModel: LiteRTDownloadedModel = {
+      ...baseModel, ...baseFields, engine: 'litert', liteRTVision: liteRTVision ?? false,
+    };
+    await persistDownloadedModel(liteRTModel, modelsDir);
+    return liteRTModel;
+  }
+
+  const llamaModel: LlamaDownloadedModel = { ...baseModel, ...baseFields, engine: 'llama' };
+
+  // Copy mmproj and link it to the model: progress 0.5→1
+  if (mmProjFileName && resolvedMmProjSource) {
+    const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
+    await copyFileWithProgress(resolvedMmProjSource, mmProjDestPath, {
+      knownTotalBytes: mmProjSourceSize ?? null,
+      onProgress: onProgress
+        ? (fraction: number) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
+        : undefined,
+    });
+    const mmProjStat = await RNFS.stat(mmProjDestPath);
+    llamaModel.mmProjPath = mmProjDestPath;
+    llamaModel.mmProjFileName = mmProjFileName;
+    llamaModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+    llamaModel.isVisionModel = true;
+    llamaModel.mmProjManual = true; // the user picked this pair: keep the link whatever the names
+  }
+
+  await persistDownloadedModel(llamaModel, modelsDir);
+  return llamaModel;
 }

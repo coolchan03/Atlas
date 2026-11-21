@@ -1,7 +1,7 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { backgroundDownloadService, modelManager } from '../../../../src/services';
-import { registerAndNotify } from '../../../../src/services/imageDownloadActions';
+import { registerAndNotify } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { resumeImageDownload } from '../../../../src/screens/ModelsScreen/imageDownloadResume';
 
 jest.mock('react-native-fs', () => ({
@@ -44,7 +44,7 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
   },
 }));
 
-jest.mock('../../../../src/services/imageDownloadActions', () => ({
+jest.mock('../../../../src/screens/ModelsScreen/imageDownloadActions', () => ({
   registerAndNotify: jest.fn(),
 }));
 
@@ -124,15 +124,7 @@ describe('resumeImageDownload', () => {
 
     mockGetImageModelsDirectory.mockReturnValue(imageModelsDir);
     mockedRNFS.exists.mockImplementation(async (path: string) => existingPaths.has(path));
-    mockedRNFS.readDir.mockImplementation(async (path: string) => {
-      if (dirEntries[path]) return dirEntries[path];
-      return [...existingPaths]
-        .filter(candidate => candidate.substring(0, candidate.lastIndexOf('/')) === path)
-        .map(candidate => ({
-          ...makeFileItem(candidate),
-          size: statSizes[candidate] ?? 1,
-        }));
-    });
+    mockedRNFS.readDir.mockImplementation(async (path: string) => dirEntries[path] ?? []);
     mockedRNFS.stat.mockImplementation(async (path: string) => ({ size: statSizes[path] ?? 0 } as any));
     mockedRNFS.read.mockImplementation(async (path: string) => headers[path] ?? '');
     mockedRNFS.mkdir.mockImplementation(async (path: string) => {

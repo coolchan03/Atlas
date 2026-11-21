@@ -1,5 +1,4 @@
 import { contextCompactionService } from './contextCompaction';
-import { useChatStore } from '../stores/chatStore';
 
 type Turn = { role: 'user' | 'assistant'; content: string };
 type SamplerConfigOpts = { temperature?: number; topK?: number; topP?: number };
@@ -50,7 +49,7 @@ export async function summarizeSession(
       (stopGeneration?.() ?? Promise.resolve()).catch(() => {}).finally(() => finish(null));
     }, 20_000);
     sendMessage(
-      'Briefly summarize our conversation so far — key topics, decisions, and context. 3 to 5 sentences maximum. Do not call any tools, just answer in plain text.',
+      'Briefly summarize our conversation so far - key topics, decisions, and context. 3 to 5 sentences maximum. Do not call any tools, just answer in plain text.',
       {
         onToken: (token) => { summary += token; },
         onReasoning: () => {},
@@ -117,15 +116,6 @@ export async function runCompaction(params: {
       : recentHistory;
 
     await resetFn(systemPrompt, { samplerConfig: opts.samplerConfig, tools: opts.tools, history: compactedHistory });
-    const previousChars = history.reduce((total, turn) => total + turn.content.length, 0);
-    const compactedChars = compactedHistory.reduce((total, turn) => total + turn.content.length, 0);
-    if (recentStart > 0 && compactedChars < previousChars) {
-      useChatStore.getState().addMessage(conversationId, {
-        role: 'assistant',
-        content: 'Compacted conversation to make room for more messages.',
-        isSystemInfo: true,
-      });
-    }
   } finally {
     contextCompactionService.signalCompacting(false);
   }

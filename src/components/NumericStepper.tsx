@@ -45,7 +45,7 @@ export const NumericStepper: React.FC<NumericStepperProps> = ({
 
   return (
     <View style={styles.row}>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Decrease"
         testID={testID ? `${testID}-decrement` : undefined}
         onPress={decrement}
         disabled={!canDecrement}
@@ -59,7 +59,7 @@ export const NumericStepper: React.FC<NumericStepperProps> = ({
         {display}
       </Text>
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Increase"
         testID={testID ? `${testID}-increment` : undefined}
         onPress={increment}
         disabled={!canIncrement}

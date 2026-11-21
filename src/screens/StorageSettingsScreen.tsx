@@ -8,8 +8,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Card } from '../components';
+import { Card } from '../components';
+import { StorageItemsSection } from './storage/StorageItemsSection';
+import { CacheCleanupSection } from './storage/CacheCleanupSection';
+import { RecentlyDeletedSection } from './storage/RecentlyDeletedSection';
+import { SyncConflictsSection } from './storage/SyncConflictsSection';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
@@ -18,12 +21,9 @@ import { useDownloadStore } from '../stores/downloadStore';
 import { hardwareService, modelManager } from '../services';
 import { OrphanedFilesSection } from './OrphanedFilesSection';
 import { createStyles } from './StorageSettingsScreen.styles';
-import { useWhisperStore } from '../stores/whisperStore';
-import { useModelDownloads } from '../services/modelDownloadService/useModelDownloads';
-import type { RootStackParamList } from '../navigation/types';
 
 export const StorageSettingsScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [storageUsed, setStorageUsed] = useState(0);
@@ -35,10 +35,6 @@ export const StorageSettingsScreen: React.FC = () => {
     downloadedImageModels,
   } = useAppStore();
   const { conversations } = useChatStore();
-  const transcriptionModelCount = useWhisperStore(s => s.presentModelIds.length);
-  const speechModelCount = useModelDownloads().filter(
-    model => model.modelType === 'tts' && model.status === 'completed',
-  ).length;
   const downloads = useDownloadStore(s => s.downloads);
   const removeFromStore = useDownloadStore(s => s.remove);
 
@@ -96,7 +92,7 @@ export const StorageSettingsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Go back"
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
@@ -141,20 +137,6 @@ export const StorageSettingsScreen: React.FC = () => {
           </View>
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
-              <Icon name="mic" size={18} color={colors.primary} />
-              <Text style={styles.infoLabel}>Transcription Models</Text>
-            </View>
-            <Text style={styles.infoValue}>{transcriptionModelCount}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <View style={styles.infoRowLeft}>
-              <Icon name="volume-2" size={18} color={colors.primary} />
-              <Text style={styles.infoLabel}>Speech Models</Text>
-            </View>
-            <Text style={styles.infoValue}>{speechModelCount}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <View style={styles.infoRowLeft}>
               <Icon name="hard-drive" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>Model Storage</Text>
             </View>
@@ -169,14 +151,10 @@ export const StorageSettingsScreen: React.FC = () => {
           </View>
         </Card>
 
-        <View style={styles.section}>
-          <Button
-            title="Auto Setup"
-            variant="outline"
-            onPress={() => navigation.navigate('AutoSetup')}
-            testID="storage-auto-setup"
-          />
-        </View>
+        <CacheCleanupSection onChanged={loadStorageInfo} />
+        <RecentlyDeletedSection />
+        <SyncConflictsSection />
+        <StorageItemsSection />
 
         {staleDownloads.length > 0 && (
           <Card style={styles.section}>
@@ -200,7 +178,7 @@ export const StorageSettingsScreen: React.FC = () => {
                     {entry.fileName || 'Unknown file'} • {entry.modelId || 'Unknown model'}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityLabel="Close"
                   style={styles.deleteButton}
                   onPress={() => handleClearStaleDownload(entry.modelKey)}
                 >
@@ -214,7 +192,7 @@ export const StorageSettingsScreen: React.FC = () => {
         <OrphanedFilesSection onStorageChange={loadStorageInfo} />
 
         <Text style={styles.hint}>
-          To free up space, you can delete models from the Models tab.
+          To free up space, you can delete models in Models → My models.
         </Text>
       </ScrollView>
 

@@ -4,13 +4,14 @@ import {
   showAlert,
   hideAlert,
 } from '../../components';
-import { llmService, activeModelService, modelManager, generationService } from '../../services';
+import { llmService, activeModelService, modelManager } from '../../services';
 import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, reasonFromLoadError } from './modelReadiness';
 import { isOverridableMemoryError } from '../../services/modelLoadErrors';
+import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -38,8 +39,8 @@ type ModelActionDeps = {
   clearStreamingMessage: () => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   addMessage: (convId: string, msg: any) => void;
-  setIsModelLoading: (loading: boolean) => void;
-  setLoadingModel: (model: DownloadedModel | null) => void;
+  setIsModelLoading: SetState<boolean>;
+  setLoadingModel: SetState<DownloadedModel | null>;
   setSupportsVision: SetState<boolean>;
   setShowModelSelector: SetState<boolean>;
   setAlertState: SetState<AlertState>;
@@ -83,9 +84,9 @@ function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'acti
   });
 }
 
-async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolean }): Promise<boolean> {
+async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolean }): Promise<void> {
   const { activeModel, activeModelId } = deps;
-  if (!activeModel || !activeModelId) return false;
+  if (!activeModel || !activeModelId) return;
   try {
     await activeModelService.loadTextModel(activeModelId, undefined, opts);
     deps.setSupportsVision(loadedModelVision(activeModel));
@@ -94,10 +95,8 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
     addBackendFallbackMsg(deps);
-    return true;
   } catch (error: any) {
     deps.setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
-    return false;
   } finally {
     deps.setIsModelLoading(false);
     deps.setLoadingModel(null);
@@ -164,7 +163,7 @@ export async function initiateModelLoad(
                   .then(() => doLoadTextModel(deps, { override: true }))
                   // Resume once the load resolves — don't gate on isModelLoaded() (races
                   // false after a multimodal load, dropping the resume). See the sibling path.
-                  .then(loaded => { if (loaded) onLoadedResume?.(); })
+                  .then(() => onLoadedResume?.())
                   .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
               },
             },
@@ -194,19 +193,15 @@ export async function ensureTextModelForChatFn(deps: {
   setLoadingModel: (m: DownloadedModel | null) => void;
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
-  // The SELECTION first, remembered choice second - from the service, which owns that order. Reading
-  // lastTextModelId alone loaded the previously-picked model and left the selected one on screen.
-  const modelId = activeModelService.selectedTextModelId();
-  if (!modelId) {
+  const { lastTextModelId, downloadedModels } = useAppStore.getState();
+  if (!lastTextModelId) {
     deps.setShowModelSelector(true);
     return false;
   }
-  deps.setLoadingModel(
-    useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null,
-  );
+  deps.setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
   deps.setIsModelLoading(true);
   try {
-    await activeModelService.loadTextModel(modelId);
+    await activeModelService.loadTextModel(lastTextModelId);
     return true;
   } catch {
     return false;
@@ -241,22 +236,71 @@ export async function ensureModelLoadedFn(
     : { ok: false, reason: 'load-threw', detail: 'the model is not resident after load' };
 }
 
+export async function proceedWithModelLoadFn(
+  deps: ModelActionDeps,
+  model: DownloadedModel,
+): Promise<void> {
+  // Close the picker FIRST so the load runs behind the dismissed sheet and the
+  // minimal in-chat loading card shows — not a load running with the sheet still open.
+  deps.setShowModelSelector(false);
+  // Route through the SINGLE shared override helper: the MEASURED residency loader
+  // is the authoritative gate, and its OverridableMemoryError drives the identical
+  // "Load Anyway" affordance every other surface (Home/ChatsList/ModelSelector) uses.
+  await loadModelWithOverride(
+    (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
+    {
+      setAlertState: deps.setAlertState,
+      onAttemptStart: () => {
+        deps.setIsModelLoading(true);
+        deps.setLoadingModel(model);
+        deps.modelLoadStartTimeRef.current = Date.now();
+      },
+      onAttemptEnd: () => {
+        deps.setIsModelLoading(false);
+        deps.setLoadingModel(null);
+        deps.modelLoadStartTimeRef.current = null;
+      },
+      onSuccess: () => {
+        deps.setSupportsVision(loadedModelVision(model));
+        if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
+          const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
+          deps.addMessage(deps.activeConversationId, {
+            role: 'assistant',
+            content: `_Model loaded: ${model.name} (${loadTime}s)_`,
+            isSystemInfo: true,
+          });
+        }
+        // Manual reloads use this path too; surface any requested-accelerator -> CPU
+        // downgrade just like the initial/lazy load paths do.
+        addBackendFallbackMsg(deps);
+      },
+    },
+  );
+}
+
+/**
+ * Selecting a text model in chat is the SAME decision Home/ChatsList/ModelSelector
+ * make: load it through the MEASURED residency loader, offering the shared
+ * "Load Anyway" override if that loader refuses. There is NO separate predictive
+ * pre-check gate here — the residency loader (makeRoomFor, evict-then-measure) is
+ * authoritative, so a model the old fileSize×1.5 estimate would have blocked in
+ * chat now loads exactly as it does from Home (bug OD3).
+ */
 export async function handleModelSelectFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
-  activeModelService.selectTextModel(model.id);
-  deps.setShowModelSelector(false);
+  if (llmService.getLoadedModelPath() === model.filePath) {
+    deps.setShowModelSelector(false);
+    return;
+  }
+  await proceedWithModelLoadFn(deps, model);
 }
 
 export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> {
   const { activeModel, isStreaming, clearStreamingMessage } = deps;
   if (isStreaming) {
-    // Through the OWNER, not the llama engine. llmService is llama.cpp only, so unloading while a LiteRT or
-    // remote reply was streaming used to stop nothing while clearStreamingMessage wiped the screen — tokens
-    // kept arriving for a reply the user could no longer see. generationService stops every engine, aborts a
-    // remote request, and keeps whatever had already streamed (the same thing STOP does).
-    await generationService.stopGeneration();
+    await llmService.stopGeneration();
     clearStreamingMessage();
   }
   const modelName = activeModel?.name;
@@ -279,9 +323,12 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
 
 type ImageModelEffectsDeps = {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
+  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined };
+  activeImageModelId: string | null;
+  downloadedModels: DownloadedModel[];
 };
 export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
-  const { setDownloadedImageModels } = deps;
+  const { setDownloadedImageModels, settings, activeImageModelId, downloadedModels } = deps;
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -302,14 +349,35 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
 
-  }, [setDownloadedImageModels]);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const preload = async () => {
+      if (
+        settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
+        settings.classifierModelId && activeImageModelId
+      ) {
+        const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
+        if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
+          try {
+            if (!cancelled) await activeModelService.loadTextModel(settings.classifierModelId);
+          }
+          catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
+        }
+      }
+    };
+    void preload();
+    return () => { cancelled = true; };
+
+  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId]);
 }
 
 type ModelStateSyncDeps = {
   activeModelInfo: { isRemote: boolean };
   activeModelId: string | null;
   activeModel: DownloadedModel | undefined;
-  activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean; thinkingLevelsOnly?: boolean } } | null;
+  modelDeps: any;
+  activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } } | null;
   activeRemoteTextModelId: string | null;
   isModelLoading: boolean;
   setSupportsVision: (v: boolean) => void;
@@ -319,6 +387,10 @@ type ModelStateSyncDeps = {
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
   const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
+  // The active text model is NOT loaded here (on chat mount / model select). It loads
+  // lazily on send, when the generation path recognizes a local text model is needed
+  // (ensureModelReady → ensureModelLoaded). Loading eagerly here is what made opening a
+  // chat — and switching models — spin up the model before the user sent anything.
   useEffect(() => {
     // Single capability rule (engines.activeTextCapabilities); vision keys on activeModelInfo.isRemote.
     setSupportsVision(activeTextCapabilities({
@@ -336,5 +408,5 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     });
     setSupportsToolCalling(caps.tools);
     setSupportsThinking(caps.thinking);
-  }, [activeModelId, activeModel?.engine, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking, activeRemoteModel?.capabilities?.thinkingLevelsOnly]);
+  }, [activeModelId, activeModel?.engine, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
 }

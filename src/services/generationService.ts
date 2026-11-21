@@ -1,36 +1,30 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
+import { setChatProbe } from './backgroundWork';
 import { llmService } from './llm';
-import { getActiveEngineService, prepareActiveConversation, stopAllTextEngines } from './engines';
-import { activeModelService } from './activeModelService';
-import { remoteServerManager } from './remoteServerManager';
+import { liteRTService } from './litert';
+import { stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
-import { contextCompactionService } from './contextCompaction';
 import logger from '../utils/logger';
+import { startStallWatchdog } from './generationWatchdog';
+import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
-import { checkProPromptForText } from './proPrompt';
+import { remoteServerManager } from './remoteServerManager';
 import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,
   prepareGenerationImpl,
   generateResponseImpl,
-  keepShownPartialOnError,
-  type GenerationRequest,
-  type GenerationWithToolsRequest,
-} from './generationServiceHelpers';
-import {
   generateRemoteResponseImpl,
   generateRemoteWithToolsImpl,
-} from './generationRemoteHelpers';
+  type GenerationWithToolsRequest,
+} from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };
-type FallbackRoute =
-  | { kind: 'remote'; serverId: string; id: string; name: string }
-  | { kind: 'local'; id: string; name: string };
 
 export interface QueuedMessage {
   id: string; conversationId: string; text: string;
@@ -39,7 +33,6 @@ export interface QueuedMessage {
    *  message the user explicitly forced to image mode is dispatched as image on drain — never re-decided
    *  at 'auto' by resolveTurnKind (#510: a queued force-image send generated as text). */
   imageMode?: 'auto' | 'force' | 'disabled';
-  assistantEnabled?: boolean;
 }
 
 export interface GenerationState {
@@ -62,16 +55,14 @@ class GenerationService {
 
   private listeners: Set<GenerationListener> = new Set();
   private abortRequested: boolean = false;
-  /** Monotonic owner for async generation setup. Stop invalidates work that is between awaits. */
-  private generationAttempt: number = 0;
   /** Whether the last/active generation was stopped by the user — lets callers skip a
    *  "no response" retry prompt when the empty result was an intentional abort. */
   wasAborted(): boolean { return this.abortRequested; }
   private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private currentRemoteAbortController: AbortController | null = null;
+  private activeRemoteProviderAtStart: any = null;
   private remoteTimeToFirstToken: number | undefined;
-  private contextUsage: Pick<GenerationMeta, 'contextPromptTokens' | 'contextWindowTokens' | 'contextEstimate'> | undefined;
 
   // Token batching — collect tokens and flush to UI at a controlled rate
   private tokenBuffer: string = '';
@@ -88,16 +79,34 @@ class GenerationService {
     return providerRegistry.getProvider('local');
   }
 
+  private async ensurePersistedRemoteProviderReady(): Promise<void> {
+    const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+    if (!activeServerId || !activeRemoteTextModelId || providerRegistry.hasProvider(activeServerId)) return;
+    try {
+      await remoteServerManager.setActiveRemoteTextModel(activeServerId, activeRemoteTextModelId);
+    } catch (error) {
+      // Never silently route a persisted remote selection to an unrelated local
+      // backend merely because startup provider hydration has not finished.
+      logger.error('[GenerationService] Failed to restore selected remote provider:', error);
+    }
+  }
+
   /** Check if using a remote provider */
   private isUsingRemoteProvider(): boolean {
     const { activeServerId } = useRemoteServerStore.getState();
     const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
-    const localLoaded = llmService.isModelLoaded();
+    const localLoaded = llmService.isModelLoaded() || liteRTService.isModelLoaded();
     logger.log(`[REMOTE-SM] isUsingRemoteProvider? activeServerId=${activeServerId ?? 'none'} hasProvider=${hasProvider} localLoaded=${localLoaded}`);
-    // The explicit remote selection is authoritative. A local resident can still
-    // exist briefly while an earlier load drains; it must never steal this turn.
-    // A persisted server without its registered provider is not ready yet.
-    return !!activeServerId && hasProvider;
+    if (!activeServerId) return false;
+    // Provider must be registered (not just persisted from a previous session)
+    if (!hasProvider) return false;
+    // If a local model is loaded, prefer it over the remote server.
+    // Log a warning so this is diagnosable if a user selects remote but gets local responses.
+    if (localLoaded) {
+      logger.warn('[GenerationService] Local model is loaded — preferring local over active remote server:', activeServerId);
+      return false;
+    }
+    return true;
   }
 
   private flushTokenBuffer(): void {
@@ -138,15 +147,36 @@ class GenerationService {
   private notifyListeners(): void { this.listeners.forEach(l => l(this.getState())); }
 
   private updateState(partial: Partial<GenerationState>): void {
+    const wasGenerating = this.state.isGenerating;
     this.state = { ...this.state, ...partial };
+    if (!wasGenerating && this.state.isGenerating) { holdScreenAwake('text-generation'); this.watchForStall(); }
+    else if (wasGenerating && !this.state.isGenerating) { releaseScreenAwake('text-generation'); this.stopWatchingForStall(); }
     this.notifyListeners();
+  }
+
+  private stallWatch: (() => void) | null = null;
+  private stopWatchingForStall(): void { this.stallWatch?.(); this.stallWatch = null; }
+  /** Ends a reply that shows no progress for minutes, keeping what was written, instead of working forever. */
+  private watchForStall(): void {
+    this.stopWatchingForStall();
+    this.stallWatch = startStallWatchdog({
+      signature: () => {
+        const chat = useChatStore.getState();
+        const conv = chat.conversations.find(c => c.id === this.state.conversationId);
+        return `${chat.streamingMessage.length}|${chat.streamingReasoningContent.length}|${conv?.messages.length ?? 0}`;
+      },
+      onStall: () => {
+        logger.warn('[GenerationService] no progress for minutes - stopping the reply');
+        void this.stopGeneration().catch(() => { });
+        try { require('react-native').Alert.alert('Stopped waiting', 'The model made no progress for 5 minutes, so Atlas stopped it. What it had written is kept. Try again, or ask for a smaller piece at a time.'); } catch { /* no UI */ }
+      },
+    });
   }
 
   private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
     const s = useAppStore.getState();
     const count = s.incrementTextGenerationCount();
     maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: s.hasEngagedSharePrompt, delayMs });
-    checkProPromptForText(delayMs);
   }
 
   private buildToolLoopHandlers() { return buildToolLoopHandlersImpl(this); }
@@ -156,123 +186,18 @@ class GenerationService {
   }
 
   /** Generate a response for a conversation. Runs independently of UI lifecycle. */
-  // Keep the existing positional callback argument for callers outside ChatScreen.
-  // eslint-disable-next-line max-params
   async generateResponse(
     conversationId: string,
     messages: Message[],
     onFirstToken?: () => void,
-    contextUsage?: GenerationRequest['contextUsage'],
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
-    return this.withModelFallback(conversationId, messages, async (route, prepared) => {
-      const request = { conversationId, messages, onFirstToken, contextUsage,
-        prepared, preservePartialOnError: false };
-      if (route.kind === 'remote') await generateRemoteResponseImpl(this, request);
-      else await generateResponseImpl(this, request);
-    });
-  }
-
-  private fallbackRoutes(messages: Message[]): FallbackRoute[] {
-    const remote = useRemoteServerStore.getState();
-    const local = useAppStore.getState();
-    const startedRemote = this.isUsingRemoteProvider();
-    const selectedId = startedRemote ? remote.activeRemoteTextModelId : local.activeModelId;
-    const selectedName = startedRemote
-      ? remote.getActiveRemoteTextModel()?.name || selectedId || 'Remote model'
-      : local.downloadedModels.find(model => model.id === selectedId)?.name || 'Local model';
-    const needsVision = messages.some(message =>
-      message.attachments?.some(attachment => attachment.type === 'image'),
-    );
-    const remoteRoutes = startedRemote
-      ? remote.servers.flatMap(server =>
-          (remote.discoveredModels[server.id] || [])
-            .filter(model =>
-              (server.id !== remote.activeServerId || model.id !== selectedId) &&
-              (!needsVision || model.capabilities.supportsVision),
-            )
-            .map(model => ({ kind: 'remote' as const, serverId: server.id, id: model.id, name: model.name })),
-        )
-      : [];
-    const localRoutes = local.downloadedModels
-      .filter(model =>
-        model.id !== selectedId &&
-        (!needsVision || (model.engine === 'litert' ? model.liteRTVision : model.isVisionModel)),
-      )
-      .sort((a, b) => a.fileSize - b.fileSize)
-      .map(model => ({ kind: 'local' as const, id: model.id, name: model.name }));
-    return [
-      startedRemote
-        ? { kind: 'remote', serverId: remote.activeServerId || '', id: selectedId || '', name: selectedName }
-        : { kind: 'local', id: selectedId || '', name: selectedName },
-      ...remoteRoutes,
-      ...localRoutes,
-    ];
-  }
-
-  private async withModelFallback<T>(
-    conversationId: string,
-    messages: Message[],
-    run: (route: FallbackRoute, prepared: boolean) => Promise<T>,
-    canRetry: () => boolean = () => true,
-  ): Promise<T | void> {
-    const routes = this.fallbackRoutes(messages);
-    let failedName = routes[0].name;
-    let lastError: unknown;
-    let prepared = false;
-    for (let index = 0; index < routes.length; index += 1) {
-      const route = routes[index];
-      if (index > 0) {
-        try {
-          if (route.kind === 'remote') {
-            await remoteServerManager.setActiveRemoteTextModel(route.serverId, route.id);
-          } else {
-            await activeModelService.loadTextModel(route.id);
-            // Loading a local fallback selects it. Clear the prior remote route
-            // before an abort can return and leave both routes selected.
-            remoteServerManager.clearActiveRemoteTextModel();
-            if (this.abortRequested) return;
-            await prepareActiveConversation(conversationId);
-            if (this.abortRequested) return;
-          }
-        } catch (error) {
-          lastError = error;
-          continue;
-        }
-        if (this.abortRequested) return;
-        if (this.state.isGenerating) {
-          this.forceFlushTokens();
-          useChatStore.getState().resetStreamingSegment();
-          this.updateState({ streamingContent: '', isThinking: true, startTime: Date.now() });
-        }
-        this.tokenBuffer = '';
-        this.reasoningBuffer = '';
-        this.totalReasoningLength = 0;
-        this.remoteTimeToFirstToken = undefined;
-        useChatStore.getState().addMessage(conversationId, {
-          role: 'tool', toolName: 'model_fallback',
-          content: `${failedName} could not answer. Trying ${route.name}.`,
-        });
-        prepared = this.state.isGenerating;
-      }
-      try {
-        return await run(route, prepared);
-      } catch (error) {
-        if (this.abortRequested) return;
-        if (contextCompactionService.isContextFullError(error)) {
-          keepShownPartialOnError(this, conversationId);
-          throw error;
-        }
-        logger.warn(
-          `[GenerationService] ${route.name} failed before model fallback: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        lastError = error;
-        failedName = route.name;
-        if (!canRetry()) break;
-      }
+    await this.ensurePersistedRemoteProviderReady();
+    // Route to remote provider if active
+    if (this.isUsingRemoteProvider()) {
+      return this.generateRemoteResponse(conversationId, messages, onFirstToken);
     }
-    if (this.state.isGenerating) keepShownPartialOnError(this, conversationId);
-    throw lastError;
+    return generateResponseImpl(this, { conversationId, messages, onFirstToken });
   }
 
   /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
@@ -285,39 +210,23 @@ class GenerationService {
       onToolCallStart?: (name: string, args: Record<string, any>) => void;
       onToolCallComplete?: (name: string, result: ToolResult) => void;
       onFirstToken?: () => void;
-      contextUsage?: GenerationRequest['contextUsage'];
-      assistantEnabled?: boolean;
     },
   ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
-    let toolStarted = false;
-    const trackedOptions = {
-      ...options,
-      onToolCallStart: (name: string, args: Record<string, any>) => {
-        toolStarted = true;
-        options.onToolCallStart?.(name, args);
-      },
-      onToolCallComplete: (name: string, result: ToolResult) => {
-        toolStarted = true;
-        options.onToolCallComplete?.(name, result);
-      },
-    };
-    return this.withModelFallback(conversationId, messages, async (route, prepared) => {
-      if (route.kind === 'remote') {
-        return generateRemoteWithToolsImpl(this, {
-          conversationId, messages,
-          options: { ...trackedOptions, prepared, preservePartialOnError: false },
-        });
-      }
-      const { enabledToolIds, projectId, contextUsage, assistantEnabled, ...callbacks } = trackedOptions;
-      if (!prepared && !(await this.prepareGeneration(conversationId))) return;
-      this.contextUsage = contextUsage;
-      try {
+    await this.ensurePersistedRemoteProviderReady();
+    // Route to remote provider if active
+    if (this.isUsingRemoteProvider()) {
+      return this.generateRemoteWithTools(conversationId, messages, options);
+    }
+    // Local generation with tools
+    const { enabledToolIds, projectId, ...callbacks } = options;
+    if (!(await this.prepareGeneration(conversationId))) return;
+
+    try {
       const outcome = await runToolLoop({
         conversationId,
         messages,
         enabledToolIds,
         projectId,
-        assistantEnabled,
         callbacks,
         ...this.buildToolLoopHandlers(),
       });
@@ -338,9 +247,12 @@ class GenerationService {
     } catch (error) {
       if (this.abortRequested) return;
       logger.error('[GenerationService] Tool generation error:', error);
+      // Even on error, keep any partial the user already saw — keepShownPartialOrClear flushes the token
+      // buffer to the store first (do NOT discard it here), then finalizes.
+      this.keepShownPartialOrClear();
+      this.resetState();
       throw error;
-      }
-    }, () => !toolStarted);
+    }
   }
 
   /**
@@ -362,12 +274,7 @@ class GenerationService {
     const shownLen = (store.streamingMessage + store.streamingReasoningContent).trim().length;
     logger.log(`[STOP-SM] keepShownPartialOrClear convId=${convId ?? 'null'} shown=${shownLen}ch → ${convId ? 'finalize' : 'clear'}`);
     if (convId) {
-      store.finalizeStreamingMessage(
-        convId,
-        generationTimeMs,
-        this.buildGenerationMeta(),
-        'cancelled',
-      );
+      store.finalizeStreamingMessage(convId, generationTimeMs, this.buildGenerationMeta());
     } else {
       store.clearStreamingMessage();
     }
@@ -375,24 +282,25 @@ class GenerationService {
 
   /** Stop the current generation. Returns partial content if any was generated. */
   async stopGeneration(): Promise<string> {
-    // Set this even between native attempts. Conversation compaction runs after the
-    // failed completion has reset `isGenerating`; Stop/Eject must still prevent its retry.
-    this.abortRequested = true;
-    this.generationAttempt += 1;
     if (!this.state.isGenerating) {
-      // Settle the visible reply before native stop callbacks can finalize it as a normal completion.
-      this.keepShownPartialOrClear();
-      // Stop generation on every engine through the registry — no engine enumeration leaked into the caller.
+      // Defensive stop: terminate every local engine plus the provider that
+      // actually owned the last remote request (which may no longer be selected).
       await stopAllTextEngines();
-      const provider = this.getCurrentProvider();
+      const provider = this.activeRemoteProviderAtStart ?? this.getCurrentProvider();
       if (provider) provider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
       }
+      // Generation already reset — but a partial may still be on screen (e.g. generationSession.end ran
+      // first, or LiteRT's state diverged). Keep the shown output instead of blindly clearing it.
+      this.keepShownPartialOrClear();
       return '';
     }
 
+    // Set abort flag BEFORE stopping so the onComplete callback
+    // knows we're stopping and won't finalize/reset on its own.
+    this.abortRequested = true;
     this.forceFlushTokens();
 
     const { startTime } = this.state;
@@ -407,11 +315,11 @@ class GenerationService {
 
     this.resetState();
 
-    // Stop both local and remote
-    if (this.isUsingRemoteProvider()) {
-      // Abort the provider's XHR so the server connection is closed immediately
-      const provider = this.getCurrentProvider();
-      if (provider) provider.stopGeneration().catch(() => { });
+    // Stop the backend that actually owns this request, not whatever is
+    // currently selected after a mid-generation model/server switch.
+    const remoteProvider = this.activeRemoteProviderAtStart;
+    if (remoteProvider) {
+      remoteProvider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -419,11 +327,9 @@ class GenerationService {
       return partialContent;
     }
 
-    // Stop the native completion after we've already updated UI state,
-    // so the user sees immediate feedback. Store the promise so new
-    // generations can drain it before starting.
-    const engine = getActiveEngineService();
-    this.pendingStop = (engine?.stopGeneration() ?? Promise.resolve())
+    // Stop every local text engine. Only one may generate at a time and this
+    // avoids selected-vs-resident drift choosing the wrong engine.
+    this.pendingStop = stopAllTextEngines()
       .catch(() => { })
       .finally(() => { this.pendingStop = null; });
 
@@ -431,14 +337,18 @@ class GenerationService {
   }
 
   /** Generate a response using a remote provider */
-  // eslint-disable-next-line max-params
   async generateRemoteResponse(
     conversationId: string,
     messages: Message[],
     onFirstToken?: () => void,
-    contextUsage?: GenerationRequest['contextUsage'],
   ): Promise<void> {
-    return generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken, contextUsage });
+    const provider = this.getCurrentProvider();
+    this.activeRemoteProviderAtStart = provider ?? null;
+    try {
+      return await generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken });
+    } finally {
+      if (this.activeRemoteProviderAtStart === provider) this.activeRemoteProviderAtStart = null;
+    }
   }
 
   /** Generate a response with tools using a remote provider */
@@ -447,7 +357,13 @@ class GenerationService {
     messages: Message[],
     options: GenerationWithToolsRequest['options'],
   ): Promise<void> {
-    return generateRemoteWithToolsImpl(this, { conversationId, messages, options });
+    const provider = this.getCurrentProvider();
+    this.activeRemoteProviderAtStart = provider ?? null;
+    try {
+      return await generateRemoteWithToolsImpl(this, { conversationId, messages, options });
+    } finally {
+      if (this.activeRemoteProviderAtStart === provider) this.activeRemoteProviderAtStart = null;
+    }
   }
 
   enqueueMessage(entry: QueuedMessage): void {
@@ -477,18 +393,22 @@ class GenerationService {
 
   private processNextInQueue(): void {
     if (this.state.queuedMessages.length === 0 || !this.queueProcessor) return;
-    const all = this.state.queuedMessages;
-    this.state = { ...this.state, queuedMessages: [] };
+    // Only the first run of messages for the SAME conversation (and the same image mode) is merged. Messages for other chats,
+    // or with a different forced mode, stay queued and run as their own turns afterwards, so text and attachments never cross chats.
+    const queued = this.state.queuedMessages;
+    const head = queued[0];
+    const sameTurn = (m: QueuedMessage) => m.conversationId === head.conversationId && (m.imageMode === 'force') === (head.imageMode === 'force');
+    let n = 0;
+    while (n < queued.length && sameTurn(queued[n])) n++;
+    const all = queued.slice(0, n);
+    this.state = { ...this.state, queuedMessages: queued.slice(n) };
     this.notifyListeners();
     const combined: QueuedMessage = all.length === 1 ? all[0] : {
       id: all[0].id, conversationId: all[0].conversationId,
       text: all.map(m => m.text).join('\n\n'),
       attachments: all.flatMap(m => m.attachments || []),
       messageText: all.map(m => m.messageText).join('\n\n'),
-      // If ANY coalesced send forced image mode, the combined dispatch must force image too — the
-      // user's explicit force must never be dropped by the merge (mirror of the single-message carry).
-      imageMode: all.some(m => m.imageMode === 'force') ? 'force' : all[0].imageMode,
-      assistantEnabled: all.some(m => m.assistantEnabled),
+      imageMode: all[0].imageMode,
     };
     this.queueProcessor(combined).catch(e => { logger.error('[GenerationService] Queue processor error:', e); });
   }
@@ -503,7 +423,6 @@ class GenerationService {
     this.reasoningBuffer = '';
     this.totalReasoningLength = 0;
     this.remoteTimeToFirstToken = undefined;
-    this.contextUsage = undefined;
     this.updateState({
       isGenerating: false,
       isThinking: false,
@@ -518,3 +437,4 @@ class GenerationService {
 }
 
 export const generationService = new GenerationService();
+setChatProbe(() => generationService.getState().isGenerating);

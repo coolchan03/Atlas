@@ -19,11 +19,9 @@ export interface ToolCall {
   id?: string;
   name: string;
   arguments: Record<string, any>;
-  context?: {
-    /** Portable chat identity. Remote action tools bind approval and progress to this chat. */
-    conversationId?: string;
-    projectId?: string;
-  };
+  context?: { projectId?: string };
+  /** Aborted when the call times out or the turn is cancelled. Tools that do I/O stop on it, and nothing is written after it aborts. */
+  signal?: AbortSignal;
 }
 
 /** How a tool call resolved. The loop sets this for EVERY call so the model and UI

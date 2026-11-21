@@ -29,6 +29,26 @@ export interface ActiveModelInfo {
   };
 }
 
+type TextRuntimeState = 'none' | 'selected' | 'loading' | 'loaded' | 'evicted';
+type TextRuntimeBackend = 'CPU' | 'GPU' | 'NPU' | 'Unknown';
+
+/** Actual local text-model runtime state. This describes residency/native reality,
+ * not the user's requested backend setting. */
+export interface TextRuntimeInfo {
+  state: TextRuntimeState;
+  modelId: string | null;
+  modelName?: string;
+  quantization?: string;
+  backend?: TextRuntimeBackend;
+  backendDetail?: string;
+  contextLength?: number;
+  gpuLayers?: number;
+  /** Offloadable layers in the model (block_count + 1), when known. */
+  totalLayers?: number;
+  fallbackNotice?: string | null;
+  loadDurationMs?: number | null;
+}
+
 export interface ResourceUsage {
   memoryUsed: number;
   memoryTotal: number;

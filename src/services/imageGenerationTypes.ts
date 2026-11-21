@@ -1,3 +1,4 @@
+import type { ImageComputeDecision } from './imageAcceleratorSelection';
 /**
  * ImageGenerationService types + the pure phase predicate.
  *
@@ -39,8 +40,6 @@ export interface ImageGenerationState {
   previewPath: string | null;
   prompt: string | null;
   conversationId: string | null;
-  /** Stable id for the assistant message this live image turn will create. */
-  messageId: string | null;
   error: string | null;
   result: GeneratedImage | null;
 }
@@ -73,4 +72,16 @@ export interface RunGenerationOptions {
   imageWidth: number;
   imageHeight: number;
   useOpenCL: boolean;
+  /** sd.cpp engine for this attempt, and the ones to try if it fails. */
+  computeBackend?: 'vulkan' | 'opencl' | 'cpu';
+  fallbacks?: ImageComputeDecision[];
+  /** Why earlier backends were skipped, shown with the result. */
+  fallbackNotes?: string[];
+}
+
+export interface UpdateEnhancementOptions {
+  conversationId: string | undefined;
+  tempMessageId: string | null;
+  enhancedPrompt: string;
+  originalPrompt: string;
 }

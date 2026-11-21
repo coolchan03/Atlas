@@ -127,14 +127,8 @@ describe('appStore', () => {
     it('setDownloadedModels excludes Whisper STT models (they belong to Voice, not Text)', () => {
       const { setDownloadedModels } = useAppStore.getState();
       const text = createDownloadedModel({ id: 'qwen', fileName: 'qwen.gguf' });
-      const whisperById = createDownloadedModel({
-        id: 'whisper-small.en',
-        fileName: 'ggml-small.en.bin',
-      });
-      const whisperByFile = createDownloadedModel({
-        id: 'recovered_x',
-        fileName: 'ggml-base.en.bin',
-      });
+      const whisperById = createDownloadedModel({ id: 'whisper-small.en', fileName: 'ggml-small.en.bin' });
+      const whisperByFile = createDownloadedModel({ id: 'recovered_x', fileName: 'ggml-base.en.bin' });
 
       setDownloadedModels([text, whisperById, whisperByFile]);
 
@@ -145,18 +139,12 @@ describe('appStore', () => {
 
     it('addDownloadedModel ignores Whisper STT models', () => {
       const { addDownloadedModel } = useAppStore.getState();
-      addDownloadedModel(
-        createDownloadedModel({
-          id: 'whisper-small.en',
-          fileName: 'ggml-small.en.bin',
-        }),
-      );
+      addDownloadedModel(createDownloadedModel({ id: 'whisper-small.en', fileName: 'ggml-small.en.bin' }));
       expect(getAppState().downloadedModels).toHaveLength(0);
     });
 
     it('removeDownloadedModel removes model by ID', () => {
-      const { addDownloadedModel, removeDownloadedModel } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });
       const model2 = createDownloadedModel({ id: 'model-2' });
 
@@ -170,8 +158,7 @@ describe('appStore', () => {
     });
 
     it('removeDownloadedModel clears activeModelId if active model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } = useAppStore.getState();
       const model = createDownloadedModel({ id: 'active-model' });
 
       addDownloadedModel(model);
@@ -194,8 +181,7 @@ describe('appStore', () => {
     });
 
     it('removeDownloadedModel preserves activeModelId if different model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });
       const model2 = createDownloadedModel({ id: 'model-2' });
 
@@ -286,7 +272,6 @@ describe('appStore', () => {
 
       expect(settings.temperature).toBe(0.7);
       expect(settings.maxTokens).toBe(1024);
-      expect(settings.maxToolCalls).toBe(25);
       expect(settings.topP).toBe(0.9);
       expect(settings.contextLength).toBe(4096);
       expect(settings.imageGenerationMode).toBe('auto');
@@ -458,8 +443,7 @@ describe('appStore', () => {
     });
 
     it('removeDownloadedImageModel removes model', () => {
-      const { addDownloadedImageModel, removeDownloadedImageModel } =
-        useAppStore.getState();
+      const { addDownloadedImageModel, removeDownloadedImageModel } = useAppStore.getState();
       const model = createONNXImageModel({ id: 'img-model-1' });
 
       addDownloadedImageModel(model);
@@ -469,11 +453,7 @@ describe('appStore', () => {
     });
 
     it('removeDownloadedImageModel clears activeImageModelId if active', () => {
-      const {
-        addDownloadedImageModel,
-        setActiveImageModelId,
-        removeDownloadedImageModel,
-      } = useAppStore.getState();
+      const { addDownloadedImageModel, setActiveImageModelId, removeDownloadedImageModel } = useAppStore.getState();
       const model = createONNXImageModel({ id: 'img-model-1' });
 
       addDownloadedImageModel(model);
@@ -604,8 +584,7 @@ describe('appStore', () => {
     });
 
     it('removeGeneratedImage removes by ID', () => {
-      const { addGeneratedImage, removeGeneratedImage } =
-        useAppStore.getState();
+      const { addGeneratedImage, removeGeneratedImage } = useAppStore.getState();
       const image1 = createGeneratedImage({ id: 'img-1' });
       const image2 = createGeneratedImage({ id: 'img-2' });
 
@@ -619,20 +598,10 @@ describe('appStore', () => {
     });
 
     it('removeImagesByConversationId removes all for conversation', () => {
-      const { addGeneratedImage, removeImagesByConversationId } =
-        useAppStore.getState();
-      const image1 = createGeneratedImage({
-        id: 'img-1',
-        conversationId: 'conv-1',
-      });
-      const image2 = createGeneratedImage({
-        id: 'img-2',
-        conversationId: 'conv-1',
-      });
-      const image3 = createGeneratedImage({
-        id: 'img-3',
-        conversationId: 'conv-2',
-      });
+      const { addGeneratedImage, removeImagesByConversationId } = useAppStore.getState();
+      const image1 = createGeneratedImage({ id: 'img-1', conversationId: 'conv-1' });
+      const image2 = createGeneratedImage({ id: 'img-2', conversationId: 'conv-1' });
+      const image3 = createGeneratedImage({ id: 'img-3', conversationId: 'conv-2' });
 
       addGeneratedImage(image1);
       addGeneratedImage(image2);
@@ -650,8 +619,7 @@ describe('appStore', () => {
     });
 
     it('clearGeneratedImages removes all', () => {
-      const { addGeneratedImage, clearGeneratedImages } =
-        useAppStore.getState();
+      const { addGeneratedImage, clearGeneratedImages } = useAppStore.getState();
 
       addGeneratedImage(createGeneratedImage());
       addGeneratedImage(createGeneratedImage());
@@ -740,10 +708,7 @@ describe('appStore', () => {
       // Apply the same logic as the merge function
       if (typeof merged.imageModelDownloadId === 'number') {
         const ids: Record<string, number> = {};
-        if (
-          Array.isArray(merged.imageModelDownloading) &&
-          merged.imageModelDownloading.length > 0
-        ) {
+        if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
           ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
         }
         (merged as any).imageModelDownloadIds = ids; // NOSONAR: property absent from spread type; as-any required by tsc
@@ -767,10 +732,7 @@ describe('appStore', () => {
     it('handles undefined imageModelDownloadIds gracefully', () => {
       const merged = { imageModelDownloadIds: undefined as any };
 
-      if (
-        !merged.imageModelDownloadIds ||
-        typeof merged.imageModelDownloadIds !== 'object'
-      ) {
+      if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
         merged.imageModelDownloadIds = {};
       }
 
@@ -791,9 +753,7 @@ describe('appStore', () => {
 
       await (useAppStore as any).persist.rehydrate();
 
-      expect(
-        (useAppStore.getState().settings as any).modelLoadingStrategy,
-      ).toBeUndefined();
+      expect((useAppStore.getState().settings as any).modelLoadingStrategy).toBeUndefined();
 
       await AsyncStorage.removeItem('local-llm-app-storage');
     });
@@ -838,6 +798,7 @@ describe('appStore', () => {
       expect(settings.enableGpu).toBe(true);
       expect(settings.gpuLayers).toBe(32);
     });
+
   });
 
   // ============================================================================
@@ -845,11 +806,7 @@ describe('appStore', () => {
   // ============================================================================
   describe('removeDownloadedImageModel branch coverage', () => {
     it('preserves activeImageModelId when a different model is removed', () => {
-      const {
-        addDownloadedImageModel,
-        setActiveImageModelId,
-        removeDownloadedImageModel,
-      } = useAppStore.getState();
+      const { addDownloadedImageModel, setActiveImageModelId, removeDownloadedImageModel } = useAppStore.getState();
       const model1 = createONNXImageModel({ id: 'img-keep' });
       const model2 = createONNXImageModel({ id: 'img-remove' });
 
@@ -866,12 +823,8 @@ describe('appStore', () => {
 
   describe('removeImagesByConversationId branch coverage', () => {
     it('returns empty array when no images match the conversationId', () => {
-      const { addGeneratedImage, removeImagesByConversationId } =
-        useAppStore.getState();
-      const image = createGeneratedImage({
-        id: 'img-1',
-        conversationId: 'conv-1',
-      });
+      const { addGeneratedImage, removeImagesByConversationId } = useAppStore.getState();
+      const image = createGeneratedImage({ id: 'img-1', conversationId: 'conv-1' });
 
       addGeneratedImage(image);
 
@@ -898,7 +851,7 @@ describe('appStore', () => {
 
       const result = merge(
         { imageModelDownloading: 'old-model-id' },
-        currentState,
+        currentState
       );
 
       expect(result.imageModelDownloading).toBeUndefined();
@@ -913,7 +866,7 @@ describe('appStore', () => {
           imageModelDownloadIds: { a: 1 },
           imageModelDownloadId: 42,
         },
-        currentState,
+        currentState
       );
 
       expect(result.imageModelDownloadIds).toBeUndefined();
@@ -926,9 +879,7 @@ describe('appStore', () => {
   // ============================================================================
   describe('settings defaults completeness', () => {
     it('has correct default systemPrompt', () => {
-      expect(getAppState().settings.systemPrompt).toContain(
-        'helpful AI assistant',
-      );
+      expect(getAppState().settings.systemPrompt).toContain('helpful AI assistant');
     });
 
     it('has correct default repeatPenalty', () => {
@@ -976,9 +927,7 @@ describe('appStore', () => {
       jest.resetModules();
       try {
         // Fresh require — no resetStores() interference, so we see the real default
-        const {
-          useAppStore: freshStore,
-        } = require('../../../src/stores/appStore');
+        const { useAppStore: freshStore } = require('../../../src/stores/appStore');
         // ios !== android → true
         expect(freshStore.getState().settings.flashAttn).toBe(true);
       } finally {
@@ -990,7 +939,7 @@ describe('appStore', () => {
       // The store default is Platform.OS !== 'android'. Verify the formula directly.
       const formula = (os: string) => os !== 'android';
       expect(formula('android')).toBe(false); // Android → flash attn off by default
-      expect(formula('ios')).toBe(true); // iOS     → flash attn on by default
+      expect(formula('ios')).toBe(true);      // iOS     → flash attn on by default
     });
 
     it('updateSettings can toggle flashAttn', () => {
@@ -1029,9 +978,7 @@ describe('appStore', () => {
       const { addDownloadedModel } = useAppStore.getState();
 
       for (let i = 0; i < 10; i++) {
-        addDownloadedModel(
-          createDownloadedModel({ id: `model-${i}`, name: `Model ${i}` }),
-        );
+        addDownloadedModel(createDownloadedModel({ id: `model-${i}`, name: `Model ${i}` }));
       }
 
       expect(getAppState().downloadedModels).toHaveLength(10);
@@ -1049,18 +996,15 @@ describe('appStore', () => {
 
     it('drops legacy persisted download tracking fields during migration', () => {
       const currentState = useAppStore.getState();
-      const migrated = (useAppStore.persist as any).getOptions().merge(
-        {
-          state: {
-            downloadProgress: { m1: { progress: 0.5 } },
-            activeBackgroundDownloads: { 1: { fileName: 'x.gguf' } },
-            imageModelDownloading: 'img-1',
-            imageModelDownloadIds: { 'img-1': 12 },
-            imageModelDownloadId: 12,
-          },
+      const migrated = (useAppStore.persist as any).getOptions().merge({
+        state: {
+          downloadProgress: { m1: { progress: 0.5 } },
+          activeBackgroundDownloads: { 1: { fileName: 'x.gguf' } },
+          imageModelDownloading: 'img-1',
+          imageModelDownloadIds: { 'img-1': 12 },
+          imageModelDownloadId: 12,
         },
-        currentState,
-      );
+      }, currentState);
 
       expect(migrated.downloadProgress).toBeUndefined();
       expect(migrated.activeBackgroundDownloads).toBeUndefined();
@@ -1070,8 +1014,7 @@ describe('appStore', () => {
     });
 
     it('handles model add and remove in sequence', () => {
-      const { addDownloadedModel, removeDownloadedModel, setActiveModelId } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel, setActiveModelId } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'keep-model' });
       const model2 = createDownloadedModel({ id: 'temp-model' });
 
@@ -1230,12 +1173,7 @@ describe('appStore', () => {
   describe('suspicious recovered model filtering', () => {
     it('setDownloadedModels filters out recovered_ model with unknown author', () => {
       const { setDownloadedModels } = useAppStore.getState();
-      const suspicious = createDownloadedModel({
-        id: 'recovered_abc',
-        author: 'unknown',
-        quantization: 'Q4_K_M',
-        fileSize: 14 * 1024 * 1024,
-      });
+      const suspicious = createDownloadedModel({ id: 'recovered_abc', author: 'unknown', quantization: 'Q4_K_M' });
       const clean = createDownloadedModel({ id: 'clean-model' });
 
       setDownloadedModels([suspicious, clean]);
@@ -1247,12 +1185,7 @@ describe('appStore', () => {
 
     it('setDownloadedModels filters out recovered_ model with empty author', () => {
       const { setDownloadedModels } = useAppStore.getState();
-      const suspicious = createDownloadedModel({
-        id: 'recovered_xyz',
-        author: '  ',
-        quantization: 'Q4',
-        fileSize: 14 * 1024 * 1024,
-      });
+      const suspicious = createDownloadedModel({ id: 'recovered_xyz', author: '  ', quantization: 'Q4' });
 
       setDownloadedModels([suspicious]);
 
@@ -1261,12 +1194,7 @@ describe('appStore', () => {
 
     it('setDownloadedModels filters out recovered_ model with unknown quantization', () => {
       const { setDownloadedModels } = useAppStore.getState();
-      const suspicious = createDownloadedModel({
-        id: 'recovered_xyz',
-        author: 'Meta',
-        quantization: 'unknown',
-        fileSize: 14 * 1024 * 1024,
-      });
+      const suspicious = createDownloadedModel({ id: 'recovered_xyz', author: 'Meta', quantization: 'unknown' });
 
       setDownloadedModels([suspicious]);
 
@@ -1275,11 +1203,7 @@ describe('appStore', () => {
 
     it('setDownloadedModels keeps recovered_ model with known author and quantization', () => {
       const { setDownloadedModels } = useAppStore.getState();
-      const legit = createDownloadedModel({
-        id: 'recovered_xyz',
-        author: 'Meta',
-        quantization: 'Q4_K_M',
-      });
+      const legit = createDownloadedModel({ id: 'recovered_xyz', author: 'Meta', quantization: 'Q4_K_M' });
 
       setDownloadedModels([legit]);
 
@@ -1288,12 +1212,7 @@ describe('appStore', () => {
 
     it('addDownloadedModel ignores suspicious recovered_ model', () => {
       const { addDownloadedModel } = useAppStore.getState();
-      const suspicious = createDownloadedModel({
-        id: 'recovered_bad',
-        author: 'unknown',
-        quantization: 'unknown',
-        fileSize: 14 * 1024 * 1024,
-      });
+      const suspicious = createDownloadedModel({ id: 'recovered_bad', author: 'unknown', quantization: 'unknown' });
 
       addDownloadedModel(suspicious);
 
@@ -1302,10 +1221,7 @@ describe('appStore', () => {
 
     it('addDownloadedModel accepts non-recovered model regardless of author', () => {
       const { addDownloadedModel } = useAppStore.getState();
-      const model = createDownloadedModel({
-        id: 'normal-model',
-        author: 'unknown',
-      });
+      const model = createDownloadedModel({ id: 'normal-model', author: 'unknown' });
 
       addDownloadedModel(model);
 
@@ -1339,11 +1255,7 @@ describe('appStore', () => {
   // migratePersistedState branches (via actual merge function)
   // ============================================================================
   describe('migratePersistedState via persist merge', () => {
-    const getMergeFn = () =>
-      (useAppStore as any).persist?.getOptions?.().merge as (
-        p: any,
-        c: any,
-      ) => any;
+    const getMergeFn = () => (useAppStore as any).persist?.getOptions?.().merge as (p: any, c: any) => any;
 
     it('migrates missing cacheType with flashAttn=true to q8_0', () => {
       const merge = getMergeFn();
@@ -1379,12 +1291,8 @@ describe('appStore', () => {
         {
           checklistDismissed: true,
           onboardingChecklist: {
-            downloadedModel: false,
-            loadedModel: false,
-            sentMessage: false,
-            triedImageGen: false,
-            exploredSettings: false,
-            createdProject: false,
+            downloadedModel: false, loadedModel: false, sentMessage: false,
+            triedImageGen: false, exploredSettings: false, createdProject: false,
           },
         },
         useAppStore.getState(),
@@ -1415,13 +1323,7 @@ describe('appStore', () => {
     it('leaves a legitimate non-boost context untouched', () => {
       const merge = getMergeFn();
       const result = merge(
-        {
-          settings: {
-            contextLength: 8192,
-            maxTokens: 2048,
-            liteRTMaxTokens: 8192,
-          },
-        },
+        { settings: { contextLength: 8192, maxTokens: 2048, liteRTMaxTokens: 8192 } },
         useAppStore.getState(),
       );
       expect(result.settings.contextLength).toBe(8192);
@@ -1440,26 +1342,6 @@ describe('appStore', () => {
       expect(result.settings.maxTokens).toBe(8192);
     });
 
-    it('re-bases generated images after iOS changes the app container', () => {
-      const merge = getMergeFn();
-      const result = merge(
-        {
-          generatedImages: [
-            createGeneratedImage({
-              id: 'restored-image',
-              imagePath:
-                '/var/mobile/Containers/Data/Application/OLD-UUID/Documents/generated_images/restored.png',
-            }),
-          ],
-        },
-        useAppStore.getState(),
-      );
-
-      expect(result.generatedImages[0].imagePath).toBe(
-        '/mock/documents/generated_images/restored.png',
-      );
-    });
-
     it('keeps a user maxTokens above the boost value even when context was boosted', () => {
       const merge = getMergeFn();
       const result = merge(
@@ -1470,6 +1352,18 @@ describe('appStore', () => {
       );
       expect(result.settings.contextLength).toBe(4096); // boosted → reset
       expect(result.settings.maxTokens).toBe(16384); // user's choice, not the boost value → kept
+    });
+  });
+
+
+  describe('resetSettings', () => {
+    it('restores model settings but keeps personal choices that have no default', () => {
+      const { useAppStore: store } = require('../../../src/stores/appStore');
+      store.getState().updateSettings({ temperature: 1.9, userName: 'Alex', hapticsOff: true, appearance: { font: 'serif' } });
+      store.getState().resetSettings();
+      const settings = store.getState().settings;
+      expect(settings.temperature).not.toBe(1.9);
+      expect(settings).toMatchObject({ userName: 'Alex', hapticsOff: true, appearance: { font: 'serif' } });
     });
   });
 });

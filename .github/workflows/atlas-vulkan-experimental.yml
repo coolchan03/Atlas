@@ -1,0 +1,110 @@
+name: Atlas Vulkan native engine experimental
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [atlas-vulkan-integration-20261011]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces an older build still running. A run started by hand (an audit batch) is never cancelled by a push.
+concurrency:
+  group: atlas-vulkan-experimental-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  native-vulkan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Fetch only public pinned Vulkan submodules
+        run: |
+          git submodule update --init --depth=1 vendor/llama-kt
+          git -C vendor/llama-kt submodule update --init --recursive --depth=1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install pinned Android Vulkan build prerequisites
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc || true
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev ninja-build cmake python3
+          sdkmanager --install 'ndk;27.1.12297006' 'ndk;27.2.12479018' 'platforms;android-35' 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          test -x "$(command -v glslc)"
+      - name: Verify source and Gradle contracts
+        run: |
+          node scripts/check-llamakt-source.cjs
+          node scripts/verify-llamakt-gradle.cjs
+          node scripts/check-llamakt-build-integration.cjs
+          node scripts/check-vulkan-bridge.cjs
+          node scripts/check-vulkan-session.cjs
+          node scripts/check-vulkan-app-ci.cjs
+          node scripts/check-vulkan-apk-artifact.cjs
+          node scripts/check-vulkan-event-emitter.cjs
+          node scripts/check-vulkan-cancel-safety.cjs
+          node scripts/check-vulkan-adapter.cjs
+          node scripts/check-vulkan-model-test-ui.cjs
+          node scripts/check-vulkan-chat-integration.cjs
+          node scripts/check-vulkan-test-package.cjs
+      - name: Install React Native build dependencies
+        run: |
+          npm ci --ignore-scripts
+          node node_modules/llama.rn/install/download-native-artifacts.js
+          ./node_modules/.bin/patch-package
+      - name: Download verified sherpa-onnx AAR
+        run: |
+          mkdir -p android/app/libs
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            -o android/app/libs/sherpa-onnx.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
+          echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
+          test -s android/app/libs/sherpa-onnx.aar
+      - name: Type-check Atlas Vulkan chat integration
+        run: ./node_modules/.bin/tsc --noEmit
+      - name: Test Vulkan streaming and existing LLM behavior
+        run: ./node_modules/.bin/jest --runInBand --coverage=false __tests__/unit/services/vulkanEngine.test.ts __tests__/unit/services/llmVulkan.test.ts __tests__/unit/services/llm.test.ts __tests__/unit/services/llmHelpers.test.ts
+      - name: Generate pinned llama.cpp Vulkan shaders
+        working-directory: vendor/llama-kt
+        run: |
+          bash scripts/bootstrap.sh
+          test -f llama-kt/src/main/cpp/ggml-vulkan/ggml-vulkan.cpp
+          test -n "$(find llama-kt/src/main/cpp/ggml-vulkan/shaders -name '*.cpp' -print -quit)"
+      - name: Build pinned OpenCL ICD bridge
+        working-directory: vendor/llama-kt
+        run: |
+          bash scripts/build-opencl.sh
+          test -s llama-kt/src/main/jniLibs/arm64-v8a/libOpenCL.so
+      - name: Compile Android ARM64 llama.kt native engine
+        working-directory: android
+        run: ./gradlew :atlasLlamaKt:assembleRelease -PatlasVulkanEnabled=true --no-daemon --console=plain
+      - name: Compile full Atlas application with experimental Vulkan bridge
+        working-directory: android
+        run: ./gradlew :app:assembleRelease -PatlasVulkanEnabled=true --no-daemon --console=plain
+      - name: Verify Vulkan, OpenCL, JNI and 16KB ELF packaging
+        run: |
+          node scripts/verify-llamakt-aar.cjs
+          node scripts/verify-vulkan-apk.cjs
+      - uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: atlas-vulkan-experimental-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: atlas-llamakt-vulkan-native-aar
+          path: android/atlasLlamaKt/build/outputs/aar/atlasLlamaKt-release.aar
+          retention-days: 2

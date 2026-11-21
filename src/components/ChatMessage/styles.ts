@@ -1,19 +1,10 @@
+import { Dimensions } from 'react-native';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../../constants';
 
-/**
- * How wide a message is allowed to be, as ONE number.
- *
- * A tool row belongs to the bubble above it, so it has to end where that bubble ends - a row that
- * stretched the full screen put its chevron past the bubble's right edge, which read as the row
- * belonging to the screen rather than to the message. This lived as a repeated '85%' in four
- * places, so the row and the bubble could drift apart silently.
- */
-const MESSAGE_MAX_WIDTH = '85%' as const;
-
-const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createBubbleStyles = (colors: ThemeColors) => ({
   container: {
-    marginVertical: 6,
+    marginVertical: 8,
     paddingHorizontal: 16,
   },
   userContainer: {
@@ -35,7 +26,7 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   // A tool-call reply's content column — matches the assistant bubble width (85%) + left alignment
   // so the thinking box, pre-text, and tool cards line up with every other AI message.
   toolCallReplyContent: {
-    width: MESSAGE_MAX_WIDTH,
+    width: '85%' as const,
     alignSelf: 'flex-start' as const,
   },
   toolCallPreText: {
@@ -43,59 +34,9 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingBottom: 6,
     width: '100%' as any,
   },
-  /**
-   * ONE rhythm for every tool row, whatever produced it.
-   *
-   * A requested call, a synced artifact and a finished result are the same thing at three moments,
-   * so they get the same container: one row per container, the same 8px above and below, left
-   * aligned in the assistant column. They used to disagree. A turn's requested calls were grouped
-   * N-to-a-container at 2px apart, centred and inset 16px INSIDE the 85% assistant column, while a
-   * result stood alone, centred and inset 16px from the SCREEN - two left edges and two gaps, which
-   * read as tool calls nested inside one another and as rows bunching mid-stream.
-   */
-  toolRow: {
-    // No maxWidth here. The parent column (toolCallReplyContent) is ALREADY the bubble's width, so
-    // capping the row at 85% again applied the same 85% twice: the row ended ~13% short of the
-    // bubble above it and its chevron stopped mid-bubble instead of at the bubble's right edge.
-    // Stretching to the column is what makes the row end exactly where its message ends.
-    alignSelf: 'stretch' as const,
-    alignItems: 'flex-start' as const,
-    paddingVertical: 4,
-  },
-  messageFooterRow: {
-    paddingVertical: 4,
-    width: MESSAGE_MAX_WIDTH,
-    alignSelf: 'flex-start' as const,
-  },
-  messageFooterHeader: {
-    paddingVertical: 0,
-  },
-  /**
-   * The head of a call/result pair: the "Using X" row, which is always followed by the row carrying
-   * that same call's duration. They are one event, so they sit closer to each other than to the next
-   * call - otherwise a transcript reads as a flat list of unrelated rows at identical spacing.
-   */
-  toolRowPaired: {
-    // Same column as toolRow, and same reason for not re-applying MESSAGE_MAX_WIDTH.
-    alignSelf: 'stretch' as const,
-    alignItems: 'flex-start' as const,
-    paddingTop: 4,
-    paddingBottom: 0,
-  },
-  /**
-   * The gutter a standalone tool-result message sits in: the same left edge as `container`, and
-   * deliberately NO vertical margin. `container` carries `marginVertical: 8`, which on top of the
-   * row's own 8px padding would space two results 32px apart while the requested calls inside one
-   * assistant turn sat at 16px - the same unequal rhythm, reintroduced from the other side.
-   */
-  toolMessageRow: {
-    paddingHorizontal: 16,
-    alignItems: 'flex-start' as const,
-  },
   toolStatusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    alignSelf: 'stretch' as const,
     gap: 6,
     paddingVertical: 2,
   },
@@ -104,10 +45,6 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontFamily: FONTS.mono,
     color: colors.textMuted,
     flex: 1,
-  },
-  toolStatusTextCompact: {
-    flex: 0,
-    flexShrink: 1,
   },
   toolDetailContainer: {
     marginTop: 6,
@@ -126,11 +63,10 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     lineHeight: 16,
   },
   bubble: {
-    maxWidth: MESSAGE_MAX_WIDTH,
+    maxWidth: '85%' as const,
     borderRadius: 8,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    ...shadows.small,
   },
   bubbleWithAttachments: {
     paddingHorizontal: 8,
@@ -140,6 +76,31 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   userBubble: {
     backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
+  },
+  // Clean layout (like ChatGPT and Claude): the reply is plain text across the page, your own message keeps a
+  // rounded bubble, and the gaps between messages are smaller.
+  lookLabel: {
+    fontWeight: '700' as const,
+    marginBottom: 2,
+    color: colors.primary,
+  },
+  cleanContainer: {
+    marginVertical: 4,
+    paddingHorizontal: 12,
+  },
+  cleanAssistantBubble: {
+    backgroundColor: 'transparent' as const,
+    paddingHorizontal: 0,
+    paddingVertical: 2,
+    maxWidth: '100%' as const,
+    minWidth: undefined,
+    width: '100%' as const,
+  },
+  cleanUserBubble: {
+    maxWidth: '85%' as const,
+    borderRadius: 18,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   assistantBubble: {
     backgroundColor: colors.surface,
@@ -178,6 +139,9 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     gap: SPACING.xs,
   },
+  audioTranscription: {
+    ...TYPOGRAPHY.bodySmall,
+  },
   documentBadgeUser: {
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
@@ -207,15 +171,13 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
   },
   attachmentImage: {
-    // Full width of the bubble, with the height following the picture's own shape. A fixed 140 square
-    // left a band of empty bubble beside every image, and cropped anything that was not square.
-    // The ratio comes from the attachment, because only it knows its shape.
-    width: '100%' as const,
+    width: 140,
+    height: 140,
     borderRadius: 12,
   },
 });
 
-const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createThinkingStyles = (colors: ThemeColors) => ({
   text: {
     ...TYPOGRAPHY.body,
     lineHeight: 20,
@@ -257,10 +219,8 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   thinkingBlock: {
     backgroundColor: colors.surfaceLight,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.small,
     marginBottom: 8,
+    overflow: 'hidden' as const,
     width: '100%' as const,
   },
   /** Full-width ThinkingBlock when rendered outside a message bubble (e.g. ToolCallWithThinking).
@@ -270,9 +230,6 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
    *  visible preview. Stretch fills the parent width in both collapsed and expanded states. */
   thinkingBlockWrapper: {
     alignSelf: 'stretch' as const,
-    // The same padding a tool row carries, so a thinking block joins the same rhythm instead of
-    // sitting flush against the row above it.
-    paddingVertical: 4,
   },
   thinkingHeader: {
     flexDirection: 'row' as const,
@@ -303,9 +260,10 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontWeight: '500' as const,
   },
   thinkingPreview: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
     marginTop: 6,
-    maxHeight: 36,
-    overflow: 'hidden' as const,
+    lineHeight: 18,
     opacity: 0.8,
   },
   thinkingToggle: {
@@ -330,7 +288,7 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   metaRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginTop: 6,
+    marginTop: 4,
     marginHorizontal: 8,
     gap: 8,
   },
@@ -355,11 +313,9 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
+    marginTop: 2,
+    marginHorizontal: 8,
     gap: 3,
-  },
-  generationMetaContainer: {
-    alignSelf: 'stretch' as const,
-    marginTop: 0,
   },
   generationMetaText: {
     ...TYPOGRAPHY.meta,
@@ -395,6 +351,28 @@ const createActionStyles = (colors: ThemeColors) => ({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
+  selectTextContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  selectTextHint: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    marginBottom: SPACING.sm,
+  },
+  selectTextScroll: {
+    maxHeight: 360,
+    backgroundColor: colors.surface,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: SPACING.md,
+  },
+  selectTextBody: {
+    ...TYPOGRAPHY.body,
+    fontFamily: FONTS.mono,
+    color: colors.text,
+  },
   editInput: {
     ...TYPOGRAPHY.body,
     fontFamily: FONTS.mono,
@@ -404,8 +382,9 @@ const createActionStyles = (colors: ThemeColors) => ({
     borderColor: colors.border,
     padding: SPACING.md,
     color: colors.text,
-    minHeight: 100,
-    maxHeight: 300,
+    // Long messages need room: about half the screen, scrolling inside.
+    minHeight: 160,
+    maxHeight: Math.max(300, Math.round(Dimensions.get('window').height * 0.5)),
     textAlignVertical: 'top' as const,
   },
   editActions: {
@@ -440,8 +419,8 @@ const createActionStyles = (colors: ThemeColors) => ({
   },
 });
 
-export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  ...createBubbleStyles(colors, shadows),
-  ...createThinkingStyles(colors, shadows),
+export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  ...createBubbleStyles(colors),
+  ...createThinkingStyles(colors),
   ...createActionStyles(colors),
 });

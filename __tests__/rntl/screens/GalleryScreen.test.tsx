@@ -131,7 +131,7 @@ jest.mock('../../../src/stores', () => ({
   }),
 }));
 
-const mockDeleteGeneratedImage = jest.fn(() => Promise.resolve(true));
+const mockDeleteGeneratedImage = jest.fn(() => Promise.resolve());
 const mockGetGeneratedImages = jest.fn(() => Promise.resolve([]));
 const mockCancelGeneration = jest.fn(() => Promise.resolve());
 let mockImageGenState = {
@@ -393,10 +393,7 @@ describe('GalleryScreen', () => {
       fireEvent.press(result.getByTestId('alert-button-Delete'));
     });
 
-    expect(mockDeleteGeneratedImage).toHaveBeenCalledWith(
-      'img-1',
-      '/mock/generated/sunset.png',
-    );
+    expect(mockDeleteGeneratedImage).toHaveBeenCalledWith('img-1');
     expect(mockRemoveGeneratedImage).toHaveBeenCalledWith('img-1');
   });
 

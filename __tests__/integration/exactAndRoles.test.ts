@@ -1,0 +1,79 @@
+/** Retrieval from a real database: a question naming a section finds that section's text; teaching and reference documents are searched apart; an older edition is not used. Only the text reader and embedding model are faked. */
+import { installRealSqlite } from '../harness/sqliteFake';
+
+let mockText = '';
+jest.mock('../../src/services/documentService', () => ({
+  documentService: { processDocumentFromPath: jest.fn(async () => ({ uri: '/x', textContent: mockText })) },
+}));
+jest.mock('../../src/services/rag/embedding', () => ({
+  embeddingService: { isLoaded: () => true, load: jest.fn(), embed: jest.fn(async () => [1, 0, 0, 0]), embedBatch: jest.fn(async (t: string[]) => t.map(() => [1, 0, 0, 0])), unload: jest.fn() },
+}));
+
+const filler = (s: string) => `${s} ${'This sentence is part of the document and talks about expensing property in general terms. '.repeat(25)}`;
+
+it('finds the passage that opens with the section asked about, searches by role, and uses the cache until a document changes', async () => {
+  installRealSqlite();
+  const { ragService } = require('../../src/services/rag');
+  const add = async (name: string, text: string) => { mockText = text; await ragService.indexDocument({ projectId: 'p1', filePath: `/in/${name}`, fileName: name, fileSize: 100 }); };
+  await add('Title 26 - Internal Revenue Code.pdf', `${filler('§ 197. Amortization of goodwill and certain other intangibles.')}\n\n${filler('§ 179. Election to expense certain depreciable business assets.')}`);
+  await add('Federal Taxation textbook.pdf', filler('Chapter 8. Deductions for depreciation and expensing.'));
+  const { isReference, isTeaching } = require('../../src/standards/docRoles');
+  expect(isReference('Title 26 - Internal Revenue Code.pdf')).toBe(true);
+  expect(isTeaching('Federal Taxation textbook.pdf')).toBe(true);
+
+  const exact = await ragService.searchProject('p1', 'What is the limit under § 179?', { topK: 3 });
+  expect(exact.chunks[0].content.trimStart().startsWith('§ 179.')).toBe(true); // the exact section first, not the look-alike § 197
+
+  const teaching = await ragService.searchProject('p1', 'depreciation', { topK: 5, include: isTeaching });
+  expect(new Set(teaching.chunks.map((c: { name: string }) => c.name))).toEqual(new Set(['Federal Taxation textbook.pdf']));
+  const reference = await ragService.searchProject('p1', 'depreciation', { topK: 5, include: isReference });
+  expect(new Set(reference.chunks.map((c: { name: string }) => c.name))).toEqual(new Set(['Title 26 - Internal Revenue Code.pdf']));
+  expect((await ragService.searchProject('p1', 'depreciation', { topK: 5, include: () => false })).chunks).toEqual([]);
+
+  // A lesson follows a pointer in the law: § 179 here points to § 197, and the real search finds that section's passage.
+  const { followPointers } = require('../../src/topics/service');
+  const held = [{ name: 'Title 26 - Internal Revenue Code.pdf', content: '§ 179. Election to expense. See also section 197 for intangibles.', position: 99, doc_id: 1 }];
+  const pointed = await followPointers(held, (q: string) => ragService.searchProject('p1', q, { topK: 3 }));
+  expect(pointed).toHaveLength(1);
+  expect(pointed[0].content.trimStart().startsWith('§ 197.')).toBe(true);
+
+  // A document added after a search is found by the next one (the cache is not stale).
+  await add('Another book.pdf', filler('Chapter 9. More on expensing property.'));
+  const after = await ragService.searchProject('p1', 'expensing', { topK: 10, include: isTeaching });
+  expect(after.chunks.some((c: { name: string }) => c.name === 'Another book.pdf')).toBe(true);
+});
+
+it('a backup restore or append counts as a change, so a search never serves the old text', async () => {
+  installRealSqlite();
+  const { ragDatabase } = require('../../src/services/rag/database');
+  await ragDatabase.ensureReady();
+  const doc = { projectId: 'p2', name: 'Restored.pdf', path: '/r', size: 1, enabled: true, createdAt: new Date().toISOString(), chunks: [{ content: 'restored text', position: 0 }] };
+  const v0 = ragDatabase.version;
+  ragDatabase.appendProjectDocuments([doc]);
+  expect(ragDatabase.version).toBeGreaterThan(v0);
+  const v1 = ragDatabase.version;
+  ragDatabase.restoreProjectDocuments(['p2'], [doc]);
+  expect(ragDatabase.version).toBeGreaterThan(v1);
+});
+
+it('a project inside a folder searches the folder\'s documents too, and a sibling does not see them', async () => {
+  installRealSqlite();
+  const { ragService } = require('../../src/services/rag');
+  const { useProjectStore } = require('../../src/stores/projectStore');
+  const make = (name: string, parentId?: string) => useProjectStore.getState().createProject({ name, description: '', systemPrompt: '', ...(parentId ? { parentId } : {}) }).id;
+  const folder = make('CPA Study');
+  const far = make('FAR', folder);
+  const aud = make('AUD', folder);
+  const alone = make('Alone');
+  mockText = filler('Chapter 3. Shared textbook on expensing property.');
+  await ragService.indexDocument({ projectId: folder, filePath: '/in/Shared book.pdf', fileName: 'Shared book.pdf', fileSize: 100 });
+  mockText = filler('Chapter 1. FAR only notes on expensing property.');
+  await ragService.indexDocument({ projectId: far, filePath: '/in/FAR notes.pdf', fileName: 'FAR notes.pdf', fileSize: 100 });
+  const names = (r: { chunks: Array<{ name: string }> }) => new Set(r.chunks.map((c) => c.name));
+  expect(names(await ragService.searchProject(far, 'expensing property', { topK: 6 }))).toEqual(new Set(['Shared book.pdf', 'FAR notes.pdf']));
+  expect(names(await ragService.searchProject(aud, 'expensing property', { topK: 6 }))).toEqual(new Set(['Shared book.pdf']));
+  expect(names(await ragService.searchProject(alone, 'expensing property', { topK: 6 }))).toEqual(new Set());
+  const docs = await ragService.getDocumentsInScope(far);
+  expect(docs.map((d: { name: string; fromFolder?: string }) => [d.name, !!d.fromFolder]).sort()).toEqual([['FAR notes.pdf', false], ['Shared book.pdf', true]]);
+  expect((await ragService.getDocumentsByProject(far)).map((d: { name: string }) => d.name)).toEqual(['FAR notes.pdf']); // the project's own list is just its own
+});

@@ -182,6 +182,7 @@ describe('doLoadLiteRTModel branches', () => {
       loadedTextModelId: 'prev',
       store: { settings: { ...makeStore().settings, liteRTBackend: 'gpu', liteRTMaxTokens: 16384 } },
     });
+    mockedGetState.mockReturnValue(ctx.store);
 
     await doLoadTextModel(ctx);
 

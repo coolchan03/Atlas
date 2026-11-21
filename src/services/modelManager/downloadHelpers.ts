@@ -6,7 +6,6 @@ import RNFS from 'react-native-fs';
 import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../types';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import { buildDownloadedModel, persistDownloadedModel } from './storage';
-import { sizeToBytes } from '../../utils/fileSize';
 
 export async function getOrphanedTextFiles(
   modelsDir: string,
@@ -30,7 +29,7 @@ export async function getOrphanedTextFiles(
       orphaned.push({
         name: file.name,
         path: file.path,
-        size: sizeToBytes(file.size),
+        size: typeof file.size === 'string' ? Number.parseInt(file.size, 10) : file.size,
       });
     }
   }

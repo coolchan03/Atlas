@@ -4,9 +4,10 @@
  */
 
 import { useAppStore } from '../stores/appStore';
+import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta, nextStreamedContent, restoreCutStart } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
@@ -127,9 +128,12 @@ export interface ToolGenerationDeps {
   isThinkingEnabled: boolean;
   isGemma4Model: boolean;
   disableCtxShift: boolean;
+  /** The context window in use, so an automatic reply length can follow it. */
+  contextLength?: number;
+  /** The loaded model's file path, for its recommended sampling defaults. */
+  modelPath?: string | null;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
-  /** Async because it also drops images whose file is gone — see LLMService.convertToOAIMessages. */
-  convertToOAIMessages: (messages: Message[]) => Promise<any[]>;
+  convertToOAIMessages: (messages: Message[]) => any[];
   setPerformanceStats: (stats: any) => void;
   setIsGenerating: (v: boolean) => void;
 }
@@ -150,7 +154,7 @@ export async function generateWithToolsImpl(
     // Reserve context space for tool schemas (~100 tokens per tool)
     const toolTokenReserve = options.tools.length * 100;
     const managed = await deps.manageContextWindow(messages, toolTokenReserve);
-    const oaiMessages = await deps.convertToOAIMessages(managed);
+    const oaiMessages = deps.convertToOAIMessages(managed);
     const { settings } = useAppStore.getState();
     const startTime = Date.now();
     let firstTokenMs = 0;
@@ -166,10 +170,10 @@ export async function generateWithToolsImpl(
 
     const completionParams = {
       messages: oaiMessages,
-      ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
+      ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift, modelPath: deps.modelPath, contextLength: deps.contextLength }),
       tools: options.tools,
       tool_choice: 'auto',
-      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model, settings.reasoningBudget),
+      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model),
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));
@@ -188,11 +192,11 @@ export async function generateWithToolsImpl(
       // into content. Route each to its own channel so the thinking block renders and the raw
       // <|channel> markers (data.token) never leak into the answer. (The tool path previously appended
       // data.token verbatim, so gemma's reasoning + its <|channel> delimiters landed in the reply.)
-      const contentPiece = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
+      const contentPiece = getStreamingDelta(nextStreamedContent(data, streamedContentSoFar), streamedContentSoFar);
       const reasoningPiece = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
-      if (data.content) streamedContentSoFar = data.content;
-      else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
-      if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+      // Track what was displayed, not the parser's latest value (see getStreamingDelta).
+      if (contentPiece) streamedContentSoFar += contentPiece;
+      if (reasoningPiece) streamedReasoningSoFar += reasoningPiece;
       if (reasoningPiece) { fullReasoning += reasoningPiece; options.onStream?.({ reasoningContent: reasoningPiece }); }
       if (contentPiece) {
         const visible = toolCallFilter ? toolCallFilter.process(contentPiece) : contentPiece;
@@ -218,6 +222,8 @@ export async function generateWithToolsImpl(
       tokenCount = cr?.tokens_predicted || tokenCount;
       logger.log(`[LLM-Tools] Using completionResult.content as response (${fullResponse.length} chars)`);
     }
+    // The streamed text can lack the first letters or words when the parser revised what was already shown.
+    if (typeof cr?.content === 'string') fullResponse = restoreCutStart(fullResponse, cr.content);
     // The reasoning the user sees: prefer the runtime's parsed reasoning_content, else what streamed.
     const finalReasoning = (typeof cr?.reasoning_content === 'string' && cr.reasoning_content) || fullReasoning;
 
@@ -235,11 +241,11 @@ export async function generateWithToolsImpl(
 
     deps.setPerformanceStats({
       ...recordGenerationStats(startTime, firstTokenMs, tokenCount),
-      lastPromptTokenCount: cr?.tokens_evaluated,
       // Flag a reply cut off at the n_predict cap so the UI can show it (B15) — but NOT a user stop
       // (interrupted), which also has stopped_eos:false. Single verdict shared with the plain path.
       lastTruncated: isTruncatedResult(cr),
     });
+    recordLlamaTimings(cr);
     generating = false;
     deps.setIsGenerating(false);
     if (cr?.context_full) {

@@ -8,35 +8,6 @@
 /** Provider types supported by the system */
 type RemoteProviderType = 'openai-compatible' | 'anthropic';
 
-/** Optional OpenAI-compatible media models served by this endpoint. */
-export interface RemoteMediaModelIds {
-  text?: string;
-  image?: string;
-  transcription?: string;
-  voice?: string;
-}
-
-export type RemoteModelCategory = keyof RemoteMediaModelIds;
-
-/** One user-selectable model reported by the remote server. */
-export interface RemoteModelOption {
-  id: string;
-  name: string;
-  /** Alternate active values returned by the Off Grid Desktop gateway, such as a primary filename. */
-  activeAliases?: string[];
-}
-
-/** Models grouped by the OpenAI-compatible work they can perform. */
-export type RemoteModelCatalog = Partial<
-  Record<RemoteModelCategory, RemoteModelOption[]>
->;
-
-export interface RemoteServerCapabilities {
-  imageGeneration: boolean;
-  transcription: boolean;
-  voice: boolean;
-}
-
 /** Remote server configuration */
 export interface RemoteServer {
   /** Unique identifier for this server */
@@ -57,23 +28,6 @@ export interface RemoteServer {
   isHealthy?: boolean;
   /** User-defined notes or description */
   notes?: string;
-  /** Selected model IDs for each OpenAI-compatible endpoint. */
-  mediaModels?: RemoteMediaModelIds;
-  /** Available models reported by servers that declare a model kind. */
-  modelCatalog?: RemoteModelCatalog;
-  /** A detected model-management contract. Generic OpenAI-compatible servers leave this unset. */
-  modelManagement?: 'offgrid-desktop-v1';
-}
-
-/** Model presence is the one source of truth for available remote media work. */
-export function remoteServerCapabilities(
-  server: Pick<RemoteServer, 'mediaModels'>,
-): RemoteServerCapabilities {
-  return {
-    imageGeneration: !!server.mediaModels?.image?.trim(),
-    transcription: !!server.mediaModels?.transcription?.trim(),
-    voice: !!server.mediaModels?.voice?.trim(),
-  };
 }
 
 /** Model discovered from a remote server */
@@ -105,8 +59,6 @@ interface RemoteModelCapabilities {
    * reasoning per request (discovered from the server, e.g. llama.cpp /props).
    */
   acceptsThinkingKwarg?: boolean;
-  /** Ollama model accepts only low/medium/high thinking levels. */
-  thinkingLevelsOnly?: boolean;
   /** Maximum context window length */
   maxContextLength?: number;
   /** Model family or type hint */
@@ -123,12 +75,6 @@ export interface ServerTestResult {
   latency?: number;
   /** Available models discovered (if connection succeeded) */
   models?: RemoteModel[];
-  /** Active media models declared by an Off Grid Desktop gateway */
-  mediaModels?: RemoteMediaModelIds;
-  /** Selectable models declared by an Off Grid Desktop gateway. */
-  modelCatalog?: RemoteModelCatalog;
-  /** Model-management contract detected during discovery. */
-  modelManagement?: 'offgrid-desktop-v1';
   /** Server info (version, type, etc.) */
   serverInfo?: ServerInfo;
 }
@@ -142,3 +88,4 @@ interface ServerInfo {
   /** Server type identifier */
   type?: string;
 }
+

@@ -1,18 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- llama.kt is API 29; AtlasVulkanModule only loads it on API 29+. -->
+    <uses-sdk tools:overrideLibrary="com.tensai.llamakt" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets Atlas hand a downloaded update to Android's installer (the person still confirms the install) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Off Grid Sync: NSD/mDNS multicast for device discovery (react-native-zeroconf). -->
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <uses-permission android:name="com.android.vending.BILLING" tools:node="remove" />
 
     <!-- For voice recording -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <!-- Requested only when the user opens the QR scanner. -->
+    <!-- In-app QR scanner for pairing devices for offline sync (asked only when scanning). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -25,19 +26,6 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Automatic screenshot and download sharing read the media the system already indexed.
-         Android 11 stopped granting the Download folder through the file picker, so MediaStore
-         with a media permission is the only path left for it. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-
-    <!-- A media permission only ever shows the media in Download, so a downloaded PDF or zip - most
-         of a real Downloads folder - stays invisible. This is the only remaining way to share those
-         files device to device, it is never requested on its own, and downloads sharing works without
-         it on media alone. Play requires the All files access declaration for this. -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-
     <!-- For silent companion file downloads (e.g. mmproj for vision models) -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
@@ -48,14 +36,36 @@
          the app is backgrounded / the screen is off (WorkManager foreground worker). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <!-- Personal Mesh keeps a live local-network connection to paired devices. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Android 13+ needs this to SHOW the ongoing download notification (requested at runtime). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scheduled tasks: set their alarms again after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- For reading and creating calendar events -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Step counter (TYPE_STEP_COUNTER) requires this on Android 10+. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Atlas assistant: optional "All files access" so agents can read/write your documents (you grant it in Settings) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Atlas: offline maps - GPS works without internet or a SIM -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
+    <!-- Atlas: lets the app find the phone's text-to-speech engine (Android 11+) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <!-- Android 11+: lets Atlas find the phone's own speech recognizer (e.g. Google/Gboard). -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
       android:name=".MainApplication"
@@ -70,12 +80,17 @@
       android:hardwareAccelerated="true"
       android:extractNativeLibs="true"
       android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-      tools:replace="android:appComponentFactory">
+      tools:replace="android:appComponentFactory,android:allowBackup,android:label">
 
       <!-- GPU-accelerated LLM inference on Qualcomm SoCs -->
       <uses-native-library android:name="libOpenCL.so" android:required="false" />
       <uses-native-library android:name="libvndksupport.so" android:required="false" />
       <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+      <activity
+        android:name="ai.offgridmobile.atlasdevice.AtlasQrScanActivity"
+        android:exported="false"
+        android:screenOrientation="portrait"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -88,31 +103,47 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
-        <!-- MCP OAuth redirect: offgrid://oauth/callback returns from the browser -->
+        <!-- Atlas nearby QR codes open a pairing confirmation, never sync silently. -->
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="offgrid" android:host="oauth" />
+            <data android:scheme="atlas" android:host="sync" />
+        </intent-filter>
+        <!-- Launcher shortcuts (hold the Atlas icon): atlas://app/chat, call, record, brief -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:scheme="atlas" android:host="app" />
+        </intent-filter>
+        <!-- Share text or a link from any app into Atlas. -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/plain" />
         </intent-filter>
       </activity>
 
-      <!-- Android does not let normal background apps read the system clipboard. This explicit
-           selection-menu action receives only the text the user chose and stores it until the
-           existing clipboard sync owner can import it. -->
-      <activity
-          android:name="ai.offgridmobile.clipboard.ProcessTextActivity"
-          android:label="@string/process_text_action_label"
-          android:exported="true"
-          android:excludeFromRecents="true"
-          android:noHistory="true"
-          android:theme="@android:style/Theme.Translucent.NoTitleBar">
-        <intent-filter>
-          <action android:name="android.intent.action.PROCESS_TEXT" />
-          <category android:name="android.intent.category.DEFAULT" />
-          <data android:mimeType="text/plain" />
-        </intent-filter>
-      </activity>
+      <!-- "Ask Atlas" in the menu that appears when text is selected in any app. -->
+      <activity-alias
+          android:name=".AskAtlasText"
+          android:targetActivity=".MainActivity"
+          android:label="Ask Atlas"
+          android:exported="true">
+          <intent-filter>
+              <action android:name="android.intent.action.PROCESS_TEXT" />
+              <category android:name="android.intent.category.DEFAULT" />
+              <data android:mimeType="text/plain" />
+          </intent-filter>
+      </activity-alias>
+
+<!-- Scheduled tasks: the alarm that shows a notification, and the reboot hook that sets the alarms again -->
+      <receiver android:name=".atlasdevice.TaskAlarmReceiver" android:exported="false" />
+      <receiver android:name=".atlasdevice.TaskAlarmBootReceiver" android:exported="true">
+          <intent-filter>
+              <action android:name="android.intent.action.BOOT_COMPLETED" />
+          </intent-filter>
+      </receiver>
 
 <!-- Receiver for background download completion events -->
       <receiver
@@ -130,15 +161,38 @@
           android:foregroundServiceType="dataSync"
           tools:node="merge" />
 
-      <!-- Personal Mesh residency: holds mDNS discovery, the TCP listener and in-flight
-           transfers open while Off Grid is backgrounded. Without it Android suspends the
-           process and the peer keeps showing this device as connected. Not exported - only
-           this app may start it. -->
+      <!-- Local AI inference has no dedicated Android FGS type. specialUse keeps the
+           process/CPU alive only while a user-started on-device model is actively working. -->
       <service
-          android:name="ai.offgridmobile.sync.MeshResidencyService"
-          android:enabled="true"
+          android:name=".atlasdevice.AtlasAiWorkService"
           android:exported="false"
-          android:foregroundServiceType="connectedDevice" />
+          android:foregroundServiceType="specialUse">
+          <property
+              android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+              android:value="User-started on-device AI model loading and inference that must continue when the app is backgrounded or the display turns off." />
+      </service>
+      <!-- Background audio: plays pre-rendered WAV files (daily briefing, episodes) when
+           the app is backgrounded. mediaPlayback is the standard Android FGS type for this. -->
+      <service
+          android:name=".atlasaudio.AtlasAudioService"
+          android:exported="false"
+          android:foregroundServiceType="mediaPlayback" />
 
+      <!-- Music Studio: holds the process while music plays with the screen off or the app closed from the recent apps, and shows it in the phone's media controls. -->
+      <service
+          android:name=".atlastts.AtlasMediaForegroundService"
+          android:exported="false"
+          android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Atlas: lets other apps (browser, document viewers) open files the assistant made -->
+        <provider
+            android:name=".atlasdevice.AtlasFileProvider"
+            android:authorities="${applicationId}.atlasfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/atlas_file_paths" />
+        </provider>
     </application>
 </manifest>

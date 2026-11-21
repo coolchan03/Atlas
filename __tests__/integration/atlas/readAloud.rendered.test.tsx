@@ -1,0 +1,120 @@
+/**
+ * Read aloud: the screen shows the reading state and its buttons act on it, and the Home widget shows the same
+ * state and opens the screen. Fakes only the device boundary.
+ */
+import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
+
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+}));
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(), types: { allFiles: '*/*' }, isErrorWithCode: () => false, errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' },
+}));
+
+const mockNavigate = jest.fn();
+
+function open(element: string) {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { useReadAloud } = require('../../../src/atlasVoice/readAloud');
+  useReadAloud.setState({ status: 'idle', title: '', parts: [], index: 0, phase: 'idle', failure: '', preparing: false });
+  const mod = element === 'screen'
+    ? React.createElement(require('../../../src/screens/ReadAloudScreen').ReadAloudScreen)
+    : React.createElement(require('../../../src/screens/HomeScreen/ReadAloudWidget').ReadAloudWidget, { openReader: mockNavigate });
+  return { rtl, view: rtl.render(mod), useReadAloud };
+}
+
+beforeEach(() => mockNavigate.mockClear());
+
+it('shows progress while reading and pauses and stops from its buttons', () => {
+  const { rtl, view, useReadAloud } = open('screen');
+  expect(view.getByText('Ready when you are')).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ status: 'reading', parts: ['One.', 'Two.', 'Three.'], index: 1 }));
+  expect(view.getByText('Part 2 of 3')).toBeTruthy();
+  expect(view.getByText('Two.')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('read-aloud-pause'));
+  expect(useReadAloud.getState().status).toBe('paused');
+  rtl.fireEvent.press(view.getByTestId('read-aloud-next'));
+  expect(useReadAloud.getState().index).toBe(2);
+  rtl.fireEvent.press(view.getByTestId('read-aloud-stop'));
+  expect(useReadAloud.getState()).toMatchObject({ status: 'idle', index: 0 });
+});
+
+it('says what the voice is really doing: loading, making the first sound, making the next part, and why it failed', () => {
+  const { rtl, view, useReadAloud } = open('screen');
+  const parts = { parts: ['Hey man how is it going.'], index: 0, status: 'reading' as const };
+  rtl.act(() => useReadAloud.setState({ ...parts, phase: 'loading', preparing: true }));
+  expect(view.getByText(/Loading the voice and your recording/)).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ phase: 'generating', preparing: true }));
+  expect(view.getByText('Making the first sound.')).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ phase: 'speaking', preparing: false }));
+  expect(view.queryByTestId('read-aloud-preparing')).toBeNull();
+  rtl.act(() => useReadAloud.setState({ phase: 'buffering' }));
+  expect(view.getByText('Making the next part.')).toBeTruthy();
+  rtl.act(() => useReadAloud.setState({ status: 'paused', phase: 'failed', failure: 'The voice produced no audio' }));
+  expect(view.getByTestId('read-aloud-failed').props.children.join('')).toContain('The voice produced no audio');
+});
+
+it('shows a typed text with its word count and a Clear button', () => {
+  const { rtl, view } = open('screen');
+  rtl.fireEvent.changeText(view.getByTestId('read-aloud-text'), 'Boil the water for three minutes before drinking it.');
+  expect(view.getByText(/9 words/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('read-aloud-clear'));
+  expect(view.queryByText(/9 words/)).toBeNull();
+});
+
+it('the Home widget shows the reading state, controls it, and opens the screen', () => {
+  const { rtl, view, useReadAloud } = open('widget');
+  expect(view.getByText(/Paste text or open a document/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('widget-read-open'));
+  expect(mockNavigate).toHaveBeenCalledTimes(1);
+  rtl.act(() => useReadAloud.setState({ status: 'reading', title: 'Water guide.pdf', parts: ['A.', 'B.'], index: 0 }));
+  expect(view.getByText('Water guide.pdf')).toBeTruthy();
+  expect(view.getByText('Reading · part 1 of 2')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('widget-read-toggle'));
+  expect(useReadAloud.getState().status).toBe('paused');
+  rtl.fireEvent.press(view.getByTestId('widget-read-stop'));
+  expect(useReadAloud.getState().status).toBe('idle');
+});
+
+it('the Home widget reads pasted text in the voice chosen on it, and a deleted voice falls back to the next saved voice, with no My voice choice', async () => {
+  const { rtl, view, useReadAloud } = open('widget');
+  const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+  const { useAtlasVoiceStore } = require('../../../src/atlasVoice/store');
+  let profileId = '';
+  rtl.act(() => { profileId = useVoiceProfiles.getState().addProfile({ name: 'Mom', voiceId: 'kokoro-en', sid: 0, rate: 1 }).id; });
+  expect(view.getByText('Mom')).toBeTruthy();
+  rtl.fireEvent.press(view.getByText('Mom'));
+  expect(useAtlasVoiceStore.getState().readVoiceId).toBe(profileId);
+  expect(view.getByTestId('widget-read-start').props.accessibilityState?.disabled ?? true).toBeTruthy();
+  rtl.fireEvent.changeText(view.getByTestId('widget-read-text'), 'Boil the water for three minutes before you drink it.');
+  rtl.fireEvent.press(view.getByTestId('widget-read-start'));
+  await rtl.waitFor(() => expect(useReadAloud.getState().parts).toEqual(['Boil the water for three minutes before you drink it.']));
+  await rtl.act(async () => { useVoiceProfiles.getState().removeProfile(profileId); });
+  expect(view.queryByText('Mom')).toBeNull();
+  expect(view.queryByText('My voice')).toBeNull();
+  expect(view.getByTestId('read-voice-none')).toBeTruthy();
+});
+
+it('sets a sleep timer, and saves the reading as an audio file in the chosen voice, saying when only part of it fit', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const rn = require('react-native');
+  Object.defineProperty(rn.Platform, 'OS', { value: 'android', configurable: true });
+  const synth = jest.fn(async (_t: string, p: string) => p);
+  rn.NativeModules.AtlasTts = { synthesizeToFile: synth, setRate: jest.fn(async () => true), activateClonedVoice: jest.fn(async () => 1), setNeuralVoice: jest.fn(async () => 1), installedNeuralVoices: jest.fn(async () => []) };
+  const view = rtl.render(React.createElement(require('../../../src/screens/ReadAloudScreen').ReadAloudScreen));
+  rtl.fireEvent.press(view.getByTestId('read-aloud-sleep-30'));
+  expect(view.getByText(/pauses at the end of the part being read/)).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('read-aloud-sleep-0'));
+  expect(view.queryByText(/pauses at the end of the part being read/)).toBeNull();
+  rtl.fireEvent.changeText(view.getByTestId('read-aloud-text'), 'A sentence that is read aloud. '.repeat(1000));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('read-aloud-save')); });
+  await rtl.waitFor(() => expect(view.getByTestId('read-aloud-saved')).toBeTruthy());
+  expect(synth).toHaveBeenCalledTimes(1);
+  expect(String(synth.mock.calls[0][1])).toMatch(/read-aloud\/reading-\d+\.wav$/);
+  expect(view.getByText(/Only the first .* of .* characters fit in one file/)).toBeTruthy();
+});

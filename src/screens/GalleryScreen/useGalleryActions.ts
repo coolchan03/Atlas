@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Platform, PermissionsAndroid, Share } from 'react-native';
+import { shareItem } from '../../utils/shareItem';
+import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import { showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore, useChatStore } from '../../stores';
+import { galleryImages } from '../../stores/appStore';
 import { imageGenerationService, onnxImageGeneratorService } from '../../services';
 import type { ImageGenerationState } from '../../services';
 import { GeneratedImage } from '../../types';
-import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 
 export const formatDate = (dateStr: string): string => {
   const ts = Number(dateStr);
@@ -21,7 +22,7 @@ export const formatDate = (dateStr: string): string => {
 };
 
 export const useGalleryActions = (conversationId: string | undefined) => {
-  const { generatedImages, removeGeneratedImage } = useAppStore();
+  const { generatedImages, hiddenImages, removeGeneratedImage } = useAppStore();
   const conversations = useChatStore(s => s.conversations);
 
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -44,8 +45,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
       try {
         const diskImages = await onnxImageGeneratorService.getGeneratedImages();
         if (diskImages.length > 0) {
-          const { generatedImages: storeImages, addGeneratedImage } = useAppStore.getState();
-          const existingIds = new Set(storeImages.map(img => img.id));
+          const { generatedImages: storeImages, hiddenImages: hidden, addGeneratedImage } = useAppStore.getState();
+          // Pictures from private or locked chats are never listed from disk either.
+          const existingIds = new Set([...storeImages.map(img => img.id), ...(hidden ?? []).map(h => h.id)]);
           for (const img of diskImages) {
             if (!existingIds.has(img.id)) {
               addGeneratedImage(img);
@@ -75,23 +77,18 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   }, [conversationId, conversations]);
 
   const displayImages = useMemo(() => {
-    if (!conversationId) return generatedImages;
+    if (!conversationId) return galleryImages(generatedImages, hiddenImages);
     return generatedImages.filter(
       img => img.conversationId === conversationId || (chatImageIds && chatImageIds.has(img.id))
     );
-  }, [generatedImages, conversationId, chatImageIds]);
+  }, [generatedImages, hiddenImages, conversationId, chatImageIds]);
 
   const handleDelete = useCallback((image: GeneratedImage) => {
     const doDelete = async () => {
       setAlertState(hideAlert());
-      const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
-        image.id,
-        image.imagePath,
-      );
-      if (deleted) {
-        removeGeneratedImage(image.id);
-        if (selectedImage?.id === image.id) setSelectedImage(null);
-      }
+      await onnxImageGeneratorService.deleteGeneratedImage(image.id);
+      removeGeneratedImage(image.id);
+      if (selectedImage?.id === image.id) setSelectedImage(null);
     };
     setAlertState(showAlert(
       'Delete Image',
@@ -140,13 +137,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
           onPress: () => {
             const doDeleteSelected = async () => {
               setAlertState(hideAlert());
-              const selectedImages = displayImages.filter(image => selectedIds.has(image.id));
-              for (const image of selectedImages) {
-                const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
-                  image.id,
-                  image.imagePath,
-                );
-                if (deleted) removeGeneratedImage(image.id);
+              for (const imageId of selectedIds) {
+                await onnxImageGeneratorService.deleteGeneratedImage(imageId);
+                removeGeneratedImage(imageId);
               }
               setSelectedIds(new Set());
               setIsSelectMode(false);
@@ -156,7 +149,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         },
       ]
     ));
-  }, [selectedIds, displayImages, removeGeneratedImage]);
+  }, [selectedIds, removeGeneratedImage]);
 
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(displayImages.map(img => img.id)));
@@ -164,9 +157,8 @@ export const useGalleryActions = (conversationId: string | undefined) => {
 
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
-      const imagePath = resolveDocumentPath(image.imagePath);
       if (Platform.OS === 'ios') {
-        await Share.share({ url: `file://${imagePath}` });
+        await shareItem({ file: image.imagePath });
         return;
       }
       await PermissionsAndroid.request(
@@ -185,7 +177,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
       }
       const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
       const fileName = `generated_${timestamp}.png`;
-      await RNFS.copyFile(imagePath, `${picturesDir}/${fileName}`);
+      await RNFS.copyFile(image.imagePath, `${picturesDir}/${fileName}`);
       setAlertState(showAlert('Image Saved', `Saved to Pictures/OffgridMobile/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));

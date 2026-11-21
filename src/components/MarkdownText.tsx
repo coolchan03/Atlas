@@ -1,12 +1,12 @@
+import { ChartBlock } from './ChartCard';
 import React, { useCallback, useMemo } from 'react';
-import { Linking, Text } from 'react-native';
-import Markdown, { MarkdownIt } from '@ronradtke/react-native-markdown-display';
-import { preprocessChatMarkdown, safeChatExternalUrl } from '@offgrid/sync';
+import { Clipboard, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
-
-const chatMarkdownParser = MarkdownIt({ typographer: true, linkify: true });
+import { tableRows, tableToMarkdown, tableToTsv } from './markdownTable';
+import { useTablePrefs } from './tablePrefs';
 
 /**
  * Escape asterisks used as multiplication operators (digit*digit) so
@@ -14,7 +14,54 @@ const chatMarkdownParser = MarkdownIt({ typographer: true, linkify: true });
  * Lookahead handles chains like 5*5*5*5 in a single pass.
  */
 export function preprocessMarkdown(text: string): string {
-  return preprocessChatMarkdown(text);
+  return fixTables(htmlTablesToMarkdown(text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`)));
+}
+
+/**
+ * Models sometimes write a table as HTML (<table><tr><th>...), which shows as raw tags. Each such table becomes a Markdown table: the first row is
+ * the header, line breaks inside a cell become spaces, any other tag is dropped. Text with no <table> is returned as it was.
+ */
+function htmlTablesToMarkdown(text: string): string {
+  if (!/<table/i.test(text)) return text;
+  return text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_all, inner: string) => {
+    const rows = [...inner.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((r) =>
+      [...r[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((c) => c[1].replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim()));
+    const cols = Math.max(0, ...rows.map((r) => r.length));
+    if (!rows.length || cols < 1) return '';
+    const line = (r: string[]) => `| ${Array.from({ length: cols }, (_, i) => r[i] ?? '').join(' | ')} |`;
+    return `\n\n${[line(rows[0]), line(Array(cols).fill('---')), ...rows.slice(1).map(line)].join('\n')}\n\n`;
+  });
+}
+
+const DASHES = '\\-\u2014\u2013\u2212\u2012\u2015';
+const SEPARATOR_CELL = new RegExp(`^\\s*:?[${DASHES}]+:?\\s*$`);
+const isTableLine = (line: string) => line.trim().startsWith('|') || (line.includes('|') && line.trim().endsWith('|'));
+
+/**
+ * Models often write the divider row of a table with long dashes ("| :— | :— |"), which is not a table to the parser, so the raw
+ * bars show. Those dividers are rewritten with ordinary hyphens (keeping any alignment colons), and a table that follows a line of
+ * text with no blank line between is given one, so it is read as a table.
+ */
+function fixTables(text: string): string {
+  if (!text.includes('|')) return text;
+  const lines = text.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+    const divider = line.includes('|') && cells.length >= 1 && cells.every((c) => SEPARATOR_CELL.test(c)) && /[\u2014\u2013\u2212\u2012\u2015-]/.test(line);
+    if (divider) {
+      const indent = line.match(/^\s*/)?.[0] ?? '';
+      const fixed = `${indent}| ${cells.map((c) => `${c.trim().startsWith(':') ? ':' : ''}---${c.trim().endsWith(':') ? ':' : ''}`).join(' | ')} |`;
+      // The header row above it starts the table: a blank line before it, unless the text above is already part of the table.
+      const header = out.length - 1;
+      if (header >= 0 && isTableLine(out[header]) && header >= 1 && out[header - 1].trim() !== '' && !isTableLine(out[header - 1])) out.splice(header, 0, '');
+      out.push(fixed);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 /** Custom link rule — renders as inline Text so it wraps correctly inside list items */
@@ -33,9 +80,7 @@ function createLinkRule(onPress: (url: string) => void) {
 
 /** Drop the trailing newline markdown-it appends to code blocks. */
 function trimTrailingNewline(content: string): string {
-  return typeof content === 'string' && content.endsWith('\n')
-    ? content.slice(0, -1)
-    : content;
+  return typeof content === 'string' && content.endsWith('\n') ? content.slice(0, -1) : content;
 }
 
 /**
@@ -51,81 +96,123 @@ const selectableRules = {
       {children}
     </Text>
   ),
-  fence: (
-    node: any,
-    _children: any,
-    ...[, styles, inheritedStyles = {}]: any[]
-  ) => (
-    <Text key={node.key} style={[inheritedStyles, styles.fence]} selectable>
-      {trimTrailingNewline(node.content)}
-    </Text>
-  ),
-  code_block: (
-    node: any,
-    _children: any,
-    ...[, styles, inheritedStyles = {}]: any[]
-  ) => (
-    <Text
-      key={node.key}
-      style={[inheritedStyles, styles.code_block]}
-      selectable
-    >
+  fence: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (node.sourceInfo?.trim() === 'chart' ? <View key={node.key}><ChartBlock content={node.content} /></View> : (
+    <View key={node.key}>
+      {/* Code keeps its line breaks and indentation, so a wide line scrolls sideways instead of running off the screen. */}
+      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator style={markdownLayout.codeScroll}>
+        <Text style={[inheritedStyles, styles.fence, markdownLayout.codeText]} selectable>
+          {trimTrailingNewline(node.content)}
+        </Text>
+      </ScrollView>
+      <CopyActions testID="copy-code" actions={[{ label: 'Copy code', text: () => trimTrailingNewline(node.content) }]} />
+    </View>
+  )),
+  code_block: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (
+    <Text key={node.key} style={[inheritedStyles, styles.code_block]} selectable>
       {trimTrailingNewline(node.content)}
     </Text>
   ),
 };
 
+/** Small copy actions under a table or code block. */
+function CopyActions({ actions, testID, extra }: { actions: { label: string; text: () => string }[]; testID: string; extra?: React.ReactNode }) {
+  const { colors } = useTheme();
+  const [done, setDone] = React.useState<string | null>(null);
+  return (
+    <View style={copyStyles.row} testID={testID}>
+      {actions.map((a) => (
+        <TouchableOpacity key={a.label} accessibilityRole="button" accessibilityLabel={a.label} testID={`${testID}-${a.label.toLowerCase().replace(/\s+/g, '-')}`}
+          onPress={() => { Clipboard.setString(a.text()); setDone(a.label); }}>
+          <Text style={[copyStyles.label, { color: done === a.label ? colors.primary : colors.textMuted }]}>{done === a.label ? 'Copied' : a.label}</Text>
+        </TouchableOpacity>
+      ))}
+      {extra}
+    </View>
+  );
+}
+
+const copyStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.sm },
+  label: { ...TYPOGRAPHY.meta },
+});
+
+const markdownLayout = StyleSheet.create({
+  codeScroll: { marginVertical: SPACING.sm },
+  codeText: { marginVertical: 0 },
+  table: { minWidth: '100%' },
+  fitTable: { width: '100%' },
+});
+
+/** A table: even columns that fit the screen's width, or a wide table that scrolls sideways. The choice is remembered. */
+function TableBlock({ node, styles, children }: { node: any; styles: any; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const fit = useTablePrefs((s) => s.fit);
+  const setFit = useTablePrefs((s) => s.setFit);
+  const toggle = (
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={fit ? 'Show wide table' : 'Fit table to screen'} testID="table-fit-toggle" onPress={() => setFit(!fit)}>
+      <Text style={[copyStyles.label, { color: colors.primary }]}>{fit ? 'Wide view' : 'Fit to screen'}</Text>
+    </TouchableOpacity>
+  );
+  return (
+    <View key={node.key}>
+      {fit
+        ? <View style={[styles._VIEW_SAFE_table, markdownLayout.fitTable]}>{children}</View>
+        : (
+          <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
+            <View style={[styles._VIEW_SAFE_table, markdownLayout.table]}>{children}</View>
+          </ScrollView>
+        )}
+      <CopyActions testID="copy-table" extra={toggle} actions={[
+        { label: 'Copy table', text: () => tableToTsv(tableRows(node)) },
+        { label: 'Copy as Markdown', text: () => tableToMarkdown(tableRows(node)) },
+      ]} />
+    </View>
+  );
+}
+
+const copyRules = {
+  table: (node: any, children: any, ...[, styles]: any[]) => <TableBlock key={node.key} node={node} styles={styles}>{children}</TableBlock>,
+};
+
 interface MarkdownTextProps {
   children: string;
   dimmed?: boolean;
-  compact?: boolean;
 }
 
-export function MarkdownText({ children, dimmed, compact }: MarkdownTextProps) {
+export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   const { colors } = useTheme();
+  const fit = useTablePrefs((s) => s.fit);
   const markdownStyles = useMemo(
-    () => createMarkdownStyles(colors, dimmed, compact),
-    [colors, compact, dimmed],
+    () => createMarkdownStyles(colors, dimmed, fit),
+    [colors, dimmed, fit],
   );
 
   const handleLinkPress = useCallback((url: string) => {
-    const safeUrl = safeChatExternalUrl(url);
-    if (safeUrl) void Linking.openURL(safeUrl);
+    Linking.openURL(url);
     return false;
   }, []);
 
   const processed = useMemo(() => preprocessMarkdown(children), [children]);
   const rules = useMemo(
-    () => ({ link: createLinkRule(handleLinkPress), ...selectableRules }),
+    () => ({ link: createLinkRule(handleLinkPress), ...selectableRules, ...copyRules }),
     [handleLinkPress],
   );
 
   return (
-    <Markdown
-      style={markdownStyles}
-      markdownit={chatMarkdownParser}
-      onLinkPress={handleLinkPress}
-      rules={rules}
-    >
+    <Markdown style={markdownStyles} onLinkPress={handleLinkPress} rules={rules}>
       {processed}
     </Markdown>
   );
 }
 
-function createMarkdownStyles(
-  colors: ThemeColors,
-  dimmed?: boolean,
-  compact?: boolean,
-) {
+function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean, fit = true) {
   const textColor = dimmed ? colors.textSecondary : colors.text;
-  const bodyTypography = compact ? TYPOGRAPHY.bodySmall : TYPOGRAPHY.body;
-  const lineHeight = compact ? 18 : 20;
 
   return {
     body: {
-      ...bodyTypography,
+      ...TYPOGRAPHY.body,
       color: textColor,
-      lineHeight,
+      lineHeight: 20,
       flexShrink: 1,
     },
     heading1: {
@@ -223,14 +310,17 @@ function createMarkdownStyles(
     thead: {
       backgroundColor: colors.surfaceLight,
     },
+    // Fit to screen: every column the same width, the text wrapped and a little smaller. Wide view: a readable width each, scrolled sideways.
     th: {
-      padding: SPACING.sm,
+      ...(fit ? { flex: 1, flexBasis: 0, minWidth: 0, fontSize: 13 } : { minWidth: 110 }),
+      padding: fit ? SPACING.xs + 2 : SPACING.sm,
       borderWidth: 0.5,
       borderColor: colors.border,
       fontWeight: '600' as const,
     },
     td: {
-      padding: SPACING.sm,
+      ...(fit ? { flex: 1, flexBasis: 0, minWidth: 0, fontSize: 13 } : { minWidth: 110 }),
+      padding: fit ? SPACING.xs + 2 : SPACING.sm,
       borderWidth: 0.5,
       borderColor: colors.border,
     },
@@ -249,11 +339,12 @@ function createMarkdownStyles(
     },
     paragraph: {
       marginTop: 0,
-      marginBottom: compact ? 0 : SPACING.sm,
+      marginBottom: SPACING.sm,
     },
     // Image (unlikely in LLM text but handle gracefully)
     image: {
       borderRadius: 6,
+      maxWidth: '100%' as const,
     },
   };
 }

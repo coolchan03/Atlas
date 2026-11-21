@@ -3,19 +3,45 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Linking,
-} from 'react-native';
-import { LoadingDots } from '../components/LoadingDots';
+  ActivityIndicator,
+  } from 'react-native';
 import { Card } from '../components';
 import type { ThemeColors } from '../theme';
-import { TYPOGRAPHY, SPACING, FONTS, OFF_GRID_DESKTOP_URL } from '../constants';
-import { RemoteModel, RemoteServer } from '../types';
-export { fetchModelFiles } from '../services/modelCatalogFiles';
-import { withUtm } from '../utils/utm';
+import { TYPOGRAPHY, SPACING, FONTS, } from '../constants';
+import { huggingFaceService } from '../services';
+import { ModelFile, RemoteModel, RemoteServer } from '../types';
+import logger from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Model file fetching
 // ---------------------------------------------------------------------------
+
+export async function fetchModelFiles(
+  models: { id: string }[],
+  opts: { preferQ4_0?: boolean; timeoutMs?: number; onEach?: (id: string, files: ModelFile[]) => void } = {},
+): Promise<Record<string, ModelFile[]>> {
+  const filesMap: Record<string, ModelFile[]> = {};
+  const timeout = opts.timeoutMs ?? 10000;
+  await Promise.all(
+    models.map(async (model) => {
+      try {
+        // Never let one slow request hold up the screen.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const files = await Promise.race([
+          huggingFaceService.getModelFiles(model.id),
+          new Promise<ModelFile[]>((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), timeout); }),
+        ]).finally(() => clearTimeout(timer));
+        const q = (name: string) => files.find(f => f.quantization.toUpperCase() === name);
+        // Snapdragon GPU/NPU only speed up Q4_0, so offer that there when it exists.
+        const pick = (opts.preferQ4_0 && q('Q4_0')) || q('Q4_K_M');
+        if (pick) { filesMap[model.id] = [pick]; opts.onEach?.(model.id, [pick]); }
+      } catch (error) {
+        logger.error(`Error fetching files for ${model.id}:`, error);
+      }
+    }),
+  );
+  return filesMap;
+}
 
 // ---------------------------------------------------------------------------
 // Discovered-server card
@@ -44,7 +70,7 @@ export const ServerCard: React.FC<{
           </Text>
         </View>
         {isConnecting && (
-          <LoadingDots color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.primary} />
         )}
         {!isConnecting && isConnected && (
           <View style={[styles.connectedBadge, { backgroundColor: `${colors.success}20`, borderColor: colors.success }]} testID={`discovered-server-${server.id}-connected`}>
@@ -87,7 +113,7 @@ export const NetworkSection: React.FC<{
 
       {isCheckingNetwork && !hasServers && (
         <View style={styles.scanningRow}>
-          <LoadingDots color={colors.textSecondary} />
+          <ActivityIndicator size="small" color={colors.textSecondary} />
           <Text style={styles.scanningText}>Scanning your network...</Text>
         </View>
       )}
@@ -107,14 +133,8 @@ export const NetworkSection: React.FC<{
       {!isCheckingNetwork && !hasServers && (
         <>
           <Text style={styles.emptyText}>
-            No Off Grid AI Desktop, Ollama, or LM Studio server found. Scan again or add one.
+            No servers found. Make sure you're on the same Wi-Fi network as your Ollama or LM Studio server, then scan or add it manually.
           </Text>
-          <TouchableOpacity
-            onPress={() => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'model-download')).catch(() => {})}
-            testID="onboarding-get-desktop"
-          >
-            <Text style={[styles.getDesktopLink, { color: colors.primary }]}>Get Off Grid AI Desktop</Text>
-          </TouchableOpacity>
         </>
       )}
 
@@ -125,7 +145,7 @@ export const NetworkSection: React.FC<{
           disabled={busy}
         >
           {busy
-            ? <LoadingDots color={colors.primary} />
+            ? <ActivityIndicator size="small" color={colors.primary} />
             : <Text style={[styles.actionButtonText, { color: colors.primary }]}>Scan Network</Text>}
         </TouchableOpacity>
         <TouchableOpacity
@@ -145,13 +165,7 @@ export const NetworkSection: React.FC<{
 
 const serverCardStyles = (colors: ThemeColors) => ({
   serverCard: {
-    marginBottom: SPACING.sm,
-    padding: SPACING.sm,
-    borderRadius: SPACING.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowOpacity: 0,
-    elevation: 0,
+    marginBottom: SPACING.md,
   },
   serverCardContent: {
     flexDirection: 'row' as const,
@@ -160,14 +174,14 @@ const serverCardStyles = (colors: ThemeColors) => ({
   },
   serverInfo: {
     flex: 1,
-    marginRight: SPACING.sm,
+    marginRight: SPACING.md,
   },
   serverName: {
     fontFamily: FONTS.mono,
     fontSize: 14,
     fontWeight: '500' as const,
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   serverMeta: {
     ...TYPOGRAPHY.meta,
@@ -176,14 +190,14 @@ const serverCardStyles = (colors: ThemeColors) => ({
   connectButton: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   connectedBadge: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   connectButtonText: {
     fontFamily: FONTS.mono,
@@ -194,18 +208,18 @@ const serverCardStyles = (colors: ThemeColors) => ({
 
 const networkSectionStyles = (colors: ThemeColors) => ({
   section: {
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.xl,
   },
   sectionTitle: {
-    ...TYPOGRAPHY.h3,
+    ...TYPOGRAPHY.h2,
     color: colors.text,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   scanningRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   scanningText: {
     ...TYPOGRAPHY.bodySmall,
@@ -214,24 +228,24 @@ const networkSectionStyles = (colors: ThemeColors) => ({
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
-    lineHeight: 18,
-    marginBottom: SPACING.xs,
+    lineHeight: 20,
+    marginBottom: SPACING.sm,
   },
   getDesktopLink: {
     ...TYPOGRAPHY.bodySmall,
     fontFamily: FONTS.mono,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   actionRow: {
     flexDirection: 'row' as const,
-    gap: SPACING.sm,
-    marginTop: SPACING.xs,
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
   },
   actionButton: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: SPACING.sm,
-    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    paddingVertical: SPACING.sm + 2,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

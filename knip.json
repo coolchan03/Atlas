@@ -1,24 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "App.tsx",
-    "__tests__/**/*.{ts,tsx}",
-    "pro/**/*.{ts,tsx}"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}",
-    "pro/**/*.{ts,tsx}"
-  ],
-  "ignoreBinaries": [
-    "swiftlint",
-    "xcrun"
-  ],
+  "entry": ["App.tsx", "__tests__/**/*.{ts,tsx}"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreBinaries": ["swiftlint", "maestro", "xcpretty"],
   "ignoreDependencies": [
-    "@offgrid/pro",
-    "buffer",
-    "js-sha512",
-    "tweetnacl",
-    "tweetnacl-util",
+    "metro",
     "react-compiler-runtime",
     "eslint-plugin-react-compiler",
     "eslint-plugin-react-native",
@@ -26,7 +12,6 @@
     "eslint-plugin-react-hooks",
     "@babel/preset-env",
     "@babel/runtime",
-    "sonar-scanner",
-    "babel-plugin-istanbul"
+    "sonar-scanner"
   ]
 }

@@ -28,7 +28,7 @@ function Host({ onShow }: { onShow: () => void }) {
 
 const TITLE = /Support Open-Source AI/i;
 
-describe('share prompt — once per session (rendered)', () => {
+describe('share prompt — Atlas promotional prompt disabled (rendered)', () => {
   beforeEach(() => { jest.useFakeTimers(); resetSharePromptSession(); });
   afterEach(() => { jest.useRealTimers(); });
 
@@ -45,18 +45,18 @@ describe('share prompt — once per session (rendered)', () => {
       jest.runOnlyPendingTimers();
     });
 
-    expect(shows).toBe(1);                          // popped exactly once, not per-milestone
-    expect(view.queryByText(TITLE)).not.toBeNull(); // and the real sheet rendered
+    expect(shows).toBe(0);
+    expect(view.queryByText(TITLE)).toBeNull();
   });
 
-  it('pops again in a NEW session (once per session, not once ever)', () => {
+  it('stays disabled in a NEW session too', () => {
     let shows = 0;
     render(<Host onShow={() => { shows += 1; }} />);
     act(() => { maybeScheduleSharePrompt({ variant: 'text', count: 2, hasEngaged: false, delayMs: 0 }); jest.runOnlyPendingTimers(); });
-    expect(shows).toBe(1);
+    expect(shows).toBe(0);
 
-    resetSharePromptSession(); // relaunch = new session
+    resetSharePromptSession();
     act(() => { maybeScheduleSharePrompt({ variant: 'text', count: 2, hasEngaged: false, delayMs: 0 }); jest.runOnlyPendingTimers(); });
-    expect(shows).toBe(2); // once per session
+    expect(shows).toBe(0);
   });
 });

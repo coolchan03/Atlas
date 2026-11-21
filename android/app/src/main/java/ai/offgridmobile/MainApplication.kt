@@ -11,12 +11,13 @@ import ai.offgridmobile.localdream.LocalDreamPackage
 import ai.offgridmobile.pdf.PDFExtractorPackage
 import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
-import ai.offgridmobile.clipboard.SyncClipboardPackage
-import ai.offgridmobile.directory.SyncDirectorySourcePackage
-import ai.offgridmobile.downloads.SyncDownloadsPackage
-import ai.offgridmobile.sync.BlobChannelPackage
-import ai.offgridmobile.screenshot.SyncScreenshotPackage
-import ai.offgridmobile.sync.MeshResidencyPackage
+import ai.offgridmobile.atlastts.AtlasTtsPackage
+import ai.offgridmobile.atlasvideo.AtlasVideoPackage
+import ai.offgridmobile.atlasvulkan.AtlasVulkanPackage
+import ai.offgridmobile.atlaskiwix.AtlasKiwixPackage
+import ai.offgridmobile.atlasdevice.AtlasDevicePackage
+import ai.offgridmobile.presentation.AtlasPresentationExporterPackage
+import ai.offgridmobile.atlasaudio.AtlasAudioPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -31,12 +32,13 @@ class MainApplication : Application(), ReactApplication {
           add(PDFExtractorPackage())
           add(LiteRTPackage())
           add(DeviceMemoryPackage())
-          add(SyncClipboardPackage())
-          add(SyncDirectorySourcePackage())
-          add(MeshResidencyPackage())
-          add(SyncScreenshotPackage())
-          add(SyncDownloadsPackage())
-          add(BlobChannelPackage())
+          add(AtlasTtsPackage())
+          add(AtlasVideoPackage())
+          add(AtlasVulkanPackage())
+          add(AtlasKiwixPackage())
+          add(AtlasDevicePackage())
+          add(AtlasPresentationExporterPackage())
+          add(AtlasAudioPackage())
         },
     )
   }

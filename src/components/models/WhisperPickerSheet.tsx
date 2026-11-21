@@ -1,47 +1,34 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, View, Text } from 'react-native';
-import { LoadingDots } from '../LoadingDots';
+import React, { useEffect } from 'react';
+import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
-import { CustomAlert, showAlert, hideAlert, initialAlertState, type AlertState } from '../CustomAlert';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { WHISPER_MODELS } from '../../services/whisperService';
+import { WHISPER_MODELS } from '../../services';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
-import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
-import { remoteServerManager } from '../../services/remoteServerManager';
-import { ModelCard } from '../ModelCard';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onClosed?: () => void;
-  onBackToModels?: () => void;
 };
 
 /**
  * Transcription (Whisper) model picker. Whisper keeps a single active STT model,
  * so selecting a model downloads it (auto-loading) and replaces the previous one.
  */
-export const WhisperPickerSheet: React.FC<Props> = ({
-  visible,
-  onClose,
-  onClosed,
-  onBackToModels,
-}) => {
+export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const downloadedModelId = useWhisperStore(s => s.downloadedModelId);
-  const isModelLoading = useWhisperStore(s => s.isModelLoading);
-  const presentModelIds = useWhisperStore(s => s.presentModelIds);
-  const downloadModel = useWhisperStore(s => s.downloadModel);
-  const selectModel = useWhisperStore(s => s.selectModel);
-  const deleteModelById = useWhisperStore(s => s.deleteModelById);
-  const refreshPresentModels = useWhisperStore(s => s.refreshPresentModels);
+  const downloadedModelId = useWhisperStore((s) => s.downloadedModelId);
+  const isModelLoading = useWhisperStore((s) => s.isModelLoading);
+  const presentModelIds = useWhisperStore((s) => s.presentModelIds);
+  const downloadModel = useWhisperStore((s) => s.downloadModel);
+  const selectModel = useWhisperStore((s) => s.selectModel);
+  const deleteModelById = useWhisperStore((s) => s.deleteModelById);
+  const refreshPresentModels = useWhisperStore((s) => s.refreshPresentModels);
 
   // In-flight download state from the SINGLE owner the Transcription tab also reads, so the picker
   // and the tab can never disagree (the picker used to read only whisperStore.downloadProgressById
@@ -54,25 +41,9 @@ export const WhisperPickerSheet: React.FC<Props> = ({
   }, [visible, anyDownloading]);
 
   return (
-    <>
-    <AppSheet
-      visible={visible}
-      onClose={onClose}
-      onClosed={onClosed}
-      onBackPress={onBackToModels}
-      title="TRANSCRIPTION MODEL"
-      enableDynamicSizing
-    >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-      >
-        <RemoteModelOptionsSection
-          category="transcription"
-          onSelect={onClose}
-        />
-        <Text style={styles.sectionLabel}>On-device models</Text>
-        {WHISPER_MODELS.map(m => {
+    <AppSheet visible={visible} onClose={onClose} title="TRANSCRIPTION MODEL" enableDynamicSizing>
+      <View style={styles.content}>
+        {WHISPER_MODELS.map((m) => {
           const active = downloadedModelId === m.id;
           const present = presentModelIds.includes(m.id);
           // Per-model in-flight state from the shared owner: this row's own progress, disabled only
@@ -80,107 +51,46 @@ export const WhisperPickerSheet: React.FC<Props> = ({
           const dl = stateFor(m.id);
           const busy = dl?.active ?? false;
           return (
-            <ModelCard
+            <AnimatedPressable
               key={m.id}
-              compact
-              model={{ id: m.id, name: m.name, author: 'On device', description: m.description }}
-              file={{ name: m.name, size: m.size * 1024 * 1024, quantization: '', downloadUrl: '' }}
-              facts={[m.lang === 'multi' ? '99 languages' : 'English', 'Transcription']}
-              isActive={active}
-              isDownloaded={present}
-              isDownloading={!!dl?.downloading}
-              isQueued={!!dl?.queued}
-              downloadProgress={dl?.progress}
-              downloadBytes={dl ? { downloaded: dl.currentBytes ?? 0, total: dl.totalBytes ?? 0, bytesPerSecond: dl.bytesPerSecond } : undefined}
+              style={[styles.row, active && styles.rowActive]}
+              hapticType="selection"
               disabled={busy}
-              onPress={() => {
-                remoteServerManager.clearActiveRemoteMediaModel(
-                  'transcription',
-                );
-                if (present) {
-                  if (!active) selectModel(m.id);
-                } else downloadModel(m.id);
-              }}
-              trailing={(() => {
-                if (dl?.queued)
-                  return (
-                    <Icon
-                      name="clock"
-                      size={16}
-                      color={colors.textMuted}
-                      testID="whisper-row-queued"
-                    />
-                  );
-                if (dl?.downloading)
-                  return (
-                    <View testID="whisper-row-progress" />
-                  );
+              onPress={() => { if (present) { if (!active) selectModel(m.id); } else downloadModel(m.id); }}
+            >
+              <View style={styles.rowInfo}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {m.name}{m.lang === 'multi' ? ' · 99 langs' : ' · EN'}
+                </Text>
+                <Text style={styles.desc} numberOfLines={1}>{m.description}</Text>
+                <Text style={styles.meta}>{m.size} MB</Text>
+              </View>
+              {(() => {
+                if (dl?.queued) return <Icon name="clock" size={16} color={colors.textMuted} testID="whisper-row-queued" />;
+                if (dl?.downloading) return <Text style={styles.percent} testID="whisper-row-progress">{Math.round(dl.progress * 100)}%</Text>;
                 // selectModel sets downloadedModelId optimistically, so the active row IS the one loading —
                 // show a spinner on it while it loads (not a premature checkmark), matching text/image.
-                if (active && isModelLoading)
-                  return (
-                    <LoadingDots
-                      color={colors.primary}
-                      testID="model-row-loading"
-                    />
-                  );
-                if (active)
-                  return <Icon name="check" size={16} color={colors.primary} />;
+                if (active && isModelLoading) return <ActivityIndicator testID="model-row-loading" size="small" color={colors.primary} />;
+                if (active) return <Icon name="check" size={16} color={colors.primary} />;
                 if (present) {
                   return (
-                    <AnimatedPressable
-                      hapticType="selection"
-                      hitSlop={8}
-                      accessibilityLabel={`Delete ${m.name} transcription model`}
-                      onPress={(event) => {
-                        event?.stopPropagation?.();
-                        setAlertState(showAlert(
-                          'Remove Transcription Model',
-                          `Delete "${m.name}"? This will free up about ${m.size} MB.`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Remove', style: 'destructive', onPress: () => {
-                              setAlertState(hideAlert());
-                              deleteModelById(m.id);
-                            } },
-                          ],
-                        ));
-                      }}
-                    >
+                    <AnimatedPressable hapticType="selection" hitSlop={8} onPress={() => deleteModelById(m.id)}>
                       <Icon name="trash-2" size={16} color={colors.textMuted} />
                     </AnimatedPressable>
                   );
                 }
-                return (
-                  <Icon name="download" size={16} color={colors.textMuted} />
-                );
+                return <Icon name="download" size={16} color={colors.textMuted} />;
               })()}
-            />
+            </AnimatedPressable>
           );
         })}
-      </ScrollView>
+      </View>
     </AppSheet>
-    <CustomAlert
-      visible={alertState.visible}
-      title={alertState.title}
-      message={alertState.message}
-      buttons={alertState.buttons}
-      onClose={() => setAlertState(hideAlert())}
-    />
-    </>
   );
 };
 
 const createStyles = (colors: ThemeColors) => ({
-  scrollView: {
-    flexShrink: 1,
-  },
-  content: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xl,
-    gap: SPACING.sm as number,
-  },
+  content: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl, gap: SPACING.sm as number },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -196,10 +106,5 @@ const createStyles = (colors: ThemeColors) => ({
   name: { ...TYPOGRAPHY.body, color: colors.text },
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-  sectionLabel: {
-    ...TYPOGRAPHY.label,
-    color: colors.textMuted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
+  percent: { ...TYPOGRAPHY.meta, color: colors.primary },
 });

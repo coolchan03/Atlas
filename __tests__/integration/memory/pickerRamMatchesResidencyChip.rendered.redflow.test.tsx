@@ -72,6 +72,8 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
+    // This test models a detected OpenCL device; backend capability is a native boundary.
+    jest.spyOn(hardwareService, 'getOpenCLCapability').mockResolvedValue({ supported: true });
     const { useAppStore } = require('../../../src/stores');
     const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
     const { activeModelService } = require('../../../src/services/activeModelService');
@@ -89,7 +91,8 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf', fileSize: 2 * GB });
     await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
     await hardwareService.refreshMemoryInfo();
-    useAppStore.setState({ checklistDismissed: true });
+    require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
+    useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
     const view = rtl.render(React.createElement(
@@ -101,8 +104,8 @@ describe('RAM display agreement — picker label matches the residency chip for 
 
     // GESTURE: select the text model the way a user does — open the picker, tap the row.
     rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
-    const row = await rtl.waitFor(() => view.getByTestId('text-model-row-m'), { timeout: 10000 });
-    rtl.fireEvent.press(row);
+    const rows = await rtl.waitFor(() => { const r = view.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 10000 });
+    rtl.fireEvent.press(rows[0]);
     await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
 
     // GESTURE: switch the inference backend to GPU (OpenCL) via the REAL BackendSelector control — the same

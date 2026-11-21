@@ -1,19 +1,18 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
 
 /**
- * Component-slot seam. Pro features register UI components against named slots
- * during activation; core renders whatever is registered and renders nothing
- * (its own fallback) when a slot is empty. This lets the private pro package
- * inject UI into core screens without core ever importing pro — free builds
- * leave every slot empty and behave exactly as before.
+ * Component-slot seam. Features register UI components against named slots
+ * at startup; core renders whatever is registered and renders nothing
+ * (its own fallback) when a slot is empty. This lets a feature
+ * inject UI into core screens without core importing it; an empty slot leaves
+ * the screen as it is.
  *
  * Slot names are plain strings (see SLOTS below for the known set). Props are
  * passed through untyped on purpose: each slot documents its own prop shape and
  * the registering component declares it.
  *
  * Registration is reactive: `useSlot` subscribes, so a slot registered AFTER a
- * consumer has mounted (e.g. Pro activated at runtime via a license key, which
- * re-runs loadProFeatures) makes that consumer re-render and pick the component
+ * consumer has mounted (e.g. a feature registered at runtime) makes that consumer re-render and pick the component
  * up live — no app restart. `getSlot` stays for non-component / one-shot reads.
  */
 const slots: Record<string, ComponentType<any>> = {};
@@ -23,18 +22,10 @@ function emitChange(): void {
   for (const l of listeners) l();
 }
 
-export function registerSlot(
-  name: string,
-  component: ComponentType<any>,
-): () => void {
-  if (slots[name] === component) return () => undefined; // no-op re-register (dev Fast Refresh)
+export function registerSlot(name: string, component: ComponentType<any>): void {
+  if (slots[name] === component) return; // no-op re-register (dev Fast Refresh)
   slots[name] = component;
   emitChange();
-  return () => {
-    if (slots[name] !== component) return;
-    delete slots[name];
-    emitChange();
-  };
 }
 
 export function getSlot(name: string): ComponentType<any> | undefined {
@@ -44,7 +35,7 @@ export function getSlot(name: string): ComponentType<any> | undefined {
 /** Reactive read of a slot — re-renders when the slot is (de)registered. */
 export function useSlot(name: string): ComponentType<any> | undefined {
   return useSyncExternalStore(
-    onStoreChange => {
+    (onStoreChange) => {
       listeners.add(onStoreChange);
       return () => listeners.delete(onStoreChange);
     },
@@ -52,22 +43,18 @@ export function useSlot(name: string): ComponentType<any> | undefined {
   );
 }
 
-export function _clearSlotsForTesting(): void {
+function _clearSlotsForTesting(): void {
   for (const key of Object.keys(slots)) {
     delete slots[key];
   }
   emitChange();
 }
 
-/** Known slot names, centralised so core and pro stay in sync. */
+/** Known slot names, centralised so core and features stay in sync. */
 export const SLOTS = {
   /** Always-mounted root component(s) rendered near the app root (e.g. the TTS
    *  engine bridge). Mounted regardless of screen. */
   appRoot: 'app.root',
-  /** Optional first-class Home entry point for configuring cross-device Sync. */
-  homeSyncCard: 'home.syncCard',
-  /** Optional Home-header entry point for actionable Pro notifications. */
-  homeNotificationsButton: 'home.notificationsButton',
   /** Replaces the chat input row when audio (voice) interface mode is active. */
   chatInputAudioMode: 'chatInput.audioMode',
   /** Voice-mode empty-state hero (big "tap to speak" mic) shown in the message
@@ -78,9 +65,6 @@ export const SLOTS = {
   messageAudioMode: 'message.audioMode',
   /** Per-message meta-row control (the TTS speak/play button) in chat mode. */
   messageSpeakButton: 'message.speakButton',
-  /** Expanded content for a Pro task tool-result row. Core keeps the compact row and Pro owns the
-   *  authoritative live, replay, and control detail. */
-  taskToolDetail: 'message.taskToolDetail',
   /** Extra row in the chat-input quick-settings popover (voice mode toggle). */
   quickSettingsAudioRow: 'quickSettings.audioRow',
   /** One-tap Chat↔Audio interface toggle in the chat-input pill icon row.
@@ -91,8 +75,6 @@ export const SLOTS = {
   generationSettingsTts: 'generationSettings.tts',
   /** Body of the "Voice" tab on the Models screen (TTS engine model
    *  download/management). The tab itself only appears when this is
-   *  registered, so free builds show just Text/Image. */
+   *  registered, so only Text/Image show. */
   modelsScreenVoiceTab: 'modelsScreen.voiceTab',
-  /** Small Pro-owned Voice availability indicator on the core Auto Setup plan. */
-  autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
 } as const;

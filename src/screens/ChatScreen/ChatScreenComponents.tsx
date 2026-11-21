@@ -1,3 +1,4 @@
+import { SPACING, TYPOGRAPHY } from '../../constants';
 import React from 'react';
 import {
   View,
@@ -5,18 +6,26 @@ import {
   TouchableOpacity,
   Modal,
   Image,
+  ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
-import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AttachStep } from 'react-native-spotlight-tour';
 import { ModelSelectorModal } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
-import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 type StylesType = ReturnType<typeof createStyles>;
 type ColorsType = ReturnType<typeof useTheme>['colors'];
+
+/** Follows late voice registration so the call button appears without reopening chat. */
+const HeaderVoiceAction: React.FC<{ styles: StylesType }> = ({ styles }) => {
+  const ModeToggle = useSlot(SLOTS.chatInputModeToggle);
+  return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null;
+};
 
 export const NoModelScreen: React.FC<{
   styles: StylesType;
@@ -32,12 +41,7 @@ export const NoModelScreen: React.FC<{
   <SafeAreaView style={styles.container} edges={['top']}>
     <View style={styles.header}>
       <View style={styles.headerRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
+        <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerLeft}>
@@ -47,19 +51,33 @@ export const NoModelScreen: React.FC<{
       </View>
     </View>
     <View style={styles.noModelContainer}>
-      <View style={styles.noModelIconContainer}>
-        <Icon name="cpu" size={32} color={colors.textMuted} />
-      </View>
-      <Text style={styles.noModelTitle}>No Model Selected</Text>
-      <Text style={styles.noModelText}>
-        {hasAvailableModels
-          ? 'Select a text or image model to get started.'
-          : 'Download a text or image model from the Models tab to get started.'}
-      </Text>
-      {hasAvailableModels && (
-        <TouchableOpacity style={styles.selectModelButton} onPress={() => setShowModelSelector(true)}>
-          <Text style={styles.selectModelButtonText}>Select Model</Text>
-        </TouchableOpacity>
+      {isModelLoading ? (
+        // A model was selected and is loading in the background. activeModelId stays
+        // null until the native load finishes, so this empty state would otherwise
+        // remain with no feedback — the user thinks nothing happened. Show a loading
+        // indicator instead of the "Select Model" prompt.
+        <>
+          <ActivityIndicator size="large" color={colors.primary} testID="no-model-loading-indicator" />
+          <Text style={[styles.noModelTitle, styles.noModelLoadingTitle]}>Loading Model</Text>
+          <Text style={styles.noModelText}>Getting your model ready. This can take a moment.</Text>
+        </>
+      ) : (
+        <>
+          <View style={styles.noModelIconContainer}>
+            <Icon name="cpu" size={32} color={colors.textMuted} />
+          </View>
+          <Text style={styles.noModelTitle}>No Model Selected</Text>
+          <Text style={styles.noModelText}>
+            {hasAvailableModels
+              ? 'Select a text or image model to get started.'
+              : 'Download a text or image model from the Models tab to get started.'}
+          </Text>
+          {hasAvailableModels && (
+            <TouchableOpacity style={styles.selectModelButton} onPress={() => setShowModelSelector(true)}>
+              <Text style={styles.selectModelButtonText}>Select Model</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
     </View>
     <ModelSelectorModal
@@ -72,6 +90,25 @@ export const NoModelScreen: React.FC<{
   </SafeAreaView>
 );
 
+const bannerStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: SPACING.sm, marginTop: SPACING.xs },
+  title: { ...TYPOGRAPHY.h3 },
+  note: { ...TYPOGRAPHY.meta, flexShrink: 1 },
+});
+
+/** A band under the header of an incognito chat that stays on screen: what it is, that nothing is kept, and (for a remote model) that the provider still sees the messages. */
+const IncognitoBanner: React.FC<{ colors: ColorsType; isRemote?: boolean }> = ({ colors, isRemote }) => (
+  <View
+    testID="incognito-banner" accessible accessibilityRole="text"
+    accessibilityLabel={`Incognito, not saved.${isRemote ? ' Your messages are still sent to the remote model provider.' : ''}`}
+    style={[bannerStyles.row, { backgroundColor: colors.primary }]}
+  >
+    <Icon name="eye-off" size={14} color={colors.background} />
+    <Text style={[bannerStyles.title, { color: colors.background }]}>Incognito · not saved</Text>
+    {isRemote && <Text style={[bannerStyles.note, { color: colors.background }]} numberOfLines={2}>Remote model still receives your messages</Text>}
+  </View>
+);
+
 export const ChatHeader: React.FC<{
   styles: StylesType;
   colors: ColorsType;
@@ -79,52 +116,69 @@ export const ChatHeader: React.FC<{
   activeProject: any;
   navigation: any;
   onOpenModels: () => void;
+  onOpenChatOptions?: () => void;
   setShowSettingsPanel: (v: boolean) => void;
+  researchMode?: boolean;
   setShowProjectSelector: (v: boolean) => void;
   isRemote?: boolean;
-}> = ({ styles, colors, activeConversation, activeProject, navigation, onOpenModels, setShowSettingsPanel, setShowProjectSelector, isRemote }) => (
+  modelRuntimeLabel?: string;
+  modelRuntimeState?: 'none' | 'selected' | 'loading' | 'loaded' | 'evicted' | 'remote';
+}> = ({ styles, colors, activeConversation, navigation, onOpenModels, onOpenChatOptions, setShowSettingsPanel, researchMode, isRemote, modelRuntimeLabel, modelRuntimeState }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-      >
+      <TouchableOpacity accessibilityLabel="Go back" style={styles.backButton} onPress={() => navigation.goBack()}>
         <Icon name="arrow-left" size={20} color={colors.text} />
       </TouchableOpacity>
       <View style={styles.headerLeft}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {activeConversation?.title || 'New Chat'}
-        </Text>
+        <View style={styles.headerSubtitleRow}>
+          {activeConversation?.isPrivate && (
+            <Icon name="eye-off" size={13} color={colors.textMuted} style={styles.remoteIcon}
+              accessibilityLabel="Private chat, not saved" testID="private-chat-indicator" />
+          )}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {activeConversation?.isPrivate ? 'Private chat (not saved)' : activeConversation?.title || 'New Chat'}
+          </Text>
+        </View>
         <View style={styles.headerSubtitleRow}>
           <TouchableOpacity style={styles.modelSelector} onPress={onOpenModels} testID="model-selector">
-            {isRemote && (
+            {modelRuntimeState === 'loading' ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.remoteIcon} />
+            ) : isRemote || modelRuntimeState === 'remote' ? (
               <Icon name="cloud" size={12} color={colors.primary} style={styles.remoteIcon} />
+            ) : modelRuntimeState === 'loaded' ? (
+              <Icon name="check-circle" size={12} color={colors.success ?? colors.primary} style={styles.remoteIcon} />
+            ) : modelRuntimeState === 'evicted' ? (
+              <Icon name="pause-circle" size={12} color={colors.textMuted} style={styles.remoteIcon} />
+            ) : (
+              <Icon name="layers" size={12} color={colors.textSecondary} style={styles.remoteIcon} />
             )}
-            <Icon name="layers" size={12} color={colors.textSecondary} style={styles.remoteIcon} />
             <Text style={styles.headerSubtitle} numberOfLines={1} testID="model-loaded-indicator">
-              Models
+              {modelRuntimeLabel || 'Models'}
             </Text>
             <Text style={styles.modelSelectorArrow}>▼</Text>
           </TouchableOpacity>
-          <Text style={styles.headerSubtitleDivider}>·</Text>
-          <TouchableOpacity style={styles.headerProjectRow} onPress={() => setShowProjectSelector(true)}>
-            <Icon name="folder" size={11} color={activeProject ? colors.primary : colors.textMuted} />
-            <Text style={[styles.headerSubtitle, { color: activeProject ? colors.primary : colors.textMuted }]} numberOfLines={1}>
-              {activeProject ? activeProject.name : 'Default'}
-            </Text>
-          </TouchableOpacity>
+          {/* Project and agent selection live in Chat Settings to keep the model visible. */}
         </View>
       </View>
-      <View style={styles.headerActions}>
-        {/* Pro-only Voice mode sits beside the conversation filters. Empty in free builds. */}
-        {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <ModeToggle /> : null; })()}
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
-          <Icon name="sliders" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
+      <View style={styles.headerActions} testID="chat-header-actions">
+        {activeConversation && !activeConversation.isPrivate && onOpenChatOptions && (
+          <TouchableOpacity accessibilityLabel="Chat options and privacy" testID="chat-more-options"
+            style={styles.iconButton} onPress={onOpenChatOptions}>
+            <Icon name={activeConversation.pinVerifier ? 'lock' : 'more-horizontal'} size={19} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+        <HeaderVoiceAction styles={styles} />
+        <AttachStep index={16}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)}
+            accessibilityRole="button"
+            accessibilityLabel={researchMode ? 'Chat settings, Deep Research enabled' : 'Chat settings'}
+            testID="chat-settings-icon">
+            <Icon name="settings" size={18} color={researchMode ? colors.primary : colors.textSecondary} />
+          </TouchableOpacity>
+        </AttachStep>
       </View>
     </View>
+    {activeConversation?.isPrivate && <IncognitoBanner colors={colors} isRemote={isRemote || modelRuntimeState === 'remote'} />}
   </View>
 );
 
@@ -159,7 +213,7 @@ export const EmptyChat: React.FC<{
           </Text>
         </View>
         <Text style={styles.projectHintText}>
-          Project: {activeProject?.name || 'Default'} — tap to change
+          Project: {activeProject?.name || 'Default'} - tap to change
         </Text>
       </TouchableOpacity>
     </AnimatedEntry>
@@ -190,15 +244,11 @@ export const ImageProgressIndicator: React.FC<{
         <View style={styles.imageProgressContent}>
           <View style={styles.imageProgressHeader}>
             {/* The placeholder image glyph is only meaningful BEFORE the live preview renders.
-                Once the preview thumbnail is up (Refining Image), drop it — it just overlapped
+                Once the preview thumbnail is up (Refining Image), drop it - it just overlapped
                 the real image (device 2026-07-16). */}
             {!imagePreviewPath && (
               <View style={styles.imageProgressIconContainer} testID="image-progress-placeholder-icon">
-                {imageGenerationProgress ? (
-                  <Icon name="image" size={18} color={colors.primary} />
-                ) : (
-                  <LoadingDots testID="image-generation-working-indicator" />
-                )}
+                <Icon name="image" size={18} color={colors.primary} />
               </View>
             )}
             <View style={styles.imageProgressInfo}>
@@ -214,7 +264,7 @@ export const ImageProgressIndicator: React.FC<{
                 {imageGenerationProgress.step}/{imageGenerationProgress.totalSteps}
               </Text>
             )}
-            <TouchableOpacity style={styles.imageStopButton} onPress={onStop}>
+            <TouchableOpacity accessibilityLabel="Stop making the image" style={styles.imageStopButton} onPress={onStop}>
               <Icon name="x" size={16} color={colors.error} />
             </TouchableOpacity>
           </View>

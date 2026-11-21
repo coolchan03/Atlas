@@ -123,7 +123,7 @@ describe('tool extension loop integration', () => {
     return executorMock;
   }
 
-  describe('pro path — extension registered', () => {
+  describe('extension registered', () => {
     it('appends extension hint to the system prompt sent to LLM', async () => {
       setupProExtension();
 
@@ -144,10 +144,7 @@ describe('tool extension loop integration', () => {
 
       expect(executorMock).toHaveBeenCalledTimes(1);
       expect(executorMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: MCP_TOOL_NAME,
-          context: { conversationId: ctx.conversationId },
-        }),
+        expect.objectContaining({ name: MCP_TOOL_NAME }),
       );
 
       const { executeToolCall } = require('../../../src/services/tools');

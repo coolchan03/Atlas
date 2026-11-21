@@ -18,13 +18,13 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('Models manager sheet — remote TEXT selection carries the cloud marker (rendered)', () => {
   const setup = () => {
     installNativeBoundary();
-     
+    /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
     const rtl = requireRTL();
-    const { RemoteServerEditorScreen } = require('../../../src/screens/RemoteServerEditorScreen');
+    const { RemoteServersScreen } = require('../../../src/screens/RemoteServersScreen');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
-     
+    /* eslint-enable @typescript-eslint/no-var-requires */
 
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });
     useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
@@ -37,19 +37,21 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
     });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
-    return { React, rtl, RemoteServerEditorScreen, HomeScreen, useRemoteServerStore, nav };
+    return { React, rtl, RemoteServersScreen, HomeScreen, useRemoteServerStore, nav };
   };
 
   /** Connect a server through the REAL Add-Server UI (the T046/T097 gesture chain). */
   const connectServerViaUI = async (env: ReturnType<typeof setup>) => {
-    const { React, rtl, RemoteServerEditorScreen } = env;
-    const srv = rtl.render(React.createElement(RemoteServerEditorScreen));
-    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('Off Grid AI Desktop')), 'My LM Studio');
-    rtl.fireEvent.changeText(srv.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
-    rtl.fireEvent.press(srv.getByTestId('test-connection'));
+    const { React, rtl, RemoteServersScreen, nav } = env;
+    const srv = rtl.render(React.createElement(RemoteServersScreen, { navigation: nav }));
+    rtl.fireEvent.press(srv.getByText('Add Server'));
+    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('e.g., My laptop')), 'My LM Studio');
+    rtl.fireEvent.changeText(srv.getByPlaceholderText('https://server.example:7878'), 'http://localhost:1234');
+    rtl.fireEvent.press(srv.getByText('Test Connection'));
     await rtl.waitFor(() => { expect(srv.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
-    rtl.fireEvent.press(srv.getByTestId('save-server'));
-    await rtl.waitFor(() => { expect(env.useRemoteServerStore.getState().servers).toHaveLength(1); }, { timeout: 4000 });
+    const addButtons = srv.getAllByText('Add Server');
+    rtl.fireEvent.press(addButtons[addButtons.length - 1]);
+    await rtl.waitFor(() => { expect(srv.queryByText('My LM Studio')).not.toBeNull(); }, { timeout: 4000 });
     srv.unmount();
   };
 
@@ -61,8 +63,7 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
     const home = rtl.render(React.createElement(HomeScreen, { navigation: nav }));
     // Select the remote model the way a user does: browse → tap the discovered remote model.
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('browse-models-button'), { timeout: 4000 }));
-    rtl.fireEvent.press(await rtl.waitFor(() => home.getByText('llama-3-8b'), { timeout: 4000 }));
-    expect(home.queryByTestId('remote-text-model-loading')).not.toBeNull();
+    rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('remote-model-item'), { timeout: 4000 }));
     await rtl.waitFor(() => { expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('llama-3-8b'); }, { timeout: 4000 });
 
     // Real gesture: open the Models manager sheet from the Home summary card.
@@ -85,15 +86,6 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
     await rtl.waitFor(() => { expect(home.queryByTestId('models-row-text')).not.toBeNull(); }, { timeout: 4000 });
     // …but with no remote selection there is no cloud marker.
     expect(home.queryByTestId('models-row-text-remote')).toBeNull();
-
-    // Open one modality, then return to the all-modalities manager from its header.
-    rtl.fireEvent.press(home.getByTestId('models-row-text'));
-    await rtl.waitFor(() => { expect(home.queryByText('TEXT MODEL')).not.toBeNull(); }, { timeout: 4000 });
-    rtl.fireEvent.press(home.getByTestId('app-sheet-back'));
-    await rtl.waitFor(() => { expect(home.queryByText('MODELS')).not.toBeNull(); }, { timeout: 4000 });
-    expect(home.queryByTestId('models-row-image')).not.toBeNull();
-    expect(home.queryByTestId('models-row-voice')).not.toBeNull();
-    expect(home.queryByTestId('models-row-speech')).not.toBeNull();
     home.unmount();
   });
 });

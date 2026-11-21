@@ -6,9 +6,9 @@ import { hardwareService } from '../services/hardware';
 import { backendForcesF16Cache } from '../services/llmHelpers';
 
 export const CACHE_TYPE_DESCRIPTIONS: Record<CacheType, string> = {
-  f16: 'Full precision — best quality, highest memory usage',
-  q8_0: '8-bit quantized — good balance of quality and memory',
-  q4_0: '4-bit quantized — lowest memory, may reduce quality',
+  f16: 'Full precision - best quality, highest memory usage',
+  q8_0: '8-bit quantized - good balance of quality and memory',
+  q4_0: '4-bit quantized - lowest memory, may reduce quality',
 };
 
 export const GPU_LAYERS_MAX = 99;
@@ -18,8 +18,8 @@ export function useTextGenerationAdvanced() {
   const { settings, updateSettings } = useAppStore();
 
   const isFlashAttnOn = settings?.flashAttn ?? true;
-  const isQuantizedCache = (settings?.cacheType ?? 'q8_0') !== 'f16';
-  const currentCacheType: CacheType = settings?.cacheType ?? 'q8_0';
+  const isQuantizedCache = (settings?.cacheType ?? 'q4_0') !== 'f16';
+  const currentCacheType: CacheType = settings?.cacheType ?? 'q4_0';
   const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, GPU_LAYERS_MAX);
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const isGpuEnabled = (settings?.inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
@@ -28,9 +28,12 @@ export function useTextGenerationAdvanced() {
   // OpenCL and HTP force f16 in the native loader, so lock the UI to match — single
   // source in llmHelpers shared with the loader and the generation-details recorder.
   const gpuForcesF16 = backendForcesF16Cache(selectedBackend);
-  const cacheDisabled = gpuForcesF16;
-  const displayCacheType = cacheDisabled ? 'f16' : currentCacheType;
+  // The choice is always yours to change and is kept: a GPU backend that cannot use a quantized cache runs f16 for now, and the saved choice applies again on the CPU.
+  const cacheDisabled = false;
+  const displayCacheType = currentCacheType;
   const [resolvedThreadCount, setResolvedThreadCount] = useState<number | null>(null);
+  const [cpuCores, setCpuCores] = useState(8);
+  useEffect(() => { hardwareService.getCpuCoreCount().then(setCpuCores).catch(() => undefined); }, []);
 
   useEffect(() => {
     if (settings?.nThreads !== 0) return;
@@ -51,7 +54,6 @@ export function useTextGenerationAdvanced() {
   };
 
   const handleCacheTypeChange = (ct: CacheType) => {
-    if (cacheDisabled) return;
     const updates: Partial<typeof settings> = { cacheType: ct };
     if (ct !== 'f16' && !isFlashAttnOn) {
       updates.flashAttn = true;
@@ -68,6 +70,7 @@ export function useTextGenerationAdvanced() {
     currentCacheType,
     displayCacheType,
     gpuLayersEffective,
+    cpuCores,
     isGpuEnabled,
     isAndroid,
     gpuForcesF16,

@@ -1,9 +1,9 @@
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
- * device case 37: confirming the delete removes the model from the downloaded
+ * Provit case 37: confirming the delete removes the model from the downloaded
  * list. The delete-confirmation ALERT (cases 35/36) is a thin on-device UI
- * interaction (device-owned), but the removal CHAIN that fires on confirm is
+ * interaction (Provit-owned), but the removal CHAIN that fires on confirm is
  * real, testable logic and was NOT covered by the existing imageProvider suite
  * (its docstring claims "remove" but no test drives it).
  *
@@ -19,9 +19,7 @@ jest.mock('../../src/services/modelManager', () => ({
   modelManager: { deleteImageModel: jest.fn(async () => {}) },
 }));
 jest.mock('../../src/services/activeModelService', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) },
+  activeModelService: { unloadImageModel: jest.fn(async () => {}) },
 }));
 jest.mock('../../src/services/backgroundDownloadService', () => ({
   backgroundDownloadService: {
@@ -63,8 +61,8 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
     expect(useAppStore.getState().downloadedImageModels.find((m: any) => m.id === 'sdxl')).toBeUndefined();
     // No in-flight row existed, so no native cancel needed.
     expect(mockCancel).not.toHaveBeenCalled();
-    // Always unload defensively so the ejected model can't stay resident.
-    expect(mockUnload).toHaveBeenCalled();
+    // Deleting an inactive model must not evict a different resident image model.
+    expect(mockUnload).not.toHaveBeenCalled();
   });
 
   it('uninstalling the ACTIVE model clears activeImageModelId (disables image gen — cases 29/38)', async () => {

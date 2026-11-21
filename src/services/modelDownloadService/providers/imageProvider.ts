@@ -24,8 +24,6 @@ import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores
 import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
-import { startImageModelDownload } from '../../imageModelDownloadOwner';
-import { pauseSyntheticImageDownload, resumeSyntheticImageDownload } from '../../imageDownloadActions';
 import type { DownloadProvider, ModelDownload } from '../types';
 
 /**
@@ -53,18 +51,6 @@ const findEntry = (modelId: string): DownloadEntry | undefined =>
 export const imageProvider: DownloadProvider = {
   modelType: 'image',
 
-  async start(request): Promise<void> {
-    if (request.modelType !== 'image') throw new Error('Invalid image download request');
-    const app = useAppStore.getState();
-    await startImageModelDownload(request.model, {
-      addDownloadedImageModel: app.addDownloadedImageModel,
-      activeImageModelId: app.activeImageModelId,
-      setActiveImageModelId: app.setActiveImageModelId,
-      setAlertState: () => undefined,
-      triedImageGen: app.onboardingChecklist.triedImageGen,
-    });
-  },
-
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
     // Retry is structurally available for image on BOTH platforms (Android resumes
@@ -80,7 +66,7 @@ export const imageProvider: DownloadProvider = {
         id: uniformDownloadId('image', e.modelId), modelType: 'image', name: e.fileName || id,
         sizeBytes: e.combinedTotalBytes || e.totalBytes, bytesDownloaded: e.bytesDownloaded,
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: { cancel: true, retry: true, remove: true, pause: isActiveStatus(e.status) && e.status !== 'processing', resume: e.status === 'paused', resumable, determinateProgress: true },
+        capabilities: { cancel: true, retry: true, remove: true, resumable, determinateProgress: true },
         error: e.errorMessage,
       });
     }
@@ -96,23 +82,6 @@ export const imageProvider: DownloadProvider = {
       });
     }
     return out;
-  },
-
-  async pause(id: string): Promise<void> {
-    const entry = findEntry(modelIdOf(id));
-    if (!entry) return;
-    if (isMultifile(entry)) { await pauseSyntheticImageDownload(modelIdOf(id)); return; }
-    await backgroundDownloadService.pauseDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
-  },
-
-  async resume(id: string): Promise<void> {
-    const entry = findEntry(modelIdOf(id));
-    if (!entry) return;
-    if (isMultifile(entry)) { await resumeSyntheticImageDownload(modelIdOf(id)); return; }
-    await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
-    backgroundDownloadService.startProgressPolling();
   },
 
   async cancel(id: string): Promise<void> {
@@ -159,8 +128,12 @@ export const imageProvider: DownloadProvider = {
         .catch(err => logger.log(`[DL-SM] image:${modelId} remove: native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await activeModelService.unloadImageModel()
-      .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
+    const app = useAppStore.getState();
+    const loadedId = activeModelService.getLoadedModelIds?.().imageModelId ?? null;
+    if (app.activeImageModelId === modelId || loadedId === modelId) {
+      await activeModelService.unloadImageModel()
+        .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
+    }
     await modelManager.deleteImageModel(modelId)
       .catch(err => logger.log(`[DL-SM] image:${modelId} remove: delete failed err=${msg(err)}`));
     useAppStore.getState().removeDownloadedImageModel(modelId);
@@ -178,7 +151,7 @@ export const imageProvider: DownloadProvider = {
       const resumableOnRelaunch = !isMultifile(e) && Platform.OS === 'android';
       if (resumableOnRelaunch) continue;
       logger.log(`[DL-SM] image:${bareId(e.modelId)} reconcile: interrupted (multifile/iOS) → failed`);
-      store.setStatus(e.downloadId, 'failed', { message: 'Interrupted — app closed. Tap retry.' });
+      store.setStatus(e.downloadId, 'failed', { message: 'Interrupted - app closed. Tap retry.' });
     }
   },
 };

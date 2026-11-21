@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, FlatList, Platform } from 'react-native';
+import { View, Text, Image, TouchableOpacity, FlatList, Platform, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import { GeneratedImage } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { createStyles, COLUMN_COUNT } from './styles';
+import { createStyles, galleryColumns } from './styles';
 import { useGalleryActions } from './useGalleryActions';
 import { GalleryGridItem } from './GridItem';
 import { FullscreenViewer } from './FullscreenViewer';
@@ -21,6 +21,7 @@ export const GalleryScreen: React.FC = () => {
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const columns = galleryColumns(useWindowDimensions().width);
 
   const {
     isSelectMode,
@@ -68,18 +69,18 @@ export const GalleryScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView testID="gallery-screen" style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         {isSelectMode ? (
           <>
-            <TouchableOpacity style={styles.closeButton} onPress={toggleSelectMode}>
+            <TouchableOpacity accessibilityLabel="Stop selecting" style={styles.closeButton} onPress={toggleSelectMode}>
               <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{selectedIds.size} selected</Text>
             <TouchableOpacity style={styles.headerButton} onPress={selectAll}>
               <Text style={styles.headerButtonText}>All</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityLabel="Delete the selected images"
               style={[styles.headerButton, selectedIds.size === 0 && styles.headerButtonDisabled]}
               onPress={handleDeleteSelected}
               disabled={selectedIds.size === 0}
@@ -93,18 +94,13 @@ export const GalleryScreen: React.FC = () => {
           </>
         ) : (
           <>
-            <TouchableOpacity
-              accessibilityLabel="Close gallery"
-              accessibilityRole="button"
-              style={styles.closeButton}
-              onPress={() => navigation.goBack()}
-            >
+            <TouchableOpacity accessibilityLabel="Close" style={styles.closeButton} onPress={() => navigation.goBack()}>
               <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{screenTitle}</Text>
             <Text style={styles.countBadge}>{displayImages.length}</Text>
             {displayImages.length > 0 && (
-              <TouchableOpacity style={styles.headerButton} onPress={toggleSelectMode}>
+              <TouchableOpacity accessibilityLabel="Select images" style={styles.headerButton} onPress={toggleSelectMode}>
                 <Icon name="check-square" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
@@ -145,7 +141,7 @@ export const GalleryScreen: React.FC = () => {
                 {imageGenState.progress.step}/{imageGenState.progress.totalSteps}
               </Text>
             )}
-            <TouchableOpacity style={styles.genCancelButton} onPress={handleCancelGeneration}>
+            <TouchableOpacity accessibilityLabel="Cancel the image" style={styles.genCancelButton} onPress={handleCancelGeneration}>
               <Icon name="x" size={16} color={colors.error} />
             </TouchableOpacity>
           </View>
@@ -165,7 +161,8 @@ export const GalleryScreen: React.FC = () => {
           data={displayImages}
           renderItem={renderGridItem}
           keyExtractor={(item) => item.id}
-          numColumns={COLUMN_COUNT}
+          key={columns}
+          numColumns={columns}
           contentContainerStyle={styles.gridContainer}
           columnWrapperStyle={styles.gridRow}
           showsVerticalScrollIndicator={false}

@@ -11,8 +11,6 @@
  */
 
 import React from 'react';
-import { voiceSession } from '../../../src/services/voiceSession';
-import { recordingController } from '../../../src/services/recordingController';
 import { Keyboard, Platform } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
@@ -53,7 +51,6 @@ jest.mock('../../../src/services/documentService', () => ({
 // Mock the stores
 const mockUseWhisperStore = jest.fn();
 const mockUseAppStore = jest.fn();
-const mockRemoteServerState = { servers: [], activeServerId: null };
 const mockUseUiModeStore = jest.fn((selector?: (s: { interfaceMode: string }) => unknown) => {
   const state = { interfaceMode: 'chat' };
   return selector ? selector(state) : state;
@@ -66,13 +63,9 @@ jest.mock('../../../src/stores', () => {
   // mocked store needs getState too (mirrors the hook return).
   const useAppStore = () => mockUseAppStore();
   useAppStore.getState = () => mockUseAppStore();
-  const useRemoteServerStore = (selector?: (state: typeof mockRemoteServerState) => unknown) =>
-    selector ? selector(mockRemoteServerState) : mockRemoteServerState;
-  useRemoteServerStore.getState = () => mockRemoteServerState;
   return {
     useWhisperStore: () => mockUseWhisperStore(),
     useAppStore,
-    useRemoteServerStore,
     useUiModeStore,
   };
 });
@@ -116,11 +109,6 @@ describe('ChatInput', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // The voice session and recording controller are module singletons; without a reset one test's
-    // session state (a turn left mid-listen) leaks into the next, so a later tap is refused and the
-    // test fails only WHEN RUN AFTER another - green in isolation, red in the suite.
-    voiceSession._resetForTesting();
-    recordingController._reset();
     jest.spyOn(Keyboard, 'dismiss');
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
@@ -1859,62 +1847,17 @@ describe('ChatInput', () => {
   });
 
   // ============================================================================
-  // Icon collapse animation (triggered by text content)
+  // Composer icons stay put while typing
   // ============================================================================
-  describe('icon collapse animation', () => {
-    it('starts Animated.timing to collapse when text is entered', () => {
-      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
-      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+  describe('composer icons while typing', () => {
+    it('keeps the attach and settings buttons visible and tappable after typing', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(<ChatInput {...defaultProps} />);
 
-      fireEvent.changeText(getByTestId('chat-input'), 'a');
+      fireEvent.changeText(getByTestId('chat-input'), 'hello');
 
-      expect(timingSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ toValue: 1 }),
-      );
-      timingSpy.mockRestore();
-    });
-
-    it('starts Animated.timing to expand when text is cleared', () => {
-      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
-      const { getByTestId } = render(<ChatInput {...defaultProps} />);
-
-      fireEvent.changeText(getByTestId('chat-input'), 'a');
-      timingSpy.mockClear();
-      fireEvent.changeText(getByTestId('chat-input'), '');
-
-      expect(timingSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ toValue: 0 }),
-      );
-      timingSpy.mockRestore();
-    });
-
-    it('disables pointer events on pill icons when text is present', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      // Before typing, icons should be interactive
       expect(getByTestId('attach-button')).toBeTruthy();
-
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
-
-      // After typing, the Animated.View wrapping icons should have pointerEvents='none'
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBeGreaterThan(0);
-    });
-
-    it('re-enables pointer events on pill icons when text is cleared', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
-      fireEvent.changeText(getByTestId('chat-input'), '');
-
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBe(0);
+      expect(getByTestId('quick-settings-button')).toBeTruthy();
+      expect(UNSAFE_queryAllByProps({ pointerEvents: 'none' }).length).toBe(0);
     });
 
     it('icons remain accessible when input is empty', () => {
@@ -1944,6 +1887,17 @@ describe('ChatInput', () => {
       );
 
       expect(getByTestId('stop-button')).toBeTruthy();
+    });
+  });
+
+  describe('ask about this', () => {
+    it('puts a quoted reply in front of what is typed', () => {
+      const { useQuoteDraft } = require('../../../src/utils/quoteDraft');
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+      fireEvent.changeText(getByTestId('chat-input'), 'Why?');
+      act(() => { useQuoteDraft.getState().set('> The rate is 5%.\n\n'); });
+      expect(getByTestId('chat-input').props.value).toBe('Why?\n\n> The rate is 5%.\n\n');
+      expect(useQuoteDraft.getState().text).toBe('');
     });
   });
 });

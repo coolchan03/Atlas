@@ -284,8 +284,9 @@ describe('Tool Handlers', () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
 
       const result = await runTool('web_search', { query: 'test query' });
+      // Do not present an offline/blocked search as a successful empty result.
+      expect(result.error).toContain('Search failed');
       expect(result.error).toContain('Network request failed');
-      expect(result.content).toBe('');
     });
 
     it.each([

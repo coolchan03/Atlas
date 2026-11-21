@@ -31,14 +31,16 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import RNFS from 'react-native-fs';
-import { doLoadTextModel, resolveMmProjPath } from '../../../src/services/activeModelService/loaders';
+import { doLoadImageModel, doLoadTextModel, resolveMmProjPath } from '../../../src/services/activeModelService/loaders';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
+import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { useAppStore } from '../../../src/stores';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
 const mockedLlm = llmService as jest.Mocked<typeof llmService>;
+const mockedImage = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
 const mockedGetState = useAppStore.getState as jest.Mock;
 
 function makeStore(overrides: any = {}) {
@@ -47,6 +49,7 @@ function makeStore(overrides: any = {}) {
     downloadedModels: [],
     setDownloadedModels: jest.fn(),
     setActiveModelId: jest.fn(),
+    setActiveImageModelId: jest.fn(),
     setLoadedSettings: jest.fn(),
     ...overrides,
   };
@@ -261,11 +264,127 @@ describe('doLoadTextModel — LiteRT path', () => {
       model: { id: 'model-1', fileName: 'model.litertlm', filePath: '/models/model.litertlm', engine: 'litert' },
     });
     ctx.store = makeStore({ settings: { liteRTBackend: 'gpu', liteRTMaxTokens: 8192 } });
+    mockedGetState.mockReturnValue(ctx.store);
 
     await doLoadTextModel(ctx);
 
     expect(ctx.store.setLoadedSettings).toHaveBeenCalledWith(
       expect.objectContaining({ liteRTMaxTokens: 8192 }),
     );
+  });
+});
+
+
+describe('doLoadImageModel — backend routing', () => {
+  const makeImageCtx = (overrides: any = {}) => ({
+    model: { id: 'img-1', name: 'Image', modelPath: '/models/image', backend: 'qnn', ...overrides.model },
+    modelId: 'img-1',
+    imageThreads: 4,
+    needsThreadReload: false,
+    cpuOnly: false,
+    preferGpu: false,
+    store: makeStore(),
+    timeoutMs: 1000,
+    loadedImageModelId: null,
+    onLoaded: jest.fn(),
+    onError: jest.fn(),
+    onFinally: jest.fn(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedImage.loadModel.mockResolvedValue(true);
+  });
+
+  it('passes the downloaded QNN backend to the native image engine', async () => {
+    const ctx = makeImageCtx();
+    await doLoadImageModel(ctx as any);
+    expect(mockedImage.loadModel).toHaveBeenCalledWith(
+      '/models/image', 4, expect.objectContaining({ backend: 'qnn' }),
+    );
+  });
+  it('forces MNN when CPU-only mode is requested', async () => {
+    const ctx = makeImageCtx({ cpuOnly: true });
+    await doLoadImageModel(ctx as any);
+    expect(mockedImage.loadModel).toHaveBeenCalledWith(
+      '/models/image', 4, expect.objectContaining({ backend: 'mnn', cpuOnly: true }),
+    );
+  });
+});
+
+describe('optional attachments in the load path', () => {
+  const MM = '/models/m-mmproj-f16.gguf';
+  const DR = '/models/m.mtp-x.gguf';
+  const llama = (extra: any = {}) => ({
+    id: 'model-1', fileName: 'm.gguf', filePath: '/models/m.gguf', engine: 'llama', mmProjPath: MM, mmProjFileName: 'm-mmproj-f16.gguf',
+    isVisionModel: true, mmProjManual: true, draftPath: DR, ...extra,
+  });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedLlm.loadModel.mockResolvedValue(undefined);
+    mockedRNFS.exists.mockResolvedValue(true);
+    mockedRNFS.readDir.mockResolvedValue([{ name: 'm-mmproj-f16.gguf', path: MM, isFile: () => true, size: 600 } as any]);
+  });
+
+  it('a disabled picture file is not started, not scanned for, and its link is NOT cleared', async () => {
+    const ctx = makeCtx({ model: llama({ mmProjDisabled: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: false, audio: false });
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel).toHaveBeenCalledWith('/models/m.gguf', undefined, expect.objectContaining({ switchedOff: { vision: true } }));
+    expect(mockedRNFS.readDir).not.toHaveBeenCalled();
+    const { modelManager } = require('../../../src/services/modelManager');
+    expect(modelManager.clearMmProjLink).not.toHaveBeenCalled();
+    expect(modelManager.saveModelWithMmproj).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['detached', { mmProjPath: undefined, mmProjDetached: true }],
+    ['archived', { mmProjPath: undefined, archivedAttachments: { vision: { path: MM, fileName: 'x', archivedAt: 't' } } }],
+  ])('a %s picture file is not found again by the folder scan', async (_name, extra) => {
+    const ctx = makeCtx({ model: llama(extra) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel).toHaveBeenCalledWith('/models/m.gguf', undefined, expect.any(Object));
+    expect(mockedRNFS.readDir).not.toHaveBeenCalled();
+  });
+
+  it('a disabled MTP file is not handed to the engine; an enabled one is', async () => {
+    let ctx = makeCtx({ model: llama({ draftDisabled: true, mmProjPath: undefined, mmProjDetached: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel.mock.calls[0][2]).not.toHaveProperty('draftPath');
+    expect(mockedLlm.loadModel.mock.calls[0][2]).toMatchObject({ switchedOff: { mtp: true } });
+
+    mockedLlm.loadModel.mockClear();
+    ctx = makeCtx({ model: llama({ mmProjPath: undefined, mmProjDetached: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel.mock.calls[0][2]).toMatchObject({ draftPath: DR });
+  });
+
+  it('an enabled picture file the engine really cannot use still gets its broken link cleared', async () => {
+    const ctx = makeCtx({ model: llama() });
+    mockedGetState.mockReturnValue(ctx.store);
+    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: false, audio: false });
+    await doLoadTextModel(ctx);
+    const { modelManager } = require('../../../src/services/modelManager');
+    expect(modelManager.clearMmProjLink).toHaveBeenCalledWith('model-1');
+  });
+
+  it('a load that times out tells the service to abandon it so it cannot go live later', async () => {
+    jest.useFakeTimers();
+    try {
+      (mockedLlm as any).abandonPendingLoad = jest.fn();
+      mockedLlm.loadModel.mockReturnValue(new Promise(() => {})); // never finishes
+      const ctx = makeCtx({ model: llama({ mmProjPath: undefined, mmProjDetached: true }), timeoutMs: 1000 });
+      mockedGetState.mockReturnValue(ctx.store);
+      const result = doLoadTextModel(ctx);
+      const assertion = expect(result).rejects.toThrow(/timed out/);
+      await jest.advanceTimersByTimeAsync(1500);
+      await assertion;
+      expect((mockedLlm as any).abandonPendingLoad).toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
   });
 });

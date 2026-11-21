@@ -14,6 +14,9 @@
  */
 import { setupChatScreen } from '../../harness/chatHarness';
 
+// These residency tests size models with the CPU overhead; the app default is now Auto (GPU overhead).
+beforeEach(() => { require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' }); });
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,
@@ -24,17 +27,21 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
   it('lists every resident with RAM and ejects one individually, leaving the others', async () => {
     // Heavy (4GB) text model so the image load EVICTS it (one heavy at a time) → residents = image +
     // whisper. The harness default is a lighter 2GB model (fits chat-flow budgets) which would co-reside.
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 4 * 1024 * 1024 * 1024 });
+    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 2 * 1024 * 1024 * 1024 });
     h.render();
     // Real interactions to reach image + whisper resident.
     await h.placeImageModel({ backend: 'mnn' });
-     
+    /* eslint-disable @typescript-eslint/no-var-requires */
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-     
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    // Explicit one-heavy-model policy: the image load must evict the text model.
+    modelResidencyManager.setLoadPolicy('conservative');
     await activeModelService.loadImageModel('sd');
+    // Sidecars are allowed to coexist with the image model in balanced mode.
+    modelResidencyManager.setLoadPolicy('balanced');
     await h.setupWhisperModel();
 
     // Precondition (real): image + whisper are in memory.

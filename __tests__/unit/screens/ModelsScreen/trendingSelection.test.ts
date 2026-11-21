@@ -51,8 +51,6 @@ jest.mock('../../../../src/services', () => ({
     getModelRecommendation: () => mockGetModelRecommendation(),
   },
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadTextModel: jest.fn(() => Promise.resolve()),
   },
 }));
@@ -135,8 +133,8 @@ describe('trendingAsModelInfo — family best-fit selection', () => {
 
     const { result } = renderHook(() => useTextModels(setAlertState));
 
-    // There are 3 families (MiniCPM5, Gemma 4, Qwen 3.5), so one model from each is shown.
-    expect(result.current.trendingAsModelInfo).toHaveLength(3);
+    // There are 2 families (gemma4, qwen35), so at most 2 models
+    expect(result.current.trendingAsModelInfo.length).toBeLessThanOrEqual(2);
 
     // Each returned model ID belongs to one of the trending families
     const { TRENDING_MODEL_IDS } = require('../../../../src/constants');

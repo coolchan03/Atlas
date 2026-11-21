@@ -64,10 +64,9 @@ describe('DocumentPreviewScreen', () => {
     });
 
     it('shows loading indicator initially', () => {
-      const { getByLabelText } = render(<DocumentPreviewScreen />);
-      // The one loader in this app announces itself as "Working". Asserted by what a user
-      // perceives rather than by component type, so replacing the loader again cannot break this.
-      expect(getByLabelText('Working')).toBeTruthy();
+      const { UNSAFE_getByType } = render(<DocumentPreviewScreen />);
+      const { ActivityIndicator } = require('react-native');
+      expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
     });
   });
 
@@ -162,5 +161,21 @@ describe('DocumentPreviewScreen', () => {
       fireEvent.press(getByText('arrow-left'));
       expect(mockGoBack).toHaveBeenCalled();
     });
+  });
+});
+
+describe('DocumentPreviewScreen: save as Markdown', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    mockProcessDocument.mockResolvedValue({ textContent: '# Report\n\nBody text.' });
+  });
+  it('saves the converted text as <name>.md in the workspace Converted folder', async () => {
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
+    jest.doMock('../../../src/atlasTools/deviceTools', () => ({ workspaceDir: async () => '/ws' }));
+    const { getByTestId } = render(<DocumentPreviewScreen />);
+    await flushPromises();
+    await act(async () => { fireEvent.press(getByTestId('save-markdown')); });
+    expect(RNFS.writeFile).toHaveBeenCalledWith('/ws/Converted/test.md', '# Report\n\nBody text.', 'utf8');
   });
 });

@@ -45,17 +45,14 @@ export const resetStores = (): void => {
     lastTextModelId: null,
     isLoadingModel: false,
     settings: {
-      systemPrompt:
-        "You are a helpful AI assistant running locally on the user's device. Be concise and helpful.",
+      systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
       temperature: 0.7,
       maxTokens: 1024,
-      maxToolCalls: 25,
       topP: 0.9,
       repeatPenalty: 1.1,
       contextLength: 4096,
       nThreads: 0,
       nBatch: 512,
-      speculativeDecoding: false,
       imageGenerationMode: 'auto',
       autoDetectMethod: 'pattern',
       classifierModelId: null,
@@ -70,11 +67,8 @@ export const resetStores = (): void => {
       gpuLayers: 99,
       flashAttn: false,
       aggressiveModelLoading: false,
-      cacheType: 'q8_0',
+      cacheType: 'q4_0',
       showGenerationDetails: false,
-      voiceTurnMode: 'silence' as const,
-      voiceSilenceAfterSpeechMs: 5_000,
-      voiceSpeakerDrainMs: 2_000,
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
       thinkingEnabled: true,
@@ -90,6 +84,8 @@ export const resetStores = (): void => {
     imageGenerationStatus: null,
     imagePreviewPath: null,
     generatedImages: [],
+    hiddenImages: [],
+    shownSpotlights: {},
     textGenerationCount: 0,
     imageGenerationCount: 0,
     hasEngagedSharePrompt: false,
@@ -149,12 +145,8 @@ export const resetStores = (): void => {
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
-    activeRemoteMediaServerIds: {},
   });
-  require('../../src/stores/downloadStore').useDownloadStore.setState({
-    downloads: {},
-    downloadIdIndex: {},
-  });
+  require('../../src/stores/downloadStore').useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} });
 };
 
 // ============================================================================
@@ -164,9 +156,7 @@ export const resetStores = (): void => {
 /**
  * Sets up the app store with a downloaded model and makes it active.
  */
-export const setupWithActiveModel = (
-  modelOptions: DownloadedModelFactoryOptions = {},
-): string => {
+export const setupWithActiveModel = (modelOptions: DownloadedModelFactoryOptions = {}): string => {
   const model = createDownloadedModel(modelOptions);
   useAppStore.setState({
     downloadedModels: [model],
@@ -180,9 +170,7 @@ export const setupWithActiveModel = (
 /**
  * Sets up the chat store with a conversation.
  */
-export const setupWithConversation = (
-  conversationOptions: ConversationFactoryOptions = {},
-): string => {
+export const setupWithConversation = (conversationOptions: ConversationFactoryOptions = {}): string => {
   const conversation = createConversation(conversationOptions);
   useChatStore.setState({
     conversations: [conversation],
@@ -196,7 +184,7 @@ export const setupWithConversation = (
  */
 export const setupFullChat = (
   modelOptions: DownloadedModelFactoryOptions = {},
-  conversationOptions: ConversationFactoryOptions = {},
+  conversationOptions: ConversationFactoryOptions = {}
 ): { modelId: string; conversationId: string } => {
   const modelId = setupWithActiveModel(modelOptions);
   const conversationId = setupWithConversation({
@@ -247,7 +235,7 @@ export const wait = async (ms: number): Promise<void> => {
  */
 export const waitFor = async (
   condition: () => boolean,
-  { timeout = 1000, interval = 50 } = {},
+  { timeout = 1000, interval = 50 } = {}
 ): Promise<void> => {
   const startTime = Date.now();
 
@@ -283,9 +271,7 @@ export const getAuthState = () => useAuthStore.getState();
  */
 export const getActiveConversation = () => {
   const state = useChatStore.getState();
-  return (
-    state.conversations.find(c => c.id === state.activeConversationId) ?? null
-  );
+  return state.conversations.find(c => c.id === state.activeConversationId) ?? null;
 };
 
 /**
@@ -304,42 +290,31 @@ export const getActiveMessages = () => {
  * Creates a mock function that resolves after a delay.
  */
 export const createDelayedMock = <T>(value: T, delayMs = 100) =>
-  jest.fn(
-    () => new Promise<T>(resolve => setTimeout(() => resolve(value), delayMs)),
-  );
+  jest.fn(() => new Promise<T>(resolve => setTimeout(() => resolve(value), delayMs)));
 
 /**
  * Creates a mock function that rejects after a delay.
  */
 export const createDelayedRejectMock = (error: Error, delayMs = 100) =>
-  jest.fn(
-    () => new Promise((_, reject) => setTimeout(() => reject(error), delayMs)),
-  );
+  jest.fn(() => new Promise((_, reject) => setTimeout(() => reject(error), delayMs)));
 
 /**
  * Creates a mock streaming callback that calls onToken multiple times.
  */
-export const createStreamingMock = (
-  tokens: string[],
-  delayBetweenTokens = 10,
-) => {
-  return jest.fn(
-    async (
-      _messages: unknown,
-      onToken: (token: string) => void,
-      onComplete: () => void,
-      _onError: (error: Error) => void,
-      _onThinking?: () => void,
-    ) => {
-      for (const token of tokens) {
-        await new Promise<void>(resolve =>
-          setTimeout(() => resolve(), delayBetweenTokens),
-        );
-        onToken(token);
-      }
-      onComplete();
-    },
-  );
+export const createStreamingMock = (tokens: string[], delayBetweenTokens = 10) => {
+  return jest.fn(async (
+    _messages: unknown,
+    onToken: (token: string) => void,
+    onComplete: () => void,
+    _onError: (error: Error) => void,
+    _onThinking?: () => void
+  ) => {
+    for (const token of tokens) {
+      await new Promise<void>(resolve => setTimeout(() => resolve(), delayBetweenTokens));
+      onToken(token);
+    }
+    onComplete();
+  });
 };
 
 // ============================================================================
@@ -349,9 +324,7 @@ export const createStreamingMock = (
 /**
  * Creates a mock LlamaContext matching the llama.rn initLlama return shape.
  */
-export const createMockLlamaContext = (
-  overrides: Record<string, any> = {},
-) => ({
+export const createMockLlamaContext = (overrides: Record<string, any> = {}) => ({
   id: 'test-context-id',
   gpu: false,
   reasonNoGPU: 'Test environment',
@@ -373,22 +346,16 @@ export const createMockLlamaContext = (
   },
   isJinjaSupported: jest.fn(() => false),
   release: jest.fn(() => Promise.resolve()),
-  completion: jest.fn((..._args: any[]) =>
-    Promise.resolve({
-      text: 'Test completion response',
-      tokens_predicted: 10,
-      tokens_evaluated: 5,
-      timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
-    }),
-  ),
+  completion: jest.fn((..._args: any[]) => Promise.resolve({
+    text: 'Test completion response',
+    tokens_predicted: 10,
+    tokens_evaluated: 5,
+    timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+  })),
   stopCompletion: jest.fn(() => Promise.resolve()),
-  tokenize: jest.fn((text: string) =>
-    Promise.resolve({ tokens: new Array(Math.ceil(text.length / 4)) }),
-  ),
+  tokenize: jest.fn((text: string) => Promise.resolve({ tokens: new Array(Math.ceil(text.length / 4)) })),
   initMultimodal: jest.fn(() => Promise.resolve(true)),
-  getMultimodalSupport: jest.fn(() =>
-    Promise.resolve({ vision: false, audio: false }),
-  ),
+  getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: false, audio: false })),
   clearCache: jest.fn(() => Promise.resolve()),
   transcribe: jest.fn(() => ({
     promise: Promise.resolve({ result: 'transcribed text' }),
@@ -399,17 +366,13 @@ export const createMockLlamaContext = (
 /**
  * Creates a mock WhisperContext matching the whisper.rn initWhisper return shape.
  */
-export const createMockWhisperContext = (
-  overrides: Record<string, any> = {},
-) => ({
+export const createMockWhisperContext = (overrides: Record<string, any> = {}) => ({
   id: 'test-whisper-id',
   release: jest.fn(() => Promise.resolve()),
-  transcribeRealtime: jest.fn(() =>
-    Promise.resolve({
-      stop: jest.fn(),
-      subscribe: jest.fn(),
-    }),
-  ),
+  transcribeRealtime: jest.fn(() => Promise.resolve({
+    stop: jest.fn(),
+    subscribe: jest.fn(),
+  })),
   transcribe: jest.fn((_filePath: string, _opts: any) => ({
     promise: Promise.resolve({ result: 'transcribed text' }),
   })),
@@ -424,7 +387,7 @@ export const createMockWhisperContext = (
  * Collects all values emitted by a subscription during a test.
  */
 export const collectSubscriptionValues = <T>(
-  subscribe: (listener: (value: T) => void) => () => void,
+  subscribe: (listener: (value: T) => void) => () => void
 ): { values: T[]; unsubscribe: () => void } => {
   const values: T[] = [];
   const unsubscribe = subscribe(value => values.push(value));
@@ -441,7 +404,7 @@ export const collectSubscriptionValues = <T>(
 export const addMessageToConversation = (
   conversationId: string,
   role: 'user' | 'assistant' | 'system',
-  content: string,
+  content: string
 ) => {
   const { addMessage } = useChatStore.getState();
   return addMessage(conversationId, { role, content });
@@ -452,7 +415,7 @@ export const addMessageToConversation = (
  */
 export const simulateGeneration = async (
   conversationId: string,
-  responseContent: string,
+  responseContent: string
 ): Promise<void> => {
   const chatStore = useChatStore.getState();
 
@@ -485,14 +448,8 @@ export const createMultipleConversations = (count: number): string[] => {
     const conv = createConversation({
       title: `Conversation ${i + 1}`,
       messages: [
-        createMessage({
-          role: 'user',
-          content: `User message in conv ${i + 1}`,
-        }),
-        createMessage({
-          role: 'assistant',
-          content: `Assistant response in conv ${i + 1}`,
-        }),
+        createMessage({ role: 'user', content: `User message in conv ${i + 1}` }),
+        createMessage({ role: 'assistant', content: `Assistant response in conv ${i + 1}` }),
       ],
     });
     ids.push(conv.id);
@@ -526,10 +483,7 @@ export const createMultipleModels = (count: number): string[] => {
 /**
  * Creates generated images in the gallery.
  */
-export const createGalleryImages = (
-  count: number,
-  conversationId?: string,
-): string[] => {
+export const createGalleryImages = (count: number, conversationId?: string): string[] => {
   const ids: string[] = [];
   const images = [];
 
@@ -554,8 +508,7 @@ export const createGalleryImages = (
  * Resets download store to initial state.
  */
 export const resetDownloadStore = (): void => {
-  const useDownloadStore =
-    require('../../src/stores/downloadStore').useDownloadStore;
+  const useDownloadStore = require('../../src/stores/downloadStore').useDownloadStore;
   useDownloadStore.setState({
     downloads: {},
     downloadIdIndex: {},
@@ -576,7 +529,6 @@ export const resetRemoteServerStore = (): void => {
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
-    activeRemoteMediaServerIds: {},
   });
 };
 
@@ -632,9 +584,7 @@ export const actStoreUpdate = (fn: () => void): void => {
 /**
  * Wraps an async function call in act() for store updates.
  */
-export const actAsyncStoreUpdate = async (
-  fn: () => Promise<void>,
-): Promise<void> => {
+export const actAsyncStoreUpdate = async (fn: () => Promise<void>): Promise<void> => {
   await act(async () => {
     await fn();
   });

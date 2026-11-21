@@ -18,8 +18,6 @@ import {
   loadDownloadedModels,
   loadDownloadedImageModels,
 } from './storage';
-import type { TransferredModelManifest } from '@offgrid/sync';
-import { registerTransferredModelFile } from './transferAdmission';
 import {
   performBackgroundDownload,
   watchBackgroundDownload,
@@ -27,25 +25,30 @@ import {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
   mmProjLocalName,
+  performMmProjRepairDownload,
 } from './download';
 import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
+import { copyFileWithProgress } from './copyFile';
+import {
+  type AttachmentKind, setAttachmentEnabled as applyEnabled, detachAttachment as applyDetach, archiveAttachment as applyArchive,
+  restoreAttachment as applyRestore, dropAttachment, isFileShared, attachmentPath,
+} from './attachments';
 import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
   cleanupMMProjEntries as scanCleanupMMProjEntries,
   scanForUntrackedImageModels as scanUntrackedImage,
   scanForUntrackedTextModels as scanUntrackedText,
+  importLocalModel as scanImportLocalModel,
   reconcileFinishedImageDownloads as reconcileImageDownloads,
   isMMProjFile,
+  ImportLocalModelOpts,
 } from './scan';
-import {
-  importLocalModel as scanImportLocalModel,
-  type ImportLocalModelOpts,
-} from './importLocalModel';
+import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 import { resolveStoredPath, determineCredibility } from './storage';
-import * as visionRepair from './visionRepairService';
-import type { RepairOpts, VisionRepairContext } from './visionRepairService';
-import { resolveOwnedDocumentPath } from '../../utils/resolveDocumentPath';
+
+;
+;
 
 class ModelManager {
   private readonly modelsDir: string;
@@ -70,23 +73,51 @@ class ModelManager {
       exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`)]);
   }
 
-  /**
-   * What the projector lifecycle needs from the registry. Every re-entrant call routes back through
-   * this object's own methods, so the manager stays the single owner of the model list.
-   */
-  private visionContext(): VisionRepairContext {
-    return {
-      modelsDir: this.modelsDir,
-      initialize: () => this.initialize(),
-      getDownloadedModels: () => this.getDownloadedModels(),
-      saveModelWithMmproj: (id, path) => this.saveModelWithMmproj(id, path),
-      linkOrphanMmProj: () => this.linkOrphanMmProj(),
-      repairMmProj: (target, opts) => this.repairMmProj(target.modelId, target.file, opts),
-    };
-  }
-
   async linkOrphanMmProj(): Promise<void> {
-    return visionRepair.linkOrphanMmProj(this.visionContext());
+    const models = await this.getDownloadedModels();
+    let dirFiles: RNFS.ReadDirResItemT[] = [];
+    try {
+      dirFiles = await RNFS.readDir(this.modelsDir);
+    } catch {
+      return;
+    }
+    const mmProjFiles = dirFiles.filter(f => f.isFile() && this.isMMProjFile(f.name));
+    if (mmProjFiles.length === 0) return;
+
+    const toSave: typeof models = [];
+    for (const m of models) {
+      if (m.engine !== 'llama') continue;
+      // Strict match (shared rule): the projector must belong to THIS model by name+variant. This is the
+      // SAME rule the loader uses, so link-time and load-time can no longer disagree (the E2B↔E4B split).
+      const chosenName = pickMmProjForModel(m.fileName, mmProjFiles.map(f => f.name));
+      const match = chosenName ? mmProjFiles.find(f => f.name === chosenName) : undefined;
+
+      if (m.mmProjPath) {
+        // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
+        const belongs = m.mmProjManual || m.id.startsWith('local_import/') || mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
+        const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
+        if (!fileExists && m.storage === 'sd') continue; // SD card is out: keep the link for when it comes back
+        if (!fileExists || !belongs) {
+          logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
+          // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
+          // still recognized as a vision model that NEEDS REPAIR (needsVisionRepair → true → the wrench and
+          // the "download the vision file" prompt appear). Wiping the vision flag made it look like a plain
+          // text model, hiding the repair path entirely (device 2026-07-14).
+          toSave.push({ ...m, mmProjPath: undefined, mmProjFileSize: undefined, isVisionModel: true });
+        }
+        // If link is valid, leave it alone
+      } else if (match) {
+        logger.log(`[linkOrphanMmProj] ${m.id} — linking ${match.path}`);
+        await this.saveModelWithMmproj(m.id, match.path);
+      }
+    }
+
+    if (toSave.length > 0) {
+      const current = await this.getDownloadedModels();
+      const updated = current.map(m => toSave.find(s => s.id === m.id) ?? m);
+      await saveModelsList(updated);
+      useAppStore.getState().setDownloadedModels(updated);
+    }
   }
 
   async getDownloadedModels(): Promise<DownloadedModel[]> {
@@ -102,27 +133,30 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-    const modelPath = resolveOwnedDocumentPath(model.filePath, this.modelsDir);
-    if (!modelPath) {
+    const allowed = (p: string) => p.startsWith(this.modelsDir) || (model.storage === 'sd' && /\/Android\/data\//.test(p));
+    if (!allowed(model.filePath)) {
       throw new Error('Invalid model path: outside app directory');
     }
     const llamaModel = model.engine === 'llama' ? model : null;
-    const mmProjPath = llamaModel?.mmProjPath
-      ? resolveOwnedDocumentPath(llamaModel.mmProjPath, this.modelsDir)
-      : null;
-    if (llamaModel?.mmProjPath && !mmProjPath) {
+    if (llamaModel?.mmProjPath && !allowed(llamaModel.mmProjPath)) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-    await RNFS.unlink(modelPath);
+    await RNFS.unlink(model.filePath).catch((e) => { if (model.storage !== 'sd') throw e; }); // SD card may be out
 
     // Only delete mmproj if no other models reference it
-    if (llamaModel?.mmProjPath && mmProjPath) {
+    if (llamaModel?.mmProjPath) {
       const otherModelsUsingMmproj = models.some(
         m => m.engine === 'llama' && m.id !== modelId && m.mmProjPath === llamaModel.mmProjPath,
       );
       if (!otherModelsUsingMmproj) {
-        await RNFS.unlink(mmProjPath).catch(() => {});
+        await RNFS.unlink(llamaModel.mmProjPath).catch(() => {});
       }
+    }
+
+    if (llamaModel?.draftPath && allowed(llamaModel.draftPath) && !isFileShared(models, llamaModel.draftPath, modelId)) await RNFS.unlink(llamaModel.draftPath).catch(() => {});
+    // Files set aside with Archive go with the model they belonged to, unless another model also uses them.
+    for (const archived of [llamaModel?.archivedAttachments?.vision, llamaModel?.archivedAttachments?.draft]) {
+      if (archived && allowed(archived.path) && !isFileShared(models, archived.path, modelId)) await RNFS.unlink(archived.path).catch(() => {});
     }
 
     await saveModelsList(models.filter(m => m.id !== modelId));
@@ -293,28 +327,242 @@ class ModelManager {
   stopBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.stopProgressPolling();
   }
-  /** @see visionRepairService.repairVision - the one rule every surface repairs a model through. */
-  async repairVision(
-    model: DownloadedModel,
-    opts?: RepairOpts,
-  ): Promise<visionRepair.VisionRepairOutcome> {
-    return visionRepair.repairVision(this.visionContext(), model, opts);
+  async repairMmProj(
+    modelId: string,
+    file: ModelFile,
+    opts?: { onProgress?: DownloadProgressCallback; onDownloadIdReady?: (id: string) => void },
+  ): Promise<void> {
+    if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
+    await this.initialize();
+    // download.ts owns background-download orchestration: it starts the sidecar,
+    // drives the SAME download-store rows the normal download writes (so the existing
+    // determinate progress bar lights up during the ~900MB fetch — BUG OD2), moves the
+    // file, and tears the transient row down. We just persist the resolved path.
+    const resolvedPath = await performMmProjRepairDownload({
+      modelId, file, modelsDir: this.modelsDir, ...opts,
+    });
+    await this.saveModelWithMmproj(`${modelId}/${file.name}`, resolvedPath);
   }
 
-  async repairMmProj(modelId: string, file: ModelFile, opts?: RepairOpts): Promise<void> {
-    return visionRepair.repairMmProj(this.visionContext(), { modelId, file }, opts);
-  }
-
+  /**
+   * Heal the DURABLE vision flag on a record from the authoritative catalog (the repo ships an mmproj).
+   * The old link cleanup wiped isVisionModel on some records, so the Download Manager — which has no catalog —
+   * showed them as plain text. Persisting the truth here makes the record the SINGLE source both surfaces
+   * read. No-op if already set (so it's safe to call on render/focus). Returns true if it changed anything.
+   */
   async markVisionModel(modelId: string): Promise<boolean> {
-    return visionRepair.markVisionModel(this.visionContext(), modelId);
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama' || target.isVisionModel) return false;
+    const updated = models.map(m => (m.id === modelId ? { ...m, isVisionModel: true } : m));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    return true;
   }
 
-  async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {
-    return visionRepair.saveModelWithMmproj(this.visionContext(), modelId, mmProjPath);
+  /**
+   * Atlas: attach a vision file (mmproj) the user picked to a model already on the phone.
+   * Copies it next to the model and links it, whatever its file name.
+   */
+  async attachMmProj(modelId: string, file: { uri: string; fileName: string; size?: number }, onProgress?: (f: number) => void): Promise<void> {
+    const { uri: sourceUri, fileName, size } = file;
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') throw new Error('Vision files can only be added to GGUF (llama) models.');
+    if (!fileName.toLowerCase().endsWith('.gguf')) throw new Error('The vision file must be a .gguf file (usually named mmproj-...).');
+    const dir = target.filePath.substring(0, target.filePath.lastIndexOf('/'));
+    const stem = target.fileName.replace(/\.gguf$/i, '');
+    const dest = `${dir}/${stem}.mmproj-${fileName.replace(/[^\w.-]+/g, '_')}`;
+    const src = sourceUri.startsWith('file://') ? decodeURIComponent(sourceUri.replace('file://', '')) : sourceUri;
+    if (src === dest) { await this.saveModelWithMmproj(modelId, dest, true); return; }
+    // Copy to a temporary name first, so a failed copy never breaks the existing link.
+    const tmp = `${dest}.tmp`;
+    await RNFS.unlink(tmp).catch(() => {});
+    try {
+      await copyFileWithProgress(src, tmp, { knownTotalBytes: size ?? null, onProgress });
+      if (size && Number((await RNFS.stat(tmp)).size) < size) throw new Error('The copy was incomplete (is there enough space?)');
+      if (await RNFS.exists(dest)) await RNFS.unlink(dest);
+      await RNFS.moveFile(tmp, dest);
+    } catch (e) { await RNFS.unlink(tmp).catch(() => {}); throw e; }
+    const old = target.mmProjPath;
+    await this.saveModelWithMmproj(modelId, dest, true);
+    if (old && old !== dest && !models.some(m => m.id !== modelId && m.engine === 'llama' && m.mmProjPath === old)) await RNFS.unlink(old).catch(() => {});
+  }
+
+  /**
+   * Atlas: attach an MTP (multi-token prediction) file to a model already on the phone. The engine drafts several
+   * tokens ahead with it and the main model checks them, so replies come faster when the guesses are right.
+   * Copied next to the model; the old MTP file (if any) is replaced.
+   */
+  async attachDraft(modelId: string, file: { uri: string; fileName: string; size?: number }, onProgress?: (f: number) => void): Promise<void> {
+    const { uri: sourceUri, fileName, size } = file;
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') throw new Error('MTP files can only be added to GGUF (llama) models.');
+    if (!fileName.toLowerCase().endsWith('.gguf')) throw new Error('The MTP file must be a .gguf file.');
+    const dir = target.filePath.substring(0, target.filePath.lastIndexOf('/'));
+    const stem = target.fileName.replace(/\.gguf$/i, '');
+    const dest = `${dir}/${stem}.mtp-${fileName.replace(/[^\w.-]+/g, '_')}`;
+    const src = sourceUri.startsWith('file://') ? decodeURIComponent(sourceUri.replace('file://', '')) : sourceUri;
+    const tmp = `${dest}.tmp`;
+    if (src !== dest) {
+      await RNFS.unlink(tmp).catch(() => {});
+      try {
+        await copyFileWithProgress(src, tmp, { knownTotalBytes: size ?? null, onProgress });
+        if (size && Number((await RNFS.stat(tmp)).size) < size) throw new Error('The copy was incomplete (is there enough space?)');
+        if (await RNFS.exists(dest)) await RNFS.unlink(dest);
+        await RNFS.moveFile(tmp, dest);
+      } catch (e) { await RNFS.unlink(tmp).catch(() => {}); throw e; }
+    }
+    const stat = await RNFS.stat(dest);
+    const old = target.draftPath;
+    const updated = models.map(m => (m.id === modelId && m.engine === 'llama'
+      ? { ...m, draftPath: dest, draftFileName: fileName, draftFileSize: Number(stat.size), draftDetached: undefined, draftDisabled: undefined } : m));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    if (old && old !== dest) await RNFS.unlink(old).catch(() => {});
+  }
+
+  /** Atlas: mark a model as having MTP layers built in (or not), so it drafts with them without a second file. */
+  async setEmbeddedMtp(modelId: string, on: boolean): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const updated = models.map(m => (m.id === modelId && m.engine === 'llama' ? { ...m, embeddedMtp: on } : m));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+  }
+
+  /** Atlas: detach (and delete) a model's MTP file. */
+  async removeDraft(modelId: string): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama' || !target.draftPath) return;
+    const old = target.draftPath;
+    const updated = models.map(m => {
+      if (m.id !== modelId || m.engine !== 'llama') return m;
+      const { draftPath: _p, draftFileName: _n, draftFileSize: _s, ...rest } = m;
+      return rest as typeof m;
+    });
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    await RNFS.unlink(old).catch(() => {});
+  }
+
+  /** Apply one change to a GGUF model's record and save it. Returns the old and new record. */
+  private async changeLlama(modelId: string, change: (m: Extract<DownloadedModel, { engine: 'llama' }>) => Extract<DownloadedModel, { engine: 'llama' }>) {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') throw new Error('Attachments can only be managed on GGUF (llama) models.');
+    const next = change(target);
+    const updated = models.map(m => (m.id === modelId ? next : m));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    return { models, before: target, after: next };
+  }
+
+  /** Atlas: Enable or Disable an attached picture/MTP file. Disabled keeps the file but the engine never starts it. */
+  async setAttachmentEnabled(modelId: string, kind: AttachmentKind, enabled: boolean): Promise<void> {
+    await this.changeLlama(modelId, m => applyEnabled(m, kind, enabled));
+  }
+
+  /** Atlas: Detach. The model forgets the file; the file stays on the phone and is not attached again by the folder scan. */
+  async detachAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    await this.changeLlama(modelId, m => applyDetach(m, kind));
+  }
+
+  /** Atlas: Archive. Set the file aside for later; it stays on the phone and is not used. */
+  async archiveAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    await this.changeLlama(modelId, m => applyArchive(m, kind));
+  }
+
+  /** Atlas: Restore an archived file (it comes back enabled). Refuses when the file is gone. */
+  async restoreAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    const archived = target?.engine === 'llama' ? target.archivedAttachments?.[kind] : undefined;
+    if (archived && !(await RNFS.exists(archived.path))) throw new Error(`${archived.fileName} is no longer on this phone, so it cannot be restored.`);
+    await this.changeLlama(modelId, m => applyRestore(m, kind));
+  }
+
+  /**
+   * Atlas: Delete. Removes the model's association and, only when no other model uses the file, the file itself.
+   * Callers confirm with the user first. Returns whether the file was removed or kept for another model.
+   */
+  async deleteAttachment(modelId: string, kind: AttachmentKind): Promise<{ fileRemoved: boolean; keptForOtherModels: boolean }> {
+    let dropped: string | undefined;
+    const { models } = await this.changeLlama(modelId, m => { const r = dropAttachment(m, kind); dropped = r.path; return r.model; });
+    if (!dropped) return { fileRemoved: false, keptForOtherModels: false };
+    if (isFileShared(models, dropped, modelId)) return { fileRemoved: false, keptForOtherModels: true };
+    await RNFS.unlink(dropped).catch(() => {});
+    return { fileRemoved: true, keptForOtherModels: false };
+  }
+
+  /** Atlas: the file this model has attached for a kind, if any (the UI asks whether it is shared before offering Delete). */
+  async isAttachmentShared(modelId: string, kind: AttachmentKind): Promise<boolean> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') return false;
+    const path = attachmentPath(target, kind) ?? target.archivedAttachments?.[kind]?.path;
+    return !!path && isFileShared(models, path, modelId);
+  }
+
+  /** Atlas: move a model (and its vision file) to the SD card folder, or back to the phone. */
+  async moveModel(modelId: string, toSdBase: string | null, onProgress?: (f: number) => void): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const m = models.find(x => x.id === modelId);
+    if (!m) throw new Error('Model not found');
+    const destDir = toSdBase ? `${toSdBase}/models` : this.modelsDir;
+    if (!(await RNFS.exists(destDir))) await RNFS.mkdir(destDir);
+    // 1) copy (originals untouched until the new paths are saved)
+    const copy = async (p: string, frac: (f: number) => void) => {
+      const dest = `${destDir}/${p.substring(p.lastIndexOf('/') + 1)}`;
+      if (dest === p) return p;
+      const st = await RNFS.stat(p);
+      await copyFileWithProgress(p, dest, { knownTotalBytes: Number(st.size), onProgress: frac });
+      const a = await RNFS.stat(dest);
+      if (Number(a.size) !== Number(st.size)) { await RNFS.unlink(dest).catch(() => {}); throw new Error('Copy was incomplete (is the card full?)'); }
+      return dest;
+    };
+    const mm = m.engine === 'llama' ? m.mmProjPath : undefined;
+    const mmExists = !!mm && (await RNFS.exists(mm));
+    const filePath = await copy(m.filePath, (f) => onProgress?.(mmExists ? f * 0.85 : f));
+    let newMm = mm;
+    try {
+      if (mm && mmExists) newMm = await copy(mm, (f) => onProgress?.(0.85 + f * 0.15));
+    } catch (e) { if (filePath !== m.filePath) await RNFS.unlink(filePath).catch(() => {}); throw e; }
+    // 2) save the new paths (every model sharing this vision file follows it)
+    const updated = (await this.getDownloadedModels()).map((x) => {
+      if (x.id === modelId) return ({ ...x, filePath, ...(x.engine === 'llama' ? { mmProjPath: newMm } : {}), storage: toSdBase ? 'sd' : undefined } as DownloadedModel);
+      if (mm && x.engine === 'llama' && x.mmProjPath === mm) return ({ ...x, mmProjPath: newMm } as DownloadedModel);
+      return x;
+    });
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    // 3) only now remove the originals
+    if (filePath !== m.filePath) await RNFS.unlink(m.filePath).catch(() => {});
+    if (mm && newMm && newMm !== mm) await RNFS.unlink(mm).catch(() => {});
+  }
+
+  async saveModelWithMmproj(modelId: string, mmProjPath: string, manual = false): Promise<void> {
+    const mmProjFileName = mmProjPath.split('/').pop() || mmProjPath;
+    const stat = await RNFS.stat(mmProjPath);
+    const mmProjFileSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
+
+    const models = await this.getDownloadedModels();
+    const updated = models.map(m =>
+      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true, ...(manual ? { mmProjManual: true } : {}), ...(m.engine === 'llama' ? { mmProjDetached: undefined, mmProjDisabled: undefined } : {}) } : m
+    );
+    await saveModelsList(updated);
+    // Also update the in-memory Zustand store so UI reflects the change immediately.
+    useAppStore.getState().setDownloadedModels(updated);
   }
 
   async clearMmProjLink(modelId: string): Promise<void> {
-    return visionRepair.clearMmProjLink(this.visionContext(), modelId);
+    const models = await this.getDownloadedModels();
+    const updated = models.map(m =>
+      m.id === modelId ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false, mmProjManual: undefined } : m
+    );
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
   }
 
   async cleanupMMProjEntries(): Promise<number> {
@@ -324,16 +572,6 @@ class ModelManager {
   async importLocalModel(opts: Omit<ImportLocalModelOpts, 'modelsDir'>): Promise<DownloadedModel> {
     await this.initialize();
     return scanImportLocalModel({ ...opts, modelsDir: this.modelsDir });
-  }
-
-  getModelsDirectory(): string {
-    return this.modelsDir;
-  }
-
-  async registerTransferredModel(manifest: TransferredModelManifest): Promise<DownloadedModel> {
-    const model = await registerTransferredModelFile(manifest, this.modelsDir);
-    useAppStore.getState().setDownloadedModels(await this.getDownloadedModels());
-    return model;
   }
 
   async getDownloadedImageModels(): Promise<ONNXImageModel[]> {
@@ -371,7 +609,8 @@ class ModelManager {
 
   async getImageModelsStorageUsed(): Promise<number> {
     const models = await this.getDownloadedImageModels();
-    return models.reduce((total, model) => total + model.size, 0);
+    return models.reduce((total, model) => total + model.size +
+      (model.supportFiles || []).reduce((sum, file) => sum + file.size, 0), 0);
   }
 
   getImageModelsDirectory(): string {
@@ -413,3 +652,4 @@ class ModelManager {
 }
 
 export const modelManager = new ModelManager();
+;

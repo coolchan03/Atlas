@@ -1,5 +1,4 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-import RNFS from 'react-native-fs';
 import {
   ImageGenerationParams,
   ImageGenerationProgress,
@@ -7,10 +6,8 @@ import {
 } from '../types';
 import { generateRandomSeed } from '../utils/generateId';
 import logger from '../utils/logger';
-import { resolveOwnedDocumentPath } from '../utils/resolveDocumentPath';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
-const PROGRESS_LOG_SAMPLE_STEPS = 5;
 
 // Pick the right native module per platform
 const DiffusionModule = Platform.select({
@@ -21,6 +18,25 @@ const DiffusionModule = Platform.select({
 
 type ProgressCallback = (progress: ImageGenerationProgress) => void;
 type PreviewCallback = (preview: { previewPath: string; step: number; totalSteps: number }) => void;
+type NativeImageParams = ImageGenerationParams & {
+  previewInterval?: number; skipLoRA?: boolean; skipUpscaler?: boolean;
+  threads?: number;
+};
+export type NativeImageRuntimeStatus = {
+  running: boolean;
+  stage: string;
+  computeBackend: string;
+  weightPrecision?: string;
+  deviceLabel: string;
+  probeOutput?: string;
+  androidVulkanFeature?: boolean;
+  step: number;
+  totalSteps: number;
+  elapsedSeconds: number;
+  secondsSinceStep: number;
+  secondsSinceLog: number;
+  cpuTicks: number;
+};
 
 /**
  * LocalDream-based image generator service.
@@ -58,6 +74,35 @@ class LocalDreamGeneratorService {
     }
   }
 
+  async getNativeImageRuntimeStatus(): Promise<NativeImageRuntimeStatus | null> {
+    if (Platform.OS !== 'android' || !DiffusionModule?.getAtlasImageRuntimeStatus) return null;
+    try {
+      return await DiffusionModule.getAtlasImageRuntimeStatus();
+    } catch (e) {
+      logger.warn('[LocalDream] Could not read native image runtime status:', e);
+      return null;
+    }
+  }
+
+  /** Read the real sd-cli --list-devices output without loading any image weights. */
+  /** Probes the Vulkan (default) or OpenCL diffusion engine's GPU device. */
+  async getNativeImageGpuDiagnostics(api: 'vulkan' | 'opencl' = 'vulkan'): Promise<{
+    enumerated: boolean;
+    androidVulkanFeature: boolean;
+    backend: string;
+    detail: string;
+    nativeOutput: string;
+  }> {
+    if (Platform.OS !== 'android' || !DiffusionModule?.getAtlasImageGpuDiagnostics) {
+      throw new Error('GPU diagnostics require the updated Android Atlas APK.');
+    }
+    if (api === 'opencl') {
+      if (!DiffusionModule.getAtlasImageGpuDiagnosticsFor) throw new Error('This APK has no OpenCL image engine.');
+      return DiffusionModule.getAtlasImageGpuDiagnosticsFor('opencl');
+    }
+    return DiffusionModule.getAtlasImageGpuDiagnostics();
+  }
+
   async getLoadedModelPath(): Promise<string | null> {
     if (!this.isAvailable()) return null;
     try {
@@ -67,7 +112,18 @@ class LocalDreamGeneratorService {
     }
   }
 
-  async loadModel(modelPath: string, threads?: number, opts: { backend?: 'mnn' | 'qnn' | 'auto'; cpuOnly?: boolean; attentionVariant?: 'split_einsum' | 'original'; preferGpu?: boolean } = {}): Promise<boolean> {
+  async getLoadedBackend(): Promise<'mnn' | 'qnn' | 'coreml' | 'sdcpp' | null> {
+    if (!this.isAvailable()) return null;
+    if (Platform.OS === 'ios') return (await this.isModelLoaded()) ? 'coreml' : null;
+    try {
+      const backend = await DiffusionModule.getLoadedBackend?.();
+      return backend === 'mnn' || backend === 'qnn' || backend === 'sdcpp' ? backend : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async loadModel(modelPath: string, threads?: number, opts: { backend?: 'mnn' | 'qnn' | 'sdcpp' | 'auto'; cpuOnly?: boolean; attentionVariant?: 'split_einsum' | 'original'; preferGpu?: boolean } = {}): Promise<boolean> {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
     }
@@ -118,15 +174,7 @@ class LocalDreamGeneratorService {
     return this.getEmitter().addListener(
       'LocalDreamProgress',
       (event: { step: number; totalSteps: number; progress: number; previewPath?: string }) => {
-        if (
-          !Number.isInteger(event.step) ||
-          event.step < 1 ||
-          event.step === 1 ||
-          event.step === event.totalSteps ||
-          event.step % PROGRESS_LOG_SAMPLE_STEPS === 0
-        ) {
-          logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
-        }
+        logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
         onProgress?.({
           step: event.step,
           totalSteps: event.totalSteps,
@@ -139,7 +187,7 @@ class LocalDreamGeneratorService {
     );
   }
 
-  private buildNativeParams(params: ImageGenerationParams & { previewInterval?: number }, prompt: string) {
+  private buildNativeParams(params: NativeImageParams, prompt: string) {
     const np = {
       prompt,
       negativePrompt: params.negativePrompt || '',
@@ -150,6 +198,10 @@ class LocalDreamGeneratorService {
       height: params.height || 512,
       previewInterval: params.previewInterval ?? 2,
       useOpenCL: params.useOpenCL ?? true,
+      ...(params.computeBackend ? { computeBackend: params.computeBackend } : {}),
+      skipLoRA: params.skipLoRA ?? false,
+      skipUpscaler: params.skipUpscaler ?? false,
+      threads: params.threads ?? this.loadedThreads ?? 4,
     };
     logger.log(`[WIRE-IMAGE-PARAMS] ${JSON.stringify({ requested: { steps: params.steps, guidanceScale: params.guidanceScale, width: params.width, height: params.height }, native: { ...np, prompt: undefined } })}`); // [WIRE] settings→native image params
     return np;
@@ -167,15 +219,12 @@ class LocalDreamGeneratorService {
       steps: params.steps || 8,
       seed: result.seed,
       modelId: '',
-      // ISO-8601, the one form every consumer of this field can read - the gallery's date, and the
-      // sync descriptor that a peer validates with Date.parse. Epoch milliseconds as text passes the
-      // `string` type and fails every reader.
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now().toString(),
     };
   }
 
   async generateImage(
-    params: ImageGenerationParams & { previewInterval?: number },
+    params: NativeImageParams,
     onProgress?: ProgressCallback,
     onPreview?: PreviewCallback,
   ): Promise<GeneratedImage> {
@@ -195,9 +244,10 @@ class LocalDreamGeneratorService {
 
     try {
       const result = await DiffusionModule.generateImage(this.buildNativeParams(params, trimmedPrompt));
-      // Native side releases the CoreML pipeline after generation to free
-      // memory, so clear TS-side state so the next request triggers a reload.
-      this.loadedThreads = null;
+      // iOS releases the CoreML pipeline after generation to free memory.
+      // Android keeps the LocalDream server/model resident, so preserve its
+      // thread residency bookkeeping there or every next request looks stale.
+      if (Platform.OS === 'ios') this.loadedThreads = null;
       return this.buildResult(params, result);
     } catch (error: any) {
       const msg = error?.message || '';
@@ -213,7 +263,9 @@ class LocalDreamGeneratorService {
 
   async cancelGeneration(): Promise<boolean> {
     if (!this.isAvailable()) return true;
-    this.generating = false;
+    // Keep the JS busy flag set until the in-flight native promise actually
+    // unwinds. This prevents an immediate retry from overlapping the cancelled
+    // native request; generateImage's finally is the single owner that clears it.
     return await DiffusionModule.cancelGeneration();
   }
 
@@ -241,33 +293,8 @@ class LocalDreamGeneratorService {
     }
   }
 
-  async deleteGeneratedImage(imageId: string, storedImagePath?: string): Promise<boolean> {
+  async deleteGeneratedImage(imageId: string): Promise<boolean> {
     if (!this.isAvailable()) return false;
-
-    if (storedImagePath !== undefined) {
-      const generatedImageDirectory = `${RNFS.DocumentDirectoryPath}/generated_images`;
-      const resolvedPath = resolveOwnedDocumentPath(
-        storedImagePath,
-        generatedImageDirectory,
-      );
-      const expectedPath = `${generatedImageDirectory}/${imageId}.png`;
-      if (
-        !resolvedPath ||
-        resolvedPath !== expectedPath ||
-        !imageId ||
-        imageId.includes('/') ||
-        imageId.includes('\0')
-      ) {
-        return false;
-      }
-
-      try {
-        if (!(await RNFS.exists(resolvedPath))) return true;
-      } catch {
-        // Let the native store decide when the filesystem check is unavailable.
-      }
-    }
-
     return await DiffusionModule.deleteGeneratedImage(imageId);
   }
 

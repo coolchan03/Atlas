@@ -1,84 +1,41 @@
-import React, { type ReactNode } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { useTheme, useThemedStyles } from '../theme';
-import type { ThemeColors, ThemeShadows } from '../theme';
 
-interface ScreenHeaderProps {
+interface Props {
   title: string;
-  /** Omitted on a tab root, which has nothing to go back to (Settings). */
+  /** Controls shown before the title, after the back arrow (symbols such as a book or a checkmark come first, then the title). */
+  left?: React.ReactNode;
+  /** Right-hand control, such as a refresh or mode button. */
+  right?: React.ReactNode;
+  /** Pass the night-red palette on the emergency tool screens; defaults to the app theme. */
+  colors?: { text: string; border: string };
+  /** What the back arrow does when it is not simply "leave this screen" (a screen with pages of its own). */
   onBack?: () => void;
-  /** A status or action at the trailing edge, e.g. the Pro badge. */
-  right?: ReactNode;
-  testID?: string;
-  variant?: 'screen' | 'tab';
 }
 
-/**
- * The one screen header.
- *
- * Its shape is not a new opinion: these are the tokens Settings and Model Settings already use, which
- * is what every other screen is measured against. They were copied per screen, so the copies drifted -
- * Sync lost the shadow and used a chevron in a 44px box, the Pro screen had no header at all - and
- * "make it match" meant editing each one. Now it means editing this.
- *
- * The touch target comes from hitSlop rather than padding, so the arrow can sit beside the title at
- * the standard inset while staying comfortably tappable.
- */
-export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
-  title,
-  onBack,
-  right,
-  testID,
-  variant = 'screen',
-}) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-
+/** The back arrow, title and optional action shared by the full-screen tools. */
+export const ScreenHeader: React.FC<Props> = ({ title, left, right, colors: given, onBack }) => {
+  const navigation = useNavigation<any>();
+  const { colors: theme } = useTheme();
+  const colors = given ?? theme;
   return (
-    <View
-      style={[styles.header, variant === 'tab' && styles.tabHeader]}
-      testID={testID}
-    >
-      {onBack ? (
-        <TouchableOpacity
-          style={styles.backButton}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          onPress={onBack}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </TouchableOpacity>
-      ) : null}
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
+    <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <TouchableOpacity style={styles.back} onPress={() => (onBack ? onBack() : navigation.goBack())} accessibilityRole="button" accessibilityLabel="Back">
+        <Icon name="arrow-left" size={22} color={colors.text} />
+      </TouchableOpacity>
+      {left}
+      <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
       {right}
     </View>
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    minHeight: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  tabHeader: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    minHeight: 52,
-  },
-  backButton: { padding: SPACING.xs },
-  title: { ...TYPOGRAPHY.h2, color: colors.text, flex: 1 },
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
+  back: { padding: SPACING.xs, marginRight: SPACING.sm },
+  title: { ...TYPOGRAPHY.h2, flex: 1 },
 });

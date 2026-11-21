@@ -345,52 +345,32 @@ describe('downloadCoreMLTokenizerFiles', () => {
     );
   });
 
-  it('warns on non-200 HTTP status but does not throw', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+  it('rejects on non-200 HTTP status because tokenizer files are required', async () => {
     const modelDir = '/data/models/sd21/compiled';
     const repo = 'apple/coreml-stable-diffusion-2-1-base';
 
     mockExists.mockResolvedValue(false);
-
     mockDownloadFile.mockReturnValue({
       jobId: 1,
       promise: Promise.resolve({ statusCode: 404, bytesWritten: 0 }),
     } as any);
 
-    // Should not throw
-    await downloadCoreMLTokenizerFiles(modelDir, repo);
-
-    // Should warn for each failed file
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[CoreML] Failed to download merges.txt: HTTP 404'),
+    await expect(downloadCoreMLTokenizerFiles(modelDir, repo)).rejects.toThrow(
+      /required CoreML tokenizer file .*HTTP 404/,
     );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[CoreML] Failed to download vocab.json: HTTP 404'),
-    );
-
-    warnSpy.mockRestore();
   });
 
-  it('warns on 500 server errors', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+  it('rejects on 500 server errors', async () => {
     const modelDir = '/data/models/sd21';
     const repo = 'apple/coreml-stable-diffusion-2-1-base';
 
     mockExists.mockResolvedValue(false);
-
     mockDownloadFile.mockReturnValue({
       jobId: 1,
       promise: Promise.resolve({ statusCode: 500, bytesWritten: 0 }),
     } as any);
 
-    await downloadCoreMLTokenizerFiles(modelDir, repo);
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('HTTP 500'),
-    );
-
-    warnSpy.mockRestore();
+    await expect(downloadCoreMLTokenizerFiles(modelDir, repo)).rejects.toThrow(/HTTP 500/);
   });
 
   it('logs each file download', async () => {
@@ -434,21 +414,17 @@ describe('downloadCoreMLTokenizerFiles', () => {
     logSpy.mockRestore();
   });
 
-  it('handles downloadFile promise rejection gracefully', async () => {
+  it('propagates download failures because tokenizer files are required', async () => {
     const modelDir = '/data/models/sd21';
     const repo = 'apple/coreml-stable-diffusion-2-1-base';
 
     mockExists.mockResolvedValue(false);
-
     mockDownloadFile.mockReturnValue({
       jobId: 1,
       promise: Promise.reject(new Error('Network error')),
     } as any);
 
-    // Per-file errors are caught — function resolves without throwing
-    await expect(
-      downloadCoreMLTokenizerFiles(modelDir, repo),
-    ).resolves.toBeUndefined();
+    await expect(downloadCoreMLTokenizerFiles(modelDir, repo)).rejects.toThrow('Network error');
   });
 
   it('downloads files sequentially (merges.txt first, then vocab.json)', async () => {

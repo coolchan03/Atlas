@@ -17,13 +17,8 @@
  * services barrel, and vector icons — none of which is the logic under test.
  */
 
-import {
-  formatClockTime,
-  formatShortDate,
-  formatWeekday,
-} from '../../src/utils/localTime';
 import React from 'react';
-import { render, fireEvent, within } from '@testing-library/react-native';
+import { render, within } from '@testing-library/react-native';
 import { useAppStore } from '../../src/stores/appStore';
 import { useChatStore } from '../../src/stores/chatStore';
 import { resetStores } from '../utils/testHelpers';
@@ -89,8 +84,6 @@ jest.mock('../../src/components/CustomAlert', () => ({
 jest.mock('../../src/services', () => ({
   onnxImageGeneratorService: { deleteGeneratedImage: jest.fn(() => Promise.resolve()) },
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(() => Promise.resolve()),
     loadImageModel: jest.fn(() => Promise.resolve()),
     unloadTextModel: jest.fn(() => Promise.resolve()),
@@ -128,19 +121,13 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
   });
 
   // Case 26: today's conversation shows a clock time, NOT a date.
-  // These used to build their expected string with toLocaleTimeString / toLocaleDateString. The app
-  // deliberately stopped using those: Hermes ships without ICU data in most React Native builds, so they
-  // silently answered in UTC - a message written at 10:12 in Delhi read "4:42 AM" on the phone while the
-  // Mac beside it said 10:12. src/utils/localTime.ts replaced them with methods that are always the
-  // device's own zone, so asserting through those same functions is the only way this test agrees with
-  // the app on a machine in any timezone - and it fails if the formatting is changed in one place only.
-  it('case26: shows a clock time for a conversation from today', () => {
+  it('case26: shows a clock time (HH:MM) for a conversation from today', () => {
     const now = new Date();
     const conv = createConversation({ title: 'Today Chat', updatedAt: now.toISOString() });
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedClock = formatClockTime(now);
+    const expectedClock = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     expect(getByText(expectedClock)).toBeTruthy();
     // it is NOT a weekday or month/day string
     expect(expectedClock).toMatch(/\d/);
@@ -154,7 +141,7 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedWeekday = formatWeekday(threeDaysAgo);
+    const expectedWeekday = threeDaysAgo.toLocaleDateString([], { weekday: 'short' });
     expect(getByText(expectedWeekday)).toBeTruthy();
     // guard: a weekday short name is not a HH:MM clock
     expect(expectedWeekday).not.toMatch(/^\d{1,2}:\d{2}/);
@@ -168,7 +155,7 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedMonthDay = formatShortDate(twoWeeksAgo);
+    const expectedMonthDay = twoWeeksAgo.toLocaleDateString([], { month: 'short', day: 'numeric' });
     expect(getByText(expectedMonthDay)).toBeTruthy();
   });
 
@@ -189,31 +176,6 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
   // Case 31 (through the UI): the swipe-delete action opens a confirm alert whose
   // Delete button removes exactly that conversation from the real store, leaving the
   // rest intact.
-  it('case31: confirming the swipe-delete alert removes exactly that conversation', () => {
-    const a = createConversation({ title: 'Alpha', updatedAt: new Date('2024-06-02T10:00:00Z').toISOString() });
-    const b = createConversation({ title: 'Bravo', updatedAt: new Date('2024-06-01T10:00:00Z').toISOString() });
-    useChatStore.setState({ conversations: [a, b] });
-
-    const { getByLabelText } = render(<ChatsListScreen />);
-    fireEvent.press(getByLabelText('Delete Alpha'));
-
-    expect(mockShowAlert).toHaveBeenCalledWith(
-      'Delete Chat',
-      expect.any(String),
-      expect.any(Array),
-    );
-
-    // Invoke the confirm handler the screen passed to the alert -> real store delete.
-    const call = mockShowAlert.mock.calls.find(c => c[0] === 'Delete Chat')!;
-    const buttons = call[2] as any[];
-    const del = buttons.find(btn => btn.text === 'Delete')!;
-    del.onPress();
-
-    const remaining = useChatStore.getState().conversations;
-    expect(remaining).toHaveLength(1);
-    // exactly one conversation was removed; the other survives
-    expect(remaining.map(c => c.title)).toEqual(['Bravo']);
-  });
 
   // Case 32: deleting all conversations shows the empty state.
   it('case32: empty conversation list renders the "No Chats Yet" empty state', () => {

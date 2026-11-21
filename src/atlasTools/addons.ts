@@ -1,0 +1,169 @@
+import RNFS from 'react-native-fs';
+import { create } from 'zustand';
+import { addLibraryFile, removeLibraryFile, useOfflineLibrary } from './offlineLibrary';
+
+/**
+ * Optional add-ons: Kiwix offline encyclopedias downloaded inside the app.
+ * Nothing here is built in - each pack is downloaded only if you choose it.
+ * Files go to the app's own storage folder (removed if the app is uninstalled).
+ */
+export interface Addon { id: string; name: string; what: string; dir: string; prefix: string; approx: string }
+
+export const ADDONS: Addon[] = [
+  { id: 'wikimed', name: 'WikiMed (medical Wikipedia)', what: 'Diseases, drugs, anatomy, first aid - with pictures', dir: 'wikipedia', prefix: 'wikipedia_en_medicine_maxi_', approx: '~2 GB' },
+  { id: 'wikem', name: 'WikEM emergency medicine', what: 'Emergency doctor reference', dir: 'other', prefix: 'wikem_en_all_maxi_', approx: '~40 MB' },
+  { id: 'postdisaster', name: 'Post-disaster survival', what: 'Survival and disaster collection', dir: 'other', prefix: 'zimgit-post-disaster_en_', approx: '~600 MB' },
+  { id: 'medicine-zg', name: 'Medicine collection', what: 'Medical manuals collection', dir: 'other', prefix: 'zimgit-medicine_en_', approx: '~70 MB' },
+  { id: 'water', name: 'Water collection', what: 'Water treatment and sanitation', dir: 'other', prefix: 'zimgit-water_en_', approx: '~20 MB' },
+  { id: 'food', name: 'Food preparation', what: 'Food, cooking and preservation', dir: 'other', prefix: 'zimgit-food-preparation_en_', approx: '~100 MB' },
+  { id: 'knots', name: 'Knots', what: 'How to tie knots', dir: 'other', prefix: 'zimgit-knots_en_', approx: '~30 MB' },
+  { id: 'appropedia', name: 'Appropedia', what: 'Appropriate technology: build, grow, power', dir: 'other', prefix: 'appropedia_en_all_maxi_', approx: '~1 GB' },
+  { id: 'energypedia', name: 'Energypedia', what: 'Small-scale solar, hydro, wind, stoves', dir: 'other', prefix: 'energypedia_en_all_maxi_', approx: '~800 MB' },
+  { id: 'ifixit', name: 'iFixit repair guides', what: 'Fix phones, electronics, everything', dir: 'ifixit', prefix: 'ifixit_en_all_', approx: '~3 GB' },
+  { id: 'wikivoyage', name: 'Wikivoyage', what: 'Travel guide for every country and city', dir: 'wikivoyage', prefix: 'wikivoyage_en_all_maxi_', approx: '~1 GB' },
+  { id: 'wikihow', name: 'wikiHow', what: 'How-to articles on everything', dir: 'wikihow', prefix: 'wikihow_en_maxi_', approx: '~10 GB' },
+  { id: 'nhs-medicines', name: 'NHS Medicines A to Z', what: 'How medicines work, doses, side effects and interactions', dir: 'zimit', prefix: 'nhs.uk_en_medicines_', approx: '~16 MB' },
+  { id: 'cdc-health', name: 'CDC health information', what: 'Disease prevention, travel health and outbreaks', dir: 'zimit', prefix: 'wwwnc.cdc.gov_en_all_', approx: '~170 MB' },
+  { id: 'medlineplus', name: 'MedlinePlus', what: 'NIH consumer health: conditions, tests, drugs, supplements', dir: 'zimit', prefix: 'medlineplus.gov_en_all_', approx: '~1.8 GB' },
+  { id: 'military-medicine', name: 'Military medicine manuals', what: 'Tactical and field medicine', dir: 'zimit', prefix: 'irp.fas.org_en_military-medicine_', approx: '~60 MB' },
+  { id: 'ready-gov', name: 'Ready.gov', what: 'Official disaster planning: weather, fire, evacuation', dir: 'zimit', prefix: 'www.ready.gov_en_', approx: '~2.4 GB' },
+  { id: 'outdoors-qa', name: 'The Great Outdoors Q&A', what: 'Hiking, camping, navigation and wilderness skills', dir: 'stack_exchange', prefix: 'outdoors.stackexchange.com_en_all_', approx: '~140 MB' },
+  { id: 'ham-qa', name: 'Amateur radio Q&A', what: 'Radios, antennas, licensing and emergency comms', dir: 'stack_exchange', prefix: 'ham.stackexchange.com_en_all_', approx: '~75 MB' },
+  { id: 'cd3wd', name: 'CD3WD appropriate technology library', what: 'Food production, water, sanitation and construction guides', dir: 'zimit', prefix: 'cd3wdproject.org_en_all_', approx: '~580 MB' },
+  { id: 'diy-qa', name: 'DIY and home improvement Q&A', what: 'Repairs, electrical, plumbing and construction', dir: 'stack_exchange', prefix: 'diy.stackexchange.com_en_all_', approx: '~1.9 GB' },
+  { id: 'woodworking-qa', name: 'Woodworking Q&A', what: 'Carpentry, joinery and woodcraft', dir: 'stack_exchange', prefix: 'woodworking.stackexchange.com_en_all_', approx: '~100 MB' },
+  { id: 'mechanics-qa', name: 'Car and motorcycle repair Q&A', what: 'Vehicle maintenance and repair', dir: 'stack_exchange', prefix: 'mechanics.stackexchange.com_en_all_', approx: '~320 MB' },
+  { id: 'gardening-qa', name: 'Gardening Q&A', what: 'Growing food, plant care, landscaping', dir: 'stack_exchange', prefix: 'gardening.stackexchange.com_en_all_', approx: '~920 MB' },
+  { id: 'cooking-qa', name: 'Cooking Q&A', what: 'Techniques, food safety and recipes', dir: 'stack_exchange', prefix: 'cooking.stackexchange.com_en_all_', approx: '~240 MB' },
+  { id: 'libretexts-med', name: 'LibreTexts medicine', what: 'Open medical textbooks', dir: 'libretexts', prefix: 'libretexts.org_en_med_', approx: '~1.1 GB' },
+  { id: 'libretexts-math', name: 'LibreTexts mathematics', what: 'Algebra to calculus textbooks', dir: 'libretexts', prefix: 'libretexts.org_en_math_', approx: '~790 MB' },
+  { id: 'libretexts-phys', name: 'LibreTexts physics', what: 'Physics courses and textbooks', dir: 'libretexts', prefix: 'libretexts.org_en_phys_', approx: '~530 MB' },
+  { id: 'wikiversity', name: 'Wikiversity', what: 'Tutorials and courses for all levels', dir: 'wikiversity', prefix: 'wikiversity_en_all_maxi_', approx: '~2.4 GB' },
+  { id: 'arduino-qa', name: 'Arduino Q&A', what: 'Microcontroller projects', dir: 'stack_exchange', prefix: 'arduino.stackexchange.com_en_all_', approx: '~250 MB' },
+  { id: 'freecodecamp', name: 'freeCodeCamp', what: 'Programming tutorials', dir: 'freecodecamp', prefix: 'freecodecamp_en_all_', approx: '~10 MB' },
+  { id: 'wikipedia-mini', name: 'Wikipedia (intro of every article)', what: 'All of English Wikipedia, first paragraph only', dir: 'wikipedia', prefix: 'wikipedia_en_all_mini_', approx: '~12 GB' },
+  { id: 'wikipedia-nopic', name: 'Wikipedia (full, no pictures)', what: 'All of English Wikipedia, full text', dir: 'wikipedia', prefix: 'wikipedia_en_all_nopic_', approx: '~50 GB' },
+];
+
+const BASE = 'https://download.kiwix.org/zim/';
+/** @public Reached by name through require() (tests, other modules): the export is used. */
+export const addonDir = () => `${require('./storage').bigFilesBase()}/zim`;
+
+interface DlState {
+  progress: Record<string, number>; // 0..1
+  jobs: Record<string, number>;     // RNFS job ids
+  resolved: Record<string, { file: string; size: string }>;
+  set: (fn: (s: DlState) => Partial<DlState>) => void;
+}
+export const useAddonDownloads = create<DlState>((set) => ({ progress: {}, jobs: {}, resolved: {}, set: (fn) => set(fn) }));
+
+const listingCache: Record<string, string> = {};
+
+/** Finds the newest file for an add-on on the Kiwix server, with its size. */
+export async function resolveAddon(a: Addon): Promise<{ file: string; size: string }> {
+  if (!listingCache[a.dir]) {
+    const r = await fetch(`${BASE}${a.dir}/`);
+    if (!r.ok) throw new Error(`Kiwix server: HTTP ${r.status}`);
+    listingCache[a.dir] = await r.text();
+  }
+  const html = listingCache[a.dir];
+  const re = new RegExp(`href="(${a.prefix.replace(/[-.]/g, '\\$&')}\\d{4}-\\d{2}\\.zim)"[^\\n]*?(\\d+(?:\\.\\d+)?[KMG])?\\s*$`, 'gm');
+  const found: { file: string; size: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) found.push({ file: m[1], size: m[2] || '' });
+  if (!found.length) {
+    const simple = [...html.matchAll(new RegExp(`href="(${a.prefix.replace(/[-.]/g, '\\$&')}\\d{4}-\\d{2}\\.zim)"`, 'g'))].map((x) => ({ file: x[1], size: '' }));
+    found.push(...simple);
+  }
+  if (!found.length) throw new Error('Not found on the Kiwix server right now.');
+  found.sort((x, y) => (x.file < y.file ? -1 : 1));
+  const best = found[found.length - 1];
+  useAddonDownloads.getState().set((s) => ({ resolved: { ...s.resolved, [a.id]: best } }));
+  return best;
+}
+
+/** The year and month in a Kiwix file name (`name_2025-01.zim`), as 202501, or 0 when it has none. */
+export const zimStamp = (fileName: string): number => {
+  const m = fileName.match(/(\d{4})-(\d{2})\.zim$/);
+  return m ? Number(m[1]) * 100 + Number(m[2]) : 0;
+};
+
+/** True when the file on the Kiwix server is a later edition than the installed one. */
+export const isNewerZim = (installedPath: string, newestFile: string): boolean => {
+  const have = zimStamp(installedPath.split('/').pop() ?? '');
+  const latest = zimStamp(newestFile);
+  return have > 0 && latest > have;
+};
+
+/** The newer file on the Kiwix server for an installed add-on, or null when it is up to date or the server cannot be reached. */
+export async function newerVersionOf(a: Addon): Promise<string | null> {
+  try {
+    const installed = await installedAddonPath(a);
+    if (!installed) return null;
+    const { file } = await resolveAddon(a);
+    return isNewerZim(installed, file) ? file : null;
+  } catch { return null; }
+}
+
+export async function installedAddonPath(a: Addon): Promise<string | null> {
+  // Look on the phone and on the SD card.
+  for (const base of require('./storage').allBases() as string[]) {
+    const dir = `${base}/zim`;
+    if (!(await RNFS.exists(dir))) continue;
+    const files = await RNFS.readDir(dir);
+    const f = files.find((x: any) => x.name.startsWith(a.prefix) && x.name.endsWith('.zim'));
+    if (f) return f.path;
+  }
+  return null;
+}
+
+export async function downloadAddon(a: Addon): Promise<void> {
+  const { file } = await resolveAddon(a);
+  await RNFS.mkdir(addonDir());
+  const target = `${addonDir()}/${file}`;
+  const part = `${target}.part`;
+  const st = useAddonDownloads.getState();
+  const { jobId, promise } = RNFS.downloadFile({
+    fromUrl: `${BASE}${a.dir}/${file}`,
+    toFile: part,
+    background: true,
+    discretionary: false,
+    progressInterval: 1000,
+    progress: (p: any) => {
+      const frac = p.contentLength > 0 ? p.bytesWritten / p.contentLength : 0;
+      useAddonDownloads.getState().set((s) => ({ progress: { ...s.progress, [a.id]: frac } }));
+    },
+  } as any);
+  st.set((s) => ({ jobs: { ...s.jobs, [a.id]: jobId }, progress: { ...s.progress, [a.id]: 0 } }));
+  try {
+    const res = await promise;
+    if (res.statusCode && res.statusCode >= 400) throw new Error(`Download failed (HTTP ${res.statusCode})`);
+    // Remove an older version of the same add-on, then put the new file in place.
+    const old = await installedAddonPath(a);
+    if (old) { await removeLibraryFile(old); await RNFS.unlink(old).catch(() => undefined); }
+    await RNFS.moveFile(part, target);
+    await addLibraryFile(target);
+  } catch (e) {
+    await RNFS.unlink(part).catch(() => undefined); // don't leave a huge half-download behind
+    throw e;
+  } finally {
+    useAddonDownloads.getState().set((s) => {
+      const jobs = { ...s.jobs }; delete jobs[a.id];
+      const progress = { ...s.progress }; delete progress[a.id];
+      return { jobs, progress };
+    });
+  }
+}
+
+export function cancelAddon(a: Addon): void {
+  const id = useAddonDownloads.getState().jobs[a.id];
+  if (id !== undefined) RNFS.stopDownload(id);
+}
+
+export async function deleteAddon(a: Addon): Promise<void> {
+  const p = await installedAddonPath(a);
+  if (!p) return;
+  await removeLibraryFile(p);
+  await RNFS.unlink(p).catch(() => undefined);
+  useOfflineLibrary.getState().remove(p);
+}

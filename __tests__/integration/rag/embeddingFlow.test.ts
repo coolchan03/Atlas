@@ -54,6 +54,7 @@ jest.mock('../../../src/services/rag/embedding', () => ({
 }));
 
 import { ragService, retrievalService } from '../../../src/services/rag';
+import { resetEmbeddingCache } from '../../../src/services/rag/retrieval';
 import { ragDatabase } from '../../../src/services/rag/database';
 import { embeddingService } from '../../../src/services/rag/embedding';
 import { cosineSimilarity } from '../../../src/services/rag/vectorMath';
@@ -64,6 +65,7 @@ const mockDocService = documentService as jest.Mocked<typeof documentService>;
 describe('Embedding Flow Integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetEmbeddingCache(); // each test puts its own rows under the service
     (ragDatabase as any).ready = false;
     (ragDatabase as any).db = null;
     mockExecuteSync.mockReturnValue({ rows: [], insertId: 0, rowsAffected: 0 });
@@ -136,7 +138,7 @@ describe('Embedding Flow Integration', () => {
       expect(result.chunks[0].content).toBe('Machine learning algorithms');
     });
 
-    it('falls back to first chunks when no embeddings exist', async () => {
+    it('falls back to keyword ranking when no embeddings exist', async () => {
       (ragDatabase as any).ready = true;
       (ragDatabase as any).db = mockDb;
 
@@ -147,7 +149,7 @@ describe('Embedding Flow Integration', () => {
         if (typeof sql === 'string' && sql.includes('rag_chunks') && sql.includes('SELECT')) {
           return {
             rows: [
-              { doc_id: 1, name: 'doc.txt', content: 'Fallback content', position: 0, score: 0 },
+              { doc_id: 1, name: 'doc.txt', content: 'Fallback anything content', position: 0, score: 0 },
             ],
           };
         }
@@ -156,7 +158,7 @@ describe('Embedding Flow Integration', () => {
 
       const result = await retrievalService.search('proj-1', 'anything');
       expect(result.chunks).toHaveLength(1);
-      expect(result.chunks[0].content).toBe('Fallback content');
+      expect(result.chunks[0].content).toBe('Fallback anything content');
     });
   });
 

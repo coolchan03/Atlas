@@ -1,0 +1,264 @@
+import { BENCHMARK_VERSION, ExamStore, isAccepted, improvementSummary, reasonCounts, runExam, scoreAnswer, type ExamItem, type ExamResult, type ExamMetrics } from '../../../src/learning/exams';
+import { memoryKnowledgeDb } from '../../harness/memoryKnowledgeDb';
+
+const expected = { facts: [['one minute', '1 minute', '60 seconds'], ['cool']], forbid: ['ten minutes'] };
+
+describe('scoring an exam answer without a model', () => {
+  it('needs every fact, accepts any wording of each, and sees numbers written out', () => {
+    expect(scoreAnswer('Boil it for 1 minute, then let it cool.', expected)).toEqual({ score: 1, correct: true, outdated: false, missing: [] });
+    expect(scoreAnswer('Boil it for one minute.', expected)).toEqual({ score: 0.5, correct: false, outdated: false, missing: ['cool'] });
+  });
+
+  it('marks an answer that uses a forbidden figure, even when the facts are there', () => {
+    expect(scoreAnswer('Boil it for one minute, or ten minutes, and cool it.', expected)).toMatchObject({ score: 1, correct: false, outdated: true });
+  });
+});
+
+describe('wording tolerance without rewarding wrong answers', () => {
+  const lease = { facts: [['lease liability'], ['right-of-use asset']] };
+  it('accepts reordered and singular/plural wording', () => {
+    expect(scoreAnswer('The lessee records a right of use asset and a liability for the lease.', lease).correct).toBe(true);
+    expect(scoreAnswer('Recorded lease liabilities and right-of-use assets appear on the balance sheet.', lease).correct).toBe(true);
+  });
+  it('treats equivalent numbers and units as the same', () => {
+    expect(scoreAnswer('The rate is 50 percent.', { facts: [['50%']] }).correct).toBe(true);
+    expect(scoreAnswer('It costs $1,200.', { facts: [['1200 dollars']] }).correct).toBe(true);
+    expect(scoreAnswer('Wait sixty seconds.', { facts: [['1 minute']] }).correct).toBe(true);
+    expect(scoreAnswer('Wait 90 seconds.', { facts: [['1 minute']] }).correct).toBe(false);
+  });
+  it('does not accept a missing fact, a different number, a negation or a contradiction', () => {
+    expect(scoreAnswer('Only a lease liability is recorded.', lease)).toMatchObject({ correct: false, missing: ['right-of-use asset'] });
+    expect(scoreAnswer('The rate is 120 percent.', { facts: [['20 percent']] }).correct).toBe(false);
+    expect(scoreAnswer('It is not a lease liability, and there is a right-of-use asset.', lease).correct).toBe(false);
+    expect(scoreAnswer('The lease liability is never recorded; the right-of-use asset is.', lease).correct).toBe(false);
+    expect(scoreAnswer('Straight-line depreciation applies, not declining balance.', { facts: [['declining balance']] }).correct).toBe(false);
+    expect(scoreAnswer('The limit is 10,000 dollars, formerly 5,000.', { facts: [['10000']], forbid: ['5000'] })).toMatchObject({ correct: false, outdated: true });
+  });
+  it('does not match words scattered far apart', () => {
+    const far = `lease ${'filler words '.repeat(20)} liability`;
+    expect(scoreAnswer(far, { facts: [['lease liability']] }).correct).toBe(false);
+  });
+});
+
+describe('failure reasons', () => {
+  const items: ExamItem[] = ['a', 'b', 'c', 'd'].map((id) => ({ id, subjectId: 's', topic: 't', question: `Question ${id}?`, expected }));
+  items.push({ id: 'bad', subjectId: 's', topic: 't', question: 'Q?', expected: { facts: [] } });
+  const run = (mode: 'baseline' | 'sources' | 'memory', answer: (id: string) => any) => runExam({ items, mode, answer: async (i) => answer(i.id) });
+
+  it('separates a wrong answer, an inference failure, an unusable key and missing evidence, and grades only what can be graded', async () => {
+    const m = await run('memory', (id) => {
+      if (id === 'a') return { text: 'Boil one minute and cool.', sourceCount: 1, memoryCount: 1 };
+      if (id === 'b') return { text: 'Just cook it.', sourceCount: 1, memoryCount: 0 };
+      if (id === 'c') throw new Error('model unloaded');
+      return { text: 'Something else', sourceCount: 0, memoryCount: 0 };
+    });
+    const by = Object.fromEntries(m.items.map((i) => [i.id, i]));
+    expect(by.a.reason).toBe('correct');
+    expect(by.b.reason).toBe('no-approved-memory');
+    expect(by.c).toMatchObject({ reason: 'inference-failure', error: 'model unloaded' });
+    expect(by.d.reason).toBe('no-sources');
+    expect(by.bad.reason).toBe('invalid-key');
+    expect(m).toMatchObject({ total: 5, ungraded: 2, correct: 1 });
+    expect(m.accuracy).toBeCloseTo(1 / 3);
+    expect(by.b.missing).toEqual(['one minute', 'cool']);
+    expect(reasonCounts(m).map((r) => r.reason).sort()).toEqual(['inference-failure', 'invalid-key', 'no-approved-memory', 'no-sources']);
+  });
+
+  it('records the model\'s wrong answer, and an empty one', async () => {
+    const m = await run('baseline', (id) => ({ text: id === 'a' ? '' : 'Boil ten minutes.', sourceCount: 0 }));
+    expect(m.items.find((i) => i.id === 'a')?.reason).toBe('empty-answer');
+    expect(m.items.find((i) => i.id === 'b')).toMatchObject({ reason: 'outdated', answer: 'Boil ten minutes.' });
+    expect(m.items.find((i) => i.id === 'c')?.reason).toBe('outdated');
+  });
+
+  it('repeated attempts keep separate history and scoring versions', () => {
+    expect(BENCHMARK_VERSION).toBe('3');
+  });
+});
+
+describe('running an exam', () => {
+  const items: ExamItem[] = ['a', 'b'].map((id) => ({ id, subjectId: 's', topic: 't', question: `Question ${id}?`, expected }));
+  const clock = () => { let t = 0; return () => (t += 2000); };
+
+  it('measures accuracy, outdated answers, unsupported citations, repeat failures and time', async () => {
+    const answers: Record<string, { text: string; sourceCount: number }> = {
+      a: { text: 'Boil one minute and let it cool. [1]', sourceCount: 1 },
+      b: { text: 'Boil ten minutes. [3]', sourceCount: 1 },
+    };
+    const metrics = await runExam({ items, mode: 'sources', answer: async (item) => answers[item.id], previousFailures: ['b'], now: clock() });
+    expect(metrics).toMatchObject({ total: 2, correct: 1, accuracy: 0.5, outdatedAnswers: 1, unsupportedCitations: 1, repeatFailures: 1, averageSeconds: 2 });
+  });
+});
+
+describe('keeping the exam apart from learning', () => {
+  it('stores items per subject, recognises an exam question, and keeps a history', async () => {
+    const store = new ExamStore(memoryKnowledgeDb());
+    const id = store.addItem({ subjectId: 's', topic: 'water', question: 'How long should water be boiled to make it safe?', expected });
+    expect(store.items('s')).toHaveLength(1);
+    expect(store.items('other')).toHaveLength(0);
+    expect(store.isExamQuestion('How long should water be boiled to make it safe')).toBe(true);
+    expect(store.isExamQuestion('What temperature kills bacteria?')).toBe(false);
+    store.saveResult('baseline', { total: 1, correct: 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [{ id, correct: false, score: 0, outdated: false, seconds: 1 }] });
+    expect(store.lastFailures('baseline')).toEqual([id]);
+    expect(store.history()[0]).toMatchObject({ mode: 'baseline', version: BENCHMARK_VERSION });
+    store.removeItem(id);
+    expect(store.items('s')).toEqual([]);
+  });
+});
+
+describe('claiming improvement only when it was measured', () => {
+  const result = (mode: ExamResult['mode'], accuracy: number, total = 10): ExamResult => ({
+    id: mode, version: BENCHMARK_VERSION, mode, at: '2026-01-01', metrics: { total, correct: accuracy * total, accuracy, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [] } as ExamMetrics,
+  });
+
+  it('says what the numbers show, and refuses to claim without enough data', () => {
+    expect(improvementSummary([result('memory', 0.8), result('baseline', 0.4)])).toContain('40 points better');
+    expect(improvementSummary([result('memory', 0.4), result('baseline', 0.6)])).toContain('No measured improvement');
+    expect(improvementSummary([result('memory', 1, 3), result('baseline', 0, 3)])).toContain('too few');
+    expect(improvementSummary([result('memory', 0.8)])).toContain('Run the exam');
+  });
+});
+
+describe('what to retest', () => {
+  const run = (version: string, items: any[], ungraded = 0): ExamResult => ({ id: 'r', version, mode: 'memory', at: '2026-01-01', metrics: { total: items.length, ungraded, correct: items.filter((i) => i.correct).length, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items } as ExamMetrics });
+  it('names the missed questions of the newest run and the ones that could not be graded', () => {
+    const { retestNote } = require('../../../src/learning/exams');
+    const note = retestNote([run(BENCHMARK_VERSION, [{ id: 'a', correct: false, reason: 'wrong-answer' }, { id: 'b', correct: true, reason: 'correct' }, { id: 'c', correct: false, reason: 'inference-failure' }], 1)]);
+    expect(note).toContain('1 question missed');
+    expect(note).toContain('1 could not be graded');
+  });
+  it('says nothing when everything passed, and will not compare older scoring rules', () => {
+    const { retestNote } = require('../../../src/learning/exams');
+    expect(retestNote([run(BENCHMARK_VERSION, [{ id: 'a', correct: true, reason: 'correct' }])])).toBe('');
+    expect(retestNote([run('1', [{ id: 'a', correct: false }])])).toContain('older scoring rules');
+    expect(retestNote([])).toBe('');
+  });
+});
+
+describe('retest schedule and answer history', () => {
+  const { dueRetests, attemptsFor } = require('../../../src/learning/exams');
+  const DAY = 86_400_000;
+  const at = (daysAgo: number, now: Date) => new Date(now.getTime() - daysAgo * DAY).toISOString();
+  const res = (when: string, items: any[], retest = false): ExamResult => ({ id: when, version: BENCHMARK_VERSION, mode: 'memory', at: when, metrics: { total: items.length, correct: 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items, retest } as ExamMetrics });
+  const now = new Date('2026-12-01T12:00:00Z');
+  const miss = { id: 'a', correct: false, reason: 'wrong-answer', answer: 'x' };
+
+  it('a missed question is due after a day, then 3 days after a second miss, then 7', () => {
+    expect(dueRetests([{ id: 'a' }], [res(at(0.5, now), [miss])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [res(at(1.1, now), [miss])], now)).toEqual(['a']);
+    const twice = [res(at(2, now), [miss]), res(at(5, now), [miss])];
+    expect(dueRetests([{ id: 'a' }], twice, now)).toEqual([]); // two misses: wait 3 days from the latest (2 days ago)
+    expect(dueRetests([{ id: 'a' }], [res(at(3.5, now), [miss]), res(at(9, now), [miss])], now)).toEqual(['a']);
+  });
+  it('a question that was then passed, never asked, or only ungraded is not due; older scoring versions are ignored', () => {
+    expect(dueRetests([{ id: 'a' }], [res(at(5, now), [miss]), res(at(1, now), [{ id: 'a', correct: true, reason: 'correct' }])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'b' }], [res(at(5, now), [miss])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [res(at(5, now), [{ id: 'a', correct: false, reason: 'inference-failure' }])], now)).toEqual([]);
+    expect(dueRetests([{ id: 'a' }], [{ ...res(at(5, now), [miss]), version: '1' }], now)).toEqual([]);
+  });
+  it('lists every attempt at a question, newest first, with its reason and answer', () => {
+    const h = [res(at(3, now), [miss]), res(at(1, now), [{ id: 'a', correct: true, reason: 'correct', answer: 'right' }], true)];
+    const a = attemptsFor(h, 'a');
+    expect(a.map((x: any) => x.correct)).toEqual([true, false]);
+    expect(a[1]).toMatchObject({ reason: 'wrong-answer', answer: 'x' });
+  });
+  it('a retest run does not count in the memory-versus-model comparison', () => {
+    const full = res(at(2, now), Array.from({ length: 10 }, (_, i) => ({ id: `q${i}`, correct: true })));
+    const partial = res(at(1, now), [{ id: 'q1', correct: false }], true);
+    const base: ExamResult = { ...full, id: 'b', mode: 'baseline', at: at(2, now), metrics: { ...full.metrics, accuracy: 0.4 } as ExamMetrics };
+    const mem: ExamResult = { ...full, metrics: { ...full.metrics, accuracy: 0.8 } as ExamMetrics };
+    expect(improvementSummary([partial, mem, base])).toContain('better');
+  });
+});
+
+
+describe('retest schedule counts runs, not modes (audit F-2)', () => {
+  const { dueRetests } = require('../../../src/learning/exams');
+  const DAY = 86_400_000;
+  const now = new Date('2026-12-01T12:00:00Z');
+  const row = (mode: any, daysAgo: number, correct: boolean): ExamResult => ({ id: `${mode}${daysAgo}`, version: BENCHMARK_VERSION, mode, at: new Date(now.getTime() - daysAgo * DAY).toISOString(), metrics: { total: 1, correct: correct ? 1 : 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [{ id: 'q', correct, reason: correct ? 'correct' : 'wrong-answer' }] } as ExamMetrics });
+  it('one run that missed in all three modes waits 1 day, not 7', () => {
+    const run = (d: number) => [row('baseline', d, false), row('sources', d, false), row('memory', d, false)];
+    expect(dueRetests([{ id: 'q' }], run(0.5), now)).toEqual([]);
+    expect(dueRetests([{ id: 'q' }], run(1.2), now)).toEqual(['q']);
+  });
+  it('a question the model alone misses but memory passes is not due', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 5, false), row('sources', 5, true), row('memory', 5, true)], now)).toEqual([]);
+  });
+  it('a miss with sources is due even though memory passed (that mode still fails)', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 5, false), row('sources', 5, false), row('memory', 5, true)], now)).toEqual(['q']);
+  });
+  it('baseline counts when it is the only mode ever run', () => {
+    expect(dueRetests([{ id: 'q' }], [row('baseline', 2, false)], now)).toEqual(['q']);
+  });
+});
+
+
+describe('numbers and their units stay together (audit F-7)', () => {
+  it('does not take a number and a unit from different places', () => {
+    expect(scoreAnswer('The useful life is 35 years and the rate is 21 percent.', { facts: [['35 percent']] }).correct).toBe(false);
+    expect(scoreAnswer('The useful life is 35 years and the rate is 21 percent.', { facts: [['21 percent']], forbid: ['35 percent'] })).toMatchObject({ correct: true, outdated: false });
+    expect(scoreAnswer('It rose by 35 percent.', { facts: [['35%']] }).correct).toBe(true);
+    expect(scoreAnswer('The recorded lease liability and asset.', { facts: [['lease liability recorded']] }).correct).toBe(true); // wording without numbers still matches in any order
+  });
+});
+
+describe('partial credit', () => {
+  const three = { facts: [['alpha'], ['beta'], ['gamma']], forbid: ['delta'] };
+  const items: ExamItem[] = [{ id: 'q', subjectId: 's', topic: 't', question: 'Q?', expected: three }];
+
+  it('gives credit for the share of facts held, accepts a mostly right answer, and gives nothing for a forbidden one', async () => {
+    const mostly = await runExam({ items, mode: 'sources', answer: async () => ({ text: 'alpha and beta', sourceCount: 1 }), now: () => 0 });
+    expect(mostly).toMatchObject({ correct: 0, mostlyRight: 1 });
+    expect(mostly.accuracy).toBeCloseTo(2 / 3);
+    const forbidden = await runExam({ items, mode: 'sources', answer: async () => ({ text: 'alpha beta gamma delta', sourceCount: 1 }), now: () => 0 });
+    expect(forbidden).toMatchObject({ mostlyRight: 0, accuracy: 0 });
+    expect(isAccepted({ correct: false, credit: 0.5, outdated: false })).toBe(false);
+  });
+
+  it('does not schedule a retest for a mostly right answer, but does for a poor one', async () => {
+    const { dueRetests } = require('../../../src/learning/exams');
+    const at = '2026-01-01T00:00:00.000Z';
+    const result = (text: string, id: string): ExamResult => ({ id, version: BENCHMARK_VERSION, mode: 'sources', at, metrics: { total: 1, correct: 0, accuracy: 0, outdatedAnswers: 0, unsupportedCitations: 0, repeatFailures: 0, averageSeconds: 1, items: [{ id: 'q', correct: false, score: text === 'mostly' ? 0.67 : 0.33, credit: text === 'mostly' ? 0.67 : 0.33, outdated: false, seconds: 1, reason: 'wrong-answer' }] } });
+    const later = new Date('2026-02-01T00:00:00.000Z');
+    expect(dueRetests([{ id: 'q' }], [result('mostly', 'r1')], later)).toEqual([]);
+    expect(dueRetests([{ id: 'q' }], [result('poor', 'r2')], later)).toEqual(['q']);
+  });
+});
+
+describe('stopping a run that keeps failing', () => {
+  it('leaves the rest unasked, not graded, after several answers in a row that earned nothing', async () => {
+    const many: ExamItem[] = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, subjectId: 's', topic: 't', question: `Q${i}?`, expected }));
+    let asked = 0;
+    const metrics = await runExam({ items: many, mode: 'sources', answer: async () => { asked += 1; return { text: 'no idea', sourceCount: 1 }; }, giveUpAfter: 3, now: () => 0 });
+    expect(asked).toBe(3);
+    expect(metrics.ungraded).toBe(5);
+    expect(metrics.items.filter((i) => i.reason === 'stopped')).toHaveLength(5);
+    expect(metrics.accuracy).toBe(0);
+    // The questions it never got to are due at once.
+    const { dueRetests } = require('../../../src/learning/exams');
+    const run: ExamResult = { id: 'r', version: BENCHMARK_VERSION, mode: 'sources', at: new Date().toISOString(), metrics };
+    expect(dueRetests(many, [run])).toEqual(expect.arrayContaining(['i3', 'i4', 'i5', 'i6', 'i7']));
+  });
+});
+
+describe('the Judge as a second opinion', () => {
+  const key = { facts: [['alpha'], ['beta']], forbid: ['delta'] };
+  const one: ExamItem[] = [{ id: 'q', subjectId: 's', topic: 't', question: 'Q?', expected: key }];
+  const run = (text: string, verdict: 'yes' | 'partly' | 'no' | null | 'throws') => runExam({
+    items: one, mode: 'sources', now: () => 0, answer: async () => ({ text, sourceCount: 1 }),
+    judge: async () => { if (verdict === 'throws') throw new Error('busy'); return verdict; },
+  });
+
+  it('raises an answer that says it in other words, and only raises', async () => {
+    expect(await run('the first thing and the second thing', 'yes')).toMatchObject({ correct: 1, accuracy: 1 });
+    expect(await run('the first thing only', 'partly')).toMatchObject({ correct: 0, mostlyRight: 1 });
+    expect(await run('nonsense', 'no')).toMatchObject({ correct: 0, mostlyRight: 0, accuracy: 0 });
+    expect(await run('nonsense', 'throws')).toMatchObject({ correct: 0, accuracy: 0 });
+  });
+
+  it('never overrides a forbidden figure', async () => {
+    expect(await run('alpha beta delta', 'yes')).toMatchObject({ correct: 0, outdatedAnswers: 1, accuracy: 0 });
+  });
+});
+

@@ -12,7 +12,6 @@
  * See docs/plans/best-backend-per-device.md and the HTP/OpenCL research.
  */
 import { ModelInfo, ModelFile, InferenceBackend, INFERENCE_BACKENDS } from '../types';
-import { isLiteRTFileName } from './modelHelpers';
 
 /** GGUF quantizations the NPU (HTP) / GPU (OpenCL) backends actually accelerate. */
 const ACCELERABLE_QUANTS = ['Q4_0', 'Q8_0'] as const;
@@ -26,7 +25,7 @@ export function isAccelerableQuant(quant: string | undefined | null): boolean {
 
 /** A LiteRT model file runs on the GPU regardless of GGUF quant. */
 function isLiteRTFile(file: ModelFile): boolean {
-  return isLiteRTFileName(file.name) || file.quantization?.toLowerCase() === 'litert';
+  return file.name.toLowerCase().endsWith('.litertlm') || file.quantization?.toLowerCase() === 'litert';
 }
 
 /**
@@ -83,8 +82,8 @@ export function recommendedAccelerator(
   capability: AccelerationCapability,
   modelName: string | undefined,
 ): 'gpu' | 'npu' | null {
-  if (capability.hasGpu) return 'gpu';
   if (capability.hasNpu && isLlamaFamily(modelName)) return 'npu';
+  if (capability.hasGpu) return 'gpu';
   return null;
 }
 
@@ -162,6 +161,29 @@ export function acceleratedBackendFor(
   return recommendedAccelerator(capability, modelName) === 'npu'
     ? INFERENCE_BACKENDS.HTP
     : INFERENCE_BACKENDS.OPENCL;
+}
+
+/**
+ * Automatic backend for a locally downloaded llama/GGUF model when the user has NOT
+ * explicitly chosen a backend. Prefer an eligible Hexagon NPU for supported Llama
+ * quantizations, then OpenCL. Q4_K is eligible for the newer OpenCL GPU path but
+ * not HTP; if the bundled runtime cannot offload it, native init falls back to CPU.
+ */
+export function automaticBackendForModel(
+  capability: AccelerationCapability,
+  modelName: string | undefined,
+  quantization: string | undefined,
+): InferenceBackend {
+  // K-quants are not eligible for the current HTP runtime, but newer
+  // llama.cpp OpenCL backends support Q4_K. Try GPU before CPU when present.
+  if (/^Q4_K(?:_[SML])?$/i.test(quantization ?? '')) {
+    return capability.hasGpu ? INFERENCE_BACKENDS.OPENCL : INFERENCE_BACKENDS.CPU;
+  }
+  if (!isAccelerableQuant(quantization)) return INFERENCE_BACKENDS.CPU;
+  const recommended = recommendedAccelerator(capability, modelName);
+  if (recommended === 'gpu') return INFERENCE_BACKENDS.OPENCL;
+  if (recommended === 'npu') return INFERENCE_BACKENDS.HTP;
+  return INFERENCE_BACKENDS.CPU;
 }
 
 /**

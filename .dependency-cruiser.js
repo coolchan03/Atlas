@@ -42,7 +42,8 @@ module.exports = {
       name: 'engine-dip-no-concrete-in-ui',
       severity: 'error',
       comment: 'UI (screens/components) must depend on the engine ABSTRACTION (services/engines), never a concrete engine service (services/litert, services/llm). Branching on a concrete engine in a caller is the DIP violation we keep fixing (SO2/SO4). Route through services/engines.',
-      from: { path: '^src/(screens|components)/' },
+      // The on-device model test is a diagnostic: it measures the concrete engines, so it has to call them.
+      from: { path: '^src/(screens|components)/', pathNot: '^src/screens/ModelTestScreen\\.tsx$' },
       to: { path: '^src/services/(litert|llm)(/|\\.|$)' },
     },
     {
@@ -64,12 +65,6 @@ module.exports = {
           '(^|/)index\\.(ts|tsx)$', // barrel/entry files
           '^src/types/', // type barrels are legitimately import-only
           '^src/(bootstrap|shims|config)/', // wiring/shim/config shells reached outside the graph
-          // Core utilities whose only importers are in the private pro/ submodule. The cruiser scans src
-          // alone, so a module used exclusively by pro reads as an orphan even though deleting it would
-          // break the build - coalesce is imported by pro/sync/fileTransferService and
-          // pro/sync/ambientShareService. Same reasoning as the @offgrid/pro exception below: not real
-          // debt, so excluded rather than baselined. Confirm with grep in pro/ before adding to this list.
-          '^src/utils/coalesce\\.ts$',
         ],
       },
       to: {},
@@ -97,10 +92,11 @@ module.exports = {
       to: {
         dependencyTypes: ['unknown', 'undetermined', 'npm-no-pkg', 'npm-unknown'],
         // Known non-resolvable-by-cruiser but LEGITIMATE: whisper.rn IS declared (^0.5.5) but the
-        // `.rn` name defeats cruiser's resolver; @offgrid/pro is the private open-core submodule
-        // wired via metro haste through the ONE bootstrap loader (loadProFeatures) — intentional,
-        // not a phantom dep. Neither is real debt, so exclude rather than baseline.
-        pathNot: '(^whisper\\.rn(/|$)|^@offgrid/pro(/|$))',
+        // `.rn` name defeats cruiser's resolver, so exclude rather than baseline.
+        // react-native-calendar-events is declared (^2.2.0); its "main" is the bare directory "src", which cruiser cannot resolve.
+        // react-native has no public export for TextAncestorContext; theme/globalText needs it to tell nested Text
+        // from top-level Text, and react-native is a declared dependency.
+        pathNot: '^(whisper\\.rn|react-native-calendar-events|react-native/Libraries/Text/TextAncestorContext)(/|$)',
       },
     },
     {
@@ -112,10 +108,6 @@ module.exports = {
     },
   ],
   options: {
-    // Keep file-linked workspace packages under node_modules so dependency-cruiser can
-    // classify them from this package.json instead of treating their real paths as
-    // undeclared source files outside the mobile project.
-    preserveSymlinks: true,
     doNotFollow: { path: 'node_modules' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },

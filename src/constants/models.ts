@@ -11,20 +11,9 @@ export const MODEL_RECOMMENDATIONS = {
   ],
 };
 
-// Curated list of recommended models for mobile (updated Sep 2026)
-// Ordered editorially: MiniCPM5 featured first, then Gemma 4, Qwen 3.5, and others.
+// Curated list of recommended models for mobile (updated Apr 2026)
+// Ordered editorially: Gemma 4 featured first, then Qwen 3.5, then others.
 export const RECOMMENDED_MODELS = [
-  // --- MiniCPM5 (featured) ---
-  {
-    id: 'openbmb/MiniCPM5-2B-GGUF',
-    name: 'MiniCPM5 2B',
-    params: 2,
-    description: 'Strong coding, reasoning, and tool use with 128K context',
-    minRam: 4,
-    type: 'text' as const,
-    org: 'openbmb',
-    isNew: true,
-  },
   // --- Gemma 4 (featured) ---
   {
     id: 'unsloth/gemma-4-E2B-it-GGUF',
@@ -62,7 +51,7 @@ export const RECOMMENDED_MODELS = [
     params: 2,
     description: 'Hybrid thinking + chat, 262K context',
     minRam: 4,
-    type: 'vision' as const,
+    type: 'text' as const,
     org: 'Qwen',
   },
   {
@@ -71,7 +60,7 @@ export const RECOMMENDED_MODELS = [
     params: 9,
     description: 'Best Qwen 3.5 quality, thinking mode, 262K context',
     minRam: 8,
-    type: 'vision' as const,
+    type: 'text' as const,
     org: 'Qwen',
   },
   // --- Others ---
@@ -137,7 +126,6 @@ export const RECOMMENDED_MODELS = [
 
 // Trending model families — one best-fit per family is shown as "trending"
 export const TRENDING_FAMILIES: Record<string, string[]> = {
-  minicpm5: ['openbmb/MiniCPM5-2B-GGUF'],
   gemma4: ['unsloth/gemma-4-E2B-it-GGUF', 'unsloth/gemma-4-E4B-it-GGUF'],
   qwen35: ['unsloth/Qwen3.5-0.8B-GGUF', 'unsloth/Qwen3.5-2B-GGUF', 'unsloth/Qwen3.5-9B-GGUF'],
 };
@@ -146,7 +134,6 @@ export const TRENDING_MODEL_IDS = Object.values(TRENDING_FAMILIES).flat();
 
 // Model organization filter options
 export const MODEL_ORGS = [
-  { key: 'openbmb', label: 'OpenBMB' },
   { key: 'Qwen', label: 'Qwen' },
   { key: 'meta-llama', label: 'Llama' },
   { key: 'google', label: 'Google' },

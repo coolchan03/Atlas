@@ -138,7 +138,7 @@ describe('BATCH7 RAG retrieval project scoping (real retrievalService)', () => {
     expect(result.chunks[0].content).toBe('cat content');
   });
 
-  it('falls back to this project\'s first chunks when it has no embeddings — still scoped', async () => {
+  it('falls back to keyword ranking when it has no embeddings — still scoped', async () => {
     // No embeddings for anyone -> getEmbeddingsByProject returns [] -> fallback to
     // getChunksByProject, which is also project-scoped.
     mockStore.length = 0;
@@ -149,7 +149,8 @@ describe('BATCH7 RAG retrieval project scoping (real retrievalService)', () => {
     mockGetEmbeddings.mockReturnValueOnce([]);
 
     const result = await retrievalService.search('alpha', 'anything', 5);
-    expect(mockGetChunks).toHaveBeenCalledWith('alpha', 5);
+    expect(mockGetChunks).toHaveBeenCalledWith('alpha', 20000);
+    expect(mockGetChunks).not.toHaveBeenCalledWith('beta', expect.anything());
     for (const chunk of result.chunks) {
       expect(chunk.content).not.toContain('BETA');
     }

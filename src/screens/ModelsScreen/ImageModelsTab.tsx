@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import { LoadingDots } from '../../components/LoadingDots';
+import React, { useEffect } from 'react';
+import { View, Text, TextInput, ActivityIndicator, TouchableOpacity, ScrollView, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { ModelCard } from '../../components';
+import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
@@ -15,9 +16,6 @@ import { ModelsScreenViewModel } from './useModelsScreen';
 import { ImageFilterBar } from './ImageFilterBar';
 import { BackendFilter, ImageFilterDimension } from './types';
 import { formatBytes, getImageModelCompatibility, hfModelToDescriptor } from './utils';
-import { modelDownloadService } from '../../services/modelDownloadService';
-import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
-import logger from '../../utils/logger';
 
 type Props = Pick<ModelsScreenViewModel,
   | 'imageSearchQuery' | 'setImageSearchQuery'
@@ -50,6 +48,7 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
+  const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
   // Single source of truth: live download status read from useDownloadStore
@@ -68,15 +67,18 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   const isActive = !!entry && isActiveStatus(entry.status);
   const isQueued = !!entry && isQueuedStatus(entry.status);
   const isDownloading = !!entry && isDownloadingStatus(entry.status);
-  const isPaused = entry?.status === 'paused';
   const progressValue = entry?.progress ?? 0;
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
   return (
     <View>
+      {recommended && (
+        <View style={styles.recommendedBadge}>
+          <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
+        </View>
+      )}
       <ModelCard
         compact
-        recommended={recommended ? {} : undefined}
         model={{
           id: model.id,
           name: model.displayName,
@@ -84,25 +86,14 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
           description: `${formatBytes(model.size)}${variantSuffix}`,
         }}
         isDownloading={isDownloading}
-        isPaused={isPaused}
         isQueued={isQueued}
         downloadProgress={progressValue}
-        downloadBytes={entry ? {
-          downloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
-          total: entry.combinedTotalBytes || entry.totalBytes || model.size,
-          bytesPerSecond: entry.bytesPerSecond,
-        } : undefined}
+        downloadBytes={entry ? { downloaded: Math.round(progressValue * model.size), total: model.size } : undefined}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
-        onDownload={isActive || isPaused ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
-        onCancel={isActive || isPaused ? () => handleCancelImageDownload(model.id) : undefined}
-        onPause={isDownloading && entry?.downloadId ? () => {
-          modelDownloadService.pause(uniformDownloadId('image', model.id)).catch(error => logger.error('Failed to pause image download:', error));
-        } : undefined}
-        onResume={isPaused && entry?.downloadId ? () => {
-          modelDownloadService.resume(uniformDownloadId('image', model.id)).catch(error => logger.error('Failed to resume image download:', error));
-        } : undefined}
+        onDownload={isActive ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
+        onCancel={isActive ? () => handleCancelImageDownload(model.id) : undefined}
       />
     </View>
   );
@@ -156,7 +147,18 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { goTo } = useSpotlightTour();
 
+  // Consume pending spotlight from the onboarding flow (queued when user taps "Try image generation")
+  useEffect(() => {
+    if (!hfModelsLoading && filteredHFModels.length > 0) {
+      const pending = consumePendingSpotlight();
+      if (pending !== null) {
+        const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+        return () => task.cancel();
+      }
+    }
+  }, [hfModelsLoading, filteredHFModels.length, goTo]);
   let emptyMessage: string;
   if (imageSearchQuery.trim()) {
     emptyMessage = 'No models match your search';
@@ -179,7 +181,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
         )}
 
         <View style={styles.deviceBanner}>
-          <Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — {imageRecommendation}</Text>
+          <Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM - {imageRecommendation}</Text>
           {imageRec?.warning && (
             <Text style={[styles.deviceBannerText, styles.deviceBannerWarning]}>{imageRec.warning}</Text>
           )}
@@ -203,7 +205,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
 
         {hfModelsLoading && (
           <View style={styles.hfLoadingContainer}>
-            <LoadingDots color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.loadingText}>Loading models...</Text>
           </View>
         )}
@@ -230,8 +232,9 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
                 handleCancelImageDownload={handleCancelImageDownload}
               />
             );
+            // Spotlight the first image model card for the onboarding flow
             if (index === 0) {
-              return card;
+              return <AttachStep key={model.id} index={17} fill>{card}</AttachStep>;
             }
             return card;
           }
@@ -288,7 +291,7 @@ export const ImageModelsTab: React.FC<Props> = ({
           >
             <MaterialIcon name={showRecommendedOnly ? 'star' : 'star-border'} size={16} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Settings"
             style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
             onPress={() => setImageFiltersVisible(v => !v)}
             hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}

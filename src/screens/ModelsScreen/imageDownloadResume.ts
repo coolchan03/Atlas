@@ -1,11 +1,10 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
-import { unzip } from 'react-native-zip-archive';
+import { extractImageModelZip } from '../../utils/imageZipExtractor';
 import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
-import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from '../../services/imageDownloadActions';
+import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import { makeImageModelKey } from '../../utils/modelKey';
@@ -40,7 +39,13 @@ async function validateModelDir(modelDir: string, backend?: string): Promise<boo
 async function validateZipArtifact(zipPath: string, expectedBytes: number): Promise<boolean> {
   if (!(await RNFS.exists(zipPath))) return false;
 
-  const actualSize = (await statFile(zipPath))?.size ?? 0;
+  let actualSize = 0;
+  try {
+    const zipStat = await RNFS.stat(zipPath);
+    actualSize = Number(zipStat.size);
+  } catch {
+    return false;
+  }
 
   if (!Number.isFinite(actualSize) || actualSize <= 0) {
     return false;
@@ -140,7 +145,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
     await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
     try {
-      await unzip(zipPath, modelDir);
+      await extractImageModelZip(zipPath, modelDir);
       await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
     } catch (error) {
       await RNFS.unlink(modelDir).catch(() => {});
@@ -174,7 +179,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
   await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
   try {
-    await unzip(zipPath, modelDir);
+    await extractImageModelZip(zipPath, modelDir);
     await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
   } catch (error) {
     await RNFS.unlink(modelDir).catch(() => {});
@@ -194,6 +199,16 @@ async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
     logger.warn(`[ImageDownload] resumeImageDownload multifile - model dir missing, marking failed ${modelId}`);
     useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
     return;
+  }
+  if (metadata.imageModelBackend === 'mnn' || metadata.imageModelBackend === 'qnn') {
+    const integrity = await validateImageModelDir(modelDir, metadata.imageModelBackend);
+    if (!integrity.complete) {
+      logger.warn(`[ImageDownload] resumeImageDownload multifile - incomplete model dir ${modelId}: ${integrity.missing.join(', ')}`);
+      useDownloadStore.getState().setStatus(entry.downloadId, 'failed', {
+        message: `Download incomplete: missing ${integrity.missing.join(', ')}. Please retry.`,
+      });
+      return;
+    }
   }
   const imageModel: ONNXImageModel = {
     id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,

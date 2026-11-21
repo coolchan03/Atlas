@@ -36,13 +36,16 @@ jest.mock('../../../src/components/AppSheet', () => ({
 
 // Mock action fns defined outside factory for access in tests
 const mockUpdateSettings = jest.fn();
-const mockResetSettings = jest.fn();
+const mockSetActiveImageModelId = jest.fn();
 
 let mockStoreValues: any = {};
 
 jest.mock('../../../src/stores', () => ({
   useAppStore: jest.fn((sel?: any) => typeof sel === 'function' ? sel(mockStoreValues) : mockStoreValues),
-  useRemoteServerStore: jest.requireActual('../../../src/stores/remoteServerStore').useRemoteServerStore,
+  useChatStore: jest.fn((sel?: any) => {
+    const chatState = { activeConversationId: null, conversations: [], updateConversation: jest.fn() };
+    return typeof sel === 'function' ? sel(chatState) : chatState;
+  }),
   selectIsLiteRT: (state: any) =>
     state.downloadedModels?.find((m: any) => m.id === state.activeModelId)?.engine === 'litert',
 }));
@@ -106,11 +109,43 @@ describe('GenerationSettingsModal', () => {
     mockStoreValues = {
       settings: { ...defaultSettings },
       updateSettings: mockUpdateSettings,
-      resetSettings: mockResetSettings,
       downloadedModels: [],
       downloadedImageModels: [],
       activeImageModelId: null,
+      setActiveImageModelId: mockSetActiveImageModelId,
     };
+  });
+
+  it('keeps Deep Research in Chat Settings, with the switch and no header strip', () => {
+    const onModeChange = jest.fn();
+    const onDepthChange = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <GenerationSettingsModal {...defaultProps} researchMode={false}
+        onResearchModeChange={onModeChange} researchDepth="deep"
+        onResearchDepthChange={onDepthChange} />,
+    );
+    expect(getByTestId('research-settings-section')).toBeTruthy();
+    expect(queryByTestId('research-depth-quick')).toBeNull();
+    fireEvent(getByTestId('deep-research-toggle'), 'valueChange', true);
+    expect(onModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('chooses quick or deep research inside the cog and locks controls while generating', () => {
+    const onModeChange = jest.fn();
+    const onDepthChange = jest.fn();
+    const { getByTestId, rerender } = render(
+      <GenerationSettingsModal {...defaultProps} researchMode researchDepth="deep"
+        onResearchModeChange={onModeChange} onResearchDepthChange={onDepthChange} />,
+    );
+    fireEvent.press(getByTestId('research-depth-quick'));
+    expect(onDepthChange).toHaveBeenCalledWith('quick');
+    rerender(
+      <GenerationSettingsModal {...defaultProps} researchMode researchDepth="quick"
+        researchBusy onResearchModeChange={onModeChange}
+        onResearchDepthChange={onDepthChange} />,
+    );
+    expect(getByTestId('deep-research-toggle').props.disabled).toBe(true);
+    expect(getByTestId('research-depth-deep').props.accessibilityState.disabled).toBe(true);
   });
 
   it('returns null when not visible', () => {
@@ -192,11 +227,13 @@ describe('GenerationSettingsModal', () => {
       <GenerationSettingsModal {...defaultProps} />,
     );
 
-    expect(queryByText('Auto-detect image requests')).toBeNull();
+    // Image settings should be collapsed initially
+    expect(queryByText('Image Model')).toBeNull();
 
     fireEvent.press(getByText('IMAGE GENERATION'));
 
-    expect(getByText('Auto-detect image requests')).toBeTruthy();
+    // Now image settings content should be visible
+    expect(getByText('Image Model')).toBeTruthy();
   });
 
   it('opens text settings section when tapping "TEXT GENERATION"', () => {
@@ -213,22 +250,6 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('Max Tokens')).toBeTruthy();
   });
 
-  it('lets context reach the model 262K limit and caps max tokens at the context', () => {
-    mockStoreValues.modelMaxContext = 262144;
-    const { getByText, getByTestId } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('TEXT GENERATION'));
-
-    // Output cannot exceed the context that has to hold it, so this surface stops the max-tokens
-    // slider at the chosen context while context itself may reach the model's trained ceiling.
-    expect(getByTestId('setting-maxTokens-slider').props.maximumValue).toBe(
-      mockStoreValues.settings.contextLength,
-    );
-    expect(getByTestId('setting-contextLength-slider').props.maximumValue).toBe(262144);
-  });
-
   it('shows performance settings inside TEXT GENERATION section', () => {
     const { getByText, getByTestId, queryByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
@@ -243,26 +264,27 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('CPU Threads')).toBeTruthy();
   });
 
-  it('calls the shared reset action when Reset to Defaults is pressed', () => {
+  it('calls updateSettings when Reset to Defaults is pressed', () => {
     const { getByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     fireEvent.press(getByText('Reset to Defaults'));
 
-    expect(mockResetSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps transcription model selection out of chat settings', () => {
-    const { getByTestId, queryByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    expect(queryByText('Transcription model')).toBeNull();
-    fireEvent.press(getByTestId('modal-transcription-accordion'));
-
-    expect(queryByText('Transcription model')).toBeNull();
-    expect(queryByText('No model selected. Tap to choose.')).toBeNull();
+    expect(mockUpdateSettings).toHaveBeenCalledWith({
+      temperature: 0.7,
+      maxTokens: 1024,
+      topP: 0.9,
+      repeatPenalty: 1.1,
+      contextLength: 4096,
+      nThreads: 0,
+      nBatch: 512,
+      // Reset now also restores the image params (Q12).
+      imageWidth: 256,
+      imageHeight: 256,
+      imageGuidanceScale: 7.5,
+      imageSteps: 8,
+    });
   });
 
   it('calls updateSettings when image gen mode Auto/Manual is pressed', () => {
@@ -480,17 +502,94 @@ describe('GenerationSettingsModal', () => {
     expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: null });
   });
 
-  it('keeps image model selection out of chat settings', () => {
-    mockStoreValues.downloadedImageModels = [
-      { id: 'img1', name: 'SD Model', style: 'creative' },
-    ];
-    const { getByText, queryByText } = render(
+  // ============================================================================
+  // NEW TESTS: Image model picker
+  // ============================================================================
+  it('shows image model picker with "None selected" when no image model', () => {
+    const { getByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     fireEvent.press(getByText('IMAGE GENERATION'));
-    expect(queryByText('Image Model')).toBeNull();
-    expect(queryByText('SD Model')).toBeNull();
+
+    expect(getByText('None selected')).toBeTruthy();
+  });
+
+  it('shows active image model name when one is selected', () => {
+    mockStoreValues.downloadedImageModels = [
+      { id: 'img1', name: 'Stable Diffusion', style: 'creative' },
+    ];
+    mockStoreValues.activeImageModelId = 'img1';
+
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+
+    expect(getByText('Stable Diffusion')).toBeTruthy();
+  });
+
+  it('opens image model picker and shows "No image models downloaded" when empty', () => {
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+    // Click the image model picker button
+    fireEvent.press(getByText('None selected'));
+
+    expect(getByText(/No image models downloaded/)).toBeTruthy();
+  });
+
+  it('opens image model picker and shows downloaded image models', () => {
+    mockStoreValues.downloadedImageModels = [
+      { id: 'img1', name: 'SD Model', style: 'creative' },
+    ];
+
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+    fireEvent.press(getByText('None selected'));
+
+    expect(getByText('SD Model')).toBeTruthy();
+    expect(getByText('None (disable image gen)')).toBeTruthy();
+  });
+
+  it('selects image model from picker', () => {
+    mockStoreValues.downloadedImageModels = [
+      { id: 'img1', name: 'SD Model', style: 'creative' },
+    ];
+
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+    fireEvent.press(getByText('None selected'));
+    fireEvent.press(getByText('SD Model'));
+
+    expect(mockSetActiveImageModelId).toHaveBeenCalledWith('img1');
+  });
+
+  it('selects "None" to disable image model', () => {
+    mockStoreValues.downloadedImageModels = [
+      { id: 'img1', name: 'SD Model', style: 'creative' },
+    ];
+    mockStoreValues.activeImageModelId = 'img1';
+
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+    // Press the Image Model picker button to open the dropdown
+    fireEvent.press(getByText('Image Model'));
+    fireEvent.press(getByText('None (disable image gen)'));
+
+    expect(mockSetActiveImageModelId).toHaveBeenCalledWith(null);
   });
 
   // ============================================================================
@@ -544,7 +643,7 @@ describe('GenerationSettingsModal', () => {
   });
 
   it('displays formatted values for text settings', () => {
-    const { getByText, getAllByText, getByTestId } = render(
+    const { getByText, getByTestId } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
@@ -555,8 +654,7 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('1.0K')).toBeTruthy(); // maxTokens: 1024
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
-    // getAllByText: maxTokens and contextLength both default to 4096 and both format to "4K".
-    expect(getAllByText('4K').length).toBeGreaterThan(0); // contextLength: 4096
+    expect(getByText('4K')).toBeTruthy(); // contextLength: 4096
   });
 
   it('shows description for text settings', () => {
@@ -567,7 +665,7 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText('TEXT GENERATION'));
 
     expect(getByText('Higher = more creative, Lower = more focused')).toBeTruthy();
-    expect(getByText('Maximum length of generated response')).toBeTruthy();
+    expect(getByText('Maximum length of an answer. Moving this turns off Auto reply length (Chat settings).')).toBeTruthy();
   });
 
   // ============================================================================
@@ -582,7 +680,7 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText('TEXT GENERATION'));
 
     expect(getByText('Show Generation Details')).toBeTruthy();
-    expect(getByText('Show context use, model, speed, and image settings below each reply')).toBeTruthy();
+    expect(getByText('Display GPU, model, tok/s, and image settings below each message')).toBeTruthy();
   });
 
   it('calls updateSettings to enable show generation details', () => {
@@ -702,11 +800,11 @@ describe('GenerationSettingsModal', () => {
 
     // Open
     fireEvent.press(getByText('IMAGE GENERATION'));
-    expect(getByText('Auto-detect image requests')).toBeTruthy();
+    expect(getByText('Image Model')).toBeTruthy();
 
     // Close
     fireEvent.press(getByText('IMAGE GENERATION'));
-    expect(queryByText('Auto-detect image requests')).toBeNull();
+    expect(queryByText('Image Model')).toBeNull();
   });
 
   it('collapses text settings when tapped twice', () => {
@@ -965,7 +1063,7 @@ describe('GenerationSettingsModal', () => {
 
         fireEvent.press(getByTestId('backend-cpu-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'cpu' });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'cpu', backendUserChosen: true });
       });
 
       it('calls updateSettings with inferenceBackend: opencl when OpenCL button pressed on Android', () => {
@@ -977,7 +1075,7 @@ describe('GenerationSettingsModal', () => {
 
         fireEvent.press(getByTestId('backend-opencl-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl' });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl', backendUserChosen: true });
       });
 
       it('calls updateSettings with gpuLayers value from GPU layers slider', () => {

@@ -1,0 +1,97 @@
+import React, { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme';
+import { Button } from '../components/Button';
+import { buildPlan, behind, daysToGo, todaysTarget, type PlanDay } from '../study/planner';
+import { parseExamLines, usePlanStore } from '../study/planStore';
+
+const st = StyleSheet.create({
+  flex: { flex: 1 }, header: { flexDirection: 'row', alignItems: 'center', padding: 12 }, title: { fontSize: 18, marginLeft: 12 }, content: { padding: 16, paddingBottom: 120 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 90 }, top8: { marginTop: 8 }, line: { borderWidth: 1, borderRadius: 8, padding: 10 }, top14: { marginTop: 14 }, row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }, semi: { fontWeight: '600' }, gap: { marginLeft: 8 },
+});
+const toLine = (e: { name: string; date: string; topics: string[] }) => `${e.name} | ${e.date} | ${e.topics.join(', ')}`;
+
+export const PlannerScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const { exams, done, setExams, toggleDone } = usePlanStore();
+  const [text, setText] = useState(exams.map(toLine).join('\n'));
+  const [msg, setMsg] = useState('');
+  const [form, setForm] = useState({ name: '', date: '', topics: '' });
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = useMemo<PlanDay[]>(() => {
+    try { return buildPlan(exams.map((e) => ({ ...e, done })), today); } catch { return []; }
+  }, [exams, done, today]);
+  const late = useMemo(() => behind(plan, done, today), [plan, done, today]);
+
+  const save = () => {
+    const r = parseExamLines(text);
+    if (r.errors.length) { setMsg(r.errors.join('\n')); return; }
+    try { buildPlan(r.exams, today); } catch (e: any) { setMsg(String(e?.message ?? e)); return; }
+    setExams(r.exams); setMsg(`Saved ${r.exams.length} exam${r.exams.length === 1 ? '' : 's'}, in the order you sit them.`);
+  };
+
+  /** One exam from three plain fields, so nobody has to type the line format. */
+  const addExam = () => {
+    const line = `${form.name} | ${form.date.trim()} | ${form.topics}`;
+    const r = parseExamLines(line);
+    if (r.errors.length) { setMsg('Give the exam a name and a date like 2026-12-20.'); return; }
+    const next = [...exams.filter((e) => e.name !== r.exams[0].name), r.exams[0]];
+    try { buildPlan(next, today); } catch (e: any) { setMsg(String(e?.message ?? e)); return; }
+    setExams(next); setText(next.map(toLine).join('\n')); setForm({ name: '', date: '', topics: '' });
+    setMsg(`Added ${r.exams[0].name}.`);
+  };
+  const removeExam = (name: string) => {
+    const next = exams.filter((e) => e.name !== name);
+    setExams(next); setText(next.map(toLine).join('\n')); setMsg(`Removed ${name}.`);
+  };
+
+  return (
+    <SafeAreaView style={[st.flex, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={st.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Back"><Icon name="arrow-left" size={22} color={colors.text} /></TouchableOpacity>
+        <Text style={[st.title, { color: colors.text }]}>Study plan</Text>
+      </View>
+      <ScrollView contentContainerStyle={st.content} keyboardShouldPersistTaps="handled">
+        <Text style={[st.semi, { color: colors.text }]}>Add an exam</Text>
+        {(['name', 'date', 'topics'] as const).map((k) => (
+          <TextInput key={k} testID={`plan-${k}`} value={form[k]} onChangeText={(v) => setForm((f) => ({ ...f, [k]: v }))} autoCapitalize="none" autoCorrect={false}
+            placeholder={k === 'name' ? 'Exam name, such as REG' : k === 'date' ? 'Date, such as 2026-12-20' : 'Topics, separated by commas'} placeholderTextColor={colors.textMuted}
+            style={[st.line, st.top8, { borderColor: colors.border, color: colors.text }]} />
+        ))}
+        <Button title="Add exam" onPress={addExam} testID="plan-add" style={st.top8} />
+        <Text style={[st.top14, { color: colors.textSecondary }]}>Or edit them all as text. One exam per line, in the order you will sit them:  Name | YYYY-MM-DD | topic, topic, topic</Text>
+        <TextInput testID="plan-text" value={text} onChangeText={setText} multiline autoCapitalize="none" autoCorrect={false} placeholder={'REG | 2026-12-20 | Basis, Gains, Entities, Ethics'} placeholderTextColor={colors.textMuted} style={[st.input, st.top8, { borderColor: colors.border, color: colors.text }]} />
+        <Button title="Save plan" onPress={save} testID="plan-save" style={st.top8} />
+        {!!msg && <Text testID="plan-msg" style={[st.top8, { color: colors.textSecondary }]}>{msg}</Text>}
+        {!exams.length && <Text testID="plan-empty" style={[st.top14, { color: colors.textSecondary }]}>No exams yet. Add one above with its date and the topics it covers, and this page makes a day-by-day schedule and shows what is behind.</Text>}
+        {plan.length > 0 && (
+          <View style={st.top14}>
+            <Text testID="plan-today" style={[st.semi, { color: colors.text }]}>Today</Text>
+            <Text style={{ color: colors.textSecondary }}>{todaysTarget(plan, today)}</Text>
+            {late.length > 0 && <Text testID="plan-behind" style={[st.top8, { color: colors.error }]}>{late.length} topic{late.length === 1 ? '' : 's'} behind: {late.join(', ')}</Text>}
+            <Text style={[st.semi, st.top14, { color: colors.text }]}>Exams</Text>
+            {exams.map((e) => (
+              <View key={e.name} style={st.row}>
+                <Text testID={`exam-days-${e.name}`} style={[st.flex, { color: colors.textSecondary }]}>{e.name}: {e.date} ({daysToGo(e.date, today)})</Text>
+                <TouchableOpacity onPress={() => removeExam(e.name)} accessibilityLabel={`Remove ${e.name}`} testID={`exam-remove-${e.name}`}><Icon name="x" size={18} color={colors.textMuted} /></TouchableOpacity>
+              </View>
+            ))}
+            <Text style={[st.semi, st.top14, { color: colors.text }]}>Topics (tap when finished)</Text>
+            {exams.flatMap((e) => e.topics.map((t) => ({ exam: e.name, t }))).map(({ exam, t }) => (
+              <TouchableOpacity key={`${exam}-${t}`} onPress={() => toggleDone(t)} style={st.row} accessibilityRole="checkbox" accessibilityState={{ checked: done.includes(t) }}>
+                <Icon name={done.includes(t) ? 'check-square' : 'square'} size={20} color={done.includes(t) ? colors.primary : colors.textMuted} />
+                <Text style={[st.gap, { color: colors.text }]}>{exam}: {t}</Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={[st.semi, st.top14, { color: colors.text }]}>Schedule</Text>
+            {plan.map((p, i) => <Text key={i} style={{ color: colors.textSecondary }}>{p.date}  {p.exam}: {p.topics.join('; ')}</Text>)}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+};

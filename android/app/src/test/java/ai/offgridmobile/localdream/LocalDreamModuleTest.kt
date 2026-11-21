@@ -433,4 +433,35 @@ class LocalDreamModuleTest {
         assertEquals(0xFF, alpha)
     }
 
+
+    // ── QNN libraries: only this chip's generation is needed ──────────────────
+    @Test
+    fun `htpVariantFor maps known Snapdragon chips and leaves unknown ones null`() {
+        assertEquals("V75", LocalDreamModule.htpVariantFor("SM8650"))
+        assertEquals("V73", LocalDreamModule.htpVariantFor("sm8550"))
+        assertEquals("V79", LocalDreamModule.htpVariantFor("SM8750"))
+        assertNull(LocalDreamModule.htpVariantFor("SM9999"))
+        assertNull(LocalDreamModule.htpVariantFor("MT6989"))
+        assertNull(LocalDreamModule.htpVariantFor(null))
+    }
+
+    @Test
+    fun `needsQnnLib keeps shared libraries and only the matching generation`() {
+        for (shared in listOf("libQnnHtp.so", "libQnnSystem.so", "libstable_diffusion_core.so")) {
+            assertTrue(shared, LocalDreamModule.needsQnnLib(shared, "V75"))
+        }
+        for (part in listOf("libQnnHtpV75.so", "libQnnHtpV75Skel.so", "libQnnHtpV75Stub.so")) {
+            assertTrue(part, LocalDreamModule.needsQnnLib(part, "V75"))
+        }
+        for (other in listOf("libQnnHtpV73.so", "libQnnHtpV73Skel.so", "libQnnHtpV79Stub.so", "libQnnHtpV68.so")) {
+            assertFalse(other, LocalDreamModule.needsQnnLib(other, "V75"))
+        }
+    }
+
+    @Test
+    fun `needsQnnLib extracts everything when the chip generation is unknown`() {
+        for (name in listOf("libQnnHtpV73.so", "libQnnHtpV81Skel.so", "libQnnSystem.so")) {
+            assertTrue(name, LocalDreamModule.needsQnnLib(name, null))
+        }
+    }
 }

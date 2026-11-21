@@ -47,10 +47,25 @@ export interface SyncStateTarget {
 export async function syncWithNativeState(target: SyncStateTarget): Promise<void> {
   const store = useAppStore.getState();
 
-  const textModelLoaded = llmService.isModelLoaded() || liteRTService.isModelLoaded();
-  if (!textModelLoaded) {
+  const llamaLoaded = llmService.isModelLoaded();
+  const liteRTLoaded = liteRTService.isModelLoaded();
+  const llamaPath = llamaLoaded ? llmService.getLoadedModelPath?.() ?? null : null;
+  const liteRTPath = liteRTLoaded ? liteRTService.getLoadedModelPath?.() ?? null : null;
+  const nativeTextModel = store.downloadedModels.find((model) =>
+    (model.engine === 'litert' && !!liteRTPath && model.filePath === liteRTPath) ||
+    (model.engine !== 'litert' && !!llamaPath && model.filePath === llamaPath),
+  );
+  if (!llamaLoaded && !liteRTLoaded) {
     target.setLoadedTextModelId(null);
+  } else if (nativeTextModel) {
+    // Correct stale selected/resident identity after backgrounding or a native
+    // engine recovery instead of assuming the currently selected id is resident.
+    if (target.loadedTextModelId !== nativeTextModel.id) {
+      target.setLoadedTextModelId(nativeTextModel.id);
+    }
   } else if (!target.loadedTextModelId && store.activeModelId) {
+    // Compatibility fallback for engines/tests that can report loaded=true but
+    // cannot expose a path. Never overwrite an already-known resident id.
     target.setLoadedTextModelId(store.activeModelId);
   }
 
@@ -58,7 +73,13 @@ export async function syncWithNativeState(target: SyncStateTarget): Promise<void
   if (!imageModelLoaded) {
     target.setLoadedImageModelId(null);
     target.setLoadedImageModelThreads(null);
-  } else if (!target.loadedImageModelId && store.activeImageModelId) {
-    target.setLoadedImageModelId(store.activeImageModelId);
+  } else {
+    const loadedImagePath = await onnxImageGeneratorService.getLoadedModelPath?.() ?? null;
+    const nativeImageModel = store.downloadedImageModels.find(m => m.modelPath === loadedImagePath);
+    if (nativeImageModel) {
+      target.setLoadedImageModelId(nativeImageModel.id);
+    } else if (!target.loadedImageModelId && store.activeImageModelId) {
+      target.setLoadedImageModelId(store.activeImageModelId);
+    }
   }
 }

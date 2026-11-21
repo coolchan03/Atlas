@@ -5,6 +5,10 @@
  * and how it integrates with the generation flow.
  */
 
+// Mock the storage adapter in state-management tests; encryption is independently tested.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({
+  encryptedChatStorage: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined) },
+}));
 import { useChatStore } from '../../../src/stores/chatStore';
 import {
   resetStores,

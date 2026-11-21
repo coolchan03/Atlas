@@ -13,17 +13,22 @@ type ColorsType = ReturnType<typeof useTheme>['colors'];
 type ChatModalSectionProps = {
   styles: StylesType;
   colors: ColorsType;
+  onOpenModels?: () => void;
   showProjectSelector: boolean;
   setShowProjectSelector: (v: boolean) => void;
   showDebugPanel: boolean;
   setShowDebugPanel: (v: boolean) => void;
   showModelSelector: boolean;
   setShowModelSelector: (v: boolean) => void;
-  onModelSelectorClosed?: () => void;
-  onBackToModels?: () => void;
   modelSelectorTab?: 'text' | 'image';
   showSettingsPanel: boolean;
   setShowSettingsPanel: (v: boolean) => void;
+  researchMode: boolean;
+  setResearchMode: (enabled: boolean) => void;
+  researchDepth: 'quick' | 'deep';
+  setResearchDepth: (depth: 'quick' | 'deep') => void;
+  researchBusy: boolean;
+  researchStatus: string | null;
   debugInfo: any;
   activeProject: any;
   activeConversation: any;
@@ -44,12 +49,12 @@ type ChatModalSectionProps = {
 };
 
 export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
-  styles, colors,
+  styles, colors, onOpenModels,
   showProjectSelector, setShowProjectSelector,
   showDebugPanel, setShowDebugPanel,
   showModelSelector, setShowModelSelector, modelSelectorTab = 'text',
-  onModelSelectorClosed, onBackToModels,
   showSettingsPanel, setShowSettingsPanel,
+  researchMode, setResearchMode, researchDepth, setResearchDepth, researchBusy, researchStatus,
   debugInfo, activeProject, activeConversation, settings, projects,
   handleSelectProject, handleModelSelect, handleUnloadModel, handleDeleteConversation,
   isModelLoading, imageCount, activeConversationId, navigation,
@@ -76,8 +81,6 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       visible={showModelSelector}
       initialTab={modelSelectorTab}
       onClose={() => setShowModelSelector(false)}
-      onClosed={onModelSelectorClosed}
-      onBackToModels={onBackToModels}
       onSelectModel={handleModelSelect}
       onUnloadModel={handleUnloadModel}
       isLoading={isModelLoading}
@@ -86,7 +89,15 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
     <GenerationSettingsModal
       visible={showSettingsPanel}
       onClose={() => setShowSettingsPanel(false)}
+      researchMode={researchMode}
+      onResearchModeChange={setResearchMode}
+      researchDepth={researchDepth}
+      onResearchDepthChange={setResearchDepth}
+      researchBusy={researchBusy}
+      researchStatus={researchStatus}
       onOpenProject={() => setShowProjectSelector(true)}
+      onOpenModels={onOpenModels}
+      activeConversationId={activeConversationId}
       onOpenGallery={imageCount > 0 ? () => navigation.navigate('Gallery', { conversationId: activeConversationId }) : undefined}
       onDeleteConversation={activeConversation ? handleDeleteConversation : undefined}
       conversationImageCount={imageCount}

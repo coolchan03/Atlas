@@ -8,36 +8,18 @@ import {
   handleDownloadImageModel,
   registerAndNotify,
   cancelSyntheticImageDownload,
-} from '../../../../src/services/imageDownloadActions';
+} from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
 import { makeImageDownloadDeps } from '../../../utils/factories';
 
-jest.mock('react-native-fs', () => {
-  const files = new Set<string>();
-  const stat = jest.fn((_path: string) => Promise.resolve({ size: 500000 }));
-  return {
-    exists: jest.fn(() => Promise.resolve(true)),
-    mkdir: jest.fn(() => Promise.resolve()),
-    unlink: jest.fn(() => Promise.resolve()),
-    writeFile: jest.fn(() => Promise.resolve()),
-    stat,
-    readDir: jest.fn(async (parent: string) =>
-      Promise.all(
-        [...files]
-          .filter(path => path.substring(0, path.lastIndexOf('/')) === parent)
-          .map(async path => ({
-            name: path.substring(path.lastIndexOf('/') + 1),
-            path,
-            size: (await stat(path)).size,
-            isFile: () => true,
-            isDirectory: () => false,
-          })),
-      ),
-    ),
-    __recordFile: (path: string) => files.add(path),
-    __resetFiles: () => files.clear(),
-  };
-});
+jest.mock('react-native-fs', () => ({
+  exists: jest.fn(() => Promise.resolve(true)),
+  mkdir: jest.fn(() => Promise.resolve()),
+  unlink: jest.fn(() => Promise.resolve()),
+  writeFile: jest.fn(() => Promise.resolve()),
+  // Default: every part is present + non-empty (validateMultifileComplete passes).
+  stat: jest.fn(() => Promise.resolve({ size: 500000 })),
+}));
 
 jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(() => Promise.resolve('/unzipped')),
@@ -81,15 +63,7 @@ const mockGetImageModelsDirectory = jest.fn(() => '/mock/image-models');
 const mockAddDownloadedImageModel = jest.fn((_m?: any) => Promise.resolve());
 const mockMoveCompletedDownload = jest.fn((_id: string, _targetPath: string) => Promise.resolve('/moved.zip'));
 const mockStartDownload = jest.fn((_params: any) => Promise.resolve({ downloadId: 'zip-42' }));
-const mockDownloadFileTo = jest.fn(
-  (opts: any): {
-    downloadIdPromise?: Promise<string>;
-    promise: Promise<void>;
-  } => {
-    (RNFS as any).__recordFile(opts.destPath);
-    return { promise: Promise.resolve() };
-  },
-);
+const mockDownloadFileTo = jest.fn((_opts: any): { downloadIdPromise?: Promise<string>; promise: Promise<void> } => ({ promise: Promise.resolve() }));
 const mockOnComplete = jest.fn((_id: string, cb: Function) => { completeCallbacks.push(cb); return jest.fn(); });
 const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push(cb); return jest.fn(); });
 const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
@@ -176,7 +150,6 @@ function makeCoreMLModelInfo(overrides: Partial<ImageModelDescriptor> = {}): Ima
 describe('imageDownloadActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (RNFS as any).__resetFiles();
     jest.requireMock('react-native-fs').exists.mockResolvedValue(false);
     completeCallbacks = [];
     errorCallbacks = [];
@@ -236,7 +209,11 @@ describe('imageDownloadActions', () => {
   });
 
   it('proceedWithDownload uses native zip flow and completes via listeners', async () => {
+    // The zip integrity gate rejects truncated downloads before calling unzip.
+    (RNFS.stat as jest.Mock).mockImplementation(async (path: string) => ({ size: path.endsWith('.zip') ? 2000000 : 500000 }));
     const deps = makeDeps();
+    // The downloaded ZIP is complete (the flow now refuses archives under 95% of the expected size).
+    (RNFS.stat as jest.Mock).mockResolvedValue({ size: makeZipModelInfo().size, isFile: () => true, isDirectory: () => false });
 
     await proceedWithDownload(makeZipModelInfo(), deps);
 
@@ -251,7 +228,9 @@ describe('imageDownloadActions', () => {
 
     expect(mockStoreApi.setProcessing).toHaveBeenCalledWith('zip-42');
     expect(mockMoveCompletedDownload).toHaveBeenCalled();
-    expect(unzip).toHaveBeenCalled();
+    // Android uses the native streaming extractor when present, else the JS unzip.
+    const native = require('react-native').NativeModules.LocalDreamModule;
+    expect(typeof native?.extractImageZip === 'function' ? native.extractImageZip : unzip).toHaveBeenCalled();
     expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-zip-model');
   });
 
@@ -347,8 +326,8 @@ describe('imageDownloadActions', () => {
 
   it('cancelSyntheticImageDownload does nothing when no runtime exists', async () => {
     const { cancelSyntheticImageDownload: cancel } = jest.requireActual(
-      '../../../../src/services/imageDownloadActions',
-    ) as typeof import('../../../../src/services/imageDownloadActions');
+      '../../../../src/screens/ModelsScreen/imageDownloadActions',
+    ) as typeof import('../../../../src/screens/ModelsScreen/imageDownloadActions');
     await expect(cancel('non-existent-model')).resolves.toBeUndefined();
   });
 

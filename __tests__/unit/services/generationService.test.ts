@@ -35,8 +35,6 @@ jest.mock('../../../src/services/llm', () => ({
 // Mock activeModelService
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     getActiveModels: jest.fn(() => ({ text: null, image: null })),
   },
 }));
@@ -763,6 +761,27 @@ describe('generationService', () => {
       const chatState = useChatStore.getState();
       expect(chatState.streamingMessage).toBe('');
       expect(chatState.isStreaming).toBe(false);
+    });
+
+    it('stores the final parsed answer when streaming left a stale revised character', async () => {
+      const convId = setupWithConversation();
+      setupWithActiveModel();
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        { onStream, onComplete }: any = {}
+      ) => {
+        onStream?.({ content: 'Hello <' });
+        onStream?.({ content: 'e' });
+        onComplete?.({ content: 'Hello be', reasoningContent: '', parsedContent: 'Hello be' });
+        return 'Hello be';
+      }) as any);
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      const assistant = useChatStore.getState().getConversationMessages(convId).find(m => m.role === 'assistant');
+      expect(assistant?.content).toBe('Hello be');
     });
 
     it('includes generation metadata on finalized message', async () => {
@@ -1562,12 +1581,11 @@ describe('generationService', () => {
   });
 
   // ============================================================================
-  // isUsingRemoteProvider — explicit remote selection is authoritative
+  // isUsingRemoteProvider — prefers local model when loaded
   // ============================================================================
-  describe('isUsingRemoteProvider — selected remote model wins', () => {
+  describe('isUsingRemoteProvider — local model wins when loaded', () => {
     const mockRemoteProvider4 = {
       id: 'remote-srv',
-      capabilities: { supportsThinking: true },
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
       stopGeneration: jest.fn().mockResolvedValue(undefined),
@@ -1582,7 +1600,7 @@ describe('generationService', () => {
       });
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => true);
       mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider4 as any);
-      // A resident local model must not replace the explicit remote selection.
+      // Local model IS loaded — service should prefer local
       mockedLlmService.isModelLoaded.mockReturnValue(true);
     });
 
@@ -1591,7 +1609,7 @@ describe('generationService', () => {
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => false);
     });
 
-    it('uses the selected remote model even when a local model is resident', async () => {
+    it('uses local LLM when local model is loaded even if remote server is configured', async () => {
       const convId = setupWithConversation();
       mockedLlmService.generateResponse.mockImplementation(async (_msgs, { onStream: cb }: any = {}) => {
         cb?.({ content: 'hello' });
@@ -1602,8 +1620,9 @@ describe('generationService', () => {
         createMessage({ role: 'user', content: 'Hi' }),
       ]);
 
-      expect(mockRemoteProvider4.generate).toHaveBeenCalled();
-      expect(mockedLlmService.generateResponse).not.toHaveBeenCalled();
+      // Local generateResponse should have been called, not remote provider
+      expect(mockedLlmService.generateResponse).toHaveBeenCalled();
+      expect(mockRemoteProvider4.generate).not.toHaveBeenCalled();
     });
   });
 

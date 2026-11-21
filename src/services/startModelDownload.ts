@@ -2,7 +2,6 @@ import { modelManager } from './modelManager';
 import { mmProjLocalName } from './modelManager/download';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useAppStore } from '../stores';
-import { activeModelService } from './activeModelService';
 import { makeModelKey } from '../utils/modelKey';
 import type { ModelFile, DownloadedModel } from '../types';
 
@@ -12,9 +11,6 @@ import type { ModelFile, DownloadedModel } from '../types';
 const queuedPlaceholderId = (modelKey: string) => `queued:${modelKey}`;
 
 export interface StartModelDownloadOpts {
-  /** Select a downloaded user model when the download began without a selection.
-   * Hidden support-model downloads leave this off. */
-  autoSelectIfEmpty?: boolean;
   /** Screen-specific UI to run AFTER the model is registered (e.g. a success or
    *  vision-repair alert). The standard register + clear has already happened. */
   onRegistered?: (model: DownloadedModel) => void;
@@ -33,17 +29,23 @@ export interface StartModelDownloadOpts {
  * pipeline (backgroundDownloadService, downloadStore progress, mmproj sidecar) was
  * already shared; this collapses the last duplicated wrapper around it.
  */
+const GB = 1024 * 1024 * 1024;
+async function assertFreeSpace(bytes: number | undefined): Promise<void> {
+  if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return;
+  let free = 0;
+  try { free = Number((await require('react-native-fs').getFSInfo())?.freeSpace) || 0; } catch { return; }
+  if (!free) return;
+  const need = bytes * 1.1;
+  if (free < need) {
+    throw new Error(`Not enough storage: this download needs ${(need / GB).toFixed(1)} GB and ${(free / GB).toFixed(1)} GB is free. Delete a model in My models or free up space first.`);
+  }
+}
+
 export async function startModelDownload(
   modelId: string,
   file: ModelFile,
   opts: StartModelDownloadOpts = {},
 ): Promise<void> {
-  // Capture this before the asynchronous download starts. If the user had a
-  // selection and explicitly unloads it while this download runs, completion
-  // must not replace that decision.
-  const mayAutoSelect =
-    opts.autoSelectIfEmpty === true &&
-    useAppStore.getState().activeModelId === null;
   const modelKey = makeModelKey(modelId, file.name);
   // Duplicate-start guard: a download already active for this logical file (rapid
   // double-tap, race after retry) is a no-op. add() also enforces this; checking
@@ -87,6 +89,9 @@ export async function startModelDownload(
   };
 
   try {
+    // Refuse up front when the file cannot fit (plus 10% headroom) instead of
+    // failing after a long download; shows as a normal failed row with the reason.
+    await assertFreeSpace(file.size + (file.mmProjFile?.size ?? 0));
     // downloadModelBackground writes the row + adds the store entry synchronously
     // after start (add for new, retryEntry for an existing failed one — including the
     // queued placeholder row added above, whose id it reconciles to the real one).
@@ -96,13 +101,6 @@ export async function startModelDownload(
       // Standard completion: register + clear the in-flight entry so the UI reads
       // "downloaded" from downloadedModels, not a lingering 100% store entry.
       useAppStore.getState().addDownloadedModel(model);
-      const app = useAppStore.getState();
-      if (mayAutoSelect && app.activeModelId === null) {
-        const selected =
-          app.downloadedModels.find(item => item.id === app.lastTextModelId) ??
-          app.downloadedModels[0];
-        if (selected) activeModelService.selectTextModel(selected.id);
-      }
       useDownloadStore.getState().remove(modelKey);
       opts.onRegistered?.(model);
     }, fail);

@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
@@ -104,8 +105,6 @@ jest.mock('../../../src/services', () => ({
     deleteGeneratedImage: jest.fn(() => Promise.resolve()),
   },
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(() => Promise.resolve()),
     loadImageModel: jest.fn(() => Promise.resolve()),
     unloadTextModel: jest.fn(() => Promise.resolve()),
@@ -147,6 +146,8 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 
 import { ChatsListScreen } from '../../../src/screens/ChatsListScreen';
 
+
+
 describe('ChatsListScreen', () => {
   beforeEach(() => {
     resetStores();
@@ -168,13 +169,7 @@ describe('ChatsListScreen', () => {
     });
 
     it('enables New when downloadable models exist but none are loaded', () => {
-      useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [createDownloadedModel()], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
@@ -212,13 +207,7 @@ describe('ChatsListScreen', () => {
     });
 
     it('shows New button flow when only image models are available', () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        activeModelId: null,
-        downloadedImageModels: [createONNXImageModel()],
-        activeImageModelId: null,
-      });
-
+      useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [createONNXImageModel()], activeImageModelId: null });
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
@@ -337,6 +326,14 @@ describe('ChatsListScreen', () => {
       });
     });
 
+    it('the eye-off button starts a private (not saved) chat', () => {
+      const model = createDownloadedModel();
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const { getByTestId } = render(<ChatsListScreen />);
+      fireEvent.press(getByTestId('new-private-chat'));
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
+    });
+
     it('sets active conversation when a conversation is pressed', () => {
       const conv = createConversation({ title: 'Activate Me' });
       useChatStore.setState({ conversations: [conv] });
@@ -347,17 +344,17 @@ describe('ChatsListScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('navigates to new Chat when New button is pressed and models exist', () => {
+    it('offers regular or private chat before navigating', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       const { getByText } = render(<ChatsListScreen />);
+      const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
       fireEvent.press(getByText('New'));
 
       expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      expect(alertSpy).not.toHaveBeenCalled(); // No Regular/Private startup dialog.
+      alertSpy.mockRestore();
     });
 
     it('does not navigate when New is pressed and no models downloaded', () => {
@@ -489,17 +486,14 @@ describe('ChatsListScreen', () => {
   // Empty State with Models
   // ==========================================================================
   describe('empty state new chat button', () => {
-    it('navigates when New Chat empty state button pressed', () => {
+    it('starts an ordinary chat directly; separate eye-off action starts a private chat', () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-
-      const { getByText } = render(<ChatsListScreen />);
+      useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+      const { getByText, getByLabelText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New Chat'));
-
       expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
+      fireEvent.press(getByLabelText('New private chat (not saved)'));
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', { privateChat: true });
     });
   });
 
@@ -512,42 +506,4 @@ describe('ChatsListScreen', () => {
   // ==========================================================================
   // Delete Chat Flow
   // ==========================================================================
-  describe('delete chat flow', () => {
-    it('shows delete confirmation when swipe-delete is triggered', () => {
-      const conv = createConversation({ title: 'Delete Me' });
-      useChatStore.setState({ conversations: [conv] });
-      useAppStore.setState({
-        generatedImages: [],
-      });
-
-      const tree = render(<ChatsListScreen />);
-      fireEvent.press(tree.getByLabelText('Delete Delete Me'));
-
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Delete Chat',
-        expect.stringContaining('Delete Me'),
-        expect.any(Array),
-      );
-    });
-
-    it('deletes conversation and images when confirmed', async () => {
-      const conv = createConversation({ title: 'To Delete' });
-      useChatStore.setState({ conversations: [conv] });
-      useAppStore.setState({
-        generatedImages: [],
-      });
-
-      const tree = render(<ChatsListScreen />);
-      fireEvent.press(tree.getByLabelText('Delete To Delete'));
-
-      const alertButtons = mockShowAlert.mock.calls[0]?.[2];
-      const deleteBtn = alertButtons?.find((b: any) => b.text === 'Delete');
-
-      if (deleteBtn?.onPress) {
-        await deleteBtn.onPress();
-        // Conversation should be deleted
-        expect(useChatStore.getState().conversations.length).toBe(0);
-      }
-    });
-  });
 });

@@ -1,0 +1,97 @@
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateId } from '../utils/generateId';
+
+/**
+ * Named voice profiles kept on this device: a voice ('' = phone voice), a speaker inside
+ * multi-voice models (Kokoro, KittenTTS) and a speed. Agents can be given a profile so
+ * their replies are read in their own voice.
+ */
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  voiceId: string;
+  sid: number;
+  rate: number;
+  /** Pocket TTS reference audio id, stored privately by the native engine. */
+  referenceId?: string;
+  /** Cloning quality for this voice only (2, 3, 5 or 8); missing means the app-wide setting, which is automatic by default. */
+  steps?: number;
+  createdAt: string;
+}
+
+interface VoiceProfilesState {
+  profiles: VoiceProfile[];
+  addProfile: (p: Omit<VoiceProfile, 'id' | 'createdAt'>) => VoiceProfile;
+  renameProfile: (id: string, name: string) => void;
+  removeProfile: (id: string) => void;
+  /** How fast this voice speaks (1 is normal). */
+  setRate: (id: string, rate: number) => void;
+  /** Sets or clears (undefined) the quality steps used for this voice only. */
+  setSteps: (id: string, steps: number | undefined) => void;
+  /** Adds the ready-made profiles not saved yet (same voice and speaker). Returns how many were added. */
+  addPresets: (presets: Omit<VoiceProfile, 'id' | 'createdAt'>[]) => number;
+}
+
+/** Ready-made profiles that are not saved yet. */
+export const missingPresets = <T extends Pick<VoiceProfile, 'voiceId' | 'sid'>>(profiles: VoiceProfile[], presets: T[]): T[] =>
+  presets.filter((p) => !profiles.some((x) => x.voiceId === p.voiceId && x.sid === p.sid));
+
+export const useVoiceProfiles = create<VoiceProfilesState>()(persist((set, get) => ({
+  profiles: [],
+  addProfile: (p) => {
+    const profile: VoiceProfile = { ...p, name: p.name.trim() || 'Voice', id: generateId(), createdAt: new Date().toISOString() };
+    set((s) => ({ profiles: [...s.profiles, profile] }));
+    return profile;
+  },
+  renameProfile: (id, name) => set((s) => ({
+    profiles: s.profiles.map((p) => (p.id === id && name.trim() ? { ...p, name: name.trim() } : p)),
+  })),
+  removeProfile: (id) => set((s) => ({ profiles: s.profiles.filter((p) => p.id !== id) })),
+  setRate: (id, rate) => set((s) => ({ profiles: s.profiles.map((p) => (p.id === id && Number.isFinite(rate) ? { ...p, rate: Math.min(2, Math.max(0.5, rate)) } : p)) })),
+  setSteps: (id, steps) => set((s) => ({ profiles: s.profiles.map((p) => (p.id === id ? { ...p, steps: steps && [2, 3, 5, 8].includes(steps) ? steps : undefined } : p)) })),
+  addPresets: (presets) => {
+    const add = missingPresets(get().profiles, presets);
+    add.forEach((p) => get().addProfile(p));
+    return add.length;
+  },
+}), {
+  name: 'atlas-voice-profiles',
+  storage: createJSONStorage(() => AsyncStorage),
+  partialize: (s) => ({ profiles: s.profiles }),
+  // Saved voices from older versions are made whole: each has its own id (two with the same or no id were highlighted together).
+  merge: (saved, current) => ({ ...current, profiles: repairProfiles((saved as Partial<VoiceProfilesState> | undefined)?.profiles ?? current.profiles) }),
+}));
+
+/** Profiles with a missing or repeated id get a new one, so each voice is chosen and highlighted on its own. */
+export function repairProfiles(profiles: VoiceProfile[]): VoiceProfile[] {
+  const seen = new Set<string>();
+  return profiles.map((p) => {
+    if (p.id && !seen.has(p.id)) { seen.add(p.id); return p; }
+    const id = generateId();
+    seen.add(id);
+    return { ...p, id };
+  });
+}
+
+/** The voice profile of the agent answering in this conversation, if it has one. */
+export function profileForConversation(conversationId: string | null | undefined): VoiceProfile | null {
+  if (!conversationId) return null;
+  const { useChatStore } = require('../stores/chatStore');
+  const { useAgentStore } = require('../stores/agentStore');
+  const conv = useChatStore.getState().conversations.find((c: any) => c.id === conversationId);
+  const agentId = conv?.agentId || useAgentStore.getState().activeAgentId;
+  const agent = agentId ? useAgentStore.getState().getAgent(agentId) : null;
+  const voiceProfileId = conv?.voiceProfileId || agent?.voiceProfileId;
+  if (!voiceProfileId) return null;
+  return useVoiceProfiles.getState().profiles.find((p) => p.id === voiceProfileId) ?? null;
+}
+
+/** Same as profileForConversation, starting from a message id. */
+export function profileForMessage(messageId: string | null | undefined): VoiceProfile | null {
+  if (!messageId) return null;
+  const { useChatStore } = require('../stores/chatStore');
+  const conv = useChatStore.getState().conversations.find((c: any) => c.messages?.some((m: any) => m.id === messageId));
+  return profileForConversation(conv?.id);
+}

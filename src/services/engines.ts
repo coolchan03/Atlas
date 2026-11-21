@@ -9,6 +9,16 @@ import logger from '../utils/logger';
 /** Every text-generation engine, defined ONCE here so callers never hardcode the concrete set. */
 const TEXT_ENGINES = [liteRTService, llmService];
 
+/** One small text job (rewrite, translate) on the loaded model. Throws `busyMessage` while a chat answer is still being written. */
+export async function completeSmallTask(messages: Message[], busyMessage: string): Promise<string> {
+  if (llmService.isCurrentlyGenerating()) throw new Error(busyMessage);
+  return llmService.generateResponse(messages, { disableThinking: true });
+}
+
+/** Which accelerator the loaded local model runs on, and how many layers (for the settings and hint text). */
+export const localGpuInfo = () => llmService.getGpuInfo();
+export const isLocalModelLoaded = (): boolean => llmService.isModelLoaded();
+
 /** What the active text model can do, resolved once so callers never branch on the concrete engine. */
 export interface EngineCapabilities {
   vision: boolean;
@@ -19,7 +29,7 @@ export interface EngineCapabilities {
 
 /** Runtime inputs for deriveEngineCapabilities — passed explicitly so the rule is pure/testable. */
 /** A remote model's declared capabilities (single named type so callers don't index CapabilityInputs). */
-export type RemoteCaps = { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean; thinkingLevelsOnly?: boolean } | null;
+export type RemoteCaps = { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } | null;
 
 export interface CapabilityInputs {
   /** A remote (gateway) model is active — its declared capabilities win. */
@@ -51,7 +61,7 @@ export function deriveEngineCapabilities(i: CapabilityInputs): EngineCapabilitie
     return {
       vision: i.remoteCaps?.supportsVision ?? false,
       tools: i.remoteCaps?.supportsToolCalling ?? false,
-      thinking: !!i.remoteCaps?.supportsThinking && !i.remoteCaps?.thinkingLevelsOnly,
+      thinking: i.remoteCaps?.supportsThinking ?? false,
       audio: false, // remote audio capability is not tracked today
     };
   }
@@ -106,17 +116,6 @@ export async function stopAllTextEngines(): Promise<void> {
 }
 
 /**
- * Give the active local engine an awaited conversation boundary before generation.
- * LiteRT already keys and rebuilds its native Conversation in prepareConversation();
- * llama implements this optional seam to clear its shared KV/recurrent state.
- */
-export async function prepareActiveConversation(conversationId: string): Promise<void> {
-  const engine = getActiveEngineService();
-  await (engine as { prepareConversationBoundary?: (id: string) => Promise<void> } | null)
-    ?.prepareConversationBoundary?.(conversationId);
-}
-
-/**
  * Invalidate the active engine's cached conversation state before a history rewind (regenerate/
  * edit). LiteRT keeps a native per-conversation KV cache that must be reset; llama has none.
  * Dispatched via the registry so callers don't branch on engine === 'litert'.
@@ -135,7 +134,7 @@ export function invalidateActiveConversation(): void {
 export function isModelReady(model: { engine?: string; filePath?: string } | null | undefined): boolean {
   if (!model) return false;
   return model.engine === 'litert'
-    ? liteRTService.isModelLoaded()
+    ? liteRTService.isModelLoaded() && liteRTService.getLoadedModelPath() === model.filePath
     : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
 }
 
@@ -234,8 +233,12 @@ export function wantsLeadingThinkToken(
  * operations keep the explicit branch — it should be visible at the call site.
  */
 export function getActiveEngineService(): typeof llmService | typeof liteRTService | null {
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const model = downloadedModels.find(m => m.id === activeModelId);
+  const { downloadedModels, activeModelId, loadedTextModelId } = useAppStore.getState();
+  // Runtime operations must follow the model that is actually resident, not a
+  // newly-selected model that has not loaded yet. Falling back to the selection
+  // is useful only when nothing is resident (e.g. readiness checks before load).
+  const modelId = loadedTextModelId ?? activeModelId;
+  const model = downloadedModels.find(m => m.id === modelId);
   if (!model) return null;
   return model.engine === 'litert' ? liteRTService : llmService;
 }
@@ -255,8 +258,8 @@ export function isRemoteTextModelActive(): boolean {
   const { activeServerId } = useRemoteServerStore.getState();
   if (!activeServerId) return false;
   if (!providerRegistry.hasProvider(activeServerId)) return false;
-  if (llmService.isModelLoaded()) return false; // a loaded local model wins over a remote server
-  return true;
+  // any loaded local model wins over a remote server
+  return !(llmService.isModelLoaded() || liteRTService.isModelLoaded());
 }
 
 /**
@@ -271,6 +274,15 @@ export function isRemoteTextModelActive(): boolean {
  * hardcode llmService, so a LiteRT text model reported "not loaded" and enhancement was
  * skipped even though the model was resident).
  */
+export async function stopStandaloneGeneration(): Promise<void> {
+  const { activeServerId } = useRemoteServerStore.getState();
+  if (isRemoteTextModelActive() && activeServerId) {
+    await providerRegistry.getProvider(activeServerId)?.stopGeneration().catch(() => {});
+    return;
+  }
+  await getActiveEngineService()?.stopGeneration().catch(() => {});
+}
+
 export async function generateStandalone(
   messages: Message[],
   onToken?: (token: string) => void,

@@ -51,8 +51,8 @@ const createAccordionStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
+    marginTop: SPACING.xl,
+    marginBottom: SPACING.md,
     paddingVertical: SPACING.sm,
   },
   accordionTitle: {
@@ -67,7 +67,7 @@ const createAccordionStyles = (colors: ThemeColors) => ({
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   sectionLabel: {
     ...TYPOGRAPHY.label,
@@ -179,9 +179,8 @@ const createActionStyles = (colors: ThemeColors) => ({
   },
 });
 
-const createModelPickerStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createModelPickerStyles = (colors: ThemeColors) => ({
   modelPickerButton: {
-    ...shadows.small,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
@@ -249,11 +248,11 @@ const createModelPickerStyles = (colors: ThemeColors, shadows: ThemeShadows) => 
 
 const createToggleStyles = (colors: ThemeColors) => ({
   modeToggleContainer: {
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   dimmed: { opacity: 0.5 },
   modeToggleInfo: {
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   modeToggleLabel: {
     ...TYPOGRAPHY.body,
@@ -314,12 +313,12 @@ const createToggleStyles = (colors: ThemeColors) => ({
   },
 });
 
-export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   ...createLayoutStyles(colors),
   ...createStatsStyles(colors),
   ...createAccordionStyles(colors),
   ...createSliderStyles(colors),
   ...createActionStyles(colors),
-  ...createModelPickerStyles(colors, shadows),
+  ...createModelPickerStyles(colors),
   ...createToggleStyles(colors),
 });

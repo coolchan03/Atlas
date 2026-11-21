@@ -1,0 +1,127 @@
+import { sampleNote } from '../../learning/confidence';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTheme } from '../../theme';
+import { useLearningStore } from '../../learning/store';
+import { GENERAL_NAME, NO_AGENT } from '../../learning/agents';
+import { exams, judgeWritesQuestions, runExamNow } from '../../learning/engine';
+import { BENCHMARK_VERSION, EXAM_MODE_LABEL, REASON_LABEL, attemptsFor, dueRetests, parseExpected, reasonCounts, type ExamResult } from '../../learning/exams';
+import { sectionStyles as s } from './sectionStyles';
+import { QuestionImport } from './QuestionImport';
+
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+/** One line for one run: right answers, outdated figures, unsupported citations, speed and memory. */
+function describeResult(r: ExamResult): string {
+  const m = r.metrics;
+  return `${EXAM_MODE_LABEL[r.mode]}: ${pct(m.accuracy)} credit (${m.correct} of ${m.total} fully right${m.mostlyRight ? `, ${m.mostlyRight} mostly right` : ''}), ${m.outdatedAnswers} out of date, ${m.unsupportedCitations} unsupported citations, ${m.averageSeconds.toFixed(1)}s each${m.memoryMB ? `, ${Math.round(m.memoryMB)} MB` : ''}${sampleNote(m.total) ? `. ${sampleNote(m.total)}` : ''}${m.ungraded ? `. ${m.ungraded} not graded` : ''}`;
+}
+
+/** Why questions did not pass in one run, in plain words ("2 × The model failed to answer..."). Empty when everything passed or the run predates reasons. */
+function describeReasons(r: ExamResult): string[] {
+  return reasonCounts(r.metrics).map(({ reason, count }) => `${count} × ${REASON_LABEL[reason]}`);
+}
+
+const History: React.FC<{ history: ExamResult[] }> = ({ history }) => {
+  const { colors } = useTheme();
+  if (!history.length) return null;
+  return (
+    <View testID="exam-history">
+      <Text style={[s.title, { color: colors.text }]}>Results so far</Text>
+      {history.map((r) => (
+        <View key={r.id}>
+          <Text style={[s.small, { color: colors.textSecondary }]}>{new Date(r.at).toLocaleDateString()} · {describeResult(r)}</Text>
+          {describeReasons(r).map((line) => <Text key={line} style={[s.small, { color: colors.textMuted }]}>   {line}</Text>)}
+        </View>
+      ))}
+      <Text style={[s.small, { color: colors.textMuted }]}>Answers are checked against the facts you wrote, not by the model. Memory use is read from the phone; processor use is not measured.</Text>
+    </View>
+  );
+};
+
+/** The exam: questions with the facts a right answer must contain, run in three ways so retrieval and memory can be measured. */
+export const ExamSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
+  const { colors } = useTheme();
+  const experts = useLearningStore((st) => st.experts);
+  const [subject, setSubject] = useState(NO_AGENT);
+  const [question, setQuestion] = useState('');
+  const [facts, setFacts] = useState('');
+  const [forbid, setForbid] = useState('');
+  const [version, setVersion] = useState(0);
+  const [status, setStatus] = useState('');
+  const [running, setRunning] = useState(false);
+  const subjects = [{ id: NO_AGENT, name: GENERAL_NAME }, ...experts];
+  const { items, history } = useMemo(() => ({ items: exams.items(subject), history: exams.history(9) }), [subject, version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const add = () => {
+    const expected = parseExpected(facts, forbid);
+    if (!question.trim() || !expected.facts.length) { Alert.alert('Needs a question and an answer', 'Write the question and at least one fact a right answer must contain.'); return; }
+    exams.addItem({ subjectId: subject, topic: useLearningStore.getState().getConfig(subject).topic, question, expected });
+    setQuestion(''); setFacts(''); setForbid(''); setVersion((v) => v + 1);
+  };
+  const due = useMemo(() => dueRetests(items, exams.history(60)), [items, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (only?: string[]) => {
+    setRunning(true);
+    try {
+      const ran = await runExamNow(subject, setStatus, only);
+      if (ran.some((m) => m.items.some((i) => i.reason === 'stopped'))) Alert.alert('The exam stopped early', 'Five answers in a row earned nothing, so the rest were not asked: asking more only repeats the failure. Try a larger model for the learner, let it study the subject again (it re-studies questions it keeps missing), or check that the answer keys use wordings the model would use.');
+    } catch (e: any) { Alert.alert('Exam', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
+  };
+  const judgeQuestions = async () => {
+    setRunning(true);
+    try {
+      const r = await judgeWritesQuestions(subject, setStatus);
+      Alert.alert('Application questions', r.added ? `${r.added} new question${r.added === 1 ? '' : 's'} added with hidden answer keys.${r.familiar ? ` ${r.familiar} dropped for only restating what was learned.` : ''}` : 'No new question came back that was not just a repeat. Try again after more is learned.');
+    } catch (e: any) { Alert.alert('Application questions', String(e?.message || e)); } finally { setRunning(false); setStatus(''); setVersion((v) => v + 1); onChanged(); }
+  };
+  const field = [s.input, { color: colors.text, borderColor: colors.border }];
+  return (
+    <View style={[s.card, { borderColor: colors.border }]} testID="exam-section">
+      <Text style={[s.title, { color: colors.text }]}>Exam</Text>
+      <Text style={[s.note, { color: colors.textSecondary }]}>
+        Questions here are never studied by the learner. The same questions are answered by the model alone, with sources, and with sources and stored memory, then compared.
+      </Text>
+      <View style={s.row}>
+        {subjects.map((x) => (
+          <TouchableOpacity key={x.id} onPress={() => setSubject(x.id)} accessibilityRole="radio" accessibilityState={{ selected: subject === x.id }}
+            style={[s.chip, { borderColor: subject === x.id ? colors.primary : colors.border, backgroundColor: subject === x.id ? colors.primary : colors.surface }]}>
+            <Text style={{ color: subject === x.id ? colors.background : colors.text }}>{x.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {items.map((i) => (
+        <View key={i.id} style={s.row}>
+          <View style={s.grow}>
+            <Text style={[s.note, { color: colors.text }]}>{i.question}</Text>
+            {attemptsFor(exams.history(60), i.id).slice(0, 3).map((a, k) => (
+              <View key={`${a.at}:${a.mode}`}>
+                <Text style={[s.small, { color: colors.textMuted }]}>
+                  {new Date(a.at).toLocaleDateString()} · {EXAM_MODE_LABEL[a.mode]} · {a.correct ? 'right' : a.accepted ? 'mostly right' : a.reason ? REASON_LABEL[a.reason] : 'wrong'}{a.judged ? ' (the Judge read it)' : ''}{a.version === BENCHMARK_VERSION ? '' : ' (older scoring)'}
+                </Text>
+                {k === 0 && !a.correct && !!a.answer && <Text style={[s.small, { color: colors.textMuted }]} testID={`exam-said-${i.id}`}>It said: "{a.answer.slice(0, 160)}"{a.missing?.length ? ` · missing: ${a.missing.join(', ').slice(0, 120)}` : ''}</Text>}
+              </View>
+            ))}
+            {due.includes(i.id) && <Text style={[s.small, { color: colors.primary }]}>Due for a retest</Text>}
+          </View>
+          <TouchableOpacity onPress={() => { exams.removeItem(i.id); setVersion((v) => v + 1); }} accessibilityLabel={`Remove ${i.question}`}><Text style={{ color: colors.error }}>Remove</Text></TouchableOpacity>
+        </View>
+      ))}
+      <TextInput testID="exam-question" value={question} onChangeText={setQuestion} placeholder="Exam question" placeholderTextColor={colors.textMuted} style={field} />
+      <TextInput testID="exam-facts" value={facts} onChangeText={setFacts} multiline placeholder={'Facts a right answer must contain, one per line.\nSeparate other wordings with |  (one minute | 1 minute)'} placeholderTextColor={colors.textMuted} style={[...field, s.multiline]} />
+      <TextInput testID="exam-forbid" value={forbid} onChangeText={setForbid} placeholder="Must not say (optional, separate with commas)" placeholderTextColor={colors.textMuted} style={field} />
+      <View style={s.row}>
+        <TouchableOpacity onPress={add} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="exam-add"><Text style={{ color: colors.primary }}>Add question</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => void judgeQuestions()} disabled={running} style={[s.button, { borderColor: running ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-judge-write"><Text style={{ color: running ? colors.textMuted : colors.primary }}>Judge writes application questions</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => run()} disabled={running || !items.length} style={[s.button, { borderColor: running || !items.length ? colors.border : colors.primary }]} accessibilityRole="button" testID="exam-run">
+          {running ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: items.length ? colors.primary : colors.textMuted }}>Run the exam</Text>}
+        </TouchableOpacity>
+      </View>
+      {!!due.length && !running && (
+        <TouchableOpacity onPress={() => run(due)} style={[s.button, { borderColor: colors.primary }]} accessibilityRole="button" testID="exam-retest"><Text style={{ color: colors.primary }}>Retest {due.length} missed question{due.length === 1 ? '' : 's'}</Text></TouchableOpacity>
+      )}
+      {!!status && <Text style={[s.small, { color: colors.textSecondary }]}>{status}</Text>}
+      <QuestionImport subjectId={subject} onAdded={() => { setVersion((v) => v + 1); onChanged(); }} />
+      <History history={history} />
+    </View>
+  );
+};

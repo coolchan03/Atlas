@@ -18,7 +18,6 @@
  * unbounded. Logging must NEVER throw, so every FS call is best-effort.
  */
 import RNFS from 'react-native-fs';
-import { statFile } from './fileStat';
 
 const LOG_PATH = `${RNFS.DocumentDirectoryPath}/offgrid-debug.log`;
 /** Rotate (keep the tail) once the file exceeds this, so it can't grow forever. */
@@ -44,14 +43,10 @@ let enabled = false;
  * The on-device path of the log file (also the `Documents/…` relative for pulls).
  * @public — intentional diagnostic accessor, exercised by the hardening tests.
  */
-export function getDebugLogPath(): string {
-  return LOG_PATH;
-}
+export function getDebugLogPath(): string { return LOG_PATH; }
 
 /** The on-device path of the never-rotated wire-capture file (for pulls). @public */
-export function getWireLogPath(): string {
-  return WIRE_LOG_PATH;
-}
+export function getWireLogPath(): string { return WIRE_LOG_PATH; }
 
 async function flushWire(): Promise<void> {
   wireTimer = null;
@@ -69,15 +64,11 @@ async function flush(): Promise<void> {
   buffer = [];
   try {
     await RNFS.appendFile(LOG_PATH, chunk, 'utf8');
-    const stat = await statFile(LOG_PATH);
-    if (stat && stat.size > MAX_BYTES) {
+    const stat = await RNFS.stat(LOG_PATH).catch(() => null);
+    if (stat && Number(stat.size) > MAX_BYTES) {
       // Keep only the most recent half so the file stays bounded but useful.
       const content = await RNFS.readFile(LOG_PATH, 'utf8').catch(() => '');
-      await RNFS.writeFile(
-        LOG_PATH,
-        content.slice(-Math.floor(MAX_BYTES / 2)),
-        'utf8',
-      ).catch(() => {});
+      await RNFS.writeFile(LOG_PATH, content.slice(-Math.floor(MAX_BYTES / 2)), 'utf8').catch(() => {});
     }
   } catch {
     /* never throw from logging */
@@ -86,21 +77,7 @@ async function flush(): Promise<void> {
 
 function scheduleFlush(): void {
   if (timer) return;
-  timer = setTimeout(() => {
-    flush().catch(() => {});
-  }, FLUSH_MS);
-}
-
-/**
- * Write everything buffered RIGHT NOW, without waiting for the flush timer.
- *
- * For a line you must not lose. The timer-based flush is scheduled work, so a step that blocks the
- * JS thread - or a process the OS is about to kill - never reaches it, and the log stops exactly
- * where the interesting part begins. That is how an 11-second main-thread block left no trace.
- */
-export function flushDebugLogNow(): void {
-  if (!enabled) return;
-  flush().catch(() => {});
+  timer = setTimeout(() => { flush().catch(() => {}); }, FLUSH_MS);
 }
 
 /** Begin capturing to the file. Idempotent; no-op outside __DEV__. */
@@ -109,21 +86,8 @@ export function initDebugLogFile(): void {
   enabled = true;
   // Append (don't wipe) a session marker so a prior session's tail survives a
   // reload/crash for post-mortem, while the size cap keeps it bounded.
-  buffer.push(
-    `\n===== session start ${new Date().toISOString()} (${LOG_PATH}) =====\n`,
-  );
+  buffer.push(`\n===== session start ${new Date().toISOString()} (${LOG_PATH}) =====\n`);
   scheduleFlush();
-}
-
-/** Stop the dev sink and release every scheduled flush. Used by app teardown and fast refresh. */
-export function stopDebugLogFile(): void {
-  enabled = false;
-  if (timer !== null) clearTimeout(timer);
-  if (wireTimer !== null) clearTimeout(wireTimer);
-  timer = null;
-  wireTimer = null;
-  buffer = [];
-  wireBuffer = [];
 }
 
 /** Append one captured log line. Called from the App.tsx logger tap. */
@@ -131,21 +95,13 @@ export function appendDebugLine(level: string, message: string): void {
   if (!enabled) return;
   const line = `${new Date().toISOString()} [${level}] ${message}\n`;
   buffer.push(line);
-  if (buffer.length >= FLUSH_AT_LINES) {
-    flush().catch(() => {});
-  } else {
-    scheduleFlush();
-  }
+  if (buffer.length >= FLUSH_AT_LINES) { flush().catch(() => {}); }
+  else { scheduleFlush(); }
   // Tee model-wire captures into the lossless, never-rotated file so a long capture
   // run can't drop the earliest lines.
   if (WIRE_CAPTURE.test(message)) {
     wireBuffer.push(line);
-    if (wireBuffer.length >= 20) {
-      flushWire().catch(() => {});
-    } else if (!wireTimer) {
-      wireTimer = setTimeout(() => {
-        flushWire().catch(() => {});
-      }, FLUSH_MS);
-    }
+    if (wireBuffer.length >= 20) { flushWire().catch(() => {}); }
+    else if (!wireTimer) { wireTimer = setTimeout(() => { flushWire().catch(() => {}); }, FLUSH_MS); }
   }
 }

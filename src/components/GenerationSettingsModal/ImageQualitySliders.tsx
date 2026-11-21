@@ -1,16 +1,12 @@
 import React from 'react';
-import { View, Text, Switch, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity, StyleSheet } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { DEFAULT_SETTINGS } from '../../stores/appStore';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import {
-  defaultImageSteps,
-  MAX_IMAGE_STEPS,
-  SWEET_SPOT_SIZE,
-} from '../../utils/imageGenAdvice';
+import { getImageTuning, getImageSizeSlider, isDirectSDXL, getImageGuidance } from '../../utils/nativeImageTuning';
 import { createStyles } from './styles';
+import { ImageBackendModePicker } from '../ImageBackendModePicker';
 
 const ClearGPUCacheButton: React.FC = () => {
   const { colors } = useTheme();
@@ -32,83 +28,102 @@ const ClearGPUCacheButton: React.FC = () => {
 
 /** Basic controls: Image Steps + Image Size */
 export const ImageQualityBasicSliders: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const { colors } = useTheme();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const model = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const preset = getImageTuning(model, settings);
+  const sizeOptions = getImageSizeSlider(model);
+  const isXL = isDirectSDXL(model);
+  const square = Math.max(sizeOptions.min, Math.min(sizeOptions.max, isXL ? 768 : 512));
+  const large = Math.max(square, Math.min(sizeOptions.max, Math.round(square * 1.5 / 64) * 64));
+  // Shapes only where they differ and the runtime can render them (imported sd.cpp checkpoints).
+  const showAspect = model?.backend === 'sdcpp' && large > square;
+  // The size slider keeps the chosen shape: it sets the width and scales the height with it.
+  const ratio = preset.width > 0 ? preset.height / preset.width : 1;
+  const heightFor = (w: number) => Math.max(sizeOptions.min, Math.round((w * ratio) / 64) * 64);
+  const aspectPresets = [
+    { label: 'Square', width: square, height: square },
+    { label: 'Portrait', width: square, height: large },
+    { label: 'Landscape', width: large, height: square },
+  ];
 
   return (
     <>
       <SliderSetting
         testID="image-steps"
-        compact
         label="Image Steps"
-        description="4-8 steps for speed, 20-50 for quality"
-        value={settings.imageSteps || defaultImageSteps(Platform.OS)}
-        min={4} max={MAX_IMAGE_STEPS} step={1}
+        description={isXL ? "28 steps recommended for SDXL" : "4-8 steps for speed, 20-50 for quality"}
+        value={preset.steps}
+        min={isXL ? 20 : 4} max={50} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 
       <SliderSetting
         testID="image-size"
-        compact
         label="Image Size"
-        description="Output resolution. Default: 512x512."
-        value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
-        min={SWEET_SPOT_SIZE} max={512} step={64}
-        formatValue={(v) => `${v}x${v}`}
-        onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
+        description={sizeOptions.description}
+        value={preset.width}
+        min={sizeOptions.min} max={sizeOptions.max} step={sizeOptions.step}
+        formatValue={(v) => `${v}x${heightFor(v)}`}
+        onChange={(value) => updateSettings({ imageWidth: value, imageHeight: heightFor(value) })}
       />
+      {showAspect && <View style={staticStyles.h1}>
+        {aspectPresets.map(option => {
+          const selected = settings.imageWidth === option.width && settings.imageHeight === option.height;
+          return (
+            <TouchableOpacity key={option.label} testID={`image-aspect-${  option.label.toLowerCase()}`}
+              accessibilityRole="button" accessibilityState={{ selected }}
+              onPress={() => updateSettings({ imageWidth: option.width, imageHeight: option.height })}
+              style={[staticStyles.h2, { backgroundColor: selected ? colors.surfaceLight : colors.background, borderColor: selected ? colors.primary : colors.border }]}>
+              <Text style={{ color: selected ? colors.primary : colors.textSecondary }}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>}
     </>
   );
 };
 
 /** Advanced controls: Guidance Scale, Image Threads, GPU Acceleration */
 export const ImageQualityAdvancedSliders: React.FC = () => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, activeImageModelId, downloadedImageModels } = useAppStore();
+  const imageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
 
   return (
     <>
       <SliderSetting
         testID="guidance-scale"
-        compact
         label="Guidance Scale"
         description="Higher = follows prompt more strictly (5-15 range)"
-        value={settings.imageGuidanceScale || 7.5}
+        value={getImageGuidance(imageModel, settings.imageGuidanceScale)}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
 
-      <SliderSetting
-        testID="image-threads"
-        compact
-        label="Image Threads"
-        description="CPU threads used for image generation. Takes effect next time the image model loads."
-        value={settings.imageThreads ?? 4}
-        min={1} max={8} step={1}
-        onChange={(value) => updateSettings({ imageThreads: value })}
-      />
+      {(Platform.OS !== 'android' || imageModel?.backend === 'sdcpp') && (
+        <SliderSetting
+          testID="image-threads"
+          label="Image Threads"
+          description="CPU threads used for image generation. Takes effect next time the image model loads."
+          value={settings.imageThreads ?? 4}
+          min={1} max={8} step={1}
+          onChange={(value) => updateSettings({ imageThreads: value })}
+        />
+      )}
 
       {Platform.OS === 'android' && (
         <View style={styles.settingGroup}>
-          <View style={styles.settingHeader}>
-            <Text style={styles.settingLabel}>GPU Acceleration</Text>
-            <Switch
-              testID="image-gpu-acceleration"
-              accessibilityLabel={`GPU Acceleration, ${
-                (settings.imageUseOpenCL ?? true) ? 'ON' : 'OFF'
-              }`}
-              value={settings.imageUseOpenCL ?? true}
-              onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
-              trackColor={{ false: colors.surfaceLight, true: colors.primary }}
-              thumbColor={colors.surface}
-            />
-          </View>
-          <Text style={styles.settingDescription}>
-            Use GPU for faster image generation. First run may be slower while optimizing for your device.
-          </Text>
-          {(settings.imageUseOpenCL ?? true) && <ClearGPUCacheButton />}
+          <ImageBackendModePicker backend={imageModel?.backend} />
+          {settings.imageBackendMode !== 'cpu' && imageModel?.backend === 'mnn' &&
+            <ClearGPUCacheButton />}
         </View>
       )}
     </>
   );
 };
+
+const staticStyles = StyleSheet.create({
+  h1: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 7 },
+  h2: { borderRadius: 9, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
+});

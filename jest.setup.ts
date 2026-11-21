@@ -25,20 +25,10 @@ try {
   // RNTL not present in a given suite's module graph — nothing to configure.
 }
 
-const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
+// The app wires its cross-layer hooks (load a model, tell the chat a message was cut) at start-up; tests need the same wiring.
+require('./src/bootstrap/atlasHooks').registerAtlasHooks();
 
-// Rendered screens can start provider refreshes during teardown. Keep Jest from
-// opening real network sockets when a test has not installed its own boundary fake.
-// Tests that exercise a remote service replace fetch at this same external boundary.
-globalThis.fetch = (async (input: RequestInfo | URL) => {
-  const url =
-    typeof input === 'string'
-      ? input
-      : input instanceof URL
-      ? input.href
-      : input.url;
-  throw new TypeError(`Network access is disabled in Jest: ${url}`);
-}) as typeof globalThis.fetch;
+const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
 
 // react-native-keyboard-controller ships a jest mock; without it, any test that
 // renders App or ChatScreen pulls in its native module and crashes.
@@ -52,18 +42,6 @@ jest.mock('react-native-edge-to-edge', () => ({
   SystemBars: () => null,
   StatusBar: () => null,
   NavigationBar: () => null,
-}));
-
-// react-native-vision-camera is a native module (NitroModules); stub it so the
-// QR scanner (mesh Scan-to-pair) can render in jest without the native view.
-jest.mock('react-native-vision-camera', () => ({
-  Camera: () => null,
-  useCameraDevice: jest.fn(() => undefined),
-  useCameraPermission: jest.fn(() => ({
-    hasPermission: false,
-    requestPermission: jest.fn(),
-  })),
-  useCodeScanner: jest.fn((config: unknown) => config),
 }));
 
 // ============================================================================
@@ -144,6 +122,13 @@ jest.mock('@react-navigation/native', () => {
 
 // llama.rn mock - use virtual mock since native module may not resolve
 jest.mock('llama.rn', () => ({
+  // Native backend devices: an Adreno (qcom) test device exposes an OpenCL GPU and a Hexagon NPU,
+  // anything else only the CPU — mirrors the real llama.rn device query.
+  getBackendDevicesInfo: jest.fn(async () => {
+    let hw = '';
+    try { hw = String(await require('react-native-device-info').getHardware?.() ?? '').toLowerCase(); } catch { /* none */ }
+    return /qcom|adreno/.test(hw) ? [{ backend: 'OpenCL', type: 'gpu', name: 'Adreno (test)' }, { backend: 'HTP', type: 'gpu', deviceName: 'HTP0' }] : [{ backend: 'CPU', type: 'cpu', name: 'CPU' }];
+  }),
   initLlama: jest.fn(() => Promise.resolve({
     id: 'test-context-id',
     gpu: false,
@@ -167,9 +152,6 @@ jest.mock('llama.rn', () => ({
       embedding: new Array(384).fill(0).map((_, i) => Math.sin(i + text.length * 0.1)),
     })),
   })),
-  // GGUF header read (no model load). Per-test control: the MTP probe reads what a model declares
-  // about itself, so a test serves real metadata rather than a hand-authored guess.
-  loadLlamaModelInfo: jest.fn(() => Promise.resolve({})),
   releaseContext: jest.fn(() => Promise.resolve()),
   completion: jest.fn(() => Promise.resolve({
     text: 'Test completion response',
@@ -230,12 +212,6 @@ jest.mock('react-native/jest/mockNativeComponent', () => {
   };
 });
 
-// TouchableOpacity forwards refs to View. Give that public host boundary the same faithful
-// measurement callback as mockNativeComponent so shared anchored controls work in rendered tests.
-(require('react-native').View.prototype as {
-  measureInWindow?: (callback: (...values: number[]) => void) => void;
-}).measureInWindow = callback => callback(0, 0, 100, 40);
-
 // react-native-audio-api mock
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
@@ -280,174 +256,30 @@ jest.mock('@react-native-community/slider', () => {
   return { __esModule: true, default: View };
 });
 
-// react-native-executorch mock
-// A voice carries its own assets (embedding + tagger + lexicon) in addition to
-// the two shared core .pte models — mirror that so completeness checks
-// (_activeVoiceSources) have a realistic full asset set to validate against.
-const mockKokoroConfig = (voice: string, language: string) => ({
-  model: {
-    durationPredictorSource: `https://example.test/kokoro/${language}/duration_predictor.pte`,
-    synthesizerSource: `https://example.test/kokoro/${language}/synthesizer.pte`,
-  },
-  voiceSource: `https://example.test/kokoro/voices/${voice}.bin`,
-  phonemizerConfig: {
-    lang: language,
-    taggerSource: `https://example.test/kokoro/${language}/tagger.pt`,
-    lexiconSource: `https://example.test/kokoro/${language}/lexicon.json`,
-    neuralModelSource: `https://example.test/kokoro/${language}/phonemizer.pte`,
-  },
-});
-jest.mock('react-native-executorch', () => ({
-  // Faithful init leaf for the executorch native runtime (a genuine external native boundary):
-  // initExecutorch registers the resource fetcher so the runtime is ready to load models through
-  // it. With models faked at the fetcher + useTextToSpeech boundary there is nothing further to
-  // emulate in-process, so it is a ready-signal (EngineBridge calls it at module import — without
-  // this the pro TTS bootstrap throws "initExecutorch is not a function").
-  initExecutorch: () => {},
-  // useTextToSpeech is the executorch boundary the TTS bridge drives. The streaming/playback is
-  // exercised end-to-end by the KokoroTTSBridge suite, which feeds chunks + drives onEnded through
-  // the AudioContext itself; here stream() just resolves (the bridge owns the audio pump).
-  useTextToSpeech: jest.fn(() => ({
-    isReady: true,
-    downloadProgress: 1,
-    error: null,
-    stream: jest.fn(() => Promise.resolve()),
-    streamStop: jest.fn(),
-  })),
-  models: {
-    text_to_speech: {
-      kokoro: {
-        en_us: {
-          heart: () => mockKokoroConfig('af_heart', 'en-us'),
-          river: () => mockKokoroConfig('af_river', 'en-us'),
-          sarah: () => mockKokoroConfig('af_sarah', 'en-us'),
-          adam: () => mockKokoroConfig('am_adam', 'en-us'),
-          michael: () => mockKokoroConfig('am_michael', 'en-us'),
-          santa: () => mockKokoroConfig('am_santa', 'en-us'),
-        },
-        en_gb: {
-          emma: () => mockKokoroConfig('bf_emma', 'en-gb'),
-          daniel: () => mockKokoroConfig('bm_daniel', 'en-gb'),
-        },
-        fr: { siwis: () => mockKokoroConfig('ff_siwis', 'fr') },
-        es: {
-          dora: () => mockKokoroConfig('ef_dora', 'es'),
-          alex: () => mockKokoroConfig('em_alex', 'es'),
-        },
-        it: {
-          sara: () => mockKokoroConfig('if_sara', 'it'),
-          nicola: () => mockKokoroConfig('im_nicola', 'it'),
-        },
-        pt: {
-          dora: () => mockKokoroConfig('pf_dora', 'pt'),
-          santa: () => mockKokoroConfig('pm_santa', 'pt'),
-        },
-        hi: {
-          alpha: () => mockKokoroConfig('hf_alpha', 'hi'),
-          omega: () => mockKokoroConfig('hm_omega', 'hi'),
-          psi: () => mockKokoroConfig('hm_psi', 'hi'),
-        },
-        pl: { mateusz: () => mockKokoroConfig('pm_mateusz', 'pl') },
-        de: { anna: () => mockKokoroConfig('df_anna', 'de') },
-      },
-    },
-  },
-  KOKORO_AMERICAN_ENGLISH_FEMALE_HEART: mockKokoroConfig('af_heart', 'en-us'),
-  KOKORO_AMERICAN_ENGLISH_FEMALE_RIVER: mockKokoroConfig('af_river', 'en-us'),
-  KOKORO_AMERICAN_ENGLISH_FEMALE_SARAH: mockKokoroConfig('af_sarah', 'en-us'),
-  KOKORO_AMERICAN_ENGLISH_MALE_ADAM: mockKokoroConfig('am_adam', 'en-us'),
-  KOKORO_AMERICAN_ENGLISH_MALE_MICHAEL: mockKokoroConfig('am_michael', 'en-us'),
-  KOKORO_AMERICAN_ENGLISH_MALE_SANTA: mockKokoroConfig('am_santa', 'en-us'),
-  KOKORO_BRITISH_ENGLISH_FEMALE_EMMA: mockKokoroConfig('bf_emma', 'en-gb'),
-  KOKORO_BRITISH_ENGLISH_MALE_DANIEL: mockKokoroConfig('bm_daniel', 'en-gb'),
-  KOKORO_FRENCH_FEMALE_SIWIS: mockKokoroConfig('ff_siwis', 'fr'),
-  KOKORO_SPANISH_FEMALE_DORA: mockKokoroConfig('ef_dora', 'es'),
-  KOKORO_SPANISH_MALE_ALEX: mockKokoroConfig('em_alex', 'es'),
-  KOKORO_ITALIAN_FEMALE_SARA: mockKokoroConfig('if_sara', 'it'),
-  KOKORO_ITALIAN_MALE_NICOLA: mockKokoroConfig('im_nicola', 'it'),
-  KOKORO_PORTUGUESE_FEMALE_DORA: mockKokoroConfig('pf_dora', 'pt'),
-  KOKORO_PORTUGUESE_MALE_SANTA: mockKokoroConfig('pm_santa', 'pt'),
-  KOKORO_HINDI_FEMALE_ALPHA: mockKokoroConfig('hf_alpha', 'hi'),
-  KOKORO_HINDI_MALE_OMEGA: mockKokoroConfig('hm_omega', 'hi'),
-  KOKORO_HINDI_MALE_PSI: mockKokoroConfig('hm_psi', 'hi'),
-  KOKORO_POLISH_MALE_MATEUSZ: mockKokoroConfig('pm_mateusz', 'pl'),
-  KOKORO_GERMAN_FEMALE_ANNA: mockKokoroConfig('df_anna', 'de'),
-}));
-
-// react-native-executorch-bare-resource-fetcher mock.
-// Default: nothing on disk. Tests override listDownloadedModels per case.
-jest.mock(
-  'react-native-executorch-bare-resource-fetcher',
-  () => ({
-    BareResourceFetcher: {
-      listDownloadedModels: jest.fn(async () => [] as string[]),
-      listDownloadedFiles: jest.fn(async () => [] as string[]),
-      deleteResources: jest.fn(async () => {}),
-      fetch: jest.fn(async () => {}),
-    },
-  }),
-  { virtual: true },
-);
-
 // react-native-fs mock
-jest.mock('react-native-fs', () => {
-  const exists = jest.fn((_path: string) => Promise.resolve(false));
-  const stat = jest.fn((_path: string) =>
-    Promise.resolve({ size: 1000000, isFile: () => true }),
-  );
-  const readDir = jest.fn(async (parent: string) => {
-    // Production now asks the parent directory for safe file metadata because RNFS.stat can abort
-    // iOS on stale paths. Keep old native-boundary fixtures valid: their latest exists(path) and
-    // stat(path) answers describe the directory entry without a second exists call.
-    const lastExistsCall = exists.mock.calls.at(-1);
-    const requestedPath = lastExistsCall?.[0];
-    if (typeof requestedPath !== 'string') return [];
-    const fullPath = requestedPath.startsWith('file://')
-      ? decodeURIComponent(requestedPath.slice(7))
-      : requestedPath;
-    const cut = fullPath.lastIndexOf('/');
-    const actualParent = cut === 0 ? '/' : fullPath.slice(0, cut);
-    if (cut < 0 || actualParent !== parent) return [];
-    const existsResult = exists.mock.results.at(-1)?.value;
-    if (!(await existsResult)) return [];
-    const facts = await stat(requestedPath);
-    return [
-      {
-        name: fullPath.slice(cut + 1),
-        path: fullPath,
-        size: facts.size,
-        mtime: (facts as { mtime?: Date }).mtime,
-        isFile: facts.isFile ?? (() => true),
-        isDirectory:
-          (facts as { isDirectory?: () => boolean }).isDirectory ??
-          (() => false),
-      },
-    ];
-  });
-  return {
-    DocumentDirectoryPath: '/mock/documents',
-    CachesDirectoryPath: '/mock/caches',
-    ExternalDirectoryPath: '/mock/external',
-    MainBundlePath: '/mock/bundle',
-    downloadFile: jest.fn(() => ({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
-    })),
-    stopDownload: jest.fn(),
-    exists,
-    mkdir: jest.fn(() => Promise.resolve()),
-    unlink: jest.fn(() => Promise.resolve()),
-    readDir,
-    readFile: jest.fn(() => Promise.resolve('')),
-    writeFile: jest.fn(() => Promise.resolve()),
-    stat,
-    read: jest.fn(() => Promise.resolve('GGUF')),
-    copyFile: jest.fn(() => Promise.resolve()),
-    copyFileAssets: jest.fn(() => Promise.resolve()),
-    moveFile: jest.fn(() => Promise.resolve()),
-    hash: jest.fn(() => Promise.resolve('mockhash')),
-  };
-});
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/mock/documents',
+  CachesDirectoryPath: '/mock/caches',
+  ExternalDirectoryPath: '/mock/external',
+  MainBundlePath: '/mock/bundle',
+  downloadFile: jest.fn(() => ({
+    jobId: 1,
+    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
+  })),
+  stopDownload: jest.fn(),
+  exists: jest.fn(() => Promise.resolve(false)),
+  mkdir: jest.fn(() => Promise.resolve()),
+  unlink: jest.fn(() => Promise.resolve()),
+  readDir: jest.fn(() => Promise.resolve([])),
+  readFile: jest.fn(() => Promise.resolve('')),
+  writeFile: jest.fn(() => Promise.resolve()),
+  stat: jest.fn(() => Promise.resolve({ size: 1000000, isFile: () => true })),
+  read: jest.fn(() => Promise.resolve('GGUF')),
+  copyFile: jest.fn(() => Promise.resolve()),
+  copyFileAssets: jest.fn(() => Promise.resolve()),
+  moveFile: jest.fn(() => Promise.resolve()),
+  hash: jest.fn(() => Promise.resolve('mockhash')),
+}));
 
 // react-native-device-info mock
 jest.mock('react-native-device-info', () => ({
@@ -457,14 +289,9 @@ jest.mock('react-native-device-info', () => ({
   getModel: jest.fn(() => 'Test Device'),
   getSystemName: jest.fn(() => 'Android'),
   getSystemVersion: jest.fn(() => '13'),
-  // The build's own identity, which is what the UI and a feedback report read (src/utils/appVersion).
-  // Synchronous in the real package too - these are native build constants, not a lookup.
-  getVersion: jest.fn(() => '0.0.103'),
-  getBuildNumber: jest.fn(() => '1784144537'),
   isEmulator: jest.fn(() => Promise.resolve(false)),
   getDeviceId: jest.fn(() => 'test-device-id'),
   getHardware: jest.fn(() => Promise.resolve('unknown')),
-  getIpAddress: jest.fn(() => Promise.resolve('192.168.1.20')),
 }));
 
 // react-native-image-picker mock
@@ -494,7 +321,6 @@ jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn(() => Promise.resolve(true)),
   getGenericPassword: jest.fn(() => Promise.resolve(false)),
   resetGenericPassword: jest.fn(() => Promise.resolve(true)),
-  ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
 }));
 
 
@@ -524,6 +350,10 @@ jest.mock('@react-native-documents/picker', () => ({
     csv: 'text/csv',
     pdf: 'application/pdf',
   },
+  // Android hands back a content:// uri; the device copies it into app storage. The fake "copy" is the same readable path.
+  // The "save to" dialog: the person picks a place; the fake accepts and reports the file name.
+  saveDocuments: jest.fn(async ({ fileName }: { fileName: string }) => [{ name: fileName }]),
+  keepLocalCopy: jest.fn(async ({ files }: { files: Array<{ uri: string }> }) => files.map((f) => ({ status: 'success', sourceUri: f.uri, localUri: f.uri }))),
   isErrorWithCode: jest.fn(() => false),
   errorCodes: {
     OPERATION_CANCELED: 'OPERATION_CANCELED',
@@ -608,10 +438,6 @@ jest.mock('react-native-reanimated', () => {
     useDerivedValue: jest.fn((fn: any) => ({ value: fn() })),
     useAnimatedProps: jest.fn((fn: any) => fn()),
     useReducedMotion: jest.fn(() => false),
-    css: {
-      keyframes: (frames: unknown) => frames,
-      create: (styles: unknown) => styles,
-    },
     withSpring: jest.fn((val: any) => val),
     withTiming: jest.fn((val: any) => val),
     withDelay: jest.fn((_: any, val: any) => val),
@@ -630,7 +456,6 @@ jest.mock('react-native-reanimated', () => {
     FadeOut: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
     SlideInDown: { duration: jest.fn().mockReturnThis() },
     SlideOutDown: { duration: jest.fn().mockReturnThis() },
-    LinearTransition: { duration: jest.fn().mockReturnThis() },
     Layout: { duration: jest.fn().mockReturnThis() },
     createAnimatedComponent: (component: any) => component || View,
   };
@@ -668,6 +493,23 @@ jest.mock('react-native-zip-archive', () => ({
 
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
+
+// react-native-spotlight-tour mock
+jest.mock('react-native-spotlight-tour', () => ({
+  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
+  AttachStep: ({ children }: { children: React.ReactNode }) => children,
+  useSpotlightTour: () => ({
+    start: jest.fn(),
+    stop: jest.fn(),
+    next: jest.fn(),
+    previous: jest.fn(),
+    goTo: jest.fn(),
+    current: 0,
+    status: 'idle',
+    pause: jest.fn(),
+    resume: jest.fn(),
+  }),
+}));
 
 // react-native-screens mock — the native Screen/ScreenStack components are undefined in jest, which
 // crashes @react-navigation/native-stack ($$typeof undefined). Map them to plain Views so a REAL
@@ -759,21 +601,11 @@ beforeEach(() => {
 // flakiness, far worse in-band). This afterEach requires RTL AFTER the test's resetModules, so it resolves
 // the SAME post-reset instance the test rendered on, and unmounts its tree. It also drops the global
 // `window` shim the harness installs for React 19's error reporter, so no true-global leaks across files.
-afterEach(async () => {
+afterEach(() => {
   // Only unmount when a test actually rendered via requireRTL (which stashed its own cleanup here). Do NOT
   // require RTL fresh — after a test's resetModules that pulls a new module graph and breaks the next test.
-  const g = globalThis as unknown as {
-    __RTL_CLEANUP__?: () => void;
-    __GEN_CLEANUP__?: () => Promise<void>;
-  };
+  const g = globalThis as unknown as { __RTL_CLEANUP__?: () => void };
   if (g.__RTL_CLEANUP__) { try { g.__RTL_CLEANUP__(); } catch { /* already torn down */ } g.__RTL_CLEANUP__ = undefined; }
-  // A generation left IN FLIGHT outlives its test. generationServiceHelpers schedules a 50ms token-buffer
-  // flush; when a suite ends mid-reply that timer fires during the NEXT suite, which has since called
-  // jest.resetModules(), so the chatStore the callback closed over is gone and it throws
-  // "Cannot read properties of undefined (reading 'getState')" — failing whichever suite happened to be
-  // running. That is why exactly one rendered suite failed per run, with a different name each time, and why
-  // it always passed in isolation. Whoever started a generation registers the stop here.
-  if (g.__GEN_CLEANUP__) { try { await g.__GEN_CLEANUP__(); } catch { /* already torn down */ } g.__GEN_CLEANUP__ = undefined; }
 });
 
 // Global timeout for async operations

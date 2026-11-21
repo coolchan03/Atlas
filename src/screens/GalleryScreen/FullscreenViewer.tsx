@@ -10,7 +10,6 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { GeneratedImage } from '../../types';
-import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 import { createStyles } from './styles';
 import { formatDate } from './useGalleryActions';
 
@@ -33,9 +32,6 @@ export const FullscreenViewer: React.FC<FullscreenViewerProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const imageUri = image
-    ? `file://${resolveDocumentPath(image.imagePath)}`
-    : '';
 
   return (
     <Modal
@@ -54,7 +50,7 @@ export const FullscreenViewer: React.FC<FullscreenViewerProps> = ({
           <View style={styles.viewerContent}>
             {!showDetails && (
               <Image
-                source={{ uri: imageUri }}
+                source={{ uri: `file://${image.imagePath}` }}
                 style={styles.fullscreenImage}
                 resizeMode="contain"
               />
@@ -68,7 +64,7 @@ export const FullscreenViewer: React.FC<FullscreenViewerProps> = ({
                   </TouchableOpacity>
                 </View>
                 <Image
-                  source={{ uri: imageUri }}
+                  source={{ uri: `file://${image.imagePath}` }}
                   style={styles.detailsPreview}
                   resizeMode="contain"
                 />

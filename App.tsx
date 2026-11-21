@@ -3,45 +3,74 @@
  * Private AI assistant that runs entirely on your device
  */
 
+import { useTasks } from './src/tasks/taskRegistry';
 import 'react-native-gesture-handler';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, LogBox } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { ActivityIndicator, AppState, Image, View, StyleSheet, LogBox } from 'react-native';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
-import {
-  appNavigationRef,
-  useProExpiryRedirect,
-} from './src/navigation/useProExpiryRedirect';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
+import { hardwareService, modelManager, authService, ragService, remoteServerManager, activeModelService } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
-import { initDebugLogFile, appendDebugLine, stopDebugLogFile } from './src/utils/debugLogFile';
-import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
-import { loadProFeatures } from './src/bootstrap/loadProFeatures';
+import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { flushAppLog, loadPreviousSession } from './src/utils/appLog';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { startLoadPolicySync } from './src/services/loadPolicySync';
-import { startNetworkReconnectWatcher, stopNetworkReconnectWatcher } from './src/services/networkReconnect';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { useSlot, SLOTS } from './src/bootstrap/slotRegistry';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { DebugLogsScreen } from './src/components/DebugLogsScreen';
-import { LoadingDots } from './src/components/LoadingDots';
+import { registerAtlasVoice } from './src/atlasVoice';
+import { startLowPowerMonitor, stopLowPowerMonitor } from './src/atlasTools/lowPower';
+import { startThermalMonitor, stopThermalMonitor } from './src/atlasTools/thermal';
+import { connectMusicControls } from './src/music/musicControls';
+import { autoPickAcceleration } from './src/atlasTools/accel';
+import { startCtxRecovery } from './src/atlasTools/ctxGuard';
+import { purgePrivateChatImages } from './src/services/privateImagePurge';
+import { startTextAppearance } from './src/theme/globalText';
+import { useNearbyPairingIntent } from './src/services/nearbySync/useNearbyPairingIntent';
+import { startShareIntake, flushShare } from './src/share/shareIntake';
+import { UndoBar } from './src/chats/UndoBar';
+import { startScheduler } from './src/schedule/runner';
+import { refreshLastFix, refreshNearbyPOI } from './src/atlasMaps/locationNote';
+import { navigationRef } from './src/utils/navigationRef';
+import { startAppLinks, flushAppLink } from './src/navigation/appLinks';
+import { registerAtlasHooks } from './src/bootstrap/atlasHooks';
+
+// Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
+registerAtlasVoice();
+registerAtlasHooks();
+connectMusicControls();
+autoPickAcceleration();
+startCtxRecovery();
+startTextAppearance(); // font and text size apply to every Text without a restart
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
-let stopStartupProbe: (() => void) | null = null;
+// The app-wide log (every build): the end of the last session is kept for a crash report, and an uncaught error is written to the log before the app handles it.
+void loadPreviousSession();
+try {
+  const errorUtils = (globalThis as { ErrorUtils?: { getGlobalHandler: () => (e: unknown, fatal?: boolean) => void; setGlobalHandler: (h: (e: unknown, fatal?: boolean) => void) => void } }).ErrorUtils;
+  const previous = errorUtils?.getGlobalHandler();
+  errorUtils?.setGlobalHandler((error, fatal) => {
+    logger.error(`[UNCAUGHT${fatal ? ' FATAL' : ''}]`, error instanceof Error ? `${error.name}: ${error.message}\n${String(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error));
+    void flushAppLog(); // written now: a fatal error ends the app before the usual few seconds are up
+    previous?.(error, fatal);
+  });
+  // A promise that fails and is never caught (most async failures: model calls, downloads) is logged too.
+  require('promise/setimmediate/rejection-tracking').enable({ allRejections: true, onUnhandled: (_id: number, error: unknown) => logger.warn('[UNHANDLED REJECTION]', error instanceof Error ? `${error.name}: ${error.message}` : String(error)) });
+} catch { /* the log is a convenience */ }
+
 // Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
 // is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).
 if (__DEV__) {
@@ -65,10 +94,6 @@ if (__DEV__) {
   logger.warn = tap('warn');
   logger.error = tap('error');
   initDebugLogFile();
-  // Immediately after the sink exists, so the first sample lands before anything heavy runs. The app
-  // was being killed by iOS at launch with the log going silent half a second in; this says where it
-  // stops and what memory was doing when it did.
-  stopStartupProbe = startStartupMemoryProbe();
 }
 
 const ensureRemoteServerStoreHydrated = async () => {
@@ -79,69 +104,37 @@ const ensureRemoteServerStoreHydrated = async () => {
   }
 };
 
-export function DevSyncStrip() {
-  const [showHistory, setShowHistory] = useState(false);
-  const [now, setNow] = useState(Date.now());
-  const latest = useDebugLogsStore(state => {
-    for (let i = state.logs.length - 1; i >= 0; i--) {
-      if (/\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(state.logs[i].message)) {
-        return state.logs[i];
-      }
-    }
-    return undefined;
-  });
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const active = latest && now - latest.timestamp < 30000;
-  const operation = active
-    ? latest.message.replace(/^.*?\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]\s*/i, '')
-    : 'Idle';
-
-  return (
-    <>
-      <Pressable
-        testID="dev-sync-strip"
-        accessibilityRole="button"
-        accessibilityLabel={`Sync: ${operation}. Show sync operations`}
-        onPress={() => setShowHistory(true)}
-        style={[styles.syncStrip, { top: insets.top, backgroundColor: colors.surface, borderColor: colors.border }]}
-      >
-        <Text numberOfLines={1} style={[styles.syncText, { color: colors.text }]}>
-          Sync: {operation}  ·  Tap for history
-        </Text>
-      </Pressable>
-      {showHistory ? <DebugLogsScreen visible onClose={() => setShowHistory(false)} syncOnly /> : null}
-    </>
-  );
-}
-
 function App() {
-  useEffect(() => () => {
-    stopStartupProbe?.();
-    stopStartupProbe = null;
-    stopDebugLogFile();
+  useNearbyPairingIntent();
+  useEffect(() => { useTasks.getState().markInterrupted(); }, []); // work cut off by Android shows as interrupted, never as still running
+  useEffect(() => startShareIntake(), []);
+  useEffect(() => startAppLinks(), []);
+  useEffect(() => startScheduler(), []);
+  // Battery and heat watching run while the app is mounted and stop with it (they used to start on import and could never be stopped).
+  useEffect(() => {
+    startLowPowerMonitor();
+    startThermalMonitor();
+    return () => { stopLowPowerMonitor(); stopThermalMonitor(); };
   }, []);
-
+  // The delayed update check is cleared if the app goes away before it fires.
+  const updateTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (updateTimer.current) clearTimeout(updateTimer.current); }, []);
+  // Keep the last GPS reading fresh (only if location was already allowed) so the AI can say roughly where you are.
+  useEffect(() => {
+    void refreshLastFix();
+    void refreshNearbyPOI();
+    void require('./src/knowledge/controller').recoverKnowledge().catch(() => undefined);
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { void refreshLastFix(); void refreshNearbyPOI(); } });
+    return () => sub.remove();
+  }, []);
   useDownloadListeners();
-  // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
-  // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
-  // it live — no restart needed.
-  const AppRoot = useSlot(SLOTS.appRoot);
-  const applyPendingProRedirect = useProExpiryRedirect();
   const [isInitializing, setIsInitializing] = useState(true);
-  const startupGeneration = useRef(0);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
 
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, backdrop } = useTheme();
 
   const {
     isEnabled: authEnabled,
@@ -180,6 +173,11 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
+      // Reconcile JS residency with what native engines actually retained while
+      // the app was backgrounded (or released under memory pressure).
+      activeModelService.syncWithNativeState().catch((error) => {
+        logger.error('[App] Failed to reconcile native model state on foreground:', error);
+      });
       // Rebuild the unified store before reattaching JS listeners so restored
       // progress events map onto current download entries instead of racing hydration.
       // NOTE: restoreQueuedDownloads() is intentionally NOT called here — on a foreground
@@ -256,24 +254,19 @@ function App() {
       await modelManager.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
         logger.error('[App] Image model reconciliation failed:', error);
       });
-      logger.log('[BOOT] refresh model lists');
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
     })().catch((error) => {
       logger.error('[App] Download-state recovery failed:', error);
     });
-  }, [
-    reattachTextDownloadRecovery,
-    setDownloadedModels,
-    setDownloadedImageModels,
-  ]);
+  }, [setDownloadedModels, setDownloadedImageModels]);
 
-  const initializeApp = useCallback(async (generation: number) => {
+  const initializeApp = useCallback(async () => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
-      logger.log('[BOOT] app store hydrate');
       await ensureAppStoreHydrated();
+      purgePrivateChatImages().catch(() => undefined); // pictures from private chats do not outlive them
 
       // Project the persisted "aggressive model loading" setting onto the residency
       // manager (single owner of the runtime load policy) now that settings are
@@ -289,7 +282,6 @@ function App() {
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
-      logger.log('[BOOT] device info');
       const deviceInfo = await hardwareService.getDeviceInfo();
       setDeviceInfo(deviceInfo);
 
@@ -297,11 +289,9 @@ function App() {
       setModelRecommendation(recommendation);
 
       // Initialize model manager and load downloaded models list
-      logger.log('[BOOT] modelManager.initialize');
       await modelManager.initialize();
 
       // Clean up any mmproj files that were incorrectly added as standalone models
-      logger.log('[BOOT] cleanup mmproj entries');
       await modelManager.cleanupMMProjEntries();
 
       // Scan for any models that may have been downloaded externally or
@@ -315,26 +305,15 @@ function App() {
 
       // Ensure remote server store is hydrated before initializing providers,
       // so getServers() / activeServerId reads see persisted data.
-      logger.log('[BOOT] remote server hydrate');
       await ensureRemoteServerStoreHydrated();
 
       // Initialize remote server providers in the background — don't block
       // the home screen while fetching models from potentially unreachable servers.
-      remoteServerManager
-        .initializeProviders()
-        .catch((err) => {
-          logger.error('[App] Failed to initialize remote server providers:', err);
-        })
-        .finally(() => {
-          if (generation !== startupGeneration.current) return;
-          // Recovery and provider initialization both update the registry and remote-server store.
-          // Start recovery only after initialization releases those owners. A failed initialization
-          // must still start the watcher so a later network recovery can repair the connection.
-          startNetworkReconnectWatcher();
-        });
+      remoteServerManager.initializeProviders().catch((err) => {
+        logger.error('[App] Failed to initialize remote server providers:', err);
+      });
 
       // Check if passphrase is set and lock app if needed
-      logger.log('[BOOT] auth passphrase check');
       const hasPassphrase = await authService.hasPassphrase();
       if (hasPassphrase && authEnabled) {
         setLocked(true);
@@ -343,20 +322,13 @@ function App() {
       // Initialize RAG database tables
       ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
 
-      try {
-        // Register the private Pro entitlement provider before the first status
-        // read, then activate only the capabilities that entitlement permits.
-        // loadProFeatures separately projects cached credential access from a
-        // Debug developer unlock; Sync reconciliation owns device admission.
-        logger.log('[BOOT] load pro features');
-        await loadProFeatures();
-      } catch (proError) {
-        logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
-      }
-
       // Show the UI immediately
-      logger.log('[BOOT] startup complete');
       setIsInitializing(false);
+      // A little later, once a day: is a newer build published? (Settings > App updates turns this off.)
+      updateTimer.current = setTimeout(() => {
+        // An update check is optional: it must never throw into the app.
+        try { void Promise.resolve(require('./src/services/appUpdate').announceUpdateOnce()).catch(() => undefined); } catch { /* ignore */ }
+      }, 8000);
 
       // Reconcile downloaded Whisper models against disk at startup. presentModelIds
       // isn't persisted (the filesystem is the source of truth), so it rehydrates
@@ -386,12 +358,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    const generation = ++startupGeneration.current;
-    initializeApp(generation);
-    return () => {
-      startupGeneration.current += 1;
-      stopNetworkReconnectWatcher();
-    };
+    initializeApp();
   }, [initializeApp]);
 
   const handleUnlock = useCallback(() => {
@@ -404,9 +371,8 @@ function App() {
         <SafeAreaProvider>
           <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
             <SystemBars style={isDark ? 'light' : 'dark'} />
-            <LoadingDots size={8} testID="startup-loading-dots" />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
-          {__DEV__ ? <DevSyncStrip /> : null}
         </SafeAreaProvider>
       </GestureHandlerRootView>
     );
@@ -419,20 +385,19 @@ function App() {
         <SafeAreaProvider>
           <SystemBars style={isDark ? 'light' : 'dark'} />
           <LockScreen onUnlock={handleUnlock} />
-          {__DEV__ ? <DevSyncStrip /> : null}
         </SafeAreaProvider>
       </GestureHandlerRootView>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.flex}>
+    <GestureHandlerRootView style={[styles.flex, backdrop ? { backgroundColor: backdrop.solid } : null]}>
+      {backdrop ? <BackdropImage uri={backdrop.uri} dim={backdrop.dim} /> : null}
       <SafeAreaProvider>
         <SystemBars style={isDark ? 'light' : 'dark'} />
-        {AppRoot ? <AppRoot /> : null}
         <NavigationContainer
-          ref={appNavigationRef}
-          onReady={applyPendingProRedirect}
+          ref={navigationRef}
+          onReady={() => { flushShare(); flushAppLink(); }}
           theme={{
             dark: isDark,
             colors: {
@@ -465,11 +430,18 @@ function App() {
         >
           <AppNavigator />
         </NavigationContainer>
-        {__DEV__ ? <DevSyncStrip /> : null}
+        <UndoBar />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
+
+const BackdropImage: React.FC<{ uri: string; dim: number }> = ({ uri, dim }) => (
+  <>
+    <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${dim})` }]} />
+  </>
+);
 
 const styles = StyleSheet.create({
   flex: {
@@ -479,20 +451,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  syncStrip: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    elevation: 1000,
-    borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  syncText: {
-    fontFamily: 'Menlo',
-    fontSize: 11,
   },
 });
 

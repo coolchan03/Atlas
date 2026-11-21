@@ -1,22 +1,22 @@
 import type { ThemeColors, ThemeShadows } from '../../theme';
-import { SPACING, TYPOGRAPHY } from '../../constants';
+import { TYPOGRAPHY } from '../../constants';
 import { createRemoteStyles } from './remoteStyles';
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   tabBar: {
     flexDirection: 'row' as const,
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xs,
-    gap: SPACING.sm,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 8,
   },
   tab: {
     flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 10,
     backgroundColor: colors.surface,
     gap: 8,
@@ -46,16 +46,16 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     backgroundColor: colors.primary,
   },
   content: {
-    padding: SPACING.md,
+    padding: 16,
   },
   contentContainer: {
-    paddingBottom: SPACING.md,
+    paddingBottom: 24,
   },
   loadedSection: {
-    marginBottom: SPACING.md,
+    marginBottom: 20,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: SPACING.md,
+    padding: 14,
     borderWidth: 1,
     borderColor: `${colors.primary}40`,
   },
@@ -66,7 +66,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   loadedLabel: {
     ...TYPOGRAPHY.label,
@@ -105,7 +105,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   sectionTitle: {
     ...TYPOGRAPHY.label,
     color: colors.textMuted,
-    marginBottom: SPACING.sm,
+    marginBottom: 12,
     textTransform: 'uppercase' as const,
   },
   emptyState: {
@@ -125,10 +125,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   modelItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
+    padding: 14,
     borderRadius: 12,
-    marginBottom: SPACING.sm,
+    marginBottom: 8,
     backgroundColor: colors.surface,
   },
   modelItemSelected: {
@@ -147,7 +146,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   modelName: {
     ...TYPOGRAPHY.body,
     color: colors.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 4,
   },
   modelNameSelected: {
     color: colors.primary,

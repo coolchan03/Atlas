@@ -2,27 +2,15 @@
  * getImageGenAdvice — the GPU-path (mnn) speed/quality guidance rule. Only the mnn path
  * gets advice (NPU/CoreML are fast + fixed-shape). Encodes the on-device reality:
  *  - <20 steps looks muddy,
+ *  - >256 is very slow on a mid-tier GPU,
  *  - <256 is GARBAGE (SD1.5 below training res), not just smaller.
  */
-import {
-  defaultImageSteps,
-  getImageGenAdvice,
-  MAX_IMAGE_STEPS,
-  QUALITY_STEP_FLOOR,
-  SWEET_SPOT_SIZE,
-} from '../../../src/utils/imageGenAdvice';
-
-describe('defaultImageSteps', () => {
-  it('uses the slider maximum on Android and iOS', () => {
-    expect(defaultImageSteps('android')).toBe(MAX_IMAGE_STEPS);
-    expect(defaultImageSteps('ios')).toBe(MAX_IMAGE_STEPS);
-  });
-});
+import { getImageGenAdvice, QUALITY_STEP_FLOOR, SWEET_SPOT_SIZE } from '../../../src/utils/imageGenAdvice';
 
 describe('getImageGenAdvice', () => {
   it('gives NO advice for the NPU (qnn) path', () => {
     expect(getImageGenAdvice({ backend: 'qnn', steps: 8, width: 512 })).toEqual({
-      show: false, raiseSteps: false, raiseSize: false,
+      show: false, raiseSteps: false, lowerSize: false, raiseSize: false,
     });
   });
 
@@ -40,21 +28,23 @@ describe('getImageGenAdvice', () => {
     expect(getImageGenAdvice({ backend: 'mnn', steps: QUALITY_STEP_FLOOR, width: SWEET_SPOT_SIZE }).raiseSteps).toBe(false);
   });
 
-  it('shows no advice at the default 512 resolution with sufficient steps', () => {
+  it('recommends LOWERING size for speed when above the sweet spot', () => {
     const a = getImageGenAdvice({ backend: 'mnn', steps: 22, width: 512 });
+    expect(a.lowerSize).toBe(true);
     expect(a.raiseSize).toBe(false);
-    expect(a.show).toBe(false);
+    expect(a.show).toBe(true);
   });
 
   it('recommends RAISING size when below 256 (garbage, not "smaller") — the 128 case', () => {
     const a = getImageGenAdvice({ backend: 'mnn', steps: 22, width: 128 });
     expect(a.raiseSize).toBe(true);
+    expect(a.lowerSize).toBe(false);
     expect(a.show).toBe(true);
   });
 
   it('is quiet at the sweet spot (256, >=20 steps)', () => {
     expect(getImageGenAdvice({ backend: 'mnn', steps: 22, width: SWEET_SPOT_SIZE })).toEqual({
-      show: false, raiseSteps: false, raiseSize: false,
+      show: false, raiseSteps: false, lowerSize: false, raiseSize: false,
     });
   });
 

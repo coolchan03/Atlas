@@ -1,0 +1,263 @@
+import { holdScreenOnly } from '../atlasTools/runtimePower';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { useAtlasVoiceStore } from './store';
+import logger from '../utils/logger';
+import { markSpeechStarted, markSpeechFinished, clearSpeechActivity } from '../music/speechActivity';
+import { noteCallTrace } from './callLifecycle';
+
+/**
+ * Thin wrapper over the AtlasTts native module (Android's built-in text-to-speech).
+ * The phone's own voice engine - no download needed, works offline once the
+ * engine's voice data is on the phone.
+ */
+const Native: any = NativeModules.AtlasTts;
+let emitter: NativeEventEmitter | null = null;
+let counter = 0;
+/** speakAndWait callers waiting for their own utterance to finish. */
+const waiters = new Map<string, (ok: boolean, failure?: string) => void>();
+
+/** What the voice is doing right now, as reported by the voice engine itself (not guessed from the button that was pressed). */
+export type SpeechPhase = 'speaking' | 'buffering';
+const phaseWatchers = new Set<(phase: SpeechPhase, utteranceId: string) => void>();
+/** Hears when audio actually starts, runs out while the next piece is made (buffering), or carries on again. Returns a function that stops listening. */
+export function watchSpeechPhase(fn: (phase: SpeechPhase, utteranceId: string) => void): () => void {
+  phaseWatchers.add(fn);
+  return () => { phaseWatchers.delete(fn); };
+}
+const announce = (phase: SpeechPhase, id = '') => phaseWatchers.forEach((fn) => { try { fn(phase, id); } catch { /* a watcher must not break speech */ } });
+
+let lastFailure = '';
+/** Why the last spoken line failed, if it did ('' when it was only stopped). Reading it clears it. */
+export function takeSpeechFailure(): string { const f = lastFailure; lastFailure = ''; return f; }
+
+export const ttsAvailable = (): boolean => Platform.OS === 'android' && !!Native;
+
+function ensureListeners(): void {
+  if (emitter || !ttsAvailable()) return;
+  emitter = new NativeEventEmitter(Native);
+  emitter.addListener('AtlasTtsStart', (e: { utteranceId: string }) => { markSpeechStarted(e?.utteranceId || 'tts'); announce('speaking', e?.utteranceId); });
+  emitter.addListener('AtlasTtsBuffering', (e: { utteranceId: string }) => announce('buffering', e?.utteranceId));
+  emitter.addListener('AtlasTtsResumed', (e: { utteranceId: string }) => announce('speaking', e?.utteranceId));
+  emitter.addListener('AtlasTtsError', (e: { utteranceId: string; message?: string }) => {
+    const message = e?.message || 'The voice failed';
+    logger.error('[AtlasTts] speech failed', message);
+    markSpeechFinished(e.utteranceId);
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(false, message); }
+    const s = useAtlasVoiceStore.getState();
+    if (s.speakingKey === e.utteranceId) s.setSpeaking(null);
+  });
+  emitter.addListener('AtlasTtsDone', (e: { utteranceId: string }) => {
+    markSpeechFinished(e.utteranceId);
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(true); return; } // podcast / video lines: not a chat reply
+    const s = useAtlasVoiceStore.getState();
+    if (s.speakingKey === e.utteranceId) {
+      s.markDone(); // hands-free mode and podcast playback listen for this
+      s.setSpeaking(null);
+    }
+  });
+  emitter.addListener('AtlasTtsNoLanguage', (e: { utteranceId: string }) => {
+    noLangHandler?.(e.utteranceId);
+  });
+  emitter.addListener('AtlasTtsStopped', (e: { utteranceId: string }) => {
+    markSpeechFinished(e.utteranceId);
+    const w = waiters.get(e.utteranceId);
+    if (w) { waiters.delete(e.utteranceId); w(false); }
+    const s = useAtlasVoiceStore.getState();
+    if (s.speakingKey === e.utteranceId) s.setSpeaking(null);
+  });
+}
+
+export function warmUp(): void {
+  if (!ttsAvailable()) return;
+  ensureListeners();
+  Native.warmUp().catch(() => undefined);
+}
+
+/** Speak text. `messageId` lets a speak button know it is the one playing. `rate` overrides the saved speed. */
+export function speak(text: string, messageId?: string, rate?: number): void {
+  if (!ttsAvailable() || !text.trim()) return;
+  ensureListeners();
+  const key = `${messageId ?? 'msg'}~${++counter}`;
+  const s = useAtlasVoiceStore.getState();
+  s.setSpeaking(key, messageId ?? null);
+  Native.setRate(rate ?? s.rate).catch(() => undefined);
+  Native.speak(text, key).catch((err: unknown) => {
+    logger.error('[AtlasTts] speak failed', err);
+    noteCallTrace(`[CALL-TTS] the voice could not speak: ${String((err as Error)?.message ?? err)}`);
+    // An earlier failed utterance must not clear a newer active one.
+    if (useAtlasVoiceStore.getState().speakingKey === key) {
+      useAtlasVoiceStore.getState().setSpeaking(null);
+    }
+  });
+}
+
+/**
+ * Starts speaking a reply that is still being written (natural voice only). Returns the utterance
+ * key, or null when this phone cannot (its own voice engine): the whole reply is spoken at the end then.
+ * `started` settles false if the voice refuses, and the speaking state is cleared.
+ */
+export function beginSpeechStream(messageId: string, rate?: number): { key: string; started: Promise<boolean> } | null {
+  if (!ttsAvailable() || !Native.speakStreamStart) return null;
+  ensureListeners();
+  const key = `${messageId}~${++counter}`;
+  const s = useAtlasVoiceStore.getState();
+  s.setSpeaking(key, messageId);
+  Native.setRate(rate ?? s.rate).catch(() => undefined);
+  const clear = () => { if (useAtlasVoiceStore.getState().speakingKey === key) useAtlasVoiceStore.getState().setSpeaking(null); };
+  const started = Native.speakStreamStart(key)
+    .then((ok: boolean) => { if (!ok) { clear(); noteCallTrace('[CALL-TTS] the voice cannot speak while the answer is written; it will speak the whole answer at the end'); } return !!ok; })
+    .catch((err: unknown) => { clear(); noteCallTrace(`[CALL-TTS] the voice could not start: ${String((err as Error)?.message ?? err)}`); return false; });
+  return { key, started };
+}
+
+/** Adds text to the reply being spoken (see beginSpeechStream). */
+export function appendSpeechStream(text: string): void {
+  if (ttsAvailable() && text.trim()) Native.speakStreamAppend?.(text).catch(() => undefined);
+}
+
+/** No more text is coming: the voice finishes what it has and reports done. */
+export function endSpeechStream(): void {
+  if (ttsAvailable()) Native.speakStreamEnd?.().catch(() => undefined);
+}
+
+/** Counts hard stops, so work that waits (a voice being loaded) can tell the person stopped the voice meanwhile. */
+let stopCount = 0;
+export const stopsSoFar = (): number => stopCount;
+
+export function stop(): void {
+  stopCount += 1;
+  clearSpeechActivity(); // Always restore music level on hard stop.
+  if (!ttsAvailable()) return;
+  useAtlasVoiceStore.getState().setSpeaking(null);
+  Native.stop().catch(() => undefined);
+}
+
+/** Play speech through the earpiece (true) or the normal speaker (false). */
+export function setEarpieceRoute(on: boolean): void {
+  if (!ttsAvailable()) return;
+  try { Native.setEarpiece?.(on)?.catch?.(() => undefined); } catch { /* older build */ }
+}
+
+/**
+ * Keeps the screen awake for a feature, under its own reason ('recorder', 'study'...). This only forwards to the one owner of the
+ * screen-on flag (atlasTools/runtimePower), so one feature letting go cannot turn the screen off in the middle of another's job.
+ */
+export function keepScreenOn(on: boolean, reason = 'misc'): void {
+  holdScreenOnly(`screen:${reason}`, on);
+}
+
+/**
+ * Lets a feature slow down some of its own spoken lines (the language course's slower-voice option)
+ * without this file knowing about the feature: `fn(messageId, rate)` returns the rate to use.
+ */
+let rateAdjuster: ((messageId: string, rate: number) => number) | null = null;
+export function setRateAdjuster(fn: ((messageId: string, rate: number) => number) | null): void { rateAdjuster = fn; }
+const adjusted = (messageId: string, rate: number) => (rateAdjuster ? rateAdjuster(messageId, rate) : rate);
+
+/** Speak in another language (BCP-47 like 'es-ES'). Calls onNoLanguage if the phone lacks that voice. */
+let noLangHandler: ((lang: string) => void) | null = null;
+export function onMissingLanguage(fn: ((lang: string) => void) | null): void { noLangHandler = fn; }
+export function speakIn(text: string, lang: string, opts: { messageId?: string; voice?: string } = {}): void {
+  const { messageId = 'phrase', voice = '' } = opts;
+  if (!ttsAvailable() || !text.trim()) return;
+  ensureListeners();
+  Native.setVoice?.(voice).catch(() => undefined);
+  const key = `${messageId}~${++counter}`;
+  const s = useAtlasVoiceStore.getState();
+  s.setSpeaking(key, messageId);
+  Native.setRate(adjusted(messageId, Math.min(s.rate, 0.9))).catch(() => undefined);
+  (Native.speakIn ? Native.speakIn(text, key, lang) : Native.speak(text, key)).catch(() => {
+    if (useAtlasVoiceStore.getState().speakingKey === key) {
+      useAtlasVoiceStore.getState().setSpeaking(null);
+    }
+  });
+}
+
+/** Speak and wait until finished (resolves false if stopped). Optional pitch / voice for podcast hosts. */
+export function speakAndWait(text: string, opts: { pitch?: number; messageId?: string; voice?: string } = {}): Promise<boolean> {
+  const { pitch = 1.0, messageId = 'podcast', voice = '' } = opts;
+  return speakWait({ text, pitch, messageId, voice, lang: 'en-US' });
+}
+
+/** Speak in a language (e.g. "es-ES") and wait until finished (false if stopped). */
+export function speakInAndWait(text: string, lang: string, opts: { messageId?: string; voice?: string } = {}): Promise<boolean> {
+  const { messageId = 'lesson', voice = '' } = opts;
+  return speakWait({ text, pitch: 1.0, messageId, voice, lang });
+}
+
+function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitch: number; messageId: string; voice: string; lang: string }): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
+    ensureListeners();
+    Native.setPitch?.(pitch).catch(() => undefined);
+    Native.setVoice?.(voice).catch(() => undefined);
+    const myKey = `${messageId}~${++counter}`;
+    const st = useAtlasVoiceStore.getState();
+    let settled = false;
+    const finish = (ok: boolean, failure?: string) => {
+      if (settled) return;
+      settled = true;
+      lastFailure = failure ?? '';
+      waiters.delete(myKey);
+      unsub();
+      Native.setPitch?.(1.0).catch(() => undefined);
+      Native.setVoice?.('').catch(() => undefined);
+      if (useAtlasVoiceStore.getState().speakingKey === myKey) useAtlasVoiceStore.getState().setSpeaking(null);
+      resolve(ok);
+    };
+    // stop() (or another speech) takes over the speaking key -> this line was stopped
+    const unsub = useAtlasVoiceStore.subscribe((s) => { if (s.speakingKey !== myKey) finish(false); });
+    waiters.set(myKey, finish);
+    st.setSpeaking(myKey, messageId);
+    Native.setRate(adjusted(messageId, st.rate)).catch(() => undefined);
+    (Native.speakIn ? Native.speakIn(text, myKey, lang) : Native.speak(text, myKey)).catch(() => finish(false));
+  });
+}
+
+export interface TtsVoice { name: string; locale: string; quality: number }
+/** Installed offline voices for a language (empty if the engine is still starting). */
+export async function listVoices(lang = 'en'): Promise<TtsVoice[]> {
+  if (!ttsAvailable() || !Native.listVoices) return [];
+  ensureListeners();
+  try {
+    let v: TtsVoice[] = await Native.listVoices(lang);
+    if (!v.length) { await new Promise((r) => setTimeout(r, 1200)); v = await Native.listVoices(lang); }
+    return v;
+  } catch { return []; }
+}
+
+/**
+ * Save speech as a WAV file with the voice chosen in Settings, without playing it.
+ * Used by "Save as video". Resolves the file path; rejects with code CANCELLED when stopped.
+ */
+export async function synthesizeToFile(text: string, outPath: string, lang = 'en-US'): Promise<string> {
+  if (!ttsAvailable() || !Native.synthesizeToFile) throw new Error('Saving speech is not available on this phone.');
+  ensureListeners();
+  await Native.setRate(useAtlasVoiceStore.getState().rate).catch(() => undefined);
+  return Native.synthesizeToFile(text, outPath, lang);
+}
+
+/**
+ * Save one podcast line in a given host voice as a WAV file, without playing it. The voice
+ * is set only for this file and put back afterwards. Resolves the file path.
+ */
+export async function synthesizeLineToFile(text: string, target: { voice: string; path: string; pitch?: number }): Promise<string> {
+  const { voice, path: outPath, pitch = 1 } = target;
+  if (!ttsAvailable() || !Native.synthesizeToFile) throw new Error('Saving speech is not available on this phone.');
+  await Native.setVoice?.(voice).catch(() => undefined);
+  if (pitch !== 1) await Native.setPitch?.(pitch).catch(() => undefined);
+  try { return await synthesizeToFile(text, outPath); } finally {
+    await Native.setVoice?.('').catch(() => undefined);
+    if (pitch !== 1) await Native.setPitch?.(1).catch(() => undefined);
+  }
+}
+
+/** True when lines can be saved as audio files ahead of playback. */
+export const canPreRender = (): boolean => ttsAvailable() && !!Native.synthesizeToFile;
+
+export function cancelSynthesis(): void {
+  if (!ttsAvailable()) return;
+  Native.cancelSynthesis?.()?.catch?.(() => undefined);
+}

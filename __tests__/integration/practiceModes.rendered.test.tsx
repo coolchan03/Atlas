@@ -1,0 +1,156 @@
+/**
+ * The Practice screen's new modes: one drill type on its own, a note on a missed question that comes back with it, flashcards from
+ * misses, a timed exam with a score at the end, and the optional daily goal.
+ */
+import { requireRTL } from '../harness/nativeBoundary';
+
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+  useRoute: () => ({ params: { projectId: 'p1' } }),
+}));
+
+beforeEach(() => jest.resetModules());
+
+const calc = (id: string, topic: string, answer: number) => ({ id, kind: 'calc', topic, prompt: `What is ${id}?`, answer });
+
+function mount() {
+  const rtl = requireRTL();
+  const React = require('react');
+  const { PracticeScreen } = require('../../src/screens/PracticeScreen');
+  const { useExerciseStore } = require('../../src/study/exercises');
+  return { rtl, r: rtl.render(React.createElement(PracticeScreen)), store: useExerciseStore };
+}
+
+it('practises one drill type, keeps a note on a miss, and shows it when the question comes back', () => {
+  const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
+  rtl.fireEvent.press(r.getByTestId('practice-pick-drill'));
+  rtl.fireEvent.press(r.getByTestId('drill-bond-price'));
+  const ids = Object.keys(store.getState().exercises);
+  expect(ids.length).toBe(8);
+  expect(ids.every((id: string) => id.startsWith('drill-bond-price-'))).toBe(true);
+
+  rtl.fireEvent.changeText(r.getByTestId('practice-input'), '1');
+  rtl.fireEvent.press(r.getByTestId('practice-check'));
+  expect(r.getByTestId('practice-result').props.children.join('')).toMatch(/Not quite/);
+  rtl.fireEvent.changeText(r.getByTestId('why-wrong'), 'I forgot to discount the face value');
+  const missed = store.getState().progress;
+  expect(Object.values(missed).some((p: any) => p.note === 'I forgot to discount the face value')).toBe(true);
+
+  rtl.fireEvent.press(r.getByTestId('practice-next'));
+  rtl.fireEvent.press(r.getByText('Stop'));
+  rtl.fireEvent.press(r.getByTestId('practice-start')); // the missed one comes back first, with the note
+  expect(r.getByTestId('earlier-note').props.children.join('')).toMatch(/I forgot to discount the face value/);
+});
+
+it('turns misses into flashcards and takes a card out when it is known', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([calc('a', 'Tax', 42), calc('b', 'Tax', 7)]); store.getState().record('a', false); store.getState().record('b', true); });
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
+  rtl.fireEvent.press(r.getByTestId('practice-cards'));
+  expect(r.getByText(/What is a\?/)).toBeTruthy();
+  expect(r.queryByTestId('card-answer')).toBeNull();
+  rtl.fireEvent.press(r.getByTestId('card'));
+  expect(r.getByTestId('card-answer').props.children).toBe('42');
+  rtl.fireEvent.press(r.getByTestId('card-got'));
+  expect(r.getByTestId('cards-empty')).toBeTruthy();
+});
+
+it('runs a timed exam with no feedback until the end, then scores it by topic and offers the misses', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([calc('a', 'Tax', 1), calc('b', 'Audit', 2)]); });
+  rtl.fireEvent.press(r.getByTestId('practice-mock-20'));
+  expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 2/);
+  const first = r.getByTestId('exam-prompt').props.children;
+  rtl.fireEvent.changeText(r.getByTestId('practice-input'), first.includes('a?') ? '1' : '2'); // right
+  expect(r.queryByTestId('practice-result')).toBeNull(); // no feedback during the exam
+  rtl.fireEvent.press(r.getByTestId('exam-next'));
+  rtl.fireEvent.changeText(r.getByTestId('practice-input'), '99'); // wrong
+  rtl.fireEvent.press(r.getByTestId('exam-finish'));
+  expect(r.getByTestId('exam-score').props.children.join('')).toMatch(/1 of 2 correct \(50%\)/);
+  expect(r.getByText(/By topic/)).toBeTruthy();
+  rtl.fireEvent.press(r.getByTestId('exam-review'));
+  expect(r.getByTestId('practice-prompt')).toBeTruthy();
+});
+
+it('shows the daily goal and streak only when it is switched on', () => {
+  const { rtl, r } = mount();
+  expect(r.queryByTestId('goal-line')).toBeNull();
+  rtl.fireEvent(r.getByTestId('goal-switch'), 'valueChange', true);
+  expect(r.getByTestId('goal-line').props.children).toMatch(/Today: 0 of 10 questions/);
+});
+
+it('clears the practice history after asking, and keeps the daily-goal setting', () => {
+  const { rtl, r, store } = mount();
+  const { Alert } = require('react-native');
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 1), projectId: 'p1' }, { ...calc('b', 'Tax', 1), projectId: 'other' }]); store.getState().record('a', false); store.getState().setGoal({ on: true }); });
+  const ask = jest.spyOn(Alert, 'alert').mockImplementation((_t: any, _m: any, buttons: any) => { buttons.find((b: any) => b.text === 'Clear').onPress(); });
+  rtl.fireEvent.press(r.getByTestId('practice-clear'));
+  expect(ask).toHaveBeenCalled();
+  expect(Object.keys(store.getState().exercises)).toEqual(['b']); // only this project's questions go; another project's stay
+  expect(store.getState().progress.a).toBeUndefined();
+  expect(store.getState().goal.on).toBe(true);
+  expect(r.getByTestId('practice-note').props.children).toBe('Practice history cleared.');
+  ask.mockRestore();
+});
+
+it('a flashcard shows the book\'s explanation and the passage with its page when turned over', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 42), explain: 'Because basis is cost.', source: { doc: 'Tax book.pdf', page: 212, quote: 'Basis is the cost of the asset' } }]); store.getState().record('a', false); });
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
+  rtl.fireEvent.press(r.getByTestId('practice-cards'));
+  rtl.fireEvent.press(r.getByTestId('card'));
+  expect(r.getByTestId('card-explain').props.children).toBe('Because basis is cost.');
+  expect(r.getByTestId('card-source').props.children.join('')).toContain('From Tax book.pdf, p. 212: "Basis is the cost of the asset"');
+});
+
+it('a timed mock exam of 10 questions shows the pace by topic at the end', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet(Array.from({ length: 6 }, (_, i) => calc(`q${i}`, i % 2 ? 'Tax' : 'Leases', i))); });
+  rtl.fireEvent.press(r.getByTestId('practice-mock-10'));
+  expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 6/);
+  for (let i = 0; i < 5; i++) rtl.fireEvent.press(r.getByTestId('exam-next'));
+  rtl.fireEvent.press(r.getByTestId('exam-finish'));
+  expect(r.getByTestId('exam-pace').props.children.join('')).toMatch(/seconds a question/);
+});
+
+it('practice, mock exams and flashcards follow the level chosen: only questions written at that level', () => {
+  const { rtl, r, store } = mount();
+  rtl.act(() => { store.getState().addSet([{ ...calc('easy1', 'Tax', 1), level: 'beginner' }, { ...calc('hard1', 'Tax', 2), level: 'hard' }, { ...calc('hard2', 'Tax', 3), level: 'hard' }]); });
+  rtl.fireEvent.press(r.getByTestId('practice-level-hard'));
+  rtl.fireEvent.press(r.getByTestId('practice-mock-10'));
+  expect(r.getByTestId('exam-clock').props.children.join('')).toMatch(/Question 1 of 2/); // the two hard ones, not the beginner one
+  rtl.fireEvent.press(r.getByTestId('exam-next'));
+  rtl.fireEvent.press(r.getByTestId('exam-finish'));
+  rtl.fireEvent.press(r.getByTestId('exam-done'));
+  rtl.fireEvent.press(r.getByTestId('practice-level-beginner'));
+  rtl.fireEvent.press(r.getByTestId('practice-start'));
+  expect(r.getByText(/What is easy1\?/)).toBeTruthy();
+});
+
+it('a 5-minute session asks missed questions first and says how long it will take; with no questions it does not invent a quiz', () => {
+  const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-session-5'));
+  expect(r.getByTestId('practice-note').props.children).toMatch(/nothing to score/);
+  expect(r.queryByTestId('practice-input')).toBeNull();
+  rtl.act(() => { store.getState().addSet([{ ...calc('a', 'Tax', 42), projectId: 'p1' }, { ...calc('b', 'Tax', 7), projectId: 'p1' }]); store.getState().record('b', false); });
+  rtl.fireEvent.press(r.getByTestId('practice-session-5'));
+  expect(r.getByTestId('practice-session-note').props.children).toMatch(/2 questions, about \d+ min/);
+  expect(r.getByTestId('practice-input')).toBeTruthy();
+});
+
+it('after a miss on a drill, offers a similar question with new numbers; not for other questions', () => {
+  const { rtl, r, store } = mount();
+  rtl.fireEvent.press(r.getByTestId('practice-more-toggle'));
+  rtl.fireEvent.press(r.getByTestId('practice-pick-drill'));
+  rtl.fireEvent.press(r.getByTestId('drill-bond-price'));
+  const first = r.getByTestId('practice-input');
+  rtl.fireEvent.changeText(first, '-1');
+  rtl.fireEvent.press(r.getByTestId('practice-check'));
+  const before = Object.keys(store.getState().exercises).length;
+  rtl.fireEvent.press(r.getByTestId('practice-similar'));
+  expect(Object.keys(store.getState().exercises).length).toBe(before + 1);
+  expect(r.queryByTestId('practice-result')).toBeNull(); // a fresh, unanswered question
+  expect(r.getByTestId('practice-input')).toBeTruthy();
+});

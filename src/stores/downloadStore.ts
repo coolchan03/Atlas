@@ -4,8 +4,7 @@ import logger from '../utils/logger';
 // The status classification + DownloadEntry shape live in a PURE util so pure consumers can use
 // them without depending on this store (utils-stay-pure). Re-exported here for back-compat — every
 // existing `from '../stores/downloadStore'` importer of these keeps working unchanged.
-import { DownloadStatus, DownloadEntry, isActiveStatus } from '../utils/downloadStatus';
-import { sampleProgressRate } from '@offgrid/ui';
+import { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
 export type { DownloadStatus, DownloadEntry };
 export type { ModelType } from '../utils/downloadStatus';
@@ -29,32 +28,6 @@ interface DownloadStoreState {
   setMmProjCompleted: (mmProjDownloadId: string, bytes: number) => void
   retryEntry: (modelKey: ModelKey, newDownloadId: string) => void
   remove: (modelKey: ModelKey) => void
-}
-
-function rateFields(
-  entry: DownloadEntry,
-  currentBytes: number,
-  sampledAtMs = Date.now(),
-): Pick<DownloadEntry, 'rateSample' | 'bytesPerSecond'> {
-  const measured = sampleProgressRate(entry.rateSample, {
-    currentBytes,
-    sampledAtMs,
-  });
-  return {
-    rateSample: measured.sample,
-    bytesPerSecond: measured.bytesPerSecond,
-  };
-}
-
-function terminalRateFields(
-  mainStatus: DownloadStatus,
-  mmProjStatus?: DownloadStatus,
-): Partial<Pick<DownloadEntry, 'rateSample' | 'bytesPerSecond'>> {
-  const mainActive = isActiveStatus(mainStatus);
-  const sidecarActive = mmProjStatus !== undefined && isActiveStatus(mmProjStatus);
-  return mainActive || sidecarActive
-    ? {}
-    : { rateSample: undefined, bytesPerSecond: undefined };
 }
 
 export const useDownloadStore = create<DownloadStoreState>((set) => ({
@@ -153,7 +126,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     if (!entry || entry.downloadId !== downloadId) return state;
     const combinedTotal = entry.combinedTotalBytes || total;
     const mmProjBytes = entry.mmProjBytesDownloaded ?? 0;
-    const liveRate = rateFields(entry, bytes + mmProjBytes);
     // Clamp: when combinedTotalBytes isn't set yet, the denominator is the main file
     // only, so adding the mmproj sidecar's bytes can push this past 1.0 (the >100%
     // progress bar). A wrong total can also overshoot. Never report >1 or <0.
@@ -167,7 +139,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           totalBytes: total,
           progress,
           status: 'running',
-          ...liveRate,
         },
       },
     };
@@ -189,7 +160,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
       return state;
     }
     const combinedTotal = entry.combinedTotalBytes || entry.totalBytes;
-    const liveRate = rateFields(entry, entry.bytesDownloaded + bytes);
     // Clamp to [0,1] — same reason as updateProgress (main-only denominator + mmproj bytes).
     const progress = combinedTotal > 0 ? Math.min(1, Math.max(0, (entry.bytesDownloaded + bytes) / combinedTotal)) : 0;
     return {
@@ -200,7 +170,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           mmProjBytesDownloaded: bytes,
           mmProjStatus: 'running',
           progress,
-          ...liveRate,
         },
       },
     };
@@ -227,7 +196,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
             ...entry,
             mmProjStatus: status as DownloadStatus,
             errorMessage: mmProjErrorMessage,
-            ...terminalRateFields(entry.status, status),
           },
         },
       };
@@ -235,13 +203,7 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     return {
       downloads: {
         ...state.downloads,
-        [modelKey]: {
-          ...entry,
-          status,
-          errorMessage: error?.message,
-          errorCode: error?.code,
-          ...terminalRateFields(status, entry.mmProjStatus),
-        },
+        [modelKey]: { ...entry, status, errorMessage: error?.message, errorCode: error?.code },
       },
     };
   }),
@@ -264,12 +226,7 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     return {
       downloads: {
         ...state.downloads,
-        [modelKey]: {
-          ...entry,
-          status: 'completed',
-          progress: 1,
-          ...terminalRateFields('completed', entry.mmProjStatus),
-        },
+        [modelKey]: { ...entry, status: 'completed', progress: 1 },
       },
     };
   }),
@@ -286,7 +243,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           ...entry,
           mmProjBytesDownloaded: bytes,
           mmProjStatus: 'completed' as DownloadStatus,
-          ...terminalRateFields(entry.status, 'completed'),
         },
       },
     };
@@ -312,8 +268,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           status: 'pending',
           bytesDownloaded: 0,
           progress: 0,
-          rateSample: undefined,
-          bytesPerSecond: undefined,
           errorMessage: undefined,
           errorCode: undefined,
           // Preserve mmproj identity fields so the UI still knows this is a

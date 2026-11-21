@@ -2,13 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   FlatList,
   Dimensions,
   Animated,
-  TouchableOpacity,
-  Linking,
-} from 'react-native';
+  } from 'react-native';
 import ReanimatedAnimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,15 +20,16 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import {
   ONBOARDING_SLIDES,
-  type OnboardingSlide,
   SPACING,
   TYPOGRAPHY,
   FONTS,
-  WEDNESDAY_URL,
-} from '../constants';
-import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+  } from '../constants';
 import { useAppStore } from '../stores';
+import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { discoverLANServers } from '../services/networkDiscovery';
+import { remoteServerManager } from '../services';
 import { RootStackParamList } from '../navigation/types';
+import logger from '../utils/logger';
 
 type OnboardingScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Onboarding'>;
@@ -41,7 +39,7 @@ const { width } = Dimensions.get('window');
 
 /** Animated slide with staggered entrance: keyword → title → description */
 const SlideContent: React.FC<{
-  item: OnboardingSlide;
+  item: (typeof ONBOARDING_SLIDES)[0];
   isActive: boolean;
   styles: ReturnType<typeof createStyles>;
   accentColor: string;
@@ -91,16 +89,7 @@ const SlideContent: React.FC<{
         withTiming(0, { duration: 400, easing: ease }),
       );
     }
-  }, [
-    descOpacity,
-    descTranslateY,
-    isActive,
-    keywordOpacity,
-    keywordTranslateY,
-    lineWidth,
-    titleOpacity,
-    titleTranslateY,
-  ]);
+  }, [isActive]);
 
   const keywordStyle = useAnimatedStyle(() => ({
     opacity: keywordOpacity.value,
@@ -161,14 +150,6 @@ const SlideContent: React.FC<{
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
-  const additionalSlides =
-    callHook<readonly OnboardingSlide[]>(HOOKS.onboardingAdditionalSlides) ??
-    [];
-  const slides = [
-    ...ONBOARDING_SLIDES.slice(0, -1),
-    ...additionalSlides,
-    ONBOARDING_SLIDES[ONBOARDING_SLIDES.length - 1],
-  ];
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -176,8 +157,38 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
+  // Kick off non-blocking LAN scan so results are ready by ModelDownloadScreen
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const discovered = await discoverLANServers();
+        if (cancelled || discovered.length === 0) return;
+        const store = useRemoteServerStore.getState();
+        const existingEndpoints = new Set(
+          store.servers.map(s => s.endpoint.replace(/\/$/, '')),
+        );
+        for (const server of discovered) {
+          if (existingEndpoints.has(server.endpoint.replace(/\/$/, '')))
+            continue;
+          await remoteServerManager.addServer({
+            name: server.name,
+            endpoint: server.endpoint,
+            providerType: 'openai-compatible',
+          });
+        }
+        logger.log('[Onboarding] Pre-discovered', discovered.length, 'servers');
+      } catch (e) {
+        logger.warn('[Onboarding] LAN scan skipped:', (e as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleNext = () => {
-    if (currentIndex < slides.length - 1) {
+    if (currentIndex < ONBOARDING_SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({
         index: currentIndex + 1,
         animated: true,
@@ -193,14 +204,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const completeOnboarding = () => {
     setOnboardingComplete(true);
-    navigation.replace('AutoSetup');
+    navigation.replace('ModelDownload');
   };
 
   const renderSlide = ({
     item,
     index,
   }: {
-    item: OnboardingSlide;
+    item: (typeof ONBOARDING_SLIDES)[0];
     index: number;
   }) => (
     <SlideContent
@@ -213,7 +224,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const renderDots = () => (
     <View testID="onboarding-dots" style={styles.dotsContainer}>
-      {slides.map((_, index) => {
+      {ONBOARDING_SLIDES.map((_, index) => {
         const inputRange = [
           (index - 1) * width,
           index * width,
@@ -242,7 +253,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     </View>
   );
 
-  const isLastSlide = currentIndex === slides.length - 1;
+  const isLastSlide = currentIndex === ONBOARDING_SLIDES.length - 1;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -260,7 +271,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         <FlatList
           ref={flatListRef}
-          data={slides}
+          data={ONBOARDING_SLIDES}
           renderItem={renderSlide}
           horizontal
           pagingEnabled
@@ -286,23 +297,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             style={styles.nextButton}
             testID="onboarding-next"
           />
-          <TouchableOpacity
-            onPress={() => Linking.openURL(WEDNESDAY_URL)}
-            style={styles.madeWithLove}
-          >
-            <View style={styles.madeWithLoveRow}>
-              <Text style={styles.madeWithLoveText}>
-                {'made with '}
-                <Text style={styles.heart}>{'♥'}</Text>
-                {' by '}
-              </Text>
-              <Image
-                source={require('../assets/wednesday_logo.png')}
-                style={styles.wednesdayLogo}
-              />
-              <Text style={styles.madeWithLoveText}>{'Wednesday'}</Text>
-            </View>
-          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -371,19 +365,5 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   nextButton: {
     width: '100%' as const,
-  },
-  madeWithLove: { alignItems: 'center' as const, paddingTop: SPACING.md },
-  madeWithLoveText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
-  heart: { color: '#FF0000', fontSize: 14 },
-  wednesdayLink: { textDecorationLine: 'underline' as const },
-  wednesdayLogo: {
-    width: 20,
-    height: 20,
-    resizeMode: 'contain' as const,
-    marginHorizontal: 4,
-  },
-  madeWithLoveRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
   },
 });

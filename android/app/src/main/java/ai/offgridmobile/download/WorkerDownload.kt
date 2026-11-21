@@ -101,16 +101,14 @@ class WorkerDownload(
 
     private suspend fun handleDownloadException(downloadId: String, download: DownloadEntity, e: Exception): Result {
         if (isStopped) return handleStoppedState(downloadId, download, download.downloadedBytes)
-        val reason = DownloadReason.fromThrowable(e)
-        // The partial file is retained, so WorkManager can retry from its byte offset
-        // after a transient connection failure. Bound the retries so a persistently
-        // broken endpoint still becomes a visible, manually retryable failure.
-        if (DownloadReason.isRetryable(reason) && runAttemptCount < MAX_TRANSIENT_RETRIES) {
-            Log.w(TAG, "Transient download failure id=$downloadId attempt=$runAttemptCount reason=$reason; retrying")
+        // Large Hugging Face/Xet transfers can stall briefly on mobile networks.
+        // Keep the partial file and resume using HTTP Range on WorkManager retry.
+        if (e is java.io.IOException && runAttemptCount < 3) {
+            Log.w(TAG, "Transient download error; retrying id=$downloadId attempt=$runAttemptCount", e)
             downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
             return Result.retry()
         }
-        return failDownload(downloadId, download, reason)
+        return failDownload(downloadId, download, DownloadReason.fromThrowable(e))
     }
 
     private data class StreamParams(
@@ -152,6 +150,13 @@ class WorkerDownload(
 
         val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE)
 
+        // A 206 is only safe to append when the server says it starts exactly where our partial file ends.
+        if (code == 206 && targetFile.exists() && !contentRangeStartsAt(response.header("Content-Range"), targetFile.length())) {
+            Log.w(TAG, "handleResponse mismatched Content-Range id=$downloadId header=${response.header("Content-Range")} fileBytes=${targetFile.length()}")
+            if (!targetFile.delete()) Log.w(TAG, "Failed to delete misaligned partial file: ${targetFile.path}")
+            return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
+        }
+
         val currentFileBytes = if (targetFile.exists() && code == 206) targetFile.length() else 0L
         val contentLength = body.contentLength()
         val totalBytes = calculateTotalBytes(code, currentFileBytes, contentLength, download.totalBytes)
@@ -180,6 +185,11 @@ class WorkerDownload(
             code == 416 -> {
                 if (!targetFile.delete()) Log.w(TAG, "Failed to delete file on 416: ${targetFile.path}")
                 failDownload(downloadId, download, DownloadReason.HTTP_416)
+            }
+            (code == 429 || code in 500..599) && runAttemptCount < 3 -> {
+                Log.w(TAG, "Temporary download HTTP $code; retrying id=$downloadId attempt=$runAttemptCount")
+                downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+                Result.retry()
             }
             !response.isSuccessful -> failDownload(downloadId, download, DownloadReason.fromHttpCode(code))
             else -> null
@@ -227,6 +237,7 @@ class WorkerDownload(
         // its LiteRT models. A transient Content-Length / payload undershoot from
         // the CDN should not be treated as corruption when no SHA is available.
         val skipSizeValidation = parseSkipSizeValidation(download.metadataJson)
+        var shaVerified = false
         if (authoritativeExpectedBytes > 0L && !skipSizeValidation) {
             val sizeDiffPercent = abs(bytesWritten - authoritativeExpectedBytes).toDouble() / authoritativeExpectedBytes
             if (sizeDiffPercent > 0.001) {
@@ -251,6 +262,18 @@ class WorkerDownload(
                     if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
                     return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
                 }
+                shaVerified = true
+            }
+        }
+
+        // A published SHA-256 is always checked after a complete transfer, even when the size matches exactly:
+        // an equal-size bit flip must never be marked COMPLETED.
+        val publishedSha = download.expectedSha256
+        if (!publishedSha.isNullOrEmpty() && !shaVerified) {
+            if (computeFileSha256(targetFile).lowercase() != publishedSha.lowercase()) {
+                Log.w(TAG, "streamToFile SHA mismatch id=$downloadId file=${download.fileName}")
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
+                return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
             }
         }
 
@@ -282,9 +305,7 @@ class WorkerDownload(
 
     private suspend fun handleStoppedState(downloadId: String, download: DownloadEntity, bytesWritten: Long): Result {
         val current = downloadDao.getDownload(downloadId) ?: download
-        return if (current.status == DownloadStatus.PAUSED) {
-            Result.failure() // Keep the partial file; resume uses HTTP Range.
-        } else if (current.status == DownloadStatus.CANCELLED) {
+        return if (current.status == DownloadStatus.CANCELLED) {
             val partialFile = File(current.destination)
             if (partialFile.exists()) partialFile.delete()
             Result.failure()
@@ -297,10 +318,11 @@ class WorkerDownload(
 
     companion object {
         private const val TAG = "WorkerDownload"
-        private const val MAX_TRANSIENT_RETRIES = 5
 
         val httpClient: OkHttpClient = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -363,6 +385,14 @@ class WorkerDownload(
                     description = "Keeps large model downloads running in the background"
                 }
             )
+        }
+
+        /** True when a `Content-Range: bytes start-end/total` header starts exactly at [offset]. */
+        internal fun contentRangeStartsAt(header: String?, offset: Long): Boolean {
+            val m = Regex("^bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)$").find(header?.trim() ?: return false) ?: return false
+            val start = m.groupValues[1].toLongOrNull() ?: return false
+            val end = m.groupValues[2].toLongOrNull() ?: return false
+            return start == offset && end >= start
         }
 
         internal fun computeFileSha256(file: File): String {

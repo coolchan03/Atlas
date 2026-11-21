@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
-import { LoadingDots } from '../LoadingDots';
+import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -15,7 +14,6 @@ type Props = {
   counts?: Partial<Record<ModelRowType, number>>;
   isLoading: boolean;
   onPress: () => void;
-  onPressType?: (type: ModelRowType) => void;
 };
 
 const TYPE_ICONS: { type: ModelRowType; icon: string; caption: string }[] = [
@@ -30,7 +28,7 @@ const TYPE_ICONS: { type: ModelRowType; icon: string; caption: string }[] = [
  * type — emerald + bright caption when that type has an active model, dimmed +
  * muted when not. Tap → manager sheet.
  */
-export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, onPress, onPressType }) => {
+export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, onPress }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -39,7 +37,7 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
       <View style={styles.header}>
         <Text style={styles.label}>Models</Text>
         {isLoading
-          ? <LoadingDots color={colors.primary} />
+          ? <ActivityIndicator size="small" color={colors.primary} />
           : <Icon name="chevron-down" size={14} color={colors.textMuted} />}
       </View>
       <View style={styles.icons}>
@@ -47,13 +45,8 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
           const active = !!labels[type] && labels[type] !== '—';
           const count = counts?.[type];
           return (
-            <AnimatedPressable
-              key={type}
-              testID={`model-summary-${type}-open`}
-              hapticType="selection"
-              onPress={(event) => { event?.stopPropagation?.(); (onPressType ?? onPress)(type); }}
-            >
             <View
+              key={type}
               testID={`model-summary-${type}`}
               // `selected` reflects "this model type has an active model" — the same signal the
               // caption/icon colour encodes visually. Exposed so a test can observe active-vs-dimmed
@@ -71,7 +64,6 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
                 <Text testID={`model-summary-count-${type}`} style={[styles.count, count > 0 && styles.countActive]}>{count}</Text>
               )}
             </View>
-            </AnimatedPressable>
           );
         })}
       </View>
@@ -83,11 +75,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.lg,
     ...shadows.small,
   },
   header: {
@@ -99,7 +91,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   icons: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
-    paddingHorizontal: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
   },
   iconCol: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
   inactive: { opacity: 0.35 },

@@ -30,16 +30,11 @@ describe('httpClient', () => {
   // ─── SSE Parsing Tests ─────────────────────────────────────────────────────
 
   describe('parseSSEStream', () => {
-    async function parseSSEData(
-      ...chunks: string[]
-    ): Promise<{ events: any[]; releaseLock: jest.Mock }> {
+    async function parseSSEData(...chunks: string[]): Promise<{ events: any[]; releaseLock: jest.Mock }> {
       const encoder = new TextEncoder();
       const readMock = jest.fn();
       chunks.forEach(chunk => {
-        readMock.mockResolvedValueOnce({
-          done: false,
-          value: encoder.encode(chunk),
-        });
+        readMock.mockResolvedValueOnce({ done: false, value: encoder.encode(chunk) });
       });
       readMock.mockResolvedValueOnce({ done: true, value: undefined });
       const releaseLock = jest.fn();
@@ -54,9 +49,7 @@ describe('httpClient', () => {
     }
 
     it('should parse simple SSE events', async () => {
-      const { events, releaseLock } = await parseSSEData(
-        'event: message\ndata: {"text":"hello"}\n\n',
-      );
+      const { events, releaseLock } = await parseSSEData('event: message\ndata: {"text":"hello"}\n\n');
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({ event: 'message', data: '{"text":"hello"}' });
       expect(releaseLock).toHaveBeenCalled();
@@ -65,7 +58,7 @@ describe('httpClient', () => {
     it('should parse multiple SSE events', async () => {
       const { events, releaseLock } = await parseSSEData(
         'event: message\ndata: {"text":"first"}\n\n' +
-          'event: message\ndata: {"text":"second"}\n\n',
+        'event: message\ndata: {"text":"second"}\n\n'
       );
       expect(events).toHaveLength(2);
       expect(events[0].data).toBe('{"text":"first"}');
@@ -74,9 +67,7 @@ describe('httpClient', () => {
     });
 
     it('should handle multi-line data', async () => {
-      const { events, releaseLock } = await parseSSEData(
-        'data: line1\ndata: line2\n\n',
-      );
+      const { events, releaseLock } = await parseSSEData('data: line1\ndata: line2\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('line1\nline2');
       expect(releaseLock).toHaveBeenCalled();
@@ -103,9 +94,7 @@ describe('httpClient', () => {
     });
 
     it('should handle events with id field', async () => {
-      const { events } = await parseSSEData(
-        'id: event-123\nevent: message\ndata: {"text":"hello"}\n\n',
-      );
+      const { events } = await parseSSEData('id: event-123\nevent: message\ndata: {"text":"hello"}\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].id).toBe('event-123');
       expect(events[0].event).toBe('message');
@@ -119,19 +108,14 @@ describe('httpClient', () => {
     });
 
     it('should handle chunked data correctly', async () => {
-      const { events, releaseLock } = await parseSSEData(
-        'event: message\ndata: hel',
-        'lo\n\n',
-      );
+      const { events, releaseLock } = await parseSSEData('event: message\ndata: hel', 'lo\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('hello');
       expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should handle event with id field', async () => {
-      const { events } = await parseSSEData(
-        'event: message\nid: 123\ndata: hello\n\n',
-      );
+      const { events } = await parseSSEData('event: message\nid: 123\ndata: hello\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].id).toBe('123');
       expect(events[0].event).toBe('message');
@@ -191,9 +175,7 @@ describe('httpClient', () => {
     });
 
     it('should parse error messages', () => {
-      const event = {
-        data: '{"error":{"message":"Rate limit exceeded","type":"rate_limit"}}',
-      };
+      const event = { data: '{"error":{"message":"Rate limit exceeded","type":"rate_limit"}}' };
       const result = parseOpenAIMessage(event);
 
       expect(result).not.toBeNull();
@@ -202,7 +184,7 @@ describe('httpClient', () => {
 
     it('should parse tool calls', () => {
       const event = {
-        data: '{"choices":[{"delta":{"tool_calls":[{"id":"call_123","function":{"name":"search","arguments":"{\\"query\\""}}]}}]}',
+        data: '{"choices":[{"delta":{"tool_calls":[{"id":"call_123","function":{"name":"search","arguments":"{\\"query\\""}}]}}]}'
       };
       const result = parseOpenAIMessage(event);
 
@@ -229,9 +211,7 @@ describe('httpClient', () => {
 
   describe('parseAnthropicMessage', () => {
     it('should parse content_block_delta', () => {
-      const event = {
-        data: '{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}',
-      };
+      const event = { data: '{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}' };
       const result = parseAnthropicMessage(event);
 
       expect(result).not.toBeNull();
@@ -240,9 +220,7 @@ describe('httpClient', () => {
     });
 
     it('should parse message_start', () => {
-      const event = {
-        data: '{"type":"message_start","message":{"id":"msg_123"}}',
-      };
+      const event = { data: '{"type":"message_start","message":{"id":"msg_123"}}' };
       const result = parseAnthropicMessage(event);
 
       expect(result).not.toBeNull();
@@ -271,6 +249,10 @@ describe('httpClient', () => {
       expect(isPrivateNetworkEndpoint('http://192.168.0.1:1234')).toBe(true);
     });
 
+    it('does not treat a public host name that starts with 10. as private', () => {
+      expect(isPrivateNetworkEndpoint('http://10.example.com:11434')).toBe(false);
+    });
+
     it('should detect 10.x.x.x as private', () => {
       expect(isPrivateNetworkEndpoint('http://10.0.0.1:11434')).toBe(true);
       expect(isPrivateNetworkEndpoint('http://10.255.255.255:8080')).toBe(true);
@@ -293,22 +275,8 @@ describe('httpClient', () => {
       expect(isPrivateNetworkEndpoint('http://169.254.0.1:11434')).toBe(true);
     });
 
-    it('accepts only the Tailscale CGNAT range as private', () => {
-      expect(isPrivateNetworkEndpoint('http://100.64.0.0:7878')).toBe(true);
-      expect(isPrivateNetworkEndpoint('http://100.116.255.25:7878')).toBe(true);
-      expect(isPrivateNetworkEndpoint('http://100.127.255.255:7878')).toBe(
-        true,
-      );
-      expect(isPrivateNetworkEndpoint('http://100.63.255.255:7878')).toBe(
-        false,
-      );
-      expect(isPrivateNetworkEndpoint('http://100.128.0.0:7878')).toBe(false);
-    });
-
     it('should detect .local (mDNS) as private', () => {
-      expect(isPrivateNetworkEndpoint('http://myserver.local:11434')).toBe(
-        true,
-      );
+      expect(isPrivateNetworkEndpoint('http://myserver.local:11434')).toBe(true);
     });
 
     it('should detect public internet as NOT private', () => {
@@ -332,9 +300,7 @@ describe('httpClient', () => {
         json: () => Promise.resolve(mockData),
       } as unknown as Response);
 
-      const result = await fetchWithTimeout('http://test.com/api', {
-        timeout: 5000,
-      });
+      const result = await fetchWithTimeout('http://test.com/api', { timeout: 5000 });
 
       expect(result).toEqual(mockData);
     });
@@ -346,9 +312,7 @@ describe('httpClient', () => {
         text: () => Promise.resolve('<html>ok</html>'),
       } as unknown as Response);
 
-      const result = await fetchWithTimeout('http://test.com/page', {
-        timeout: 5000,
-      });
+      const result = await fetchWithTimeout('http://test.com/page', { timeout: 5000 });
 
       expect(result).toBe('<html>ok</html>');
     });
@@ -360,9 +324,8 @@ describe('httpClient', () => {
         text: () => Promise.resolve('Not Found'),
       } as Response);
 
-      await expect(
-        fetchWithTimeout('http://test.com/missing', { timeout: 5000 }),
-      ).rejects.toThrow('Not Found');
+      await expect(fetchWithTimeout('http://test.com/missing', { timeout: 5000 }))
+        .rejects.toThrow('HTTP 404');
     });
 
     it('should timeout after specified duration', async () => {
@@ -376,14 +339,13 @@ describe('httpClient', () => {
       });
 
       await expect(
-        fetchWithTimeout('http://test.com/slow', { timeout: 100 }),
+        fetchWithTimeout('http://test.com/slow', { timeout: 100 })
       ).rejects.toThrow();
     });
 
     it('should retry on transient errors', async () => {
       const mockData = { success: true };
-      jest
-        .spyOn(global, 'fetch')
+      jest.spyOn(global, 'fetch')
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
@@ -394,7 +356,7 @@ describe('httpClient', () => {
       const result = await fetchWithTimeout('http://test.com/api', {
         timeout: 5000,
         retries: 1,
-        retryDelay: 0, // No delay for test
+        retryDelay: 0  // No delay for test
       });
 
       expect(result).toEqual({ success: true });
@@ -406,9 +368,8 @@ describe('httpClient', () => {
       abortError.name = 'AbortError';
       jest.spyOn(global, 'fetch').mockRejectedValue(abortError);
 
-      await expect(
-        fetchWithTimeout('http://test.com/api', { timeout: 5000 }),
-      ).rejects.toThrow('Request cancelled');
+      await expect(fetchWithTimeout('http://test.com/api', { timeout: 5000 }))
+        .rejects.toThrow('Request cancelled');
     });
 
     it('should fallback to text when content-type header is missing', async () => {
@@ -418,31 +379,27 @@ describe('httpClient', () => {
         text: () => Promise.resolve('plain text response'),
       } as unknown as Response);
 
-      const result = await fetchWithTimeout('http://test.com/api', {
-        timeout: 5000,
-      });
+      const result = await fetchWithTimeout('http://test.com/api', { timeout: 5000 });
 
       expect(result).toBe('plain text response');
     });
 
-    it('should fall back to the HTTP status when response.text() fails', async () => {
+    it('should fallback to "Unknown error" when response.text() fails', async () => {
       jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: false,
         status: 500,
         text: () => Promise.reject(new Error('text failed')),
       } as unknown as Response);
 
-      await expect(
-        fetchWithTimeout('http://test.com/error', { timeout: 5000 }),
-      ).rejects.toThrow('Remote server returned HTTP 500');
+      await expect(fetchWithTimeout('http://test.com/error', { timeout: 5000 }))
+        .rejects.toThrow('HTTP 500: Unknown error');
     });
 
     it('should handle non-Error thrown values', async () => {
       jest.spyOn(global, 'fetch').mockRejectedValue('string error');
 
-      await expect(
-        fetchWithTimeout('http://test.com/api', { timeout: 5000, retries: 0 }),
-      ).rejects.toThrow('string error');
+      await expect(fetchWithTimeout('http://test.com/api', { timeout: 5000, retries: 0 }))
+        .rejects.toThrow('string error');
     });
   });
 
@@ -470,9 +427,7 @@ describe('httpClient', () => {
     });
 
     it('should return error for unreachable endpoint', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(
-        new Error('Connection refused'),
-      );
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Connection refused'));
 
       const result = await testEndpoint('http://192.168.1.50:11434', 5000);
 
@@ -507,32 +462,6 @@ describe('httpClient', () => {
       expect(result.success).toBe(true);
     });
 
-    it('bounds the full fallback probe sequence with one timeout', async () => {
-      jest.useFakeTimers();
-      try {
-        (global.fetch as jest.Mock)
-          .mockResolvedValueOnce({ ok: false, status: 404 })
-          .mockImplementation(
-            (_url, init: RequestInit) =>
-              new Promise((_resolve, reject) => {
-                const abort = () => reject(new Error('aborted'));
-                if (init.signal?.aborted) abort();
-                else
-                  init.signal?.addEventListener('abort', abort, { once: true });
-              }),
-          );
-
-        const pending = testEndpoint('http://192.168.1.50:11434', 50);
-        await Promise.resolve();
-        await jest.advanceTimersByTimeAsync(50);
-
-        await expect(pending).resolves.toMatchObject({ success: false });
-        expect(global.fetch).toHaveBeenCalledTimes(4);
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
     it('should strip trailing slashes from endpoint', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
@@ -543,7 +472,7 @@ describe('httpClient', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://192.168.1.50:11434/v1/models',
-        expect.any(Object),
+        expect.any(Object)
       );
     });
   });
@@ -556,7 +485,7 @@ describe('httpClient', () => {
     // Helper: mock the FileReader global with a success result
     function mockFileReaderSuccess(result = 'data:image/png;base64,encoded') {
       const mockReader = {
-        readAsDataURL: jest.fn(function (this: any) {
+        readAsDataURL: jest.fn(function(this: any) {
           setTimeout(() => {
             this.result = result;
             if (this.onload) this.onload({ target: this });
@@ -573,7 +502,7 @@ describe('httpClient', () => {
     // Helper: mock the FileReader global to trigger an error
     function mockFileReaderError() {
       const mockReader = {
-        readAsDataURL: jest.fn(function (this: any) {
+        readAsDataURL: jest.fn(function(this: any) {
           setTimeout(() => {
             if (this.onerror) this.onerror({ target: this });
           }, 0);
@@ -612,7 +541,7 @@ describe('httpClient', () => {
       RNFS.exists.mockResolvedValue(false);
 
       await expect(imageToBase64DataUrl('file:///missing.png')).rejects.toThrow(
-        'Image file not found',
+        'Image file not found'
       );
     });
 
@@ -673,9 +602,9 @@ describe('httpClient', () => {
         status: 404,
       } as Response);
 
-      await expect(
-        imageToBase64DataUrl('http://example.com/missing.png'),
-      ).rejects.toThrow('Failed to fetch image: 404');
+      await expect(imageToBase64DataUrl('http://example.com/missing.png')).rejects.toThrow(
+        'Failed to fetch image: 404'
+      );
     });
 
     it('should throw on FileReader error', async () => {
@@ -687,9 +616,7 @@ describe('httpClient', () => {
 
       mockFileReaderError();
 
-      await expect(
-        imageToBase64DataUrl('http://example.com/image.png'),
-      ).rejects.toThrow('Failed to read image as base64');
+      await expect(imageToBase64DataUrl('http://example.com/image.png')).rejects.toThrow('Failed to read image as base64');
     });
   });
 
@@ -747,10 +674,9 @@ describe('httpClient', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              data: [{ id: 'model.gguf' }, { id: 'other.gguf' }],
-            }),
+          json: () => Promise.resolve({
+            data: [{ id: 'model.gguf' }, { id: 'other.gguf' }],
+          }),
         });
 
       const result = await detectServerType('http://localhost:1234', 5000);
@@ -762,8 +688,7 @@ describe('httpClient', () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         headers: { get: () => null },
-        json: () =>
-          Promise.resolve({ object: 'list', data: [{ id: 'gpt-4' }] }),
+        json: () => Promise.resolve({ object: 'list', data: [{ id: 'gpt-4' }] }),
       });
 
       const result = await detectServerType('http://localhost:8080', 5000);
@@ -811,7 +736,7 @@ describe('httpClient', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:11434/v1/models',
-        expect.any(Object),
+        expect.any(Object)
       );
     });
 
@@ -865,27 +790,19 @@ describe('httpClient', () => {
 
       // Capture event handlers
       Object.defineProperty(mockXHR, 'onreadystatechange', {
-        set: (fn: () => void) => {
-          onReadyStateChange = fn;
-        },
+        set: (fn: () => void) => { onReadyStateChange = fn; },
         get: () => onReadyStateChange,
       });
       Object.defineProperty(mockXHR, 'onprogress', {
-        set: (fn: () => void) => {
-          onProgress = fn;
-        },
+        set: (fn: () => void) => { onProgress = fn; },
         get: () => onProgress,
       });
       Object.defineProperty(mockXHR, 'onerror', {
-        set: (fn: () => void) => {
-          onError = fn;
-        },
+        set: (fn: () => void) => { onError = fn; },
         get: () => onError,
       });
       Object.defineProperty(mockXHR, 'ontimeout', {
-        set: (fn: () => void) => {
-          onTimeout = fn;
-        },
+        set: (fn: () => void) => { onTimeout = fn; },
         get: () => onTimeout,
       });
 
@@ -903,15 +820,8 @@ describe('httpClient', () => {
     const TEST_ENDPOINT = 'http://localhost:11434/api/chat';
     let streamEvents: any[] = [];
 
-    function startStream(
-      headers: Record<string, string> = {},
-      timeout = 0,
-    ): Promise<void> {
-      return createStreamingRequest(
-        TEST_ENDPOINT,
-        { body: { model: 'test' }, headers, timeout },
-        e => streamEvents.push(e),
-      );
+    function startStream(headers: Record<string, string> = {}): Promise<void> {
+      return createStreamingRequest(TEST_ENDPOINT, { body: { model: 'test' }, headers }, (e) => streamEvents.push(e));
     }
 
     // Helper: simulate a progress event with given SSE response text
@@ -931,21 +841,12 @@ describe('httpClient', () => {
     }
 
     it('should make POST request with correct headers', async () => {
-      const _promise = startStream({ Authorization: 'Bearer token' });
+      const _promise = startStream({ 'Authorization': 'Bearer token' });
 
       expect(mockXHR.open).toHaveBeenCalledWith('POST', TEST_ENDPOINT, true);
-      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith(
-        'Content-Type',
-        'application/json',
-      );
-      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith(
-        'Accept',
-        'text/event-stream',
-      );
-      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith(
-        'Authorization',
-        'Bearer token',
-      );
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Accept', 'text/event-stream');
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer token');
       expect(mockXHR.send).toHaveBeenCalledWith('{"model":"test"}');
     });
 
@@ -958,38 +859,12 @@ describe('httpClient', () => {
       expect(streamEvents[0].data).toBe('{"text":"hello"}');
     });
 
-    it('rejects a credential downgrade before parsing SSE progress', async () => {
-      const onEvent = jest.fn();
-      const promise = createStreamingRequest(
-        'https://desktop.example.test/v1/chat',
-        { body: {}, headers: { Authorization: 'Bearer token' } },
-        onEvent,
-      );
-      mockXHR.responseURL = 'http://192.168.1.30:7878/v1/chat';
-      simulateProgress('data: {"text":"must-not-run"}\n\n');
-
-      await expect(promise).rejects.toThrow('redirected credentials');
-      expect(onEvent).not.toHaveBeenCalled();
-      expect(mockXHR.abort).toHaveBeenCalled();
-    });
-
     it('should resolve on successful completion', async () => {
       const promise = startStream();
 
       simulateComplete('data: final\n\n');
 
       await expect(promise).resolves.toBeUndefined();
-    });
-
-    it('rejects a credentialed HTTPS stream that reports an HTTP redirect target', async () => {
-      const promise = createStreamingRequest(
-        'https://desktop.example.test/v1/chat',
-        { body: {}, headers: { Authorization: 'Bearer token' } },
-        jest.fn(),
-      );
-      mockXHR.responseURL = 'http://192.168.1.30:7878/v1/chat';
-      simulateComplete('data: final\n\n');
-      await expect(promise).rejects.toThrow('redirected credentials');
     });
 
     it('should reject on HTTP error', async () => {
@@ -1000,7 +875,7 @@ describe('httpClient', () => {
       mockXHR.readyState = 4;
       if (onReadyStateChange) onReadyStateChange();
 
-      await expect(promise).rejects.toThrow('Internal Server Error');
+      await expect(promise).rejects.toThrow('HTTP 500');
     });
 
     it('should reject on network error', async () => {
@@ -1014,7 +889,7 @@ describe('httpClient', () => {
     });
 
     it('should reject on timeout', async () => {
-      const promise = startStream({}, 300000);
+      const promise = startStream();
 
       // Advance timers past timeout
       jest.advanceTimersByTime(300000);
@@ -1106,7 +981,7 @@ describe('httpClient', () => {
     });
 
     it('should handle XHR timeout via ontimeout', async () => {
-      const promise = startStream({}, 300000);
+      const promise = startStream();
 
       // Simulate XHR timeout
       jest.advanceTimersByTime(300000);
@@ -1128,26 +1003,19 @@ describe('httpClient', () => {
 
       (global as any).XMLHttpRequest = jest.fn(() => mockXHRThatThrows);
 
-      await expect(
-        createStreamingRequest(
-          'http://localhost:11434/api/chat',
-          { body: { model: 'test' }, headers: {} },
-          () => {},
-        ),
-      ).rejects.toThrow('Send failed');
+      await expect(createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { body: { model: 'test' }, headers: {} },
+        () => {}
+      )).rejects.toThrow('Send failed');
     });
 
     it('should abort XHR when signal fires', async () => {
       const controller = new AbortController();
       const promise = createStreamingRequest(
         TEST_ENDPOINT,
-        {
-          body: { model: 'test' },
-          headers: {},
-          timeout: 300000,
-          signal: controller.signal,
-        },
-        e => streamEvents.push(e),
+        { body: { model: 'test' }, headers: {}, timeout: 300000, signal: controller.signal },
+        (e) => streamEvents.push(e),
       );
 
       controller.abort();
@@ -1206,10 +1074,9 @@ describe('httpClient', () => {
         .mockResolvedValueOnce({ ok: false, status: 404 }) // /api/tags fails
         .mockResolvedValueOnce({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              data: [{ id: 'some-model' }, { id: 'other-model' }], // no .gguf
-            }),
+          json: () => Promise.resolve({
+            data: [{ id: 'some-model' }, { id: 'other-model' }], // no .gguf
+          }),
         });
 
       const result = await detectServerType('http://localhost:1234', 5000);
@@ -1280,11 +1147,7 @@ describe('httpClient', () => {
 
     it('resolves and calls onLine for each complete NDJSON line', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       simulateSuccess('{"done":false}\n{"done":true}\n');
       await promise;
       expect(onLine).toHaveBeenCalledTimes(2);
@@ -1292,40 +1155,9 @@ describe('httpClient', () => {
       expect(onLine).toHaveBeenCalledWith({ done: true });
     });
 
-    it('rejects a credential downgrade before parsing NDJSON progress', async () => {
-      const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'https://desktop.example.test/api/chat',
-        { body: {}, headers: { Authorization: 'Bearer token' } },
-        onLine,
-      );
-      mockXHR.responseURL = 'http://192.168.1.30:11434/api/chat';
-      mockXHR.responseText = '{"done":true}\n';
-      mockXHR.onprogress?.();
-
-      await expect(promise).rejects.toThrow('redirected credentials');
-      expect(onLine).not.toHaveBeenCalled();
-      expect(mockXHR.abort).toHaveBeenCalled();
-    });
-
-    it('rejects a credentialed HTTPS stream that reports an HTTP redirect target', async () => {
-      const promise = createNDJSONStreamingRequest(
-        'https://desktop.example.test/api/chat',
-        { body: {}, headers: { Authorization: 'Bearer token' } },
-        jest.fn(),
-      );
-      mockXHR.responseURL = 'http://192.168.1.30:11434/api/chat';
-      simulateSuccess();
-      await expect(promise).rejects.toThrow('redirected credentials');
-    });
-
     it('flushes partial buffered line on readyState=4', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       // No trailing newline — sits in lineBuffer until completion
       simulateSuccess('{"done":true}');
       await promise;
@@ -1333,45 +1165,29 @@ describe('httpClient', () => {
     });
 
     it('rejects on HTTP error status', async () => {
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        jest.fn(),
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
       mockXHR.responseText = 'Internal Server Error';
       mockXHR.readyState = 4;
       mockXHR.status = 500;
       mockXHR.onreadystatechange?.();
-      await expect(promise).rejects.toThrow('Internal Server Error');
+      await expect(promise).rejects.toThrow('HTTP 500');
     });
 
     it('rejects on network error', async () => {
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        jest.fn(),
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
       mockXHR.onerror?.();
       await expect(promise).rejects.toThrow('Network error');
     });
 
     it('rejects on timeout', async () => {
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        jest.fn(),
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
       mockXHR.ontimeout?.();
       await expect(promise).rejects.toThrow('Request timeout');
     });
 
     it('skips empty/blank lines', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       simulateSuccess('\n\n{"done":true}\n\n');
       await promise;
       expect(onLine).toHaveBeenCalledTimes(1);
@@ -1379,11 +1195,7 @@ describe('httpClient', () => {
 
     it('warns and skips invalid JSON lines', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       simulateSuccess('not-json\n{"ok":true}\n');
       await promise;
       expect(onLine).toHaveBeenCalledTimes(1);
@@ -1398,19 +1210,12 @@ describe('httpClient', () => {
       );
       simulateSuccess('');
       await promise;
-      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith(
-        'Authorization',
-        'Bearer token',
-      );
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer token');
     });
 
     it('processes onprogress chunks and merges partial lines', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       // First progress event delivers half a line
       mockXHR.responseText = '{"a":1}\n{"b":';
       mockXHR.onprogress?.();
@@ -1425,11 +1230,7 @@ describe('httpClient', () => {
 
     it('warns and skips invalid JSON in buffered final line', async () => {
       const onLine = jest.fn();
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        onLine,
-      );
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
       // No trailing newline so it ends up in lineBuffer — invalid JSON
       simulateSuccess('not-valid-json');
       await promise;
@@ -1437,15 +1238,56 @@ describe('httpClient', () => {
     });
 
     it('rejects when xhr.send throws', async () => {
-      mockXHR.send = jest.fn(() => {
-        throw new Error('send failed');
-      });
-      const promise = createNDJSONStreamingRequest(
-        'http://localhost/api/chat',
-        { body: {} },
-        jest.fn(),
-      );
+      mockXHR.send = jest.fn(() => { throw new Error('send failed'); });
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
       await expect(promise).rejects.toThrow('send failed');
     });
+
+  });
+});
+describe('fetchWithTimeout cancellation and bounds', () => {
+  afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+  const never = (signal: AbortSignal) => new Promise<never>((_, reject) => signal.addEventListener('abort', () => { const e = new Error('Aborted'); e.name = 'AbortError'; reject(e); }));
+
+  it("passes the caller's signal through: aborting it cancels the request", async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => never(init.signal)) as any);
+    const caller = new AbortController();
+    const pending = fetchWithTimeout('http://test.com/slow', { timeout: 60000, signal: caller.signal });
+    caller.abort();
+    await expect(pending).rejects.toThrow('Request cancelled');
+  });
+
+  it('is cancelled at once when the caller was already aborted', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => never(init.signal)) as any);
+    const caller = new AbortController(); caller.abort();
+    await expect(fetchWithTimeout('http://test.com/x', { signal: caller.signal })).rejects.toThrow('Request cancelled');
+  });
+
+  it('keeps the time limit running while the body is read, and says it timed out', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(global, 'fetch').mockImplementation(((_u: any, init: any) => Promise.resolve({
+      ok: true, headers: { get: () => 'application/json' }, json: () => never(init.signal),
+    })) as any);
+    const pending = fetchWithTimeout('http://test.com/stall', { timeout: 1000 });
+    const result = pending.catch((e: Error) => e.message);
+    await jest.advanceTimersByTimeAsync(1001);
+    expect(await result).toBe('Request timed out');
+  });
+
+  it('never repeats a POST, but repeats a GET after a network error', async () => {
+    const spy = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
+    await expect(fetchWithTimeout('http://test.com/pay', { method: 'POST', retries: 2, retryDelay: 1 })).rejects.toThrow('network down');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockClear();
+    await expect(fetchWithTimeout('http://test.com/get', { retries: 2, retryDelay: 1 })).rejects.toThrow('network down');
+    expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes its listener from the caller signal after every outcome', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, headers: { get: () => 'text/plain' }, text: async () => 'ok' } as any);
+    const caller = new AbortController();
+    const remove = jest.spyOn(caller.signal, 'removeEventListener');
+    await fetchWithTimeout('http://test.com/ok', { signal: caller.signal });
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 });

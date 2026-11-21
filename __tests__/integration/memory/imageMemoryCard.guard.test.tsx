@@ -17,14 +17,14 @@ import { createONNXImageModel } from '../../utils/factories';
 async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; availBytes: number }, modelSizeBytes: number) {
   const boundary = installNativeBoundary({ ram });
   void boundary;
-   
+  /* eslint-disable @typescript-eslint/no-var-requires */
   const React = require('react');
   const { render } = requireRTL();
   const { imageGenerationService } = require('../../../src/services/imageGenerationService');
   const { hardwareService } = require('../../../src/services/hardware');
   const { useAppStore } = require('../../../src/stores');
   const { ModelFailureCard } = require('../../../src/components/ModelFailureCard');
-   
+  /* eslint-enable @typescript-eslint/no-var-requires */
 
   // CoreML backend → activeModelService skips the mnn/qnn integrity (FS) gate, straight to the memory gate.
   const model = createONNXImageModel({ id: 'sd', name: 'Big SD', modelPath: '/models/big', backend: 'coreml' as never, size: modelSizeBytes });
@@ -36,15 +36,6 @@ async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; ava
 }
 
 describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () => {
-  it('does not use the 1GB minimum budget to admit a small dirty model at critically low RAM', async () => {
-    const t = await setup({ platform: 'android', totalBytes: 12 * GB, availBytes: 100 * MB }, 200 * MB);
-    const result = await t.imageGenerationService.generateImage({ prompt: 'a cat' });
-    expect(result).toBeNull();
-
-    const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
-    expect(view.getByText('Image model: Not Enough Memory')).toBeTruthy();
-  });
-
   it('refuses an unfittable load and shows the "Not Enough Memory" card + Load Anyway', async () => {
     const t = await setup({ platform: 'ios', totalBytes: 6 * GB, availBytes: 300 * MB }, 8 * GB);
     const result = await t.imageGenerationService.generateImage({ prompt: 'a cat' });
@@ -69,7 +60,7 @@ describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () =>
     // budget stops refusing — the user is NEVER dead-ended at "we evicted everything and there's STILL
     // no memory". After the override attempt the memory-refusal card is gone (the gate admitted the load).
     // Whether the forced 8GB dirty load then survives on the physical device is the native OOM outcome —
-    // an on-device run, not something the in-Node fake can honestly assert.
+    // Provit, not something the in-Node fake can honestly assert.
     const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
     expect(view.queryByText('Image model: Not Enough Memory')).toBeNull();
   });

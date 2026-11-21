@@ -12,9 +12,6 @@ export const createTextGenAdvancedStyles = (colors: ThemeColors) => ({
   container: {
     marginBottom: SPACING.lg,
   },
-  compactContainer: {
-    marginBottom: 0,
-  },
   info: {
     marginBottom: SPACING.md,
   },
@@ -30,6 +27,7 @@ export const createTextGenAdvancedStyles = (colors: ThemeColors) => ({
   },
   buttons: {
     flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: SPACING.sm,
   },
   button: {

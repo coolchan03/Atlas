@@ -1,20 +1,30 @@
 /**
  * ImageGenAdviceCard — in-chat GPU-path speed/quality guidance. Renders nothing off the
- * mnn path or at good settings; shows the right tips (raise steps / raise
+ * mnn path or at good settings; shows the right tips (raise steps / lower size / raise
  * size) when the live settings warrant it; is dismissible. Drives the REAL store + rule.
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 
+jest.mock('react-native-vector-icons/Feather', () => 'Icon');
+jest.mock('../../../src/components/AnimatedPressable', () => {
+  const { TouchableOpacity } = require('react-native');
+  return { AnimatedPressable: ({ children, onPress, testID }: any) => (
+    <TouchableOpacity testID={testID} onPress={onPress}>{children}</TouchableOpacity>
+  ) };
+});
+
 import { ImageGenAdviceCard } from '../../../src/components/ImageGenAdviceCard';
 import { useAppStore } from '../../../src/stores';
 
 const setup = (backend: string | undefined, imageSteps: number | undefined, imageWidth: number | undefined) => {
-  useAppStore.getState().setDownloadedImageModels(backend
+  useAppStore.setState({
+    downloadedImageModels: backend
       ? ([{ id: 'img', name: 'M', modelPath: '/m', backend, downloadedAt: '', size: 1 }] as any)
-      : []);
-  useAppStore.getState().setActiveImageModelId(backend ? 'img' : null);
-  useAppStore.getState().updateSettings({ imageSteps, imageWidth, imageHeight: imageWidth });
+      : ([] as any),
+    activeImageModelId: backend ? 'img' : null,
+    settings: { ...useAppStore.getState().settings, imageSteps, imageWidth, imageHeight: imageWidth } as any,
+  });
 };
 
 describe('ImageGenAdviceCard', () => {
@@ -36,9 +46,9 @@ describe('ImageGenAdviceCard', () => {
     expect(queryByTestId('image-gen-advice-size')).toBeNull();
   });
 
-  it('renders no advice at the default 512 resolution with sufficient steps', () => {
+  it('shows the lower-size tip when too large (512)', () => {
     setup('mnn', 22, 512);
-    expect(render(<ImageGenAdviceCard />).queryByTestId('image-gen-advice')).toBeNull();
+    expect(render(<ImageGenAdviceCard />).getByTestId('image-gen-advice-size')).toBeTruthy();
   });
 
   it('shows the raise-size (garbage) tip when below 256 (the 128 case)', () => {

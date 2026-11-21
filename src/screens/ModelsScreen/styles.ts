@@ -2,15 +2,25 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { createImageModelsStyles } from './imageStyles';
 
-const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createBaseStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   flex1: { flex: 1 },
   backButton: { padding: 4, marginRight: 8 },
   searchContainerNoPadding: { paddingHorizontal: 0 },
   container: { flex: 1, backgroundColor: colors.background },
-  downloadManagerButton: {
-    padding: SPACING.xs,
-    position: 'relative' as const,
+  header: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    ...shadows.small,
+    zIndex: 1,
   },
+  title: { ...TYPOGRAPHY.h2, color: colors.text, flex: 1 },
+  downloadManagerButton: { padding: 8, position: 'relative' as const },
   downloadBadge: {
     position: 'absolute' as const,
     top: 2,
@@ -24,16 +34,13 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     paddingHorizontal: 4,
   },
   downloadBadgeText: { ...TYPOGRAPHY.label, color: colors.text },
-  tabScroller: {
+  tabBar: {
+    flexDirection: 'row' as const,
+    paddingHorizontal: 16,
+    gap: 24,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     marginBottom: 12,
-  },
-  tabBar: {
-    flexDirection: 'row' as const,
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
-    gap: SPACING.md,
   },
   tabItem: { paddingVertical: 10, alignItems: 'center' as const },
   tabText: { ...TYPOGRAPHY.body, color: colors.textMuted },
@@ -49,7 +56,7 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   searchContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 8,
   },
@@ -62,8 +69,24 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     paddingVertical: 12,
     color: colors.text,
   },
+  importButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingVertical: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed' as const,
+    borderColor: `${colors.primary}60`,
+    borderRadius: 12,
+    backgroundColor: `${colors.primary}08`,
+  },
+  importButtonText: { ...TYPOGRAPHY.body, color: colors.primary },
   importProgressCard: {
-    marginHorizontal: SPACING.md,
+    marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 8,
     padding: 16,
@@ -87,7 +110,7 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: 16,
   },
   loadingText: { ...TYPOGRAPHY.body, color: colors.textSecondary },
-  listContent: { paddingHorizontal: SPACING.md, paddingBottom: 32 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
   deviceBanner: {
     backgroundColor: `${colors.trending}15`,
     borderRadius: 8,
@@ -109,7 +132,7 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
 const createFilterStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   filterBar: { marginBottom: 4, paddingBottom: 4 },
   filterPillRow: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 16,
     gap: 8,
     alignItems: 'center' as const,
   },
@@ -139,7 +162,7 @@ const createFilterStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   filterCountText: { ...TYPOGRAPHY.labelSmall, color: colors.background, fontWeight: '700' as const },
   clearFiltersButton: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   clearFiltersText: { ...TYPOGRAPHY.bodySmall, color: colors.error },
-  filterExpandedContent: { paddingHorizontal: SPACING.md, paddingTop: 8, paddingBottom: 4 },
+  filterExpandedContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   filterChipWrap: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
   filterChip: {
     flexDirection: 'row' as const,
@@ -169,24 +192,14 @@ const createFilterStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
 });
 
 const createTextModelsStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
-  modelInfoCard: {
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: SPACING.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
+  modelInfoCard: { marginHorizontal: 16, marginTop: 12, marginBottom: 16 },
   authorRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginBottom: SPACING.xs,
-    gap: SPACING.sm,
+    marginBottom: 8,
+    gap: 8,
   },
-  modelAuthor: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
+  modelAuthor: { ...TYPOGRAPHY.body, color: colors.textSecondary },
   credibilityBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -197,14 +210,14 @@ const createTextModelsStyles = (colors: ThemeColors, _shadows: ThemeShadows) => 
   },
   credibilityIcon: { ...TYPOGRAPHY.label },
   credibilityText: { ...TYPOGRAPHY.meta },
-  modelDescription: { ...TYPOGRAPHY.bodySmall, color: colors.text, marginBottom: SPACING.xs },
+  modelDescription: { ...TYPOGRAPHY.body, color: colors.text, marginBottom: 12 },
   modelStats: { flexDirection: 'row' as const, gap: 16 },
   statText: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-  sectionTitle: { ...TYPOGRAPHY.h3, color: colors.text, paddingHorizontal: SPACING.md, marginBottom: 4 },
+  sectionTitle: { ...TYPOGRAPHY.h3, color: colors.text, paddingHorizontal: 16, marginBottom: 4 },
   sectionSubtitle: {
     ...TYPOGRAPHY.body,
     color: colors.textSecondary,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   recommendedTitle: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginBottom: SPACING.md },

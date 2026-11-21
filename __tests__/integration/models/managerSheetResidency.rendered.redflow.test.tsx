@@ -15,6 +15,9 @@
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
+// These residency tests size models with the CPU overhead; the app default is now Auto (GPU overhead).
+beforeEach(() => { require('../../../src/stores/appStore').useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' }); });
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => ({ params: {} }),
@@ -51,10 +54,11 @@ async function setupHome() {
   const docs = boundary.fs!.DocumentDirectoryPath;
   const modelPath = `${docs}/models/ggml-small.gguf`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf' });
+  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf', fileSize: 500 * 1024 * 1024 });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
-  useAppStore.setState({ checklistDismissed: true });
+  require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
+  useAppStore.setState({ activeModelId: null, loadedTextModelId: null, checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
 
   const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
   const view = rtl.render(React.createElement(
@@ -66,8 +70,8 @@ async function setupHome() {
 
   // GESTURE: select the text model the way a user does — open the picker, tap the row.
   rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
-  const row = await rtl.waitFor(() => view.getByTestId('text-model-row-m'), { timeout: 10000 });
-  rtl.fireEvent.press(row);
+  const rows = await rtl.waitFor(() => { const r = view.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 10000 });
+  rtl.fireEvent.press(rows[0]);
   await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
 
   return { boundary, React, rtl, useAppStore, activeModelService, view };
@@ -109,7 +113,7 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     // The row itself still opens the text picker (eject must not swallow the row tap).
     await rtl.act(async () => { pressByWalkingUp(view.getByTestId('models-row-text')); });
-    await rtl.waitFor(() => { expect(view.queryByTestId('text-model-row-m')).not.toBeNull(); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(view.queryAllByTestId('model-item').length).toBeGreaterThan(0); }, { timeout: 10000 });
   }, 60000);
 
   it('the Select Model picker no longer renders the In Memory section (moved to the manager sheet)', async () => {
@@ -122,13 +126,13 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     // The surface that carried "In Memory": the chat's ModelSelectorModal (mounted the way the
     // sibling memory suite does — with a resident live, the section rendered here on HEAD).
-     
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
     const picker = rtl.render(React.createElement(ModelSelectorModal, {
       visible: true, onClose: () => {}, onSelectModel: () => {}, onUnloadModel: () => {}, isLoading: false,
       currentModelPath: null,
     }));
-    await rtl.waitFor(() => { expect(picker.queryByText('TEXT MODEL')).not.toBeNull(); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(picker.queryByText('Select Model')).not.toBeNull(); }, { timeout: 10000 });
     await new Promise((r) => setTimeout(r, 400)); // one poll tick of the section, so absence is real
 
     // RED on HEAD: the picker still shows "In Memory". The manager sheet is the residency surface now.

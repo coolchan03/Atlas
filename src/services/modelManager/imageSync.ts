@@ -3,6 +3,8 @@ import { unzip } from 'react-native-zip-archive';
 import { ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
+import { ensureImageExtractionComplete, validateImageModelDir } from '../../utils/imageModelIntegrity';
+import logger from '../../utils/logger';
 
 interface SyncCompletedImageDownloadsOpts {
   imageModelsDir: string;
@@ -50,6 +52,15 @@ async function recoverZipDownload(opts: {
 
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
   await unzip(zipPath, modelDir);
+
+  if (metadata.imageModelBackend === 'mnn' || metadata.imageModelBackend === 'qnn') {
+    await ensureImageExtractionComplete({
+      backend: metadata.imageModelBackend,
+      modelDir,
+      zipPath,
+      modelId: metadata.modelId.replace('image:', ''),
+    });
+  }
   await RNFS.unlink(zipPath).catch(() => {});
 
   if (metadata.imageModelBackend === 'coreml') {
@@ -62,8 +73,18 @@ async function recoverMultifileDownload(
   metadata: PersistedDownloadInfo,
   modelDir: string,
 ): Promise<string> {
-  if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
-    await downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo);
+  if (metadata.imageModelBackend === 'coreml') {
+    const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+    if (metadata.imageModelRepo) {
+      await downloadCoreMLTokenizerFiles(resolvedModelDir, metadata.imageModelRepo);
+    }
+    return resolvedModelDir;
+  }
+  if (metadata.imageModelBackend === 'mnn' || metadata.imageModelBackend === 'qnn') {
+    const integrity = await validateImageModelDir(modelDir, metadata.imageModelBackend);
+    if (!integrity.complete) {
+      throw new Error(`Recovered image model is incomplete: ${integrity.missing.join(', ')}`);
+    }
   }
   return modelDir;
 }
@@ -104,13 +125,19 @@ export async function syncCompletedImageDownloads(opts: SyncCompletedImageDownlo
         })
         : await recoverMultifileDownload(metadata, modelDir);
 
+      // The recovery transaction commits only after extraction/tokenizer
+      // validation is complete, mirroring the normal download path.
+      if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+      await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8');
       const imageModel = buildRecoveredImageModel(metadata, imageModelId, modelPath);
       await addDownloadedImageModel(imageModel);
       existingIds.add(imageModel.id);
       recovered.push(imageModel);
       clearDownloadCallback(download.downloadId);
-    } catch {
-      // Keep metadata so recovery can be retried on next app start.
+    } catch (error) {
+      // Preserve recovery metadata and report an actionable diagnostic rather
+      // than silently losing the failure every time the app starts.
+      logger.warn(`[ImageDownloadRecovery] Could not restore ${imageModelId}; will retry on next startup:`, error);
     }
   }
 

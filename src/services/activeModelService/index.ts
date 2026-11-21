@@ -10,12 +10,10 @@ import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
-import {
-  createSelectedTextModelResolver,
-  selectedTextModelIdOf,
-} from './selectedTextModel';
-import { activeModelSnapshot } from './snapshot';
-import type { DownloadedModel } from '../../types';
+import { autoPickAccelerationForModel } from '../../atlasTools/accel';
+import { holdScreenAwake, releaseScreenAwake } from '../../atlasTools/runtimePower';
+import { recordTextLoadDuration } from './runtimeInfo';
+import { textOverheadMultiplier } from './types';
 import type {
   ActiveModelInfo,
   ResourceUsage,
@@ -27,14 +25,13 @@ import {
   checkMemoryForModel as _checkMemoryForModel,
   checkMemoryForDualModel as _checkMemoryForDualModel,
   getCurrentlyLoadedMemoryGB as _getCurrentlyLoadedMemoryGB,
-  estimateTextModelMemoryMB,
 } from './memory';
 import { doLoadTextModel, doLoadImageModel, checkImageModelCanLoad } from './loaders';
+import { warmUpTextModel } from '../modelWarmUp';
 import {
   getResourceUsage as _getResourceUsage,
   syncWithNativeState as _syncWithNativeState,
 } from './utils';
-;
 class ActiveModelService {
   private readonly listeners: Set<ModelChangeListener> = new Set();
   private readonly loadingState = { text: false, image: false };
@@ -42,49 +39,35 @@ class ActiveModelService {
   private loadedImageModelId: string | null = null;
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
-  /** Resolves the selection against the downloaded list, tolerating a rebuilt id (see resolveModel). */
-  private readonly selectedTextModel = createSelectedTextModelResolver({
-    read: () => {
-      const store = useAppStore.getState();
-      return { models: store.downloadedModels, selectedId: store.activeModelId };
-    },
-    warn: message => logger.warn(message),
-  });
   private imageLoadPromise: Promise<void> | null = null;
-  /** The SINGLE writer for the loaded-text-model id: keeps the private field and the reactive store
-   *  projection (loadedTextModelId) in lockstep, so every surface reads one truth for "currently loaded". */
+  /** Single writer keeping the private loaded id and reactive store projection in lockstep. */
   private setLoadedText(id: string | null): void {
     this.loadedTextModelId = id;
     useAppStore.getState().setLoadedTextModelId(id);
   }
-  /**
-   * The selected text model, resolved. The ONE answer to "which text model is chosen", so no surface
-   * repeats the lookup and none of them can disagree about it.
-   */
-  resolveSelectedTextModel(): DownloadedModel | null {
-    return this.selectedTextModel();
-  }
-
-  /** The id to load for a turn (see selectedTextModelIdOf for why the order matters). */
-  selectedTextModelId(): string | null {
-    return selectedTextModelIdOf(useAppStore.getState());
-  }
-
   getActiveModels(): ActiveModelInfo {
-    return activeModelSnapshot({
-      textModel: this.resolveSelectedTextModel(),
-      imageModel:
-        useAppStore
-          .getState()
-          .downloadedImageModels.find(
-            m => m.id === useAppStore.getState().activeImageModelId,
-          ) ?? null,
-      textIsLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
-      imageIsLoaded: this.loadedImageModelId != null,
-      loading: this.loadingState,
-    });
+    const store = useAppStore.getState();
+    const textModel =
+      store.downloadedModels.find(m => m.id === store.activeModelId) ?? null;
+    const imageModel =
+      store.downloadedImageModels.find(
+        m => m.id === store.activeImageModelId,
+      ) ?? null;
+    return {
+      text: {
+        model: textModel,
+        // Report the SELECTED model as loaded only when that exact model is resident.
+        // A different model can remain resident briefly during a lazy switch.
+        isLoaded: !!store.activeModelId && this.isTextModelCurrent(store.activeModelId),
+        isLoading: this.loadingState.text,
+      },
+      image: {
+        model: imageModel,
+        isLoaded: !!store.activeImageModelId && this.loadedImageModelId === store.activeImageModelId,
+        isLoading: this.loadingState.image,
+      },
+    };
   }
-
   hasAnyModelLoaded(): boolean {
     const info = this.getActiveModels();
     return info.text.isLoaded || info.image.isLoaded;
@@ -113,6 +96,7 @@ class ActiveModelService {
       imageModelId: this.loadedImageModelId,
     };
   }
+
   getPerformanceStats() {
     return llmService.getPerformanceStats();
   }
@@ -168,10 +152,18 @@ class ActiveModelService {
     if (!model) {
       throw new Error('Model not found');
     }
+
+    // Resolve automatic acceleration BEFORE calculating residency cost or native
+    // load params so the memory gate and the engine see the same backend. Explicit
+    // user choices are never changed by this helper.
+    await autoPickAccelerationForModel(model);
+
+    // Re-read the store because automatic backend selection may have updated settings.
+    const loadStore = useAppStore.getState();
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     // GPU-aware overhead: a GPU/NPU backend adds working buffers in system RAM the flat CPU 1.5× misses.
-    const textSizeMB = await estimateTextModelMemoryMB(model);
+    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(loadStore.settings.inferenceBackend)) || 0) / (1024 * 1024));
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
@@ -188,17 +180,21 @@ class ActiveModelService {
         : new OverridableMemoryError('Not enough free memory to load this model. Close other apps or choose a smaller model.');
     }
     this.loadingState.text = true;
+    holdScreenAwake('text-model-load');
     this.notifyListeners();
+    const loadStartedAt = Date.now();
     this.textLoadPromise = doLoadTextModel({
       model,
       modelId,
-      store,
+      store: loadStore,
       timeoutMs,
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
+        recordTextLoadDuration(id, Date.now() - loadStartedAt);
         this.setLoadedText(id);
         useAppStore.getState().setTextModelEvicted(false); // loaded → clear any prior eviction
+        void warmUpTextModel(); // optional, silent, GPU only
         modelResidencyManager.register(
           { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
           () => this.doUnloadTextModelLocked(true), // eviction keeps the selection
@@ -210,18 +206,13 @@ class ActiveModelService {
       onFinally: () => {
         this.loadingState.text = false;
         this.textLoadPromise = null;
+        releaseScreenAwake('text-model-load');
         this.notifyListeners();
       },
     });
     await this.textLoadPromise;
   }
-  /**
-   * The ONE owner of the "active text model" write. Selecting a model MARKS it active (the load is
-   * deferred to the first message); this is the single place a selection is recorded, so the View
-   * dispatches this intent instead of poking the store — presentation holds no authoritative state.
-   * activeModelId is then set from exactly three places, all here in the service: select (this),
-   * load-success (loaders), and cleared on load-failure/unload — so it can never drift from reality.
-   */
+  /** Record the selected text model; loading remains lazy until first use. */
   selectTextModel(modelId: string): void {
     const store = useAppStore.getState();
     store.setActiveModelId(modelId);
@@ -265,7 +256,7 @@ class ActiveModelService {
   }
   async loadImageModel(
     modelId: string,
-    timeoutMs: number = 180000,
+    timeoutMs: number = 240000,
     opts?: { override?: boolean },
   ): Promise<void> {
     await modelResidencyManager.runExclusive(`load:image:${modelId}`, () =>
@@ -395,7 +386,8 @@ class ActiveModelService {
     const hasTextModel =
       !!store.activeModelId ||
       !!this.loadedTextModelId ||
-      !!getActiveEngineService()?.isModelLoaded();
+      llmService.isModelLoaded() ||
+      liteRTService.isModelLoaded();
     const hasImageModel =
       !!store.activeImageModelId || !!this.loadedImageModelId;
     if (hasTextModel) {
@@ -458,7 +450,7 @@ class ActiveModelService {
     const s = useAppStore.getState();
     return { downloadedModels: s.downloadedModels, downloadedImageModels: s.downloadedImageModels };
   }
-  private getCurrentlyLoadedMemoryGB(): Promise<number> {
+  private getCurrentlyLoadedMemoryGB(): number {
     return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
   async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {
@@ -487,6 +479,12 @@ class ActiveModelService {
         this.loadedImageModelThreads = n;
       },
     });
+    // Native state is authoritative. If a pipeline/engine disappeared (iOS
+    // one-shot image release, memory warning, native crash), remove the matching
+    // residency charge too so future memory decisions are not made against a ghost.
+    if (this.loadedTextModelId == null) modelResidencyManager.release('text');
+    if (this.loadedImageModelId == null) modelResidencyManager.release('image');
+    this.notifyListeners();
   }
   subscribe(listener: ModelChangeListener): () => void {
     this.listeners.add(listener);

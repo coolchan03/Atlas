@@ -3,8 +3,8 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
-import { LoadingDots } from './LoadingDots';
 import { AppSheet } from './AppSheet';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -13,9 +13,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 // AlertState + its factories are pure and live in utils/alertState so non-UI code can build an
 // alert state without importing this component (no-backward-layering-core). Re-exported here so
 // existing `from '../components/CustomAlert'` importers are unchanged.
-import { AlertButton } from '../utils/alertState';
+import type { AlertButton } from '../utils/alertState';
 
-export type { AlertButton };
 export type { AlertState } from '../utils/alertState';
 export { initialAlertState, showAlert, hideAlert } from '../utils/alertState';
 
@@ -58,7 +57,7 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
     >
       <View style={styles.content}>
         {loading ? (
-          <LoadingDots color={colors.primary} style={styles.loadingIndicator} />
+          <ActivityIndicator size="small" color={colors.primary} style={styles.loadingIndicator} />
         ) : null}
         {message ? <Text style={[styles.message, prominentMessage && styles.messageProminent]}>{message}</Text> : null}
         <View style={styles.buttonContainer}>

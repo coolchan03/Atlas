@@ -149,7 +149,8 @@ describe('useKeyboardAwarePopover', () => {
       expect(mockMeasureInWindow).toHaveBeenCalled();
       // anchor.y = screenH - btnY = 800 - 100 = 700
       // anchor.x = screenW - (btnX + btnW) = 400 - (10 + 50) = 340
-      expect(result.current.anchor).toEqual({ y: 700, x: 340 });
+      // anchor.top = the trigger's top edge in window coordinates (what the popover measures itself against)
+      expect(result.current.anchor).toEqual({ y: 700, x: 340, top: 100 });
     });
 
     it('handles missing measureInWindow gracefully', () => {
@@ -180,7 +181,7 @@ describe('useKeyboardAwarePopover', () => {
 
       // y = screenH - (undefined ?? 0) = 800 - 0 = 800
       // x = screenW - (btnX + btnW) = 400 - (10 + 50) = 340
-      expect(result.current.anchor).toEqual({ y: 800, x: 340 });
+      expect(result.current.anchor).toEqual({ y: 800, x: 340, top: 0 });
     });
   });
 

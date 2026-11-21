@@ -14,7 +14,7 @@ import { DownloadEntry } from '../../stores/downloadStore';
 import { backgroundDownloadService } from '../../services';
 import { DownloadItem } from './items';
 import logger from '../../utils/logger';
-import { proceedWithDownload } from '../../services/imageDownloadActions';
+import { proceedWithDownload } from '../ModelsScreen/imageDownloadActions';
 import { imageDescriptorFromMetadata } from '../ModelsScreen/imageDescriptor';
 import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
 

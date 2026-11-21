@@ -26,21 +26,18 @@ import { queuedUniformId } from './uniformId';
 import {
   DownloadProvider,
   ModelDownload,
-  ModelDownloadStartRequest,
   ModelDownloadStatus,
   ModelDownloadType,
 } from './types';
 
 type Listener = () => void;
-type Op = 'retry' | 'cancel' | 'remove' | 'pause' | 'resume';
+type Op = 'retry' | 'cancel' | 'remove';
 
 /** Coalesce a burst of provider changes into one self-list (transition logging). */
 const SELF_REFRESH_MS = 300;
 
 /** Which capability flag gates each control op. */
 const OP_CAPABILITY: Record<Op, keyof ModelDownload['capabilities']> = {
-  pause: 'pause',
-  resume: 'resume',
   retry: 'retry',
   cancel: 'cancel',
   remove: 'remove',
@@ -49,7 +46,6 @@ const OP_CAPABILITY: Record<Op, keyof ModelDownload['capabilities']> = {
 class ModelDownloadService {
   private readonly providers = new Map<ModelDownloadType, DownloadProvider>();
   private readonly providerUnsubs = new Map<ModelDownloadType, () => void>();
-  private readonly providerRegistrations = new Map<ModelDownloadType, symbol>();
   private readonly listeners = new Set<Listener>();
   /** Last seen status per download id — the basis for transition detection/logging. */
   private readonly lastStatus = new Map<string, ModelDownloadStatus>();
@@ -58,33 +54,18 @@ class ModelDownloadService {
   private selfRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Register a domain's provider. Re-registering replaces (and re-subscribes). */
-  register(provider: DownloadProvider): () => void {
-    const registration = Symbol(provider.modelType);
+  register(provider: DownloadProvider): void {
     this.providerUnsubs.get(provider.modelType)?.();
     // Re-registering: forget this type's last-seen statuses so the next list logs
     // its downloads as 'new' rather than churning gone/new against stale ids.
-    for (const id of this.lastStatus.keys()) {
+    for (const id of [...this.lastStatus.keys()]) {
       if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
     }
     this.providers.set(provider.modelType, provider);
     const unsub = provider.subscribe(() => { this.onProviderChange(); });
     this.providerUnsubs.set(provider.modelType, unsub);
-    this.providerRegistrations.set(provider.modelType, registration);
     logger.log(`[DL-SM] provider registered type=${provider.modelType}`);
     this.onProviderChange(); // capture/log this provider's initial state
-    return () => {
-      if (this.providers.get(provider.modelType) !== provider ||
-          this.providerRegistrations.get(provider.modelType) !== registration) return;
-      this.providerUnsubs.get(provider.modelType)?.();
-      this.providerUnsubs.delete(provider.modelType);
-      this.providerRegistrations.delete(provider.modelType);
-      this.providers.delete(provider.modelType);
-      for (const id of this.lastStatus.keys()) {
-        if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
-      }
-      logger.log(`[DL-SM] provider unregistered type=${provider.modelType}`);
-      this.onProviderChange();
-    };
   }
 
   /**
@@ -147,15 +128,6 @@ class ModelDownloadService {
     return merged;
   }
 
-  async start(request: ModelDownloadStartRequest): Promise<void> {
-    const provider = this.providers.get(request.modelType);
-    if (!provider?.start) throw new Error(`No download starter registered for ${request.modelType}`);
-    logger.log(`[DL-SM] start type=${request.modelType}`);
-    await provider.start(request);
-    await this.list();
-    this.notify();
-  }
-
   /** Compare each download's status to what we last saw and log every change. */
   private logTransitions(downloads: ModelDownload[]): void {
     const seen = new Set<string>();
@@ -163,19 +135,16 @@ class ModelDownloadService {
       seen.add(d.id);
       const prev = this.lastStatus.get(d.id);
       if (prev !== d.status) {
-        const errorSuffix = d.error ? ` error="${d.error}"` : '';
         logger.log(
-          `[DL-SM] ${d.id} ${prev ?? 'new'} → ${d.status} bytes=${
-            d.bytesDownloaded
-          }/${d.sizeBytes} progress=${(d.progress * 100).toFixed(
-            0,
-          )}%${errorSuffix}`,
+          `[DL-SM] ${d.id} ${prev ?? 'new'} → ${d.status}` +
+          ` bytes=${d.bytesDownloaded}/${d.sizeBytes} progress=${(d.progress * 100).toFixed(0)}%` +
+          `${d.error ? ` error="${d.error}"` : ''}`,
         );
         this.lastStatus.set(d.id, d.status);
       }
     }
     // Forget downloads that disappeared (removed) so a re-add logs as 'new' again.
-    for (const id of this.lastStatus.keys()) {
+    for (const id of [...this.lastStatus.keys()]) {
       if (!seen.has(id)) {
         logger.log(`[DL-SM] ${id} ${this.lastStatus.get(id)} → gone (removed)`);
         this.lastStatus.delete(id);
@@ -183,8 +152,6 @@ class ModelDownloadService {
     }
   }
 
-  pause(id: string): Promise<void> { return this.dispatch('pause', id); }
-  resume(id: string): Promise<void> { return this.dispatch('resume', id); }
   retry(id: string): Promise<void> { return this.dispatch('retry', id); }
   cancel(id: string): Promise<void> { return this.dispatch('cancel', id); }
   remove(id: string): Promise<void> { return this.dispatch('remove', id); }
@@ -197,7 +164,6 @@ class ModelDownloadService {
    * fall-through that dispatches.
    */
   private async dispatch(op: Op, id: string): Promise<void> {
-    if (op === 'pause' || op === 'resume') await this.list();
     let download = this.lastList.find(d => d.id === id);
     if (!download) { await this.list(); download = this.lastList.find(d => d.id === id); }
     if (!download) {
@@ -224,9 +190,7 @@ class ModelDownloadService {
     }
     logger.log(`[DL-SM] ${op} ${id} → dispatch type=${download.modelType}`);
     try {
-      const action = provider[op];
-      if (!action) throw new Error(`${op} is unavailable for ${download.modelType}`);
-      await action.call(provider, id);
+      await provider[op](id);
     } catch (err) {
       logger.log(`[DL-SM] ${op} ${id} FAILED err=${err instanceof Error ? err.message : String(err)}`);
       throw err;
@@ -280,7 +244,6 @@ class ModelDownloadService {
     if (this.selfRefreshTimer) { clearTimeout(this.selfRefreshTimer); this.selfRefreshTimer = null; }
     this.providers.clear();
     this.providerUnsubs.clear();
-    this.providerRegistrations.clear();
     this.listeners.clear();
     this.lastStatus.clear();
     this.lastList = [];

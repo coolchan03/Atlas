@@ -1,0 +1,56 @@
+/** Realistic app state for exploring screens: models, a project with saved study results, chats, an agent. Call after installNativeBoundary. */
+import { createDownloadedModel, createONNXImageModel, createConversationWithMessages } from '../utils/factories';
+
+const src = [{ n: 1, doc: 'Book', part: 1, text: 'Assets equal liabilities plus equity.' }, { n: 2, doc: 'Book', part: 2, text: 'A lease is a contract to use an asset.' }];
+export const studyResults = (): unknown[] => [
+  { kind: 'guide', createdAt: 1, topic: 'Leases', title: 'Study guide', sources: src, text: '# Guide\n\nA lease is a contract [2].' },
+  { kind: 'cards', createdAt: 2, topic: 'Leases', title: 'Cards', sources: src, cards: [{ q: 'What is a lease?', a: 'A contract', src: [2] }, { q: 'Assets?', a: 'What you own', src: [1] }] },
+  { kind: 'quiz', createdAt: 3, topic: 'Leases', title: 'Quiz', sources: src, quiz: [{ q: 'Which is a lease?', options: ['a', 'b', 'c'], answer: 1, why: 'because', src: [2] }] },
+  { kind: 'podcast', createdAt: 4, topic: 'Leases', title: 'Episode', sources: src, hosts: 2, minutes: 3, podcast: [{ host: 'A', text: 'Welcome to leases.' }, { host: 'B', text: 'A lease is a contract.' }] },
+  { kind: 'slides', createdAt: 5, topic: 'Leases', title: 'Deck', sources: src, slides: [{ title: 'Leases', bullets: ['Contract', 'Asset'], narration: 'Leases are contracts.', src: [2] }] },
+  { kind: 'game', createdAt: 6, topic: 'Leases', title: 'Memory pairs', sources: src, game: { type: 'pairs', data: { terms: [{ answer: 'Lease', clue: 'Contract to use an asset', src: [2] }, { answer: 'Equity', clue: 'Owner claim', src: [1] }, { answer: 'Assets', clue: 'What you own', src: [1] }, { answer: 'Debt', clue: 'What you owe', src: [1] }], cards: [] } } },
+  { kind: 'answer', createdAt: 7, topic: 'Q', title: 'Answer', sources: src, text: 'It is a contract [2].' },
+];
+
+export interface Seeded { project: string; model: string; image: string; agent: string; chat: string }
+
+export type Profile = 'full' | 'empty' | 'busy';
+export const PROFILES: Profile[] = ['full', 'empty', 'busy'];
+/** Every case under every profile; the first value (the name) says which. */
+export const withProfiles = <T extends [string, ...unknown[]]>(cases: T[]): Array<[...T, Profile]> =>
+  cases.flatMap((c) => PROFILES.map((profile) => [`${c[0]} (${profile})`, ...c.slice(1), profile] as unknown as [...T, Profile]));
+
+/**
+ * full: models, a project with saved work and chats. empty: a fresh install. busy: the same data with a model loaded, off-grid on, the dark
+ * theme with compact large text and rounded corners, tools on and a private chat open, so state-dependent branches flip.
+ */
+export function seedApp(profile: Profile = 'full'): Seeded {
+  const RNFS = require('react-native-fs');
+  const none = profile === 'empty';
+  if (!RNFS.getFSInfo) RNFS.getFSInfo = jest.fn(async () => ({ freeSpace: 50 * 1024 ** 3, totalSpace: 128 * 1024 ** 3 }));
+  const { useAppStore, useChatStore } = require('../../src/stores');
+  const { useProjectStore } = require('../../src/stores/projectStore');
+  const { useStudyStore } = require('../../src/study/store');
+  const { useAgentStore } = require('../../src/stores/agentStore');
+  if (none) return { project: 'missing-project', model: 'missing-model', image: 'missing-image', agent: 'missing-agent', chat: 'missing-chat' };
+  const model = createDownloadedModel({ id: 'm1', name: 'Test model', filePath: '/models/m1.gguf', fileSize: 800 * 1024 * 1024 });
+  useAppStore.setState({
+    downloadedModels: [model, createDownloadedModel({ id: 'm2', name: 'Second', filePath: '/models/m2.gguf', fileSize: 2 * 1024 ** 3 })],
+    activeModelId: 'm1', downloadedImageModels: [createONNXImageModel({ id: 'img1', name: 'Test image model' })], modelNicknames: { m2: 'Big one' },
+  });
+  const project = useProjectStore.getState().createProject({ name: 'FAR prep', description: 'Notes', systemPrompt: 'Tutor', icon: '#1D4ED8' });
+  for (const r of studyResults()) useStudyStore.getState().add(project.id, r);
+  const chats = [createConversationWithMessages(4, { title: 'Lease questions', projectId: project.id }), createConversationWithMessages(2, { title: 'Taxes' }), { ...createConversationWithMessages(2, { title: 'Archived' }), isArchived: true }];
+  useChatStore.setState({ conversations: chats, activeConversationId: chats[0].id });
+  if (profile === 'busy') {
+    const state = useAppStore.getState();
+    useAppStore.setState({
+      loadedTextModelId: 'm1', themeMode: 'dark',
+      settings: { ...state.settings, showGenerationDetails: true, enabledTools: ['calculator', 'web_search', 'read_url', 'search_knowledge_base'], appearance: { layoutMode: 'compact', density: 'compact', textSize: 'xlarge', cornerRadius: 2, chatLayout: 'bubbles' } },
+    } as never);
+    require('../../src/atlasTools/offGridState').useOffGrid.setState({ on: true });
+    const priv = { ...createConversationWithMessages(3, { title: 'Private' }), isPrivate: true };
+    useChatStore.setState({ conversations: [priv, ...chats], activeConversationId: priv.id } as never);
+  }
+  return { project: project.id, model: 'm1', image: 'img1', agent: useAgentStore.getState().agents[0].id, chat: chats[0].id };
+}

@@ -1,22 +1,19 @@
 /**
- * Function-hook seam. Pro features register plain functions against named hooks
- * during activation; core calls them when present and falls back to a no-op /
+ * Function-hook seam. Features register plain functions against named hooks
+ * at startup; core calls them when present and falls back to a no-op /
  * default when absent. Use this for behaviour (not UI — see slotRegistry for UI):
  * reading the audio interface mode, triggering speech after generation, and
  * augmenting the prompt in voice mode.
  *
- * Free builds register nothing, so callHook returns undefined and core keeps
+ * With nothing registered, callHook returns undefined and core keeps
  * its default behaviour.
  */
 type HookFn = (...args: any[]) => any;
 
 const hooks: Record<string, HookFn> = {};
 
-export function registerHook(name: string, fn: HookFn): () => void {
+export function registerHook(name: string, fn: HookFn): void {
   hooks[name] = fn;
-  return () => {
-    if (hooks[name] === fn) delete hooks[name];
-  };
 }
 
 /** Call a hook if registered; returns its result, or undefined when absent. */
@@ -31,33 +28,30 @@ export function _clearHooksForTesting(): void {
   }
 }
 
-/** Known hook names, centralised so core and pro stay in sync. */
+/** Known hook names, centralised so core and features stay in sync. */
 export const HOOKS = {
-  /** () => readonly OnboardingSlide[] — optional feature-owned onboarding content. Core owns the
-   *  renderer and navigation; feature packages contribute data only. */
-  onboardingAdditionalSlides: 'onboarding.additionalSlides',
+  /** () => string[] — the ids of PIN-protected projects (their study results and documents never reach plain storage). */
+  protectedProjectIds: 'projects.protectedIds',
+  /** () => boolean — whether a model is writing an answer right now (never re-lock chats mid-reply). */
+  generationActive: 'models.generationActive',
+  /** (latestTokens: number, budgetTokens: number) => void — the person's latest message was too long for the model and its start was cut; tell them in the chat. */
+  messageCut: 'chat.messageCut',
+  /** (modelId: string | null) => Promise<void> — make sure a text model is loaded (null: the one in use, else the first downloaded). */
+  ensureTextModel: 'models.ensureText',
+  /** (modelId: string) => void — an agent that has its own model was made active; the app loads that model in the background. */
+  agentModelChosen: 'agent.modelChosen',
   /** () => boolean — whether a message can be spoken (TTS enabled + ready). */
   audioCanSpeak: 'audio.canSpeak',
   /** (text: string, messageId: string) => void — speak a message aloud. */
   audioSpeak: 'audio.speak',
-  /** () => boolean — whether speech is playing or being generated right now. Hands-free asks before
-   *  it re-opens the mic, so the assistant is never recorded as if it were the person talking. */
-  audioIsSpeaking: 'audio.isSpeaking',
-  /** () => void — stop speech that is running or pending, WITHOUT disturbing an idle engine. Fired at
-   *  the start of a turn to kill stale playback; must stay cheap because it runs constantly. */
+  /** () => void — stop any in-progress speech. */
   audioStop: 'audio.stop',
-  /** () => void — the person LEFT. Stop and tear down unconditionally: there is no warm engine worth
-   *  protecting for a screen nobody is on, and a guard that reasons about flags is exactly how audio
-   *  kept playing after the chat was closed. */
-  audioStopForExit: 'audio.stopForExit',
-  /** () => Promise<void> — Pro stops the active Desktop task started by this chat. */
-  taskStopActive: 'task.stopActive',
-  /** (content: string) => void — fired as the assistant message streams; pro
+  /** (content: string) => void — fired as the assistant message streams; the voice feature
    *  uses it to synthesize/play speech sentence-by-sentence while generation is
    *  still in progress (no-op unless voice mode + engine ready). */
   audioOnStreamingToken: 'audio.onStreamingToken',
   /** (conversationId: string) => void — when streaming ends, speak the final
-   *  assistant message if voice mode is active (pro checks mode/readiness). */
+   *  assistant message if voice mode is active (it checks mode/readiness). */
   audioOnStreamingEnd: 'audio.onStreamingEnd',
   /** () => void — app went to background: pause speech if playing. */
   audioOnAppBackground: 'audio.onAppBackground',
@@ -65,8 +59,6 @@ export const HOOKS = {
   audioOnAppForeground: 'audio.onAppForeground',
   /** (basePrompt: string) => string — augment the prompt when in voice mode. */
   audioAugmentPrompt: 'audio.augmentPrompt',
-  /** (language: string) => void — keep the active speech voice aligned with STT. */
-  audioSelectLanguage: 'audio.selectLanguage',
   /** () => Promise<Array<{ engineId: string; name: string; sizeBytes: number }>>
    *  — downloaded TTS (voice) models, surfaced in the Download Manager. */
   downloadsListVoiceModels: 'downloads.listVoiceModels',
@@ -75,17 +67,4 @@ export const HOOKS = {
   /** () => Promise<void> — warm the active TTS engine at boot if its model is
    *  downloaded and fits the residency budget (no-op otherwise). */
   audioPreload: 'audio.preload',
-  /** (mutation: SyncMutation) => void — a core data owner committed a record
-   *  change. Pro records it in the state-sync op-log; free builds do nothing. */
-  syncRecordLocalMutation: 'sync.recordLocalMutation',
-  /** (conversationId: string) => void — a local resend/regenerate replaced the reply. Pro drops the
-   *  live previews it holds for the conversation; the durable tombstone is emitted by the caller. */
-  chatStreamDiscardConversation: 'chatStream.discardConversation',
-
-  /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
-   *  a document lifecycle change. Pro transfers or reconciles it with peers. */
-  syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
-  /** (text: string, timestamp: number) => void — core copied text locally. Pro records it through
-   *  the shared clipboard owner instead of waiting for a delayed native clipboard notification. */
-  clipboardRecordLocalText: 'clipboard.recordLocalText',
 } as const;

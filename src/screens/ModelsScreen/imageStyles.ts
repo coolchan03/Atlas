@@ -28,10 +28,10 @@ const createImageModelsStylesPart1 = (colors: ThemeColors, _shadows: ThemeShadow
     flex: 1,
   },
   imageModelsSection: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 16,
   },
   imageModelsList: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 16,
     marginBottom: 24,
   },
   recommendedBadge: {

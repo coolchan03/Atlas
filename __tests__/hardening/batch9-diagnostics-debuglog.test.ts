@@ -1,7 +1,7 @@
 /**
  * BATCH 9 — Device Info diagnostics computation + debug-log file sink rotation.
  *
- * on-device test-plan lines 1409-1549 (Device Info cases 5-10) + the CLAUDE.md debug-log sink.
+ * Provit plan lines 1409-1549 (Device Info cases 5-10) + the CLAUDE.md debug-log sink.
  *
  * Two ABSENT-LOGIC gaps closed here — both drive the REAL service, mocking only the
  * genuine boundaries (the native memory module; the RNFS filesystem):
@@ -19,8 +19,6 @@
  *    trigger, the disabled no-op, and __DEV__/idempotent init. No existing test covers it.
  *    We stand up an in-memory RNFS so the REAL flush()/rotation runs end to end.
  */
-
-import type { NativeFileSystemBoundary } from '../harness/nativeFileSystem';
 
 // ── HardwareService.getProcessMemory computation ───────────────────────────────
 describe('BATCH 9 — HardwareService.getProcessMemory (real bytes→MB computation)', () => {
@@ -89,30 +87,26 @@ describe('BATCH 9 — HardwareService.getProcessMemory (real bytes→MB computat
 });
 
 // ── debugLogFile.ts size-cap / rotation ────────────────────────────────────────
-// The shared native boundary provides the directory entry, stored bytes, append, read and truncate
-// behavior. The production sink remains real above that device boundary.
-jest.mock('react-native-fs', () => {
-  const { defaultNativeFileSystemBoundary: boundary } = require('../harness/nativeFileSystem');
-  return { __esModule: true, default: boundary.module, ...boundary.module };
-});
+// In-memory RNFS so the REAL flush()/rotation logic runs. Only appendFile/stat/readFile/
+// writeFile are exercised by the sink.
+const mockFs: { content: string } = { content: '' };
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/mock/documents',
+  appendFile: jest.fn((_p: string, data: string) => { mockFs.content += data; return Promise.resolve(); }),
+  stat: jest.fn(() => Promise.resolve({ size: Buffer.byteLength(mockFs.content, 'utf8') })),
+  readFile: jest.fn(() => Promise.resolve(mockFs.content)),
+  writeFile: jest.fn((_p: string, data: string) => { mockFs.content = data; return Promise.resolve(); }),
+}));
 
 describe('BATCH 9 — debugLogFile size-cap / rotation (real flush logic)', () => {
   const MAX_BYTES = 5 * 1024 * 1024;
-  const LOG_PATH = '/mock/documents/offgrid-debug.log';
   let mod: typeof import('../../src/utils/debugLogFile');
-  let fileSystem: NativeFileSystemBoundary;
   const originalDev = (global as any).__DEV__;
-
-  const readLog = async (): Promise<string> =>
-    (await fileSystem.exists(LOG_PATH))
-      ? fileSystem.module.readFile(LOG_PATH, 'utf8')
-      : '';
 
   beforeEach(() => {
     (global as any).__DEV__ = true; // the sink is __DEV__-gated
+    mockFs.content = '';
     jest.resetModules(); // fresh module-level `enabled`/`buffer` state per test
-    fileSystem = require('../harness/nativeFileSystem').defaultNativeFileSystemBoundary;
-    fileSystem.reset();
     jest.useFakeTimers();
     mod = require('../../src/utils/debugLogFile');
   });
@@ -124,14 +118,14 @@ describe('BATCH 9 — debugLogFile size-cap / rotation (real flush logic)', () =
   it('appendDebugLine is a no-op until initDebugLogFile enables the sink', async () => {
     mod.appendDebugLine('info', 'before init — should be dropped');
     await jest.runOnlyPendingTimersAsync();
-    expect(await readLog()).toBe('');
+    expect(mockFs.content).toBe('');
   });
 
   it('init writes a session-start marker and is idempotent (case: __DEV__ gate)', async () => {
     mod.initDebugLogFile();
     mod.initDebugLogFile(); // second call must not add a second marker
     await jest.runOnlyPendingTimersAsync();
-    const markers = (await readLog()).match(/session start/g) ?? [];
+    const markers = mockFs.content.match(/session start/g) ?? [];
     expect(markers).toHaveLength(1);
   });
 
@@ -139,43 +133,38 @@ describe('BATCH 9 — debugLogFile size-cap / rotation (real flush logic)', () =
     mod.initDebugLogFile();
     mod.appendDebugLine('DL-SM', 'download started');
     await jest.runOnlyPendingTimersAsync();
-    expect(await readLog()).toContain('[DL-SM] download started');
+    expect(mockFs.content).toContain('[DL-SM] download started');
   });
 
   it('flushes immediately once the buffer reaches 50 lines (FLUSH_AT_LINES)', async () => {
     mod.initDebugLogFile();
     await jest.runOnlyPendingTimersAsync(); // drain the init marker
-    await fileSystem.module.writeFile(LOG_PATH, '', 'utf8');
+    mockFs.content = '';
     // 49 lines: buffered, not yet flushed (no timer advance).
     for (let i = 0; i < 49; i++) mod.appendDebugLine('x', `line ${i}`);
-    expect(await readLog()).toBe('');
+    expect(mockFs.content).toBe('');
     // 50th line trips the immediate flush.
     mod.appendDebugLine('x', 'line 49');
     await Promise.resolve(); await Promise.resolve();
-    expect(await readLog()).toContain('line 49');
-    expect(await readLog()).toContain('line 0');
+    expect(mockFs.content).toContain('line 49');
+    expect(mockFs.content).toContain('line 0');
   });
 
   it('rotates to the newest half once the file exceeds MAX_BYTES (5MB cap)', async () => {
     mod.initDebugLogFile();
     await jest.runOnlyPendingTimersAsync();
     // Pre-fill the file just over the cap with an OLD marker at the head.
-    await fileSystem.module.writeFile(
-      LOG_PATH,
-      `OLD_HEAD_MARKER${'a'.repeat(MAX_BYTES)}`,
-      'utf8',
-    );
+    mockFs.content = `OLD_HEAD_MARKER${'a'.repeat(MAX_BYTES)}`;
     // Append a small NEW line and flush → stat > MAX_BYTES → rotate to newest half.
     mod.appendDebugLine('NEW', 'newest-tail-line');
     await jest.runOnlyPendingTimersAsync();
     await Promise.resolve();
 
-    const content = await readLog();
-    const size = Buffer.byteLength(content, 'utf8');
+    const size = Buffer.byteLength(mockFs.content, 'utf8');
     expect(size).toBeLessThanOrEqual(Math.floor(MAX_BYTES / 2) + 1);
     // The newest content survives; the old head was dropped by the tail-truncation.
-    expect(content).toContain('newest-tail-line');
-    expect(content).not.toContain('OLD_HEAD_MARKER');
+    expect(mockFs.content).toContain('newest-tail-line');
+    expect(mockFs.content).not.toContain('OLD_HEAD_MARKER');
   });
 
   it('getDebugLogPath points at the app Documents container', () => {
@@ -189,6 +178,6 @@ describe('BATCH 9 — debugLogFile size-cap / rotation (real flush logic)', () =
     prodMod.initDebugLogFile();
     prodMod.appendDebugLine('info', 'prod line');
     await jest.runOnlyPendingTimersAsync();
-    expect(await readLog()).toBe('');
+    expect(mockFs.content).toBe('');
   });
 });

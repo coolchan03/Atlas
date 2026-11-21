@@ -5,15 +5,10 @@
  */
 
 import { act } from '@testing-library/react-native';
-import {
-  migrateRemoteServerState,
-  useRemoteServerStore,
-} from '../../../src/stores/remoteServerStore';
-import {
-  resetRemoteServerStore,
-  actStoreUpdate,
-} from '../../utils/testHelpers';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
 import * as httpClient from '../../../src/services/httpClient';
+import { fetchModelsFromServer } from '../../../src/stores/remoteServerHelpers';
 
 // Mock httpClient
 jest.mock('../../../src/services/httpClient', () => ({
@@ -32,10 +27,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   getAllKeys: jest.fn(() => Promise.resolve([])),
 }));
 
-function addTestServer(
-  name = 'Test Server',
-  endpoint = 'http://test:11434',
-): string {
+function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string {
   let serverId = '';
   actStoreUpdate(() => {
     serverId = useRemoteServerStore.getState().addServer({
@@ -50,20 +42,8 @@ function addTestServer(
 function addServerWithModel(modelId = 'model1', modelName = 'Model 1'): string {
   const serverId = addTestServer();
   actStoreUpdate(() => {
-    useRemoteServerStore
-      .getState()
-      .setDiscoveredModels(serverId, [
-        {
-          id: modelId,
-          name: modelName,
-          serverId,
-          capabilities: {
-            supportsVision: false,
-            supportsToolCalling: false,
-            supportsThinking: false,
-          },
-          lastUpdated: new Date().toISOString(),
-        },
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+      { id: modelId, name: modelName, serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
     ]);
   });
   return serverId;
@@ -73,33 +53,6 @@ describe('remoteServerStore', () => {
   beforeEach(() => {
     resetRemoteServerStore();
     jest.clearAllMocks();
-  });
-
-  it('migrates the old shared active server into independent media categories', () => {
-    const migrated = migrateRemoteServerState({
-      servers: [
-        {
-          id: 'desktop',
-          name: 'Studio Mac',
-          endpoint: 'http://192.168.1.50:7878', // NOSONAR - private LAN test fixture
-          providerType: 'openai-compatible',
-          createdAt: 'now',
-          mediaModels: {
-            image: 'flux',
-            transcription: 'whisper',
-            voice: 'kokoro',
-          },
-        },
-      ],
-      activeServerId: 'desktop',
-      activeRemoteImageModelId: 'flux',
-    });
-
-    expect(migrated.activeRemoteMediaServerIds).toEqual({
-      image: 'desktop',
-      transcription: 'desktop',
-      voice: 'desktop',
-    });
   });
 
   describe('addServer', () => {
@@ -122,6 +75,19 @@ describe('remoteServerStore', () => {
       expect(servers[0].name).toBe('Test Server');
       expect(servers[0].endpoint).toBe('http://192.168.1.50:11434');
       expect(servers[0].createdAt).toBeDefined();
+    });
+
+    it('never stores an API key in persisted server state', () => {
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().addServer({
+          name: 'Protected Server',
+          endpoint: 'http://protected:11434',
+          providerType: 'openai-compatible',
+          apiKey: 'super-secret',
+        } as any);
+      });
+
+      expect((useRemoteServerStore.getState().servers[0] as any).apiKey).toBeUndefined();
     });
 
     it('should store notes if provided', () => {
@@ -166,6 +132,15 @@ describe('remoteServerStore', () => {
       expect(server?.endpoint).toBe('http://updated:11434');
     });
 
+    it('strips an API key from direct store updates', () => {
+      const serverId = addTestServer();
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().updateServer(serverId, { apiKey: 'leak-me-not' } as any);
+      });
+
+      expect((useRemoteServerStore.getState().getServerById(serverId) as any)?.apiKey).toBeUndefined();
+    });
+
     it('should not modify other servers', () => {
       let server1Id = '';
       let _server2Id = '';
@@ -183,9 +158,7 @@ describe('remoteServerStore', () => {
       });
 
       actStoreUpdate(() => {
-        useRemoteServerStore
-          .getState()
-          .updateServer(server1Id, { name: 'Updated Server 1' });
+        useRemoteServerStore.getState().updateServer(server1Id, { name: 'Updated Server 1' });
       });
 
       const servers = useRemoteServerStore.getState().servers;
@@ -278,28 +251,8 @@ describe('remoteServerStore', () => {
 
       actStoreUpdate(() => {
         useRemoteServerStore.getState().setDiscoveredModels(serverId, [
-          {
-            id: 'llama2',
-            name: 'Llama 2',
-            serverId,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: true,
-              supportsThinking: false,
-            },
-            lastUpdated: new Date().toISOString(),
-          },
-          {
-            id: 'mistral',
-            name: 'Mistral',
-            serverId,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: true,
-              supportsThinking: false,
-            },
-            lastUpdated: new Date().toISOString(),
-          },
+          { id: 'llama2', name: 'Llama 2', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+          { id: 'mistral', name: 'Mistral', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
         ]);
       });
 
@@ -318,9 +271,7 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().clearDiscoveredModels(serverId);
       });
 
-      expect(
-        useRemoteServerStore.getState().discoveredModels[serverId],
-      ).toBeUndefined();
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeUndefined();
     });
   });
 
@@ -330,9 +281,7 @@ describe('remoteServerStore', () => {
         success: true,
         latency: 50,
       });
-      (httpClient.detectServerType as jest.Mock).mockResolvedValue({
-        type: 'ollama',
-      });
+      (httpClient.detectServerType as jest.Mock).mockResolvedValue({ type: 'ollama' });
 
       let serverId = '';
       actStoreUpdate(() => {
@@ -386,9 +335,7 @@ describe('remoteServerStore', () => {
 
       let result;
       await act(async () => {
-        result = await useRemoteServerStore
-          .getState()
-          .testConnectionByEndpoint('http://test:11434');
+        result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
       });
 
       expect(result!.success).toBe(true);
@@ -413,9 +360,7 @@ describe('remoteServerStore', () => {
     });
 
     it('should return null for non-existent ID', () => {
-      const server = useRemoteServerStore
-        .getState()
-        .getServerById('non-existent');
+      const server = useRemoteServerStore.getState().getServerById('non-existent');
 
       expect(server).toBeNull();
     });
@@ -425,17 +370,13 @@ describe('remoteServerStore', () => {
     it('should return model by ID', () => {
       const serverId = addServerWithModel();
 
-      const model = useRemoteServerStore
-        .getState()
-        .getModelById(serverId, 'model1');
+      const model = useRemoteServerStore.getState().getModelById(serverId, 'model1');
 
       expect(model?.name).toBe('Model 1');
     });
 
     it('should return null for non-existent model', () => {
-      const model = useRemoteServerStore
-        .getState()
-        .getModelById('non-existent', 'non-existent');
+      const model = useRemoteServerStore.getState().getModelById('non-existent', 'non-existent');
 
       expect(model).toBeNull();
     });
@@ -471,9 +412,7 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
       });
 
-      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(
-        'model-123',
-      );
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-123');
     });
 
     it('should clear active remote text model ID', () => {
@@ -481,51 +420,37 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
       });
 
-      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(
-        'model-123',
-      );
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-123');
 
       actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
       });
 
-      expect(
-        useRemoteServerStore.getState().activeRemoteTextModelId,
-      ).toBeNull();
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBeNull();
     });
   });
 
   describe('activeRemoteImageModelId', () => {
     it('should set active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
       });
 
-      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe(
-        'vision-model-456',
-      );
+      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-model-456');
     });
 
     it('should clear active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
       });
 
-      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe(
-        'vision-model-456',
-      );
+      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-model-456');
 
       actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteImageModelId(null);
       });
 
-      expect(
-        useRemoteServerStore.getState().activeRemoteImageModelId,
-      ).toBeNull();
+      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBeNull();
     });
   });
 
@@ -539,28 +464,8 @@ describe('remoteServerStore', () => {
           providerType: 'openai-compatible',
         });
         useRemoteServerStore.getState().setDiscoveredModels(serverId, [
-          {
-            id: 'llama2',
-            name: 'Llama 2',
-            serverId,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: true,
-              supportsThinking: false,
-            },
-            lastUpdated: new Date().toISOString(),
-          },
-          {
-            id: 'mistral',
-            name: 'Mistral',
-            serverId,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: true,
-              supportsThinking: false,
-            },
-            lastUpdated: new Date().toISOString(),
-          },
+          { id: 'llama2', name: 'Llama 2', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+          { id: 'mistral', name: 'Mistral', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
         ]);
         useRemoteServerStore.getState().setActiveServerId(serverId);
         useRemoteServerStore.getState().setActiveRemoteTextModelId('llama2');
@@ -587,20 +492,8 @@ describe('remoteServerStore', () => {
           endpoint: 'http://test:11434',
           providerType: 'openai-compatible',
         });
-        useRemoteServerStore
-          .getState()
-          .setDiscoveredModels(serverId, [
-            {
-              id: 'llama2',
-              name: 'Llama 2',
-              serverId,
-              capabilities: {
-                supportsVision: false,
-                supportsToolCalling: true,
-                supportsThinking: false,
-              },
-              lastUpdated: new Date().toISOString(),
-            },
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'llama2', name: 'Llama 2', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
         ]);
         // Set model ID but not server ID
         useRemoteServerStore.getState().setActiveRemoteTextModelId('llama2');
@@ -622,24 +515,10 @@ describe('remoteServerStore', () => {
           endpoint: 'http://test:11434',
           providerType: 'openai-compatible',
         });
-        useRemoteServerStore
-          .getState()
-          .setDiscoveredModels(serverId, [
-            {
-              id: 'llava',
-              name: 'LLaVA',
-              serverId,
-              capabilities: {
-                supportsVision: true,
-                supportsToolCalling: false,
-                supportsThinking: false,
-              },
-              lastUpdated: new Date().toISOString(),
-            },
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'llava', name: 'LLaVA', serverId, capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
         ]);
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteMediaServerId('image', serverId);
+        useRemoteServerStore.getState().setActiveServerId(serverId);
         useRemoteServerStore.getState().setActiveRemoteImageModelId('llava');
       });
 
@@ -669,23 +548,15 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-1');
       });
 
-      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(
-        'model-1',
-      );
-      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe(
-        'vision-1',
-      );
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-1');
+      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-1');
 
       actStoreUpdate(() => {
         useRemoteServerStore.getState().clearAllServers();
       });
 
-      expect(
-        useRemoteServerStore.getState().activeRemoteTextModelId,
-      ).toBeNull();
-      expect(
-        useRemoteServerStore.getState().activeRemoteImageModelId,
-      ).toBeNull();
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBeNull();
+      expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBeNull();
     });
   });
 
@@ -698,30 +569,22 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().updateServerHealth(serverId, true);
       });
 
-      expect(
-        useRemoteServerStore.getState().discoveredModels[serverId],
-      ).toBeDefined();
-      expect(
-        useRemoteServerStore.getState().serverHealth[serverId],
-      ).toBeDefined();
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeDefined();
+      expect(useRemoteServerStore.getState().serverHealth[serverId]).toBeDefined();
 
       actStoreUpdate(() => {
         useRemoteServerStore.getState().removeServer(serverId);
       });
 
-      expect(
-        useRemoteServerStore.getState().discoveredModels[serverId],
-      ).toBeUndefined();
-      expect(
-        useRemoteServerStore.getState().serverHealth[serverId],
-      ).toBeUndefined();
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeUndefined();
+      expect(useRemoteServerStore.getState().serverHealth[serverId]).toBeUndefined();
     });
   });
 
   describe('discoverModels', () => {
     it('should throw error when server not found', async () => {
       await expect(
-        useRemoteServerStore.getState().discoverModels('non-existent-id'),
+        useRemoteServerStore.getState().discoverModels('non-existent-id')
       ).rejects.toThrow('Server not found');
     });
 
@@ -731,7 +594,9 @@ describe('remoteServerStore', () => {
         ok: true,
         json: async () => ({
           object: 'list',
-          data: [{ id: 'gpt-4', owned_by: 'openai' }],
+          data: [
+            { id: 'gpt-4', owned_by: 'openai' },
+          ],
         }),
       });
       (global as any).fetch = mockFetch;
@@ -747,17 +612,13 @@ describe('remoteServerStore', () => {
 
       let modelsPromise: any;
       act(() => {
-        modelsPromise = useRemoteServerStore
-          .getState()
-          .discoverModels(serverId);
+        modelsPromise = useRemoteServerStore.getState().discoverModels(serverId);
       });
       const models = await modelsPromise;
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('gpt-4');
-      expect(
-        useRemoteServerStore.getState().discoveredModels[serverId],
-      ).toHaveLength(1);
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toHaveLength(1);
     });
 
     it('trusts the gateway kind:"vision" for supportsVision even when name/probe detection would miss it (F7)', async () => {
@@ -769,11 +630,7 @@ describe('remoteServerStore', () => {
         json: async () => ({
           object: 'list',
           data: [
-            {
-              id: 'gemma-4-e4b-it-Q8_0.gguf',
-              kind: 'vision',
-              owned_by: 'offgrid',
-            },
+            { id: 'gemma-4-e4b-it-Q8_0.gguf', kind: 'vision', owned_by: 'offgrid' },
             { id: 'plain-chat.gguf', kind: 'chat', owned_by: 'offgrid' },
           ],
         }),
@@ -783,29 +640,20 @@ describe('remoteServerStore', () => {
       let serverId = '';
       actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
-          name: 'Gateway',
-          endpoint: 'http://mac:7878',
-          providerType: 'openai-compatible',
+          name: 'Gateway', endpoint: 'http://mac:7878', providerType: 'openai-compatible',
         });
       });
       let modelsPromise: any;
-      act(() => {
-        modelsPromise = useRemoteServerStore
-          .getState()
-          .discoverModels(serverId);
-      });
+      act(() => { modelsPromise = useRemoteServerStore.getState().discoverModels(serverId); });
       const models = await modelsPromise;
 
-      const vision = models.find(
-        (m: any) => m.id === 'gemma-4-e4b-it-Q8_0.gguf',
-      );
+      const vision = models.find((m: any) => m.id === 'gemma-4-e4b-it-Q8_0.gguf');
       const chat = models.find((m: any) => m.id === 'plain-chat.gguf');
       expect(vision?.capabilities.supportsVision).toBe(true);
       expect(chat?.capabilities.supportsVision).toBe(false);
     });
 
-    it('should handle fetch failure and return empty array', async () => {
-      // Mock fetch to fail
+    it('preserves the cached model list when discovery fails', async () => {
       const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
       (global as any).fetch = mockFetch;
 
@@ -816,14 +664,20 @@ describe('remoteServerStore', () => {
           endpoint: 'http://test:11434',
           providerType: 'openai-compatible',
         });
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+          id: 'cached-model',
+          name: 'Cached Model',
+          serverId,
+          capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+          lastUpdated: new Date().toISOString(),
+        }]);
       });
 
-      // discoverModels returns empty array on fetch failure
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels(serverId);
+      await expect(useRemoteServerStore.getState().discoverModels(serverId))
+        .rejects.toThrow('Unable to discover models');
 
-      expect(models).toHaveLength(0);
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]?.map(m => m.id))
+        .toEqual(['cached-model']);
       expect(useRemoteServerStore.getState().isLoading).toBe(false);
       expect(useRemoteServerStore.getState().discoveringServerId).toBeNull();
     });
@@ -831,17 +685,13 @@ describe('remoteServerStore', () => {
 
   describe('testConnection error cases', () => {
     it('should return error when server not found', async () => {
-      const result = await useRemoteServerStore
-        .getState()
-        .testConnection('non-existent-id');
+      const result = await useRemoteServerStore.getState().testConnection('non-existent-id');
       expect(result.success).toBe(false);
       expect(result.error).toBe('Server not found');
     });
 
     it('should catch errors and return error result', async () => {
-      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(
-        new Error('Network failure'),
-      );
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Network failure'));
 
       let serverId = '';
       actStoreUpdate(() => {
@@ -852,9 +702,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const result = await useRemoteServerStore
-        .getState()
-        .testConnection(serverId);
+      const result = await useRemoteServerStore.getState().testConnection(serverId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Network failure');
@@ -863,26 +711,18 @@ describe('remoteServerStore', () => {
 
   describe('testConnectionByEndpoint error cases', () => {
     it('should handle network errors', async () => {
-      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(
-        new Error('Connection timeout'),
-      );
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Connection timeout'));
 
-      const result = await useRemoteServerStore
-        .getState()
-        .testConnectionByEndpoint('http://test:11434');
+      const result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Connection timeout');
     });
 
     it('should handle non-Error exceptions', async () => {
-      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(
-        'Unknown failure',
-      );
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue('Unknown failure');
 
-      const result = await useRemoteServerStore
-        .getState()
-        .testConnectionByEndpoint('http://test:11434');
+      const result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Unknown error');
@@ -910,8 +750,8 @@ describe('remoteServerStore', () => {
     });
   });
 
-  describe('store credential boundary', () => {
-    it('does not persist or send an API key passed directly to the public store', async () => {
+  describe('fetchModelsFromServer with apiKey', () => {
+    it('should use Authorization header when apiKey is provided', async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -921,24 +761,18 @@ describe('remoteServerStore', () => {
       });
       (global as any).fetch = mockFetch;
 
-      let serverId = '';
-      actStoreUpdate(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'API Key Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-          apiKey: 'secret-key',
-        });
+      await fetchModelsFromServer({
+        id: 'direct-auth-test',
+        name: 'API Key Server',
+        endpoint: 'http://test:11434',
+        providerType: 'openai-compatible',
+        createdAt: new Date().toISOString(),
+        apiKey: 'secret-key',
       });
 
-      await useRemoteServerStore.getState().discoverModels(serverId);
-
       expect(mockFetch).toHaveBeenCalled();
-      expect(
-        useRemoteServerStore.getState().getServerById(serverId),
-      ).not.toHaveProperty('apiKey');
       const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1].headers).not.toHaveProperty('Authorization');
+      expect(callArgs[1].headers.Authorization).toBe('Bearer secret-key');
     });
   });
 
@@ -964,9 +798,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels(serverId);
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
 
       expect(models).toHaveLength(2);
       expect(models[0].id).toBe('llama2:latest');
@@ -1004,16 +836,14 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels(serverId);
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
 
       expect(callCount).toBeGreaterThanOrEqual(2); // /v1/models + /api/tags (+ optional /api/show per model)
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('ollama-model');
     });
 
-    it('should return empty array when both endpoints fail', async () => {
+    it('should reject when both endpoints fail so callers can preserve cached models', async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: false,
         json: async () => ({}),
@@ -1029,11 +859,8 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels(serverId);
-
-      expect(models).toHaveLength(0);
+      await expect(useRemoteServerStore.getState().discoverModels(serverId))
+        .rejects.toThrow('Unable to discover models');
     });
   });
 
@@ -1061,11 +888,7 @@ describe('remoteServerStore', () => {
 
   describe('isGenerativeModel filter', () => {
     it('filters out embedding models by "embed" pattern', async () => {
-      const models = await discoverWithModels([
-        'llama3',
-        'nomic-embed-text',
-        'text-embedding-ada-002',
-      ]);
+      const models = await discoverWithModels(['llama3', 'nomic-embed-text', 'text-embedding-ada-002']);
       const ids = models.map(m => m.id);
       expect(ids).toContain('llama3');
       expect(ids).not.toContain('nomic-embed-text');
@@ -1073,11 +896,7 @@ describe('remoteServerStore', () => {
     });
 
     it('filters out reranker models', async () => {
-      const models = await discoverWithModels([
-        'llama3',
-        'bge-reranker-v2',
-        'cross-encoder-rerank',
-      ]);
+      const models = await discoverWithModels(['llama3', 'bge-reranker-v2', 'cross-encoder-rerank']);
       const ids = models.map(m => m.id);
       expect(ids).toContain('llama3');
       expect(ids).not.toContain('bge-reranker-v2');
@@ -1086,12 +905,7 @@ describe('remoteServerStore', () => {
 
     it('filters out known embedding model prefixes (bge-, e5-, gte-, minilm)', async () => {
       const models = await discoverWithModels([
-        'mistral',
-        'bge-small-en',
-        'e5-large-v2',
-        'gte-base',
-        'all-minilm-l6',
-        'arctic-embed-m',
+        'mistral', 'bge-small-en', 'e5-large-v2', 'gte-base', 'all-minilm-l6', 'arctic-embed-m',
       ]);
       const ids = models.map(m => m.id);
       expect(ids).toContain('mistral');
@@ -1103,20 +917,12 @@ describe('remoteServerStore', () => {
     });
 
     it('keeps text generation models like llama, mistral, qwen', async () => {
-      const models = await discoverWithModels([
-        'llama3:8b',
-        'mistral:7b',
-        'qwen2:1.5b',
-        'phi-3:mini',
-      ]);
+      const models = await discoverWithModels(['llama3:8b', 'mistral:7b', 'qwen2:1.5b', 'phi-3:mini']);
       expect(models).toHaveLength(4);
     });
 
     it('filters classifier models', async () => {
-      const models = await discoverWithModels([
-        'llama3',
-        'zero-shot-classifier',
-      ]);
+      const models = await discoverWithModels(['llama3', 'zero-shot-classifier']);
       const ids = models.map(m => m.id);
       expect(ids).toContain('llama3');
       expect(ids).not.toContain('zero-shot-classifier');
@@ -1132,7 +938,10 @@ describe('remoteServerStore', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            models: [{ name: 'llama3' }, { name: 'nomic-embed-text' }],
+            models: [
+              { name: 'llama3' },
+              { name: 'nomic-embed-text' },
+            ],
           }),
         });
       });
@@ -1147,9 +956,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels(serverId);
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
       const ids = models.map(m => m.id);
       expect(ids).toContain('llama3');
       expect(ids).not.toContain('nomic-embed-text');

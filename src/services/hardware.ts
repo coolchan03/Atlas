@@ -1,8 +1,8 @@
 import { Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import { getBackendDevicesInfo } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
-import { readPerformanceCoreCount } from './cpuTopologyReader';
 // Access NativeModules.LocalDreamModule dynamically (not destructured)
 // so it can be mocked in tests after module import.
 const getLocalDreamModule = () => NativeModules.LocalDreamModule;
@@ -25,11 +25,24 @@ import { HTP_ENABLED } from '../config/featureFlags';
  */
 const FLAGSHIP_8GEN2 = new Set([8550, 8650, 8735, 8750, 8845, 8850]);
 const FLAGSHIP_8GEN1 = new Set([8450, 8475]);
+/** Other Snapdragon chips with a Hexagon NPU new enough (V68 or later) for the bundled QNN libraries. A chip that is not in any of the three lists is NOT assumed to have one. */
+const NPU_CAPABLE_OTHER = new Set([7325, 7450, 7475, 7550, 7675, 8350, 8535, 8635]);
+/** ARM part ids of the small power-saving cores: Cortex-A53, A35, A55, A510 and A520. */
+const LITTLE_CORE_PARTS = new Set(['0xd03', '0xd04', '0xd05', '0xd46', '0xd80']);
+
+/** Number of fast cores in /proc/cpuinfo text, or null when it carries no part ids. */
+export function countFastCores(cpuinfo: string): number | null {
+  const parts = [...cpuinfo.matchAll(/^CPU part\s*:\s*(0x[0-9a-f]+)/gim)].map((m) => m[1].toLowerCase());
+  if (!parts.length) return null;
+  return parts.filter((part) => !LITTLE_CORE_PARTS.has(part)).length;
+}
+
 class HardwareService {
   private cachedDeviceInfo: DeviceInfoType | null = null;
   private cachedSoCInfo: SoCInfo | null = null;
   private cachedImageRecommendation: ImageModelRecommendation | null = null;
-  private cachedOpenCLCapability: { supported: boolean; reason?: string } | null = null;
+  private cachedOpenCLCapability: { supported: boolean; reason?: string; devices?: string[] } | null = null;
+  private cachedHtpDevice: boolean | null = null;
   async getDeviceInfo(): Promise<DeviceInfoType> {
     if (this.cachedDeviceInfo) {
       return this.cachedDeviceInfo;
@@ -160,11 +173,7 @@ class HardwareService {
     const used = await DeviceInfo.getUsedMemory();
     return {
       used,
-      // ONE owner for "how much can we still allocate". Was `total - used`: device-wide free RAM,
-      // which on a 12GB iPhone read ~10.9GB while the process ceiling was ~6.3GB. The model-load gate
-      // reads this figure, so an oversized model was approved and iOS killed the app. Android has no
-      // per-process cap, which is why only iOS died. computeAvailableBytes already gets this right.
-      available: await this.computeAvailableBytes(total, used),
+      available: total - used,
       total,
     };
   }
@@ -177,7 +186,7 @@ class HardwareService {
           }
         })
         .catch(error =>
-          console.warn('Failed to fetch total memory in background:', error),
+          logger.warn('Failed to fetch total memory in background:', error),
         );
       return 4; // Safe default until cache is populated
     }
@@ -194,7 +203,7 @@ class HardwareService {
           }
         })
         .catch(error =>
-          console.warn(
+          logger.warn(
             'Failed to fetch available memory in background:',
             error,
           ),
@@ -296,9 +305,25 @@ class HardwareService {
    * so the gate doesn't refuse an ANE load that fits (nor admit a GPU load that
    * OOMs). Android (ONNX/QNN reserves accelerator memory up front) keeps 2.5×.
    */
-  estimateImageModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
+  estimateImageModelRam(model: {
+    fileSize?: number; size?: number; mmProjFileSize?: number;
+    backend?: string;
+    supportFiles?: Array<{ size?: number; enabled?: boolean; kind?: string }>;
+  }): number {
     const multiplier = Platform.OS === 'ios' && !this.preferGpuForImageGen() ? 1.8 : 2.5;
-    return this.estimateModelRam(model, multiplier);
+    const checkpointEstimate = this.estimateModelRam(model, multiplier);
+    if (model.backend !== 'sdcpp') return checkpointEstimate;
+    // Native multi-component models (Anima, Z-Image, Chroma, FLUX) load the
+    // attached VAE and text encoders in addition to the primary checkpoint.
+    // Omitting them produced a misleading "fits in RAM" result.
+    const attachments = model.supportFiles ?? [];
+    const supportBytes = attachments
+      .filter(file => file.enabled !== false && file.kind !== 'upscaler')
+      .reduce((total, file) => total + (Number.isFinite(file.size) && (file.size ?? 0) > 0
+        ? file.size ?? 0 : 0), 0);
+    // Encoders and LoRAs may allocate working buffers besides their weight files.
+    // Upscalers execute after diffusion and aren't permanently resident.
+    return checkpointEstimate + supportBytes * 1.25;
   }
   formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): string {
     return `~${(this.estimateModelRam(model, multiplier) / (1024 * 1024 * 1024)).toFixed(1)} GB`;
@@ -370,15 +395,12 @@ class HardwareService {
     const num = Number.parseInt(smMatch[1], 10);
     if (FLAGSHIP_8GEN2.has(num)) return '8gen2';
     if (FLAGSHIP_8GEN1.has(num)) return '8gen1';
-    return 'min';
+    return NPU_CAPABLE_OTHER.has(num) ? 'min' : undefined; // an unknown or older chip (870, 750G, 695) gets no NPU recommendation
   }
   private getIosImageRec(chip: SoCInfo['appleChip'], ramGB: number): ImageModelRecommendation {
     const coreml = 'coreml';
     if ((chip === 'A17Pro' || chip === 'A18') && ramGB >= 6)
-      // SDXL is NOT recommended (nor offered) on iOS \u2014 its ~7 GB dirty Core ML footprint jetsams
-      // even top-tier devices (see coreMLModelBrowser). SD 2.1 Palettized (6-bit, ANE) is the
-      // best-quality model that loads safely, so big devices get it as the top pick.
-      return { recommendedBackend: coreml, recommendedModels: ['2-1-base-palettized', 'v1-5-palettized'], bannerText: 'SD 2.1 Palettized recommended \u2014 best quality for your device', compatibleBackends: [coreml] };
+      return { recommendedBackend: coreml, recommendedModels: ['sdxl', 'xl-base'], bannerText: 'All models supported \u2014 SDXL for best quality', compatibleBackends: [coreml] };
     if ((chip === 'A15' || chip === 'A16') && ramGB >= 6)
       return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized', '2-1-base-palettized'], bannerText: 'SD 1.5 or SD 2.1 Palettized recommended', compatibleBackends: [coreml] };
     if (ramGB < 4)
@@ -442,28 +464,22 @@ class HardwareService {
       return matches ? matches.length : 4;
     } catch { return 4; }
   }
-  /** The cores worth running inference on. Cached for the process: CPU topology cannot change while
-   *  the app runs, and this sits on the model-load path. */
-  private performanceCores: number | null = null;
-  async getPerformanceCoreCount(): Promise<number> {
-    if (Platform.OS !== 'android') return 0; // no sysfs; the caller keeps its own rule
-    if (this.performanceCores !== null) return this.performanceCores;
-    const cores = await this.getCpuCoreCount();
-    const count = await readPerformanceCoreCount(cores);
-    logger.log(`[CPU-SM] performance cores=${count} of ${cores}`);
-    this.performanceCores = count;
-    return count;
-  }
+  /**
+   * Threads for inference. On a big.LITTLE chip (the onn tablet: 4 fast Cortex-A78 + 4 slow A55) the
+   * slow cores drag the whole pool, so only the fast ones are used. Chips whose cores are all fast
+   * (Snapdragon 8 Elite) keep four fifths of the cores.
+   */
   async getRecommendedThreadCount(): Promise<number> {
-    const cores = await this.getCpuCoreCount();
-    // Android: thread the PERFORMANCE cluster and nothing else. The old rule was 80% of every core,
-    // which on an 8-core phone spilled two threads onto efficiency cores and ran slower than using
-    // four — the case this replaces. Below two the topology read told us nothing useful, so fall
-    // through to the generic rule rather than crippling the engine on a single thread.
+    let cores = 4;
+    let fast: number | null = null;
     if (Platform.OS === 'android') {
-      const fast = await this.getPerformanceCoreCount();
-      if (fast >= 2) return Math.min(fast, cores);
+      try {
+        const cpuinfo = await RNFS.readFile('/proc/cpuinfo', 'utf8');
+        cores = cpuinfo.match(/^processor\s*:/gm)?.length ?? 4;
+        fast = countFastCores(cpuinfo);
+      } catch { /* keep the defaults */ }
     }
+    if (fast !== null && fast >= 2 && fast < cores) return fast;
     return cores <= 4 ? cores : Math.floor(cores * 0.8);
   }
   /**
@@ -475,20 +491,41 @@ class HardwareService {
    */
   async getAccelerationCapability(): Promise<{ hasNpu: boolean; hasGpu: boolean }> {
     if (Platform.OS !== 'android') return { hasNpu: false, hasGpu: false };
-    const [soc, opencl] = await Promise.all([this.getSoCInfo(), this.getOpenCLCapability()]);
-    return { hasNpu: HTP_ENABLED && soc.hasNPU, hasGpu: opencl.supported };
+    const [soc, opencl, htp] = await Promise.all([this.getSoCInfo(), this.getOpenCLCapability(), this.hasHtpDevice()]);
+    // A Snapdragon SoC is not enough: the bundled runtime must expose a Hexagon device
+    // (HTP0...). Without it the "NPU" choice could only ever fail.
+    return { hasNpu: HTP_ENABLED && soc.hasNPU && htp, hasGpu: opencl.supported };
   }
 
-  async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string }> {
+  /** True when the bundled llama.rn runtime exposes a Hexagon NPU device (HTP0, HTP1...). */
+  async hasHtpDevice(): Promise<boolean> {
+    if (this.cachedHtpDevice !== null) return this.cachedHtpDevice;
+    if (Platform.OS !== 'android') return false;
+    try {
+      const devices: Array<{ backend?: string; deviceName?: string; name?: string }> = await getBackendDevicesInfo();
+      return (this.cachedHtpDevice = devices.some(d =>
+        /^HTP\d/i.test(d.deviceName ?? d.name ?? '') || /hexagon|htp/i.test(d.backend ?? '')));
+    } catch { return false; /* not cached: a failed probe may succeed later */ }
+  }
+
+  /** `devices` names the native OpenCL GPU devices, so a load can ask for exactly them
+   *  (otherwise the runtime's default list can also pick up the Hexagon NPU). */
+  async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string; devices?: string[] }> {
     if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
     try {
-      const hardware = (await DeviceInfo.getHardware()).toLowerCase();
-      // Support Qualcomm Adreno (qcom) and ARM Mali GPUs.
-      // Avoid 'arm' alone — it matches the CPU architecture string (arm64-v8a), not the GPU vendor.
-      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali');
-      if (!hasCompatibleGpu) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_compatible_gpu' });
-      return (this.cachedOpenCLCapability = { supported: true });
+      // The CPU hardware string is not the GPU name (MediaTek/Mali tablets were
+      // incorrectly rejected). Ask the bundled native runtime what it exposes.
+      const devices = await getBackendDevicesInfo();
+      const gpus = devices.filter(device =>
+        /opencl/i.test(device.backend) && /gpu/i.test(device.type));
+      const supported = gpus.length > 0;
+      const names = gpus.map(device => (device as { deviceName?: string }).deviceName).filter((n): n is string => !!n);
+      return (this.cachedOpenCLCapability = {
+        supported,
+        reason: supported ? undefined : 'native_opencl_device_not_found',
+        ...(names.length ? { devices: names } : {}),
+      });
     } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
   }
 }

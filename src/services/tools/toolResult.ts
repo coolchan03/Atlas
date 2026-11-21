@@ -1,22 +1,16 @@
 /**
  * The one place that turns ANY tool outcome — a returned result, an empty result,
  * or a thrown error — into a typed, model-readable ToolResult. Every tool path
- * (built-in, pro/email, MCP) funnels through here via the tool loop, so:
+ * (built-in and extension tools) funnels through here via the tool loop, so:
  *   - a tool that THROWS becomes a typed 'error' result (it never crashes the turn),
  *   - an empty result is marked 'empty' (not a silent success),
  *   - the string handed to the model is NEVER empty and explicitly states failure,
  *     so the model can't mistake a timeout / disconnected server / no-data for a
  *     successful answer (the root of the "tools give improper information" reports).
  *
- * Pure + UI-free so both core and pro depend on it without dragging UI in.
+ * Pure + UI-free so core and extensions both depend on it without dragging UI in.
  */
 import type { ToolCall, ToolResult, ToolErrorCategory } from './types';
-import {
-  boundToolResult,
-  MAX_TOOL_RESULT_CHARS,
-} from '@offgrid/models';
-
-export { MAX_TOOL_RESULT_CHARS } from '@offgrid/models';
 
 /** Best-effort classification of a failure from its message (one place this lives). */
 export function classifyToolError(err: unknown): ToolErrorCategory {
@@ -66,24 +60,23 @@ export function normalizeToolResult(call: ToolCall, raw: ToolResult): ToolResult
  * model it was truncated so it doesn't assume it saw everything. This gate is upstream-agnostic — it
  * protects against any oversized result, no matter how the tool is written.
  */
+export const MAX_TOOL_RESULT_CHARS = 24000;
+
 /**
  * The content string the MODEL sees. Never empty; failures and empties are stated
  * explicitly so the model treats them as such instead of inventing an answer.
  */
-export function toolResultModelContent(
-  result: ToolResult,
-  maxChars = MAX_TOOL_RESULT_CHARS,
-): string {
+export function toolResultModelContent(result: ToolResult): string {
   if (result.status === 'error') {
     const cat = result.errorCategory ?? 'internal';
-    return boundToolResult(
-      result.name,
-      `Tool "${result.name}" failed (${cat}): ${result.error ?? 'unknown error'}. It returned no data — do not assume it succeeded.`,
-      maxChars,
-    );
+    return `Tool "${result.name}" failed (${cat}): ${result.error ?? 'unknown error'}. It returned no data - do not assume it succeeded.`;
   }
   if (result.status === 'empty') {
     return `Tool "${result.name}" ran but returned no content.`;
   }
-  return boundToolResult(result.name, result.content, maxChars);
+  if (result.content.length > MAX_TOOL_RESULT_CHARS) {
+    const kept = result.content.slice(0, MAX_TOOL_RESULT_CHARS);
+    return `${kept}\n\n[Tool "${result.name}" result truncated: showing the first ${MAX_TOOL_RESULT_CHARS} of ${result.content.length} characters. The result was too large to send in full - ask a more specific follow-up if you need more.]`;
+  }
+  return result.content;
 }

@@ -8,20 +8,8 @@ export {
 } from './models';
 
 // External URLs
-export const WEDNESDAY_URL = 'https://wednesday.is';
-
-// Off Grid AI Desktop: the free, open-source desktop app (not a Pro feature).
-// Linked from Pro screens and from remote-server discovery alike.
-export const OFF_GRID_DESKTOP_URL = 'https://getoffgridai.co/desktop';
-export const OFF_GRID_DESKTOP_BENEFIT =
-  'More power, same privacy. Run bigger models on Mac or Windows and keep every device in sync.';
-
-export const PRO_AHA_FEATURES = [
-  'Create images with the model active on your Desktop',
-  'Transcribe speech with the model active on your Desktop',
-  'Hear replies in the voice active on your Desktop',
-  'Control which models your named Desktop serves',
-];
+/** The GitHub repository whose releases hold Atlas updates and library packs. */
+export const ATLAS_REPO = 'coolchan03/Atlas';
 
 // Hugging Face API configuration
 export const HF_API = {
@@ -118,17 +106,8 @@ If asked about yourself, you can mention you're a local AI assistant that priori
   maxContextLength: 4096, // Default context window; eliminates double-init on models that support ≥4096
 };
 
-export interface OnboardingSlide {
-  id: string;
-  keyword: string;
-  title: string;
-  description: string;
-}
-
-// Core onboarding slides. Optional feature packages contribute additional slide data through the
-// onboarding.additionalSlides hook so Core keeps one renderer without advertising unavailable
-// features in free builds.
-export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
+// Onboarding slides
+export const ONBOARDING_SLIDES = [
   {
     id: 'freedom',
     keyword: 'YOURS',
@@ -161,75 +140,77 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
 
 // Fonts
 export const FONTS = {
-  mono: 'Menlo',
+  mono: 'sans-serif', // was Menlo (never existed on Android)
+  heading: 'serif', // Atlas look: book-style headings
+  body: 'sans-serif',
 };
 
 // Typography Scale - Centralized font sizes and styles
 export const TYPOGRAPHY = {
   // Display / Hero numbers
   display: {
-    fontSize: 22,
-    fontFamily: FONTS.mono,
-    fontWeight: '200' as const,
+    fontSize: 24,
+    fontFamily: FONTS.heading,
+    fontWeight: '700' as const,
     letterSpacing: -0.5,
   },
 
   // Headings
   h1: {
-    fontSize: 24,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 25,
+    fontFamily: FONTS.heading,
+    fontWeight: '700' as const,
     letterSpacing: -0.5,
   },
   h2: {
-    fontSize: 16,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 17,
+    fontFamily: FONTS.heading,
+    fontWeight: '600' as const,
     letterSpacing: -0.2,
   },
   h3: {
-    fontSize: 13,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 14,
+    fontFamily: FONTS.body,
+    fontWeight: '600' as const,
     letterSpacing: -0.2,
   },
 
   // Body text
   body: {
-    fontSize: 14,
-    fontFamily: FONTS.mono,
+    fontSize: 15,
+    fontFamily: FONTS.body,
     fontWeight: '400' as const,
   },
   bodySmall: {
     fontSize: 13,
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.body,
     fontWeight: '400' as const,
   },
 
   // Labels (whispers)
   label: {
-    fontSize: 10,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    fontWeight: '500' as const,
     letterSpacing: 0.3,
   },
   labelSmall: {
-    fontSize: 9,
-    fontFamily: FONTS.mono,
-    fontWeight: '400' as const,
+    fontSize: 10,
+    fontFamily: FONTS.body,
+    fontWeight: '500' as const,
     letterSpacing: 0.3,
   },
 
   // Metadata / Details
   meta: {
-    fontSize: 10,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 11,
+    fontFamily: FONTS.body,
+    fontWeight: '400' as const,
   },
   metaSmall: {
-    fontSize: 9,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
+    fontSize: 10,
+    fontFamily: FONTS.body,
+    fontWeight: '400' as const,
   },
 };
 

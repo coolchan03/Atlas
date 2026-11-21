@@ -1,0 +1,5 @@
+{
+  "schema": "atlas-native-image/v1",
+  "sampling_method": "euler",
+  "schedule": "discrete"
+}

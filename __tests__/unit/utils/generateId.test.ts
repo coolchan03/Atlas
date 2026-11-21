@@ -4,14 +4,11 @@
 
 import { generateId, generateRandomSeed } from '../../../src/utils/generateId';
 
-const UUID_V4 =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 describe('generateId', () => {
   describe('with crypto available', () => {
-    it('should generate a UUID identity', () => {
+    it('should generate a unique ID', () => {
       const id = generateId();
-      expect(id).toMatch(UUID_V4);
+      expect(id).toMatch(/^\d+-[a-z0-9]+$/);
     });
 
     it('should generate different IDs on subsequent calls', () => {
@@ -36,17 +33,17 @@ describe('generateId', () => {
       }
     });
 
-    it('should generate a UUID identity when crypto is not available', () => {
+    it('should generate ID using fallback when crypto is not available', () => {
       const id = generateId();
-      expect(id).toMatch(UUID_V4);
+      expect(id).toMatch(/^\d+-[a-z0-9]+$/);
     });
 
     it('should generate different IDs using fallback', () => {
       const id1 = generateId();
       const id2 = generateId();
-      expect(id1).toMatch(UUID_V4);
-      expect(id2).toMatch(UUID_V4);
-      expect(id1).not.toBe(id2);
+      // IDs might be same if called in same millisecond, but format should be valid
+      expect(id1).toMatch(/^\d+-[a-z0-9]+$/);
+      expect(id2).toMatch(/^\d+-[a-z0-9]+$/);
     });
   });
 });
@@ -101,5 +98,28 @@ describe('generateRandomSeed', () => {
         expect(Number.isInteger(seed)).toBe(true);
       }
     });
+  });
+});
+describe('without Web Crypto (Hermes on Android)', () => {
+  it('never repeats an id, even for thousands made in the same millisecond', () => {
+    const original = (global as any).crypto;
+    (global as any).crypto = undefined;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const ids = new Set(Array.from({ length: 5000 }, () => generateId()));
+      expect(ids.size).toBe(5000);
+      for (const id of ids) expect(id).toMatch(/^\d+-[a-z0-9]+$/);
+    } finally { now.mockRestore(); (global as any).crypto = original; }
+  });
+});
+
+describe('random seeds without Web Crypto', () => {
+  it('differ even when asked for in the same millisecond', () => {
+    const original = (global as any).crypto;
+    (global as any).crypto = undefined;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      expect(new Set(Array.from({ length: 50 }, () => generateRandomSeed())).size).toBeGreaterThan(45);
+    } finally { now.mockRestore(); (global as any).crypto = original; }
   });
 });

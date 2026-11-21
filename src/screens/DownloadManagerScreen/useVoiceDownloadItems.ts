@@ -1,8 +1,8 @@
 /**
  * Voice (TTS) + transcription (STT/Whisper) completed-download items for the
  * Download Manager. These models don't live in the model stores, so we read
- * them from disk: STT/Whisper is core; TTS is pro and contributes through the
- * downloads.listVoiceModels hook (absent in free builds).
+ * them from disk: STT/Whisper is core; TTS contributes through the
+ * downloads.listVoiceModels hook (absent when no voice feature is registered).
  */
 import { useState, useEffect, useCallback } from 'react';
 import { AlertState, showAlert } from '../../components/CustomAlert';
@@ -50,8 +50,7 @@ async function loadItems(): Promise<DownloadItem[]> {
         items.push({
           type: 'active', modelType: 'tts', modelId: engineId, fileName: d.name,
           author: 'Voice', quantization: '', fileSize: d.sizeBytes,
-          bytesDownloaded: d.bytesDownloaded, bytesPerSecond: d.bytesPerSecond,
-          progress: d.progress, status: 'downloading', name: d.name,
+          bytesDownloaded: d.bytesDownloaded, progress: d.progress, status: 'downloading', name: d.name,
         });
       } else if (d.status === 'error') {
         // A failed Kokoro fetch. Surface it as a failed active item so the

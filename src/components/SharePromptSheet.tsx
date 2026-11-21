@@ -1,13 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { GITHUB_URL, rateOnStore } from '../utils/sharePrompt';
+import { GITHUB_URL, shareOnX } from '../utils/sharePrompt';
 import { useAppStore } from '../stores/appStore';
-import { Button } from './Button';
 
 interface SharePromptSheetProps {
   visible: boolean;
@@ -25,11 +24,6 @@ export const SharePromptSheet: React.FC<SharePromptSheetProps> = ({ visible, onC
     onClose();
   };
 
-  const handleNeverShow = () => {
-    setEngaged(true);
-    onClose();
-  };
-
   return (
     <AppSheet visible={visible} onClose={onClose} enableDynamicSizing title="Support Open-Source AI">
       <View style={styles.content}>
@@ -42,33 +36,14 @@ export const SharePromptSheet: React.FC<SharePromptSheetProps> = ({ visible, onC
           <Text style={styles.buttonText}>Star on GitHub</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={() => handleEngage(rateOnStore)}>
-          <Icon name="star" size={18} color={styles.buttonText.color} />
-          <Text style={styles.buttonText}>
-            {Platform.OS === 'ios' ? 'Rate on the App Store' : 'Rate on Google Play'}
-          </Text>
+        <TouchableOpacity style={styles.button} onPress={() => handleEngage(shareOnX)}>
+          <Icon name="share-2" size={18} color={styles.buttonText.color} />
+          <Text style={styles.buttonText}>Share on X</Text>
         </TouchableOpacity>
 
-        <View style={styles.dismissActions}>
-          <Button
-            title="Maybe later"
-            variant="ghost"
-            size="small"
-            onPress={onClose}
-            style={styles.dismissButton}
-            textStyle={styles.dismissText}
-            testID="share-prompt-maybe-later"
-          />
-          <Button
-            title="Don't show again"
-            variant="ghost"
-            size="small"
-            onPress={handleNeverShow}
-            style={styles.dismissButton}
-            textStyle={styles.dismissText}
-            testID="share-prompt-never-show"
-          />
-        </View>
+        <TouchableOpacity style={styles.dismissButton} onPress={onClose}>
+          <Text style={styles.dismissText}>Maybe later</Text>
+        </TouchableOpacity>
       </View>
     </AppSheet>
   );
@@ -104,15 +79,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.primary,
   },
-  dismissActions: {
-    flexDirection: 'row' as const,
-    gap: SPACING.sm,
-    width: '100%' as const,
-    marginTop: SPACING.sm,
-  },
   dismissButton: {
-    flex: 1,
-    minHeight: 44,
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.sm,
   },
   dismissText: {
     ...TYPOGRAPHY.bodySmall,

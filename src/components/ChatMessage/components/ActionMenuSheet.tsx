@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput } from 'react-native';
+import React from 'react';
+import { View, Text, TextInput, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../../theme';
 import { AppSheet } from '../../AppSheet';
@@ -11,16 +11,22 @@ interface ActionMenuSheetProps {
   isUser: boolean;
   canEdit: boolean;
   canRetry: boolean;
+  canDelete?: boolean;
+  canSaveToProject?: boolean;
   canGenerateImage: boolean;
   canSpeak: boolean;
-  canTranscribeAgain?: boolean;
   styles: any;
   onCopy: () => void;
   onEdit: () => void;
   onRetry: () => void;
+  onDelete?: () => void;
+  onSaveToProject?: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
-  onTranscribeAgain?: () => void;
+  /** When provided, shows a "Select text" item (chat mode) for partial copy. */
+  onSelectText?: () => void;
+  /** Pin this message to the Pinned page, and make slides from it. */
+  extras?: { pinned: boolean; onPin: () => void; onSlides?: () => void; onCheck?: () => void; onWhy?: () => void; onAsk?: () => void };
 }
 
 export function ActionMenuSheet({
@@ -29,16 +35,20 @@ export function ActionMenuSheet({
   isUser,
   canEdit,
   canRetry,
+  canDelete,
+  canSaveToProject,
   canGenerateImage,
   canSpeak,
-  canTranscribeAgain = false,
   styles,
   onCopy,
   onEdit,
   onRetry,
+  onDelete,
+  onSaveToProject,
   onGenerateImage,
   onSpeak,
-  onTranscribeAgain,
+  onSelectText,
+  extras,
 }: ActionMenuSheetProps) {
   const { colors } = useTheme();
 
@@ -60,7 +70,19 @@ export function ActionMenuSheet({
           <Text style={styles.actionSheetText}>Copy</Text>
         </AnimatedPressable>
 
-        {canEdit && (
+        {onSelectText && (
+          <AnimatedPressable
+            testID="action-select-text"
+            hapticType="selection"
+            style={styles.actionSheetItem}
+            onPress={onSelectText}
+          >
+            <Icon name="type" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Select text</Text>
+          </AnimatedPressable>
+        )}
+
+        {isUser && canEdit && (
           <AnimatedPressable
             testID="action-edit"
             hapticType="selection"
@@ -86,18 +108,6 @@ export function ActionMenuSheet({
           </AnimatedPressable>
         )}
 
-        {canTranscribeAgain && onTranscribeAgain && (
-          <AnimatedPressable
-            testID="action-transcribe-again"
-            hapticType="selection"
-            style={styles.actionSheetItem}
-            onPress={onTranscribeAgain}
-          >
-            <Icon name="mic" size={18} color={colors.textSecondary} />
-            <Text style={styles.actionSheetText}>Transcribe again</Text>
-          </AnimatedPressable>
-        )}
-
         {canGenerateImage && (
           <AnimatedPressable
             testID="action-generate-image"
@@ -107,6 +117,53 @@ export function ActionMenuSheet({
           >
             <Icon name="image" size={18} color={colors.textSecondary} />
             <Text style={styles.actionSheetText}>Generate Image</Text>
+          </AnimatedPressable>
+        )}
+
+        {extras && (
+          <AnimatedPressable testID="action-pin" hapticType="selection" style={styles.actionSheetItem} onPress={extras.onPin}>
+            <Icon name="bookmark" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>{extras.pinned ? 'Unpin' : 'Pin'}</Text>
+          </AnimatedPressable>
+        )}
+        {extras?.onCheck && !isUser && (
+          <AnimatedPressable testID="action-check-answer" hapticType="selection" style={styles.actionSheetItem} onPress={extras.onCheck}>
+            <Icon name="check-circle" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Check this answer</Text>
+          </AnimatedPressable>
+        )}
+        {extras?.onAsk && !isUser && (
+          <AnimatedPressable testID="action-ask" hapticType="selection" style={styles.actionSheetItem} onPress={extras.onAsk}>
+            <Icon name="corner-down-right" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Ask about this</Text>
+          </AnimatedPressable>
+        )}
+        {extras?.onWhy && !isUser && (
+          <AnimatedPressable testID="action-why" hapticType="selection" style={styles.actionSheetItem} onPress={extras.onWhy}>
+            <Icon name="help-circle" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Why this reply</Text>
+          </AnimatedPressable>
+        )}
+        {extras?.onSlides && !isUser && (
+          <AnimatedPressable testID="action-slides" hapticType="selection" style={styles.actionSheetItem} onPress={extras.onSlides}>
+            <Icon name="monitor" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Make slides from this</Text>
+          </AnimatedPressable>
+        )}
+
+        {canSaveToProject && onSaveToProject && !isUser && (
+          <AnimatedPressable testID="action-save-to-project" hapticType="selection"
+            style={styles.actionSheetItem} onPress={onSaveToProject}>
+            <Icon name="folder-plus" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Save report to project</Text>
+          </AnimatedPressable>
+        )}
+
+        {canDelete && onDelete && (
+          <AnimatedPressable testID="action-delete" hapticType="selection"
+            style={styles.actionSheetItem} onPress={onDelete}>
+            <Icon name="trash-2" size={18} color={colors.error} />
+            <Text style={[styles.actionSheetText, { color: colors.error }]}>Delete message</Text>
           </AnimatedPressable>
         )}
 
@@ -126,13 +183,43 @@ export function ActionMenuSheet({
   );
 }
 
+interface SelectTextSheetProps {
+  visible: boolean;
+  onClose: () => void;
+  content: string;
+  styles: any;
+}
+
+/**
+ * Read-only sheet that presents the message text fully selectable, so the user
+ * can select part of it and copy via the native selection toolbar. This avoids
+ * the conflict where the bubble's long-press opens the action menu before the
+ * OS text-selection gesture can start.
+ */
+export function SelectTextSheet({ visible, onClose, content, styles }: SelectTextSheetProps) {
+  return (
+    <AppSheet visible={visible} onClose={onClose} title="SELECT TEXT" enableDynamicSizing>
+      <View style={styles.selectTextContent}>
+        <Text style={styles.selectTextHint}>Long-press to select, then copy.</Text>
+        <ScrollView style={styles.selectTextScroll} nestedScrollEnabled>
+          <Text selectable testID="select-text-body" style={styles.selectTextBody}>
+            {content}
+          </Text>
+        </ScrollView>
+      </View>
+    </AppSheet>
+  );
+}
+
 interface EditSheetProps {
   visible: boolean;
   onClose: () => void;
   defaultValue: string;
-  onSave: (text: string) => void;
+  onChangeText: (text: string) => void;
+  onSave: () => void;
+  /** Save the change but keep the conversation after this message and do not ask again. */
+  onSaveOnly?: () => void;
   onCancel: () => void;
-  resendsAfterSave: boolean;
   styles: any;
   colors: any;
 }
@@ -141,16 +228,13 @@ export function EditSheet({
   visible,
   onClose,
   defaultValue,
+  onChangeText,
   onSave,
+  onSaveOnly,
   onCancel,
-  resendsAfterSave,
   styles,
   colors,
 }: EditSheetProps) {
-  const [draft, setDraft] = useState(defaultValue);
-  useEffect(() => {
-    if (visible) setDraft(defaultValue);
-  }, [visible, defaultValue]);
   return (
     <AppSheet
       visible={visible}
@@ -161,13 +245,14 @@ export function EditSheet({
       <View style={styles.editSheetContent}>
         <TextInput
           style={styles.editInput}
-          value={draft}
-          onChangeText={setDraft}
+          defaultValue={defaultValue}
+          onChangeText={onChangeText}
           multiline
           autoFocus
           placeholder="Enter message..."
           placeholderTextColor={colors.textMuted}
           textAlignVertical="top"
+          scrollEnabled
         />
         <View style={styles.editActions}>
           <AnimatedPressable
@@ -177,14 +262,22 @@ export function EditSheet({
           >
             <Text style={styles.editButtonText}>CANCEL</Text>
           </AnimatedPressable>
+          {!!onSaveOnly && (
+            <AnimatedPressable
+              hapticType="selection"
+              style={[styles.editButton, styles.editButtonCancel]}
+              onPress={onSaveOnly}
+              testID="edit-save-only"
+            >
+              <Text style={styles.editButtonText}>SAVE</Text>
+            </AnimatedPressable>
+          )}
           <AnimatedPressable
             hapticType="impactMedium"
             style={[styles.editButton, styles.editButtonSave]}
-            onPress={() => onSave(draft)}
+            onPress={onSave}
           >
-            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>
-              {resendsAfterSave ? 'SAVE & RESEND' : 'SAVE'}
-            </Text>
+            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>SAVE & RESEND</Text>
           </AnimatedPressable>
         </View>
       </View>

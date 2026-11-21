@@ -1,0 +1,835 @@
+# Atlas 0.0.105 — Changelog and Handoff
+
+Status: **published** as [Atlas build 75](https://github.com/coolchan03/Atlas/releases/tag/atlas-75)
+(signed APK, commit `fbe7be78`; build 72 is an earlier publish of the same version). Built on `atlas-voice` @ `d334d31` (v0.0.104) on branch
+`claude/atlas-implementation-handoff-kvnfzs`. Android `versionName` 0.0.105, `versionCode` 1784144539.
+
+Nothing here has been run on a physical phone or tablet. Every item marked *needs device test* must be
+checked on the onn Pro 13 and the Razr Ultra 2025 before it is called done.
+
+---
+
+## 1. Vulkan and hardware acceleration
+
+### Implemented
+- **The llama.kt Vulkan text engine is now built into the release APK.** Root cause of "Vulkan not available":
+  the official build never passed `-PatlasVulkanEnabled=true`, so `:atlasLlamaKt` was never compiled into
+  releases (only into a side-by-side `.vulkantest` experimental app). The official workflow now builds it and
+  **fails the release** if `lib/arm64-v8a/libllamakt.so` is missing. A release-contract check prevents the
+  flag being dropped again.
+- The side-by-side `.vulkantest` package id is gone; the release updates the normal Atlas install.
+- App minimum Android version stays **7.0 (API 24)**. llama.kt needs Android 10 (API 29): the manifest overrides
+  the library minimum and the bridge refuses to load llama.kt below API 29, reporting "needs Android 10".
+- **OpenCL stays separate.** llama.kt is built Vulkan + CPU only (OpenCL sources/flags removed by the pinned
+  overlay); OpenCL remains in llama.rn.
+- **Diagnostics distinguish missing engine from unsupported hardware.** New `runtimeStatus()` reports one of:
+  `not_packaged` (build problem), `native_load_failed`, `sdk_unsupported`, `no_vulkan_device` (driver reports no
+  Vulkan GPU), `probe_failed`, or `ok` with the detected devices. Support is decided by the driver's device
+  list, never by chipset name.
+- **Actual GPU layers are shown.** For Vulkan, OpenCL and NPU the app reports
+  `min(requested, block_count + 1)` from the model's GGUF metadata — the layers llama.cpp actually assigns —
+  as "N of M layers" in Model Test, runtime info and settings. Previously Vulkan showed 0 / "unverified" and
+  OpenCL showed the requested 99.
+- **Adjustable / maximum safe offload.** Vulkan now uses the same device-RAM cap as OpenCL. Settings has a
+  **Maximum safe** button (offload every layer this device's RAM allows) next to the layer slider, and shows
+  what the loaded model actually got.
+- **No silent CPU.** Explicit Vulkan fails visibly if the engine is missing, no Vulkan GPU exists, the RAM cap
+  leaves 0 layers, or the native load reports 0 GPU layers. Automatic mode may still fall through to CPU and
+  says so.
+- **Download reliability (PENDING_FIXES #2):** stranded downloads after an app update are marked
+  "interrupted" with a retry instead of spinning forever (also covers retrying / waiting-for-network rows).
+
+### Tested
+- Unit/Jest: Vulkan adapter, LLM Vulkan load paths, offload accounting, Kotlin unit tests for the bridge's
+  offload/GPU-detection helpers and the stranded-download rule (Kotlin tests compile/run in CI only).
+- All `scripts/check-vulkan-*.cjs`, `check-llamakt-*` and `verify-llamakt-gradle` contracts pass; the
+  Vulkan-only CMake overlay applies cleanly to the pinned llama.kt.
+- GitHub Actions APK build: see "Build evidence" below.
+
+### Needs physical-device testing
+- onn Pro 13 (Mali / MediaTek): Settings → Text generation → Vulkan, load a Q4 GGUF, check Model Test shows
+  "Vulkan … N of M layers" and real speed; try Maximum safe.
+- Razr Ultra 2025 (Adreno): compare OpenCL vs Vulkan; confirm explicit Vulkan never runs on CPU.
+- A device on Android 9 or older must still install and run (Vulkan reported as needing Android 10).
+
+## 2. Tablet layout
+
+### Implemented
+- Layout follows the **window** width (Material size classes), so phones in portrait are unchanged.
+- ≥600 dp (tablet portrait, unfolded foldable, landscape phone): **navigation rail** on the left, built from
+  the same customizable nav-bar settings (order, hidden items and shortcuts behave identically).
+- ≥840 dp (13.2" onn in landscape): **two-pane Workspace** (Projects | Agents side by side) and **Model
+  Settings in two open columns**.
+- Chat on wide screens: header aligned with the readable column; user bubbles narrower, answers wider.
+
+### Tested
+Jest render tests prove phone layouts are unchanged and tablet layouts switch at the breakpoints.
+
+### Needs physical-device testing
+Rotation on the onn tablet, the Razr's inner screen in both orientations, split-screen/multi-window.
+
+## 3. KittenTTS voices
+
+### Implemented
+- **KittenTTS Nano (v0.2, ~29 MB)** and **Mini (v0.1, ~163 MB)** as optional downloads, each with 8 built-in
+  voices, running on the existing sherpa-onnx engine with the same sentence streaming, stop/cancel, one-thread
+  load/free (memory) and offline playback as Kokoro/Piper. Existing Android TTS, Kokoro and Piper unchanged.
+- **Verified locally** with sherpa-onnx 1.13.7 (same version as the app): both packages load, 8 speakers,
+  24 kHz, non-silent audio for every speaker (~1 s per sentence for Nano on 4 x86 cores).
+- **Licensing checked:** both packages ship an Apache-2.0 LICENSE; the voices workflow refuses to republish a
+  KittenTTS package without it. Their espeak-ng-data is GPL-3.0 data, redistributed the same way as the
+  existing Piper/Kokoro packages.
+- Voices are named "Kitten 1–8": upstream labels alternate male/female, but a pitch check did not confirm the
+  order for the packaged models, so no gender is claimed. Each voice previews when chosen.
+- **Named voice profiles** (voice + speaker + speed) with preview, stored on the device.
+- **Per-agent voice:** Agents → edit → Voice. That agent's replies are read in its profile; the saved app voice
+  is restored afterwards for other screens.
+
+### Not implemented: voice cloning (KittenTTS 2)
+Correction to an earlier draft: **KittenTTS 2** (KittenML, 1.7B parameters, 506 MiB–1 GB) does clone a voice
+from 5–30 s of audio. The packages shipped here are the older lightweight KittenTTS models, which cannot.
+KittenTTS 2 is not in this release because:
+- its only non-Python runtime (`kitten-tts-2-cpp`, MIT) is a batch command-line tool with a LibTorch
+  (TorchScript) waveform decoder and no documented Android/ARM64 build;
+- its voice cloning needs an offline Python preparation step;
+- its weights use the separate "Stellon Labs Community License", which could not be read from this build
+  environment (Hugging Face blocked), so redistribution terms are unverified.
+A practical route: prepare the voice on a computer with KittenTTS 2, import the prepared voice into Atlas,
+and run a KittenTTS 2 engine ported to Android (llama.cpp fork + Android LibTorch decoder). That port is a
+separate native project; voice sample recording/import was not built until it exists.
+
+### Done
+The **Build Atlas voices** workflow ran successfully on 2026-10-19, so `kitten-nano-en.zip` and
+`kitten-mini-en.zip` are on the `atlas-voices` release.
+
+### Kokoro v1.0 voices (chosen by ear from rendered samples)
+- New downloadable voice **Kokoro v1.0** (`kokoro-v1-en`, sherpa-onnx `kokoro-int8-multi-lang-v1_0`,
+  Apache-2.0, LICENSE checked by the voices workflow): 28 English speakers, US and UK.
+- British speakers load the UK pronunciation dictionary only with `lang="en"`; American speakers load
+  the US one with `en-us` (`NeuralTts.kokoroDictionary`). `lang="en-gb"` renders silence, so it is not used.
+- **Voice depth:** a speaker can be played lower without changing its pace. Atlas generates the speech
+  faster and plays it back slower by the same factor (`NeuralTts.deepen`). "Lewis (deep)" is Lewis at 0.9
+  (about 81 Hz instead of 91 Hz).
+- Models -> Voice -> Voice profiles offers ready-made profiles once the voice is downloaded:
+  **Echo** and **Puck** (American), **Fable** (British) and **Deep British** (Lewis at 0.9).
+- Rendered and listened to on a computer only. Phone speed on Kokoro v1.0 is not measured yet.
+
+### Import your own voice
+- Models -> Voice -> **Import voice file** adds a voice the user downloaded: a sherpa-onnx Piper (`vits-piper-...`),
+  Kokoro or KittenTTS package as `.tar.bz2` or `.zip`. It is unpacked on the phone (paths outside the voice
+  folder are refused), checked for a model and `tokens.txt`, named readably ("Northern English Male (Piper,
+  en GB)") and used. Multi-speaker voices get a speaker stepper. Unconverted Piper files (`.onnx` + `.onnx.json`)
+  get a message pointing to the sherpa-onnx version.
+- Tested: Kotlin unit tests unpack real `.tar.bz2` and `.zip` archives and refuse path escapes; a rendered test
+  imports a voice and steps through speakers.
+
+## 4. Image and LLM reliability
+
+### Implemented
+- **Qwen repeated-text glitch — likely root cause fixed.** llama.rn re-parses all generated text into an
+  accumulated `content` each token, and that parse can revise text already shown (Qwen's chat format holds
+  back partial `<tool_call>`/`<think>` tags; failed partial parses arrive as raw tokens). The stream helper
+  re-appended the **whole** reply whenever the new value did not extend the old one, and the stored message
+  is built from the stream, so the repetition was saved. Deltas are now computed against displayed text and
+  the final message is reconciled with llama.rn's parsed answer.
+- Inaccurate acceleration reporting fixed (see §1).
+
+### Not done (needs device or more time)
+- Native image generation with `.gguf`/`.safetensors`, VAE/encoders, LoRA, `.pth` upscalers and JSON settings
+  was **not executed** — it needs the phone/tablet. Tokenizer mismatches, model switching and memory errors
+  were not re-investigated beyond the items above.
+
+## 5. Project and chat protection
+
+### Implemented
+- **Plaintext leak fixed:** adding a document to a PIN-protected project left the *original file* unencrypted
+  in the attachments folder. The copy is now deleted after encryption (and if encryption fails).
+- Document paths/names are no longer written to the Android system log.
+- **Protect existing projects with their chats:** protecting a project now encrypts each of its chats with the
+  project PIN (verified) before locking. Unlocking the project opens its chats; new chats can be started inside
+  an unlocked protected project and are sealed with the project PIN. Selective protection and permanent
+  unprotect are unchanged.
+
+- **Study outputs** of a protected project are encrypted in their own file (project PIN key); never written to
+  plain storage, re-encrypted on every change while unlocked, dropped from memory on re-lock.
+- An existing chat can be **moved into an unlocked protected project**; it is sealed with the project PIN.
+- **Backup/restore audit:** restoring a backup used to delete every protected project on the phone (and
+  locked chats missing from the backup). Restore now keeps them. Unlocked protected projects are included
+  in password backups sealed with their own PIN and open on a new phone with that PIN.
+- Nearby phone/tablet transfer was checked: protected projects, protected chats and study outputs are never
+  sent.
+
+### Not done
+- Original document bytes are not kept for protected projects (only encrypted text/embeddings) — by design.
+- Backup/restore and phone↔tablet transfer were not changed or re-audited beyond the above.
+
+## 6a. Daily briefing (user report: ignored interests, made things up, read ads as news, odd page)
+- Broad interests use Google News top-story sections (U.S., world, business, tech, science, health, sports,
+  entertainment); others use a 2-day search. Press releases, sponsored/shopping items and stories older than
+  48 hours are dropped; the same story from several outlets is merged; every interest gets a story first.
+  Bing's outlet field (`<News:Source>`) was never read before; fixed.
+- One part per real headline, written only from that story's own text, shorter when the source is thin. Fun
+  facts come only from the offline library, never the model's memory.
+- The page shows the exact headlines used (outlet, interest, time, link), uses the app's shared components,
+  and shows step-by-step progress with elapsed time while it is made.
+- Tested with fixtures in the real Google/Bing RSS formats; the live news hosts are blocked from the build
+  environment, so a real-day check on the phone is still needed.
+
+## 6. Project learning / Therapy
+
+- The Therapy setup (six private chats sharing *Personal History*, *AI Instructions*, *Current Progress*) is now
+  possible inside **one protected project**: create the project, add the three documents, create the chats,
+  then protect it — or protect first and create chats while unlocked. No private data is in the repo or APK.
+- **Shared files are now writable:** a chat can create or update a named project document (e.g. *Current
+  Progress*) with the new `update_project_document` tool (enable it like other tools). In a protected project
+  it is written straight into the encrypted vault. Save report to project works in protected projects too.
+- **Tested:** an integration test has chat A append to *Current Progress* in a protected project and checks that
+  chat B's prompt then contains that text, with only encrypted files written. The project prompt no longer
+  tells the model to use tools that are switched off.
+- Learning games: terms were already taken only from the project's passages; everyday filler words
+  ("however", "important") are now kept out of crosswords, word searches and term games.
+  The obsolete 23-games request was not implemented, as instructed.
+- **Read and edit shared documents:** Knowledge base -> pencil writes a new shared document; tapping a note or a
+  `.md`/`.txt` document opens it for editing (also from the project screen). Saving replaces the old version and a
+  rename removes the old name. Documents keep their exact text (protected-project notes store it inside the
+  encrypted vault) instead of being rebuilt from search chunks, which dropped spacing and repeated parts of long
+  paragraphs. Tested with a rendered test on a protected project: only encrypted files are written.
+
+## 6b. Recorder with speaker labels (FF-07, built at the user's request)
+
+- Atlas hub -> **Recorder**. Opt-in: the user first confirms they will tell everyone they are recording. A red
+  "Recording" indicator with a timer shows while it runs; leaving the screen asks to stop. Android's own
+  microphone indicator also shows.
+- After stopping, everything happens on the phone: Whisper writes timed text, sherpa-onnx speaker diarization
+  finds who spoke when (pyannote segmentation 3.0, MIT; 3D-Speaker ERes2Net, Apache-2.0, about 45 MB, one-time
+  download packaged by the voices workflow as `atlas-speakers.zip`), and the two are joined into lines per speaker.
+- Users name speakers, tap a line to fix who said it, re-label with a known number of people, save the
+  transcript to a project, and delete recordings. Recordings stay in Atlas's private storage and are not part
+  of backups. A transcript interrupted by closing Atlas can be retried.
+- **Accuracy (honest):** on a synthetic test conversation (three Kokoro voices) the labels were right for two
+  clearly different voices, but two similar male voices were merged into one speaker unless the number of
+  people was given. Real voices usually differ more; test on the phone with real people before relying on it.
+- Tested: a rendered test records, transcribes and labels a two-person conversation, renames a speaker and
+  fixes a line (microphone, files, Whisper and the speaker engine faked at the device boundary). Kotlin unit
+  tests cover model lookup and resampling. Not run on a phone yet.
+- **Share and download:** share a transcript to any app, download it as a text file, or download the audio
+  (WAV) to keep a copy outside Atlas, since recordings are not in backups.
+- **Upload audio or video files.** Recorder -> "Transcribe an audio or video file" opens the file picker for
+  any audio or video Android can play (mp3, m4a, aac, ogg, opus, flac, wav, mp4, mov, webm and more). Atlas
+  reads the first sound track on the phone (Android MediaExtractor + MediaCodec), streams it to a 16 kHz mono
+  WAV without loading the whole file into memory, then makes the same labelled transcript as a recording. The
+  title is the file name. Android only (the speaker engine is Android only); other phones do not show the
+  button. Tested: a rendered test uploads a video and gets a two-speaker transcript (picker, files, decoder,
+  Whisper and speaker engine faked at the device boundary); Kotlin tests cover the WAV header, stereo to
+  mono, and resampling across chunk edges. Needs device test with a real phone video and a voice memo.
+
+## 7. Voice mode ("phone call") speech input
+
+- **Bug fixed:** voice mode treated a direct-audio chat model as "voice available", recorded each turn, then only
+  transcribed it if a Whisper model was downloaded — so turns came back "couldn't hear that".
+- Voice mode now uses a downloaded Whisper model as before, or **the phone's own speech recognizer** (on most
+  phones Google's speech service, the one Gboard voice typing uses), asking for the on-device recognizer and
+  offline recognition. If the offline language pack is missing it retries with the default recognizer (still
+  asking for offline). The Android 11+ manifest query needed to find the recognizer was missing; added.
+- Text-chat mic behavior is unchanged (the keyboard's mic already dictates there).
+- **Looks like a phone call (FF-02, chosen by the user: in-app call screen, not cellular calls):** voice mode
+  opens a full-screen call with the agent's name and initial, a call timer, status and live caption, round
+  Mute / Speaker-Earpiece / Hands-free buttons, a talk button and a red End call. A hands-free call starts
+  listening as soon as it opens.
+- **Talk over it to interrupt:** in hands-free mode the mic is metered (not recorded or transcribed) while an
+  answer plays. When you speak clearly over it for about 0.3 s, speech stops and a new turn starts. The
+  recorder has no echo cancellation, so the trigger adapts to the answer's own echo level. It works best on the
+  earpiece; on loudspeaker you may need to speak up.
+- **Less talkative, more like a person:** call mode tells the model it is on a phone call: one to three
+  sentences, answer first, offer details instead of listing them, contractions, short follow-up questions, no
+  markdown or symbols, and do not repeat itself after an interruption.
+- Needs device test: Razr + Gboard with the offline English pack installed, airplane mode, hands-free on;
+  barge-in on earpiece and loudspeaker; that loudspeaker playback does not interrupt itself.
+- The recorder that labels speakers (FF-07) was later built at the user's request: see 6b.
+
+## 8. Learn a language (inside the "Learn a language" project)
+
+- The Spanish Learning project is now **Learn a language**: pick the language, then play a board game of
+  lessons. Six CEFR levels (A1 Beginner, A2 Elementary, B1 Intermediate, B2 Upper intermediate, C1 Advanced,
+  C2 Proficient), 138 units of vocabulary, grammar and themes. A level saved by the earlier four-level course
+  moves to the matching CEFR level. The AI writes each unit once, following a written teaching method
+  (comprehensible input, recognition before production, spaced review), and keeps it for offline use.
+- **Every square is one lesson of about five minutes.** Each game kind has a typical time (12 s to pick a
+  word, 40 s to match pairs), and Atlas learns your own pace after a few answers, so quick games mean more
+  exercises and slow ones fewer. Grammar, harder themes and big units are split into two lessons (part 2
+  repeats two items from part 1).
+- **Board:** a much bigger snake-shaped board with numbered squares and a pawn. Every two lessons you land on
+  a story, a podcast, a one-minute speed round, a word search or a review square, and each level ends with a
+  checkpoint (a ten-minute test of the whole level, 80% to pass). Levels are a 2 x 2 grid so names are no longer
+  cut off; lesson text wraps instead of being cut.
+- **Games:** pick the word, what does it mean, listen and pick, match pairs, true or false, letter scramble,
+  fill in the blank, word order with extra words that do not belong, tap what you hear, type the
+  translation, dictation (accents forgiven but pointed out), and the word search (English word bank, grid in
+  the language you are learning, any alphabet).
+- **Speaking:** "Say this out loud" exercises use the phone's own speech recognizer (offline when the
+  language pack is installed). "Can't speak now" skips one; a microphone switch on the board turns them off.
+- **Missed answers come back** once at the end of the lesson; only the first try counts for stars.
+- **Daily goal:** a bar on the board shows today's XP against a goal (50, 100, 200 or 300; tap to change).
+- **Progress is saved:** stars, XP, streak, finished squares, and a lesson left halfway carries on where it
+  stopped. The course is included in Atlas backups.
+- **Pre-made stories and podcasts:** a library of 110 pieces across A1 to C2: simplified fairy tales and
+  fables, funny everyday moments, friends talking, places and culture, made-up news, news from history, and
+  today's real headlines as a short bulletin. Thirteen are written out in full in Spanish and open instantly;
+  the rest are written once by the AI at your level from an outline and kept.
+- **Prepare this level:** one tap on the board writes every lesson and board story of the level with the AI
+  on the phone, with progress and a Stop button, so the whole level then works offline without waiting.
+- **Word book:** every word learned, with its meaning, a play button, how well it is known (five dots) and
+  when it is next due; search in either language, sort A to Z or by what is due.
+- **Weekly progress:** XP for each of the last seven days as bars, with this week's XP and lessons. Story and podcast squares land on their own piece. Create
+  your own is still there.
+- **Word search fix:** a word now counts wherever it is spelled in a line, also where the filler letters
+  happen to spell it a second time.
+- **Help while learning:** tap any word in a lesson or story for its meaning; a help button asks the AI tutor
+  about the exercise on screen (it gives a hint before the answer); right and wrong sounds (on/off on the
+  board); "Load the AI model now" when a lesson or story needs the model and it is not loaded.
+- Tested: rendered tests play a lesson through, check levels and split lessons, resume a half-done lesson,
+  solve a word search, open a pre-made story from a board square and move on, tap a word for its meaning,
+  and turn sounds off. Needs device test: sound, pace and lesson length on the phone, and AI-written units
+  and stories with the model you use.
+
+## 8b. Language course additions (0.0.106)
+
+- **Practice phone calls.** The AI plays a waiter, receptionist, taxi dispatcher and others and speaks only the
+  language being learned, at the learner's level. Pick a situation (or describe your own) from "Practice call"
+  on the course screen; a call square also sits on the board every 6 lessons with the situation of the lesson
+  before it (done after the learner has said 3 lines). Each sentence is spoken as soon as it is written. "What do
+  I say?" suggests a line with its English meaning. After hanging up the learner's lines are checked and real
+  mistakes are shown with the corrected sentence. Uses the phone's speech recognizer in the learned language; a phone
+  without one gets a typing box. Not checked on a device yet.
+- **Tap a word.** Words are dotted-underlined. The bubble gives the meaning, a speaker button, a save-to-My-words
+  button and, for verbs, a conjugation table (offline for Spanish by rule, written once by the AI for other languages).
+- **Exams** every 8 lessons (70% to pass), a board-game look for the board, and "next lesson only" when preparing a level.
+
+## 8c. Language course additions (0.0.107)
+
+- **Crossword square** every 5 lessons: the clues are in English and the answers are written in the language
+  being learned (tap a clue, type the answer, Check; Hint fills the first letter). It is optional: Skip marks
+  the square done with no XP so the board moves on. Words come from the lessons so far.
+- Conjugation tenses sit behind tabs (Present, Past, Imperfect, Future, Conditional).
+- The "Your turn" card says how many lessons are left before the next exam.
+- The course screen opens scrolled to the learner's square.
+
+## 8d. Quality additions (0.0.108)
+
+- **Learn a language is its own tab** (Learn, in the bottom-bar settings; also a Home card and a quick-home entry). It no longer
+  shows in the Projects list. The built-in project record stays underneath, so earlier tutor chats, backups and sync are unchanged;
+  the course screen has Chat with your tutor and Past chats.
+- **Find the best settings** (model test page, GGUF models): loads the model with automatic acceleration and the CPU at a few thread
+  counts, times a short reply each way, lists the speeds and keeps the fastest. After two slow replies (under 3 tok/s) a one-line tip
+  above the message box suggests it. Optional **Warm up after loading** (Text generation, off by default) runs one silent reply after a
+  GPU model loads. Not verified on a device yet; whether the tablet's first-question wait is shader compilation is still unknown.
+- **My mistakes** (words missed most, a right answer takes one off), optional **Slower voice** for the course's spoken lines (off by
+  default), and **Captions** on practice calls (off = listen first, tap a line to read it).
+- **Save as file** in the chat menu (Markdown). **Backup reminder**: Settings shows when the last backup was; Home reminds after 7 days
+  with no backup, then every 14 days, and can be snoozed a week. Atlas cannot back up by itself (the person chooses where the file goes).
+- The course's model calls (lessons, word lookups, calls) now go through the background job queue, so they wait behind a chat answer or
+  another job instead of failing with "Generation already in progress".
+
+## 8e. Calls and the tablet GPU (0.0.109)
+
+- **The tablet's GPU is the Mali-G57**, not the G615 (a wrong guess of mine): the "Automatic skips Vulkan" rule only matched the G615, so
+  it never applied on the onn 13" Pro. It now matches the Mali-G57, the GPU that was measured (CPU 4.5 tok/s vs Vulkan 2.1).
+- **Practice call listens with Whisper**, the same engine as transcription, told to expect the language being learned (multilingual models
+  only; the ".en" models cannot). Falls back to the phone's recognizer, then to typing. Same end-of-turn rule as the main call, now one
+  shared detector (`endOfSpeech.ts`).
+- **Call mode**: the phone recognizer is asked to end the turn after about a second of quiet (its own default is longer), and the call
+  screen shows where each turn's time went ("sent 0.8 s after you stopped, voice started 3.2 s later"; also logged as `[CALL-LAT]`).
+  Not measured on a device yet, so whether this removes the walkie-talkie feel is unknown.
+
+## 8f. Pairing, Learn tab and briefing (0.0.110)
+
+- **QR pairing**: saving the other device failed with "Caller-provided IV not permitted": the pairing record is sealed with a key held in
+  the Android Keystore, which creates its own random nonce and refuses one supplied by the caller. Sync and pairing encryption now go
+  through `SyncCrypto` (the cipher picks the nonce and it is stored in front of the ciphertext), with JVM tests. Packets already on the
+  wire keep the same format. Not verified on two devices yet.
+- **Learn is a tab by default** (Home, Chats, Workspace, Learn, Settings). Someone who arranged their bottom bar before keeps it as it was
+  and turns Learn on in Settings, Bottom bar.
+- **Briefing**: "Topics to avoid" understood only the words in a headline, so avoiding "sports" removed almost nothing (a result about the
+  Bears never says "sports"). Sports, Celebrity gossip, Politics and Crime now match what those stories are about, and the screen offers
+  them as one-tap chips.
+
+## 8g. Briefing and slow-reply tips (0.0.111)
+
+- **Not for me** on every story of a finished briefing (the eye icon next to its headline): avoid a kind of story (Sports, Celebrity
+  gossip, Politics, Crime; the kind it looks like is listed first), stop following the interest it came from, or just hide it from the
+  list. The audio already made is not rewritten; the next briefing follows the choice.
+- **The slow-reply tip says why** when the settings show it: the GPU is slower than the CPU on this device (Mali-G57: "Use the CPU"), or
+  more threads are set than the phone has fast cores ("Use automatic threads"); otherwise it offers the settings test as before.
+
+## 8h. Chat, projects, search and skills (0.0.112)
+
+- **Save a chat as a file** from the chat menu: Markdown (.md) or plain text (.txt); "Share to an app" is last.
+- **Chat layout** (Appearance): Clean by default (replies as plain text across the page, a bubble only for your own message, smaller gaps,
+  wider column on a tablet); Bubbles keeps the earlier look.
+- **Project types** (General, School, Work): starting instructions that never replace your own, and quick starts (Quiz me, Study plan,
+  Summarize, Action items...) that open a new chat with the request typed in the box. Language learning is its own tab.
+- **Home**: a Search row (chats and what was said in them, screens and settings by what people call them, projects, models) and a
+  Continue card (your next Learn square, today's briefing).
+- **Skills** (Settings, Skills): import a SKILL.md or a zipped skill folder, or paste one, in the open format Claude and OpenClaw use; see a
+  preview first. A skill's instructions join the chat prompt when a message clearly fits its description or starts with /skill-name, cut to
+  fit the model's context. Scripts and files next to SKILL.md are not run; programs a skill expects (curl, python) are listed. In backups.
+
+## 8i. Share into Atlas and launcher shortcuts (0.0.113)
+
+- **Share into Atlas**: text or a link shared from any app (Share, then Atlas), or text selected anywhere and sent with **Ask Atlas**,
+  opens "What should Atlas do with this?": Ask about it, Summarize, Explain simply, Translate to English, Draft a reply. Each opens a
+  new chat with the request already typed in the message box. Shared text waits if the app is still starting or locked behind a PIN.
+- **Launcher shortcuts** (hold the Atlas icon): New chat, Practice call, Record, Today's briefing (links atlas://app/chat, call, record, brief).
+- Native code only checked by the CI build and its JVM tests so far (ShareText); first use on a device will confirm both entry points.
+
+## 8j. Undo, diagnostics, hold-a-tab, faster sync (0.0.114)
+
+- **Undo delete chat**: deleting an ordinary chat is immediate; an "Chat deleted / UNDO" bar stays for 8 seconds. Images generated in the chat
+  are deleted only when the bar goes away. Undo also clears the deletion record that sync would send, so the chat is not removed from the
+  other phone. Locked and private chats still ask first and cannot be undone.
+- **Copy diagnostics** (Settings, About): version, device, GPU, thread/GPU/context settings, measured speeds, last call timing. No chat text, keys or file paths.
+- **Hold a tab** on the bottom bar: Home opens Search, Chats starts a new chat, Learn starts a practice call, Projects starts a project, Models opens downloads, Settings opens Appearance.
+- **Sync pushes changes after ~5 seconds** (waiting for a streaming reply to finish) instead of only on the 60-second tick.
+- Not changed: tools sent per message stay the user's choice (not pruned automatically); speed ideas that need a device measurement wait for Copy diagnostics numbers.
+
+## 8k. Your list (0.0.115)
+
+- **Briefing on Home**: the briefing row is always there ("Listen to today's briefing", or "Today's news briefing: not made yet, tap to make it").
+- **Briefing summarizes**: each story is a two-to-four sentence summary in the AI's own words, with more and shorter stories; only 900 characters of an article are read for background, and the script is told never to read or quote it.
+- **Calls end by themselves more reliably**: the quiet-after-speech rule now follows the room's noise (it no longer mistakes speech that starts at once for background noise, and handles a steady hum).
+- **Learn practice call looks like a phone call**: no header, big caller circle, timer, round Captions / Talk / "What do I say?" buttons and a large red End call.
+- **Lesson speaking exercise listens with Whisper** (the multilingual model, told the language) when one is downloaded, else the phone recognizer; tap the mic again to send.
+- **Prepare lessons**: no longer fails because no model is "selected"; it uses the last used or first downloaded model, and a missing model gives a clear message.
+- **Copy**: each table in a reply has "Copy table" (pastes as spreadsheet cells) and "Copy as Markdown"; code blocks have "Copy code".
+- **Draft text or email**: new tool opens Messages or Email with the message written; you press send. Enable it per agent (Draft texts and emails).
+- **Maps grounding**: "My location" now tells the model it only has coordinates and your saved places, so it should stop naming nearby airports or towns.
+- **Sync**: a chat made on both phones (same title, one is the other plus more) is merged into one; an agent or project that is identical on both is not added twice. Two different chats with the same title are still both kept.
+- **Learning mode without an agent**: choose "No agent" and the lessons are kept with the learning history.
+- **Multicolor accent** (Appearance): each bottom tab has its own color.
+- Not verified on a device: call end-of-turn, Whisper in lessons, the call screen look, Draft message links.
+
+## 8l. Second round from your list (0.0.116)
+
+- **Lessons**: every sitting goes through all six example sentences (the course now writes six, not five), and no sentence is shown twice in a row; single words are shared between the two sittings of a unit, sentences are not.
+- **Home**: the Simple, Compact and Colorful homes replace "Presentations" with **Daily briefing** (the standard home already showed the briefing row). Five more themes (Mocha, Mint, Sakura, Graphite, Sunset) and six more accent colors (Orange, Lime, Cyan, Indigo, Fuchsia, Gold).
+- **Learn a language listening**: Whisper is now found when any multilingual model is on the phone, even if an English one is selected; a lesson exercise frees the AI to make room for it; and if it cannot load, the screen says why (memory, error) instead of "no speech recognizer".
+- **Voices**: lessons, the word book, word taps, stories and podcasts use the phone's different voices (a dialogue gives each speaker their own), and the practice-call caller keeps one voice per scenario. Phones with a single voice for a language sound as before.
+- **Podcasts** play by themselves, part by part, with the text hidden until you tap "Show the text".
+- **Briefing**: "avoid sports" now catches team names and scorelines (Chiefs beat Bills 27-20), and "sports news" or "all sports" count as sports; interests you avoid are skipped; no "welcome to the daily briefing" opener; silence at the start and end of each voice line is trimmed so there is no gap between lines.
+- **Load the AI model now** button on the briefing screen and the Learn screen.
+- Not verified on a device: Whisper in lessons and calls on the tablet, voice variety, podcast autoplay, line gaps.
+
+## 8m. Calls, themes and small things (0.0.117)
+
+- **Learn practice call**: loads the AI model before the caller speaks; with none downloaded it says so and offers "Load the AI model now". The transcript no longer pushes End call off the screen (the likely reason you got stuck), the phone's Back button hangs up, and the screen stays on during the call.
+- **Colorful** now works in dark mode and with a chosen accent or background: pastel (dark: deep) tinted surfaces, each Home card in its own color, and each bottom tab in its own color.
+- **Two more layouts**: Grid (big square tiles, two across) and Focus (only Chat, Learn and the briefing). Four more backgrounds: High contrast, Lavender, Peach, Navy.
+- **Appearance**: "Surprise me" picks a random background and accent; "Reset the look" returns to the default (keeps your chat layout).
+- Not verified on a device.
+
+## 8n. Briefing: avoid topics, length, repeats (0.0.118)
+
+- **Topics to avoid are checked by the AI**: after the word lists, the AI on the phone reads the candidate headlines (and your interests) and names the ones about a topic you avoid, even when no sports word appears. If it cannot be asked, the word lists still run.
+- **Length is reached for real**: stories are written one by one until the script truly has the chosen number of spoken words; the last story written gets the goodbye, extra stories read in advance are left out, and the fun fact (if on) is still included. Before, the length was only estimated from the amount of source text.
+- **No repeated cards**: two headlines about the same event (different outlets, different wording) or with the same link count as one, and each part is told which stories are already covered.
+- Not verified on a device.
+
+## 8o. Force load everywhere (0.0.119)
+
+- The model picker (Home, Chats and the chat screen share it) has a **Force load: free memory first, skip the safeguards** switch. Switch it on and the next load unloads every other model and loads with the memory safeguards overridden, then the switch turns itself off.
+- Any load that fails now offers **Free memory and load** (memory refusals) or **Free memory and retry** (any other failure), not only "Load Anyway" for some memory cases.
+- The briefing, Learn and practice-call screens already had **Load the AI model now**.
+- Not verified on a device.
+
+## 8p. Importing a model that is already in the folder (0.0.120)
+
+- Importing a .gguf whose name is already in the models folder no longer fails with "already exists" when the model is not in the list. A complete leftover copy is added to the list as it is (no second copy); a partial one is replaced. If the model really is in the list, it says so and names it.
+- Not verified on a device.
+
+## 8q. MTP files, more slides, skills and looks (0.0.121)
+
+- **MTP files**: a model in My models has **Add MTP file** (and **Remove MTP file**). Import a model and its MTP .gguf together (pick both files) and the MTP file is attached; a lone MTP file explains how to add it. When the model loads, the engine drafts a few tokens ahead with the MTP file and the main model checks them. If the engine cannot start with the file, the model loads without it. Settings > Text generation > **Use MTP files** (on by default) switches it off. The runtime info says "MTP drafting on". Speed-up not measured on a device.
+- **Slides**: seven more templates (Minimal green, Sage, Forest, Sunrise, Ocean, Berry, Mono) and five more slide types (Section, Two columns, Agenda, Quote, Big number). PDF export turns the new slide types into the basic ones with all the text kept. Bullets in PowerPoint files now show a bullet dot instead of a question mark.
+- **Skills**: a library of 17 ready-made skills (summarize, explain simply, proofread, rewrite tone, email reply, meeting notes, text to table, study quiz, flashcards, math steps, decision helper, trip planner, recipe, daily planner, code explainer, careful fact-check, brainstorm), one tap each.
+- **Looks**: four more backgrounds (Terminal, Midnight, Dune, Rosewater).
+- Not verified on a device.
+
+## 8r. MTP built into the model, and scheduled tasks (0.0.122)
+
+- **MTP built into a model file**: importing a single file with MTP in its name now asks whether it is a complete model with MTP built in (it is then imported and drafts with its own MTP layers, no second file) or only the small MTP file (it explains how to attach it). My models shows **MTP built in: on/off** on every GGUF model without an attached file, to switch it by hand. "Use MTP files" in settings covers both kinds. Not measured on a device.
+- **Scheduled tasks** (Settings > Scheduled tasks): have the AI do something at a time you set. Two kinds: **Ask the AI** (any prompt; start it with /skill-name to use a skill) and **Daily briefing**. Repeat once, every day, weekdays or weekly on a day, at an hour and minute. Four starting ideas (morning briefing, plan my day, weekly review, word of the day). Each answer is kept as a chat and a row on Home says it is ready. **Run now**, switch on/off, edit, delete. A failed run keeps its reason and is tried again after 15 minutes. Included in backups; not synced between phones (both phones would run it).
+- **When tasks run**: while Atlas is open (when it comes to the front, then once a minute). Atlas has no background alarm yet, so a task due while the phone was away runs once when you come back, not once per missed time.
+- Not verified on a device.
+
+## 8s. Notifications for scheduled tasks, and Learn a topic (0.0.123)
+
+- **Notifications from background alarms**: each switched-on scheduled task gets a notification at its time even when Atlas is closed (the next 10 runs of every task are set at once, so they keep coming for about two weeks; opening Atlas tops them up, and a reboot sets them again). Tap one and Atlas opens on Scheduled tasks, where the due task runs. Saving a task asks for the notification permission (Android 13 and up). Alarms are "allow while idle" ones: no special permission, but they can arrive a few minutes late while the phone dozes. The AI answer is still made when Atlas is open (tap the notification); it is not generated in the background.
+- **Learn a topic** (Home > Learn a topic): the language board for any subject. Name it, say what you want to be able to do, where you are now, how you like to learn and how long a sitting is. The AI designs the board: how many squares (12 to 30, in units), and for each square a format of its own choosing to suit the subject: **lesson** (sections, an example, key points), **quiz** (multiple choice with reasons), **flashcards**, **match**, **put in order**, **practice** (an open task you answer in words or code, which the AI marks and shows a good answer for). It also names the board journey and says how it will teach. Each square is written when you reach it and kept, so it works again offline. Stars, progress, and a final quiz that covers the course. Courses are in backups, not synced. Hold a course to delete it.
+- Not verified on a device.
+
+## 8t. Courses from your sources, pins, slides from replies, and more (0.0.124)
+
+- **Topic courses use sources**: each course has a **Sources** card. **Find sources online** searches, has the AI pick the best few, reads them and adds them (remove any you do not want); **Paste notes**; **Add a text file**. Squares are written from the passages that match what the square covers, and say which source they rely on. In the new-course form, **Look for good sources online first** builds the whole plan around what the sources cover (needs the internet; not in off-grid mode). Squares already written stay as they are.
+- **Courses adapt**: a quiz, practice, flashcard, match or order square that goes badly (one star) gets a lesson right after it that explains the same thing another way (up to six per course). **I already know this** on a lesson skips it (and says "skip this lesson?" after two three-star squares in a row). **Try new questions** rewrites a finished square.
+- **Pinned answers (all chats)**: the message menu has **Pin** (and Unpin). Settings > **Pinned** lists them with search, copy, open the chat and unpin.
+- **Make slides from this**: the message menu on a reply turns it into slides (no AI needed): title from the first heading, a slide per heading, bullets from lists, sentences and table rows. It opens in the slide editor; the draft it replaces is kept.
+- **Schedule by talking**: the AI has a **Schedule a task** tool ("remind me every weekday at 7 to read the news"), also for typed or voice messages. Turn it on for an agent (Schedule tasks and reminders).
+- **Scheduled tasks run in the background** while Atlas is running but not in front (with the same ongoing notice the chat uses); a closed app still gets the notification, and the answer is made when you tap it.
+- **Merge duplicate chats**: a banner on the Chats list when chats share a title (for example after syncing) merges each set into one chat with all the messages in time order.
+- **Faster first reply**: only the tools a message could need are sent (Settings > text generation > Send only the tools a message needs; on by default).
+- **Contact actions**: the draft tool can also **open the phone app with a number ready** to call. Not done: reply notifications and watch alerts.
+- Not verified on a device.
+
+## 8u. Styles, Gemma 4 fix, more kinds of square, courses inside projects (0.0.125)
+
+- **Styles** (Settings > Appearance > Style): **Aero glass**, **Retro desktop** (Windows 95 look), **Windows XP**, **Classic Mac**, **iOS**, **Material You**, **Neon night**, **Green terminal**. A style sets the colors, accent, font and chat style, and also the **shape of boxes**: corner size, border weight and shadow or glow, applied to every themed screen. You can still change any part afterwards; "Atlas" returns to the standard look and "Reset the look" clears the style. Screens with hard-coded sizes only take the colors, not the shape.
+- **Gemma 4 and Gemma 3n files load with an f16 cache** whatever the cache setting says (quantized KV cache crashed them), including when the chosen cache is q8_0 or q4_0. Applies by file name (gemma-4, gemma4, gemma-3n). If a model still crashes on load, pull the debug log (see CLAUDE.md) and send the last lines.
+- **Twelve kinds of square for Learn a topic**: lesson, quiz, flashcards, match, put in order, practice (code answers get a code box), plus **fill the gap**, **true or false**, **scenario**, **calculate** (a number with a tolerance and the working), **worked example** (revealed step by step) and **table** (copyable like a chat table). The AI picks per square. **Ask the tutor about this** on every square opens a chat about it.
+- **Courses are part of projects**: a project has a **Courses** row (courses for its subject, built from the project's shared documents as well as the course's own sources), and its tutor chats are in the project. The Home entry still makes a course without a project.
+- Not verified on a device.
+
+## 8v. Teach almost anything, and the AI knows your city (0.0.126)
+
+- **Twenty kinds of square** for Learn a topic. Added: **type the answer** (vocabulary, terms, formulas; ignores case, accents and punctuation), **fix the mistake** (grammar, a wrong line of code), **fill the table** (journal entries, truth tables, conjugations), **sort into groups**, **listen and type** (dictation, in any language the phone can speak), **read and answer** (a passage, case or data, then questions) and **predict the result** (code, circuits, experiments, formulas, with code shown properly). Lessons now also have **common mistakes** and a **test yourself** question that reveals its answer.
+- **Subject playbooks**: for maths, science, accounting and finance, English and writing, programming, history and social studies, skills and crafts, and health, the AI is told how teachers of that subject mix the squares (for example accounting: worked examples, fill-the-table journal entries, calculations, sorting assets and liabilities). Any other subject is worked out by the AI. It is told to use at least five kinds of square in a course, and to write maths in plain symbols.
+- **The AI knows roughly where you are**: a built-in offline list of 6,456 cities (every city of 100,000 people or more, plus the three largest of every country; GeoNames, CC BY 4.0). The AI is told the city and country nearest your phone's last GPS reading (read when Atlas opens and comes to the front, if location was allowed once, for example in Maps), never the coordinates, and not if the reading is over 12 hours old. The "My location" tool also lists the nearest cities. **Appearance > AI style > Where I am** turns it off. Only large cities are known, so a small town is described as near the closest city.
+- Not verified on a device.
+
+## 8w. Send a course to another phone (0.0.127)
+
+- **Learn a topic > open a course > "Send this course to another phone"** saves the course as a
+  `.atlascourse.json` file with the phone's own save dialog (Downloads, Drive, a messaging app's share, and so on).
+- **Learn a topic > "Open a course someone sent"** picks that file and adds the course. It opens at once, offline: the
+  plan and every square already written come with it.
+- Not sent: your progress and stars, the project link, and the text of web pages (a web source keeps only its title
+  and address). Your own notes and added text files do travel with it.
+- The file is checked square by square on opening (sizes, formats, answers in range); a file that is not an Atlas
+  course says so instead of failing.
+- Not verified on a device.
+
+## 8x. Courses, pinned answers, skills and scheduled tasks merge over nearby sync (0.0.128)
+
+- These four were already sent across, but as a whole store where the newest copy replaced the other phone's, so work
+  done on both phones was lost. They now merge item by item, like saved places and checklists.
+- **Courses:** a course made on each phone is kept. The same course on both phones keeps the best stars per square, every
+  square written on either phone, any extra lesson added after a bad score, and the union of sources.
+- **Deleting:** a course, pin, skill or task deleted on one phone stays deleted on the other, and one added on the other
+  phone since the last sync is kept. Nothing is deleted on the very first sync.
+- Skills are matched by name; pins, courses and tasks by id.
+- Not verified on two real phones.
+
+## 8y. Gemma 4 12B writes noise on the phone (0.0.129 to 0.0.131)
+
+What was found (checked on a computer with the same llama.cpp code the app ships, not on the phone):
+- The exact file (Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf) decodes correctly on the CPU with both the
+  old (rc.4) and the new (rc.9) llama.cpp: "hi" gives "Hello! How can I help you today?" with ordinary token ids. Its
+  tokenizer, chat template (checked against llama.cpp's own jinja renderer) and this QAT quantization are fine.
+- Its projector (mmproj-...-BF16.gguf) works on the CPU: shown a red square with a blue circle it answers "This image
+  features a blue circle centered inside a large red square."
+- Its MTP file (mtp-gemma-4-12B-it.gguf) is a gemma4-assistant file that loads in the engine, its output width (3840)
+  matches the model, and Atlas's MTP settings map to the engine's. Drafting itself was NOT run end to end.
+- CORRECTION (from the phone's own test report, 0.0.130): the same file also writes only `<pad>` on the phone's CPU, with
+  every sampled token id 0 and a probability of exactly 1/262,144, so the model computes the same value for every word on
+  every backend. It is not specific to OpenCL, and the earlier reading that "the GPU path is at fault" was wrong. Either
+  the copy on the phone has wrong bytes (the file size, 7.38 GB, is right), or the phone's ARM CPU kernels mishandle this
+  model. 0.0.131 tests both (see below). The published file's SHA-256 is 59656d74...b5134; the copy tested on a computer
+  matches it.
+- The phone's copy was renamed (...HauhauCSQ4_K_M.gguf) because Atlas treated the original name as already installed. The
+  name does not affect decoding, but it breaks the automatic projector pairing; use My Models > Add vision file.
+
+What changed:
+- llama.rn 0.13.0-rc.4 to 0.13.0-rc.9 (newer llama.cpp and a large OpenCL backend update, including the flash-attention
+  path for Gemma 4's 512-wide global layers that this 12B uses). Whether it fixes the noise on the Razr is not known
+  until it is tried. (rc.9 also keeps the per-layer embedding lookup of the E2B/E4B models in host memory; the 12B has
+  no per-layer embeddings, so that part does not apply to it.)
+- After a Gemma 4 load (0.0.131: on the CPU too), Atlas checks one short reply (words, sampled token ids, how sure the model was).
+  Noise fails the load with a plain reason (Automatic moves on to the CPU), the context is released, and the result is
+  remembered per model file, backend and GPU layer count, and llama.rn version. It runs before pictures are set up.
+- GPU load timeout: no longer one flat 45 s. A load whose weights are still loading (the percentage keeps moving) is
+  left alone; a stall says where ("weights stopped loading at 63%" or "weights are loaded but GPU setup has not
+  finished"); the log gets the progress steps, free memory and llama.cpp's last lines. A timed-out load is finished and
+  released before another load (including the CPU fallback) starts, or you are told to close and reopen Atlas.
+- Settings > About > Test GPU on this model (0.0.131: now a model test): first checks the model, picture and MTP files by
+  size and SHA-256 against the published values (a renamed file is still recognised by size), then loads the model on the
+  CPU three ways (the app's settings, ARM-optimized kernels off, batch 512) and at 24, 16 and 8 GPU layers (OpenCL always
+  runs with flash attention off in Atlas, so there is no on/off pair). Earlier text: loads the model on the CPU and at 24, 16 and 8 GPU layers with flash
+  attention on and off (2,048 context, batch 128, f16 cache, MTP off), checks the reply of each, then asks the projector
+  what colour a red picture is. The report can be copied. Copy diagnostics now includes the llama.rn version and the
+  remembered GPU checks.
+- 0.0.130: Test GPU on this model has a model picker. A model whose GPU load is refused by the output check can no longer
+  be selected for chat, so the test now takes any downloaded GGUF model (default: the current one, else a Gemma 4).
+- 0.0.132: importing a model file now REPLACES any file and saved-list entry of the same name instead of refusing with
+  "already in your models list" (which appeared even after the model had been removed). A same-size leftover is also
+  copied over now: the same size does not mean the same bytes, and a damaged copy was being kept. Same for a picture file.
+- 0.0.134 (0.0.133 was cancelled before publishing): the phone's report showed the file intact (checksum identical) and the
+  CPU correct in all three settings, but a 14-token prompt on the OpenCL GPU got a wrong FIRST word (`<pad>` with NaN
+  scores, or a stray token leading to "ASU is a great choice!") with every later word right. Real chats, which always carry
+  a system prompt, were fine. So the load-time check now uses a prompt of realistic length and BLOCKS a load only on clear
+  noise (placeholder tokens, NaN or flat scores). A wrong answer, or a check that cannot run, is a warning and never blocks a
+  model. A second, short-prompt check decides whether to use the first-word workaround: prompts under about 192 tokens run
+  once first so the first word comes from the engine's single-token step; it is switched on only if the same check passes with
+  it, and never for long prompts. The remembered verdict records the batch size and CPU-kernel setting.
+- 0.0.156: Three sensor screens in the Atlas hub. Noise Meter shows live dB SPL from the microphone (animated bar, Quiet/Moderate/Loud/Dangerous labels). Metal Detector shows magnetometer field strength in microtesla with a baseline-capture button and an alert when elevated above ~70 uT. Step Counter counts steps via the hardware pedometer with estimated distance and calories, and resets when you press Reset. Daily briefing enhancements: nearby points of interest from OpenStreetMap, weather and UV index, newspaper reading mode (top stories condensed into a readable digest), calendar event context (shows your plans today), and live flight status fetched from FlightAware when a flight number appears in your calendar.
+- 0.0.155: Per-screen background images. Each screen (Atlas Hub, Compass, Maps, Emergency, Daily Brief, and others) can show a subtle background illustration chosen for the screen's purpose. Background images are off by default and can be enabled in Appearance settings.
+- 0.0.154: Daily Brief audio playback continues when the screen is locked or the app is backgrounded (Android foreground service). Compass screen adds live accelerometer (G-force), orientation (pitch and roll), barometric pressure and altitude, and battery temperature cards alongside the compass dial. Home screen tiles for Gallery, Maps, Planner, Phrases, and Practice Call. Learning session folder picker so you can point a learning cycle at a specific folder.
+- 0.0.153: Dependency-cycle cleanup and lint fixes across the codebase (no behavior change). Import-cycle violations reduced from 80 to 24. Low-power and off-grid state moved to leaf modules; cross-layer hooks wired in one place (src/bootstrap/atlasHooks.ts).
+- 0.0.152: Teach the AI: you can give a learning cycle your own documents. "Add files" picks files on the phone and "Add the Atlas
+  folder" adds every readable file in the Atlas folder (the Converted folder is skipped; files already added are skipped; one
+  that cannot be read is reported and the rest carry on). They go into the chosen knowledge project, or one named after the
+  subject ("Taxes documents") when none is chosen, and the learner reads them first and cites them. The question bank no longer
+  rejects a question when it is tapped: a tap opens it, and Approve, Reject and Remove are separate buttons. Dependency check:
+  80 import-cycle and layering violations down to 24 (below the repo's baseline of 33): the low-power and off-grid state moved
+  to small leaf modules, an agent's model switch, loading a model for study and the long-message notice go through named hooks
+  wired in one place (src/bootstrap/atlasHooks.ts), UI asks services/engines instead of the concrete engine, and
+  navigationRef, navBar, haptics and modelRuntimeStatus moved to the layers that match what they import.
+- 0.0.151: lint clean-up across the app (no change to what anything does). Literal style values moved into module-level
+  StyleSheets and colour literals into named constants; long parameter lists became option objects (speech, pack import, vault
+  sealing, study cards, drills, slides, the Vulkan engine, model file attach, image accelerator choice); template strings,
+  shadowed names and a few inverted checks tidied. Files that are still over the size and complexity caps are listed once in
+  .eslintrc.js so new code stays under them.
+- 0.0.150: the 0.0.149 features, with the lint errors in the code changed this week fixed. The update card, Chat settings and
+  the packs section use the themed style sheets; the briefing's tune-and-line player moved out of the Study screen into a small
+  tested module (it also now stops cleanly when the opening tune is cut off); long parameter lists became option objects
+  (document reading, book pages, slide text, the final tool-loop reply). No change to what the features do.
+- 0.0.149: documents, sources and update notes. Documents are converted to Markdown before the AI reads them (Word, PowerPoint,
+  Excel, PDF, HTML, CSV: headings, lists and tables are kept; code, JSON and plain text are left as they are; switch it off in
+  Chat settings > Convert documents to Markdown). Project-document excerpts are numbered: the model cites [1], and the reply
+  shows a small raised number and lists the excerpts under it. Searching a document keeps each excerpt's heading trail. A
+  document's preview has a button that saves it as a .md file in the workspace Converted folder. Briefing tunes have a volume
+  (Quiet, Normal or Loud). The update card has a "What is new" toggle, and each release page now carries the newest notes.
+  Also: "Ask about this" on a reply quotes it into the message box; "Why this reply" lists the model, lessons and numbered
+  excerpts behind a reply; a source chip can open the project document it came from; exported chats list their numbered
+  sources; the update card shows a Cancel button while downloading; the briefing has a playback speed (Slower, Normal,
+  Faster; faster also raises the voices a little) and carries on from the line you stopped at; Chat settings can convert
+  every Word, PowerPoint, Excel, PDF, web page and CSV file in the Atlas workspace into .md files in its Converted folder;
+  empty Teach the AI screens say what to do first. Fixes: Markdown conversion kept `<` inside code, chunking an empty
+  document no longer throws, and a failing update check can no longer throw into the app.
+- 0.0.148: from phone use. Daily briefing: Listen from the beginning no longer stops silently when the opening tune cannot be
+  played (a tune that fails or never ends is skipped). Teach the AI (was Learning mode): one screen for the default chat with an
+  expert per subject (General, Taxes, Law, Psychology...), each with its own topic, question bank, reports and lessons; every report
+  the AI writes is readable in full with the judge's verdict, score and sources; a chat uses only the lessons of the expert whose
+  subject it is about; "More options" holds the old controls. Agents and pals are listed apart (Friend and Jake are pals; a Type
+  choice when editing). Home: Teach the AI, Study a textbook (Knowledge) and optional Atlas emergency tiles (turn on under
+  Customize). A reply that says a file was saved when no file tool saved one now says so. The Appearance screen groups its options
+  so it starts short (every option kept). Merging chats: a review sheet shows each chat's agent, project, size and last line, lets you
+  choose which settings and agent the merged chat keeps, and merges one set at a time. An always-on honesty line and a
+  grounded-answers skill reduce made-up answers. A message longer than the model can read now tells you the start was left out.
+  Atlas emergency packages in Small, Medium, Large and Full sizes: add to the phone, save as one file to an SD card or flash drive,
+  and import from it. Not verified on a phone.
+  Also in 0.0.148: updates from inside the app (Settings > App updates: checks the latest GitHub release against this build, downloads
+  the APK and starts Android's installer; also checked once a day when the app opens, switch in Settings, skipped in off-grid
+  mode). The made-by-Wednesday footer was removed. Source numbers: a reply that cites a search result as [1] shows a small raised
+  number and lists the sources under it; Teach the AI reports list their sources 1 to n. Undo for merged chats. Jump-to-story chips
+  in the briefing. A note under a reply saying which learned lessons it used. Share the AI's reports as Markdown. Packages saved to
+  a drive carry a manifest so an incomplete copy is caught. "Check this answer" in a reply's menu. A message longer than the model can
+  read is read in parts (switch in Chat settings). Knowledge studies EPUB and text books as well as PDFs. Messaging-app looks set the
+  chat background and show the time. Fixed: pinning a message or making slides from it crashed (ChatMessage used the chat store
+  without importing it). Not verified on a phone.
+- 0.0.147: fixes and additions from phone use. Daily briefing: lines are queued in order so the one you play renders first (the
+  gaps of several seconds before each card); the briefing opens and closes with a short tune (switch in Show options); timing lines
+  tagged [POD] in Debug Logs. Chat: tool calls time out (3 minutes, 10 for research and media), an unanswered file prompt counts as
+  Deny after 2 minutes, a reply with no progress for 5 minutes is stopped with its text kept; reply length follows the memory size
+  (Auto, or 512 to 8K in Chat settings); the start of a reply is no longer cut when the stream was revised; models no longer end every
+  answer with a question unless you turn that on; SAVE fixes an old message without resending; wide code blocks and tables scroll
+  sideways. Looks: iMessage, text message, WhatsApp, Messenger, Telegram and Discord chat styles. Permissions: group switches
+  (facts and web, calendar, files, memory, phone); study, maths and project-document tools are used in projects only; the "keep
+  it to 3 tools" warnings are gone. About you: boxes for name, age, work, how to help, interests and notes, known to every chat;
+  remember works with no agent. Project chats update the shared documents themselves; write_file accepts the usual alternative
+  argument names. Learning: lessons are also saved as Learning/<name>-lessons.md. Home: Get models, Load a model, Learn a language,
+  Learn a topic, and Customize to hide or move tiles. Skills: 13 controlled-language, reasoning and style skills in the library.
+  The private Pro app and everything built for it were removed. Not verified on a phone.
+- 0.0.146: audit and polish. Efficiency: practice questions were written to storage in full on every key typed into a drill answer;
+  they are now saved once, 0.6 seconds after you stop. Clean-up: the Practice screen is split into a start panel and a question panel
+  (it had grown to one 190-line function), shared styles live in one file, unused imports and style entries removed, two functions
+  that took too many positional arguments now take one object. Small additions: the plan screen shows days to go for each exam;
+  the periodic table has a colour key; a timed exam keeps the screen on; "Clear my practice history" on the Practice screen (asks
+  first, keeps your daily-goal setting). Not verified on a phone.
+- 0.0.144: teaching moved onto the learning game board, with no subject to pick. The AI plans a whole subject (up to 60 squares in
+  up to 10 units) and now has these new square types: "Exact drill" (practice the app makes and marks itself with exact arithmetic,
+  with account dropdowns and amounts to type for financial statements: balance sheet, income statement, cash flow, trial balance,
+  journal entry; and compound interest, loans, bonds, leases, inventory, depreciation, ratios, break-even, NPV; algebra, fractions,
+  percents, geometry, slope, mean and median, unit conversion, combinations; speed, force, energy, Ohm's law, density, gas law, molar
+  mass, moles, pH; and research statistics) and "Periodic table" (tap the element on a real table: by symbol, number, name, group and
+  period, or family). Typed answers are kept when you leave a square and it resumes at the first question not yet marked. Calculation
+  squares written by the AI now carry a sum the app works out itself; if the AI's answer disagrees the app's number is used. The tutor
+  chat also gets exact tools for equations, number problems, percents, shapes, fractions, the periodic table, molar mass, pH and
+  constants, and text statistics for English. Fixed: pressing Check in Practice used to clear the typed answer. The quick quiz-from-chat
+  idea was dropped. Not verified on a phone.
+- 0.0.143: review fixes. The saved practice questions are capped at 600 (known questions go first; misses, questions with a note and the
+  ones just added stay), because every drill press added questions that were saved on the phone for good. Two automatic backups
+  asked for at once now build one. Pausing a scanned PDF now stops between pages instead of finishing every page first.
+- 0.0.142: Practice gets: bond price, lease liability and bond interest drills (checked against an independent recalculation); pick
+  one drill type on its own; a timed exam (20 questions, 30 minutes, no feedback until the end, then a score by topic and a button to
+  review the misses; blanks count as wrong); flashcards from missed questions (tap for the answer, "Got it" or "Again"); a note on why
+  you missed a question, shown when it comes back; and an optional daily goal and streak (off by default). Not verified on a phone.
+- 0.0.141: fix: code blocks stayed monospace only on phones with the bundled fonts; with the new 8-bit font on other platforms they followed the chosen font. They now always stay monospace. (Found by the full test run on 0.0.140.)
+- 0.0.140: (1) The Terminal style now uses an 8-bit pixel font (Press Start 2P, SIL Open Font License; a new "8-bit" font choice too).
+  (2) Citation chips: numbered chips under practice answers and web-search results; tap one for the quote, the link and whether the
+  quote was found in the source (practice quotes are checked against your document; search snippets are the search engine's text and
+  say so). (3) Drills made in code now cover compound interest (find the future value, present value, rate or number of years), loan
+  payments, effective rate, inventory (FIFO and weighted average), double-declining depreciation, ratios, break-even, NPV, income
+  statement, cash flow statement, trial balance, and research statistics (standard deviation, margin of error, t statistic, sample size,
+  regression slope); keys are computed and checked against independent recalculation. (4) Learning reports: a daily automatic backup of
+  everything learned (last seven kept, in the app's storage), Restore from any of them (adds nothing twice), Save to Files, and all
+  cycle reports in one Markdown file (Knowledge > Transfer). Backups do not count as "the last export". (5) The picture lookup now sends
+  Wikimedia the app name it asks for; it could not be tried against the live service from the build machine (rate limited), so it is
+  tested with a faked reply only. Not verified on a phone.
+- 0.0.139: Practice > Accounting drills (no documents needed): balance sheet, journal entry, net income, depreciation and current
+  ratio exercises made in code. The numbers are generated and the answer key is computed, so statements always balance and the key
+  cannot be wrong; the same seed gives the same drill. Not verified on a phone.
+- 0.0.138: screens for the study tools. Study > Study plan: exams in the order you sit them, a target for today, topics to tick off
+  and what is behind. Study > Rubric check: paste a rubric and a draft and see the criteria the draft never mentions (wording only,
+  not quality). Appearance > Background picture: a picture behind every screen, dimmed to your choice; screens become see-through and
+  boxes keep their colour, so some pop-ups may look different. Not done: custom font files (React Native cannot load one at runtime
+  without a native font library), citation chips in chat, per-subject packs. Not verified on a phone.
+- 0.0.137: more study tools for the CPA and a doctorate. Tutor tools: "study_helpers" (exam planner in the order you sit them, rubric
+  check that lists criteria a draft never mentions, APA 7 references and in-text citations, literature matrix; nothing is invented, a
+  missing author or year is shown as n.d. or left blank), "find_image" (Wikimedia Commons pictures with author, licence and link,
+  switched off by off-grid mode; matches are not guaranteed to be right). Charts: a reply can contain a chart block that is drawn as a
+  pie, bar or line with its source underneath, or a note that no source was given. Scanned PDF pages are read by the loaded vision
+  model (the page is drawn to a picture by the native PDF code on Android and iOS) and listed as read from a picture; with no vision
+  model they stay flagged. Briefing audio no longer re-activates the audio session before every line. The shared citation format
+  (verified quotes, numbered reference list) is code only so far: it is not yet shown as chips in chat. Not verified on a phone, and the
+  new native page-drawing code is compiled for the first time by CI. Not done: custom font files and background images, per-subject
+  packs, citation chips in the UI, a screen for the planner/rubric/matrix (they are tutor tools in chat).
+- 0.0.136: study tools. (1) Tutor tool "study_math": statistics, t tests, regression, sample size, unit conversion, date arithmetic and
+  time-value of money computed in code, on by default for the default agent. (2) Practice questions: Study > Practice questions
+  makes exercises from a project's documents in one shared format (multiple choice, true/false, fill in, calculation, order, match,
+  dropdown tables that must balance, testlets, short answers). Answers are checked in code. A question is kept only if its quote
+  appears in the material; others are skipped and counted. Missed questions return first, scores are shown per topic, and unfinished
+  answers are saved. (3) Appearance: import a theme from JSON (colours checked), corner roundness, one-tap Easy mode. Not done yet:
+  custom font files and background images (React Native cannot load a font file at runtime without a native font library), the shared
+  citation chips, charts in chat, online images, study planner, rubric checker, OCR through the vision model. Not verified on a phone.
+- 0.0.135: learning knowledge system (Knowledge screen, opened from Learning). Per-cycle immutable reports, findings with evidence,
+  judge and manager reviews tied to evidence hashes, persistent expert agents (route, promote, merge, split, evaluate), PDF study
+  with citations and resume, and a ZIP interchange export/import (docs/ATLAS_LEARNING_INTERCHANGE.md). Street Advisory import is NOT
+  verified. Native page-by-page PDF reading (Kotlin and Swift) is compiled by CI only. News briefing: the length now counts the
+  words actually written (a 15 minute briefing no longer stops near 10), repeated lines are dropped, the dated greeting is always
+  the first line, every line is rendered as audio ahead of playback (also when the hosts differ only by pitch), and the briefing can
+  be exported as a transcript or a story summary. Not verified on a phone.
+- 0.0.134: sampling defaults per model. The HauhauCS Gemma 4 files use the author's recommendation (temperature 0.6, top-k 64,
+  top-p 0.9, min-p 0.05, repeat penalty 1.1). Order: the active agent's value, then a value changed in Settings (anything
+  other than the app default), then the model's recommendation, then the app default. Other models behave as before.
+- 0.0.133: the model test takes a checksum or a Hugging Face download link (read from the page's small LFS pointer, no big
+  download) and says whether the file matches; it remembers it per file. New steps: GPU with the prompt fed one token at a
+  time (tests whether the wrong first word comes from processing a whole prompt at once on the GPU) and, with an MTP file
+  attached, CPU with MTP (reports whether drafting started and the speed).
+- Not found: no report of this exact failure (Gemma 4, Adreno, OpenCL, wrong first word). llama.cpp's OpenCL backend is
+  built and tuned around Q4_0, not Q4_K, which is what this file is. On the phone the CPU is the working, equally fast path.
+- Fix: an MTP file attached to a model was offered by the model scan as a "recovered model".
+- Not verified on a phone: the OpenCL result, the timeout behaviour on a 12B load, the picture check on the GPU, and MTP.
+
+## Build evidence and checks
+
+- New **Android unit tests** workflow runs the Kotlin/JVM tests (`:app:testDebugUnitTest`) on every push that
+  touches `android/`; first run passed.
+
+See the end of this file (filled in after the final CI run).
+
+## Not changed
+- `FUTURE_RELEASES.md` keeps all nine items. FF-02 (call screen) was implemented at the user's request and is
+  noted there, unchecked until device-verified. FF-07 (recording/speaker labelling) was built at the user's
+  explicit request ("Do 2-6", then "build those"); it stays unchecked there until device-verified.
+- The permanent signing key: the release workflow still requires and verifies the existing keystore; no new
+  key was generated. No secrets, private chats or device data were committed.
+
+## Atlas 0.0.157 — Voice cloning, music studio, home widgets, learning reliability
+
+- 0.0.160: Music Studio now plays on instruments instead of plain tones: electric piano, piano, plucked and rock guitar, organ, bells, synth, pads and real drums (kick, snare, hi-hat). Each style has its own band, several instruments at once (for example jazz is electric piano chords, a walking bass, brushed hats and a vibes lead; rock is two driven guitars, bass and a kick and snare backbeat), and a new default instrument choice, Style band, plays it. Tunes are now 16 bars in an A and a B section: chords are played the way the style plays them (swung comping, off-beat skank, stabs, oom-pah, alberti, strum), the bass walks or pulses, the melody repeats a short motif, moves it up a step, turns it over and resolves on the chord, and the drums fill the end of each section. and the filter that cut everything above about 1.4 kHz (why every style sounded like soft pads) is gone. New Instrument sound choices: Electric piano, Guitar, Rock guitar and Organ. Five specialist agents are new: Accountant, Repair Helper, Home Chef, Paperwork Reader and Meeting Secretary. Each works from skills in the skill library (bank statement to CSV with a reconciliation check, repair helper, dinner from what I have, explain this letter, contract reader, meeting follow-ups, bill and warranty reminders, writing coach, how does this work) and they apply without adding them under Skills first. The level now has two circles that overlap when the phone is flat and level and line up top and bottom at 0, 90, 180 and 270 when it is held upright. The compass screen shows height from GPS and from air pressure side by side, keeps a pressure log while it is open, and says when pressure is falling at a steady GPS height (the weather may be turning), taking your own climbing out. A new Sensors screen lists every sensor the phone has with live readings, plus GPS and battery temperature. Teach the AI can take your own tests: paste or choose a quiz or exam in any layout, the AI reads it into questions with answers, you check them, and they go to the exam, to the study questions, or split (every fourth held back for the exam), with repeats skipped and the answer key built from your answers. CPA exam prep sets up REG, TCP, FAR and AUD as four separate projects; each takes your textbooks and notes, reads question banks and quizzes into practice questions filed by topic, and has a checklist of topics where you tick what you have studied and a Check button runs a quiz on the topic; a topic shows as understood only after at least 5 different questions with 80% right. The topic lists are starting outlines, not the official AICPA blueprint, and can be replaced by pasting the real one. The Call tile now lets you choose the agent (the therapist, Jake, any agent), the model, the project folder and the voice, remembers your choice and can save it as a one-tap Home button. The Learn a topic create form takes several files at once (PDF, Word, text), keeps them in the course's project and plans from them. Agents have a Project folder (a therapist can use your therapy folder in every new chat), a course can be connected to a project and given several files from its board, and Practice takes your own questions and files. CPA exam prep shows days to the exam and topics a week once you set the date. The Call picker has a Call again button, and Storage shows totals. Read aloud lists only your saved voices. A cloned voice sample is trimmed to the 12 seconds the engine reads (more audio does not improve the clone), step options no longer promise quality, and speeds are limited to 0.9 to 1.2 times. The result of Music Studio is still synthesised, like a keyboard demo, not a recording of players.
+- 0.0.161: You can put as many Call buttons on Home as you like, each with its own agent, model, project and chat, and edit them later (pencil on the button). A call button for a chat you already have loads that chat's model and picks up where it left off. The Study plan screen adds and removes exams from three plain fields instead of a typed line format, saved Music Studio tracks have a Share button, and the Planner tile says what it does.
+- 0.0.162: Each CPA exam is now its own board-game course like every other thing you learn. On an exam's page, Start the board makes one lesson square for each topic on its checklist, a quiz after each area and a whole-exam quiz last, all written from the textbooks and notes in that exam's project. Playing a topic's square ticks it on the checklist, the exam cards show how far along the board you are, and Rebuild from the checklist makes the board again after you change the outline.
+- 0.0.163: Textbooks of any size sync between your phones (sent in pieces and checked, text and file); the knowledge base reads up to 3 million characters and 250 MB PDFs, so a whole textbook is searched, not its first pages. Exam prep adds the bar exam, CFA I, USMLE Step 1, NCLEX-RN, PMP, CISSP and Series 7. A course connected to your books has a Match to an exam card that lists the exam's topics your books never cover and adds the ones they do cover to the board; quizzes and practice start from the textbook's own questions (with the book's printed answers) and squares can show the passages they came from. Missed quiz answers come back as review questions. Home has a search box, a Continue card (next square, questions to review, days to your exam) and widgets for one course board, one project or practice. Music Studio is simple: say what you want, pick a style, how lively and how long, press Make music; the page names the instruments (jazz is piano, bass and swing drums), with Another version and Surprise me, and the AI score option that failed with the motif limit is gone. Question banks saved as CSV or tab-separated files are read in code with no size limit. Backup and sync now include practice questions, exam prep, the study plan, About me, Home widgets and call choices, with a test that stops a new store being forgotten. Removing a Home widget or a course can be undone. Plain http to a public server is refused. Five unused native packages and 16 known advisories are removed.
+- 0.0.164: Teach the AI has a Keep the screen on while it learns option (on by default) and keeps learning in the background through the foreground notice even if the screen does sleep; the screen-on setting now has one owner, so leaving Practice or stopping a recording can no longer turn the screen off in the middle of learning. Other fixes and additions: Share works for files on Android (a saved track or an image) and uses one function everywhere; a daily study reminder opens your calendar with a repeating event ending on your exam day; Models, Maps and the daily briefing say when off-grid mode blocks them; on a tablet the course board and the square you play sit side by side; icon-only buttons have labels for screen readers. The 0.0.163 build failed because a patch for a removed package was still in the repo, so its changes ship here.
+- 0.0.165: Study tools: Cite my books switch on a project (answers quote the passage, name the document and page, and say Not in your books when it is not there); PDFs are read page by page so every chunk keeps its page number; mock exams of 10, 25 or 50 questions spread evenly over topics, with your pace by topic at the end; Home shows your weakest topic and a Home widget shows how many questions are due; flashcards from misses show the book's explanation and the passage with its page; questions to ask the tutor later, typed or spoken, saved on each course; a printable study guide from any course; an exam outline can be read from a file; Check a backup file shows what is inside without restoring; practice questions merge per question when two phones sync, and the sync screen shows the document being sent with progress and a Cancel button. Also in this version: a textbook in a course's project becomes one unit per chapter, each with a lesson, key terms and a chapter test, in the book's own order; Beginner, Moderate and Hard for course squares, practice questions, mock exams and flashcards; exam and test presets for CMA 1 and 2, CFA I and II, Enrolled Agent, MCAT, LSAT, SAT, ACT, GRE and GMAT beside the CPA, bar, USMLE, NCLEX, PMP, CISSP and Series 7 (in sections); the AI judge is Lenient by default for small on-device models, with Balanced and Strict choices on the Teach screen; Refine with AI for the task the AI learns; any voice (cloned voices and every installed speaker) for Home widgets and calls; Music Studio instruments rebuilt (two-string piano with a hammer thump, tuned guitar and bass strings, detuned string pads, drawbar organ, metallic hi-hat) and the screen cut to words, style, how lively, length and Make music; Practice and the course board keep their extra controls under folds.
+- 0.0.166: Audit stabilization: multiple-choice and true/false answers are checked strictly (blank or arbitrary text is never option 0 or "false"); exam scoring no longer accepts negated or look-alike numbers ("not 20", "120"); Clear practice history only clears the current project; saved questions, courses and scheduled tasks are no longer silently cut at 3,000 / 20 / 30; queued messages for different chats or a forced image are never merged; a tool the chat has not enabled is refused when it runs; temporary private chats stay out of search; model downloads always check the published SHA-256 and only resume when the server's Content-Range matches; the exam run keeps the screen on like the learning loop.
+- 0.0.167: Exam prep and learning stabilization: each exam (FAR, AUD, REG and others) keeps its own questions and scores by exam code, with no project needed; one optional shared "CPA Exam Preparation" project; older questions are marked with their exam code without moving anything; Professional exam prep opens from Learn a topic; the compass level has two moving circles and a readable angle; a better pick of the clearest part of a voice sample (noise, speech, clipping, pauses); voice quality options say what they are for; an Extra rounded (pills and circles) appearance choice; two phones' study attempts add up when they sync, and documents with the same name and size but different contents are told apart; long files can be read to the end; a timed-out tool is stopped and cannot write afterwards; practice progress is saved in order and when the app goes to the background; protected projects show only their name in search; the experiment memory mode uses only verified notes; request text and raw model output are no longer logged; backup size errors state the real limit; ZIP model import stops on too many files or too little space; the build checks the 16 KB alignment of native libraries and runs ESLint.
+- 0.0.168: Quick 5, 10 and 20 minute study sessions on Practice (missed and due questions first, only that exam's questions, no invented quiz when there are none); failed file imports now say what failed, the likely cause and a next step, and "Share details" removes tokens, paths, emails, PINs and locations.
+- 0.0.169: A Task center in Settings (imports and other long jobs with progress only when the total is known, Cancel, Retry, Dismiss; failed jobs stay until dismissed; work cut off by Android shows as interrupted; one heavy job runs at a time); Free up space in Storage (rebuildable caches with exact sizes, never models, documents, chats or backups); What this chat uses in the chat menu (real model, project, tools and privacy, protected names hidden); Add a zip on an exam page (unpacked safely, every file listed and accounted for, nothing added until you agree); Try a similar one after a missed drill (new numbers, answer worked out by code); Buttons now have a role, a label and a 44 to 48 dp minimum height for screen readers.
+- 0.0.170: Recently deleted in Storage (chats and courses come back after a restart, once, into their own project; locked and private items are never kept); resizable course board and square panes on a tablet (side by side or stacked, remembered per window shape); Check this answer recomputes written calculations in code first; a refused or risky model load explains the memory estimate with a range and your choices; a different book with the same file name is kept, and a question bank of any size is read completely (stops at 5,000 and says so); every zip importer unpacks through one safe check; a store the other phone's newer copy replaces is kept for two weeks with Put back; questions answered per day add up across two phones; practice questions and courses from a protected project are left out of backups and sync; stored claims show plain confidence states and short benchmarks say they are too small to show improvement.
+- 0.0.175: Boards are six times longer for exam checklists and textbooks: every topic or chapter is six squares (the reading, key terms, a worked example, a quiz, an assignment and a chapter exam) instead of one, with a review exam after each area and a whole-exam check last; boards can hold up to 400 squares and shared courses keep them all. The reading follows the difficulty: the whole chapter for Beginner, a condensed chapter for Moderate, an expert summary of the rules and exceptions for Hard. Courses already on the phone keep their old boards; a new exam board or textbook course uses the new shape. Includes the 0.0.174 board layout fix and everything from 0.0.173.
+- 0.0.176: Question banks: add a file of questions as a course source and Atlas recognises it, uses it for quizzes and exams (with an answer key if the file has one) and keeps it out of the teaching text. AI-planned courses get the same longer chapter boards. You can talk to the learning AI, ask it for a report the judge and manager review, and the judge and manager now read every report of a wave. Fixes the test that failed the 0.0.175 build.
+- 0.0.177: Cloned voices no longer glitch or repeat on text with no ending punctuation: the text is given a capital start and a full stop, and a phrase of under five words gets padding, so the model knows where the speech ends. The words and pacing are unchanged. The learning AI no longer reports "two claims disagree" for the same rule in different tax years or for loosely related sentences with different numbers.
+- 0.0.178: Read aloud and cloned voices: choosing a voice is now one job at a time, so pressing stop and play, or changing voice, can no longer leave the engine with a mix of two voices or reload a voice that is already loaded; the saved voice is put back after a quiet 15 seconds instead of at every stop. Voice failures are reported (the engine says why, and Read aloud shows it) instead of looking like silence, and the engine tells apart finished, failed, stopped and interrupted. Read aloud shows what is really happening: loading the voice and recording, making the first sound, speaking, making the next part, or failed. Project documents: only chunks near the best match are sent, spread over documents. 19 more offline reference packs (NHS medicines, CDC, MedlinePlus, Ready.gov, outdoors, ham radio, DIY, gardening, LibreTexts, Wikiversity and more).
+- 0.0.179: Fixes the build that stopped 0.0.178 (the offline map place search used a map-reader call this version does not have). New Drug labels screen and chat tool: the FDA label for a medicine (what it is for, dose, warnings, who must not use it, interactions) in the manufacturer's own words; a first lookup needs a connection, and every label you open is kept on the phone for reading with no signal. Hidden Voice lab for the cloning voice (tap the version in About seven times): makes the same sentence at 2, 3 and 5 steps, saves each as a WAV, measures it (length, speed, silences, bursts, clipping, sample rate) and your reference recording, and plays each file through the voice output or Android's player so a generation fault can be told from a playback fault.
+- 0.0.180: Cloned voice, from the Voice lab results on a real phone: the same sentence typed with no full stop ran on for 40 seconds with 55 bursts of sound (the repeating and glitching), and the app already adds that full stop. At 3 steps and up the first syllable was dropped because speech started on the very first sample, so those steps now get a lead-in. The lab adds runs with and without the lead-in so this can be confirmed by ear.
+- 0.0.181: Cloned voice quality is now Automatic by default: it starts at the best quality (8 steps, which sounded smoothest on a real phone and costs no noticeable time there) and steps down to 5, 3 or 2 only if the phone cannot make speech faster than it is spoken. A phone still on the old default of 2 moves to Automatic; a deliberate 3, 5 or 8 is kept. The Voice quality card lists Automatic first.
+- 0.0.182: Voice lab can recommend the highest clean step count for a voice and save it for that voice only. The cloning voice's lead-in and trailing pause are trimmed to a short breath. Read aloud picks up where you left off when you open the same text again, has a sleep timer (15, 30 or 60 minutes, pausing at the end of the part being read), and can save the reading as an audio file (about 20 minutes per file). Follow-up questions ("what about 2024?") search project documents with the earlier question's words added. Drug labels can compare two saved labels for mentions of each other. Offline packs show Update when a newer edition exists. Learned claims are matched by year, so a question about 2024 prefers 2024 claims and a question with no year shows each claim's year. The build now compiles the Kotlin first, so a Kotlin mistake stops a run in minutes. Two old lint errors fixed.
+- 0.0.183: Learn a topic can write the next lessons ahead while you play: a board choice (Off, 1, 2, 3 or 5, two by default) writes that many of the next unplayed lessons in the background, one at a time, and a lesson you open yourself always goes first and is never written twice. Every exam board now has at least 100 squares: a chapter is six squares and gets up to eight more (true or false, fill the blanks, case study, type the answer, read and answer, match, sort, calculations) when an exam has few topics, written from your textbook like the rest. Rebuilding an exam board keeps the stars and lessons of squares with the same name.
+- 0.0.184: Stops the learning AI saying "Two claims disagree" for almost every report. The earlier fix only stopped new false conflicts; the ones already stored (the same rule in different years, loosely alike sentences) were still each turned into a "Two claims disagree" study question ahead of everything else. When learning starts, stored conflicts are now re-checked: the ones that are not real are closed, their claims go back to unreviewed (with a note in each claim's history), their waiting study questions are dropped, and a line says how many were cleared. Real conflicts, the same wording with a different figure, are kept.
+- 0.0.185: Zip files can be picked again. Add a zip (CPA study material) and the Atlas pack import asked the file picker only for particular zip types, which greys out a zip that the phone labels differently; they now offer every file and check that the name ends in .zip. A zip with nothing Atlas can read (for example only videos) now says what is in it instead of closing without a word.
+- 0.0.186: The Import a .zip pack button on the Knowledge screen now adds PDF, Word, PowerPoint, Excel and EPUB files as well as text, so a zip of study material (like a FAR study pack of PDFs and Word files) is no longer imported as only its text and data files. Files Atlas cannot read (pictures, videos) are now listed in the result instead of being skipped silently.
+- 0.0.187: The latest standards can overrule a textbook. A new Latest standards lookup (a chat tool) searches the standard-setters' own sites (FASB, SEC, IRS, AICPA, PCAOB) for a topic, keeps only pages that really are on those sites, puts the newest Accounting Standards Update first, and says plainly when nothing official was found, so a textbook is never called out of date without a source. In the learning ledger, a claim backed by a standard-setter's own page now overrules an older claim that rests only on textbooks: the textbook claim is marked superseded with the reason in its history, instead of both being disputed. Accounting lessons now mark points FASB has been changing with a Check: line and never state an ASU number from memory.
+- 0.0.188: Standards you add yourself overrule textbooks. A document added to a project under a standard's name (FASB ..., ASC 842 ..., ASU 2016-13 ..., GASB ..., or Codification in the name) is treated as the standard itself: chat tells the model that where it differs from a textbook the standard is right and the textbook is out of date, and the learning ledger lets claims from it overrule textbook claims.
+- 0.0.189: Atlas can tell a document is from FASB whatever it is called. When a document is added, Atlas reads its first pages and marks it as the official standard if they show it is a FASB standard or update (the board's name together with "Accounting Standards Update", "Codification" or an ASC or ASU number). Every document in a project also has a shield: press it to mark any document as the official standard, or to take the mark off one Atlas recognised (it is then not marked again). Marked documents overrule textbooks in chat and in the learning ledger, the same as a document named like a standard.
+- 0.0.201: From your notes. (1) A chapter exam is matched on its subject ("Leases"), not on the words every exam shares ("chapter", "exam", "questions"), so it no longer picks up a textbook question about something else; a question needs most of the subject's words. (2) Quiz questions, answer choices and cards are never cut off: one too long to show is left out, and explanations are cut only at the end of a sentence. (3) Sources are one quiet line ("Sources (3)") until you tap it. (4) An assignment must be real work with a model answer and what a good answer includes; "click next" is rejected and written again. (5) A chapter's unit is named for what it covers ("Chapter 7: Leases"), the title is read from the line under "Chapter 7" when it is not on the same line, and a chapter whose title cannot be found keeps its number instead of being dropped. (6, 7) "Write squares now" on the board: the next 5, 10 or 20, the whole course, or any one chapter or topic; it shows which square is being written and which failed, and carries on past a failure. (8) Music Studio says what it is doing at each step (writing the tune, playing every note into a recording, saving, starting the player, reading the recording) and shows the position while it plays. (9) Real instruments: add a SoundFont (.sf2) of recorded instruments, or download the free 6 MB one, and the pianos, guitars, strings, horns and drums are real recordings played at each note's pitch and length, instead of synthesised. Without one nothing changes. (10) The AI composer is given the key, the scale and the chord of every bar (worked out in code) and music theory to follow, and what it writes is corrected against them: out-of-key notes move into the key, the melody lands on chord tones on the strong beats, the bass plays the chord root, timings sit on a quarter-beat grid, and parts keep to their range. (12) From a review: opening an exam page no longer sets the exam up; deleting a folder warns that its own documents are deleted while the projects inside move up; a short assignment ("Write a function that reverses a string") is accepted as long as it has something to write and an answer to compare with; two books' untitled chapters are not merged; a SoundFont is swapped in only once it is all there, and the free download is refused if it is not the expected size; recorded drums keep their natural loudness (a hat softer than a kick) and notes are only gently levelled; the real-instrument renderer is much lighter on the phone. (11) Projects can be inside projects: a folder shows what is inside when tapped, a project inside a folder also uses the folder's documents, and CPA Study is now one folder with FAR, AUD and REG each a project inside it (an exam set up before moves into its own project inside the folder the first time you open it). CFA and CMA work the same way.
+- 0.0.200: (1) Settings > Self-check tries each piece studying depends on, on your phone, and says pass, fail or skipped with the reason: the phone's model, the server model, the search model, searching your documents, reading scanned pages, looking things up online, the reading voice, the lock-screen controls (it shows a test notification for a moment) and free space. (2) The document list shows how many passages each document has, and the project's size on the phone; while documents are added you can Pause, Resume or Stop (scanned pages are read one at a time, so a pause takes effect at the next page; stopping drops the file in progress and keeps the ones already added), and when a scan finishes it says how many pages were read from pictures. (3) On each exam page, "What changed since your books?" lists pages on FASB, IRS, SEC and similar sites that are newer than the newest year in your document names, with links. (4) "Review your weak spots" builds a board from the topics where your practice shows you are weakest. (5) A lesson has "Read aloud", in the voice chosen for Read aloud. (6) Under the lines of a lesson that none of its passages back, "Check these lines" looks for each in your documents (the law first) and on the standard-setters' sites, and says backed, found, or still not verified. (7) From a code review: stopping a scan no longer leaves a mark or a copy behind; notes for several scanned files are all shown; "Check these lines" says "could not check" when it cannot search (off-grid) instead of "not verified"; verdicts clear when a lesson is written again; "What changed since your books" takes the books' year from the books only, ignores future dates, and searches a few topics at a time; the self-check no longer shows over a reading, waits longer for the model to load, and says when a project is protected; a pause is never left stuck when you leave the screen. (8) Backups: document marks, the teach or reference choice and what each tax file turned out to be were left out of backups, so a restore lost them; they are now included.
+- 0.0.199: (1) A scanned PDF added to a project is read page by page from its pictures when a vision model is loaded (before, only the Knowledge feature did this and project documents were refused). Only a document that is mostly pictures is read this way, up to 300 pages, and when it finishes it says how many pages were read from pictures (check numbers in them) and how many could not be read. A text book with a few blank pages is left alone. Without a vision model the error says what to do. (2) A lesson on a section of the law also pulls the section it points to ("see section 168"), so the definition it depends on is there. (3) Fixes from a code review: two alike chapters of one book are no longer merged into one unit; a restored or appended backup no longer leaves searches serving old text; "This is unclear" now really writes the lesson again; a server model that fails silently or answers with nothing no longer stalls or blanks a lesson (the phone model takes over after 5 minutes at most); a document switched off no longer counts as the newest edition, in chapters, outline or coverage; different parts of the regulations (Part 1, Part 301) are no longer treated as editions of one work; an ordinary topic such as "A far-reaching study of Roman history" is no longer taken for an exam, and a course made in a project you chose is not replaced by an exam board; "§ 179" no longer matches "§ 179A" or "§ 1790" and a section's own text is found before the many places that mention it; the lock-screen controls turn on wherever the phone has the module, not by system name.
+- 0.0.198: Built for a big tax and FAR library. (1) A question that names a section ("§ 179", "section 1245(a)", "Reg. 1.263(a)-1", "ASC 842-10-25", "ASU 2016-02", "Rev. Proc. 2024-40", "Notice 2024-5") now finds the text that opens with that exact reference first, instead of a look-alike section. Stored text is also kept in memory between searches until a document changes, so writing a lesson no longer reloads the whole library for every search. (2) Each document has a role, shown under its name: textbooks, IRS publications, notes and study packs TEACH lessons; the Code, regulations, bulletins and standards are REFERENCE, used to check the lesson and correct a book, never copied into it. Tap the line to switch it. (4) A quiz question whose right answer has a figure that none of your passages show gets a "Check ... against your sources" note. (5) A document with a newer edition of the same work in the project says "Older edition: not used", and is left out of lessons. (6) When a model on a server is chosen for chat, lessons, quizzes and learning reports are written by it (with room for a whole lesson), and fall back to the phone's model if the server fails. (7) On an exam's page, "Check coverage" rates every checklist topic as covered (two or more books), thin, or not in your documents.
+- 0.0.197: Courses use ALL the textbooks in a project, not one. A course made from a project reads each book's chapters on its own and merges them: the same subject in two books becomes one unit, and a chapter only one book has is kept. Each lesson is written from the best passage of each book that covers it (two at most from one book), not the top few overall. Standards and the law come first: a passage from a FASB document, the Code, a regulation or a bulletin is marked in the lesson prompt and wins where it differs from a textbook, and the lesson says older books may still show the old rule. Where books differ from each other, the lesson says so briefly.
+- 0.0.196: The other exams work the same way as the CPA. Each exam gets its folder automatically (the CFA levels share "CFA Study", the CMA parts share "CMA Study", every other exam such as the Bar, EA, Series 7, USMLE, NCLEX, MCAT, LSAT, SAT, ACT, GRE, GMAT, PMP and CISSP has its own), starts with the layout Atlas already knows, and gets more detailed from the books you add to it. Typing the name of an exam as a new course ("CFA level 1", "Series 7 prep", "the Bar exam") now builds the board from that known layout instead of planning from scratch, and files you attach go into its folder. The layouts are starting outlines from general knowledge, not the official blueprints; replace them with the official outline when you have it.
+- 0.0.195: All CPA material is now in one project, "CPA Study", made automatically the first time you open a CPA exam (exams that already had their own project keep it). The outline starts as the rough checklist and gets more detailed from the textbooks you add: chapters the checklist does not cover are added as topics under the area they fit, the board is rebuilt to match, and what you played and the lessons already written are kept. Question banks and files named as a blueprint are not read as books. Finding sources online no longer fails when pages will not load: it tries the next result, uses the search snippet when a page is blocked, and says why when nothing works.
+- 0.0.194: (1) Tap a source under a lesson to read the whole page it came from. (2) Opening the passages marks the sentence the lesson leans on. (3) Lines of a lesson that carry a number or a rule and are not in any of your sources are listed as "Not found in your sources". (4) Atlas now reads the first pages of a tax file to tell a publication, bulletin, regulation or the Code apart and to find its year, so files with names like scan0042.pdf are ranked and dated correctly. (5) When a question names a tax year and a source is for another year, the answer is told not to give that source's figures as the answer. (6) Quizzes and chapter exams ask again, in new words, about questions you got wrong earlier in the course. (7) A lesson has "This is unclear: Simpler, Another example, Shorter", which writes it again that way. (8) Read Aloud shows play, pause, previous, next on the lock screen and in the notification shade (Android; needs notification permission). The notification is shown while Atlas is running; if Android ends the app in the background, reading stops with it.
+- 0.0.193: "Where this came from" now says where in each source: the page for a PDF (for example "Intermediate Accounting, page 214"), the part number for other files, and the paragraph for a note you pasted. Web pages stay tappable links.
+- 0.0.192: Lessons read better. Text now has space between paragraphs and bold key terms and rules, and bullet lists show as lists. Every example in a lesson must include its answer and working; an example that only asks a question is left out. Sources are no longer written into the reading: under each square a "Where this came from" list names them, and web pages are links you can tap. When your own books say little on a lesson, Atlas looks online (unless off-grid is on) and links those pages too. The exam checklist (the blueprint) can now only be replaced from a file that is an outline, not a textbook or study pack, and the AI may only keep topics the file really contains; a file named as a blueprint is never used as lesson text. Lessons also use tables for anything with columns (comparisons, schedules, rate lists) and write journal entries as Account / Debit / Credit tables. You can now choose how many lessons are made ahead: off, 1, 2, 3, 5, 8, 10, 15 or 20. Each chapter already gets a reading, key terms, a worked example, a quiz, an assignment and a chapter exam (up to 14 squares).
+- 0.0.191: Tax projects now follow the order of authority and use the newest edition. Atlas reads a document's name to tell the Internal Revenue Code (Title 26), Treasury regulations (CFR), Internal Revenue Bulletins, IRS publications and textbooks apart. In chat and in Teach the AI the order is the Code, then regulations, then bulletins, then publications, then textbooks, and the answer says which source and edition it used. When two editions of the same publication are in the project (for example Pub 17 for 2023 and 2024), only the newest is used. In the learning ledger a higher source overrules a lower one, and a later edition overrules an earlier one of the same kind.
+- 0.0.190: Stops the learning AI filling its reports with "Two claims disagree". The cause was a loop: a conflict became a study question, whose report talked about "Claim A" and "Claim B" and stored sentences cut off in the middle, and those became new conflicts. Now only complete statements about the subject are stored as claims (not fragments, and not sentences about other claims); a report that settles a conflict never creates new conflicts; only one conflict question waits at a time; and a "no" or "not" only makes two sentences conflict when they are short statements of the same thing. When learning starts, stored conflicts that these rules no longer count are closed.
+- 0.0.174: The course and language board is sized from the room it really has, so squares no longer stick out past the board on a screen that pads it; square titles read at one size, wrap on words and no longer follow the phone's large-text setting inside the small squares; the Your turn card shows two lines of the title. Everything from 0.0.173 (hidden composer and make_music, map tools and zip maps, sensors redesign, exam prep tile removed) is in this release.
+- 0.0.173: Music: the chat can make music through a Make music tool. A hidden composer (a specialist pass of the on-phone model, with its score checked line by line and a built-in fallback) writes the tune using 35 instruments and a 10-piece drum kit; Music Studio has an Ask the AI composer button. Maps: the AI can list your offline maps and search named places in a .map file with no internet; Maps can open .zip map files and lists where to find map files. Sensors: tools as tiles, sensors grouped with icons, live dots and x/y/z bars. The Professional exam prep tile and card are removed from Home and Learn a topic.
+- 0.0.172: Release gate met: global test coverage is above 80% on statements, branches, functions and lines (branches 80.2%, lines 91.3%). The checks added with it cover the practice phone call, the voice and music players, backup refusals and rollback, sync merging, model file import, the update check, the model test screens, the maps screen and the offline arcade. No app behaviour changed in this version.
+- 0.0.171: Exact arithmetic is no longer left to the AI alone: in a chat that already uses tools, the calculator is added for that one turn when the message has hard sums or percentages (your tool list, character and model are not changed, and What this chat uses says so). Home tile colours and the My models screen are tidied onto shared palettes and style sheets. A route acceptance matrix (67 routes) and a device verification checklist are added to the docs, with every item marked not run until a real device run fills it in.
+- 0.0.159: Multi-step helpers on Home: bank statement to a CSV that code proves complete (every transaction is in the file and opening balance plus amounts equals closing balance to the cent), meeting follow-ups with reminders, bill and warranty reminders, repair help with code-added safety warnings, dinner from what you have that never includes foods you said to avoid, explain a letter or label with each point tied to the exact words it came from, a writing coach that reports numbers a rewrite dropped, explain how a snippet or formula works, and a contract and lease reader. Each helper shows its result and waits for your approval before anything is saved or scheduled. Music Studio has 52 styles in four groups (moods and genres, eras and genres, seasons and holidays, places and settings), including jazz, vaporwave, the seasons, Thanksgiving, Halloween, Christmas, Cinco de Mayo, Italian restaurant, 1920s, retro 80s, pop and rock. Cloned voices sync between paired phones (the voice list, the sample list and the sample audio), get a speed, and a poor sample is flagged before Create. The voice-cloning engine downloads inside the app. Storage lists models, voices, cloned samples, maps and recordings with sizes and delete. Map downloads show Installed or Update and warn when there is not enough free space. Compass and level are redrawn after the old iOS ones, and Settings, Appearance has a Units choice for miles or kilometers and Fahrenheit or Celsius. A Call Atlas tile starts a hands-free call in one tap. Teach the AI is a list of subject cards that open their own pages, a subject with the same name is not made twice, and a subject can be deleted from the list. Voice files can be added with Import Local File. Voice downloads and unpacking are size-capped. On-screen text no longer uses em dashes.
+- 0.0.158: Teach the AI is now a learning cycle, not a report writer. Each claim in a report is checked against the passage it cites and compared with what is already known: a repeat adds a second source, a conflict is recorded and both claims are marked disputed, and everything is stored as unreviewed knowledge with its evidence. The judge scores facts, citations, completeness, relevance, logic and clarity separately; a wrong fact, or a citation that does not say what the claim says, disputes the report whatever the overall score. The cycle settles conflicts first, then reviews what is due (spaced review, graded by comparing each answer with what was stored, never by the model), then studies new questions. A failed report is not rewritten without new evidence, instruction-like text in retrieved pages is removed before the model sees it, and an interrupted run says where it stopped. What failed and how it was corrected is kept as experience, and strategies the Manager suggests are kept as unverified procedures, both apart from facts. Learning reliability now has an exam (the same questions answered by the model alone, with sources, and with sources and stored memory, scored against the facts you wrote, with a results history that reports an improvement only when it was measured), progress and conflict review, and export: portable knowledge files (importing never makes a claim verified) and a training dataset made only of claims you verified, with exam questions left out. Atlas does not train or change any model. The daily briefing and podcast voice picker now starts each host with three voices; Add voice brings in any other voice, including your saved and cloned voices, and a cloned host is rendered with its own voice. Not included: ingesting the tax code and other legal sources. This build is generated from the v0.0.158 branch; none of it has been tried on a phone or tablet yet.
+- 0.0.157: Adds offline, opt-in voice cloning with a quality wizard and private, named voice profiles; an original instrumental music composer and persistent in-app player; customizable in-app home widgets (agent call, safe chat resume, music, learning, and tools); an inspectable evidence ledger and manual review for learning claims; plus chat, presentation, memory, and permissions improvements. Updated Android native voice processing and added regression tests. This build is generated from the v0.0.157 feature branch. Voice quality, device stability, and UI behavior still require physical phone/tablet testing; autonomous online fact verification is not implemented. Read aloud: paste text or open a document (PDF, Word, text, EPUB and more) and Atlas reads it in your chosen voice, including a cloned one, with play, pause, skip and speed; add the Read text aloud widget to Home to see progress and pause from there. Voice cloning is rebuilt as four steps (engine, sample, name and try, create) with any audio file or length, one name, and a visible Create voice button; Read aloud has a voice chooser on the screen and on the Home widget, and a Home tile; Skills are grouped by what they are for; Assistant permissions now lists Read calendar. Audit fixes: chats filed under a PIN-protected project are no longer read for memory suggestions; Background settings now lists exactly the screens that show a picture (Settings, Learning, Daily briefing, Home, Compass and the three sensor screens, with Maps removed); the Compass, Home widget, music and voice-clone screens were split into smaller parts with no change to what they do; every lint error and dependency-rule error is fixed, and rendered tests now cover widget launching, the level view and backgrounds.
+- 0.0.233: Faster on slow models: lessons in pieces, a background model, more tuning. Also lessons that ran on, and music on slow models. Since the last published build (0.0.232). A model that writes slowly (under 8 tokens a second, measured on this phone) took 14 minutes to make one tune: a whole score is hundreds of tokens, and the composer could ask up to four questions (the score, a second try, a rewrite after a listening check, and a name). For such a model the composer now asks once for the melody alone (a title, a tempo and notes), the app builds the bass and chords, and one short question names it; the tune's note says why. The Debug Logs and Share all logs now show how long each question to the model took (`[MUSIC] the model answered in N s`). A model that writes at normal speed is asked for the whole score as before. Logs: the report no longer lists first-reply checks of every model ever tried (a Qwen report talked about Gemma); it shows the checks for the model in use only. It gains a STATE section: battery, low-battery mode, heat guard and phone heat, off-grid mode, every model on the phone with its speed and what its test kept, the generation settings, and what AI work is running. Every background AI call (lessons, music, briefing, learning, exams) now logs one line: what it was for, prompt size, time to the first word, tokens and tokens a second, and total time. Lessons that ran on: a model that does not stop kept writing a lesson (thousands of words, or the same paragraph again and again) until the time limit stopped it, and the lesson never advanced. A reply is now cut once it is far longer than any lesson (about 24000 characters for a lesson, tables included, 14000 for other squares) or starts repeating itself (a table's repeated rules and numbers are not counted as repeating); the model is stopped, the sections it finished are kept (the one half written is left out) and the lesson advances. If nothing can be kept, the second try asks for a short answer, and the lesson prompt now asks for under 1200 words and under 80 words a section. A lesson that runs out of time while still writing keeps what was written instead of losing it. The Debug Logs and Share all logs say when a reply was cut short and why. Phone calls: emojis and emoticons are taken out of every reply while the chat is a phone call (on the screen and in what is spoken, as the words arrive), and the call prompts say never to use them even when the AI style setting allows emoji; practice phone calls strip them too. Faster on slow models: (1) Lessons in pieces: on a model that writes under 8 tokens a second (measured on the phone), a lesson is written as an outline call, then two sections per call (each with only the passages that fit them, so the prompt is shorter), then one call for the mistakes, the check question and the key points. Each piece is small enough to finish and is saved as soon as it is written, so a failure keeps the sections already written and the lesson advances; if the pieces cannot be made, the whole lesson is asked for in one call as before. Fast models still write a lesson in one call. (2) Model for writing in the background: My models has a new choice, a smaller and faster model for lessons, music, the briefing and games. It is loaded for that work, and the chat model comes back after 45 seconds of quiet; with nothing chosen everything uses the selected model as before. The slow-model checks follow the model that does the writing. (3) Speculative decoding: Find the best settings now also times the model's built-in MTP drafting once, for a model with no MTP file and not marked as having MTP, and keeps it on the model only if it is clearly faster. (4) Find the best settings now also times fewer, more and all GPU layers for an NPU or GPU winner, and keeps the layer count for that model only when it is at least 8% faster.
+- 0.0.232: The learner stops failing in circles, lessons and logs. Since the last published build (0.0.230; 0.0.231 may also be out). (1) Partial credit: an exam answer holding at least 60% of the expected facts (and nothing the key forbids) is accepted as mostly right, earns that share as credit, shows as "mostly right" and is not retested; the accuracy figure is now credit earned, with the fully right count beside it. Practice recall also gives half credit to a stored claim the answer gets across in part (right figures, about a third of the words). Exam scoring is version 3, so older results are not compared. (2) A question the learner misses three times with no recall since is taken out of the tests for 3 days and studied again in simple terms instead, and the Learning log says so. (3) When most answers of a practice batch are wrong, the next batch is given up to twice as many stored notes; a clean batch puts it back. (4) An exam run stops after 5 answers in a row that earn nothing, marks the rest "not asked" (not graded) and tells you what to try, instead of grinding through every question in all three modes. (5) Learn-a-lesson time-outs now tell reading from writing. The lesson screen shows live whether the AI is reading the sources (nothing written yet) or writing (with a word count). A call is still stopped when it fails, but for the real reason: stuck reading for too long (set from the model's measured reading speed), no new word for two minutes while writing (stuck, not slow), or past the overall limit for the model in use (4 to 30 minutes, from its measured speed). A model that is writing slowly is no longer stopped just for being slow, and the message says which of the three happened. (6) The Judge now gives a second opinion on an exam answer the word matching did not pass: if the key facts are there in other words it counts as right, if some are it counts as mostly right. It can only raise a result, never overrides a forbidden figure, and the result shows "the Judge read it". (7) Music: when the AI's full score cannot be read, it is now asked for the melody alone (a title, a tempo and notes with lengths); the app builds the bass and chords from the key and chords it already chose, so the tune is still the AI's melody. Only when that fails does the built-in composer make the tune, and it now gets a name too: the AI's, or a random one for its style, never the request text. (8) The screen stays on whenever the AI is working in the background: writing a lesson (from finding the passages to the last call), making music, the briefing, learning and exams. (9) Learn a lesson: one way to choose how far ahead to write (the Write ahead setting); the "Next 5 / 10 / 20" links are gone, and Whole course and Write one chapter stay. While one of those runs, the ahead writer waits, so the board shows one line and one count instead of two that disagreed. (10) Chapters: a chapter whose first section started soon after its heading was dropped, and a "Part 1" or "Lesson 2" inside a chapter could take that chapter's number, which is why only some chapters showed and the board did not start at chapter 1. A chapter now runs to the next heading of the same kind, the chapters are the heading kind that numbers the most, and chapters numbered in words ("Chapter One") are found. (11) App-wide logs in every build: every log line is kept (the newest 3000 in memory and a rolling file that survives a crash). About has Share all logs and Copy all logs: one text file with the phone summary, the problems, the briefing trace, the newest 500 lines and the end of the previous session. Lessons log the prompt size, how long each call took and the start and end of a reply that could not be read; music logs what the AI replied. Uncaught errors are logged. (12) Power saving that nobody asked for: the heat guard (answers kept short while the phone is hot) was on for everyone by default, so a phone that warmed up while writing lessons or music quietly went into a power-saving mode. It is now off unless you switch it on in Low-battery mode, and an older saved "on" is switched off once. Low-battery mode itself was already off by default and only turns on below your battery level. (13) Privacy of the new logs: the app-wide log is kept on the phone in every build and leaves it only when you press Share or Copy all logs in About; what a person dictated is left out of it, but it can name files, topics and the start of a model's reply.
+- 0.0.231: Settings, fun facts, speed tuning and diagnostics. Since the last published build (0.0.229; 0.0.230 may also be out). (1) Reminders and tips moved to Assistant settings (renamed from Assistant permissions); the daily briefing lines now sit on the News briefing screen only. (2) The fun fact is no longer about the topic itself: a related Wikipedia page is picked at random and told from its details, so "United States" gives something specific, not what the country is. (3) "Find the best settings" now also times the KV cache type (f16, q8_0, q4_0) and flash attention on the winning backend and thread count, and keeps one only when it is at least 8% faster. (4) What just happened: the briefing screen has a link that shows the player's own account of its last run (the files it queued, each one it reached, anything the phone's player skipped, the voice each line was made in) plus a quality line (stories told from a headline alone, teaser lines taken out, the fun fact's source page). (5) Preview a fun fact: a link under the fun facts switch shows what a fact would be told from, without making a briefing. (6) A call that sits too long in one stage (idle without listening, a reply that never ends) writes one [CALL-STALL] line to the Call log with every flag behind it. (7) Find the best settings: the cache type, flash attention and batch size it keeps now apply to that model only, not to every model; a new switch also times batch sizes on a long prompt (a few minutes longer; context length is not changed because it changes how much the model remembers, not how fast it runs). My models, Fastest on this phone, now says what was kept for each model or that it has not been tested.
+- 0.0.230: Briefing and voice fixes. Since the last published build (0.0.229). (1) A cloned voice no longer gets better or worse part-way through a reading: its speed setting changes only between sentences, ignores the first (loading) piece, and only ever steps down. (2) Briefings no longer end a story with a teaser such as "next we will see what else is making headlines", a promise to elaborate, or a pointer to a video; the model is told not to, and any that slip through are removed. (3) The fun fact is asked to be a specific surprising detail, not a definition of the topic. (4) The Debug Logs now record when the phone's player skips a briefing tune and what the composer replied when it could not write a score, so the missing intro tune and the built-in music fallback can be traced.
+- 0.0.229: Learning and helpers. Since the last published build (0.0.228). (1) Exams: a multiple-choice question is now asked with its choices (before, imported exam and study questions lost them, so they could not be answered), the model is told to answer directly and never refuse, and a missed question shows what the model said and which facts were missing, so a failing exam can be read. (2) The chat AI can make a multi-step helper for you (the make_helper tool): it is checked like one you write, saved in Multi-step helpers marked "made by the AI", and runs only when you open it and press Start. (3) A lesson shows a hint line when its sources stress words the lesson never uses. (4) The Debug Logs record, for each lesson, how long finding the passages and writing took.
+- 0.0.228: Music Studio. Since the last published build (0.0.226; 0.0.227, the Teach AI and project ZIP version, is included). (1) Make my own music: in Music Studio, Make my own music opens the note editor on a Blank page or a preset (Drum beat, Pop chords, Lo-fi loop, 12-bar blues, Slow ballad) with the chords, bass and drums already in place for you to write a melody over, and Export MIDI puts each drum on its own key. Saving an empty page says to add notes first. (2) The "Made with the built-in composer" fix: the AI composer's score is read the way small models really write it (commas, colons or bars between the fields, the loudness left out or after the instrument, an instrument given by its name, a lower-case pitch, a numbered list, a drum line without a loudness), a short tune needs fewer notes, the second try uses a much shorter instruction, and the message now says how many lines were readable or what the model replied instead. (3) Included from 0.0.227: export a project as one ZIP and open it on another phone; the Judge writes application questions with hidden keys; goals and earlier mistakes as cards; a phase badge, the context budget and degraded-search notice on the Teach AI screen.
+- 0.0.227: Teach AI and persistent learning. Since the last published build (0.0.226). (1) Export a project as one ZIP: on the Teach AI screen, Export this project writes the project, everything its learners learned (candidates, verified and disputed claims with their passages, the learned notes, lessons and study questions, and the full reports), and the project's documents (the original files and their searchable text), with a checksum for every file. Open a project ZIP adds it to another phone without overwriting anything, keeps each claim's status, adds nothing twice if opened again, and refuses a damaged or half-written zip without changing anything (it is checked completely before anything is written, and the learned records go in one database transaction), and leaves a project or learner that is already here as it is. The models you used are not stored, so any model can read and extend what was learned. (2) The Judge can write application questions: unfamiliar situations that need a learned idea, with hidden answer keys saved as exam questions (the learner never sees them); a question that only restates a stored claim is dropped. (3) Stored knowledge cards stay inside their own subject, so two projects on a similar topic never share cards; the learner's active goal and its earlier mistakes with their corrections are now cards too (a goal is always in the working context; neither counts as checked knowledge). (4) The room for stored knowledge in each step follows the loaded model's context (200 to 1800 tokens) and halves when the phone is saving power; the learning screen shows it. (5) A badge shows whether the learner is learning, reviewing, testing, waiting or paused. (6) The log says once when the project's documents were searched by keywords only or are not indexed yet.
+- 0.0.226: Since the last published build (225, version 0.0.221), so this release carries versions 0.0.222 to 0.0.226. In short: the KV cache type can be changed again and q4_0 is the default; hidden specialist agents and one Assistant; four more multi-step helpers and helpers you write yourself; calls where a soft voice ends its turn by itself; briefing host voices you can change after it is written and the briefing in the phone's media controls; boards with no size limit that go one textbook at a time with bigger review exams; and fixes from two code reviews. Full list by version:
+
+  Version 0.0.222: From your list. (1) The KV cache type can be changed again whatever the backend: your choice is kept, and a note says when the GPU backend or a Gemma 3n or Gemma 4 model runs f16 anyway. (2) Agents: Teacher, the plain Assistant and Meeting Secretary are gone, Phone Assistant is now just Assistant, and Accountant, Home Chef and Paperwork Reader are hidden specialists (listed under Specialists on the Agents screen, not in the chat or Home pickers); Home Chef now carries food safety temperatures (poultry 165 F, ground meat 160 F, pork and beef 145 F), allergens and leftover rules. (3) Four more multi-step helpers: Monthly budget (exact sums, savings ideas), Study plan (topics spread over the days, last day for review), A week of dinners (checked against what you cannot eat, one merged shopping list) and Decision helper (weighted pros and cons added up in code). (4) Calls: a soft voice now ends its turn by itself, and a quiet stretch keeps listening (up to about a minute) instead of muting you. (5) A bracketed note in a reply, like [Text like a guy: lowercase], is never spoken. (6) Briefing: the row of story chips is named for each story's own headline, starts at the first story (after the weather and day lines), and says how many stories there are.
+  Version 0.0.223: (1) q4_0 is the default KV cache (Gemma 3n and Gemma 4 still run f16). (2) Write your own multi-step helpers: on the Multi-step helpers screen, Make your own helper takes a name and one step per line (field: asked first, with choices after a | or typed; ask: a choice part-way; ai: an instruction for the AI), can draft the steps from a plain description, and ends with your approval and a saved note; the AI only sees what you give it. (3) A briefing's host voices can be changed after it is written (Change the host voices on the open show); its audio is made again in the new voices. (4) The pause after each story chime is 3 seconds instead of 7. (5) On a board, Make a new board from every chapter of the textbooks builds the one-book-at-a-time board for a course made earlier (the old board stays). (6) The podcast log (Debug Logs) now says when a host voice is borrowed and when your saved voice is put back, so a mid-show voice switch can be traced.
+  Version 0.0.224: From a code review of this stretch. Cancel writing stops at once instead of starting the square again; leaving the briefing takes its notification down; a chat reply is never treated as background work, so heat and low-power limits always apply to chat; people whose active agent was Teacher or the plain Assistant land on no agent or Assistant, and Home Chef gets the food safety prompt on existing installs; telling the AI to change a big board shows it the chapters you name (and says when it saw only part); a board from many textbooks stops at the board limit and says so; CPA projects are moved into CPA Study once, so one you move out stays out; opening a show no longer re-renders its audio; the lock-screen next button does nothing on the last story and shows Story N of M.
+  Version 0.0.225: No limit on the size of a board: it can hold any number of squares, and a book's chapters are no longer cut off at 60. Includes everything in 0.0.224.
+  Version 0.0.226: Bigger exams, and a code review. (1) A course from textbooks now has a review exam after every fourth chapter, a final exam at the end of each book of two or more chapters, and one whole-course exam after the last book; exam boards (CPA and the like) get a review exam after every fourth topic of an area, besides the review exam that closes each area. An exam sits with the chapter it follows. (2) An exam square covers what its own description says (a chapter range, a book), not always the whole course. (3) A board made by the AI is still held to 400 squares so a model that loops cannot fill the phone; any other board has no limit, a book's chapters are read up to 400 per book, and Match to an exam no longer cuts a board to 80 squares. (4) The board's top line says how many chapters it has.
+
+- 0.0.221: EVERYTHING SINCE BUILD 202 (the last published build; its notes ended at version 0.0.201). Builds 203 to 213 were made and tested but not published, so this release carries all of their changes plus versions 0.0.214 to 0.0.221, newest at the bottom. In short: exams marked on meaning with reasons and retests; lessons saved as a draft first, with Stop; several textbooks per course; incognito banner; random and dice tools; step-by-step chat; a Music Studio note editor and a composer that checks its own tune; calls that speak a cloned voice sentence by sentence; tablet and rotation fixes; a heat guard; a day line in the briefing; per-project defaults; music variations; more lines in the daily briefing; one-sentence reminders; MIDI import and tune continuation; lessons saved as Word documents; a redesigned Music Studio with music that plays in the background; swipe and hold options on lists; a speed test that times every NPU, GPU and CPU option; one-project backup and restore; a smaller app (unused fonts, a duplicate engine and other languages removed); and a clean security audit. Qualcomm GenieX was tried and removed. Full list by version:
+
+  Version 0.0.203: From your notes. Daily briefing: no headlines shown while it is made (only story numbers); a 7 second quiet beat after the chime between stories; the weather and the day's calendar are spoken right after the date; stories are fetched in parallel and a short script is gone back over for more detail until it reaches the length you picked; the opening tune also plays when you carry on where you left off, and a tune that cannot play no longer ends the show. Music Studio: the AI composer frees memory and loads the model itself (it only worked after a chat had loaded it); one clear "Compose with AI" box and a "Quick tune (no AI)"; random titles; fuller bands (jazz has sax, vibraphone and muted trumpet); three SoundFonts to download; background sounds (white, pink, brown noise, rain, ocean, wind, fan). Learn a topic: tables fit the screen with even columns (and a Wide view toggle) and long-dash dividers now make tables; readings can be in depth; worked examples ask you to try each step first; journal-entry assignments are an Account / Debit / Credit table; chapters are named "1 – Cash"; a bad result adds an explanation lesson and new questions; crossword, word search, scramble, memory match and guess-the-term squares, and you can add any square to the board. Home: widgets are tiles with an icon you choose; swipe or press and hold to hide Continue learning. Compass: swipe between compass and level. Chats are named by the AI when you leave them. The text/email tool is no longer offered for "tell me something". PowerPoint previews draw all eight layouts in each style's font. Fixes found by looking again: ids made in the same millisecond were identical on Android (so voices added together all highlighted together, and messages and widgets could clash); colours from an imported theme (#abc, #rrggbbaa) are made safe before the app adds shades to them.
+
+  Version 0.0.204: Image seeds asked for in the same millisecond are no longer identical on Android (the clock-based fallback is replaced), same cause as the voice highlighting fix in 0.0.203.
+
+  Version 0.0.205: A table the AI wrote as HTML (<table><tr>...) now shows as a real table instead of raw tags, in lessons already written too; lessons are told to use Markdown tables only.
+
+  Version 0.0.206: Exams: answers are marked on meaning (reordered wording, plurals, equal numbers and units such as "50 percent" and "50%") without accepting a negation or a different number, each missed question says why (wrong answer, no source found, no approved note, the model failed, the answer key is unusable), questions that could not be graded are left out of the score, and missed questions come back for a retest after 1, 3, then 7 days with the history of every attempt. Learn a topic: a lesson is saved and readable as soon as its first version is written; the in-depth rewrite follows in the background with time limits, and Stop really stops it. Courses from several textbooks keep every book's chapters (two chapters are merged only when their titles say the same thing), share the lesson's passages between the books and keep room for the controlling standard, and the course board has a "What this course covers" section. Searches with no embeddings use the question's own words and say "no evidence" instead of returning the first pages of a book. Calls: the microphone opens by one rule (idle and not muted), including at the start and after an answer that was never spoken. Incognito chats show "Incognito · not saved". New chat tools: random number and roll dice. Work through steps in the chat quick settings. Music Studio: Edit notes on a saved track (piano roll, drum grid, instruments per part, tempo, MIDI export).
+
+  Version 0.0.207: From a full review of 0.0.206. A first missed exam question is retested after 1 day (it waited 7); Stop on a lesson no longer lets it save itself or start a second model call; the open lesson switches to its in-depth version when that is saved; a dollar amount such as $1,200 is no longer rewritten before marking; the warning about a missing or wrong controlling standard (for example no GASB document in a government course) is always shown; Work through steps saves your message first, gives tools the chat's project, and never repeats a tool or sends the message a second time after an error. Cleaner code: 186 needless exports removed.
+
+  Version 0.0.208: Calls: an agent with its own (cloned) voice now starts speaking sentence by sentence while the answer is still being written, as the normal voice does. Tablets and rotation: bottom sheets, dialogs and the gallery follow the current window size (fixed width on wide windows, more gallery columns), PIN screens keep their field above the keyboard. Voice Lab has one-tap test sentences for the known weak spots (a short opening "I" or "I'm", numbers, long prose). Unknown or older Snapdragon chips are no longer told they have an NPU. Speeds are kept per model and per backend, and Automatic tries the backend that measured fastest first. QNN image libraries are copied only for the phone's own chip generation. ZIP imports check file count, size and paths before unpacking. The daily briefing fetches the article for a story that has only a headline and says so when it still has only that. Safer dependencies: markdown-it 14 and linkify-it 5 (slow-input fixes) and the maintained xml parser. Build: the version code rises with every build so each build upgrades the last.
+
+  Version 0.0.209: Cleanup and safety, no new screens. Unused code removed or marked (nothing unused is left exported, and the import cycles are gone), the app's start-up call that closes interrupted knowledge cycles is kept, dependency fixes for the markdown renderer and the XML parser (npm audit: 18 findings down to 13, none critical), the search code for the web is in its own small file, and the optional Qualcomm GenieX engine (only in special builds) was corrected so it compiles. Everything in 0.0.206, 0.0.207 and 0.0.208 is in this version: exam marking on meaning with reasons and retests, lessons saved before the in-depth rewrite, several textbooks kept apart with a "What this course covers" section, incognito banner, random and dice tools, Work through steps, Music Studio note editor, calls that speak a cloned voice sentence by sentence, tablet and rotation fixes, and a version code that rises with every build.
+
+  Version 0.0.210 (never published on its own; folded into 0.0.211): Smaller and tidier. The app bundles only the two icon fonts it uses (about 3.9 MB smaller), the Android command-line tools are updated to 20.2.0 (npm audit: 13 findings down to 6; none critical; the remaining ones are Metro's image reader, which only runs when the app is built, and the voice package's build plugin), a nightly check of the whole test suite runs on the default branch, and the Qualcomm GenieX engine is parked: it stays out of the app until it supports tools and images.
+
+  Version 0.0.211: A smaller app with nothing extra inside. Removed: the second copy of the image engine that was never run (11 MB), 17 icon fonts the app does not use (3.9 MB), library text in other languages the app has no screens for, and build bookkeeping files. The slow native image engines are now reused between builds when their source and patches are unchanged, the word-search test is lighter so the nightly check stays steady, and the Debug Logs screen builds its copy and share text in one place. The test time limit is raised from 10 to 30 seconds so slow runners stop failing steady tests. Includes everything in 0.0.210: updated command-line tools (npm audit: 13 findings down to 6), a nightly check of the full test suite, and Qualcomm GenieX parked outside the app.
+
+  Version 0.0.212: Cleaner builds and a better log screen. npm audit is now clean (0 findings): the image reader that Metro uses was moved to its patched version with a small Metro patch, and two old packages used only by the voice package's build plugin were updated. ESLint warnings went from 626 to 505. A chip-specific "lean" build can be made from the Build Atlas APK workflow (pick the NPU generation, for example V79 for the Razr Ultra 2025) and leaves out the other five NPU libraries; the published build still carries all of them. The Debug Logs screen can show All, Warnings or Errors, and Copy and Share use what is shown. Includes everything in 0.0.211.
+
+  Version 0.0.213: GenieX is gone from the app: no bridge, no engine, no comparison card, no build flag and no workflow option, so nothing of it adds storage or build time. Builds now keep their Gradle and image-engine caches even when a late step fails (before, one late failure threw away the caches of a 40-minute build). Includes everything in 0.0.212.
+
+  Version 0.0.214: Four additions. (1) Heat guard: when Android reports the phone as hot (or the battery is 42 C or more on phones that do not report it), answers are kept short until it cools; it is in Settings under low-battery mode and can be switched off. (2) Speed test: it now times the NPU, each GPU backend the phone offers, and the CPU with several thread counts, separately; chat offers it once after the first reply from a model; an NPU or GPU winner is kept as that model's preferred backend while the setting stays on Automatic, so other models still fall back normally. (3) The music composer listens to its own tune: it checks for a melody in most bars, a returning idea, stepwise motion, varied rhythm, a bass and chords, sends a weak tune back once with the list of problems, keeps the better version, ends it on the home note and fades it in and out. (4) Back up and restore one project: in Backup & sync, a single project with its chats and documents goes to one password-protected file and is merged into any phone, leaving everything else alone. Includes everything in 0.0.213.
+
+  Version 0.0.215: (1) The daily briefing now ends its opening with your day: the scheduled tasks that run later today, and a reminder to charge the phone when the battery is at 30 percent or less and not charging. It comes after the weather and the calendar. (2) Icon-only buttons (back, close, delete, add, stop, settings, edit, search, refresh, next, show or hide a key, read aloud, quick settings) now have spoken names for TalkBack: 58 buttons that a screen reader used to call just "button". (3) Builds: a version check stops a build when package.json, the lockfile, build.gradle or the release notes disagree (it found the lockfile stuck on 0.0.212); a newer test build replaces an older one still running; a publishing build can be made as a draft or a pre-release; weekly update pull requests for the build tools and packages. (4) Debug Logs, heat guard, speed test, composer check and one-project backup from 0.0.214 are all in this version.
+
+  Version 0.0.216: (1) Per-project defaults: in a project's settings you can choose the agent new chats in that project start with, and "Short" answers (about 250 words) for every chat in it; other projects and loose chats are unchanged, and a deleted agent is simply ignored. (2) Music Studio: every saved tune has a "Variation" button. Atlas reads the key, scale and chords back from the saved notes, shows the AI composer the original, and asks for a new melody over the same chords, tempo and length; the result goes through the same key, listening and ending checks, and the built-in composer makes the next variant if the AI composer cannot. (3) Builds: a twice-weekly cache-refresh build is set up for the default branch (it starts once the workflow is merged there).
+
+  Version 0.0.217: The daily briefing gets more lines, said after the weather and the calendar. (1) In the evening, "Pack for tomorrow": an umbrella when rain is likely (50 percent or more), and a warmer jacket when tomorrow's high is 8 degrees Celsius or more below today's. (2) Birthdays and anniversaries on your calendar are said first ("Today is Sam's birthday") and the other events are listed after. (3) A study streak from three days in a row on. (4) On Mondays, a digest of last week: how many study items you made, on how many days, and in which project. (5) Where you were last: the newest chat from the last three days; incognito chats, PIN-locked chats and protected projects are never named. (6) Atlas tells you when it goes back to full speed: "Plugged in: back to full speed" when low-battery mode ends, and when the heat guard turns on or off. Builds: the Android unit tests now save Robolectric's downloaded files and treat a failed download of them as an outage instead of a test failure.
+
+  Version 0.0.218: Switches for everything Atlas says on its own. Settings has a new card with a switch for each reminder, tip, notice and extra briefing line: the back-up reminder, speed tips in chat, back-to-full-speed notices, pack for tomorrow, birthdays and anniversaries, scheduled tasks and battery, study streak, Monday digest, and where you were last. All are on by default, the choices are kept in backups, and scheduled tasks keep their own switch on the Scheduled tasks screen.
+
+  Version 0.0.219: Assistant, learning and creating. (1) Reminders from one sentence: on the Scheduled tasks screen, type "call Mom tomorrow at 9am", "stretch every weekday at 8", "check the oven in 20 minutes" or "water the plants every Monday at 6pm" and it becomes a scheduled task, with no AI needed. (2) The briefing's study streak is now the app's own streak (one missed day a week forgiven), and it says how many review cards are due and in which projects; Home shows the same as a card that opens the busiest project's review. Protected projects are never named. (3) From 5 pm the briefing looks ahead: tomorrow's calendar (birthdays first) and tomorrow's scheduled tasks. (4) Music Studio: Import MIDI turns a .mid file into a track you can play, edit, vary and export; Continue adds a new contrasting section to a saved tune in the same key and chords (up to 32 bars in all). (5) A lesson has Save as Word, which writes a .docx with its sections, examples, common mistakes, quick check and key points and opens the share sheet.
+
+  Version 0.0.220: From your list. (1) Music Studio is rebuilt around one panel: a text box for what you want and drop-downs for Made by (AI composer, Quick tune with no AI, or Background noise), Style, How lively, Length, Sound (the built-in synthesiser or your SoundFont's real instruments) and Instruments to use (the AI composer is told to use exactly the ones you pick); choosing Background noise swaps them for a list of noises. Your tracks are a plain list: tap to play, swipe sideways or press and hold for Delete, Share, Edit notes, Variation and Continue; the volume, repeat, SoundFont and background settings are folded under Sound and playback. (2) The AI now names the tunes it makes: after writing a tune it is asked for a title (2 to 5 words), and a tune with no title gets a made-up one. (3) Music keeps playing when you leave Atlas or close it from the recent apps, and shows in the phone's media player with previous, play or pause, and next; switch it off under Sound and playback (it then pauses as before). Music and Read Aloud share one notification, and only the one that owns it answers the buttons. (4) Swipe or hold, never delete by accident: a hold opens a sheet of buttons (Delete is a button you press, and still asks), and a swipe reveals the same actions, on your tracks, courses and earlier briefings; chats in the list reveal Pin, Archive, Delete and More options when swiped. (5) Home: the study and reminders card at the top can be hidden (a switch under Customize this screen, and in Settings), and the My home widgets box with Add widget now appears only while you are customizing. (6) Call buttons say what is happening: waiting for a busy model, Loading the model by name, Starting the call, on the Home tile and on the Call screen. (7) During a call, a Call log under the timer lists what the call has done (and can be shared), and the status says plainly when nothing on the phone can write down speech.
+  Version 0.0.221: Fixes and the board. (1) AI practice no longer fails: background writing (practice sets, lessons, reviews) ignores the chat's short-answer limits, which were cutting the JSON off. (2) The heat-guard warning no longer shows when the guard is switched off: it waited for your saved setting to load. (3) Read as newspaper opens the paper. (4) Host voices you pick (including cloned and saved voices) are used even when the voice engine offers only one voice. (5) The briefing says the time, gives friendly advice (a sweater when it is cold, turn up the AC when it is hot, an umbrella for rain) and the exact highest UV index; the where-you-were-last line is gone; stories are told in the third person, attributed to their outlet, with two to four sentences each. (6) The shield on a document now says what it means: Mark official or Official standard (it overrules textbooks when they disagree). (7) Older CPA exam projects are moved into the CPA Study folder when you open the CPA screens. (8) Boards: add a game or activity to any chapter or topic (a Where it goes drop-down) and see it on the board at once; Cancel writing stops write-now; the per-chapter list is folded; tell the AI what is missing or should go and it edits the board (played squares are kept). (9) A course from several textbooks now goes one book at a time, every chapter of each, with read, key terms, worked example, quiz, assignment and chapter exam for each chapter; the board names its primary source; chapter names are asked for 20 at a time, and the fallback names keep whole phrases instead of cut-off words. (10) The daily briefing shows in the phone's media controls (pause, play, next story, previous, stop) and keeps playing with the app closed.

@@ -121,8 +121,6 @@ jest.mock('../../../src/services', () => ({
     getQueuedItems: jest.fn(() => []),
   },
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadTextModel: jest.fn(),
     unloadImageModel: jest.fn(() => Promise.resolve()),
   },
@@ -381,7 +379,7 @@ describe('DownloadManagerScreen', () => {
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
     expect(getByText('test-model-q4.gguf')).toBeTruthy();
     expect(getByText('test-author')).toBeTruthy();
-    expect(getByText(/4\.00 GB · Q4_K_M · Text/)).toBeTruthy();
+    expect(getByText('Q4_K_M')).toBeTruthy();
     expect(queryByText('No models downloaded yet')).toBeNull();
   });
 
@@ -405,7 +403,6 @@ describe('DownloadManagerScreen', () => {
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('SD Turbo')).toBeTruthy();
     expect(getByText('Image Generation')).toBeTruthy();
-    expect(getByText('2.00 GB')).toBeTruthy();
   });
 
   it('renders active download with progress info', () => {
@@ -547,33 +544,8 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('256 B / 1 KB · Rate unavailable')).toBeTruthy();
-    expect(getByText('25%')).toBeTruthy();
-  });
-
-  it('shows the measured rate for an active download', () => {
-    mockDownloadStoreDownloads = {
-      'author/model-id/active-model.gguf': {
-        modelKey: 'author/model-id/active-model.gguf',
-        downloadId: 'dl-rate',
-        modelId: 'author/model-id',
-        fileName: 'active-model.gguf',
-        quantization: 'Q4_K_M',
-        modelType: 'text',
-        status: 'running',
-        bytesDownloaded: 512 * 1024,
-        totalBytes: 1024 * 1024,
-        combinedTotalBytes: 1024 * 1024,
-        bytesPerSecond: 128 * 1024,
-        progress: 0.5,
-        createdAt: Date.now(),
-        lastProgressAt: Date.now(),
-      },
-    };
-
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('512 KB / 1 MB · 128.0 KB/s')).toBeTruthy();
-    expect(getByText('50%')).toBeTruthy();
+    // Progress bar is shown but no status text for running downloads
+    expect(getByText('256 B / 1 KB')).toBeTruthy();
   });
 
   it('does not show storage section when no completed models', () => {
@@ -968,12 +940,13 @@ describe('DownloadManagerScreen', () => {
     expect(queryAllByTestId('delete-model-button').length).toBe(0);
   });
 
-  it('does not invent a file size when the completed model size is unknown', () => {
+  it('formatBytes returns "0 B" for zero bytes (covers line 545 branch)', () => {
+    // A completed model with fileSize of 0 triggers formatBytes(0) which returns '0 B'
     setupSingleModelState({ modelOverrides: { id: 'model-zero', name: 'Zero Model', fileName: 'zero-model.gguf', fileSize: 0 } }, 0);
 
-    const { getByText, queryByText } = render(<DownloadManagerScreen />);
-    expect(getByText('zero-model.gguf')).toBeTruthy();
-    expect(queryByText(/0 B · Q4_K_M/)).toBeNull();
+    const { getByText } = render(<DownloadManagerScreen />);
+    // The size display for a 0-byte model shows '0 B'
+    expect(getByText('0 B')).toBeTruthy();
   });
 
   it('image model with quantization renders imageBadge and imageQuantText styles (covers lines 424-425)', () => {

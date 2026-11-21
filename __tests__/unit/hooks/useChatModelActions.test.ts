@@ -4,11 +4,11 @@
  * Tests the exported async functions directly, covering uncovered branches:
  * - addSystemMsg: no-op when activeConversationId missing or showGenerationDetails false
  * - initiateModelLoad: memory check failure path
- * - handleModelSelectFn: records a selection without loading
+ * - proceedWithModelLoadFn: success path with system message, createConversation path
  * - handleUnloadModelFn: success path with system message
  */
 
-import { initiateModelLoad, ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn } from '../../../src/screens/ChatScreen/useChatModelActions';
+import { initiateModelLoad, ensureModelLoadedFn, proceedWithModelLoadFn, handleModelSelectFn, handleUnloadModelFn } from '../../../src/screens/ChatScreen/useChatModelActions';
 import { createDownloadedModel } from '../../utils/factories';
 import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 
@@ -18,9 +18,6 @@ import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    selectTextModel: jest.fn(),
     loadTextModel: jest.fn(),
     unloadTextModel: jest.fn(),
     checkMemoryForModel: jest.fn(),
@@ -32,7 +29,6 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     getMultimodalSupport: jest.fn(),
     getLoadedModelPath: jest.fn(),
-    getBackendFallbackNotice: jest.fn(() => null),
     stopGeneration: jest.fn(),
     isModelLoaded: jest.fn(),
     // engines.activeTextCapabilities (reached via loadedModelVision / state-sync) reads these too.
@@ -44,7 +40,7 @@ jest.mock('../../../src/services/llm', () => ({
 // LiteRT boundary mocked as a dumb flag reader so engines.isModelReady/deriveEngineCapabilities
 // (which read this DIRECT module, not the barrel) resolve deterministically for the litert path.
 jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
+  liteRTService: { isModelLoaded: jest.fn(() => false), getLoadedModelPath: jest.fn(() => '/mock/models/test-model.gguf') },
 }));
 
 // Get mock references after hoisting
@@ -54,7 +50,6 @@ const { liteRTService } = require('../../../src/services/litert');
 const mockLiteRTLoaded = liteRTService.isModelLoaded as jest.Mock;
 
 const mockLoadTextModel = activeModelService.loadTextModel as jest.Mock;
-const mockSelectTextModel = activeModelService.selectTextModel as jest.Mock;
 const mockUnloadTextModel = activeModelService.unloadTextModel as jest.Mock;
 const mockCheckMemoryForModel = activeModelService.checkMemoryForModel as jest.Mock;
 const mockGetActiveModels = activeModelService.getActiveModels as jest.Mock;
@@ -96,7 +91,6 @@ beforeEach(() => {
   // Reset (not just re-default) the loader so a prior test's unconsumed
   // mockRejectedValueOnce/mockResolvedValueOnce queue can't leak into the next.
   mockLoadTextModel.mockReset().mockResolvedValue(undefined);
-  mockSelectTextModel.mockClear();
   mockUnloadTextModel.mockResolvedValue(undefined);
   mockCheckMemoryForModel.mockResolvedValue({ canLoad: true, severity: 'safe', message: '' });
   mockGetActiveModels.mockReturnValue({ text: { isLoading: false } });
@@ -325,7 +319,9 @@ describe('ensureModelLoadedFn typed outcome', () => {
 
   it('returns ok without loading when the LiteRT model is already resident', async () => {
     mockLiteRTLoaded.mockReturnValue(true);
-    const deps = makeDeps({ activeModel: createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: true }) });
+    const active = createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: true });
+    (liteRTService.getLoadedModelPath as jest.Mock).mockReturnValue(active.filePath);
+    const deps = makeDeps({ activeModel: active });
     const outcome = await ensureModelLoadedFn(deps);
     expect(outcome).toEqual({ ok: true });
     expect(mockLoadTextModel).not.toHaveBeenCalled();
@@ -355,19 +351,120 @@ describe('ensureModelLoadedFn typed outcome', () => {
 });
 
 // ─────────────────────────────────────────────
+// proceedWithModelLoadFn
+// ─────────────────────────────────────────────
+
+describe('proceedWithModelLoadFn', () => {
+  it('closes the picker up front and routes the load through the MEASURED loader', async () => {
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'm', name: 'M' });
+    const p = proceedWithModelLoadFn(deps, model); // don't await yet — check the sync prefix
+    // The sheet dismisses synchronously, before the load resolves.
+    expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
+    expect(deps.setIsModelLoading).toHaveBeenCalledWith(true);
+    await p; // let it finish so nothing leaks
+    // No predictive pre-check — the load went to the authoritative residency loader.
+    expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
+    expect(mockLoadTextModel).toHaveBeenCalledWith('m', undefined, undefined);
+  });
+
+  it('offers the shared Load Anyway override when the MEASURED loader refuses (OverridableMemoryError)', async () => {
+    // First (non-override) attempt refuses with the overridable error; the retry succeeds.
+    mockLoadTextModel
+      .mockRejectedValueOnce(new OverridableMemoryError('Not enough free memory to load this model.'))
+      .mockResolvedValueOnce(undefined);
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'over-1', name: 'Big' });
+
+    await proceedWithModelLoadFn(deps, model);
+
+    const alert = deps.setAlertState.mock.calls.find((c: any) => c[0]?.title === 'Insufficient Memory')?.[0];
+    expect(alert).toBeDefined();
+    const loadAnyway = alert.buttons.find((b: any) => b.text === 'Load Anyway');
+    loadAnyway.onPress();
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // The retry forces past the residency gate with { override: true } — same affordance
+    // every other surface uses via the shared helper.
+    expect(mockLoadTextModel).toHaveBeenLastCalledWith('over-1', undefined, { override: true });
+  });
+
+  it('loads model and posts system message when showGenerationDetails=true', async () => {
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
+    mockGetMultimodalSupport.mockReturnValueOnce(null);
+    const deps = makeDeps({ activeConversationId: 'conv-1', settings: { showGenerationDetails: true } });
+    deps.modelLoadStartTimeRef.current = Date.now() - 1000;
+    const model = createDownloadedModel({ id: 'model-1', name: 'Fast Model' });
+    await proceedWithModelLoadFn(deps, model);
+    expect(deps.addMessage).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ isSystemInfo: true }),
+    );
+    expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
+  });
+
+  it('does not create a conversation when no active conversation and showGenerationDetails=false', async () => {
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
+    const deps = makeDeps({ activeConversationId: null, settings: { showGenerationDetails: false } });
+    const model = createDownloadedModel({ id: 'model-2' });
+    await proceedWithModelLoadFn(deps, model);
+    expect(deps.createConversation).not.toHaveBeenCalled();
+    expect(deps.addMessage).not.toHaveBeenCalled();
+  });
+
+  it('shows error alert when load throws', async () => {
+    mockLoadTextModel.mockRejectedValueOnce(new Error('GGUF error'));
+    const deps = makeDeps();
+    const model = createDownloadedModel();
+    await proceedWithModelLoadFn(deps, model);
+    expect(deps.setAlertState).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Error' }),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────
 // handleModelSelectFn
 // ─────────────────────────────────────────────
 
 describe('handleModelSelectFn', () => {
-  it('selects the model and closes the picker without loading it', async () => {
+  it('closes selector immediately when same model is already loaded', async () => {
+    const model = createDownloadedModel({ filePath: '/loaded/model.gguf' });
+    mockGetLoadedModelPath.mockReturnValueOnce('/loaded/model.gguf');
+    const deps = makeDeps();
+    await handleModelSelectFn(deps, model);
+    expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
+    expect(mockLoadTextModel).not.toHaveBeenCalled();
+  });
+
+  it('loads through the MEASURED loader with NO predictive pre-check gate (OD3 parity)', async () => {
+    mockGetLoadedModelPath.mockReturnValue(null);
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
     const deps = makeDeps();
     const model = createDownloadedModel({ id: 'sel-1' });
 
     await handleModelSelectFn(deps, model);
 
-    expect(mockSelectTextModel).toHaveBeenCalledWith('sel-1');
-    expect(mockLoadTextModel).not.toHaveBeenCalled();
+    // The divergent predictive gate is gone — selection goes straight to the loader,
+    // exactly as Home does, so a model the estimate would block still loads.
+    expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
+    expect(mockLoadTextModel).toHaveBeenCalledWith('sel-1', undefined, undefined);
     expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
+  });
+
+  it('offers the shared Load Anyway override when the loader refuses (not a hard block)', async () => {
+    mockGetLoadedModelPath.mockReturnValue(null);
+    mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('Not enough free memory.'));
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'sel-2' });
+
+    await handleModelSelectFn(deps, model);
+
+    expect(deps.setAlertState).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Insufficient Memory' }),
+    );
+    expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
   });
 });
 
@@ -437,6 +534,46 @@ describe('initiateModelLoad — Load Anyway button (measured loader refusal, tur
 
     // State cleaned up (setIsModelLoading(false) called in finally)
     expect(deps.setIsModelLoading).toHaveBeenCalledWith(true); // set by callback
+  });
+});
+
+// ─────────────────────────────────────────────
+// handleModelSelectFn — Load Anyway callback (measured-loader refusal)
+// ─────────────────────────────────────────────
+
+describe('handleModelSelectFn — Load Anyway button', () => {
+  it('executes Load Anyway callback when the loader refuses (overridable)', async () => {
+    mockGetLoadedModelPath.mockReturnValue(null);
+    mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('OOM'));
+
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'model-x' });
+    await handleModelSelectFn(deps, model);
+
+    const alertCall = deps.setAlertState.mock.calls.find((c: any) => c[0]?.title === 'Insufficient Memory')[0];
+    const loadAnywayBtn = alertCall.buttons.find((b: any) => b.text === 'Load Anyway');
+    expect(loadAnywayBtn).toBeDefined();
+
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
+    deps.setAlertState.mockClear();
+    await loadAnywayBtn.onPress();
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // Retry forces past the gate with override.
+    expect(mockLoadTextModel).toHaveBeenLastCalledWith('model-x', undefined, { override: true });
+  });
+
+  it('shows a plain error (no override) when the loader fails with a non-memory error', async () => {
+    mockGetLoadedModelPath.mockReturnValue(null);
+    mockLoadTextModel.mockRejectedValueOnce(new Error('GGUF corrupt'));
+
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'model-y' });
+    await handleModelSelectFn(deps, model);
+
+    expect(deps.setAlertState).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Error' }),
+    );
   });
 });
 

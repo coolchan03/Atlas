@@ -11,14 +11,14 @@ import type { Message } from '../../../src/types';
 describe('thinking across a tool-call turn (guard)', () => {
   it('shows the streamed reasoning AND the final answer after a tool call', async () => {
     const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-     
+    /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
-    const { fireEvent, render } = requireRTL();
+    const { render } = requireRTL();
     const { liteRTService } = require('../../../src/services/litert');
     const { generationService } = require('../../../src/services/generationService');
     const { useAppStore, useChatStore } = require('../../../src/stores');
     const { ChatMessage } = require('../../../src/components/ChatMessage');
-     
+    /* eslint-enable @typescript-eslint/no-var-requires */
 
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
     useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
@@ -39,12 +39,11 @@ describe('thinking across a tool-call turn (guard)', () => {
 
     const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
     const assistant = [...messages].reverse().find(m => m.role === 'assistant');
-    const { getByTestId, queryByText } = render(React.createElement(ChatMessage, { message: assistant as Message, showGenerationDetails: false }));
+    const { queryByText } = render(React.createElement(ChatMessage, { message: assistant as Message, showGenerationDetails: false }));
 
     // The reasoning is preserved + shown, and the final answer renders — the thinking isn't lost across
     // the tool call.
-    expect(queryByText(/The answer is 4\./)).not.toBeNull();
-    fireEvent.press(getByTestId('assistant-work-toggle'));
     expect(queryByText(/Let me compute this with the calculator/)).not.toBeNull();
+    expect(queryByText(/The answer is 4\./)).not.toBeNull();
   });
 });

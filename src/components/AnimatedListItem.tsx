@@ -1,8 +1,8 @@
 import React from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
 import { AnimatedEntry } from './AnimatedEntry';
-import { AnimatedPressable, type AnimatedPressableProps } from './AnimatedPressable';
-import { type HapticType } from '../utils/haptics';
+import { AnimatedPressable } from './AnimatedPressable';
+import { type HapticType } from '../services/haptics';
 
 export interface AnimatedListItemProps {
   /** List index for stagger delay */
@@ -27,16 +27,6 @@ export interface AnimatedListItemProps {
   disabled?: boolean;
   /** Test ID */
   testID?: string;
-  /**
-   * Accessibility label for the whole row. Without one, iOS concatenates every child into a single
-   * run-on name - a projects row read as "O, Off Grid AI …, , 0, Known Off Grid AI source materi…"
-   * - which is unusable to VoiceOver and leaves the row unaddressable by name.
-   */
-  accessibilityLabel?: string;
-  /** What the row is, for assistive tech. List rows that navigate are buttons. */
-  accessibilityRole?: AnimatedPressableProps['accessibilityRole'];
-  /** Secondary detail (counts, description) that should not crowd the label. */
-  accessibilityHint?: string;
   children: React.ReactNode;
 }
 
@@ -56,9 +46,6 @@ export function AnimatedListItem({
   onLongPress,
   disabled,
   testID,
-  accessibilityLabel,
-  accessibilityRole,
-  accessibilityHint,
   children,
 }: AnimatedListItemProps) {
   return (
@@ -71,9 +58,6 @@ export function AnimatedListItem({
         onLongPress={onLongPress}
         disabled={disabled}
         testID={testID}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole={accessibilityRole}
-        accessibilityHint={accessibilityHint}
       >
         {children}
       </AnimatedPressable>

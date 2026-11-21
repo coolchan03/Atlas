@@ -3,4 +3,7 @@ plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'OffgridMobile'
 include ':app'
+// Experimental Vulkan text inference. Builds only when atlasVulkanEnabled=true.
+include ':atlasLlamaKt'
+project(':atlasLlamaKt').projectDir = file('atlasLlamaKt')
 includeBuild('../node_modules/@react-native/gradle-plugin')

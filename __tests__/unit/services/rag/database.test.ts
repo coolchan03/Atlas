@@ -4,9 +4,7 @@ import { open } from '@op-engineering/op-sqlite';
 const mockExecuteSync = jest.fn();
 const mockDb = {
   executeSync: mockExecuteSync,
-  execute: jest.fn(() =>
-    Promise.resolve({ rows: [], insertId: 0, rowsAffected: 0 }),
-  ),
+  execute: jest.fn(() => Promise.resolve({ rows: [], insertId: 0, rowsAffected: 0 })),
   close: jest.fn(),
   delete: jest.fn(),
 };
@@ -24,7 +22,7 @@ import { ragDatabase } from '../../../../src/services/rag/database';
 
 function expectDeleteCascade() {
   const deleteCalls = mockExecuteSync.mock.calls.filter(
-    (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE'),
+    (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
   );
   expect(deleteCalls).toHaveLength(3);
   expect(deleteCalls[0][0]).toContain('rag_embeddings');
@@ -44,17 +42,12 @@ describe('RagDatabase', () => {
     it('opens the database and creates tables', async () => {
       await ragDatabase.ensureReady();
       expect(open).toHaveBeenCalledWith({ name: 'rag.db' });
-      const tableCreates = mockExecuteSync.mock.calls
-        .map(call => call[0])
-        .filter(
-          sql =>
-            typeof sql === 'string' &&
-            sql.includes('CREATE TABLE IF NOT EXISTS'),
-        );
-      expect(tableCreates).toHaveLength(3);
-      expect(tableCreates[0]).toContain('rag_documents');
-      expect(tableCreates[1]).toContain('rag_chunks');
-      expect(tableCreates[2]).toContain('rag_embeddings');
+      // secure_delete first (deleted document text must be overwritten), then 3 tables
+      expect(mockExecuteSync).toHaveBeenCalledTimes(4);
+      expect(mockExecuteSync.mock.calls[0][0]).toContain('secure_delete');
+      expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_documents');
+      expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_chunks');
+      expect(mockExecuteSync.mock.calls[3][0]).toContain('rag_embeddings');
     });
 
     it('does not re-initialize on second call', async () => {
@@ -68,22 +61,13 @@ describe('RagDatabase', () => {
   describe('insertDocument', () => {
     it('inserts a document and returns the id', async () => {
       await ragDatabase.ensureReady();
-      mockExecuteSync.mockReturnValue({
-        insertId: 42,
-        rowsAffected: 1,
-        rows: [],
-      });
+      mockExecuteSync.mockReturnValue({ insertId: 42, rowsAffected: 1, rows: [] });
 
-      const id = ragDatabase.insertDocument({
-        projectId: 'proj1',
-        name: 'test.txt',
-        path: '/path/test.txt',
-        size: 1234,
-      });
+      const id = ragDatabase.insertDocument({ projectId: 'proj1', name: 'test.txt', path: '/path/test.txt', size: 1234 });
       expect(id).toBe(42);
       expect(mockExecuteSync).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO rag_documents'),
-        expect.arrayContaining(['proj1', 'test.txt', '/path/test.txt', 1234]),
+        expect.arrayContaining(['proj1', 'test.txt', '/path/test.txt', 1234])
       );
     });
   });
@@ -91,11 +75,7 @@ describe('RagDatabase', () => {
   describe('insertChunks', () => {
     it('inserts each chunk and returns rowids', async () => {
       await ragDatabase.ensureReady();
-      mockExecuteSync.mockReturnValue({
-        insertId: 10,
-        rowsAffected: 1,
-        rows: [],
-      });
+      mockExecuteSync.mockReturnValue({ insertId: 10, rowsAffected: 1, rows: [] });
 
       const chunks = [
         { content: 'chunk one', position: 0 },
@@ -104,8 +84,7 @@ describe('RagDatabase', () => {
       const rowIds = ragDatabase.insertChunks(42, chunks);
       expect(rowIds).toEqual([10, 10]); // mock always returns 10
       const chunkInserts = mockExecuteSync.mock.calls.filter(
-        (c: any[]) =>
-          typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_chunks'),
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_chunks')
       );
       expect(chunkInserts).toHaveLength(2);
       expect(chunkInserts[0][1]).toEqual(['chunk one', 42, 0]);
@@ -122,9 +101,7 @@ describe('RagDatabase', () => {
       ]);
 
       const embInserts = mockExecuteSync.mock.calls.filter(
-        (c: any[]) =>
-          typeof c[0] === 'string' &&
-          c[0].includes('INSERT INTO rag_embeddings'),
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_embeddings')
       );
       expect(embInserts).toHaveLength(2);
     });
@@ -135,16 +112,10 @@ describe('RagDatabase', () => {
       await ragDatabase.ensureReady();
       const embBuffer = new Float32Array([0.1, 0.2]).buffer;
       mockExecuteSync.mockReturnValue({
-        rows: [
-          {
-            chunk_rowid: 1,
-            doc_id: 42,
-            name: 'doc.txt',
-            content: 'hello',
-            position: 0,
-            embedding: embBuffer,
-          },
-        ],
+        rows: [{
+          chunk_rowid: 1, doc_id: 42, name: 'doc.txt',
+          content: 'hello', position: 0, embedding: embBuffer,
+        }],
       });
 
       const results = ragDatabase.getEmbeddingsByProject('proj1');
@@ -195,15 +166,7 @@ describe('RagDatabase', () => {
     it('returns documents for the given project', async () => {
       await ragDatabase.ensureReady();
       const mockDocs = [
-        {
-          id: 1,
-          project_id: 'proj1',
-          name: 'doc1.txt',
-          path: '/p',
-          size: 100,
-          created_at: '2024-01-01',
-          enabled: 1,
-        },
+        { id: 1, project_id: 'proj1', name: 'doc1.txt', path: '/p', size: 100, created_at: '2024-01-01', enabled: 1 },
       ];
       mockExecuteSync.mockReturnValue({ rows: mockDocs });
 
@@ -217,7 +180,7 @@ describe('RagDatabase', () => {
       await ragDatabase.ensureReady();
       ragDatabase.toggleEnabled(42, false);
       const updateCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('UPDATE'),
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('UPDATE')
       );
       expect(updateCalls).toHaveLength(1);
       expect(updateCalls[0][1]).toEqual([0, 42]);
@@ -228,13 +191,7 @@ describe('RagDatabase', () => {
     it('returns chunks for a project', async () => {
       await ragDatabase.ensureReady();
       const mockResults = [
-        {
-          doc_id: 1,
-          name: 'doc.txt',
-          content: 'some content',
-          position: 0,
-          score: 0,
-        },
+        { doc_id: 1, name: 'doc.txt', content: 'some content', position: 0, score: 0 },
       ];
       mockExecuteSync.mockReturnValue({ rows: mockResults });
 
@@ -256,14 +213,7 @@ describe('RagDatabase', () => {
     it('throws if getDb called before ensureReady', () => {
       (ragDatabase as any).ready = false;
       (ragDatabase as any).db = null;
-      expect(() =>
-        ragDatabase.insertDocument({
-          projectId: 'p',
-          name: 'n',
-          path: 'path',
-          size: 0,
-        }),
-      ).toThrow('not initialized');
+      expect(() => ragDatabase.insertDocument({ projectId: 'p', name: 'n', path: 'path', size: 0 })).toThrow('not initialized');
     });
 
     it('rolls back insertChunks transaction on error', async () => {
@@ -277,34 +227,28 @@ describe('RagDatabase', () => {
         return { insertId: 1, rowsAffected: 1, rows: [] };
       });
 
-      expect(() =>
-        ragDatabase.insertChunks(42, [{ content: 'chunk', position: 0 }]),
-      ).toThrow('insert failed');
+      expect(() => ragDatabase.insertChunks(42, [
+        { content: 'chunk', position: 0 },
+      ])).toThrow('insert failed');
 
-      const rollbackCall = mockExecuteSync.mock.calls.find(
-        (c: any[]) => c[0] === 'ROLLBACK',
-      );
+      const rollbackCall = mockExecuteSync.mock.calls.find((c: any[]) => c[0] === 'ROLLBACK');
       expect(rollbackCall).toBeDefined();
     });
 
     it('rolls back insertEmbeddingsBatch transaction on error', async () => {
       await ragDatabase.ensureReady();
       mockExecuteSync.mockImplementation((sql: string) => {
-        if (sql.includes('INSERT INTO rag_embeddings'))
-          throw new Error('embed failed');
+        if (sql.includes('INSERT INTO rag_embeddings')) throw new Error('embed failed');
         return { insertId: 1, rowsAffected: 1, rows: [] };
       });
 
-      expect(() =>
-        ragDatabase.insertEmbeddingsBatch([
-          { chunkRowid: 1, docId: 42, embedding: [0.1, 0.2] },
-        ]),
-      ).toThrow('embed failed');
+      expect(() => ragDatabase.insertEmbeddingsBatch([
+        { chunkRowid: 1, docId: 42, embedding: [0.1, 0.2] },
+      ])).toThrow('embed failed');
 
-      const rollbackCall = mockExecuteSync.mock.calls.find(
-        (c: any[]) => c[0] === 'ROLLBACK',
-      );
+      const rollbackCall = mockExecuteSync.mock.calls.find((c: any[]) => c[0] === 'ROLLBACK');
       expect(rollbackCall).toBeDefined();
     });
+
   });
 });

@@ -5,6 +5,10 @@
  * Priority: P0 (Critical) - Core inference engine.
  */
 
+// Inference unit tests isolate chat persistence from the native Android Keystore.
+jest.mock('../../../src/stores/encryptedChatStorage', () => ({ encryptedChatStorage: {
+  getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(async () => undefined),
+} }));
 import { initLlama } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -18,9 +22,9 @@ const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
 /**
- * Helper: sets up mocks for configured context-loading tests.
+ * Helper: sets up mocks for auto context scaling tests.
  */
-function setupContextLoadTest({
+function setupScalingTest({
   modelContextLength,
   userContextLength,
   contextCount = 1,
@@ -65,7 +69,6 @@ describe('LLMService', () => {
     // Reset singleton state
     (llmService as any).context = null;
     (llmService as any).currentModelPath = null;
-    (llmService as any).nativeConversationId = null;
     (llmService as any).isGenerating = false;
     (llmService as any).multimodalSupport = null;
     (llmService as any).multimodalInitialized = false;
@@ -113,13 +116,13 @@ describe('LLMService', () => {
       await expect(llmService.loadModel('/missing/model.gguf')).rejects.toThrow('Model file not found');
     });
 
-    it('offers a memory override and then tries the selected context', async () => {
+    it('downgrades context when memory is tight instead of loading and crashing (F4)', async () => {
       const { hardwareService } = require('../../../src/services/hardware');
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: 2 * 1024 * 1024 * 1024 } as any); // 2 GB model
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
-      // ~2.9 GB available: the estimate rejects the selected 8192 context.
+      // ~2.9 GB available: 8192/4096 ctx don't fit, a smaller ctx does.
       jest.spyOn(hardwareService, 'getAppMemoryUsage').mockResolvedValue({
         used: 5 * 1024 * 1024 * 1024,
         available: 2900 * 1024 * 1024,
@@ -129,11 +132,10 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, contextLength: 8192, cacheType: 'q8_0' },
       });
 
-      await expect(llmService.loadModel('/models/big.gguf')).rejects.toThrow('Not enough memory');
-      expect(initLlama).not.toHaveBeenCalled();
-      await llmService.loadModel('/models/big.gguf', undefined, { override: true });
+      await llmService.loadModel('/models/big.gguf');
+
       const ctxArg = (initLlama as jest.Mock).mock.calls[0][0].n_ctx;
-      expect(ctxArg).toBe(8192);
+      expect(ctxArg).toBeLessThan(8192); // context was reduced to fit
       expect(llmService.isModelLoaded()).toBe(true);
     });
 
@@ -205,12 +207,14 @@ describe('LLMService', () => {
       expect(llmService.isModelLoaded()).toBe(true);
     });
 
-    it('reports failure at the selected context when CPU also fails', async () => {
+    it('falls back to smaller context when CPU also fails', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
+      const ctx = createMockLlamaContext();
       mockedInitLlama
         .mockRejectedValueOnce(new Error('GPU error'))
-        .mockRejectedValueOnce(new Error('OOM with ctx=4096'));
+        .mockRejectedValueOnce(new Error('OOM with ctx=4096'))
+        .mockResolvedValueOnce(ctx as any);
 
       useAppStore.setState({
         settings: {
@@ -220,16 +224,16 @@ describe('LLMService', () => {
         },
       });
 
-      await expect(llmService.loadModel('/models/test.gguf'))
-        .rejects.toThrow('selected context 4096');
-      expect(initLlama).toHaveBeenCalledTimes(2);
-      expect((initLlama as jest.Mock).mock.calls.every(([args]) => args.n_ctx === 4096)).toBe(true);
+      await llmService.loadModel('/models/test.gguf');
+
+      // Third call should use ctx=2048
+      expect(initLlama).toHaveBeenCalledTimes(3);
+      const thirdCallArgs = (initLlama as jest.Mock).mock.calls[2][0];
+      expect(thirdCallArgs.n_ctx).toBe(2048);
     });
 
     it('warns when mmproj file not found but continues', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true) // model exists
-        .mockResolvedValueOnce(false); // mmproj doesn't exist
+      mockedRNFS.exists.mockImplementation(async (path: string) => path !== '/models/mmproj.gguf');
 
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
@@ -287,7 +291,7 @@ describe('LLMService', () => {
       );
     });
 
-    it('uses flashAttn=true from store and sets q8_0 KV cache', async () => {
+    it('uses flashAttn=true from store and sets q4_0 KV cache (the default)', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
@@ -304,8 +308,8 @@ describe('LLMService', () => {
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
           flash_attn_type: 'auto',
-          cache_type_k: 'q8_0',
-          cache_type_v: 'q8_0',
+          cache_type_k: 'q4_0',
+          cache_type_v: 'q4_0',
         })
       );
     });
@@ -352,8 +356,8 @@ describe('LLMService', () => {
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
           flash_attn_type: 'auto',
-          cache_type_k: 'q8_0',
-          cache_type_v: 'q8_0',
+          cache_type_k: 'q4_0',
+          cache_type_v: 'q4_0',
         })
       );
     });
@@ -570,7 +574,7 @@ describe('LLMService', () => {
         const onComplete = jest.fn();
         const result = await llmService.generateResponse([createUserMessage('hi')], { onComplete });
         expect(result).toBe('The clean answer.');
-        expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning' });
+        expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning', parsedContent: 'The clean answer.' });
       });
 
       it('FAIL-SAFE: empty filtered content from auto → the raw text still surfaces (answer never blank)', async () => {
@@ -768,7 +772,7 @@ describe('LLMService', () => {
       expect(contents).toContain('Q2');
     });
 
-    it('passes all messages through to llama.rn for native context shifting', async () => {
+    it('windows oversized history safely when native context shifting is unsafe', async () => {
       const ctx = await setupForContextTest();
 
       (llmService as any).currentSettings.contextLength = 2048;
@@ -788,10 +792,11 @@ describe('LLMService', () => {
 
       const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
       const contents = oaiMessages.map((m: any) => m.content);
-      // All messages should be present — no JS-side truncation
+      // Older turns can leave the active window; the saved messages stay intact.
       expect(contents).toContain('Final question');
-      expect(contents).toContain(`Question 0 ${'x'.repeat(100)}`);
+      expect(contents).not.toContain(`Question 0 ${'x'.repeat(100)}`);
       expect(contents.join(' ')).toContain('System prompt');
+      expect(messages).toHaveLength(52);
     });
   });
 
@@ -845,21 +850,6 @@ describe('LLMService', () => {
 
     it('is safe without context', async () => {
       await llmService.clearKVCache(); // Should not throw
-    });
-
-    it('fully clears once when the native context moves to another chat', async () => {
-      mockedRNFS.exists.mockResolvedValue(true);
-      const ctx = createMockLlamaContext();
-      mockedInitLlama.mockResolvedValue(ctx as any);
-      await llmService.loadModel('/models/test.gguf');
-
-      await llmService.prepareConversationBoundary('chat-a');
-      await llmService.prepareConversationBoundary('chat-a');
-      await llmService.prepareConversationBoundary('chat-b');
-
-      expect(ctx.clearCache).toHaveBeenCalledTimes(2);
-      expect(ctx.clearCache).toHaveBeenNthCalledWith(1, true);
-      expect(ctx.clearCache).toHaveBeenNthCalledWith(2, true);
     });
   });
 
@@ -1283,6 +1273,15 @@ describe('LLMService', () => {
     beforeEach(() => {
       (hw as any).cachedOpenCLCapability = null;
       jest.spyOn(hw, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+      jest.spyOn(hw, 'getDeviceInfo').mockResolvedValue({
+        totalMemory: 12 * 1024 ** 3,
+        usedMemory: 2 * 1024 ** 3,
+        availableMemory: 10 * 1024 ** 3,
+        deviceModel: 'Test Android',
+        systemName: 'Android',
+        systemVersion: '15',
+        isEmulator: false,
+      });
     });
 
     afterEach(() => {
@@ -1301,7 +1300,7 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       const info = llmService.getGpuInfo();
       expect(info.gpu).toBe(true);
@@ -1322,7 +1321,7 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       const info = llmService.getGpuInfo();
       expect(info.gpu).toBe(true);
@@ -1684,6 +1683,7 @@ describe('LLMService', () => {
           ...useAppStore.getState().settings,
           temperature: 0.2,
           maxTokens: 512,
+          maxTokensMode: 'manual' as const,
           topP: 0.8,
           repeatPenalty: 1.3,
         },
@@ -1696,6 +1696,19 @@ describe('LLMService', () => {
       expect(callArgs.n_predict).toBe(512);
       expect(callArgs.top_p).toBe(0.8);
       expect(callArgs.penalty_repeat).toBe(1.3);
+    });
+
+    it('sizes the reply to the context window when the length is automatic', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        completion: jest.fn(async (_p: any, cb: any) => { cb({ token: 'OK' }); return { text: 'OK', tokens_predicted: 1 }; }),
+        tokenize: jest.fn(() => Promise.resolve({ tokens: [1, 2, 3] })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, maxTokens: 512, maxTokensMode: 'auto' as const } });
+      await llmService.generateResponse([createUserMessage('Hi')]);
+      expect(ctx.completion.mock.calls[0]![0]!.n_predict).toBeGreaterThan(512);
     });
   });
 
@@ -1752,9 +1765,9 @@ describe('LLMService', () => {
 
       const debugInfo = await llmService.getContextDebugInfo(messages);
 
-      // With native context shifting, all messages are passed through
-      expect(debugInfo.managedMessageCount).toBe(debugInfo.originalMessageCount);
-      expect(debugInfo.truncatedCount).toBe(0);
+      // The active window omits older turns while preserving the original chat.
+      expect(debugInfo.managedMessageCount).toBeLessThan(debugInfo.originalMessageCount);
+      expect(debugInfo.truncatedCount).toBeGreaterThan(0);
     });
 
     it('uses char/4 estimation when tokenize throws in debug info', async () => {
@@ -1881,7 +1894,7 @@ describe('LLMService', () => {
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
-        .rejects.toThrow('Failed to load model at selected context');
+        .rejects.toThrow('Failed to load model even at minimum context');
     });
   });
 
@@ -2061,44 +2074,47 @@ describe('LLMService', () => {
   // ========================================================================
   // Auto context scaling
   // ========================================================================
-  describe('configured context loading', () => {
-    it('passes the selected 4096 context directly without a second init', async () => {
-      setupContextLoadTest({
+  describe('auto context scaling', () => {
+    it('loads at 4096 default context without a second init when model supports ≥4096', async () => {
+      setupScalingTest({
         modelContextLength: '8192',
         userContextLength: 4096, // default
       });
 
       await llmService.loadModel('/models/test.gguf');
 
+      // targetCtx = min(8192, 4096, deviceMax=4096) = 4096 = initial.actualLength → no second init
       expect(initLlama).toHaveBeenCalledTimes(1);
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({ n_ctx: 4096 }),
       );
     });
 
-    it('passes a custom context length directly', async () => {
-      setupContextLoadTest({
+    it('does not scale when user set a custom context length', async () => {
+      setupScalingTest({
         modelContextLength: '8192',
         userContextLength: 1024,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
+      // userIsOnDefault = false → no scaling check
       expect(initLlama).toHaveBeenCalledTimes(1);
-      expect(initLlama).toHaveBeenCalledWith(
-        expect.objectContaining({ n_ctx: 1024 }),
-      );
     });
 
-    it('does not perform a second metadata-driven scaling init', async () => {
-      const [ctx1] = setupContextLoadTest({
+    it('scales up when user is on default and model supports larger ctx than default', async () => {
+      // This can only trigger if deviceMaxCtx > APP_CONFIG.maxContextLength
+      // (e.g. device with >8GB RAM where deviceMaxCtx = 8192)
+      // Simulate by setting userContextLength below deviceMaxCtx
+      const [ctx1] = setupScalingTest({
         modelContextLength: '8192',
-        userContextLength: 2048,
+        userContextLength: 2048, // below default — treated as custom (userIsOnDefault = false)
         contextCount: 1,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
+      // userIsOnDefault = 2048 === 4096 = false → no scaling
       expect(initLlama).toHaveBeenCalledTimes(1);
       expect(ctx1.release).not.toHaveBeenCalled();
     });
@@ -2333,6 +2349,15 @@ describe('LLMService', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       // Clear SoC cache between tests
       (hardwareService as any).cachedSoCInfo = null;
+      jest.spyOn(hardwareService, 'getDeviceInfo').mockResolvedValue({
+        totalMemory: 12 * 1024 ** 3,
+        usedMemory: 2 * 1024 ** 3,
+        availableMemory: 10 * 1024 ** 3,
+        deviceModel: 'Test Snapdragon',
+        systemName: 'Android',
+        systemVersion: '15',
+        isEmulator: false,
+      });
     });
 
     afterEach(() => {
@@ -2345,17 +2370,17 @@ describe('LLMService', () => {
         vendor: 'qualcomm', hasNPU: true, qnnVariant: '8gen3',
       });
 
-      const ctx = createMockLlamaContext();
+      const ctx = createMockLlamaContext({ gpu: true });
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
         settings: { ...useAppStore.getState().settings, inferenceBackend: 'htp' as const, gpuLayers: 99 },
       });
 
-      await llmService.loadModel('/models/test.gguf');
+      await llmService.loadModel('/models/test-Q4_0.gguf');
 
       expect(mockedInitLlama).toHaveBeenCalledWith(
-        expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
+        expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }), expect.any(Function),
       );
     });
 

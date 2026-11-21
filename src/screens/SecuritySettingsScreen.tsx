@@ -19,8 +19,11 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAuthStore } from '../stores';
 import { authService } from '../services';
 import { PassphraseSetupScreen } from './PassphraseSetupScreen';
+import { useChatPrefs } from '../atlasTools/chatPrefs';
 
 export const SecuritySettingsScreen: React.FC = () => {
+  const hideLocked = useChatPrefs((s) => s.hideLockedChats);
+  const setChatPrefs = useChatPrefs((s) => s.set);
   const navigation = useNavigation();
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
@@ -45,9 +48,12 @@ export const SecuritySettingsScreen: React.FC = () => {
             style: 'destructive',
             onPress: () => {
               setAlertState(hideAlert());
-              authService.removePassphrase().then(() => {
-                setAuthEnabled(false);
-              }).catch(() => {});
+              authService.removePassphrase().then((removed) => {
+                if (removed) setAuthEnabled(false);
+                else setAlertState(showAlert('Could not disable lock', 'The secure passphrase could not be removed. The app lock remains enabled.'));
+              }).catch(() => {
+                setAlertState(showAlert('Could not disable lock', 'Secure storage was unavailable. The app lock remains enabled.'));
+              });
             },
           },
         ]
@@ -66,7 +72,7 @@ export const SecuritySettingsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Go back"
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
@@ -103,10 +109,26 @@ export const SecuritySettingsScreen: React.FC = () => {
           )}
         </Card>
 
+        <Card style={styles.section}>
+          <Text style={styles.sectionTitle}>Locked Chats</Text>
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Hide locked chats</Text>
+              <Text style={styles.settingHint}>PIN-locked chats disappear from Chats and Home. To see them, long-press the "Chats" title and enter the PIN. Long-press it again to hide them.</Text>
+            </View>
+            <Switch
+              value={hideLocked}
+              onValueChange={(v) => setChatPrefs({ hideLockedChats: v })}
+              trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
+              thumbColor={hideLocked ? colors.primary : colors.textMuted}
+            />
+          </View>
+        </Card>
+
         <Card style={styles.infoCard}>
           <Icon name="info" size={18} color={colors.textMuted} />
           <Text style={styles.infoText}>
-            When enabled, the app will lock automatically when you switch away or close it. Your passphrase is stored securely on device and never transmitted.
+            The optional app lock is separate from individual chat protection. Ordinary chats are not encrypted by default. A chat you explicitly protect is encrypted with its own Android Keystore key and unlocked by its PIN; the same PIN may protect several chats. Removing protection after verifying the PIN saves that chat normally. Private chats are not persisted. Password-protected manual backups carry protected chats and projects only in sealed form: ones unlocked at backup time open on a new phone with their PIN; ones still locked can be restored only on this phone. Automatic sync is disabled.
           </Text>
         </Card>
       </ScrollView>

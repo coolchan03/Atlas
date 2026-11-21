@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupWithActiveModel } from '../../utils/testHelpers';
@@ -38,6 +38,10 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Navigator tests do not need bundled survival illustrations. Avoid importing real
+// static image assets in the lightweight Jest environment.
+jest.mock('../../../src/survival/images', () => ({ SURVIVAL_IMAGES: {} }));
+
 // Mock navigation
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => {
@@ -56,17 +60,12 @@ jest.mock('@react-navigation/native', () => {
 // Mock services
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(() => Promise.resolve()),
     loadImageModel: jest.fn(() => Promise.resolve()),
     unloadTextModel: jest.fn(() => Promise.resolve()),
     unloadImageModel: jest.fn(() => Promise.resolve()),
     unloadAllModels: jest.fn(() => Promise.resolve({ textUnloaded: true, imageUnloaded: true })),
-    getActiveModels: jest.fn(() => ({
-      text: { model: null, isLoaded: false, isLoading: false },
-      image: { model: null, isLoaded: false, isLoading: false },
-    })),
+    getActiveModels: jest.fn(() => ({ text: null, image: null })),
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' })),
     subscribe: jest.fn(() => jest.fn()),
     getResourceUsage: jest.fn(() => Promise.resolve({
@@ -98,7 +97,7 @@ jest.mock('../../../src/services/hardware', () => ({
   },
 }));
 
-jest.mock('../../../src/utils/haptics', () => ({
+jest.mock('../../../src/services/haptics', () => ({
   triggerHaptic: jest.fn(),
 }));
 
@@ -184,24 +183,60 @@ describe('AppNavigator', () => {
   });
 
   describe('Tab bar rendering', () => {
-    it('renders all five tab labels', () => {
-      const { getAllByText } = renderAppNavigator();
+    it('shows Home, Chats, Workspace and Settings by default, with Models off the bar', () => {
+      const { getAllByText, queryByTestId } = renderAppNavigator();
 
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Projects').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
+      expect(getAllByText('Workspace').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
+      expect(queryByTestId('models-tab')).toBeNull();
     });
 
-    it('renders all tab buttons with testIDs', () => {
+    it('has no Agents tab', () => {
+      const { queryByText } = renderAppNavigator();
+      expect(queryByText('Agents')).toBeNull();
+    });
+
+    it('renders the shown tab buttons with testIDs', () => {
       const { getByTestId } = renderAppNavigator();
 
       expect(getByTestId('home-tab')).toBeTruthy();
       expect(getByTestId('chats-tab')).toBeTruthy();
       expect(getByTestId('projects-tab')).toBeTruthy();
-      expect(getByTestId('models-tab')).toBeTruthy();
       expect(getByTestId('settings-tab')).toBeTruthy();
+    });
+
+    it('puts Models on the bar when the person turns it on, and can add a shortcut', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'survival', 'home'] } } });
+      const { getByTestId, queryByTestId } = renderAppNavigator();
+      expect(getByTestId('models-tab')).toBeTruthy();
+      expect(queryByTestId('home-tab')).toBeNull();
+      expect(getByTestId('settings-tab')).toBeTruthy();
+    });
+
+    it('hides the labels when asked', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { labels: false } } });
+      const { queryByText } = renderAppNavigator();
+      expect(queryByText('Workspace')).toBeNull();
+    });
+  });
+
+  describe('holding a tab', () => {
+    it('opens the thing you most often want from it: Search from Home, Appearance from Settings', async () => {
+      const { getByTestId, findByTestId } = renderAppNavigator();
+      fireEvent(getByTestId('home-tab'), 'longPress');
+      expect(await findByTestId('search-input')).toBeTruthy();
+    });
+  });
+
+  describe('Multicolor accent', () => {
+    it('gives each tab its own color', () => {
+      useAppStore.getState().updateSettings({ appearance: { accent: 'multi' } });
+      const view = renderAppNavigator();
+      const iconColor = (id: string) => view.getByTestId(id).findAll((n: any) => n.props?.size === 22 && n.props?.color).map((n: any) => n.props.color)[0];
+      expect(iconColor('home-tab')).not.toBe(iconColor('chats-tab'));
+      expect(String(iconColor('chats-tab')).toLowerCase()).toMatch(/^#(047857|34d399)$/);
     });
   });
 
@@ -277,12 +312,14 @@ describe('AppNavigator', () => {
       // This is the key regression test: with a 48dp bottom inset (3-button Android nav),
       // all tabs should still be visible and not clipped by the system navigation bar
       mockInsets.bottom = 48;
+      // The fullest bar: all five main tabs on.
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, navBar: { hidden: ['emergency', 'library', 'brief', 'compass', 'phrases', 'recorder', 'language', 'survival'] } } });
       const { getAllByText, getByTestId } = renderAppNavigator();
 
       // All tab labels should be visible
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
-      expect(getAllByText('Projects').length).toBeGreaterThanOrEqual(1);
+      expect(getAllByText('Workspace').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
 

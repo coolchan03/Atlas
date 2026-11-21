@@ -1,0 +1,95 @@
+/**
+ * Cloning a voice: one name, a visible Create voice button that says what is missing, and a saved voice that
+ * carries that name. Fakes only the device boundary.
+ */
+import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
+
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+}));
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(), isErrorWithCode: () => false, errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' }, types: {},
+}));
+
+const MODEL = 'sherpa-onnx-pocket-tts-int8';
+
+function open(opts: { model?: boolean; sample?: boolean; native?: Record<string, unknown> }) {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { NativeModules, Platform, Alert } = require('react-native');
+  Platform.OS = 'android';
+  NativeModules.AtlasTts = { importVoiceReference: jest.fn(), ...opts.native };
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  const { useNeuralVoices } = require('../../../src/atlasVoice/neural');
+  const { useCloneReferences } = require('../../../src/atlasVoice/cloneStore');
+  const { useVoiceProfiles } = require('../../../src/atlasVoice/profiles');
+  useNeuralVoices.setState({ installed: opts.model ? { [MODEL]: 1 } : {} });
+  useCloneReferences.setState({ references: opts.sample ? [{ id: 'ref-1', name: 'My voice', seconds: 12, createdAt: '2026-01-01' }] : [] });
+  useVoiceProfiles.setState({ profiles: [] });
+  const { VoiceCloneCard } = require('../../../src/atlasVoice/VoiceCloneCard');
+  return { rtl, view: rtl.render(React.createElement(VoiceCloneCard)), alert, useCloneReferences, useVoiceProfiles };
+}
+
+it('tells you what is missing before a voice can be created', () => {
+  const { rtl, view } = open({ model: false, sample: false });
+  expect(view.getByText('Turn on the permission switch above first.')).toBeTruthy();
+  rtl.fireEvent(view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  expect(view.getByText('Install the Pocket TTS model in step 1 first.')).toBeTruthy();
+});
+
+it('asks for a sample, then a name, then creates a named voice from the one name field', async () => {
+  const none = open({ model: true, sample: false });
+  none.rtl.fireEvent(none.view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  expect(none.view.getByText('Record or choose a voice sample in step 2 first.')).toBeTruthy();
+  none.view.unmount();
+
+  const { rtl, view, alert, useCloneReferences, useVoiceProfiles } = open({ model: true, sample: true });
+  // Let the saved lists finish loading before the person acts, as they have by the time anyone taps a button.
+  await useVoiceProfiles.persist.rehydrate();
+  await useCloneReferences.persist.rehydrate();
+  rtl.fireEvent(view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  expect(view.getByText('Give the voice a name in step 3.')).toBeTruthy();
+  rtl.fireEvent.changeText(view.getByTestId('voice-clone-name'), 'Mom');
+  expect(view.queryByText('Give the voice a name in step 3.')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('voice-clone-speed-1.2'));
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-clone-create')); });
+  await rtl.waitFor(() => expect(useVoiceProfiles.getState().profiles).toMatchObject([{ name: 'Mom', rate: 1.2, voiceId: MODEL, referenceId: 'ref-1' }]));
+  expect(useCloneReferences.getState().references[0].name).toBe('Mom');
+  expect(alert).toHaveBeenCalledWith('Voice created', expect.any(String), expect.any(Array));
+  // Pressing Create again renames instead of adding a second copy.
+  rtl.fireEvent.changeText(view.getByTestId('voice-clone-name'), 'Mum');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-clone-create')); });
+  await rtl.waitFor(() => expect(useVoiceProfiles.getState().profiles).toMatchObject([{ name: 'Mum' }]));
+});
+
+it('downloads the voice engine inside the app, with no separate download-then-import step', async () => {
+  const installed: Array<{ id: string; bytes: number }> = [];
+  const download = jest.fn(async (_url: string, name: string) => {
+    const id = name.replace(/\.tar\.bz2$/, '');
+    installed.push({ id, bytes: 200e6 });
+    return id;
+  });
+  const { rtl, view } = open({ model: false, sample: false, native: {
+    downloadAndImportNeuralVoice: download, setNeuralVoice: jest.fn(), installedNeuralVoices: jest.fn(async () => installed), addListener: jest.fn(), removeListeners: jest.fn(),
+  } });
+  rtl.fireEvent(view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-clone-download-model')); });
+  expect(download).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/.*pocket-tts.*\.tar\.bz2$/), expect.stringMatching(/pocket-tts.*\.tar\.bz2$/));
+  await rtl.waitFor(() => expect(view.getByText('Installed.')).toBeTruthy());
+});
+
+it('warns before creating a voice from a sample that is too poor to clone well', async () => {
+  const analyze = jest.fn(async () => ({ rating: 'needs-recording', seconds: 12, peak: 1, rmsDb: -40, noiseFloorDb: -20, signalNoiseDb: 5, clippedPercent: 9, quietPercent: 50, trimStartSeconds: 0, trimEndSeconds: 0, advice: ['Record somewhere quieter.'] }));
+  const { rtl, view, alert, useVoiceProfiles } = open({ model: true, sample: true, native: { analyzeVoiceReference: analyze } });
+  rtl.fireEvent(view.getByTestId('voice-clone-consent'), 'valueChange', true);
+  rtl.fireEvent.changeText(view.getByTestId('voice-clone-name'), 'Mom');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('voice-clone-create')); });
+  expect(useVoiceProfiles.getState().profiles).toHaveLength(0);
+  const [title, message, buttons] = alert.mock.calls.at(-1) as [string, string, Array<{ text: string; onPress?: () => void }>];
+  expect(title).toBe('This sample may sound poor');
+  expect(message).toContain('Record somewhere quieter.');
+  rtl.act(() => { buttons.find((b) => b.text === 'Create anyway')!.onPress!(); });
+  expect(useVoiceProfiles.getState().profiles).toMatchObject([{ name: 'Mom' }]);
+});

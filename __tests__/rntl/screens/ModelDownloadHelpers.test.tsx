@@ -18,15 +18,9 @@ jest.mock('../../../src/components', () => ({
   },
 }));
 
-// Hugging Face is the remote boundary. ModelDownloadHelpers now reaches it through
-// modelCatalogFiles, so both import paths must resolve to the same controlled adapter.
-jest.mock('../../../src/services/huggingface', () => ({
+jest.mock('../../../src/services', () => ({
   huggingFaceService: { getModelFiles: jest.fn() },
 }));
-
-jest.mock('../../../src/services', () =>
-  jest.requireMock('../../../src/services/huggingface'),
-);
 
 jest.mock('../../../src/utils/logger', () => ({
   __esModule: true,
@@ -143,7 +137,7 @@ describe('NetworkSection', () => {
   it('shows empty text when no servers and not checking', () => {
     const { getByText } = render(<NetworkSection {...defaultNetworkProps} />);
     expect(
-      getByText('No Off Grid AI Desktop, Ollama, or LM Studio server found. Scan again or add one.'),
+      getByText(/No servers found\. Make sure you're on the same Wi-Fi/),
     ).toBeTruthy();
   });
 

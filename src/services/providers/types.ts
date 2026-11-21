@@ -26,8 +26,6 @@ export interface ProviderCapabilities {
    * gates on this flag instead of sniffing the port.
    */
   acceptsThinkingKwarg?: boolean;
-  /** This model accepts thinking levels, but cannot turn thinking off. */
-  thinkingLevelsOnly?: boolean;
   /** Maximum context window length (if known) */
   maxContextLength?: number;
   /** Provider name for display */
@@ -40,8 +38,6 @@ export interface CompletionResult {
   content: string;
   /** Reasoning/thinking content (if supported) */
   reasoningContent?: string;
-  /** Structured provider reasoning that must be replayed unchanged during tool use. */
-  reasoningDetails?: Array<Record<string, unknown>>;
   /** Generation metadata */
   meta?: GenerationMeta;
   /** Tool calls made (if any) */
@@ -80,8 +76,6 @@ export interface GenerationOptions {
   stopSequences?: string[];
   /** Whether to enable thinking/reasoning mode (Ollama: sends "think" param; others: parsed from response) */
   enableThinking?: boolean;
-  /** User's existing thinking budget; providers translate it when they support levels. */
-  reasoningBudget?: number;
 }
 
 /** Tool definition for function calling */
@@ -169,3 +163,4 @@ export interface LLMProvider {
   /** Clean up resources */
   dispose?(): Promise<void>;
 }
+

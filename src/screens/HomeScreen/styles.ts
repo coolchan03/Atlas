@@ -9,27 +9,16 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     flex: 1,
   },
   content: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.xs,
+    padding: 20,
+    paddingBottom: 32,
   },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginBottom: SPACING.md,
+    marginBottom: 20,
   },
   headerLeft: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.sm,
-  },
-  appLogo: {
-    width: SPACING.xxl + SPACING.sm,
-    height: SPACING.xxl + SPACING.sm,
-  },
-  headerActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
@@ -121,7 +110,7 @@ const createModelCardStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontWeight: '500' as const,
   },
   newChatButton: {
-    marginBottom: SPACING.md,
+    marginBottom: 20,
   },
 });
 const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
@@ -130,10 +119,9 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    marginBottom: SPACING.md,
-    gap: SPACING.md,
+    padding: 16,
+    marginBottom: 20,
+    gap: 16,
     ...shadows.small,
   },
   galleryCardInfo: {
@@ -152,11 +140,11 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   desktopCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    padding: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: colors.primary,
-    gap: SPACING.sm,
+    gap: 10,
     ...shadows.small,
   },
   desktopCardHeader: {
@@ -211,30 +199,11 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
   },
-  supportCard: {
-    marginBottom: SPACING.md,
-    gap: SPACING.md,
-  },
-  supportHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.sm,
-  },
-  supportTitle: {
-    ...TYPOGRAPHY.h3,
-    color: colors.text,
-    flex: 1,
-  },
-  supportDescription: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textSecondary,
-  },
   setupCard: {
     alignItems: 'center' as const,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    marginBottom: SPACING.md,
-    gap: SPACING.sm,
+    padding: 20,
+    marginBottom: 20,
+    gap: 12,
   },
   setupActions: {
     flexDirection: 'row' as const,
@@ -246,13 +215,13 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textAlign: 'center' as const,
   },
   section: {
-    marginBottom: SPACING.md,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: SPACING.sm + SPACING.xs,
+    marginBottom: 12,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
@@ -269,7 +238,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 10,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm + 2,
-    marginBottom: SPACING.sm + SPACING.xs,
+    marginBottom: SPACING.md,
     ...shadows.small,
   },
   conversationInfo: {
@@ -301,7 +270,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     width: 44,
     borderRadius: 10,
-    marginBottom: SPACING.sm + SPACING.xs,
+    marginBottom: SPACING.md,
     marginLeft: SPACING.sm,
   },
   statsRow: {

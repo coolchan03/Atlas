@@ -1,6 +1,6 @@
 import type { ThemeColors, ThemeShadows } from '../../theme';
 
-export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -24,7 +24,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surfaceLight,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    ...shadows.small,
   },
   buttonAsSend: {
     width: 44,
@@ -58,8 +57,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     height: 44,
     borderRadius: 22,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.primary,
+    borderTopColor: 'transparent',
   },
   // Background STT download (send-slot footprint): a STATIC determinate ring —
   // per-quadrant border colors are set from ringQuadrants at render. Matches the
@@ -76,24 +76,26 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderWidth: 2,
   },
-  // Audio (voice) mode loading/transcribing: a 56px dot-loader surface that matches the
-  // buttonAudio mic footprint exactly, so the center slot keeps one size across
+  // Audio (voice) mode loading/transcribing: a 56px spinner ring that matches the
+  // buttonAudio mic footprint EXACTLY, so the center slot keeps one size across
   // mic / loading / transcribing / stop — the bottom bar never grows or shrinks.
   buttonAudioLoading: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.primary,
+    borderTopColor: 'transparent',
   },
   buttonAudioTranscribing: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.info,
+    borderTopColor: 'transparent',
   },
   buttonRecording: {
     backgroundColor: colors.primary,

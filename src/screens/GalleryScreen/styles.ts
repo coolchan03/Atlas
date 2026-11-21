@@ -2,10 +2,14 @@ import { StyleSheet, Dimensions } from 'react-native';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 
-const { width: screenWidth } = Dimensions.get('window');
-export const COLUMN_COUNT = 3;
+const COLUMN_COUNT = 3;
 const GRID_SPACING = 4;
-const CELL_SIZE = (screenWidth - GRID_SPACING * (COLUMN_COUNT + 1)) / COLUMN_COUNT;
+const TARGET_CELL = 130;
+/** Columns for the window as it is now: 3 on a phone in portrait, more on a wider window (landscape, unfolded, tablet) so pictures keep a sensible size. */
+export const galleryColumns = (windowWidth: number): number => Math.max(COLUMN_COUNT, Math.round(windowWidth / TARGET_CELL));
+/** Cell size for a window width and column count. */
+export const galleryCell = (windowWidth: number, columns: number): number => Math.floor((windowWidth - GRID_SPACING * (columns + 1)) / columns);
+const CELL_SIZE = galleryCell(360, COLUMN_COUNT); // only a fallback: GridItem sets the real size from the live window
 
 const createHeaderStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {

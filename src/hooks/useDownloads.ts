@@ -1,3 +1,4 @@
+import logger from '../utils/logger';
 import { useEffect } from 'react';
 import { backgroundDownloadService } from '../services/backgroundDownloadService';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
@@ -29,7 +30,7 @@ export function useDownloadListeners() {
       // Status transitions from native (retrying / waiting_for_network) come
       // through Progress events. Don't treat them like normal byte updates —
       // route them to setStatus so the UI reflects the actual state.
-      if (event.status === 'retrying' || event.status === 'waiting_for_network' || event.status === 'paused') {
+      if (event.status === 'retrying' || event.status === 'waiting_for_network') {
         useDownloadStore.getState().setStatus(event.downloadId, event.status);
         return;
       }
@@ -39,7 +40,7 @@ export function useDownloadListeners() {
       } else if (entry.mmProjDownloadId === event.downloadId) {
         useDownloadStore.getState().updateMmProjProgress(event.downloadId, event.bytesDownloaded);
       } else {
-        console.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
+        logger.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
       }
     });
 
@@ -130,7 +131,6 @@ export function useDownloads() {
     // inline list omitted 'retrying'/'waiting_for_network', which isActiveStatus counts.
     active: Object.values(downloads).filter(d => isActiveStatus(d.status)),
     failed: Object.values(downloads).filter(d => d.status === 'failed'),
-    paused: Object.values(downloads).filter(d => d.status === 'paused'),
     completed: Object.values(downloads).filter(d => d.status === 'completed'),
     cancel,
     retry,

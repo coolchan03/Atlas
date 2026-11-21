@@ -37,7 +37,6 @@ function buildAssistantToolCallMessage(msg: Message): OpenAIChatMessage {
   return {
     role: 'assistant',
     content: msg.content || '',
-    ...(msg.reasoningDetails?.length ? { reasoning_details: msg.reasoningDetails } : {}),
     tool_calls: (msg.toolCalls || []).map(tc => ({
       id: tc.id || `call_${generateId()}`,
       type: 'function' as const,

@@ -1,13 +1,13 @@
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 import {
   maybeScheduleSharePrompt,
   resetSharePromptSession,
   subscribeSharePrompt,
   emitSharePrompt,
-  rateOnStore,
+  shareOnX,
 } from '../../../src/utils/sharePrompt';
 
-describe('maybeScheduleSharePrompt — at most once per session', () => {
+describe('maybeScheduleSharePrompt — Atlas promotional prompts disabled', () => {
   beforeEach(() => { jest.useFakeTimers(); resetSharePromptSession(); });
   afterEach(() => { jest.useRealTimers(); });
 
@@ -18,13 +18,13 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
     try { fn(emits); } finally { unsub(); }
   }
 
-  it('emits ONCE per session even when triggered many times (no 2/10/20 re-show)', () => {
+  it('never emits even when triggered many times', () => {
     withListener(emits => {
       for (const count of [2, 3, 10, 20, 50]) {
         maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: false, delayMs: 0 });
       }
       jest.runOnlyPendingTimers();
-      expect(emits).toEqual(['text']); // exactly one, not one per milestone
+      expect(emits).toEqual([]);
     });
   });
 
@@ -44,54 +44,32 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
     });
   });
 
-  it('emits again in a NEW session (after resetSharePromptSession)', () => {
+  it('remains disabled in a new session after reset', () => {
     withListener(emits => {
       maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
-      resetSharePromptSession(); // relaunch = new session
+      resetSharePromptSession();
       maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
-      expect(emits).toEqual(['image', 'image']); // once each session
+      expect(emits).toEqual([]);
     });
   });
 });
 
-describe('rateOnStore', () => {
+describe('shareOnX', () => {
   const openURL = Linking.openURL as jest.Mock;
-  const canOpenURL = Linking.canOpenURL as jest.Mock;
-  const originalPlatform = Platform.OS;
 
   beforeEach(() => {
     openURL.mockReset().mockResolvedValue(undefined);
-    canOpenURL.mockReset().mockResolvedValue(false);
   });
 
-  afterAll(() => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
-  });
-
-  it('opens the App Store review page on iOS', async () => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
-    await rateOnStore();
-    expect(openURL).toHaveBeenCalledWith(
-      'https://apps.apple.com/app/id6759299882?action=write-review',
-    );
-    expect(canOpenURL).not.toHaveBeenCalled();
-  });
-
-  it('opens the Play Store app on Android when it is available', async () => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
-    canOpenURL.mockResolvedValue(true);
-    await rateOnStore();
-    expect(openURL).toHaveBeenCalledWith('market://details?id=ai.offgridmobile');
-  });
-
-  it('opens the Play Store web page when the Android app is unavailable', async () => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
-    await rateOnStore();
-    expect(openURL).toHaveBeenCalledWith(
-      'https://play.google.com/store/apps/details?id=ai.offgridmobile',
-    );
+  it('opens the X web intent prefilled with the share text, ready to post', async () => {
+    await shareOnX();
+    expect(openURL).toHaveBeenCalledTimes(1);
+    const url = openURL.mock.calls[0][0];
+    expect(url).toMatch(/^https:\/\/x\.com\/intent\/post\?text=/);
+    expect(decodeURIComponent(url)).toContain('Off Grid AI is background intelligence');
+    expect(decodeURIComponent(url)).toContain('getoffgridai.co/early-access');
   });
 });
 

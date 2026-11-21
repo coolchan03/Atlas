@@ -3,11 +3,8 @@ import { FONTS, TYPOGRAPHY, SPACING } from '../../constants';
 import { Platform } from 'react-native';
 
 export const PILL_ICON_SIZE = 32;
-export const ANIM_DURATION_IN = 180;
-export const ANIM_DURATION_OUT = 200;
-const TOOL_WARNING_COLOR = '#F59E0B';
 
-export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -112,11 +109,13 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden' as const,
     paddingLeft: 16,
     paddingRight: 4,
     paddingVertical: 6,
     minHeight: 56,
-    ...shadows.small,
   },
   pillInput: {
     flex: 1,
@@ -129,24 +128,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingTop: Platform.OS === 'ios' ? 10 : 6,
     paddingBottom: Platform.OS === 'ios' ? 10 : 6,
     paddingRight: 4,
-  },
-  assistantButton: {
-    width: 36,
-    height: 44,
-    marginLeft: -SPACING.sm,
-    marginRight: SPACING.xs,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  assistantGateContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.xl,
-    gap: SPACING.lg,
-  },
-  assistantGateText: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
   },
   // Push-to-talk hint that replaces the text field while holding to record: a recording dot on the
   // left, "‹ Slide to cancel" centred (the mic sits to the right, outside the pill).
@@ -196,15 +177,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   iconWrapper: {
     position: 'relative' as const,
   },
-  toolWarningDot: {
-    position: 'absolute' as const,
-    top: -2,
-    right: -2,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: TOOL_WARNING_COLOR,
-  },
   // Small badge on image gen icon
   iconBadge: {
     position: 'absolute' as const,
@@ -241,7 +213,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     backgroundColor: colors.primary,
-    ...shadows.small,
   },
   circleButtonStop: {
     backgroundColor: `${colors.error}`,
@@ -259,6 +230,8 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   circleButtonIdle: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   visionBadge: {
     backgroundColor: `${colors.primary}20`,
@@ -288,10 +261,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: SPACING.sm,
     height: 32,
     borderRadius: 16,
-  },
-  audioControlButton: {
-    backgroundColor: colors.surface,
-    ...shadows.small,
   },
   audioVoiceLabel: {
     ...TYPOGRAPHY.meta,

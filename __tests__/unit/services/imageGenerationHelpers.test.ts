@@ -168,7 +168,7 @@ describe('buildImageGenMeta', () => {
     (Platform as any).OS = 'ios';
     const meta = buildImageGenMeta(baseModel, baseOpts);
     expect(meta.gpu).toBe(true);
-    expect(meta.gpuBackend).toBe('Core ML (ANE)');
+    expect(meta.gpuBackend).toBe('Core ML (accelerator selected by OS)');
   });
 
   it('includes model name, steps, guidanceScale, resolution', () => {
@@ -190,7 +190,7 @@ describe('buildImageGenMeta', () => {
     (Platform as any).OS = 'android';
     const meta = buildImageGenMeta({ ...baseModel, backend: 'mnn' }, { ...baseOpts, useOpenCL: true });
     expect(meta.gpu).toBe(true);
-    expect(meta.gpuBackend).toBe('MNN (GPU)');
+    expect(meta.gpuBackend).toBe('MNN (OpenCL requested; compute unverified)');
   });
 
   it('returns MNN CPU when useOpenCL is false and backend is mnn on android', () => {

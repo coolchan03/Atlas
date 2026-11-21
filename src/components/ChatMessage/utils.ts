@@ -6,8 +6,10 @@ export { parseThinkingContent, parseModelOutput } from '../../utils/messageConte
 
 
 
-/** A message's time, from the one formatter that answers in the device's own zone. */
-export { formatClockTime as formatTime } from '../../utils/localTime';
+export function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 export function formatDuration(ms: number): string {
   if (ms < 1000) {
@@ -22,35 +24,7 @@ export function formatDuration(ms: number): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-export type MessageData = { displayContent: string; parsedContent: ParsedContent };
-
-/**
- * Parsed once per message, not once per render.
- *
- * Reasoning-splitting and markdown-preparation used to run on EVERY render of every visible row: a
- * screen-wide re-render re-parsed the whole transcript. Committed message objects keep their
- * identity across renders (getDisplayMessages spreads the same objects), so keying on the object
- * makes the parse happen when the domain projection changes and never again. The content is
- * re-checked so a message edited in place cannot serve a stale parse, and the map is weak so a
- * closed conversation - or a per-token live row - is collected normally.
- */
-const parsedMessages = new WeakMap<Message, { content: string; reasoningContent?: string; data: MessageData }>();
-
-export function buildMessageData(message: Message): MessageData {
-  const cached = parsedMessages.get(message);
-  if (
-    cached &&
-    cached.content === message.content &&
-    cached.reasoningContent === message.reasoningContent
-  ) {
-    return cached.data;
-  }
-  const data = parseMessageData(message);
-  parsedMessages.set(message, { content: message.content, reasoningContent: message.reasoningContent, data });
-  return data;
-}
-
-function parseMessageData(message: Message): MessageData {
+export function buildMessageData(message: Message): { displayContent: string; parsedContent: ParsedContent } {
   // Non-assistant messages carry no model markup — pass content straight through.
   if (message.role !== 'assistant') {
     return { displayContent: message.content, parsedContent: { thinking: null, response: message.content, isThinkingComplete: true } };
@@ -61,6 +35,6 @@ function parseMessageData(message: Message): MessageData {
   const parsed = parseModelOutput(message.content, message.reasoningContent);
   return {
     displayContent: parsed.answer,
-    parsedContent: { thinking: parsed.reasoning, response: parsed.answer, isThinkingComplete: message.isStreaming ? parsed.isReasoningComplete : true, thinkingLabel: parsed.reasoningLabel },
+    parsedContent: { thinking: parsed.reasoning, response: parsed.answer, isThinkingComplete: parsed.isReasoningComplete, thinkingLabel: parsed.reasoningLabel },
   };
 }

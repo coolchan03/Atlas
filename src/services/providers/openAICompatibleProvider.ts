@@ -6,7 +6,6 @@
  */
 
 import { Message } from '../../types';
-import { openRouterReasoningPayload, reasoningBudgetPayload, REASONING_BUDGET_AUTO } from '@offgrid/models';
 import type {
   LLMProvider,
   ProviderType,
@@ -23,7 +22,6 @@ import type {
   OpenAIConfig,
   OpenAIStreamState,
 } from './openAICompatibleTypes';
-import { remoteAuthorizationHeaders } from '../remoteTransportPolicy';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';
 
@@ -92,7 +90,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
     options: GenerationOptions,
     thinkingEnabled: boolean
   ): Record<string, unknown> {
-    const isOpenRouter = new URL(this.config.endpoint).hostname === 'openrouter.ai';
     return {
       model: this.config.modelId,
       messages: openaiMessages,
@@ -102,23 +99,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // A client-side cap (default 1024) silently truncates reasoning models that
       // need a larger budget for <think> blocks (Qwen3, DeepSeek-R1, etc).
       ...(options.topP !== undefined && { top_p: options.topP }),
-      ...(this.modelCapabilities.supportsToolCalling && options.tools && options.tools.length > 0 && {
-        tools: options.tools,
-        tool_choice: 'auto',
-      }),
+      ...(this.modelCapabilities.supportsToolCalling && options.tools && options.tools.length > 0 && { tools: options.tools, tool_choice: 'auto' }),
       // Control Qwen3 thinking per-request via chat_template_kwargs, but only for
       // servers that advertised (at discovery) that they honor it. Gating on a
       // discovered capability — not the endpoint's port — keeps the "which server
       // accepts this?" decision in one place and free of implementation coupling.
       ...(this.modelCapabilities.acceptsThinkingKwarg && { chat_template_kwargs: { enable_thinking: thinkingEnabled } }),
-      ...(this.config.modelId.startsWith('remote-vision:') && this.modelCapabilities.acceptsThinkingKwarg
-        ? reasoningBudgetPayload(thinkingEnabled, options.reasoningBudget ?? REASONING_BUDGET_AUTO)
-        : {}),
-      ...(isOpenRouter && this.modelCapabilities.supportsThinking
-        ? thinkingEnabled
-          ? openRouterReasoningPayload(true, options.reasoningBudget ?? REASONING_BUDGET_AUTO)
-          : { reasoning: { effort: 'none' } }
-        : {}),
     };
   }
 
@@ -136,13 +122,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // Capture signal in closure so abort checks remain valid even after
     // this.abortController is nulled by stopGeneration().
     const { signal } = this.abortController;
-    let streamError: Error | null = null;
 
     try {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
-      const thinkingEnabled =
-        this.modelCapabilities.thinkingLevelsOnly ||
-        options.enableThinking !== false;
+      const thinkingEnabled = options.enableThinking !== false;
 
       logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
 
@@ -152,7 +135,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           options, callbacks, signal,
           endpoint: this.config.endpoint,
           modelId: this.config.modelId,
-          thinkingLevelsOnly: this.modelCapabilities.thinkingLevelsOnly,
+          apiKey: this.config.apiKey,
           abort: () => this.abortController?.abort(),
         });
       }
@@ -163,7 +146,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       };
-      Object.assign(headers, remoteAuthorizationHeaders(this.config.endpoint, this.config.apiKey));
+      if (this.config.apiKey) {
+        headers.Authorization = `Bearer ${this.config.apiKey}`;
+      }
 
       let baseUrl = this.config.endpoint;
       while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
@@ -171,13 +156,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
       const state: OpenAIStreamState = {
         fullContent: '', fullReasoningContent: '',
-        reasoningDetails: [],
         toolCalls: [], currentToolCall: null,
         completeCalled: false, streamErrorOccurred: false,
       };
       const thinkTagParser = new ThinkTagParser();
 
-      await createStreamingRequest(url, { body: requestBody, headers, signal }, (event) => {
+      await createStreamingRequest(url, { body: requestBody, headers, timeout: 300000, signal }, (event) => {
         if (signal.aborted) return;
         const message = parseOpenAIMessage(event);
         if (!message) return;
@@ -185,7 +169,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (message.error) {
           logger.error(`[Provider][DEBUG] Stream error: ${JSON.stringify(message.error)}`);
           state.streamErrorOccurred = true;
-          streamError = new Error(message.error.message || 'API error');
+          callbacks.onError(new Error(message.error.message || 'API error'));
           this.abortController?.abort();
           return;
         }
@@ -199,18 +183,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
           if (choice.finish_reason) {
             logger.log(`[Provider][DEBUG] finish_reason=${choice.finish_reason}, fullContent=${state.fullContent.length}, reasoning=${state.fullReasoningContent.length}, toolCalls=${state.toolCalls.length}`);
           }
-          if (
-            !state.completeCalled &&
-            (choice.finish_reason === 'stop' ||
-              choice.finish_reason === 'tool_calls')
-          ) {
+          if (choice.finish_reason === 'stop' || choice.finish_reason === 'tool_calls') {
             state.completeCalled = true;
             const completedCalls = state.toolCalls.filter(tc => tc.function?.name);
             logger.log(`[Provider][DEBUG] Completing — content=${state.fullContent.length} chars, reasoning=${state.fullReasoningContent.length} chars, completedCalls=${completedCalls.length}`);
             callbacks.onComplete({
               content: state.fullContent,
               reasoningContent: state.fullReasoningContent || undefined,
-              reasoningDetails: state.reasoningDetails?.length ? state.reasoningDetails : undefined,
               meta: { gpu: false, gpuBackend: 'Remote' },
               toolCalls: completedCalls.length > 0 ? completedCalls.map(tc => ({
                 id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
@@ -220,8 +199,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
         }
       });
 
-      if (streamError) throw streamError;
-
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
       // 'content_filter', null), ensure the generation is finalised.
       if (!state.completeCalled && !state.streamErrorOccurred) {
@@ -230,7 +207,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
         callbacks.onComplete({
           content: state.fullContent,
           reasoningContent: state.fullReasoningContent || undefined,
-          reasoningDetails: state.reasoningDetails?.length ? state.reasoningDetails : undefined,
           meta: { gpu: false, gpuBackend: 'Remote' },
           toolCalls: completedCalls.length > 0 ? completedCalls.map(tc => ({
             id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
@@ -238,10 +214,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
         });
       }
     } catch (error) {
-      if (streamError) {
-        callbacks.onError(streamError);
-        return;
-      }
       if (signal.aborted) {
         callbacks.onComplete({ content: '', meta: { gpu: false } });
         return;

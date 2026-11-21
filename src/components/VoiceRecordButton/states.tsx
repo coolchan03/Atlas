@@ -1,8 +1,7 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Animated } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
-import { LoadingDots } from '../LoadingDots';
 import { createStyles } from './styles';
 import { ringQuadrants } from './derive';
 
@@ -10,15 +9,23 @@ import { ringQuadrants } from './derive';
 
 interface LoadingStateProps {
   asSendButton: boolean;
+  loadingAnim: Animated.Value;
 }
 
-export const LoadingState: React.FC<LoadingStateProps> = ({ asSendButton }) => {
+export const LoadingState: React.FC<LoadingStateProps> = ({ asSendButton, loadingAnim }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const spin = loadingAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  // Audio mode: a 56px spinner ring sized exactly like the mic (no smaller button +
+  // "Loading…" text), so the bottom bar height doesn't shift while the model loads.
+  if (!asSendButton) {
+    return <Animated.View testID="voice-loading" style={[styles.button, styles.buttonAudioLoading, { transform: [{ rotate: spin }] }]} />;
+  }
   return (
-    <View testID="voice-loading" style={[styles.button, asSendButton ? styles.buttonAsSendLoading : styles.buttonAudioLoading]}>
-      <LoadingDots color={colors.primary} size={asSendButton ? 4 : 5} />
-    </View>
+    <Animated.View testID="voice-loading" style={[styles.button, styles.buttonAsSendLoading, { transform: [{ rotate: spin }] }]}>
+      <Icon name="mic" size={18} color={colors.primary} />
+    </Animated.View>
   );
 };
 
@@ -26,15 +33,22 @@ export const LoadingState: React.FC<LoadingStateProps> = ({ asSendButton }) => {
 
 interface TranscribingStateProps {
   asSendButton: boolean;
+  loadingAnim: Animated.Value;
 }
 
-export const TranscribingState: React.FC<TranscribingStateProps> = ({ asSendButton }) => {
+export const TranscribingState: React.FC<TranscribingStateProps> = ({ asSendButton, loadingAnim }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const spin = loadingAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  // Audio mode: 56px ring matching the mic footprint (see LoadingState).
+  if (!asSendButton) {
+    return <Animated.View style={[styles.button, styles.buttonAudioTranscribing, { transform: [{ rotate: spin }] }]} />;
+  }
   return (
-    <View style={[styles.button, asSendButton ? styles.buttonAsSendLoading : styles.buttonAudioTranscribing]}>
-      <LoadingDots color={colors.info} size={asSendButton ? 4 : 5} />
-    </View>
+    <Animated.View style={[styles.button, styles.buttonAsSendLoading, { transform: [{ rotate: spin }] }]}>
+      <Icon name="mic" size={18} color={colors.info} />
+    </Animated.View>
   );
 };
 

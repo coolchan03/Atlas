@@ -18,12 +18,12 @@
 
 /** Model families whose GGUF chat templates emit native reasoning (thinking). */
 export const GGUF_THINKING_NAME_PATTERNS: readonly string[] = [
-  'gemma-4', 'gemma4', 'qwen3', 'deepseek-r1', 'smollm3', 'gpt-oss', 'magistral', 'minicpm5',
+  'gemma-4', 'gemma4', 'qwen3', 'deepseek-r1', 'smollm3', 'gpt-oss', 'magistral',
 ];
 
 /** Model families whose GGUF chat templates support tool calling. */
 export const GGUF_TOOLS_NAME_PATTERNS: readonly string[] = [
-  'gemma-4', 'gemma4', 'qwen', 'llama-3', 'llama3', 'mistral', 'smollm3', 'deepseek', 'gpt-oss', 'hermes', 'minicpm5',
+  'gemma-4', 'gemma4', 'qwen', 'llama-3', 'llama3', 'mistral', 'smollm3', 'deepseek', 'gpt-oss', 'hermes',
 ];
 
 export interface PredictedGgufCapabilities {

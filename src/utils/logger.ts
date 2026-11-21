@@ -3,6 +3,8 @@
 // which jest does NOT mock — so the source's [X-SM] state-machine traces become visible while debugging a
 // test, without patching the logger per-test or sprinkling process.stderr.write through the source. Opt-in
 // so normal test runs stay quiet.
+import { noteAppLog } from './appLog';
+
 const stderrDebug =
   typeof process !== 'undefined' &&
   !!process.env?.JEST_WORKER_ID &&
@@ -22,14 +24,17 @@ const toStderr = (level: string, args: unknown[]): void => {
 const logger = {
   log: (...args: unknown[]): void => {
     toStderr('log', args);
+    noteAppLog('log', args);
     if (__DEV__) console.log(...args); // NOSONAR
   },
   warn: (...args: unknown[]): void => {
     toStderr('warn', args);
+    noteAppLog('warn', args);
     if (__DEV__) console.warn(...args); // NOSONAR
   },
   error: (...args: unknown[]): void => {
     toStderr('error', args);
+    noteAppLog('error', args);
     if (__DEV__) console.error(...args); // NOSONAR
   },
 };

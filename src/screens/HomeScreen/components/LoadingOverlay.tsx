@@ -53,13 +53,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginTop: SPACING.xl,
     overflow: 'hidden' as const,
   },
-  // Full width and clipped by the track, so sliding it in from the left reads as a fill.
   progressBar: {
-    width: PROGRESS_TRACK_WIDTH,
     height: 3,
     borderRadius: 2,
     backgroundColor: colors.primary,
-    alignSelf: 'flex-start' as const,
   },
   tipCard: {
     flexDirection: 'row' as const,
@@ -126,7 +123,7 @@ export const LoadingOverlay: React.FC<Props> = ({ loadingState }) => {
         toValue: PROGRESS_CEILING,
         duration: PROGRESS_DURATION_MS,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: false,
       });
       anim.start();
       return () => anim.stop();
@@ -137,7 +134,7 @@ export const LoadingOverlay: React.FC<Props> = ({ loadingState }) => {
         toValue: 1,
         duration: 300,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: false,
       });
       finish.start(({ finished }) => {
         if (finished) {
@@ -173,13 +170,9 @@ export const LoadingOverlay: React.FC<Props> = ({ loadingState }) => {
   }, [loadingState.isLoading, tipOpacity]);
 
   const tip = LOADING_TIPS[tipIndex];
-  // A full-width bar slid in from the left inside a clipping track, rather than an animated width.
-  // Transform and opacity are the only properties the native driver can animate, and this bar has to
-  // keep moving while the JS thread is loading a model - a bar that stutters reports a hang that is
-  // not happening. translateX rather than scaleX so the fill is exact and needs no origin correction.
-  const barOffset = progress.interpolate({
+  const barWidth = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [-PROGRESS_TRACK_WIDTH, 0],
+    outputRange: ['0%', '100%'],
   });
 
   return (
@@ -199,12 +192,7 @@ export const LoadingOverlay: React.FC<Props> = ({ loadingState }) => {
           </Text>
 
           <View style={styles.progressTrack}>
-            <Animated.View
-              style={[
-                styles.progressBar,
-                { transform: [{ translateX: barOffset }] },
-              ]}
-            />
+            <Animated.View style={[styles.progressBar, { width: barWidth }]} />
           </View>
 
           <View style={styles.tipCard}>

@@ -55,15 +55,14 @@ jest.mock('../../../src/components/Button', () => ({
 
 const mockSetOnboardingComplete = jest.fn();
 
-jest.mock('../../../src/stores', () => {
-  // Getters resolve lazily at access time so the `mock*` closures are defined by then.
-  const state = {
-    get setOnboardingComplete() { return mockSetOnboardingComplete; },
-  };
-  const useAppStore: any = jest.fn((selector?: any) => (selector ? selector(state) : state));
-  useAppStore.getState = () => state;
-  return { useAppStore };
-});
+jest.mock('../../../src/stores', () => ({
+  useAppStore: jest.fn((selector?: any) => {
+    const state = {
+      setOnboardingComplete: mockSetOnboardingComplete,
+    };
+    return selector ? selector(state) : state;
+  }),
+}));
 
 jest.mock('../../../src/constants', () => ({
   ...jest.requireActual('../../../src/constants'),
@@ -85,8 +84,31 @@ jest.mock('../../../src/constants', () => ({
   ],
 }));
 
+const mockDiscoverLANServers = jest.fn().mockResolvedValue([]);
+jest.mock('../../../src/services/networkDiscovery', () => ({
+  discoverLANServers: (...args: any[]) => mockDiscoverLANServers(...args),
+}));
+
+const mockAddServer = jest.fn().mockResolvedValue({ id: 'new-server' });
+jest.mock('../../../src/services', () => ({
+  remoteServerManager: {
+    addServer: (...args: any[]) => mockAddServer(...args),
+  },
+}));
+
+jest.mock('../../../src/stores/remoteServerStore', () => ({
+  useRemoteServerStore: Object.assign(
+    jest.fn((selector?: any) => {
+      const state = { servers: [] };
+      return selector ? selector(state) : state;
+    }),
+    {
+      getState: jest.fn(() => ({ servers: [] })),
+    },
+  ),
+}));
+
 import { OnboardingScreen } from '../../../src/screens/OnboardingScreen';
-import { WEDNESDAY_URL } from '../../../src/constants';
 
 const mockNavigate = jest.fn();
 const mockReset = jest.fn();
@@ -138,7 +160,7 @@ describe('OnboardingScreen', () => {
     fireEvent.press(getByText('Skip'));
 
     expect(mockSetOnboardingComplete).toHaveBeenCalledWith(true);
-    expect(mockReplace).toHaveBeenCalledWith('AutoSetup');
+    expect(mockReplace).toHaveBeenCalledWith('ModelDownload');
   });
 
   it('does not complete onboarding when Next is pressed on non-last slide', () => {
@@ -199,16 +221,71 @@ describe('OnboardingScreen', () => {
     expect(getByTestId('onboarding-next')).toBeTruthy();
   });
 
-  it('opens correct Wednesday URL when tapping Made with love', () => {
-    const { Linking } = require('react-native');
-    const spy = jest
-      .spyOn(Linking, 'openURL')
-      .mockImplementation(() => Promise.resolve());
-    const { getByText } = render(<OnboardingScreen navigation={navigation} />);
-    fireEvent.press(getByText('Wednesday'));
-    expect(spy).toHaveBeenCalledWith(WEDNESDAY_URL);
-    expect(WEDNESDAY_URL).toBe('https://wednesday.is');
-    spy.mockRestore();
+  it('kicks off LAN discovery on mount', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    mockDiscoverLANServers.mockResolvedValue([
+      {
+        endpoint: 'http://192.168.1.10:11434',
+        type: 'ollama',
+        name: 'Ollama (192.168.1.10)',
+      },
+    ]);
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockDiscoverLANServers).toHaveBeenCalled();
+    expect(mockAddServer).toHaveBeenCalledWith({
+      name: 'Ollama (192.168.1.10)',
+      endpoint: 'http://192.168.1.10:11434',
+      providerType: 'openai-compatible',
+    });
+  });
+
+  it('does not add duplicate servers during LAN discovery', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    const {
+      useRemoteServerStore,
+    } = require('../../../src/stores/remoteServerStore');
+    useRemoteServerStore.getState.mockReturnValue({
+      servers: [{ endpoint: 'http://192.168.1.10:11434' }],
+    });
+    mockDiscoverLANServers.mockResolvedValue([
+      { endpoint: 'http://192.168.1.10:11434', type: 'ollama', name: 'Ollama' },
+    ]);
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockAddServer).not.toHaveBeenCalled();
+  });
+
+  it('handles LAN discovery errors gracefully', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    mockDiscoverLANServers.mockRejectedValue(new Error('Network error'));
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Should not throw — error is caught
+    expect(mockDiscoverLANServers).toHaveBeenCalled();
+  });
+
+  it('does not render the removed Wednesday promotional link', () => {
+    const { queryByText } = render(<OnboardingScreen navigation={navigation} />);
+    expect(queryByText('Wednesday')).toBeNull();
   });
 
   it('completes onboarding when Get Started pressed on last slide', async () => {
@@ -236,6 +313,6 @@ describe('OnboardingScreen', () => {
     fireEvent.press(getByTestId('onboarding-next'));
 
     expect(mockSetOnboardingComplete).toHaveBeenCalledWith(true);
-    expect(mockReplace).toHaveBeenCalledWith('AutoSetup');
+    expect(mockReplace).toHaveBeenCalledWith('ModelDownload');
   });
 });

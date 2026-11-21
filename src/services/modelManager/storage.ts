@@ -1,19 +1,9 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
 import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
-import { statFile } from '../../utils/fileStat';
-import { parseHuggingFaceUrl } from '../../utils/modelOrigin';
-import { collapseDuplicateFileRows, collapseDuplicateImageRows } from './collapseDuplicateFileRows';
-import { reconcilePrimaryPaths, resolveStoredPath } from './reconcileStoredPaths';
-import { useAppStore } from '../../stores';
-import { isLiteRTFileName } from '../../utils/modelHelpers';
-
-// Re-exported because this module was the published home of these helpers before they were extracted
-// into the one place both registries share.
-export { resolveStoredPath };
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
@@ -53,28 +43,39 @@ export function determineCredibility(author: string): ModelCredibility {
   };
 }
 
+export function resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
+  const baseDirName = currentBaseDir.substring(currentBaseDir.lastIndexOf('/') + 1);
+  const marker = `/${baseDirName}/`;
+  const markerIndex = storedPath.indexOf(marker);
+
+  if (markerIndex === -1) return null;
+
+  const relativePart = storedPath.substring(markerIndex + marker.length);
+  if (!relativePart) return null;
+
+  return `${currentBaseDir}/${relativePart}`;
+}
+
 export async function saveModelsList(models: DownloadedModel[]): Promise<void> {
   await AsyncStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(models));
 }
 
-/**
- * Change the model registry: persist the list AND publish it, in that order.
- *
- * Every writer needs both halves - a list saved but not published leaves the screens reading a
- * model that no longer exists until something forces a refetch, which is how a repaired model kept
- * showing "no vision file" until the app restarted. Four call sites each wrote the pair by hand;
- * this is the one that cannot forget the second line.
- *
- * `saveModelsList` stays for the read path only, where a self-heal rewrite must NOT publish (it is
- * running inside the very load the store is waiting on).
- */
-export async function commitModelsList(models: DownloadedModel[]): Promise<void> {
-  await saveModelsList(models);
-  useAppStore.getState().setDownloadedModels(models);
-}
-
 export async function saveImageModelsList(models: ONNXImageModel[]): Promise<void> {
   await AsyncStorage.setItem(IMAGE_MODELS_STORAGE_KEY, JSON.stringify(models));
+}
+
+async function tryResolveTextModelPath(
+  model: DownloadedModel,
+  modelsDir: string,
+): Promise<{ exists: boolean; updated: boolean }> {
+  const resolved = resolveStoredPath(model.filePath, modelsDir);
+  if (!resolved || resolved === model.filePath) return { exists: false, updated: false };
+  const exists = await RNFS.exists(resolved);
+  if (exists) {
+    model.filePath = resolved;
+    return { exists: true, updated: true };
+  }
+  return { exists: false, updated: false };
 }
 
 async function tryResolveMmProjPath(
@@ -98,22 +99,68 @@ async function validateAndResolveModels(
   models: DownloadedModel[],
   modelsDir: string,
 ): Promise<{ validModels: DownloadedModel[]; pathsUpdated: boolean }> {
-  const { verdicts, pathsUpdated: primaryUpdated } = await reconcilePrimaryPaths(models, modelsDir, {
-    getPath: model => model.filePath,
-    setPath: (model, path) => {
-      model.filePath = path;
-    },
-  });
+  const validModels: DownloadedModel[] = [];
+  let pathsUpdated = false;
 
-  // Only a model whose primary file is actually present can have its projector resolved - a missing
-  // model has nothing to see with either.
-  const withProjector = models.filter((_, i) => verdicts[i].exists);
-  const mmProjResults = await Promise.all(
-    withProjector.map(model => tryResolveMmProjPath(model, modelsDir)),
+  const existenceChecks = await Promise.all(
+    models.map(m => RNFS.exists(m.filePath))
   );
 
-  const pathsUpdated = primaryUpdated || mmProjResults.some(Boolean);
-  return { validModels: models.filter((_, i) => verdicts[i].keep), pathsUpdated };
+  const modelsToResolve: Array<{ model: DownloadedModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    if (!existenceChecks[i]) {
+      modelsToResolve.push({ model: models[i], idx: i });
+    }
+  }
+
+  const resolutionResults = await Promise.all(
+    modelsToResolve.map(({ model }) => tryResolveTextModelPath(model, modelsDir))
+  );
+
+  for (let i = 0; i < modelsToResolve.length; i++) {
+    const result = resolutionResults[i];
+    if (result.updated) pathsUpdated = true;
+  }
+
+  const modelsToCheckMmProj: Array<{ model: DownloadedModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0 && resolutionResults[idx].exists) {
+        modelsToCheckMmProj.push({ model: models[i], idx: i });
+      }
+    } else {
+      modelsToCheckMmProj.push({ model: models[i], idx: i });
+    }
+  }
+
+  const mmProjResults = await Promise.all(
+    modelsToCheckMmProj.map(({ model }) => tryResolveMmProjPath(model, modelsDir))
+  );
+
+  for (const result of mmProjResults) {
+    if (result) pathsUpdated = true;
+  }
+
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    let exists = mainExists;
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0) {
+        exists = resolutionResults[idx].exists;
+      }
+    }
+    // Atlas: keep models that live on an SD card while the card is out, so they are not forgotten.
+    // (If the card is in but the file is gone, the model really was removed.)
+    const sdOut = models[i].storage === 'sd' && !(await RNFS.exists(models[i].filePath.split('/Android/')[0]).catch(() => false));
+    if (exists || sdOut) {
+      validModels.push(models[i]);
+    }
+  }
+
+  return { validModels, pathsUpdated };
 }
 
 export async function loadDownloadedModels(modelsDir: string): Promise<DownloadedModel[]> {
@@ -149,13 +196,26 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   }
 
   const { validModels, pathsUpdated } = await validateAndResolveModels(models, modelsDir);
-  const { models: deduped, collapsed } = collapseDuplicateFileRows(validModels);
 
-  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
-    await saveModelsList(deduped);
+  if (validModels.length !== models.length || pathsUpdated) {
+    await saveModelsList(validModels);
   }
 
-  return deduped;
+  return validModels;
+}
+
+async function tryResolveImageModelPath(
+  model: ONNXImageModel,
+  imageModelsDir: string,
+): Promise<{ exists: boolean; updated: boolean }> {
+  const resolved = resolveStoredPath(model.modelPath, imageModelsDir);
+  if (!resolved || resolved === model.modelPath) return { exists: false, updated: false };
+  const exists = await RNFS.exists(resolved);
+  if (exists) {
+    model.modelPath = resolved;
+    return { exists: true, updated: true };
+  }
+  return { exists: false, updated: false };
 }
 
 export async function loadDownloadedImageModels(imageModelsDir: string): Promise<ONNXImageModel[]> {
@@ -176,23 +236,46 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
     return [];
   }
 
-  const { verdicts, pathsUpdated } = await reconcilePrimaryPaths(models, imageModelsDir, {
-    getPath: model => model.modelPath,
-    setPath: (model, path) => {
-      model.modelPath = path;
-    },
-  });
+  const existenceChecks = await Promise.all(
+    models.map(m => RNFS.exists(m.modelPath))
+  );
 
-  const validModels = models.filter((_, i) => verdicts[i].keep);
-  // Repairs a registry that already grew duplicates under the old `Date.now()` ids, exactly as the
-  // text registry does one function above.
-  const { models: deduped, collapsed } = collapseDuplicateImageRows(validModels);
-
-  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
-    await saveImageModelsList(deduped);
+  const modelsToResolve: Array<{ model: ONNXImageModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    if (!existenceChecks[i]) {
+      modelsToResolve.push({ model: models[i], idx: i });
+    }
   }
 
-  return deduped;
+  const resolutionResults = await Promise.all(
+    modelsToResolve.map(({ model }) => tryResolveImageModelPath(model, imageModelsDir))
+  );
+
+  let pathsUpdated = false;
+  for (const result of resolutionResults) {
+    if (result.updated) pathsUpdated = true;
+  }
+
+  const validModels: ONNXImageModel[] = [];
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    let exists = mainExists;
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0) {
+        exists = resolutionResults[idx].exists;
+      }
+    }
+    if (exists) {
+      validModels.push(models[i]);
+    }
+  }
+
+  if (validModels.length !== models.length || pathsUpdated) {
+    await saveImageModelsList(validModels);
+  }
+
+  return validModels;
 }
 
 export interface BuildModelOpts {
@@ -202,81 +285,39 @@ export interface BuildModelOpts {
   mmProjPath?: string;
   /** Kept even when mmProjPath is absent (download failed) so needsVisionRepair can detect the gap */
   expectedMmProjFileName?: string;
-  /** Provenance the caller already knows (a device transfer carries the sender's). Wins over the URL. */
-  origin?: ModelOrigin;
-}
-
-/**
- * The projector's size on disk, falling back to the size the catalog advertised.
- *
- * The file wins when it is there: a resumed or repaired sidecar can differ from the metadata, and
- * the storage figures the user reads come from this number.
- */
-async function resolveMmProjFileSize(
-  mmProjPath: string | undefined,
-  mmProjFile: ModelFile['mmProjFile'],
-): Promise<number | undefined> {
-  if (!mmProjPath) return undefined;
-  try {
-    return (await statFile(mmProjPath))?.size ?? mmProjFile?.size;
-  } catch {
-    // Keep the fallback size from metadata.
-    return mmProjFile?.size;
-  }
-}
-
-/**
- * mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
- * This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
- *   model.mmProjFileName is set  →  model was supposed to have vision
- *   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
- */
-function resolveMmProjFileName(
-  mmProjPath: string | undefined,
-  mmProjFile: ModelFile['mmProjFile'],
-  expectedMmProjFileName: string | undefined,
-): string | undefined {
-  if (mmProjPath) return mmProjFile?.name ?? mmProjPath.split('/').pop();
-  return expectedMmProjFileName ?? mmProjFile?.name;
-}
-
-/**
- * Registry wins for curated LiteRT artifacts: the display name comes from a single source of truth
- * keyed by fileName. Falls back to the file's own name for locally-imported .litertlm files, then to
- * the modelId basename for everything else.
- */
-function resolveDisplayName(
-  modelId: string,
-  file: ModelFile,
-  curatedDisplayName: string | undefined,
-): string {
-  if (curatedDisplayName) return curatedDisplayName;
-  if (isLiteRTFileName(file.name)) return file.name.replace(/\.litertlm$/i, '');
-  return modelId.split('/').pop() || modelId;
 }
 
 export async function buildDownloadedModel(opts: BuildModelOpts): Promise<DownloadedModel> {
   const { modelId, file, resolvedLocalPath, mmProjPath, expectedMmProjFileName } = opts;
-  // Through the safe reader. `RNFS.stat` here ABORTED the app three seconds after every launch: the
-  // startup scan calls this for each stored model, an absolute container path goes stale on reinstall,
-  // and iOS raises an uncatchable NSInvalidArgumentException for a path whose type it cannot resolve.
-  // A missing file is now a size of 0 - the model reads as present-but-empty, which the caller already
-  // handles - instead of taking the process down. See utils/fileStat.
-  const stat = await statFile(resolvedLocalPath);
+  const stat = await RNFS.stat(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
-  const isLiteRT = isLiteRTFileName(file.name);
+  const isLiteRT = file.name.toLowerCase().endsWith('.litertlm');
   const mmProjFile = file.mmProjFile;
-  const mmProjFileSize = await resolveMmProjFileSize(mmProjPath, mmProjFile);
-  const mmProjFileName = resolveMmProjFileName(mmProjPath, mmProjFile, expectedMmProjFileName);
+  let mmProjFileSize = mmProjPath ? mmProjFile?.size : undefined;
+  if (mmProjPath) {
+    try {
+      const mmStat = await RNFS.stat(mmProjPath);
+      mmProjFileSize = typeof mmStat.size === 'string' ? Number.parseInt(mmStat.size, 10) : mmStat.size;
+    } catch {
+      // Keep fallback size from metadata.
+    }
+  }
 
+  // mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
+  // This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
+  //   model.mmProjFileName is set  →  model was supposed to have vision
+  //   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
+  const mmProjFileName = mmProjPath
+    ? (mmProjFile?.name ?? mmProjPath.split('/').pop())
+    : (expectedMmProjFileName ?? mmProjFile?.name);
+
+  // Registry wins for curated LiteRT artifacts: display name and capability bits
+  // come from a single source of truth keyed by fileName. Falls back to the
+  // file's metadata for locally-imported .litertlm files, then to modelId basename
+  // for everything else.
   const curatedLiteRT = isLiteRT ? getCuratedLiteRTEntry(file.name) : undefined;
-  const derivedName = resolveDisplayName(modelId, file, curatedLiteRT?.displayName);
-
-  // Provenance, taken from the URL we actually fetched. This is the ONE moment it is known for
-  // certain; everything downstream (vision repair) reads it instead of guessing from the id.
-  // `opts.origin` wins when a caller already knows better - a device transfer passes on the
-  // origin the sending device recorded, which the receiver cannot derive from the bytes alone.
-  const origin = opts.origin ?? parseHuggingFaceUrl(file.downloadUrl) ?? undefined;
+  const derivedName = curatedLiteRT?.displayName
+    ?? (isLiteRT ? file.name.replace(/\.litertlm$/i, '') : (modelId.split('/').pop() || modelId));
 
   const commonFields = {
     id: `${modelId}/${file.name}`,
@@ -284,11 +325,10 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     author,
     filePath: resolvedLocalPath,
     fileName: file.name,
-    fileSize: stat?.size ?? 0,
+    fileSize: typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size,
     quantization: file.quantization,
     downloadedAt: new Date().toISOString(),
     credibility: determineCredibility(author),
-    ...(origin ? { origin } : {}),
   };
 
   if (isLiteRT) {

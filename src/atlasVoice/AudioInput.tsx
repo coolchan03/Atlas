@@ -1,0 +1,348 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
+import { useUiModeStore } from '../stores/uiModeStore';
+import { useChatStore } from '../stores/chatStore';
+import { useAgentStore } from '../stores/agentStore';
+import { audioRecorderService } from '../services/audioRecorderService';
+import { useAtlasVoiceStore } from './store';
+import { stop as stopSpeech, setEarpieceRoute } from './tts';
+import { BargeInDetector } from './bargeIn';
+import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
+import { Alert } from 'react-native';
+import { LISTEN_DELAY_MS, MAX_FAILED_STARTS, START_CHECK_MS, callPhase, describePhaseChange, noteCallTrace, shouldStartListening, stallNote, type CallPhase, type CallSnapshot } from './callLifecycle';
+import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
+import { callTrace } from './callLifecycle';
+import { shareItem } from '../utils/shareItem';
+import logger from '../utils/logger';
+const MAX_QUIET_TURNS = 4; // quiet listening stretches in a row (about a minute) before the call pauses
+
+
+/** mm:ss (or h:mm:ss) like a phone's call timer. */
+export function formatCallTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const sec = String(seconds % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+/** Status line and talk-button icon for the call screen, highest-priority state last. */
+export function callStatus(p: {
+  handsFree: boolean; muted: boolean; isModelLoading?: boolean; isRecording?: boolean; isTranscribing?: boolean;
+  isGenerating?: boolean; speakingKey: string | null; callerName: string; /** false: nothing on this phone can write down speech. */ voiceAvailable?: boolean;
+}): { status: string; icon: string } {
+  if (p.speakingKey) return { status: `${p.callerName} is speaking... talk or tap to interrupt`, icon: 'volume-x' };
+  if (p.isGenerating) return { status: 'Thinking... tap to stop', icon: 'pause' };
+  if (p.isTranscribing) return { status: 'Writing down what you said...', icon: 'mic' };
+  if (p.isRecording) return { status: 'Listening... it answers when you stop talking', icon: 'square' };
+  if (p.isModelLoading) return { status: 'Loading speech model...', icon: 'mic' };
+  if (p.muted) return { status: 'Muted', icon: 'mic' };
+  if (p.voiceAvailable === false) return { status: 'Nothing on this phone can write down speech yet. Download a speech model (Whisper) in Models, then call again.', icon: 'mic' };
+  return { status: p.handsFree ? 'Tap to talk. It listens again after each answer.' : 'Tap to talk.', icon: 'mic' };
+}
+
+/** Who is "on the line": the conversation's agent, else the active agent, else Atlas. */
+function useCallerName(): string {
+  return useChatStore((s) => {
+    const conv = s.conversations.find((c) => c.id === s.activeConversationId);
+    const agents = useAgentStore.getState();
+    return agents.getAgent(conv?.agentId ?? agents.activeAgentId)?.name ?? 'Atlas';
+  });
+}
+
+/**
+ * Voice ("phone call") mode, shown as a full-screen call. Tap the big button to talk; in
+ * hands-free mode it stops by itself when you go quiet, sends, reads the answer aloud, then
+ * listens again. Mute stops listening until it is turned off; End call returns to typing.
+ */
+export function AtlasAudioInput(props: any) {
+  const {
+    onStartRecording, onStopRecording, onCancelRecording, onStop,
+    isRecording, isTranscribing, isModelLoading, isGenerating, voiceAvailable, partialResult, error, disabled,
+  } = props;
+  const { colors } = useTheme();
+  const handsFree = useAtlasVoiceStore((s) => s.handsFree);
+  const setHandsFree = useAtlasVoiceStore((s) => s.setHandsFree);
+  const speakingKey = useAtlasVoiceStore((s) => s.speakingKey);
+  const doneTick = useAtlasVoiceStore((s) => s.doneTick);
+  const setMode = useUiModeStore((s) => s.setInterfaceMode);
+  const earpiece = useAtlasVoiceStore((s) => s.earpiece);
+  const setEarpiece = useAtlasVoiceStore((s) => s.setEarpiece);
+  const [note, setNote] = useState<string | null>(null);
+  const [muted, setMuted] = useState(false);
+  // Paused by the person's silence (not by tapping mute): the call stays quiet until they tap.
+  const [paused, setPaused] = useState(false);
+  // Listening starts that did not lead to a recording; after a few the call says so instead of retrying forever.
+  const [failedStarts, setFailedStarts] = useState(0);
+  const callerName = useCallerName();
+  // Where the time of the last turn went (see turnTiming.ts): shown under the status and logged.
+  const times = useRef<TurnTimes>({});
+  const [timing, setTiming] = useState<string | null>(null);
+  const mark = (event: TurnEvent) => {
+    times.current = nextTimes(times.current, event, Date.now());
+    const text = describeTurn(times.current);
+    if (text && text !== timing) { logger.log(`[CALL-LAT] ${text}`); rememberCallTiming(text); setTiming(text); }
+  };
+  const wasRecording = useRef(false);
+  useEffect(() => { if (wasRecording.current && !isRecording) mark('stopped'); wasRecording.current = !!isRecording; }, [isRecording]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isGenerating) mark('sent'); }, [isGenerating]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (speakingKey) mark('voice'); }, [speakingKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Earpiece ("phone call") output only while voice mode is open; normal speaker everywhere else.
+  useEffect(() => {
+    setEarpieceRoute(earpiece);
+    return () => setEarpieceRoute(false);
+  }, [earpiece]);
+
+  const latest = useRef(props);
+  latest.current = props;
+  // The turn ends by itself when the person stops talking (like a real call): see endOfSpeech.ts.
+  const vad = useRef<EndOfSpeechDetector | null>(null);
+  const quietTurns = useRef(0);
+
+  // Mic loudness -> decide when the person has finished talking, so nobody has to tap to send.
+  useEffect(() => {
+    audioRecorderService.setLevelListener((rms) => {
+      // While an answer is being spoken, the mic is only metered for barge-in.
+      const watch = bargeIn.current;
+      if (watch) {
+        if (watch.push(rms)) interrupt();
+        return;
+      }
+      if (!latest.current.isRecording) return;
+      const verdict = vad.current?.push(rms, Date.now());
+      if (verdict === 'end') { quietTurns.current = 0; latest.current.onStopRecording?.(); }
+      else if (verdict === 'nothing') {
+        latest.current.onCancelRecording?.();
+        // A quiet stretch is not a reason to stop listening (that felt like being muted): listen again a few times, then pause.
+        quietTurns.current += 1;
+        if (quietTurns.current < MAX_QUIET_TURNS) { setNote('Still listening...'); setFailedStarts(0); }
+        else { quietTurns.current = 0; setPaused(true); setNote('Paused after a long quiet. Tap the button when you want to talk.'); }
+      }
+    });
+    return () => audioRecorderService.setLevelListener(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- reads live state through refs
+
+  // Barge-in: in hands-free mode the mic is metered while the answer plays; if the user talks
+  // over it, speech stops and a fresh turn starts (so the answer's echo is never transcribed).
+  const bargeIn = useRef<BargeInDetector | null>(null);
+  const endBargeIn = () => {
+    if (!bargeIn.current) return;
+    bargeIn.current = null;
+    audioRecorderService.cancelRecording();
+  };
+  const interrupt = () => {
+    endBargeIn();
+    stopSpeech();
+    setTimeout(() => latest.current.onStartRecording?.(), 150);
+  };
+  useEffect(() => {
+    const p = latest.current;
+    if (!speakingKey || !handsFree || muted || !p.voiceAvailable || p.isRecording) return;
+    const detector = new BargeInDetector();
+    bargeIn.current = detector;
+    audioRecorderService.startRecording()
+      .then(() => { if (bargeIn.current !== detector) audioRecorderService.cancelRecording(); }) // answer already over
+      .catch(() => { if (bargeIn.current === detector) bargeIn.current = null; });
+    return endBargeIn;
+  }, [speakingKey, handsFree, muted]);
+
+  // Reset the silence detector at the start of every recording. If the microphone reports no
+  // loudness (some phones, or the phone's own recognizer which ends turns itself), say so.
+  useEffect(() => {
+    if (!isRecording) return;
+    vad.current = new EndOfSpeechDetector(Date.now(), CALL_END_OF_SPEECH);
+    const t = setTimeout(() => {
+      if (vad.current?.levels || !latest.current.isRecording || !audioRecorderService.isCurrentlyRecording()) return;
+      logger.warn('[CALL] no microphone levels: automatic end of turn unavailable on this recording');
+      setNote('Tap the button when you finish talking.');
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [isRecording]);
+
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  // One rule opens the microphone (callLifecycle.ts): whenever the call is idle and not muted or paused, it listens. This covers the
+  // start of the call (even if the speech model is still loading), the end of every answer (spoken or not), and a recovery after a
+  // turn that ended oddly. A start that never leads to a recording is counted, and after a few the call says so.
+  const doneTickSeen = useRef(doneTick);
+  doneTickSeen.current = doneTick;
+  useEffect(() => {
+    if (isRecording) { if (failedStarts) setFailedStarts(0); return undefined; }
+    const snapshot = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
+    if (!shouldStartListening(snapshot)) {
+      if (handsFree && failedStarts >= MAX_FAILED_STARTS) setNote('The microphone did not start. Tap the button to try again.');
+      return undefined;
+    }
+    let check: ReturnType<typeof setTimeout> | undefined;
+    const start = setTimeout(() => {
+      setNote(null);
+      latest.current.onStartRecording?.();
+      check = setTimeout(() => { if (!latest.current.isRecording) setFailedStarts((n) => n + 1); }, START_CHECK_MS);
+    }, LISTEN_DELAY_MS);
+    return () => { clearTimeout(start); if (check) clearTimeout(check); };
+  }, [handsFree, muted, paused, voiceAvailable, disabled, isRecording, isTranscribing, isGenerating, isModelLoading, speakingKey, failedStarts, doneTick]);
+
+  // Every change of what the call is doing is logged with how long the last stage took, plus the events that explain a stall
+  // (an error from the recorder or speech engine, a muted or paused call), so a failed call can be read back afterwards.
+  const phase = callPhase({ handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts });
+  const lastPhase = useRef<{ phase: CallPhase; at: number }>({ phase, at: Date.now() });
+  useEffect(() => {
+    const now = Date.now();
+    if (lastPhase.current.phase === phase) return;
+    const line = describePhaseChange({ prev: lastPhase.current.phase, next: phase }, now - lastPhase.current.at, failedStarts ? `${failedStarts} failed mic starts` : '');
+    logger.log(line); noteCallTrace(line, now);
+    lastPhase.current = { phase, at: now };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A stage that lasts too long (the call sitting idle without opening the microphone, a reply that never ends) is written to the log once, with the flags behind it.
+  const snapshotRef = useRef<CallSnapshot | null>(null);
+  snapshotRef.current = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
+  const stallNoted = useRef('');
+  useEffect(() => {
+    if (!handsFree) return undefined;
+    const timer = setInterval(() => {
+      const snap = snapshotRef.current;
+      const stall = snap ? stallNote(snap, Date.now() - lastPhase.current.at) : null;
+      const key = `${lastPhase.current.at}`;
+      if (!stall || stallNoted.current === key) return;
+      stallNoted.current = key;
+      logger.warn(stall); noteCallTrace(stall);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [handsFree]);
+  useEffect(() => { if (error) { const line = `[CALL-ERROR] ${String(error)}`; logger.warn(line); noteCallTrace(line); } }, [error]);
+  useEffect(() => { noteCallTrace(`[CALL-ROUTE] ${earpiece ? 'earpiece' : 'speaker'}`); }, [earpiece]);
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    setPaused(false);
+    setFailedStarts(0);
+    if (next && isRecording) onCancelRecording?.();
+    setNote(next ? 'Muted - Atlas is not listening.' : null);
+  };
+
+  const endCall = () => {
+    stopSpeech();
+    if (isRecording) onCancelRecording?.();
+    setMode('chat');
+  };
+
+  const press = () => {
+    setNote(null);
+    setPaused(false);
+    setFailedStarts(0);
+    if (muted) setMuted(false);
+    if (speakingKey) { stopSpeech(); return; }
+    if (isRecording) { onStopRecording?.(); return; }
+    if (isGenerating) { onStop?.(); return; }
+    if (!voiceAvailable) {
+      setNote("To talk, download a speech-to-text (Whisper) model in the Models screen, or install your phone's speech recognition (Google speech / Gboard voice typing) with its offline language. Answers can still be read aloud.");
+      return;
+    }
+    onStartRecording?.();
+  };
+
+  const { status, icon } = callStatus({ handsFree, muted, isModelLoading, isRecording, isTranscribing, isGenerating, speakingKey, callerName, voiceAvailable });
+  const busy = isTranscribing || isModelLoading;
+  // What the call has been doing, in plain lines (the same lines the Debug Logs screen holds), so a call that will not listen or speak can be explained.
+  const showCallLog = () => {
+    const lines = callTrace();
+    const text = lines.length ? lines.join('\n') : 'Nothing has been recorded for this call yet.';
+    Alert.alert('What this call has done', text.slice(-1200), [{ text: 'Close', style: 'cancel' }, { text: 'Share', onPress: () => { void shareItem({ title: 'Atlas call log', text }); } }]);
+  };
+  const initial = callerName.trim().charAt(0).toUpperCase() || 'A';
+
+  const roundButton = (opts: { icon: string; label: string; active?: boolean; onPress: () => void; testID: string }) => (
+    <TouchableOpacity
+      testID={opts.testID}
+      onPress={opts.onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!opts.active }}
+      accessibilityLabel={opts.label}
+      style={styles.control}
+    >
+      <View style={[styles.round, { backgroundColor: opts.active ? colors.text : colors.surface, borderColor: colors.border }]}>
+        <Icon name={opts.icon} size={24} color={opts.active ? colors.background : colors.text} />
+      </View>
+      <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>{opts.label}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={endCall} statusBarTranslucent>
+      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} testID="voice-call-screen">
+        <View style={styles.caller}>
+          <View style={[styles.avatar, { backgroundColor: colors.surface, borderColor: speakingKey || isRecording ? colors.primary : colors.border }]}>
+            <Text style={[styles.avatarText, { color: colors.text }]}>{initial}</Text>
+          </View>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{callerName}</Text>
+          <Text style={[styles.timer, { color: colors.textSecondary }]} testID="voice-call-timer">{formatCallTime(elapsed)}</Text>
+          <Text style={[styles.status, { color: colors.textSecondary }]}>{note ?? (error ? String(error) : status)}</Text>
+          <TouchableOpacity onPress={showCallLog} accessibilityLabel="Show what this call has done" testID="voice-call-log"><Text style={[styles.timing, { color: colors.primary }]}>Call log</Text></TouchableOpacity>
+          {!!timing && <Text style={[styles.timing, { color: colors.textMuted }]} testID="voice-call-timing">{timing}</Text>}
+          {!!partialResult && isRecording && (
+            <Text style={[styles.caption, { color: colors.text }]} numberOfLines={3}>{partialResult}</Text>
+          )}
+        </View>
+
+        <View style={styles.controls}>
+          {roundButton({ icon: muted ? 'mic-off' : 'mic', label: muted ? 'Unmute' : 'Mute', active: muted, onPress: toggleMute, testID: 'voice-call-mute' })}
+          {roundButton({ icon: earpiece ? 'phone' : 'volume-2', label: earpiece ? 'Earpiece' : 'Speaker', active: !earpiece, onPress: () => setEarpiece(!earpiece), testID: 'voice-call-speaker' })}
+          {roundButton({ icon: 'repeat', label: 'Hands-free', active: handsFree, onPress: () => setHandsFree(!handsFree), testID: 'voice-call-handsfree' })}
+        </View>
+
+        <View style={styles.bottom}>
+          <TouchableOpacity
+            onPress={press}
+            disabled={disabled && !isGenerating && !speakingKey}
+            style={[styles.talk, { backgroundColor: isRecording ? colors.error : colors.primary }]}
+            accessibilityLabel="Talk"
+            testID="voice-call-talk"
+          >
+            {busy ? <ActivityIndicator color={colors.background} /> : <Icon name={icon} size={30} color={colors.background} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={endCall}
+            style={[styles.end, { backgroundColor: colors.error }]}
+            accessibilityLabel="End call"
+            testID="voice-call-end"
+          >
+            <Icon name="phone-off" size={28} color={colors.background} />
+          </TouchableOpacity>
+          <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>End call</Text>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, justifyContent: 'space-between', paddingHorizontal: SPACING.xl },
+  caller: { alignItems: 'center', paddingTop: SPACING.xxl * 2 },
+  avatar: { width: 112, height: 112, borderRadius: 56, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { ...TYPOGRAPHY.display },
+  name: { ...TYPOGRAPHY.h1, marginTop: SPACING.lg },
+  timer: { ...TYPOGRAPHY.body, marginTop: SPACING.xs },
+  status: { ...TYPOGRAPHY.bodySmall, marginTop: SPACING.md, textAlign: 'center' },
+  timing: { ...TYPOGRAPHY.meta, marginTop: SPACING.xs, textAlign: 'center' },
+  caption: { ...TYPOGRAPHY.body, marginTop: SPACING.md, textAlign: 'center' },
+  controls: { flexDirection: 'row', justifyContent: 'space-around' },
+  control: { alignItems: 'center', width: 96 },
+  round: { width: 64, height: 64, borderRadius: 32, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  controlLabel: { ...TYPOGRAPHY.meta, marginTop: SPACING.xs },
+  bottom: { alignItems: 'center', paddingBottom: SPACING.xxl },
+  talk: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.xl },
+  end: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
+});

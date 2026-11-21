@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { LoadingDots } from '../components/LoadingDots';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../components';
 import {
@@ -125,13 +124,13 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Orphaned Files</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Refresh"
             style={styles.scanButton}
             onPress={scanForOrphanedFiles}
             disabled={isScanning}
           >
             {isScanning ? (
-              <LoadingDots color={colors.primary} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <Icon name="refresh-cw" size={16} color={colors.primary} />
             )}
@@ -158,13 +157,13 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
                     {hardwareService.formatBytes(file.size)}
                   </Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityLabel="Delete"
                   style={styles.deleteButton}
                   onPress={() => handleDeleteFile(file)}
                   disabled={isDeleting === file.path}
                 >
                   {isDeleting === file.path ? (
-                    <LoadingDots color={colors.error} />
+                    <ActivityIndicator size="small" color={colors.error} />
                   ) : (
                     <Icon name="trash-2" size={18} color={colors.error} />
                   )}
