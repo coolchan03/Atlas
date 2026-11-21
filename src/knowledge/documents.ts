@@ -57,15 +57,30 @@ export interface ImportResult { doc: SourceDocument; duplicate: boolean }
 /** What kind of book a stored document is, from its name (the stored original has no extension). */
 const kindOf = (doc: { name: string }): BookKind => bookKind(doc.name) ?? 'pdf';
 
+/** A SHA-256 that can be trusted as a fingerprint: 64 hex digits. Anything else (empty, undefined, truncated) is a failed hash. */
+export const isUsableHash = (raw: unknown): raw is string => typeof raw === 'string' && /^[0-9a-f]{64}$/i.test(raw);
+
+/**
+ * The stored document that is confirmed to be this file: same verified fingerprint AND same size. A failed hash never matches anything,
+ * so two different files are never merged because both failed to hash, and a different edition (different bytes) is always kept.
+ */
+export function confirmedDuplicate<T extends { hash: string; bytes?: number }>(docs: T[], hash: string | null, bytes: number): T | undefined {
+  if (!hash || !isUsableHash(hash)) return undefined;
+  return docs.find((d) => isUsableHash(d.hash) && d.hash.toLowerCase() === hash.toLowerCase() && (d.bytes === undefined || d.bytes === bytes));
+}
+
 /** Brings a PDF, EPUB or text file into Atlas's private storage. The same bytes imported twice are one document. */
 export async function importPdf(input: { uri: string; name: string; agentId?: string; topicId?: string }): Promise<ImportResult> {
   const kind = bookKind(input.name);
   if (!kind) throw new Error('Atlas can study PDF, EPUB and plain text (.txt, .md) files.');
   const local = (await resolvePickedFileUri(input.uri, input.name)).replace(/^file:\/\//, '');
   const bytes = Number((await RNFS.stat(local)).size);
-  const hash = await RNFS.hash(local, 'sha256');
-  const existing = (await listDocuments()).find((d) => d.hash === hash);
+  let verified: string | null = null;
+  try { const raw = await RNFS.hash(local, 'sha256'); verified = isUsableHash(raw) ? raw.toLowerCase() : null; } catch { verified = null; }
+  const existing = confirmedDuplicate(await listDocuments(), verified, bytes);
   if (existing) return { doc: existing, duplicate: true };
+  // When the file could not be fingerprinted it still imports, under its own unique key: it is never called a duplicate of anything.
+  const hash = verified ?? `unhashed-${uuid().replace(/-/g, '')}`;
   await ensureDir(`${P.original(hash).slice(0, P.original(hash).lastIndexOf('/'))}`);
   if (!(await RNFS.exists(P.original(hash)))) await RNFS.copyFile(local, P.original(hash));
   let pages: number | undefined;
