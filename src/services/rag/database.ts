@@ -393,6 +393,19 @@ class RagDatabase {
     db.executeSync('DELETE FROM rag_embeddings WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
     db.executeSync('DELETE FROM rag_chunks WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
     db.executeSync('DELETE FROM rag_documents WHERE project_id = ?', [projectId]);
+    this.tidyFts();
+  }
+
+  /**
+   * Deleting from the full-text index only writes tombstones; the erased words stay in its segments until they are merged. A project that is
+   * erased (for example when it becomes protected, so no readable copy may stay behind) merges the index now, and with secure_delete on the
+   * freed pages are overwritten.
+   */
+  private tidyFts(): void {
+    if (!this.ftsReady) return;
+    try { this.getDb().executeSync(`INSERT INTO rag_fts(rag_fts) VALUES ('optimize')`); } catch (error) {
+      logger.warn('[RagDB] could not merge the full-text index after an erase:', error instanceof Error ? error.message : String(error));
+    }
   }
 }
 
