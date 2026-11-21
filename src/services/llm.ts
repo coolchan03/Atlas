@@ -2,6 +2,7 @@ import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { useAccelRecord } from '../atlasTools/accelRecord';
 import { useSpecBenefit } from '../atlasTools/specBenefit';
+import { noteStage } from '../atlasTools/stageTimes';
 import { loadFallbackNotes } from './fallbackNotes';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
@@ -446,6 +447,7 @@ class LLMService {
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
           useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
+          noteStage('loading', Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
             ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
             : undefined;
@@ -750,6 +752,7 @@ class LLMService {
       const cr = completionResult as any;
       logger.log(`[LLM] Native completion finished: content=${!!(cr?.content || cr?.text)}, reasoning=${!!cr?.reasoning_content}, toolCalls=${Array.isArray(cr?.tool_calls) ? cr.tool_calls.length : 0}`);
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
+      noteStage('first word', firstTokenMs);
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);

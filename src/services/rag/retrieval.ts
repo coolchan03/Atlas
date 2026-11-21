@@ -7,6 +7,7 @@ import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
 import { lexicalRank } from './lexicalRank';
 import { mergeKeywordHits } from './keywordMerge';
+import { noteStage } from '../../atlasTools/stageTimes';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -71,6 +72,11 @@ function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSour
 
 class RetrievalService {
   async search(projectId: string, query: string, options: number | SearchOptions = 5): Promise<SearchResult> {
+    const began = Date.now();
+    try { return await this.searchTimed(projectId, query, options); } finally { noteStage('retrieval', Date.now() - began); }
+  }
+
+  private async searchTimed(projectId: string, query: string, options: number | SearchOptions): Promise<SearchResult> {
     const { topK = 5, include } = typeof options === 'number' ? { topK: options } as SearchOptions : options;
     const exact = isProtectedProject(projectId) ? [] : this.exactMatches(projectId, query, { include, topK });
     const found = await this.searchSemantic(projectId, query, { topK, include });

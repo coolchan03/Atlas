@@ -1,6 +1,7 @@
 import { randomNumber, rollDice } from './randomTool';
 import { Platform } from 'react-native';
 import { runStudyTool } from '../../study/studyTools';
+import { noteStage } from '../../atlasTools/stageTimes';
 import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../rag';
@@ -16,7 +17,9 @@ import { forceHttps, isBlockedUrl } from './urlSafety';
 import { evaluateExpression } from '../../utils/arithmetic';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
-  return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
+  const durationMs = Date.now() - start;
+  noteStage('tools', durationMs);
+  return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs };
 }
 
 export async function executeToolCall(call: ToolCall): Promise<ToolResult> {

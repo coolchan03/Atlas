@@ -1,5 +1,6 @@
 import { currentBackend, recordSpeed } from './speed';
 import { useAccelRecord } from './accelRecord';
+import { noteStage } from './stageTimes';
 import { useSpecBenefit } from './specBenefit';
 import { useAppStore } from '../stores/appStore';
 
@@ -44,6 +45,8 @@ export function recordLlamaTimings(cr: any, fallbackDecode?: number, drafting?: 
     // A reply of real length, with whether speculative decoding was running, feeds the "does it help on this phone" comparison.
     const decode = t?.predicted_per_second || fallbackDecode;
     recordFirstWord(t?.prompt_ms, t?.prompt_n);
+    noteStage('prompt', Number(t?.prompt_ms));
+    noteStage('writing', Number(t?.predicted_ms));
     if (drafting !== undefined && decode && Number(t?.predicted_n) >= 24) useSpecBenefit.getState().record(useAppStore.getState().activeModelId ?? '', drafting, decode);
     recordSpeed({
       decode: t?.predicted_per_second || fallbackDecode,

@@ -50,6 +50,7 @@ function describeState(): string {
     }).join('\n')}`;
   });
   part('Generation', () => { const s = app.settings; return `temperature ${s.temperature}, top-p ${s.topP}, max answer ${s.maxTokens} tokens, context ${s.contextMode === 'auto' ? 'automatic' : s.contextLength}, batch ${s.nBatch}, threads ${s.nThreads || 'auto'}, backend ${s.inferenceBackend}, cache ${s.cacheType}, flash attention ${s.flashAttn ? 'on' : 'off'}`; });
+  part('Where the time went (last requests)', () => { const lines = require('./stageTimes').stageSummary(); return lines.length ? `\n  ${lines.join('\n  ')}` : null; });
   part('Working now', () => {
     const { currentWork } = require('../topics/liveWork');
     const { screenAwakeReasons } = require('./runtimePower');
