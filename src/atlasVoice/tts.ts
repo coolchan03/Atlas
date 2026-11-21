@@ -4,6 +4,7 @@ import { useAtlasVoiceStore } from './store';
 import logger from '../utils/logger';
 import { markSpeechStarted, markSpeechFinished, clearSpeechActivity } from '../music/speechActivity';
 import { noteCallTrace } from './callLifecycle';
+import { speechSafe } from '../utils/emoji';
 
 /**
  * Thin wrapper over the AtlasTts native module (Android's built-in text-to-speech).
@@ -76,7 +77,8 @@ export function warmUp(): void {
 }
 
 /** Speak text. `messageId` lets a speak button know it is the one playing. `rate` overrides the saved speed. */
-export function speak(text: string, messageId?: string, rate?: number): void {
+export function speak(raw: string, messageId?: string, rate?: number): void {
+  const text = speechSafe(raw); // no emoji or unspeakable characters reach the voice
   if (!ttsAvailable() || !text.trim()) return;
   ensureListeners();
   const key = `${messageId ?? 'msg'}~${++counter}`;
@@ -113,7 +115,8 @@ export function beginSpeechStream(messageId: string, rate?: number): { key: stri
 }
 
 /** Adds text to the reply being spoken (see beginSpeechStream). */
-export function appendSpeechStream(text: string): void {
+export function appendSpeechStream(raw: string): void {
+  const text = speechSafe(raw);
   if (ttsAvailable() && text.trim()) Native.speakStreamAppend?.(text).catch(() => undefined);
 }
 
@@ -159,7 +162,8 @@ const adjusted = (messageId: string, rate: number) => (rateAdjuster ? rateAdjust
 /** Speak in another language (BCP-47 like 'es-ES'). Calls onNoLanguage if the phone lacks that voice. */
 let noLangHandler: ((lang: string) => void) | null = null;
 export function onMissingLanguage(fn: ((lang: string) => void) | null): void { noLangHandler = fn; }
-export function speakIn(text: string, lang: string, opts: { messageId?: string; voice?: string } = {}): void {
+export function speakIn(raw: string, lang: string, opts: { messageId?: string; voice?: string } = {}): void {
+  const text = speechSafe(raw);
   const { messageId = 'phrase', voice = '' } = opts;
   if (!ttsAvailable() || !text.trim()) return;
   ensureListeners();
@@ -187,7 +191,8 @@ export function speakInAndWait(text: string, lang: string, opts: { messageId?: s
   return speakWait({ text, pitch: 1.0, messageId, voice, lang });
 }
 
-function speakWait({ text, pitch, messageId, voice, lang }: { text: string; pitch: number; messageId: string; voice: string; lang: string }): Promise<boolean> {
+function speakWait({ text: raw, pitch, messageId, voice, lang }: { text: string; pitch: number; messageId: string; voice: string; lang: string }): Promise<boolean> {
+  const text = speechSafe(raw);
   return new Promise((resolve) => {
     if (!ttsAvailable() || !text.trim()) { resolve(true); return; }
     ensureListeners();
