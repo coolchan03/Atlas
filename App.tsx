@@ -31,8 +31,8 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { registerAtlasVoice } from './src/atlasVoice';
-import { startLowPowerMonitor } from './src/atlasTools/lowPower';
-import { startThermalMonitor } from './src/atlasTools/thermal';
+import { startLowPowerMonitor, stopLowPowerMonitor } from './src/atlasTools/lowPower';
+import { startThermalMonitor, stopThermalMonitor } from './src/atlasTools/thermal';
 import { connectMusicControls } from './src/music/musicControls';
 import { autoPickAcceleration } from './src/atlasTools/accel';
 import { startCtxRecovery } from './src/atlasTools/ctxGuard';
@@ -50,8 +50,6 @@ import { registerAtlasHooks } from './src/bootstrap/atlasHooks';
 // Atlas: free read-aloud + voice mode + hands-free mode using the phone's own voice.
 registerAtlasVoice();
 registerAtlasHooks();
-startLowPowerMonitor();
-startThermalMonitor();
 connectMusicControls();
 autoPickAcceleration();
 startCtxRecovery();
@@ -112,6 +110,15 @@ function App() {
   useEffect(() => startShareIntake(), []);
   useEffect(() => startAppLinks(), []);
   useEffect(() => startScheduler(), []);
+  // Battery and heat watching run while the app is mounted and stop with it (they used to start on import and could never be stopped).
+  useEffect(() => {
+    startLowPowerMonitor();
+    startThermalMonitor();
+    return () => { stopLowPowerMonitor(); stopThermalMonitor(); };
+  }, []);
+  // The delayed update check is cleared if the app goes away before it fires.
+  const updateTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (updateTimer.current) clearTimeout(updateTimer.current); }, []);
   // Keep the last GPS reading fresh (only if location was already allowed) so the AI can say roughly where you are.
   useEffect(() => {
     void refreshLastFix();
@@ -318,7 +325,7 @@ function App() {
       // Show the UI immediately
       setIsInitializing(false);
       // A little later, once a day: is a newer build published? (Settings > App updates turns this off.)
-      setTimeout(() => {
+      updateTimer.current = setTimeout(() => {
         // An update check is optional: it must never throw into the app.
         try { void Promise.resolve(require('./src/services/appUpdate').announceUpdateOnce()).catch(() => undefined); } catch { /* ignore */ }
       }, 8000);

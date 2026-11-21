@@ -10,7 +10,7 @@ import { Keyboard, Dimensions, Platform, StatusBar, TouchableOpacity } from 'rea
  * anchorX → distance from screen right to trigger right edge (popover right-aligns with trigger)
  */
 export function useKeyboardAwarePopover() {
-    const [anchor, setAnchor] = useState({ y: 0, x: 0 });
+    const [anchor, setAnchor] = useState<{ y: number; x: number; top?: number }>({ y: 0, x: 0 });
     const [visible, setVisible] = useState(false);
     const triggerRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
     const keyboardVisibleRef = useRef(false);
@@ -37,7 +37,8 @@ export function useKeyboardAwarePopover() {
                 const y = screenH - (btnY ?? 0) - statusBarOffset;
                 // right: align popover's right edge with the trigger button's right edge
                 const x = screenW - ((btnX ?? 0) + (btnW ?? 0));
-                setAnchor({ y, x });
+                // `top` is the trigger's top edge in window coordinates: the popover places itself from this and its own measured overlay.
+                setAnchor({ y, x, top: btnY ?? 0 });
             });
             setVisible(true);
         };

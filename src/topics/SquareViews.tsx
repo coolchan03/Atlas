@@ -19,6 +19,7 @@ import { GameFinishContext } from '../components/games/kit';
 import { buildCrossword, buildWordSearch } from '../study/learningGames';
 import { buildPairs } from '../study/games/logic';
 import type { StudyResult } from '../study/store';
+import { parseTypedNumber } from './typedNumber';
 
 type Of<K extends SquareContent['kind']> = Extract<SquareContent, { kind: K }>;
 interface ViewProps<K extends SquareContent['kind']> { content: Of<K>; onDone: (stars: 1 | 2 | 3, missed?: number[]) => void }
@@ -240,11 +241,13 @@ function NumericView({ content, onDone }: ViewProps<'numeric'>) {
   const t = useText();
   const [typed, setTyped] = useState('');
   const [tries, setTries] = useState(0);
-  const [result, setResult] = useState<'right' | 'wrong' | null>(null);
+  const [result, setResult] = useState<'right' | 'wrong' | 'invalid' | null>(null);
   const [shown, setShown] = useState(false);
   const checkAnswer = () => {
-    const value = Number(typed.replace(/[,\s]/g, '').replace(/[^\d.+\-eE]/g, ''));
-    const ok = Number.isFinite(value) && Math.abs(value - content.answer) <= Math.max(content.tolerance, 1e-9);
+    const value = parseTypedNumber(typed, content.unit);
+    // Text that is not a number is not an answer: it is not marked wrong, does not use up a try, and never counts as 0.
+    if (value === null) { setResult('invalid'); return; }
+    const ok = Math.abs(value - content.answer) <= Math.max(content.tolerance, 1e-9);
     setTries(tries + 1);
     setResult(ok ? 'right' : 'wrong');
     if (ok) setShown(true);
@@ -257,6 +260,7 @@ function NumericView({ content, onDone }: ViewProps<'numeric'>) {
           placeholderTextColor={t.colors.textMuted} style={[styles.numberInput, styles.flex, { color: t.colors.text, borderColor: t.colors.border }]} testID="numeric-input" />
         {!!content.unit && <Text style={t.body}>{content.unit}</Text>}
       </View>
+      {result === 'invalid' && <Text style={{ color: t.colors.error }} testID="numeric-invalid">That is not a number. Type digits only, for example 1250.50, -3 or 1.2e-3.</Text>}
       {result === 'wrong' && <Text style={{ color: t.colors.error }} testID="numeric-wrong">Not quite. Check the working and try again{tries >= 2 ? ', or look at the working below' : ''}.</Text>}
       {result === 'right' && <Text style={{ color: t.colors.primary }} testID="numeric-right">Correct: {content.answer} {content.unit}{content.checked ? ' (checked with the calculator)' : ''}</Text>}
       {result !== 'right' && <Button title="Check" disabled={!typed.trim()} onPress={checkAnswer} testID="numeric-check" />}

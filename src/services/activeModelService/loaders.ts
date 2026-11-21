@@ -17,6 +17,7 @@ import logger from '../../utils/logger';
 import { beginLoad, loadWorked, loadFailed } from '../../atlasTools/ctxGuard';
 import RNFS from 'react-native-fs';
 import { isMMProjFile, mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
+import { isAttachmentActive, mayAutoAttach } from '../modelManager/attachments';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
@@ -31,6 +32,9 @@ export async function resolveMmProjPath(
   model: LlamaDownloadedModel,
   modelId: string,
 ): Promise<string | undefined> {
+  // A picture file that is switched off, detached or archived is not started and not looked for: the folder scan
+  // below would otherwise attach it again behind the user's back.
+  if (model.mmProjPath ? !isAttachmentActive(model, 'vision') : !mayAutoAttach(model, 'vision')) return undefined;
   // Fast path: a persisted mmProjPath that still exists AND actually belongs to this model. The old
   // first-match scan could persist a MISMATCHED projector (E2B model → E4B mmproj); without the belongs-to
   // check the fast path would keep returning that stale wrong path forever, so the vision fix never lands on
@@ -179,9 +183,21 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
 
 /** Atlas: if a bigger memory size (context) broke the load, go back to the last size that worked and try once more. */
 /** The MTP options of a model, only the ones it has (so a model without MTP loads exactly as before). */
-function mtpOptions(model: { engine: string; draftPath?: string; embeddedMtp?: boolean }): { draftPath?: string; embeddedMtp?: boolean } {
+function mtpOptions(model: DownloadedModel): { draftPath?: string; embeddedMtp?: boolean } {
   if (model.engine !== 'llama') return {};
-  return { ...(model.draftPath ? { draftPath: model.draftPath } : {}), ...(model.embeddedMtp ? { embeddedMtp: true } : {}) };
+  // A draft file that is switched off stays attached but is not handed to the engine, so no draft runtime or memory is set up.
+  const draftOn = model.draftPath && isAttachmentActive(model, 'draft');
+  return { ...(draftOn ? { draftPath: model.draftPath } : {}), ...(model.embeddedMtp ? { embeddedMtp: true } : {}) };
+}
+
+/** The attached parts the user has switched off for this model, so the load report can say why they are not running. */
+function switchedOffOption(model: LlamaDownloadedModel): { switchedOff?: { vision?: boolean; mtp?: boolean } } {
+  const switchedOff = {
+    ...(model.mmProjPath && model.mmProjDisabled ? { vision: true } : {}),
+    ...(model.draftPath && model.draftDisabled ? { mtp: true } : {}),
+  };
+  // Left out entirely when nothing is switched off, so a model with no disabled parts loads exactly as it always did.
+  return Object.keys(switchedOff).length ? { switchedOff } : {};
 }
 
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
@@ -209,13 +225,17 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(
-        () =>
+        () => {
+          // The native load keeps running after we stop waiting. Tell the service to release what it builds
+          // instead of publishing a model nobody is tracking (that stray context held the memory for the next load).
+          llmService.abandonPendingLoad();
           reject(
             new Error(
               `Text model loading timed out after ${ctx.timeoutMs / 1000}s. ` +
                 'Try a smaller model or reduce context length in settings.',
             ),
-          ),
+          );
+        },
         ctx.timeoutMs,
       );
     });
@@ -223,7 +243,7 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     await beginLoad('llama', ctx.modelId);
     try {
       await Promise.race([
-        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model) }),
+        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), ...switchedOffOption(ctx.model) }),
         timeoutPromise,
       ]);
     } finally {
@@ -238,7 +258,10 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     // The Vulkan engine is text only by design, so it reports no picture support for a model whose
     // picture file is fine: leave the link in place for the engines that can use it.
     const onVulkan = /vulkan/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
-    if (ctx.model.mmProjPath && !multimodalSupport?.vision && !onVulkan) {
+    // A picture file that was left out on purpose (Safe Model Loading, a crash last time, switched off) is not a broken
+    // link: only forget the association when the engine really tried it and could not use it.
+    const visionLeftOut = !!llmService.getLoadReport?.()?.vision.skippedBecause && llmService.getLoadReport?.()?.vision.skippedBecause !== 'the engine could not start it';
+    if (ctx.model.mmProjPath && isAttachmentActive(ctx.model, 'vision') && !multimodalSupport?.vision && !onVulkan && !visionLeftOut) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 

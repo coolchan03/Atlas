@@ -18,6 +18,7 @@ import {
   ModelLoadingModeSelector,
   WarmUpToggle,
   MtpToggle,
+  SafeModelLoadingToggle,
   TrimToolsToggle,
   CpuThreadsSlider,
   BatchSizeSlider,
@@ -54,6 +55,7 @@ export const TextGenerationAdvanced: React.FC = () => {
       <ModelLoadingModeSelector />
       <WarmUpToggle />
       <MtpToggle />
+      <SafeModelLoadingToggle />
       <TrimToolsToggle />
     </>
   );

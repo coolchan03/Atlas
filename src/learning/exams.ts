@@ -1,6 +1,8 @@
 import type { LearningKnowledgeDb } from './knowledgeDb';
 import { citedNumbers } from './evidenceGate';
-import { numbersIn, similarity, wordsToDigits } from './claimText';
+import { checkSupport, numbersIn, similarity, wordsToDigits } from './claimText';
+import { fingerprint, whyNotComparable } from './examCompare';
+export { whyNotComparable };
 
 /** The three ways the same questions are answered, so retrieval and memory can be measured against the model alone. */
 export type ExamMode = 'baseline' | 'sources' | 'memory';
@@ -43,7 +45,17 @@ interface ItemResult {
   error?: string;
   sourceCount?: number;
   memoryCount?: number;
+  /**
+   * Whether a right answer was backed by evidence, which is a different question from whether it was right. 'supported': it cites a source it
+   * was given (and the cited text contains what it says, when the text is known). 'unsupported': it may be right, but nothing it cites backs it,
+   * so it does not show the sources helped. 'not-applicable': the model alone, or the answer was not right or not graded.
+   */
+  evidence?: ItemEvidence;
 }
+export type ItemEvidence = 'supported' | 'unsupported' | 'not-applicable';
+
+/** Which questions, which subject, which model and which grading rules a run used. Runs are only compared when all of these match. */
+export interface ExamContext { subjectId: string; questionSet: string; model: string; grading: string }
 export interface ExamMetrics {
   /** Questions asked. Accuracy is measured over the ones that could be graded (total minus ungraded). */
   total: number;
@@ -58,6 +70,16 @@ export interface ExamMetrics {
   mostlyRight?: number;
   /** Credit earned over the questions that could be graded: right answers count in full, mostly right ones by their share of the facts. */
   accuracy: number;
+  /**
+   * Like `accuracy`, but in the modes that give sources an answer earns credit only when it is backed by evidence. Right answers that cite nothing
+   * they were given are counted separately (`unsupportedCorrect`) rather than as proof that the sources or memory helped. Absent in older results.
+   */
+  supportedAccuracy?: number;
+  /** Right (or mostly right) answers that came with a valid citation, and ones that did not. Only counted in the modes that give sources. */
+  supportedCorrect?: number;
+  unsupportedCorrect?: number;
+  /** What this run was about, for comparing runs only with comparable ones. Absent in older results. */
+  context?: ExamContext;
   /** Answers that used a figure the exam marks as out of date or wrong. */
   outdatedAnswers: number;
   /** Citations [n] pointing at a source the model was never given. */
@@ -83,8 +105,18 @@ const SECONDS: Record<string, number> = { second: 1, minute: 60, hour: 3600, day
  * One spelling for the same quantity, applied to answer and wording alike: "1,200", "$1200" and "1200 dollars" agree, "50 percent" and
  * "50%" agree, "one minute" and "60 seconds" agree, and "straight-line" equals "straight line".
  */
+function markNegatives(text: string): string {
+  return text
+    // A loss in brackets, "($1,200)" or "(1,200.50)": the brackets are the sign. A bare "(2)" is a clause number and stays.
+    .replace(/\(\s?(\$?)\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%?)\s?\)/g, (...g: string[]) => (g[1] || g[3] || g[2].includes(',') || g[2].includes('.') ? ` minus ${g[1]}${g[2]}${g[3]} ` : g[0]))
+    .replace(/\bnegative\s+(?=\$?\s?\d)/g, 'minus ')
+    .replace(/(^|[\s(=:])[-\u2212]\s?(\$?)\s?(?=\d)/g, '$1 minus $2') // "-5000", "-$5,000"
+    .replace(/(^|[\s(=:])\$\s?[-\u2212]\s?(?=\d)/g, '$1 minus $$'); // "$-5,000"
+}
+
 function canonical(text: string): string {
-  return wordsToDigits(text.toLowerCase())
+  // The sign is turned into the word "minus" BEFORE hyphens become spaces below; otherwise "-5000" read as "5000" and a loss matched a gain.
+  return markNegatives(wordsToDigits(text.toLowerCase()))
     .replace(/(\d),(?=\d{3}\b)/g, '$1')
     .replace(/\$\s*(\d+(?:\.\d+)?)/g, '$1 dollars ')
     .replace(/(\d)\s*(?:%|per\s?cent|percent)/g, '$1 percent ')
@@ -108,7 +140,7 @@ const has = (answer: string, wording: string) => {
     const before = a.slice(0, m.index + m[1].length).trimEnd();
     const after = a.slice(m.index + m[0].length);
     const negatedAfter = /^\s*(?:(?:is|are|was|were|does|do|did|can|will|should|must|would)\s+)?(?:not|never)\b|^\s*(?:is|are|does|do|did|can|won|should)n't\b/.test(after);
-    if (!negatedAfter && !/(?:\bnot|\bno|\bnever|n't|\bnor|\bneither|\bwithout)(?:\s+(?:a|an|the|any|really|always))?$/.test(before)) return true;
+    if (!negatedAfter && !/(?:\bnot|\bno|\bnever|n't|\bnor|\bneither|\bwithout)(?:\s+(?:a|an|the|any|really|always))?$|\bminus$/.test(before)) return true; // "minus 5000" is not "5000"
   }
   return false;
 };
@@ -167,6 +199,8 @@ interface Answered {
   text: string;
   /** The numbered sources the model was given (none for the model alone). */
   sourceCount: number;
+  /** The text of those sources in order (passage 1 first), when the caller has it: lets the exam check that a citation really backs the answer. */
+  passages?: string[];
   /** Stored, approved notes the model was given (only in the memory mode). */
   memoryCount?: number;
 }
@@ -175,6 +209,20 @@ export type Answerer = (item: ExamItem, mode: ExamMode) => Promise<Answered>;
 export type SecondOpinion = (item: ExamItem, answer: string) => Promise<'yes' | 'partly' | 'no' | null>;
 
 const clip = (t: string, n = 600) => (t.length > n ? `${t.slice(0, n)}…` : t);
+
+/** Is a right answer backed by a source it was given? Only meaningful in the modes that give sources, and only for an answer that earned credit. */
+function evidenceOf(mode: ExamMode, answered: Answered & { text: string }, accepted: boolean): ItemEvidence {
+  const { text } = answered;
+  if (mode === 'baseline' || !accepted) return 'not-applicable';
+  const valid = citedNumbers(text).filter((n) => n >= 1 && n <= answered.sourceCount);
+  if (!valid.length) return 'unsupported';
+  if (answered.passages?.length) {
+    const cited = valid.map((n) => answered.passages?.[n - 1] ?? '').filter(Boolean);
+    // The text of the cited sources is known: it must contain what the answer states (its figures and enough of its words).
+    if (cited.length && checkSupport(text.replace(/\[\d+\]/g, ' '), cited).supported === false) return 'unsupported';
+  }
+  return 'supported';
+}
 
 /** Scores one answer and says why it passed or not. */
 function gradeItem(item: ExamItem, mode: ExamMode, answered: Answered & { seconds: number }): ItemResult {
@@ -186,9 +234,11 @@ function gradeItem(item: ExamItem, mode: ExamMode, answered: Answered & { second
   if (!text.trim()) reason = 'empty-answer';
   else if (noEvidence && mode !== 'baseline' && answered.sourceCount === 0 && !answered.memoryCount) reason = 'no-sources';
   else if (noEvidence && mode === 'memory' && answered.memoryCount === 0) reason = 'no-approved-memory';
+  const credit = scored.outdated || reason === 'no-sources' || reason === 'no-approved-memory' ? 0 : scored.score;
   return {
-    id: item.id, correct: scored.correct, score: scored.score, credit: scored.outdated || reason === 'no-sources' || reason === 'no-approved-memory' ? 0 : scored.score, outdated: scored.outdated, seconds, reason, missing: scored.missing,
+    id: item.id, correct: scored.correct, score: scored.score, credit, outdated: scored.outdated, seconds, reason, missing: scored.missing,
     answer: clip(text), sourceCount: answered.sourceCount, memoryCount: answered.memoryCount,
+    evidence: evidenceOf(mode, { ...answered, text }, credit >= ACCEPT_SHARE && !scored.outdated),
   };
 }
 
@@ -214,7 +264,7 @@ async function withSecondOpinion(asked: { item: ExamItem; fullAnswer: string; ju
 export const isAccepted = (r: { correct: boolean; credit?: number; outdated: boolean }): boolean => r.correct || (!r.outdated && (r.credit ?? 0) >= ACCEPT_SHARE);
 
 /** Runs every item in one mode. The answerer is the model plus whatever retrieval the mode allows; scoring stays here. */
-export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number; giveUpAfter?: number; judge?: SecondOpinion }): Promise<ExamMetrics> {
+export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer: Answerer; previousFailures?: string[]; now?: () => number; giveUpAfter?: number; judge?: SecondOpinion; model?: string }): Promise<ExamMetrics> {
   const now = input.now ?? Date.now;
   const results: ItemResult[] = [];
   let unsupported = 0;
@@ -246,8 +296,13 @@ export async function runExam(input: { items: ExamItem[]; mode: ExamMode; answer
   const correct = results.filter((r) => r.correct).length;
   const earned = results.filter((r) => !(r.reason && NOT_GRADED.includes(r.reason))).reduce((a, r) => a + (r.credit ?? (r.correct ? 1 : 0)), 0);
   const failed = new Set(input.previousFailures ?? []);
+  const sourced = input.mode !== 'baseline';
+  const supportedCredit = results.filter((r) => !(r.reason && NOT_GRADED.includes(r.reason))).reduce((a, r) => a + (sourced && r.evidence === 'unsupported' ? 0 : (r.credit ?? (r.correct ? 1 : 0))), 0);
   return {
     total: results.length, ungraded, secondOpinion: !!input.judge, correct, mostlyRight: results.filter((r) => !r.correct && isAccepted(r)).length, accuracy: graded ? earned / graded : 0,
+    supportedAccuracy: graded ? supportedCredit / graded : 0,
+    ...(sourced ? { supportedCorrect: results.filter((r) => r.evidence === 'supported').length, unsupportedCorrect: results.filter((r) => r.evidence === 'unsupported').length } : {}),
+    context: examContext(input.items, !!input.judge, input.model),
     outdatedAnswers: results.filter((r) => r.outdated).length, unsupportedCitations: unsupported,
     repeatFailures: results.filter((r) => !r.correct && !(r.reason && NOT_GRADED.includes(r.reason)) && failed.has(r.id)).length,
     averageSeconds: results.length ? results.reduce((a, r) => a + r.seconds, 0) / results.length : 0, items: results,
@@ -340,6 +395,21 @@ export class ExamStore {
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
+/** What a run was about. The question set is identified by the questions AND their answer keys, so editing a key makes it a different exam. */
+export function examContext(items: ExamItem[], judge: boolean, model = ''): ExamContext {
+  const subjectId = [...new Set(items.map((i) => i.subjectId))].sort().join(',');
+  const questionSet = fingerprint([...items].sort((a, b) => a.id.localeCompare(b.id)).map((i) => `${i.id}\u0001${i.question}\u0001${JSON.stringify(i.expected)}`).join('\u0002'));
+  return { subjectId, questionSet, model, grading: `benchmark ${BENCHMARK_VERSION}, ${judge ? 'with' : 'without'} Judge second opinion` };
+}
+
+/** The four plain categories for a run's answers: backed by evidence, right but not backed, wrong, and not graded. */
+export function evidenceCounts(metrics: ExamMetrics): { supported: number; unsupported: number; incorrect: number; ungraded: number } {
+  const ungraded = metrics.items.filter((i) => i.reason && NOT_GRADED.includes(i.reason)).length;
+  const accepted = metrics.items.filter((i) => !(i.reason && NOT_GRADED.includes(i.reason)) && isAccepted(i));
+  const unsupported = accepted.filter((i) => i.evidence === 'unsupported').length;
+  return { supported: accepted.length - unsupported, unsupported, incorrect: metrics.items.length - ungraded - accepted.length, ungraded };
+}
+
 /**
  * What the measurements say. An improvement is claimed only when the latest run with memory beats the latest run
  * without it, on the same version of the exam, over enough questions. Otherwise it says there is not enough to claim.
@@ -352,8 +422,14 @@ export function improvementSummary(history: ExamResult[]): string {
   if (!!base.metrics.secondOpinion !== !!memory.metrics.secondOpinion) return 'One run had the Judge reading answers in other words and the other did not, so they were graded differently and cannot be compared. Run the exam again in both modes.';
   if ([base, memory].some((r) => r.metrics.items.some((i) => i.reason === 'stopped'))) return 'A run stopped early after several misses in a row, so the two runs did not answer the same questions and cannot be compared. Fix what is failing, then run the exam again.';
   if (Math.min(base.metrics.total - (base.metrics.ungraded ?? 0), memory.metrics.total - (memory.metrics.ungraded ?? 0)) < MIN_QUESTIONS) return `Fewer than ${MIN_QUESTIONS} questions: too few to say whether anything improved.`;
+  const unrelated = whyNotComparable(base.metrics, memory.metrics);
+  if (unrelated) return unrelated;
   const delta = memory.metrics.accuracy - base.metrics.accuracy;
-  if (delta > 0) return `With sources and stored memory the answers were right ${pct(memory.metrics.accuracy)} of the time, against ${pct(base.metrics.accuracy)} for the model alone (${Math.round(delta * 100)} points better on ${memory.metrics.total} questions).`;
+  // Right is not the same as backed by evidence: credit that cites nothing it was given does not show that sources or memory helped.
+  const backed = memory.metrics.supportedAccuracy ?? memory.metrics.accuracy;
+  const backedDelta = backed - base.metrics.accuracy;
+  if (delta > 0 && backedDelta <= 0) return `The answers with sources and stored memory were right more often (${pct(memory.metrics.accuracy)} against ${pct(base.metrics.accuracy)}), but ${memory.metrics.unsupportedCorrect ?? 'several'} of the right answers cited nothing they were given, so this does not show the sources or memory helped. Counting only answers backed by a source it is ${pct(backed)}.`;
+  if (backedDelta > 0) return `With sources and stored memory the answers were right ${pct(memory.metrics.accuracy)} of the time, against ${pct(base.metrics.accuracy)} for the model alone (${Math.round(delta * 100)} points better on ${memory.metrics.total} questions)${backed < memory.metrics.accuracy ? `; ${pct(backed)} were backed by a cited source` : ''}.`;
   return `No measured improvement: ${pct(memory.metrics.accuracy)} with sources and stored memory against ${pct(base.metrics.accuracy)} for the model alone.`;
 }
 

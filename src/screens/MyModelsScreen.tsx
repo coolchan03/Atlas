@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Clipboard, Linking, Modal, ScrollView, StyleS
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SpeedRankingCard } from '../components/models/SpeedRanking';
 import { BackgroundModelCard } from '../components/models/BackgroundModel';
+import { ModelAttachments } from '../components/models/ModelAttachments';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
@@ -107,17 +108,6 @@ export const MyModelsScreen: React.FC = () => {
       setImportProgress: (p) => setBusy(p ? { id: m.id, label: 'Adding MTP file', fraction: p.fraction } : null),
     });
   };
-  const removeDraft = (m: DownloadedModel) => confirm('Remove MTP file?', `${m.name} will no longer draft with its MTP file.`, 'Remove', async () => {
-    await modelManager.removeDraft(m.id);
-  });
-  const removeVision = (m: DownloadedModel) => confirm('Remove vision file?', `${m.name} will no longer look at pictures.`, 'Remove', async () => {
-    const mm = (m as any).mmProjPath as string | undefined;
-    await modelManager.clearMmProjLink(m.id);
-    if (mm && !textModels.some((x) => x.id !== m.id && (x as any).mmProjPath === mm)) {
-      try { const RNFS = require('react-native-fs').default; await RNFS.unlink(mm); } catch { /* already gone */ }
-    }
-  });
-
   const doImport = async () => {
     await quickImportModel({ setAlertState, setImportProgress: (p) => setBusy(p ? { id: 'import', label: `Importing ${p.fileName}`, fraction: p.fraction } : null) });
   };
@@ -190,35 +180,18 @@ export const MyModelsScreen: React.FC = () => {
         <Text style={[styles.s14, { color: colors.textSecondary }]}>TEXT MODELS ({textModels.length})</Text>
         {!textModels.length && <Text style={[styles.s15, { color: colors.textMuted }]}>None yet. Download one in the Models tab or import a file.</Text>}
         {textModels.map((m) => {
-          const vision = m.engine === 'llama' && !!(m as any).mmProjPath;
+          const vision = m.engine === 'llama' && !!(m as any).mmProjPath && !(m as any).mmProjDisabled;
           const onSd = (m as any).storage === 'sd';
           const size = (m.fileSize || 0) + ((m as any).mmProjFileSize || 0);
           return (
             <View key={m.id} style={card}>
               <Text style={[styles.s16, { color: colors.text }]}>{nicknames[m.id] || m.name}</Text>
               <Text style={[styles.s17, { color: colors.textMuted }]}>
-                {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{m.engine === 'llama' && (m.draftPath || m.embeddedMtp) ? ' · MTP' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}{speeds[m.id]?.decode ? ` · writes ~${Math.max(1, Math.round(speeds[m.id].decode * 0.75))} words/s` : ''}
+                {m.fileName} · {fmtBytes(size)} · {onSd ? 'SD card' : 'phone'}{m.engine === 'litert' ? ' · LiteRT' : ''}{m.engine === 'llama' && ((m.draftPath && !m.draftDisabled) || m.embeddedMtp) ? ' · MTP' : ''}{vision ? ' · sees pictures' : ''}{m.id === activeId ? ' · in use' : ''}{speeds[m.id]?.decode ? ` · writes ~${Math.max(1, Math.round(speeds[m.id].decode * 0.75))} words/s` : ''}
               </Text>
               <View style={styles.s18}>
                 <TouchableOpacity style={btn(colors.primary)} onPress={() => openNickname(m.id, m.name)}><Icon name="edit-2" size={14} color={colors.primary} /><Text style={[styles.s19, { color: colors.primary }]}>Nickname</Text></TouchableOpacity>
                 <TouchableOpacity style={btn(colors.primary)} disabled={!!busy} onPress={() => navigation.navigate('ModelTest', { modelId: m.id })}><Icon name="activity" size={14} color={colors.primary} /><Text style={[styles.s20, { color: colors.primary }]}>Test</Text></TouchableOpacity>
-                {m.engine === 'llama' && (vision ? (
-                  <TouchableOpacity style={btn(colors.border)} onPress={() => removeVision(m)}><Icon name="eye-off" size={14} color={colors.textSecondary} /><Text style={[styles.s21, { color: colors.textSecondary }]}>Remove vision file</Text></TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={btn(colors.primary)} onPress={() => addVision(m)}><Icon name="eye" size={14} color={colors.primary} /><Text style={[styles.s22, { color: colors.primary }]}>Add vision file</Text></TouchableOpacity>
-                ))}
-                {m.engine === 'llama' && !m.draftPath && (
-                  <TouchableOpacity style={btn(m.embeddedMtp ? colors.primary : colors.border)} testID={`embedded-mtp-${m.id}`}
-                    onPress={() => { void modelManager.setEmbeddedMtp(m.id, !m.embeddedMtp); }}>
-                    <Icon name="zap" size={14} color={m.embeddedMtp ? colors.primary : colors.textSecondary} />
-                    <Text style={[styles.s23, { color: m.embeddedMtp ? colors.primary : colors.textSecondary }]}>{m.embeddedMtp ? 'MTP built in: on' : 'MTP built in: off'}</Text>
-                  </TouchableOpacity>
-                )}
-                {m.engine === 'llama' && (m.draftPath ? (
-                  <TouchableOpacity style={btn(colors.border)} testID={`remove-mtp-${m.id}`} onPress={() => removeDraft(m)}><Icon name="zap-off" size={14} color={colors.textSecondary} /><Text style={[styles.s24, { color: colors.textSecondary }]}>Remove MTP file</Text></TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={btn(colors.primary)} disabled={!!busy} testID={`add-mtp-${m.id}`} onPress={() => addDraft(m)}><Icon name="zap" size={14} color={colors.primary} /><Text style={[styles.s25, { color: colors.primary }]}>Add MTP file</Text></TouchableOpacity>
-                ))}
                 {(sd || onSd) && (
                   <TouchableOpacity style={btn(colors.border)} disabled={!!busy} onPress={() => move(m, !onSd)}>
                     <Icon name={onSd ? 'smartphone' : 'hard-drive'} size={14} color={colors.text} />
@@ -227,6 +200,11 @@ export const MyModelsScreen: React.FC = () => {
                 )}
                 <TouchableOpacity style={btn(colors.error)} disabled={!!busy} onPress={() => delText(m)}><Icon name="trash-2" size={14} color={colors.error} /><Text style={[styles.s27, { color: colors.error }]}>Delete</Text></TouchableOpacity>
               </View>
+              {m.engine === 'llama' && (
+                <ModelAttachments model={m} loaded={m.id === activeId} busy={!!busy}
+                  onAdd={(kind) => { void (kind === 'vision' ? addVision(m) : addDraft(m)); }}
+                  onError={(message) => setAlertState(showAlert('Could not change that file', message))} />
+              )}
             </View>
           );
         })}
@@ -398,11 +376,6 @@ const styles = StyleSheet.create({
   s18: { flexDirection: 'row', flexWrap: 'wrap' },
   s19: { marginLeft: 6 },
   s20: { marginLeft: 6 },
-  s21: { marginLeft: 6 },
-  s22: { marginLeft: 6 },
-  s23: { marginLeft: 6 },
-  s24: { marginLeft: 6 },
-  s25: { marginLeft: 6 },
   s26: { marginLeft: 6 },
   s27: { marginLeft: 6 },
   s28: { fontWeight: '700', marginTop: 8, marginBottom: 6 },

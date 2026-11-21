@@ -34,7 +34,8 @@ it('tries each option, lists the speeds and applies the fastest', async () => {
 
   const screen = rtl.render(React.createElement(ModelTestScreen));
   rtl.fireEvent.press(screen.getByTestId('model-tune-start'));
-  const result = await screen.findByTestId('model-tune-result', {}, { timeout: 20000 });
+  // Every reading here is the same, so the two fastest are "too close to call" and are timed again (a full reload each): allow for that.
+  const result = await screen.findByTestId('model-tune-result', {}, { timeout: 45000 });
   expect(result).toBeTruthy();
   // Every option has a line, whether it measured or not.
   expect(screen.getAllByText(/tok\/s|failed/).length).toBeGreaterThanOrEqual(3);
@@ -45,7 +46,7 @@ it('tries each option, lists the speeds and applies the fastest', async () => {
   expect(settings.nThreads).not.toBe(7);
   expect(useTuned.getState().at.llm).toBeGreaterThan(0);
   now.mockRestore();
-}, 40000);
+}, 70000);
 
 it('suggests finding faster settings when replies are slow, opens the test, and can be dismissed', () => {
   const rtl = requireRTL();

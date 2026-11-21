@@ -1183,6 +1183,105 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
+  // Optional attachments (picture file / MTP file) — independent of the base model
+  // ========================================================================
+  describe('attachment management', () => {
+    const MM = '/mock/documents/models/m-mmproj-f16.gguf';
+    const DR = '/mock/documents/models/m.mtp-x.gguf';
+    const base = { id: 'local_import/m.gguf', name: 'M', author: 'Local', filePath: '/mock/documents/models/m.gguf', fileName: 'm.gguf', fileSize: 1000, engine: 'llama', quantization: 'Q4_0', downloadedAt: 't', isVisionModel: true,
+      mmProjPath: MM, mmProjFileName: 'm-mmproj-f16.gguf', mmProjFileSize: 600, draftPath: DR, draftFileName: 'x.gguf', draftFileSize: 150 };
+    const lastSaved = () => JSON.parse(String(mockedAsyncStorage.setItem.mock.calls.filter(c => Array.isArray(JSON.parse(String(c[1])))).at(-1)?.[1]));
+    beforeEach(() => {
+      mockedRNFS.exists.mockImplementation(() => Promise.resolve(true));
+      (mockedRNFS as any).unlink = jest.fn(() => Promise.resolve());
+    });
+    afterEach(() => { mockedRNFS.exists.mockImplementation(() => Promise.resolve(false)); });
+    const stored = (...models: object[]) => mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(models));
+
+    it('Disable keeps both files on the phone and attached, and the model itself is untouched', async () => {
+      stored(base);
+      await modelManager.setAttachmentEnabled(base.id, 'vision', false);
+      const saved = lastSaved()[0];
+      expect(saved.mmProjDisabled).toBe(true);
+      expect(saved.mmProjPath).toBe(MM);
+      expect(saved.draftPath).toBe(DR);
+      expect(saved.filePath).toBe(base.filePath);
+      expect(mockedRNFS.unlink).not.toHaveBeenCalled();
+    });
+
+    it('Detach and Archive never delete any file', async () => {
+      stored(base);
+      await modelManager.detachAttachment(base.id, 'vision');
+      expect(lastSaved()[0].mmProjPath).toBeUndefined();
+      expect(lastSaved()[0].mmProjDetached).toBe(true);
+      stored(base);
+      await modelManager.archiveAttachment(base.id, 'draft');
+      expect(lastSaved()[0].archivedAttachments.draft.path).toBe(DR);
+      expect(lastSaved()[0].draftPath).toBeUndefined();
+      expect(mockedRNFS.unlink).not.toHaveBeenCalled();
+    });
+
+    it('Restore brings an archived file back when it is still on the phone', async () => {
+      stored({ ...base, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, mmProjDetached: true,
+        archivedAttachments: { vision: { path: MM, fileName: 'm-mmproj-f16.gguf', fileSize: 600, archivedAt: 't' } } });
+      await modelManager.restoreAttachment(base.id, 'vision');
+      expect(lastSaved()[0].mmProjPath).toBe(MM);
+      expect(lastSaved()[0].archivedAttachments).toBeUndefined();
+    });
+
+    it('Restore refuses, and changes nothing, when the archived file is gone', async () => {
+      stored({ ...base, mmProjPath: undefined, archivedAttachments: { vision: { path: MM, fileName: 'm-mmproj-f16.gguf', archivedAt: 't' } } });
+      mockedRNFS.exists.mockImplementation((path: string) => Promise.resolve(path !== MM)); // only the archived file is gone
+      mockedAsyncStorage.setItem.mockClear();
+      await expect(modelManager.restoreAttachment(base.id, 'vision')).rejects.toThrow(/no longer on this phone/);
+      expect(mockedAsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('Delete removes the file when only this model uses it', async () => {
+      stored(base);
+      const result = await modelManager.deleteAttachment(base.id, 'vision');
+      expect(result).toEqual({ fileRemoved: true, keptForOtherModels: false });
+      expect(mockedRNFS.unlink).toHaveBeenCalledWith(MM);
+      expect(mockedRNFS.unlink).not.toHaveBeenCalledWith(base.filePath);
+    });
+
+    it('Delete keeps a file another model still uses, but still detaches it from this one', async () => {
+      const other = { ...base, id: 'local_import/other.gguf', filePath: '/mock/documents/models/other.gguf', draftPath: undefined };
+      stored(base, other);
+      expect(await modelManager.isAttachmentShared(base.id, 'vision')).toBe(true);
+      const result = await modelManager.deleteAttachment(base.id, 'vision');
+      expect(result).toEqual({ fileRemoved: false, keptForOtherModels: true });
+      expect(mockedRNFS.unlink).not.toHaveBeenCalled();
+      const saved = lastSaved();
+      expect(saved.find((m: any) => m.id === base.id).mmProjPath).toBeUndefined();
+      expect(saved.find((m: any) => m.id === other.id).mmProjPath).toBe(MM);
+    });
+
+    it('deleting the base model removes its archived files, but not ones another model uses', async () => {
+      const archived = { vision: { path: MM, fileName: 'a', archivedAt: 't' }, draft: { path: '/mock/documents/models/m.mtp-y.gguf', fileName: 'b', archivedAt: 't' } };
+      const m1 = { ...base, mmProjPath: undefined, draftPath: undefined, archivedAttachments: archived };
+      const m2 = { ...base, id: 'local_import/o.gguf', filePath: '/mock/documents/models/o.gguf', mmProjPath: MM, draftPath: undefined };
+      stored(m1, m2);
+      await modelManager.deleteModel(m1.id);
+      expect(mockedRNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/m.mtp-y.gguf');
+      expect(mockedRNFS.unlink).not.toHaveBeenCalledWith(MM);
+    });
+
+    it('attaching a picture file on purpose lifts an earlier detach', async () => {
+      stored({ ...base, mmProjPath: undefined, mmProjDetached: true });
+      mockedRNFS.stat.mockResolvedValue({ size: 600, isFile: () => true } as any);
+      await modelManager.saveModelWithMmproj(base.id, MM, true);
+      expect(lastSaved()[0].mmProjPath).toBe(MM);
+      expect(lastSaved()[0].mmProjDetached).toBeUndefined();
+    });
+
+    it('refuses attachments on a model that is not a GGUF model', async () => {
+      stored({ ...base, engine: 'litert', liteRTVision: false });
+      await expect(modelManager.setAttachmentEnabled(base.id, 'vision', false)).rejects.toThrow(/GGUF/);
+    });
+  });
+
+  // ========================================================================
   // importLocalModel
   // ========================================================================
   describe('MTP file', () => {

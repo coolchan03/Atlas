@@ -86,11 +86,19 @@ describe('finding the best settings', () => {
     expect(layerOptions({ ...npu, backend: 'auto' as any }, 20)).toEqual([]);
   });
 
-  it('tries the model\'s built-in MTP drafting once, only when it has no draft file and is not marked as having it', () => {
+  it('tries the model\'s built-in MTP drafting once, only when its metadata shows MTP layers, it has no draft file and is not marked as having them', () => {
     const base = { id: 'cpu-6', label: 'CPU', backend: 'cpu' as any, threads: 6 };
-    expect(mtpOptions(base, { engine: 'llama' }).map((o) => o.extra)).toEqual([{ mtp: true }]);
-    expect(mtpOptions(base, { engine: 'llama', draftPath: '/m/draft.gguf' })).toEqual([]);
-    expect(mtpOptions(base, { engine: 'llama', embeddedMtp: true })).toEqual([]);
-    expect(mtpOptions(base, { engine: 'litert' })).toEqual([]);
+    expect(mtpOptions(base, { engine: 'llama' }, 1).map((o) => o.extra)).toEqual([{ mtp: true }]);
+    expect(mtpOptions(base, { engine: 'llama' }, 3).map((o) => o.extra)).toEqual([{ mtp: true }]);
+    expect(mtpOptions(base, { engine: 'llama', draftPath: '/m/draft.gguf' }, 1)).toEqual([]);
+    expect(mtpOptions(base, { engine: 'llama', embeddedMtp: true }, 1)).toEqual([]);
+    expect(mtpOptions(base, { engine: 'litert' }, 1)).toEqual([]);
+  });
+
+  it('never loads built-in MTP to test it on a model whose file has no MTP layers, or whose layers are unknown', () => {
+    const base = { id: 'cpu-6', label: 'CPU', backend: 'cpu' as any, threads: 6 };
+    expect(mtpOptions(base, { engine: 'llama' }, 0)).toEqual([]); // the file says none
+    expect(mtpOptions(base, { engine: 'llama' }, null)).toEqual([]); // could not be read: not assumed
+    expect(mtpOptions(base, { engine: 'llama' })).toEqual([]);
   });
 });

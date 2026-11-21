@@ -575,7 +575,7 @@ function examAnswerer(cfg: LearnConfig, subjectId?: string): Answerer {
     const notes = working.usedNotes;
     const material = [sources && `SOURCES:\n${sources}`, working.text && `STORED NOTES:\n${working.text}`].filter(Boolean).join('\n\n');
     const text = await ask(`${EXAM_SYSTEM} Use only the material given and cite sources like [1].`, `${material || 'No material found.'}\n\nQUESTION: ${item.question}`, 'learner');
-    return { text, sourceCount: list.length, memoryCount: mode === 'memory' ? notes.length : undefined };
+    return { text, sourceCount: list.length, passages: list.map((source) => String((source as { passage?: string }).passage ?? '')), memoryCount: mode === 'memory' ? notes.length : undefined };
   };
 }
 
@@ -621,7 +621,7 @@ export async function runExamNow(subjectId: string, onStatus: (message: string) 
     const results: ExamMetrics[] = [];
     for (const mode of EXAM_MODES) {
       onStatus(`Exam: ${mode}...`);
-      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode), judge: judgeSecondOpinion });
+      const metrics = await runExam({ items, mode, answer: examAnswerer(cfg, subjectId), previousFailures: exams.lastFailures(mode), judge: judgeSecondOpinion, model: roleModels.learner });
       const memoryMB = (await require('../services/hardware').hardwareService.getProcessMemory?.().catch(() => null))?.footprintMB;
       const counts = safely(() => learningKnowledgeDb.getReliabilitySnapshot().counts, null);
       exams.saveResult(mode, { ...metrics, retest: only ? true : undefined, memoryMB, claimsStored: counts ? Object.values(counts).reduce((a: number, b: number) => a + b, 0) : undefined });

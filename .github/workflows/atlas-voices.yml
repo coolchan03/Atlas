@@ -11,6 +11,11 @@ on:
 permissions:
   contents: write
 
+# These runs upload files to a shared release: one at a time, and a newer run waits instead of cancelling an upload halfway.
+concurrency:
+  group: atlas-voices
+  cancel-in-progress: false
+
 jobs:
   voices:
     runs-on: ubuntu-latest

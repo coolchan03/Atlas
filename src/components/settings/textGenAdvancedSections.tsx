@@ -25,6 +25,7 @@ import { hardwareService } from '../../services/hardware';
 import { isLocalModelLoaded, localGpuInfo } from '../../services/engines';
 import { describeOffload } from '../../services/gpuOffload';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
+import { recoverFromPreviousRun, describeLoadHealth, clearCrashHistory } from '../../services/loadGuard';
 
 const isAndroid = Platform.OS === 'android';
 
@@ -327,6 +328,42 @@ export const MtpToggle: React.FC = () => {
       onSelect={(id) => updateSettings({ useMtp: id === 'on' })}
       testIdFor={(id) => `use-mtp-${id}-button`}
     />
+  );
+};
+
+// ─── Safe Model Loading ───────────────────────────────────────────────────────
+
+/** Plain-language summary of the last model load, so nobody has to read raw logs to learn why a model closed the app. */
+export const SafeModelLoadingToggle: React.FC = () => {
+  const styles = useThemedStyles(createTextGenAdvancedStyles);
+  const { settings, updateSettings } = useAppStore();
+  const [health, setHealth] = useState(() => describeLoadHealth());
+  useEffect(() => {
+    let alive = true;
+    // The saved record is read once per launch; this also turns a crash from the previous run into a visible entry.
+    void recoverFromPreviousRun().then(() => { if (alive) setHealth(describeLoadHealth()); });
+    return () => { alive = false; };
+  }, []);
+  const forget = async () => {
+    await clearCrashHistory();
+    setHealth(describeLoadHealth());
+  };
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Safe Model Loading"
+      description="Loads models on the CPU with no picture file and no MTP drafting, which are the parts most likely to close the app while a model starts. Nothing is deleted; turn it off to go back. Requires model reload."
+      options={BOOL_OPTIONS}
+      current={settings.safeModelLoading === true ? 'on' : 'off'}
+      onSelect={(id) => updateSettings({ safeModelLoading: id === 'on' })}
+      testIdFor={(id) => `safe-model-loading-${id}-button`}
+    >
+      <Text style={styles.desc} testID="load-health-summary">{health.summary}</Text>
+      {health.crashes.length > 0 && (
+        <TouchableOpacity testID="forget-crash-history-button" style={styles.button} onPress={forget}>
+          <Text style={styles.buttonText}>Forget crash history</Text>
+        </TouchableOpacity>
+      )}
+    </SegmentedRow>
   );
 };
 
