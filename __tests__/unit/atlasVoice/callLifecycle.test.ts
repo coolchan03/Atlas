@@ -61,3 +61,34 @@ describe('call stall note', () => {
     expect(stallNote(with_({ failedStarts: 3 }), 4000)).toContain('flags on: handsFree, voiceAvailable, failedStarts');
   });
 });
+
+describe('a microphone that keeps failing is retried, then reported (the call never sits deaf while looking alive)', () => {
+  const { recoveryStep, micFailureNote, RECOVERY_COOLDOWN_MS, MAX_RECOVERY_CYCLES } = require('../../../src/atlasVoice/callLifecycle');
+  const stuck = with_({ failedStarts: MAX_FAILED_STARTS });
+
+  it('does nothing while the microphone has not failed enough times', () => {
+    expect(recoveryStep(with_({ failedStarts: MAX_FAILED_STARTS - 1 }), 0)).toEqual({ action: 'none' });
+  });
+
+  it('waits and retries, with a longer wait each time', () => {
+    expect(recoveryStep(stuck, 0)).toEqual({ action: 'retry', afterMs: RECOVERY_COOLDOWN_MS });
+    expect(recoveryStep(stuck, 1)).toEqual({ action: 'retry', afterMs: RECOVERY_COOLDOWN_MS * 2 });
+    expect(recoveryStep(stuck, 2)).toEqual({ action: 'retry', afterMs: RECOVERY_COOLDOWN_MS * 3 });
+  });
+
+  it('gives up after the last cycle, so it cannot retry for ever', () => {
+    expect(recoveryStep(stuck, MAX_RECOVERY_CYCLES)).toEqual({ action: 'give-up' });
+  });
+
+  it('never "recovers" something that is not broken: muted, paused, busy, ended, or already listening', () => {
+    for (const o of [{ muted: true }, { paused: true }, { isGenerating: true }, { isTranscribing: true }, { speaking: true }, { isRecording: true }, { isModelLoading: true }, { handsFree: false }, { voiceAvailable: false }]) {
+      expect(recoveryStep(with_({ failedStarts: MAX_FAILED_STARTS, ...o }), 0)).toEqual({ action: 'none' });
+    }
+  });
+
+  it('says "trying again" while it is trying and "tap the button" only once it has stopped', () => {
+    expect(micFailureNote(0)).toMatch(/Trying again/);
+    expect(micFailureNote(MAX_RECOVERY_CYCLES - 1)).toMatch(/Trying again/);
+    expect(micFailureNote(MAX_RECOVERY_CYCLES)).toMatch(/Tap the button/);
+  });
+});
