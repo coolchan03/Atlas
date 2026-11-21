@@ -51,12 +51,12 @@ function runPhone(script: Script) {
   return { seen, prompts };
 }
 
-let original: { cacheType: string; flashAttn: boolean };
+let original: { cacheType: string; flashAttn: boolean; nBatch: number };
 beforeEach(() => {
   jest.clearAllMocks();
   resetStores();
   useAppStore.setState({ downloadedModels: [{ id: 'm1', name: 'M', author: 'a', filePath: '/m/m.gguf', fileName: 'm.gguf', fileSize: 1e9, quantization: 'Q4', downloadedAt: 't', engine: 'llama' } as any] });
-  original = { cacheType: useAppStore.getState().settings.cacheType, flashAttn: useAppStore.getState().settings.flashAttn };
+  original = { cacheType: useAppStore.getState().settings.cacheType, flashAttn: useAppStore.getState().settings.flashAttn, nBatch: useAppStore.getState().settings.nBatch };
 });
 
 describe('tuneDevice with noisy timings', () => {
@@ -97,25 +97,44 @@ describe('tuneDevice with noisy timings', () => {
   });
 
   it('the long-prompt round re-reads a barely-better batch size with a different start, so a cached prompt cannot flatter the repeat', async () => {
-    const phone = runPhone({ 'cpu:4': [8.0] });
-    // first words: the size in use ("batch-now") 20 s, the quickest alternative only 17 s
+    runPhone({ 'cpu:4': [8.0] });
+    // first words: the batch size in use ("batch-now") 20 s, the others 17 s: a gain one reading would adopt but noise could explain
     let lastFirstWord = 0;
     mockedLlm.generateResponse.mockImplementation((async (messages: Array<{ content: string }>) => {
       const text = messages[0].content;
       if (text === 'Say hello.') return '';
       const long = text.includes('Summarise the paragraph above');
-      lastFirstWord = long ? 20000 : 500;
+      const { nBatch } = useAppStore.getState().settings;
+      lastFirstWord = long ? (nBatch === original.nBatch ? 20000 : 17000) : 500;
       return '';
     }) as any);
     mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: 8, lastTokensPerSecond: 8, lastTimeToFirstToken: lastFirstWord })) as any);
     await tuneDevice('m1', () => undefined, { deep: true });
-    expect(phone).toBeDefined();
     const calls = mockedLlm.generateResponse.mock.calls.map((c) => (c[0] as Array<{ content: string }>)[0].content);
     const longCalls = calls.filter((c) => c.includes('Summarise the paragraph above'));
-    expect(longCalls.length).toBeGreaterThan(1);
-    // equal readings everywhere = no real gain, so the batch sizes are compared and the repeat prompts start differently
+    expect(longCalls.length).toBeGreaterThan(3); // the round itself, then the repeats
     expect(longCalls.some((c) => /^Reading \d+\. /.test(c))).toBe(true);
-    expect(new Set(longCalls).size).toBeGreaterThan(1);
+    // each option is re-read once (baseline and the quicker size), and no repeat is the same text as its option's first reading
+    const repeats = longCalls.filter((c) => /^Reading \d+\. /.test(c));
+    const originals = longCalls.filter((c) => !/^Reading \d+\. /.test(c));
+    expect(repeats.length).toBeGreaterThanOrEqual(2);
+    expect(repeats.some((c) => originals.includes(c))).toBe(false);
+  });
+
+  it('does not re-read a batch size that is clearly faster (the gain is believed)', async () => {
+    runPhone({ 'cpu:4': [8.0] });
+    let lastFirstWord = 0;
+    mockedLlm.generateResponse.mockImplementation((async (messages: Array<{ content: string }>) => {
+      const text = messages[0].content;
+      if (text === 'Say hello.') return '';
+      const { nBatch } = useAppStore.getState().settings;
+      lastFirstWord = text.includes('Summarise the paragraph above') ? (nBatch === original.nBatch ? 20000 : 10000) : 500;
+      return '';
+    }) as any);
+    mockedLlm.getPerformanceStats.mockImplementation((() => ({ lastDecodeTokensPerSecond: 8, lastTokensPerSecond: 8, lastTimeToFirstToken: lastFirstWord })) as any);
+    await tuneDevice('m1', () => undefined, { deep: true });
+    const calls = mockedLlm.generateResponse.mock.calls.map((c) => (c[0] as Array<{ content: string }>)[0].content);
+    expect(calls.filter((c) => /^Reading \d+\. /.test(c) && c.includes('Summarise the paragraph above'))).toHaveLength(0);
   });
 
   it('restores the original settings and leaves nothing loaded half-way when cancelled or finished', async () => {

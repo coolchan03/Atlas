@@ -141,26 +141,30 @@ type TuneBase = { cacheType: CacheType; flashAttn: boolean; nBatch: number; gpuL
 /** Results within this share of the fastest are too close to call from one timing each. */
 const CLOSE_TO_TOP = 0.85;
 
-/** The (up to three) fastest first-round results that are within noise of the best: they are timed again before one is picked. */
+/** The two fastest first-round results when they are within noise of each other: they are timed again before one is picked (each repeat is a full model load, so no more than the decision needs). */
 export function contendersToConfirm(results: TuneResult[]): TuneResult[] {
   const ok = results.filter((r) => !r.error && r.tps > 0);
   const top = ok.reduce((m, r) => Math.max(m, r.tps), 0);
-  const close = ok.filter((r) => r.tps >= top * CLOSE_TO_TOP).sort((a, b) => b.tps - a.tps).slice(0, 3);
+  const close = ok.filter((r) => r.tps >= top * CLOSE_TO_TOP).sort((a, b) => b.tps - a.tps).slice(0, 2);
   return close.length >= 2 ? close : [];
 }
 
-/** The plain winner and the best memory-setting refinement, when the refinement is neither clearly worse nor clearly better (so one timing cannot decide). */
+/**
+ * The plain winner and the best memory-setting refinement, only when one timing would ADOPT the refinement (it beat the winner by REFINE_GAIN)
+ * without being so far ahead that noise cannot explain it. A refinement that did not win on its single timing changes nothing and costs nothing.
+ */
 export function refinementToConfirm(first: TuneResult | null, results: TuneResult[]): TuneResult[] {
   const refined = pickBest(results.filter((r) => r.option.extra));
-  const ambiguous = !!first && !!refined && refined.tps >= first.tps / CONFIRM_BELOW_GAIN && refined.tps < first.tps * CONFIRM_BELOW_GAIN;
+  const ambiguous = !!first && !!refined && refined.tps >= first.tps * REFINE_GAIN && refined.tps < first.tps * CONFIRM_BELOW_GAIN;
   return ambiguous && first && refined ? [first, refined] : [];
 }
 
-/** The batch size in use and the quickest alternative, when the alternative read the long prompt faster by less than CONFIRM_BELOW_GAIN. */
+/** The batch size in use and the quickest alternative, only when one reading would adopt the alternative (REFINE_GAIN faster) by a margin noise could explain (under CONFIRM_BELOW_GAIN). */
 export function batchesToConfirm(deepResults: TuneResult[]): TuneResult[] {
   const baseline = deepResults.find((r) => !r.error && r.option.id.endsWith('batch-now'));
   const quickest = deepResults.filter((r) => !r.error && !r.option.id.endsWith('batch-now') && r.firstWordSec > 0).sort((a, b) => a.firstWordSec - b.firstWordSec)[0];
-  return baseline && quickest && baseline.firstWordSec / quickest.firstWordSec < CONFIRM_BELOW_GAIN ? [baseline, quickest] : [];
+  const gain = baseline && quickest ? baseline.firstWordSec / quickest.firstWordSec : 0;
+  return baseline && quickest && gain >= REFINE_GAIN && gain < CONFIRM_BELOW_GAIN ? [baseline, quickest] : [];
 }
 
 /** The same result after it was timed again (matched by option), or the original. */

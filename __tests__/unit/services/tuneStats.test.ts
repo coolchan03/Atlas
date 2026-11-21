@@ -52,25 +52,27 @@ describe('merging repeated timings', () => {
 });
 
 describe('what is timed again', () => {
-  it('only results within noise of the fastest, at most three, and none when there is a clear winner', () => {
-    expect(contendersToConfirm([r('a', 5.6), r('b', 5.0), r('c', 4.9), r('d', 4.8)]).map((x) => x.option.id)).toEqual(['a', 'b', 'c']);
+  it('only the top two when they are within noise of each other, and none when there is a clear winner', () => {
+    expect(contendersToConfirm([r('a', 5.6), r('b', 5.0), r('c', 4.9), r('d', 4.8)]).map((x) => x.option.id)).toEqual(['a', 'b']);
     expect(contendersToConfirm([r('a', 8), r('b', 4), r('c', 3)])).toEqual([]);
     expect(contendersToConfirm([r('a', 5)])).toEqual([]);
     expect(contendersToConfirm([r('a', 5), { ...r('b', 5), error: 'x' }])).toEqual([]);
   });
 
-  it('a memory refinement is re-checked only when it is neither clearly worse nor clearly better', () => {
+  it('a memory refinement is re-checked only when one timing would adopt it and noise could explain the gain', () => {
     const first = r('cpu-4', 5);
-    expect(refinementToConfirm(first, [first, r('cpu-4+cache-q8_0', 5.3, { cacheType: 'q8_0' })]).map((x) => x.option.id)).toEqual(['cpu-4', 'cpu-4+cache-q8_0']);
+    expect(refinementToConfirm(first, [first, r('cpu-4+cache-q8_0', 5.5, { cacheType: 'q8_0' })]).map((x) => x.option.id)).toEqual(['cpu-4', 'cpu-4+cache-q8_0']);
+    expect(refinementToConfirm(first, [first, r('cpu-4+cache-q8_0', 5.3, { cacheType: 'q8_0' })])).toEqual([]); // 6% on one timing would not be adopted anyway
     expect(refinementToConfirm(first, [first, r('cpu-4+cache-q8_0', 8, { cacheType: 'q8_0' })])).toEqual([]); // clearly better
     expect(refinementToConfirm(first, [first, r('cpu-4+cache-q8_0', 2, { cacheType: 'q8_0' })])).toEqual([]); // clearly worse
     expect(refinementToConfirm(null, [])).toEqual([]);
   });
 
-  it('a batch size is re-checked only when its gain on the long prompt is small', () => {
+  it('a batch size is re-checked only when its gain on the long prompt would be adopted but is small enough to be noise', () => {
     const now = r('x+batch-now', 5, undefined, 20);
     expect(batchesToConfirm([now, r('x+batch-1024', 5, undefined, 17)]).map((x) => x.option.id)).toEqual(['x+batch-now', 'x+batch-1024']);
     expect(batchesToConfirm([now, r('x+batch-1024', 5, undefined, 10)])).toEqual([]); // 2x faster: believed
+    expect(batchesToConfirm([now, r('x+batch-1024', 5, undefined, 19.5)])).toEqual([]); // 3% faster would not be adopted anyway
     expect(batchesToConfirm([now])).toEqual([]);
   });
 
