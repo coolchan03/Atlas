@@ -2,6 +2,7 @@ import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
 import { useAccelRecord } from '../atlasTools/accelRecord';
 import { useSpecBenefit } from '../atlasTools/specBenefit';
+import { loadFallbackNotes } from './fallbackNotes';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -386,6 +387,7 @@ class LLMService {
             }
             await leaveStage();
             const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = init;
+            notes.push(...loadFallbackNotes({ requestedContext: ctxLen, actualContext: actualLength, gpuAttemptFailed, backend, requestedGpuLayers: nGpuLayers, attemptedGpuLayers }));
             // From here a context exists. Whatever goes wrong next, it is released (never left half-initialized behind).
             try {
               this.assertNotAbandoned(epoch);
