@@ -762,22 +762,57 @@ export async function auditNow(agentId: string): Promise<void> {
   try { await managerReview(agent, cfg); } catch (e: any) { L().log({ agentId, kind: 'error', title: 'Problem', body: String(e?.message || e) }); } finally { running = false; status('Idle'); }
 }
 
-/** Session mode: give the session's lessons and judge-approved answers to the agent. */
-export async function keepSession(agentId: string): Promise<string> {
+/** What a practice session proposes to keep: its lessons (one per line, repeats gone) and the answers the Judge checked. Nothing here is saved yet. */
+export interface SessionProposal { lessons: string[]; answers: Array<{ index: number; q: string; answer: string }> }
+
+export function sessionProposal(agentId: string): SessionProposal {
+  const st = L().get(agentId);
+  const lessons = [...new Set((st.sessionLessons ?? '').split('\n').map((l) => l.trim()).filter(Boolean))];
+  const answers = (st.notes ?? []).slice(0, 60).map((n, index) => ({ index, q: n.q, answer: n.answer }));
+  return { lessons, answers };
+}
+
+/**
+ * Session mode: keep what the PERSON approved from the session. A practice session proposes lessons and Judge-checked answers; the Judge is
+ * often the same small model that wrote them, so none of it becomes trusted memory on its own. The person reviews the proposal
+ * (sessionProposal) and passes what they approve: those lessons join the agent's lessons, and those answers are saved to the project's
+ * knowledge base, where later sessions and conversations find them. What was not approved stays proposed; nothing is dropped silently.
+ * With no approval passed, nothing is kept and the proposal is left for review.
+ */
+export async function keepSession(agentId: string, approved?: { lessons?: string[]; answers?: number[] }): Promise<string> {
   const agent = learningAgent(agentId);
   const cfg = L().getConfig(agentId);
-  const st = L().get(agentId);
   if (!agent) return 'Agent not found';
-  // Pre-upgrade judge-passed notes were never independently verified. Preserve them,
-  // but do not turn them into trusted knowledge merely by pressing Keep.
-  if (st.notes.length || st.sessionLessons.trim()) return 'Reports and proposed lessons are preserved for review. No unverified facts were added to agent memory.';
-  const merged = [agent.lessons?.trim(), st.sessionLessons.trim()].filter(Boolean).join('\n');
-  const lines = [...new Set(merged.split('\n').map((l) => l.trim()).filter(Boolean))].slice(-16);
-  setLessons(agentId, lines.join('\n'));
-  let saved = 0;
-  if (cfg.projectId) {
-    for (const n of st.notes.slice(0, 60)) { await saveNote(agent, { ...cfg, mode: 'keep' }, { q: n.q, answer: n.answer }); saved++; }
+  const proposal = sessionProposal(agentId);
+  if (!proposal.lessons.length && !proposal.answers.length) return 'This session has proposed nothing to keep yet.';
+  if (!approved || (!approved.lessons?.length && !approved.answers?.length)) {
+    return `The proposed lessons and answers are preserved for review (${proposal.lessons.length} lessons, ${proposal.answers.length} answers). Choose what to keep.`;
   }
+  const chosenLessons = proposal.lessons.filter((l) => approved.lessons?.includes(l)); // only what the session actually proposed
+  const chosenAnswers = proposal.answers.filter((a) => approved.answers?.includes(a.index));
+  let lessonsKept = 0;
+  if (chosenLessons.length) {
+    const merged = [...new Set([...(agent.lessons ?? '').split('\n').map((l) => l.trim()).filter(Boolean), ...chosenLessons])].slice(-16);
+    setLessons(agentId, merged.join('\n'));
+    lessonsKept = chosenLessons.length;
+  }
+  // An answer can only be kept in a project's knowledge base. Without a project it stays proposed rather than being thrown away.
+  let answersKept = 0;
+  const keptIndexes = new Set<number>();
+  if (cfg.projectId) {
+    for (const a of chosenAnswers) { await saveNote(agent, { ...cfg, mode: 'keep' }, { q: a.q, answer: a.answer }); keptIndexes.add(a.index); answersKept++; }
+  }
+  const after = L().get(agentId);
+  const keptLessonSet = new Set(chosenLessons);
+  L().patch(agentId, {
+    sessionLessons: (after.sessionLessons ?? '').split('\n').filter((l) => !keptLessonSet.has(l.trim())).join('\n'),
+    notes: (after.notes ?? []).filter((_, i) => !keptIndexes.has(i)),
+  });
+  const waiting = chosenAnswers.length - answersKept;
+  return `Kept ${lessonsKept} lesson${lessonsKept === 1 ? '' : 's'}${cfg.projectId ? ` and ${answersKept} answer${answersKept === 1 ? '' : 's'} (saved to the project's knowledge base)` : ''}.${waiting > 0 ? ` ${waiting} approved answer${waiting === 1 ? ' needs' : 's need'} a project to be saved in, so ${waiting === 1 ? 'it was' : 'they were'} left proposed.` : ''}`;
+}
+
+/** Throws away what a session proposed, when the person decides none of it is worth keeping. */
+export function discardSession(agentId: string): void {
   L().patch(agentId, { sessionLessons: '', notes: [] });
-  return `Kept ${lines.length} lessons${cfg.projectId ? ` and ${saved} answers (saved to the project's knowledge base)` : ''}.`;
 }

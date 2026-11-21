@@ -19,7 +19,8 @@ import { refineTask } from '../learning/refineTask';
 import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
 import { startTalkChat } from '../learning/talk';
 import { askAsReport } from '../learning/askReport';
-import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, newRound, learningLoad } from '../learning/engine';
+import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, discardSession, sessionProposal, newRound, learningLoad } from '../learning/engine';
+import { SessionReviewSheet } from '../components/SessionReviewSheet';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
 import { ProjectZip } from './learningReliability/ProjectZip';
@@ -71,6 +72,7 @@ export const LearningScreen: React.FC = () => {
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
   const clearAgent = useLearningStore((s) => s.clearAgent);
   const [running, setRunning] = useState(isLearning());
+  const [reviewing, setReviewing] = useState(false);
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
   const phase = phaseOf(statusText, isLearning());
   const [open, setOpen] = useState<string | null>(null);
@@ -471,9 +473,13 @@ export const LearningScreen: React.FC = () => {
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>This practice session</Text>
           <Text style={styles.counts}>{st?.notes?.length ?? 0} checked answers{st?.sessionLessons ? `\nLessons so far:\n${st.sessionLessons}` : ''}</Text>
-          <TouchableOpacity disabled={running} onPress={async () => { try { Alert.alert('Done', await keepSession(agentId)); } catch (e: any) { Alert.alert('Could not keep it', String(e?.message || e)); } }} style={[styles.smallBtn, literalStyles.s4]}>
+          <TouchableOpacity disabled={running} testID="learning-keep" onPress={() => setReviewing(true)} style={[styles.smallBtn, literalStyles.s4]}>
             <Text style={styles.smallBtnText}>Keep what it learned</Text>
           </TouchableOpacity>
+          <SessionReviewSheet visible={reviewing} proposal={sessionProposal(agentId)} canSaveAnswers={!!cfg.projectId}
+            onClose={() => setReviewing(false)}
+            onDiscard={() => { discardSession(agentId); setReviewing(false); Alert.alert('Done', 'The session was thrown away. Nothing was kept.'); }}
+            onKeep={async (approved) => { setReviewing(false); try { Alert.alert('Done', await keepSession(agentId, approved)); } catch (e: any) { Alert.alert('Could not keep it', String(e?.message || e)); } }} />
         </View>
       )}
 
