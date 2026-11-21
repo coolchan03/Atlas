@@ -462,8 +462,8 @@ class LLMService {
           const message = String(error?.message || error || 'Native load failed');
           if (!refused) {
             await recordLoadFailure({ modelPath, backend, ...attempt, stage, message, nativeTail: recentNativeLog(6) || undefined });
-            // Only a failure of the plainest setup counts against the accelerator: a refused try, or one that also had MTP or pictures switched on, may have failed for those.
-            if (!refused && !attempt.mtp && !attempt.vision) useAccelRecord.getState().recordFailure(modelPath, backend);
+            // Only a failure of the plainest setup counts against the accelerator: one that also had MTP or pictures switched on may have failed for those, and running out of memory is about the model, not the accelerator.
+            if (!attempt.mtp && !attempt.vision && !/memory|RAM/i.test(message)) useAccelRecord.getState().recordFailure(modelPath, backend);
           }
           // A memory refusal is about the model, not the backend: keep its type so the UI
           // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
