@@ -1,7 +1,7 @@
-import { RagSearchResult, ragDatabase } from './database';
+import { RagSearchResult, StoredEmbedding, ragDatabase } from './database';
 import { isProtectedProject, knowledgeSource } from './knowledgeSource';
 import { embeddingService } from './embedding';
-import { cosineSimilarity } from './vectorMath';
+import { cosineScorer } from './vectorMath';
 import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
@@ -46,17 +46,24 @@ const KEYWORD_CANDIDATES = 400;
 interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
 
 /** The stored embeddings of a project, kept in memory until a document is added, removed or switched, so a lesson (many searches in a row) does not read and decode every one each time. Not kept for a protected project, nor for a very large one. */
-const embeddingCache = new Map<string, { version: number; stored: ReturnType<typeof ragDatabase.getEmbeddingsByProject> }>();
+type Embedded = Omit<StoredEmbedding, 'embedding'> & { embedding: ArrayLike<number> };
+const embeddingCache = new Map<string, { version: number; stored: Embedded[] }>();
 const MAX_CACHED = 40000;
 /** Forgets the kept embeddings (for a test that swaps the database under the service). */
 export const resetEmbeddingCache = (): void => embeddingCache.clear();
-function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSource>) {
+function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSource>): Embedded[] {
   // No version to compare (or a protected project): read fresh every time.
   if (isProtectedProject(projectId) || typeof ragDatabase.version !== 'number') return source.getEmbeddingsByProject(projectId);
   const hit = embeddingCache.get(projectId);
   if (hit && hit.version === ragDatabase.version) return hit.stored;
   const stored = source.getEmbeddingsByProject(projectId);
-  if (stored.length <= MAX_CACHED) embeddingCache.set(projectId, { version: ragDatabase.version, stored }); else embeddingCache.delete(projectId);
+  // Kept as 32-bit floats (what is stored on disk): half the memory of a list of numbers, and a faster pass over each vector.
+  if (stored.length <= MAX_CACHED) {
+    const compact = stored.map((e): Embedded => ({ ...e, embedding: Float32Array.from(e.embedding) }));
+    embeddingCache.set(projectId, { version: ragDatabase.version, stored: compact });
+    return compact;
+  }
+  embeddingCache.delete(projectId);
   return stored;
 }
 
@@ -132,12 +139,13 @@ class RetrievalService {
       return this.lexical(projectId, query, { include, topK });
     }
 
+    const score = cosineScorer(queryVec);
     const scored = stored.map(entry => ({
       doc_id: entry.doc_id,
       name: entry.name,
       content: entry.content,
       position: entry.position,
-      score: cosineSimilarity(queryVec, entry.embedding),
+      score: score(entry.embedding),
     }));
 
     scored.sort((a, b) => b.score - a.score);

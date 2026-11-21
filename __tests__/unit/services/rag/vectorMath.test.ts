@@ -143,3 +143,21 @@ describe('vectorMath', () => {
     });
   });
 });
+
+describe('cosineScorer', () => {
+  const { cosineScorer, cosineSimilarity } = require('../../../../src/services/rag/vectorMath');
+  it('gives the same numbers as cosineSimilarity, for plain arrays and 32-bit floats alike', () => {
+    const q = [0.2, -0.5, 0.9, 0.1];
+    const vectors = [[1, 0, 0, 0], [0.2, -0.5, 0.9, 0.1], [-1, 1, -1, 1], [0, 0, 0, 0]];
+    const score = cosineScorer(q);
+    for (const v of vectors) {
+      expect(score(v)).toBeCloseTo(cosineSimilarity(q, v), 10);
+      expect(score(Float32Array.from(v))).toBeCloseTo(cosineSimilarity(q, v), 5);
+    }
+  });
+
+  it('scores a zero vector, or a zero question, as 0 rather than NaN', () => {
+    expect(cosineScorer([1, 2])([0, 0])).toBe(0);
+    expect(cosineScorer([0, 0])([1, 2])).toBe(0);
+  });
+});
