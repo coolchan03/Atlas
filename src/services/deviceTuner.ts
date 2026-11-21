@@ -108,7 +108,7 @@ function batchOptions(base: TuneOption, current: number): TuneOption[] {
 const REFINE_GAIN = 1.08;
 
 /** A typical chat reply, in tokens: what "the whole reply" means when options are ranked. */
-export const TYPICAL_REPLY_TOKENS = 150;
+const TYPICAL_REPLY_TOKENS = 150;
 
 /**
  * Speed over a whole reply: tokens written divided by the time from asking to the last word (the wait for the first word plus the writing).
@@ -261,6 +261,15 @@ function keepBatch(deepResults: TuneResult[], chosen: TuneResult): TuneResult {
 }
 
 /** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). */
+/**
+ * Nothing won, or the test was cancelled: the last trial's model is still loaded with the trial's settings. Put back the model that was active
+ * (with the settings it had), so no stale context or unexpected model is left running.
+ */
+async function reloadOriginal(modelId: string | null | undefined): Promise<void> {
+  if (!modelId) return;
+  try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(modelId); } catch (e) { logger.warn(`[TUNE] could not reload the model that was active before the test: ${String((e as Error)?.message || e)}`); }
+}
+
 let tuning: Promise<unknown> | null = null;
 /** True while a speed test is running (only one may: each one loads and unloads the model, so two at once would fight over it). */
 export const isTuning = (): boolean => tuning !== null;
@@ -350,11 +359,7 @@ async function runTuning(modelId: string, onProgress: (p: TuneProgress) => void,
   }
   const best = cancelFlag ? null : chosen;
   await restoreMtp(modelId, model, best);
-  // Nothing won, or it was cancelled: the last trial's model is still loaded with the trial's settings. Put back the model that was active (with the
-  // settings it had), so no stale context or unexpected model is left running.
-  if (!best && originallyActive) {
-    try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(originallyActive); } catch (e) { logger.warn(`[TUNE] could not reload the model that was active before the test: ${String((e as Error)?.message || e)}`); }
-  }
+  if (!best) await reloadOriginal(originallyActive);
   if (best) {
     // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
     // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
