@@ -7,6 +7,11 @@ on:
     branches: [atlas-image-native]
   workflow_dispatch:
 
+# A newer push to the same branch replaces an older build still running. A run started by hand (an audit batch) is never cancelled by a push.
+concurrency:
+  group: atlas-native-image-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 jobs:
   native-image-apk:
     runs-on: ubuntu-24.04

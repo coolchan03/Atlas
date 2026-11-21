@@ -10,6 +10,11 @@ on:
     branches: [atlas-voice]
     paths: ['atlas/**', '.github/workflows/atlas-packs.yml']
 
+# These runs upload files to a shared release: one at a time, and a newer run waits instead of cancelling an upload halfway.
+concurrency:
+  group: atlas-packs
+  cancel-in-progress: false
+
 jobs:
   release:
     permissions:

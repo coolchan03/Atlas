@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch replaces an older build still running. A run started by hand (an audit batch) is never cancelled by a push.
+concurrency:
+  group: atlas-vulkan-experimental-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 jobs:
   native-vulkan:
     runs-on: ubuntu-24.04

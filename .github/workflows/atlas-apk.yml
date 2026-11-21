@@ -364,8 +364,22 @@ jobs:
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
           retention-days: 3
+      # An automatic publish (a push to a stable branch) is only for the newest commit. If a newer commit has landed while this one was building,
+      # this APK is out of date: it stays available as the build file, but is not published as the latest release (the newer commit's own run
+      # publishes). A manual run with publish ticked is the person's explicit choice and always publishes.
+      - name: Is this still the newest commit of the branch?
+        id: head
+        if: github.event_name == 'push'
+        run: |
+          current="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [ -n "$current" ] && [ "$current" != "$GITHUB_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Not published::A newer commit ($current) has landed on ${GITHUB_REF_NAME}, so this older build ($GITHUB_SHA) is not published as the latest release. The APK is saved as the build file Atlas-apk on this run."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets' || inputs.publish == true)
+        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets')))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
