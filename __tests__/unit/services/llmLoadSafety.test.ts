@@ -108,6 +108,21 @@ describe('speculative decoding that is slower on this phone', () => {
   });
 });
 
+describe('a model\'s own backend', () => {
+  const { useTuned } = require('../../../src/atlasTools/speed');
+
+  it('is used for that model, while the global backend stays what it was for others', async () => {
+    setSettings({ inferenceBackend: 'opencl' });
+    useAppStore.setState({ downloadedModels: [{ id: 'm1', filePath: MODEL } as any, { id: 'm2', filePath: '/models/other.gguf' } as any] });
+    useTuned.setState({ memory: { m1: { inferenceBackend: 'cpu', nThreads: 3, from: { inferenceBackend: 'opencl', nThreads: useAppStore.getState().settings.nThreads } } } });
+    await llmService.loadModel(MODEL);
+    expect(llmService.getLoadReport()?.backend).toBe('cpu');
+    await llmService.loadModel('/models/other.gguf');
+    expect(llmService.getLoadReport()?.backend).not.toBe('cpu'); // the global opencl (or its fallback), not m1's choice
+    useTuned.setState({ memory: {} });
+  });
+});
+
 describe('Safe Model Loading', () => {
   it('runs on the CPU with no picture file and no MTP, even when all three are configured', async () => {
     setSettings({ safeModelLoading: true, inferenceBackend: 'opencl' });

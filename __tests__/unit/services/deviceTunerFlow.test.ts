@@ -167,4 +167,27 @@ describe('tuneDevice with noisy timings', () => {
     runPhone({ 'cpu:4': [5.0, 5.0] });
     await expect(tuneDevice('m1', () => undefined)).resolves.toBeTruthy();
   });
+  it('keeps the winning backend and threads for this model only: the global settings and other models are unchanged', async () => {
+    const { useTuned, withModelMemory } = require('../../../src/atlasTools/speed');
+    const before = { ...useAppStore.getState().settings };
+    runPhone({ 'auto:4': [3.0], 'cpu:4': [8.0], 'cpu:3': [3.5], 'cpu:6': [4.0] });
+    const outcome = await tuneDevice('m1', () => undefined);
+    expect(outcome.best?.option.id).toBe('cpu-4');
+    const after = useAppStore.getState().settings;
+    expect(after.inferenceBackend).toBe(before.inferenceBackend);
+    expect(after.nThreads).toBe(before.nThreads);
+    expect(after.backendUserChosen).toBe(before.backendUserChosen);
+    expect(useTuned.getState().memory.m1).toMatchObject({ inferenceBackend: 'cpu', nThreads: 4 });
+    // m1 loads with its own result; a different model loads with the global settings.
+    expect(withModelMemory(after, 'm1')).toMatchObject({ inferenceBackend: 'cpu', nThreads: 4 });
+    expect(withModelMemory(after, 'm2')).toMatchObject({ inferenceBackend: before.inferenceBackend, nThreads: before.nThreads });
+  });
+
+  it('lets a change made in Settings afterwards win over the saved per-model choice', async () => {
+    const { withModelMemory } = require('../../../src/atlasTools/speed');
+    runPhone({ 'auto:4': [3.0], 'cpu:4': [8.0], 'cpu:3': [3.5], 'cpu:6': [4.0] });
+    await tuneDevice('m1', () => undefined);
+    const changed = { ...useAppStore.getState().settings, inferenceBackend: 'opencl', nThreads: 2 };
+    expect(withModelMemory(changed, 'm1')).toMatchObject({ inferenceBackend: 'opencl', nThreads: 2 });
+  });
 });

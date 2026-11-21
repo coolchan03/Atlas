@@ -5,6 +5,7 @@ import { INFERENCE_BACKENDS, type DownloadedModel } from '../types';
 import { automaticBackendForModel } from '../utils/acceleration';
 import logger from '../utils/logger';
 import { chooseBackend, useAccelRecord } from './accelRecord';
+import { useTuned } from './speed';
 
 /**
  * Atlas automatic acceleration policy.
@@ -59,6 +60,8 @@ export async function autoPickAccelerationForModel(model: DownloadedModel): Prom
 
   const st = useAppStore.getState();
   if (st.settings.backendUserChosen || st.settings.inferenceBackend === INFERENCE_BACKENDS.AUTO) return;
+  // This model's own speed test already chose its backend: leave it, and do not change the global backend under it (that would also change other models).
+  if (useTuned.getState().memory[model.id]?.inferenceBackend) return;
 
   try {
     const capability = await hardwareService.getAccelerationCapability();

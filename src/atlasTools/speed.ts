@@ -90,16 +90,18 @@ interface TunedState {
 }
 export interface ModelMemory {
   cacheType?: 'f16' | 'q8_0' | 'q4_0'; flashAttn?: boolean; nBatch?: number; gpuLayers?: number;
+  /** The CPU thread count and the backend this model's test chose. They are this model's own: other models keep the global ones. */
+  nThreads?: number; inferenceBackend?: string;
   /** The global values in force when it was saved: if the person changes one in Settings afterwards, their choice wins over the saved one. */
-  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number };
+  from?: { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number; nThreads?: number; inferenceBackend?: string };
 }
 
 /** The settings one model loads with: the global ones, with the memory settings its test kept (each only while the global one is unchanged since). */
-export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number }>(settings: T, modelId: string | undefined): T {
+export function withModelMemory<T extends { cacheType?: string; flashAttn?: boolean; nBatch?: number; gpuLayers?: number; nThreads?: number; inferenceBackend?: string }>(settings: T, modelId: string | undefined): T {
   const kept = modelId ? useTuned.getState().memory[modelId] : undefined;
   if (!kept) return settings;
   const out: T = { ...settings };
-  for (const key of ['cacheType', 'flashAttn', 'nBatch', 'gpuLayers'] as const) {
+  for (const key of ['cacheType', 'flashAttn', 'nBatch', 'gpuLayers', 'nThreads', 'inferenceBackend'] as const) {
     const wanted = kept[key];
     if (wanted !== undefined && (!kept.from || kept.from[key] === settings[key])) (out as Record<string, unknown>)[key] = wanted;
   }
