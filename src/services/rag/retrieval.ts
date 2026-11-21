@@ -1,7 +1,7 @@
 import { RagSearchResult, StoredEmbedding, ragDatabase } from './database';
 import { isProtectedProject, knowledgeSource } from './knowledgeSource';
 import { embeddingService } from './embedding';
-import { cosineScorer } from './vectorMath';
+import { cosineScorer, topByScore } from './vectorMath';
 import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
@@ -157,19 +157,13 @@ class RetrievalService {
     }
 
     const score = cosineScorer(queryVec);
-    const scored = stored.map(entry => ({
-      doc_id: entry.doc_id,
-      name: entry.name,
-      content: entry.content,
-      position: entry.position,
-      score: score(entry.embedding),
-    }));
-
-    scored.sort((a, b) => b.score - a.score);
+    // Only the best few are kept as the scores are worked out (no object and no sort for every passage in the library).
+    const scored = topByScore(stored, (entry) => score(entry.embedding), topK * 3)
+      .map(({ item, score: s }) => ({ doc_id: item.doc_id, name: item.name, content: item.content, position: item.position, score: s }));
     // Take extra candidates, add what only the question's own words find (a section number, a name), then keep the ones that are
     // about the question and spread them over the documents.
     const keyword = scopeOf(projectId).flatMap((id) => keywordCandidates(id, query, include ? KEYWORD_CANDIDATES_FILTERED : topK * 3) ?? []).filter((c) => !include || include(c.name));
-    const ranked = rankChunks(query, mergeKeywordHits(scored.slice(0, topK * 3), keyword, topK * 3), topK);
+    const ranked = rankChunks(query, mergeKeywordHits(scored, keyword, topK * 3), topK);
     return { chunks: ranked, kind: ranked.length ? 'semantic' : 'none-matching' };
   }
 

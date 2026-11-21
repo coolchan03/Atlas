@@ -62,3 +62,23 @@ export function cosineScorer(query: ArrayLike<number>): (vec: ArrayLike<number>)
     return dot / denom;
   };
 }
+
+/**
+ * The `k` items with the highest scores, best first, without scoring-and-sorting the whole list into new objects: one pass keeps a small sorted
+ * shortlist, and only an item that beats the shortlist's worst is placed in it. For a library of tens of thousands of passages that is one score per
+ * passage and a few insertions, instead of a list of that many objects sorted. Items with a NaN score are never chosen. Ties keep list order.
+ */
+export function topByScore<T>(items: readonly T[], scoreOf: (item: T) => number, k: number): Array<{ item: T; score: number }> {
+  const best: Array<{ item: T; score: number }> = [];
+  if (k <= 0) return best;
+  for (const item of items) {
+    const score = scoreOf(item);
+    if (Number.isNaN(score)) continue;
+    if (best.length === k && score <= best[k - 1].score) continue;
+    let at = best.length;
+    while (at > 0 && best[at - 1].score < score) at -= 1;
+    best.splice(at, 0, { item, score });
+    if (best.length > k) best.pop();
+  }
+  return best;
+}

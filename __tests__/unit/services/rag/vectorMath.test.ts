@@ -160,3 +160,20 @@ describe('cosineScorer', () => {
     expect(cosineScorer([0, 0])([1, 2])).toBe(0);
   });
 });
+
+describe('topByScore', () => {
+  const { topByScore } = require('../../../../src/services/rag/vectorMath');
+  const scores = (items: number[], k: number) => topByScore(items, (x: number) => x, k).map((r: { score: number }) => r.score);
+
+  it('returns the k best, best first, the same as sorting everything', () => {
+    const items = Array.from({ length: 500 }, (_, i) => ((i * 7919) % 1000) / 10);
+    const sorted = [...items].sort((a, b) => b - a);
+    for (const k of [1, 5, 30, 500, 900]) expect(scores(items, k)).toEqual(sorted.slice(0, k));
+  });
+
+  it('keeps list order for equal scores, skips NaN, and gives nothing for k of 0', () => {
+    const r = topByScore([{ n: 'a', s: 1 }, { n: 'b', s: 1 }, { n: 'c', s: NaN }, { n: 'd', s: 2 }], (x: { s: number }) => x.s, 3);
+    expect(r.map((x: { item: { n: string } }) => x.item.n)).toEqual(['d', 'a', 'b']);
+    expect(scores([1, 2, 3], 0)).toEqual([]);
+  });
+});
