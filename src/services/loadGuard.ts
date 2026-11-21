@@ -12,6 +12,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import logger from '../utils/logger';
+import { __resetExitReasonsForTests, explainExit, isBenignExit, noteLastExit } from './exitReasons';
 
 const STORAGE_KEY = '@atlas/loadGuard.v1';
 /** A crash is forgotten after this long, so a fixed driver or a freed-up phone gets another chance. */
@@ -52,6 +53,8 @@ export interface CrashRecord extends LoadConfig {
   lastAt: number;
   contextLength?: number;
   gpuLayers?: number;
+  /** What the operating system said ended that run, when it said (Android 11 and up). */
+  exitReason?: string;
 }
 
 /** A load that failed in a way JS could see (not a crash). Kept so the failing operation can be explained later. */
@@ -111,18 +114,32 @@ export function recoverFromPreviousRun(now: number = Date.now()): Promise<CrashR
         logger.warn('[LOAD-GUARD] the saved load record was unreadable and was reset:', e);
         state = { inFlight: null, crashes: {}, failures: [] };
       }
-      const crumb = state.inFlight;
+      let crumb = state.inFlight;
+      let exitNote: string | undefined;
+      if (crumb) {
+        // The system's own record of how that run ended. A load cut short because the person closed the app says nothing about the model, so it
+        // is not recorded as a crash (and the next load is not made more careful for it). No record, or one from before the load began: as before.
+        const exit = await noteLastExit().catch(() => null);
+        if (exit && exit.at >= crumb.startedAt) {
+          if (isBenignExit(exit)) {
+            logger.log(`[LOAD-GUARD] the previous run ended during ${STAGE_LABEL[crumb.stage]}, but ${explainExit(exit)}: not recorded as a crash`);
+            state.inFlight = null;
+            crumb = null;
+            await persist();
+          } else exitNote = explainExit(exit);
+        }
+      }
       if (crumb) {
         const signature = loadSignature(crumb);
         const prev = state.crashes[signature];
         recovered = {
           modelPath: crumb.modelPath, backend: crumb.backend, mtp: crumb.mtp, vision: crumb.vision, signature,
           stage: crumb.stage, count: (prev?.count ?? 0) + 1, lastAt: now,
-          contextLength: crumb.contextLength, gpuLayers: crumb.gpuLayers,
+          contextLength: crumb.contextLength, gpuLayers: crumb.gpuLayers, exitReason: exitNote,
         };
         state.crashes[signature] = recovered;
         state.inFlight = null;
-        logger.error(`[LOAD-GUARD] the previous run ended while ${STAGE_LABEL[crumb.stage]} (${crumb.backend}, MTP ${crumb.mtp ? 'on' : 'off'}, pictures ${crumb.vision ? 'on' : 'off'}): recorded as a crash`);
+        logger.error(`[LOAD-GUARD] the previous run ended while ${STAGE_LABEL[crumb.stage]} (${crumb.backend}, MTP ${crumb.mtp ? 'on' : 'off'}, pictures ${crumb.vision ? 'on' : 'off'}): recorded as a crash${exitNote ? `; the system says ${exitNote}` : ''}`);
       }
       prune(now);
       if (crumb) await persist();
@@ -221,7 +238,7 @@ export function describeLoadHealth(): { crashes: CrashRecord[]; lastFailure: Fai
   let summary = 'No model load has crashed Atlas recently.';
   if (crashes.length) {
     const c = crashes[0];
-    summary = `Atlas closed while ${STAGE_LABEL[c.stage]} for ${name(c.modelPath)} (${c.backend}${c.mtp ? ', MTP' : ''}${c.vision ? ', pictures' : ''}). That setup is now loaded more carefully.`;
+    summary = `Atlas closed while ${STAGE_LABEL[c.stage]} for ${name(c.modelPath)} (${c.backend}${c.mtp ? ', MTP' : ''}${c.vision ? ', pictures' : ''}). That setup is now loaded more carefully.${c.exitReason ? ` The system says ${c.exitReason}.` : ''}`;
   } else if (lastFailure) {
     summary = `The last load of ${name(lastFailure.modelPath)} failed while ${STAGE_LABEL[lastFailure.stage]}: ${lastFailure.message}`;
   }
@@ -241,5 +258,6 @@ export function __resetLoadGuardForTests(): void {
   state = { inFlight: null, crashes: {}, failures: [] };
   loaded = null;
   recovered = null;
+  __resetExitReasonsForTests();
   writeChain = Promise.resolve();
 }

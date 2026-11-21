@@ -19,6 +19,7 @@ import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
 import { flushAppLog, loadPreviousSession } from './src/utils/appLog';
+import { noteLastExit } from './src/services/exitReasons';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
@@ -107,6 +108,7 @@ const ensureRemoteServerStoreHydrated = async () => {
 function App() {
   useNearbyPairingIntent();
   useEffect(() => { useTasks.getState().markInterrupted(); }, []); // work cut off by Android shows as interrupted, never as still running
+  useEffect(() => { void noteLastExit(); }, []); // how the last run ended (Android keeps a record), written to the app log of every build
   useEffect(() => startShareIntake(), []);
   useEffect(() => startAppLinks(), []);
   useEffect(() => startScheduler(), []);
