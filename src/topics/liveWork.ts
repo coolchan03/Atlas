@@ -8,7 +8,7 @@
  * making progress, or when it passes the overall limit for the model in use (timeLimit.ts).
  */
 type WorkPhase = 'idle' | 'waiting' | 'reading' | 'writing';
-export interface Work { phase: WorkPhase; startedAt: number; phaseSince: number; lastTokenAt: number; chars: number; text: string }
+export interface Work { phase: WorkPhase; startedAt: number; phaseSince: number; lastTokenAt: number; chars: number; text: string; /** How much text the model is given to read before it can write (instructions and sources), in characters. */ promptChars?: number }
 
 const idle = (): Work => ({ phase: 'idle', startedAt: 0, phaseSince: 0, lastTokenAt: 0, chars: 0, text: '' });
 let work: Work = idle();
@@ -17,7 +17,7 @@ let owner = 0;
 
 export const currentWork = (): Work => ({ ...work });
 /** Starts a call's record and returns its token; the other functions only act for the call whose token is the latest. */
-export function beginWork(now = Date.now()): number { owner += 1; work = { phase: 'waiting', startedAt: now, phaseSince: now, lastTokenAt: 0, chars: 0, text: '' }; return owner; }
+export function beginWork(now = Date.now(), promptChars = 0): number { owner += 1; work = { phase: 'waiting', startedAt: now, phaseSince: now, lastTokenAt: 0, chars: 0, text: '', ...(promptChars > 0 ? { promptChars } : {}) }; return owner; }
 export function endWork(token: number): void { if (token === owner) work = idle(); }
 /** The model started on the prompt (local model only). */
 export function noteReading(token: number, now = Date.now()): void { if (token === owner && work.phase === 'waiting') work = { ...work, phase: 'reading', phaseSince: now }; }
@@ -55,8 +55,17 @@ export function giveUpReason(w: Work, now: number, limits: GiveUpLimits): GiveUp
 export function workLine(w: Work, now = Date.now()): string {
   const secs = Math.max(0, Math.round((now - w.phaseSince) / 1000));
   const time = secs >= 60 ? `${Math.floor(secs / 60)} min ${secs % 60} s` : `${secs} s`;
-  if (w.phase === 'reading') return `Reading the sources (${time}). Nothing written yet; this is the slow part on some phones.`;
-  if (w.phase === 'writing') return `Writing (${time}), about ${Math.round(w.chars / 5)} words so far.`;
+  // Reading and writing are different work with different speeds, so each line says its own measure: how much there is to read (and for how
+  // long it has been read), or how much has been written and how fast. A slow read is not a slow writer.
+  if (w.phase === 'reading') {
+    const toRead = w.promptChars ? `about ${Math.round(w.promptChars / 5)} words of instructions and sources` : 'the instructions and sources';
+    return `Reading ${toRead} (${time} so far). Nothing written yet; this is the slow part on some phones.`;
+  }
+  if (w.phase === 'writing') {
+    const words = Math.round(w.chars / 5);
+    const speed = secs >= 5 && words >= 5 ? `, about ${(words / secs).toFixed(1)} words a second` : '';
+    return `Writing (${time}): about ${words} words so far${speed}.`;
+  }
   if (w.phase === 'waiting') return `Working (${time})...`;
   return '';
 }

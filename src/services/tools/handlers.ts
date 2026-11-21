@@ -111,7 +111,10 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     }
     case 'schedule_task': {
       const { createScheduledTask } = require('../../schedule/createFromTool');
-      return createScheduledTask(call.arguments ?? {});
+      const saved: string = createScheduledTask(call.arguments ?? {});
+      if (!saved.startsWith('Saved the schedule')) return saved; // something was missing: nothing was saved, so nothing is claimed
+      const { checkReminders, notificationNote } = require('../../schedule/alarms');
+      return `${saved} ${notificationNote(await checkReminders())}`;
     }
     case 'learned_knowledge': {
       const q = requireString(call, 'question');

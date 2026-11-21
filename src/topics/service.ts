@@ -72,7 +72,7 @@ async function askBounded(system: string, user: string, limits: { overallMs?: nu
   const { overallMs = callLimit(), maxChars = Infinity } = limits;
   let timer: ReturnType<typeof setInterval> | undefined;
   const readMs = readLimitMs();
-  const token = beginWork();
+  const token = beginWork(Date.now(), system.length + user.length);
   const asked = Date.now();
   logger.log(`[LESSON] asking the model: ${system.length + user.length} characters in the prompt, limits read ${Math.round(readMs / 1000)} s, overall ${Math.round(overallMs / 1000)} s`);
   // A reply that runs on (thousands of words, or the same paragraph over and over) is cut here and what was written is kept.

@@ -59,8 +59,24 @@ Not attempted, or only partly. None of these is started in code.
 - Parts 6, 7 (other than 7.4) and 9: preview reporting, notification checks, remote cancellation, the full visual audit, tablet layouts, Quick/Balanced/Deep modes.
 - Part 8 except 8.9: ARM64-only releases, native C++ caching, compiler caching, Gradle configuration caching, fast dev builds, APK size. These need real builds to measure and could not be run here.
 
+## Second pass (same day, after the first merge)
+
+More items finished, each with tests; none run on a device.
+
+- 3.1 Duplicate detection: a document is skipped as a duplicate only when its SHA-256 and size are confirmed. A failed or empty hash never matches (it used to match any other failed hash); the file still imports under its own key; a different edition is always kept.
+- 1.10 Emoji before speech: `speechSafe` removes emoji, invisible, control, icon-font and divider characters before any text reaches the voice (read-aloud, briefing, calls, streaming). Letters of every script, digits, currency and unit signs and the joiners inside Persian and Indic words are kept.
+- 1.10 Lesson screen: reading shows how much there is to read and for how long; writing shows words written and words a second.
+- 6.1 / 6.2: a web-page preview and a reminder are reported as working only when they did. The saved file and the preview are reported separately. A saved schedule is separated from "a notification will appear", which is only said after notifications are confirmed on and the alarms were accepted.
+- 6.3: a cancelled remote request no longer erases the controller of a newer one (Stop could no longer cancel it), and a new request cancels one still streaming.
+- 1.4: a long planned course keeps whole chapters, never half of one (it used to cut a chapter, and its exam, in the middle).
+- 2.11: a book is not given standard-setter authority because of its title or file name. First pages that show a published book (ISBN, edition, learning objectives, publisher copyright) win over a standard-like name or cover. This also stops a book titled "FASB ASC 842 Guide" being marked official from its cover.
+- 1.7: a failed background-model load keeps the person's chat choice (it could be left on the background model), a failed restore is retried twice, and nothing is swapped while a reply is being written.
+- 1.12: two more leaking timers (the debounced exercise save and the delayed voice restore) no longer keep a process alive. The full suite passes (1,000 suites, 10,415 tests). The "worker did not exit gracefully" warning still appears once. `--detectOpenHandles` found nothing in `home`, `chat`, `atlas`, `onboarding`, `memory`, `happy` or `generation` after the fixes, and `screens`, `settings`, `skills`, `stores`, `workflows` and the root-level integration files did not finish in the time allowed, so the last one is still unfound.
+
+Still not done: everything under "Not done" above except the items listed here.
+
 ## Needs attention from a person
 
 - The workspace engineering contract named in `AGENTS.md` (`../.codex/ENGINEERING_CONTRACT.md`) was not available in this container, so only `rules.md` and `CLAUDE.md` were followed.
 - Gemini, Codecov and SonarCloud reviews (8.10) run on a pull request; their findings are not in this document.
-- Jest (1.12): one leak is fixed. Importing `App.tsx` started the battery and heat monitors, which nothing could stop; they now start with the app and stop with it (`monitorsStop.test.ts`). The full suite passes (995 suites, 10,339 tests), but the "worker process failed to exit gracefully" warning still appears once, so at least one more leaking suite remains. The leak is not in `unit`, `rntl`, `hardening`, `contracts` or `specs`; it is somewhere in `__tests__/integration`. Running `--detectOpenHandles` over the whole suite takes hours in-band, so narrow it by sub-directory.
+- Jest (1.12): see the second pass above for the current state. In the first pass one leak was fixed. Importing `App.tsx` started the battery and heat monitors, which nothing could stop; they now start with the app and stop with it (`monitorsStop.test.ts`). The full suite passes (995 suites, 10,339 tests), but the "worker process failed to exit gracefully" warning still appears once, so at least one more leaking suite remains. The leak is not in `unit`, `rntl`, `hardening`, `contracts` or `specs`; it is somewhere in `__tests__/integration`. Running `--detectOpenHandles` over the whole suite takes hours in-band, so narrow it by sub-directory.

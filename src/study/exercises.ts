@@ -165,7 +165,13 @@ export function debouncedStorage<S>(ms: number): PersistStorage<S> {
   return {
     getItem: (name) => base.getItem(name),
     removeItem: (name) => { waiting = undefined; return base.removeItem(name); },
-    setItem: (name, value) => { waiting = { name, value }; if (timer) clearTimeout(timer); timer = setTimeout(() => { void flush(); }, ms); },
+    setItem: (name, value) => {
+      waiting = { name, value };
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void flush(); }, ms);
+      // A save that is only waiting to be written must never keep a process alive (the app saves on the way to the background; see above).
+      (timer as { unref?: () => void }).unref?.();
+    },
   };
 }
 

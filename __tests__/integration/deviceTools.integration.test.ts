@@ -88,12 +88,16 @@ describe('device tools: files', () => {
     const ws = await tools.workspaceDir();
     answer(Alert, 'Create');
     const res = await tools.createWebPage('My Site!', '<p>Hello</p>');
-    expect(res).toMatch(/Opened it for preview/); expect(native.openFile).toHaveBeenCalledWith(`${ws}/Sites/my-site/index.html`);
+    expect(res).toMatch(/saved and a preview was requested/); expect(res).not.toMatch(/did not open/); expect(native.openFile).toHaveBeenCalledWith(`${ws}/Sites/my-site/index.html`);
     expect(await RNFS.readFile(`${ws}/Sites/my-site/index.html`, 'utf8')).toMatch(/<!doctype html>.*<title>My Site!<\/title>/);
     await tools.createWebPage('Full', '<html><body>whole</body></html>');
     expect(await RNFS.readFile(`${ws}/Sites/full/index.html`, 'utf8')).toBe('<html><body>whole</body></html>');
     native.openFile.mockRejectedValueOnce(new Error('no viewer'));
-    expect(await tools.createWebPage('', '<p>x</p>')).toMatch(/Path:/);
+    const failed = await tools.createWebPage('', '<p>x</p>');
+    expect(failed).toMatch(/Path:/);
+    // The file was saved, and the failed preview is reported as failed (with the reason), never as "Opened".
+    expect(failed).toMatch(/saved, but the preview did not open \(no viewer\)/);
+    expect(failed).not.toMatch(/preview was requested/);
     jest.restoreAllMocks(); answer(Alert, 'Deny');
     expect(await tools.createWebPage('No', '<p>x</p>')).toMatch(/declined/);
     expect(await tools.openFile('Sites/my-site/index.html')).toMatch(/Opened/);

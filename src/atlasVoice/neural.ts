@@ -327,10 +327,11 @@ export function restoreSavedVoice(): Promise<void> {
  */
 export function restoreSavedVoiceSoon(delayMs = 15000): void {
   const asked = voiceEpoch;
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     if (voiceEpoch !== asked) return;
     restoreSavedVoice().catch(() => undefined);
   }, delayMs);
+  (timer as { unref?: () => void }).unref?.(); // a pending restore never keeps a process alive
 }
 
 /** Voices for podcast hosts: distinct-sounding speakers when the model has many. */

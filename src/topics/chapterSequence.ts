@@ -68,12 +68,20 @@ function baseSquares(name: string, unit: string, about: string): Square[] {
  * AI put straight after it is dropped (the chapter has its own). Squares of any other kind (matching, ordering, practice, unit tests) stay where they are.
  */
 export function expandLessons(squares: PlannedSquare[], max: number): PlannedSquare[] {
-  const out: Square[] = [];
+  // Each lesson becomes one GROUP (its whole chapter); every other square is a group of one. When the course is longer than `max`, whole groups
+  // are kept in their order and the rest are left off: a chapter is never cut in the middle (that lost its chapter exam and left the course
+  // outline with half a chapter), and a later short square is never kept after an earlier chapter was dropped (no gaps, no reordering).
+  const groups: Square[][] = [];
   squares.forEach((sq, i) => {
-    if (sq.format === 'lesson' && !sq.checkpoint) { chapterSquares(sq.title, sq.unit, `(${sq.focus})`).forEach((c) => out.push(c)); return; }
+    if (sq.format === 'lesson' && !sq.checkpoint) { groups.push(chapterSquares(sq.title, sq.unit, `(${sq.focus})`)); return; }
     const before = squares[i - 1];
     const redundant = (sq.format === 'quiz' || sq.format === 'cards') && !sq.checkpoint && before?.format === 'lesson' && before.unit === sq.unit;
-    if (!redundant) out.push(sq);
+    if (!redundant) groups.push([sq]);
   });
-  return out.slice(0, max).map((sq, i) => ({ ...sq, key: `s${i + 1}` }));
+  const out: Square[] = [];
+  for (const g of groups) {
+    if (out.length + g.length > max) break;
+    out.push(...g);
+  }
+  return out.map((sq, i) => ({ ...sq, key: `s${i + 1}` }));
 }

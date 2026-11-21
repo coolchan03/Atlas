@@ -47,11 +47,34 @@ export async function askForNotifications(): Promise<boolean> {
   } catch { return false; }
 }
 
-/** Hands the current alarms to the phone (replacing the old ones). Safe to call often. */
-export async function syncAlarms(now = Date.now()): Promise<void> {
+/** Hands the current alarms to the phone (replacing the old ones). Safe to call often. True only when the phone accepted them. */
+export async function syncAlarms(now = Date.now()): Promise<boolean> {
   const module = native();
-  if (!module) return;
-  try { await module.setAlarms(JSON.stringify(alarmsFor(useSchedule.getState().tasks, now))); } catch { /* alarms are a convenience */ }
+  if (!module) return false;
+  try { await module.setAlarms(JSON.stringify(alarmsFor(useSchedule.getState().tasks, now))); return true; } catch { return false; /* alarms are a convenience */ }
+}
+
+export type NotificationStatus = 'ready' | 'off' | 'unavailable';
+
+/** Whether notifications can be shown right now, WITHOUT asking: this phone build cannot schedule alarms, they are switched off, or they work. */
+export async function notificationStatus(): Promise<NotificationStatus> {
+  const module = native();
+  if (!module) return 'unavailable';
+  try { return (await module.notificationsEnabled()) ? 'ready' : 'off'; } catch { return 'unavailable'; }
+}
+
+/** Checks the reminder really is set up: the alarms are handed over and notifications can be shown. */
+export async function checkReminders(): Promise<{ status: NotificationStatus; handedOver: boolean }> {
+  const handedOver = await syncAlarms();
+  return { status: await notificationStatus(), handedOver };
+}
+
+/** One honest sentence about whether a reminder will appear. A saved schedule is not the same as a notification that will show. */
+export function notificationNote(check: { status: NotificationStatus; handedOver: boolean }): string {
+  if (check.status === 'unavailable') return 'No notification will appear: this phone cannot schedule alarms for Atlas. The task still runs when Atlas is open at that time.';
+  if (check.status === 'off') return 'Notifications are switched off for Atlas, so no reminder will appear yet. Allow them in Settings > Scheduled tasks or the phone\'s app settings. The task still runs when Atlas is open at that time.';
+  if (!check.handedOver) return 'The schedule is saved, but the phone\'s alarm service did not accept the reminder, so it may not appear. Open Settings > Scheduled tasks to try again.';
+  return 'A notification will appear at that time.';
 }
 
 /** Keeps the alarms in step with the task list while the app runs. Returns the way to stop. */

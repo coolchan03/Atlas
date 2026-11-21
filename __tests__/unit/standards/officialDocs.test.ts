@@ -50,3 +50,42 @@ describe('marking documents', () => {
     expect(overrules([{ kind: 'project', title: 'Becker FAR.pdf' }], [{ kind: 'project', title: 'scan_0042.pdf' }])).toBe(false);
   });
 });
+
+describe('a standard-like file name is not enough on its own', () => {
+  const { useOfficialDocs, noteIfStandard, studyMaterialFromText } = require('../../../src/standards/officialDocs');
+  const { isOfficialDocumentName, documentStanding } = require('../../../src/standards/authority');
+  beforeEach(() => useOfficialDocs.setState({ names: [], refused: [], studyMaterial: [], tax: {}, roles: {} }));
+
+  const book = `FASB ASC 842 Leases: A Practical Guide\nSeventh Edition\nISBN 978-1-23456-789-0\nCopyright 2023 by John Wiley & Sons\nLearning Objectives\nAfter reading this chapter you will be able to...`;
+  const standard = `Financial Accounting Standards Board\nAccounting Standards Update No. 2016-02\nLeases (Topic 842)\nAmendments to the FASB Accounting Standards Codification`;
+
+  it('recognises the first pages of a published book, and not those of a standard', () => {
+    expect(studyMaterialFromText(book)).toBe(true);
+    expect(studyMaterialFromText(standard)).toBe(false);
+    expect(studyMaterialFromText('ISBN only here, nothing else of a book')).toBe(false); // one sign is not enough
+  });
+
+  it('a textbook named like a standard loses the standard-setter rank once its first pages show it is a book', () => {
+    expect(isOfficialDocumentName('FASB ASC 842 Guide.pdf')).toBe(true); // by name alone, before anything is read
+    noteIfStandard('FASB ASC 842 Guide.pdf', book);
+    expect(isOfficialDocumentName('FASB ASC 842 Guide.pdf')).toBe(false);
+    expect(documentStanding('FASB ASC 842 Guide.pdf').rank).toBeGreaterThan(1);
+  });
+
+  it('a book whose cover names the standard and the body is not marked official from its first pages either', () => {
+    expect(noteIfStandard('Leases Guide.pdf', book)).toBe(false);
+    expect(useOfficialDocs.getState().names).not.toContain('Leases Guide.pdf');
+  });
+
+  it('a real standard keeps its rank, and a file the person marked themselves keeps it too', () => {
+    noteIfStandard('ASU 2016-02.pdf', standard);
+    expect(isOfficialDocumentName('ASU 2016-02.pdf')).toBe(true);
+    noteIfStandard('FASB Guide.pdf', book);
+    useOfficialDocs.getState().mark('FASB Guide.pdf'); // the person says it is the standard
+    expect(isOfficialDocumentName('FASB Guide.pdf')).toBe(true);
+  });
+
+  it('a file with a standard-like name whose pages were never read is still treated by its name (nothing contradicts it)', () => {
+    expect(isOfficialDocumentName('ASU 2023-07.pdf')).toBe(true);
+  });
+});

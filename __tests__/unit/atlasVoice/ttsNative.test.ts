@@ -176,3 +176,30 @@ describe('voices and files', () => {
 });
 
 export {};
+
+describe('what reaches the voice engine', () => {
+  it('speak, speakIn, streaming and speakAndWait all send text with emoji and unspeakable characters removed', async () => {
+    const { tts, native } = load();
+    tts.speak('Well done \u{1F600} you did it', 'm1');
+    expect(native.speak).toHaveBeenCalledWith('Well done you did it', expect.any(String));
+    tts.speakIn('Bonjour \u{1F44B} café', 'fr-FR');
+    expect(native.speakIn).toHaveBeenCalledWith('Bonjour café', expect.any(String), 'fr-FR');
+    tts.appendSpeechStream('part ✅ two');
+    expect(native.speakStreamAppend).toHaveBeenCalledWith('part two');
+    void tts.speakAndWait('Line \u{1F4A1} one');
+    await flush();
+    expect(native.speakIn).toHaveBeenLastCalledWith('Line one', expect.any(String), 'en-US');
+  });
+
+  it('text that is only emoji is not sent at all (and never starts a "speaking" state)', async () => {
+    const { tts, native, store } = load();
+    tts.speak('\u{1F600}\u{1F44D}', 'm2');
+    tts.appendSpeechStream('✅');
+    tts.speakIn('\u{1F600}', 'en-US');
+    expect(await tts.speakAndWait('\u{1F600}')).toBe(true);
+    expect(native.speak).not.toHaveBeenCalled();
+    expect(native.speakIn).not.toHaveBeenCalled();
+    expect(native.speakStreamAppend).not.toHaveBeenCalled();
+    expect(store.getState().speakingKey).toBeNull();
+  });
+});

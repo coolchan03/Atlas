@@ -451,6 +451,57 @@ describe('OpenAICompatibleProvider', () => {
     });
   });
 
+  describe('a cancelled request never interferes with a newer one', () => {
+    const msgs = [{ id: '1', role: 'user' as const, content: 'Hi', timestamp: 0 }];
+
+    it('Stop still cancels request B after request A (already cancelled) finishes late', async () => {
+      await provider.loadModel('test-model');
+      const signals: AbortSignal[] = [];
+      const releases: Array<() => void> = [];
+      (httpClient.createStreamingRequest as jest.Mock).mockImplementation(
+        (_url, req) => new Promise<void>((resolve) => { signals.push(req.signal); releases.push(resolve); }),
+      );
+      const cb = () => ({ onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() });
+      const a = provider.generate(msgs, {}, cb());
+      await new Promise((r) => setImmediate(r));
+      await provider.stopGeneration(); // A is abandoned (as after a timeout)
+      expect(signals[0].aborted).toBe(true);
+      const b = provider.generate(msgs, {}, cb());
+      await new Promise((r) => setImmediate(r));
+      releases[0](); // A finishes late
+      await a;
+      await provider.stopGeneration(); // the person presses Stop on B
+      expect(signals[1].aborted).toBe(true); // B really was cancelled
+      releases[1]();
+      await b;
+    });
+
+    it('starting a new request cancels one that is still streaming', async () => {
+      await provider.loadModel('test-model');
+      const signals: AbortSignal[] = [];
+      const releases: Array<() => void> = [];
+      (httpClient.createStreamingRequest as jest.Mock).mockImplementation(
+        (_url, req) => new Promise<void>((resolve) => { signals.push(req.signal); releases.push(resolve); }),
+      );
+      const cb = () => ({ onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() });
+      const a = provider.generate(msgs, {}, cb());
+      await new Promise((r) => setImmediate(r));
+      const b = provider.generate(msgs, {}, cb());
+      await new Promise((r) => setImmediate(r));
+      expect(signals[0].aborted).toBe(true); // A no longer streams into the person's screen
+      expect(signals[1].aborted).toBe(false);
+      releases.forEach((r) => r());
+      await Promise.all([a, b]);
+    });
+
+    it('a request that finishes normally still clears its own controller (nothing left to stop)', async () => {
+      await provider.loadModel('test-model');
+      (httpClient.createStreamingRequest as jest.Mock).mockResolvedValue(undefined);
+      await provider.generate(msgs, {}, { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() });
+      expect((provider as any).abortController).toBeNull();
+    });
+  });
+
   describe('getTokenCount', () => {
     it('should estimate token count', async () => {
       const count = await provider.getTokenCount('Hello world this is a test');

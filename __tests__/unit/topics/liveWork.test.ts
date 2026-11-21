@@ -10,7 +10,7 @@ describe('telling reading from writing, and slow from stuck', () => {
     t = beginWork(0);
     expect(currentWork().phase).toBe('waiting');
     noteReading(t, 1000);
-    expect(workLine(currentWork(), 31_000)).toMatch(/Reading the sources \(30 s\)/);
+    expect(workLine(currentWork(), 31_000)).toMatch(/Reading the instructions and sources \(30 s so far\)/);
     noteWriting(t, 'The', 100_000);
     noteWriting(t, 'The lease liability', 400_000);
     expect(workLine(currentWork(), 401_000)).toMatch(/Writing .*words so far/);
@@ -67,3 +67,42 @@ describe('the screen stays on while a lesson is written', () => {
     expect(screenAwakeReasons()).not.toContain('lesson-writing');
   });
 });
+
+describe('the live line reports the right measure for reading and for writing', () => {
+  it('reading says how much there is to read and for how long; it gives no writing speed', () => {
+    const t = beginWork(0, 12_000); // 12,000 characters of instructions and sources
+    noteReading(t, 0);
+    const line = workLine(currentWork(), 45_000);
+    expect(line).toMatch(/Reading about 2400 words of instructions and sources \(45 s so far\)/);
+    expect(line).toMatch(/Nothing written yet/);
+    expect(line).not.toMatch(/a second/);
+    endWork(t);
+  });
+
+  it('writing says how much has been written and how fast, as words a second, not tokens', () => {
+    const t = beginWork(0, 12_000);
+    noteReading(t, 0);
+    noteWriting(t, 'x'.repeat(500), 40_000); // writing began at 40 s
+    noteWriting(t, 'x'.repeat(1500), 60_000);
+    const line = workLine({ ...currentWork(), chars: 1500 }, 60_000);
+    // 1500 characters is about 300 words over 20 s of writing
+    expect(line).toMatch(/Writing \(20 s\): about 300 words so far, about 15\.0 words a second\./);
+    expect(line).not.toMatch(/Reading/);
+    endWork(t);
+  });
+
+  it('gives no speed in the first moments of writing, when it would only be noise', () => {
+    const t = beginWork(0);
+    noteWriting(t, 'Hello there', 1000);
+    expect(workLine(currentWork(), 2000)).not.toMatch(/a second/);
+    endWork(t);
+  });
+
+  it('an unknown prompt size is not invented', () => {
+    const t = beginWork(0);
+    noteReading(t, 0);
+    expect(workLine(currentWork(), 10_000)).toMatch(/Reading the instructions and sources \(10 s so far\)/);
+    endWork(t);
+  });
+});
+
