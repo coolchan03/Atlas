@@ -31,6 +31,7 @@ import { getToolExtensions } from '../../services/tools/extensions';
 import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages } from '../../services/engines';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
+import { logIgnored } from '../../utils/logIgnored';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
 import { reportModelFailure } from '../../services/modelFailureHandler';
@@ -211,7 +212,7 @@ export async function shouldRouteToImageGenerationFn(
     if (!classifierModel) {
       // No classifier yet: provision SmolLM2 in the background for next time,
       // and use fast heuristics for this turn.
-      ensureDefaultClassifier().catch(() => {});
+      ensureDefaultClassifier().catch(logIgnored('provisioning the message classifier'));
       const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
       logger.log(`[ROUTE-SM] → ${intent === 'image'}: no-text-model heuristic intent=${intent}`);
       return intent === 'image';
@@ -297,7 +298,7 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
     // cautious rule: its native cache must not be reused across a moved prompt start.
     const openCl = /opencl/i.test(llmService.getGpuInfo?.()?.gpuBackend ?? '');
     if (contextDebug.contextUsagePercent > 95 || (openCl && (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70))) {
-      await llmService.clearKVCache(false).catch(() => { });
+      await llmService.clearKVCache(false).catch(logIgnored('clearing the context cache near its limit'));
     }
   } catch { /* ignore */ }
 }
@@ -343,11 +344,11 @@ async function generateWithCompactionRetry(
   } catch (e) { logger.warn('[ChatGen] auto-compress skipped', e); }
   try { const outcome = await gen(opts.messages); turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted; } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error) || ephemeralContext) throw error;
-    await llmService.stopGeneration().catch(() => { });
+    await llmService.stopGeneration().catch(logIgnored('stopping the reply before compacting'));
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
-      await llmService.clearKVCache(true).catch(() => { });
+      await llmService.clearKVCache(true).catch(logIgnored('clearing the context cache after compaction failed'));
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
     });

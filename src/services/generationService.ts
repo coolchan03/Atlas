@@ -13,6 +13,7 @@ import { startStallWatchdog } from './generationWatchdog';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { remoteServerManager } from './remoteServerManager';
+import { logIgnored } from '../utils/logIgnored';
 import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,
@@ -167,7 +168,7 @@ class GenerationService {
       },
       onStall: () => {
         logger.warn('[GenerationService] no progress for minutes - stopping the reply');
-        void this.stopGeneration().catch(() => { });
+        void this.stopGeneration().catch(logIgnored('stopping a reply that made no progress'));
         try { require('react-native').Alert.alert('Stopped waiting', 'The model made no progress for 5 minutes, so Atlas stopped it. What it had written is kept. Try again, or ask for a smaller piece at a time.'); } catch { /* no UI */ }
       },
     });
@@ -287,7 +288,7 @@ class GenerationService {
       // actually owned the last remote request (which may no longer be selected).
       await stopAllTextEngines();
       const provider = this.activeRemoteProviderAtStart ?? this.getCurrentProvider();
-      if (provider) provider.stopGeneration().catch(() => { });
+      if (provider) provider.stopGeneration().catch(logIgnored('stopping the remote provider'));
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -319,7 +320,7 @@ class GenerationService {
     // currently selected after a mid-generation model/server switch.
     const remoteProvider = this.activeRemoteProviderAtStart;
     if (remoteProvider) {
-      remoteProvider.stopGeneration().catch(() => { });
+      remoteProvider.stopGeneration().catch(logIgnored('stopping the remote provider'));
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;

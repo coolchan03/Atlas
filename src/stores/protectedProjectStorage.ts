@@ -4,6 +4,7 @@ import type { Project } from '../types';
 import { protectedVault } from './protectedProjectVault';
 import { protectedStudyVault } from './protectedStudyVault';
 import logger from '../utils/logger';
+import { logIgnored } from '../utils/logIgnored';
 import { isProtectedProjectUnlocked, unlockedProjectPin, unlockedProjectIds, unlockedProjectEntries, rememberProjectPin, forgetProjectPin, forgetAllProjectPins } from './protectionState';
 
 export { isProtectedProjectUnlocked };
@@ -275,7 +276,7 @@ export async function permanentlyUnprotectProject(id: string, pin: string): Prom
   try {
     await writeReplacement(id, clearSecurity(decrypted));
   } catch (e) {
-    await ragService.eraseProjectDocumentsFromIndex(id).catch(() => undefined); // still protected: no plain copies
+    await ragService.eraseProjectDocumentsFromIndex(id).catch(logIgnored('erasing a protected project\'s plain index copies')); // still protected: no plain copies
     throw e;
   }
   const study = await protectedStudyVault.open(id, pin, p.pinVerifier);
@@ -302,7 +303,7 @@ export async function relockProjects(): Promise<void> {
     ? stub(p, blobs.get(p.id) || p.protectedBlob || '') : p) }));
 }
 if (Platform.OS === 'android') AppState.addEventListener('change', state => {
-  if (state !== 'active') void relockProjects().catch(() => undefined);
+  if (state !== 'active') void relockProjects().catch(logIgnored('locking protected projects when the app left the screen'));
 });
 export const protectedProjectStorage = {
   async getItem(key: string): Promise<string | null> {

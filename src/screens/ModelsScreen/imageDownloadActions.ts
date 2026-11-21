@@ -14,6 +14,7 @@ import { ImageModelDescriptor, ImageDownloadDeps } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete, validateImageModelDir } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
+import { logIgnored } from '../../utils/logIgnored';
 // ImageDownloadDeps lives in ./types to avoid a cycle; re-export it for existing importers.
 export type { ImageDownloadDeps };
 interface ImageMetadata {
@@ -297,7 +298,8 @@ export async function downloadHuggingFaceModel(
     await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
-    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
+    // Not swallowed: a model without its _ready marker is read as half-downloaded and deleted at the next start, so a failed write must fail the download now.
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8');
     await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, modelDir), modelName: modelInfo.name });
   } catch (error: any) {
     if (isCancelledError(error)) {
@@ -465,7 +467,7 @@ export async function proceedWithDownload(
         // A partial unzip must NEVER be marked _ready (see ensureImageExtractionComplete).
         await ensureImageExtractionComplete({ backend: modelInfo.backend, modelDir, zipPath, modelId: modelInfo.id });
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
-        await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
+        await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8'); // not swallowed, see above
         await RNFS.unlink(zipPath).catch(() => {});
         await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
       } catch (e) {
@@ -495,7 +497,7 @@ export async function handleDownloadImageModel(modelInfo: ImageModelDescriptor, 
     if (warningMessage) {
       showQnnWarningAlert({
         warningMessage, hasNPU: socInfo.hasNPU, modelInfo,
-        onDownloadAnyway: () => { proceedWithDownload(modelInfo, deps).catch(() => {}); },
+        onDownloadAnyway: () => { proceedWithDownload(modelInfo, deps).catch(logIgnored('starting the image download after the warning')); },
       }, deps);
       return;
     }
