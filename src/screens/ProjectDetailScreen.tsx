@@ -28,6 +28,7 @@ import { LanguageCourseCard } from '../language/LanguageCourseCard';
 import { ProjectPinGate } from '../components/ProjectPinGate';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { useTopics } from '../topics/store';
+import { formatChatDate } from '../utils/formatChatDate';
 const COLOR_FFF = '#fff';
 const COLOR_RGBA_255_255_255_0_85 = 'rgba(255,255,255,0.85)';
 const literalStyles = StyleSheet.create({
@@ -109,20 +110,7 @@ export const ProjectDetailScreen: React.FC = () => {
     ));
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
 
   const renderChat = ({ item }: { item: Conversation }) => {
     const lastMessage = item.messages[item.messages.length - 1];
@@ -141,7 +129,7 @@ export const ProjectDetailScreen: React.FC = () => {
               <Text style={styles.chatTitle} numberOfLines={1}>
                 {item.pinVerifier && !isChatUnlocked(item.id) ? 'Locked conversation' : item.title}
               </Text>
-              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+              <Text style={styles.chatDate}>{formatChatDate(item.updatedAt)}</Text>
             </View>
             {item.pinVerifier && !isChatUnlocked(item.id) ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
