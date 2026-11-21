@@ -16,6 +16,31 @@ describe('the other kinds of square', () => {
     fireEvent.press(view.getByTestId('numeric-done'));
     expect(done).toHaveBeenCalledWith(1);
   });
+  it('a calculation: text that is not a number is rejected, not marked wrong, and never counts as an answer of 0', () => {
+    const done = jest.fn();
+    const view = render(<SquareView onDone={done} content={{ kind: 'numeric', task: 'What is the balance after paying it off?', answer: 0, tolerance: 0.5, unit: 'USD', working: ['10 - 10'] }} />);
+    for (const junk of ['hello world', 'abc', '5abc10']) {
+      fireEvent.changeText(view.getByTestId('numeric-input'), junk);
+      fireEvent.press(view.getByTestId('numeric-check'));
+      expect(view.getByTestId('numeric-invalid')).toBeTruthy();
+      expect(view.queryByTestId('numeric-right')).toBeNull();
+      expect(view.queryByTestId('numeric-wrong')).toBeNull();
+    }
+    fireEvent.changeText(view.getByTestId('numeric-input'), '0');
+    fireEvent.press(view.getByTestId('numeric-check'));
+    expect(view.getByTestId('numeric-right')).toBeTruthy();
+    fireEvent.press(view.getByTestId('numeric-done'));
+    expect(done).toHaveBeenCalledWith(3); // junk did not use up tries: still a first-try answer (three stars)
+  });
+  it('a calculation keeps negative values, decimals and scientific notation', () => {
+    const view = render(<SquareView onDone={jest.fn()} content={{ kind: 'numeric', task: 'Net result?', answer: -1250.5, tolerance: 0.01, unit: '', working: [] }} />);
+    fireEvent.changeText(view.getByTestId('numeric-input'), '1250.5');
+    fireEvent.press(view.getByTestId('numeric-check'));
+    expect(view.getByTestId('numeric-wrong')).toBeTruthy(); // the right size but the wrong sign
+    fireEvent.changeText(view.getByTestId('numeric-input'), '-1.2505e3');
+    fireEvent.press(view.getByTestId('numeric-check'));
+    expect(view.getByTestId('numeric-right')).toBeTruthy();
+  });
   it('a worked example asks the learner to try each step first, then shows it, says how close they were and ends with the takeaway', () => {
     const done = jest.fn();
     const view = render(<SquareView onDone={done} content={{ kind: 'worked', problem: 'Solve x+2=5', steps: [{ step: 'Subtract 2 from both sides', why: 'undo +2' }, { step: 'x = 3', why: '' }], takeaway: 'Do the same to both sides' }} />);

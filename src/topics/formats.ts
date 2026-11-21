@@ -262,6 +262,27 @@ export function authorityNote(excerpts: Array<{ source: string; rank?: number; r
 
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
+/**
+ * The position of the right option, read strictly. A whole number, digits in a string, a letter (A, B, "option C") or the text of one option all
+ * name an answer. A missing, empty, null, boolean, fractional or out-of-range key names none: it is never read as 0, because that made option A
+ * the right answer for every question the model forgot to key. Undefined when the key cannot be trusted.
+ */
+export function answerIndex(raw: unknown, options: string[]): number | undefined {
+  let index: number | undefined;
+  if (typeof raw === 'number') index = Number.isInteger(raw) ? raw : undefined;
+  else if (typeof raw === 'string') {
+    const t = raw.trim();
+    const letter = /^(?:option\s+)?([A-Ea-e])[.):]?$/.exec(t);
+    if (/^\d+$/.test(t)) index = Number(t);
+    else if (letter) index = letter[1].toUpperCase().charCodeAt(0) - 65;
+    else {
+      const matching = options.map((o, i) => (o.trim().toLowerCase() === t.toLowerCase() ? i : -1)).filter((i) => i >= 0);
+      index = matching.length === 1 ? matching[0] : undefined;
+    }
+  }
+  return index !== undefined && index >= 0 && index < options.length ? index : undefined;
+}
+
 /** Reads the AI's content for a square; null when it is not usable. */
 export function parseContent(format: SquareFormat, raw: string): SquareContent | null {
   const j = parseJsonLoose<any>(raw);
@@ -278,12 +299,17 @@ export function parseContent(format: SquareFormat, raw: string): SquareContent |
       // A question or a choice that is too long is dropped whole: a quiz must never show one cut off in the middle.
       const choices = list(q?.options).slice(0, 5).map((o) => whole(o, 400));
       const options = choices.filter((o): o is string => !!o);
-      const answer = Number(q?.answer);
+      const answer = answerIndex(q?.answer, options);
       return { q: whole(q?.q, 900) ?? '', options, answer, why: tidy(q?.why, 900), whole: choices.every(Boolean) };
-    }).filter((q) => q.whole && q.q && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length).map(({ whole: _w, ...q }) => q);
+    });
+    const usable = questions.filter((q): q is typeof q & { answer: number } => q.whole && !!q.q && q.options.length >= 2 && q.answer !== undefined);
+    // Questions whose answer key was missing or unusable are left out. When several are (the model lost track of its own keys), the rest are not
+    // trusted either and the whole thing is asked for again (one bad key among several is just dropped).
+    const keyless = questions.filter((q) => q.whole && !!q.q && q.options.length >= 2 && q.answer === undefined).length;
+    if (keyless >= 2 && keyless * 2 >= questions.length) return null;
     const passage = format === 'reading' ? str(j.passage, 2000) : '';
     if (format === 'reading' && !passage) return null;
-    return questions.length >= 2 ? { kind: 'quiz', questions: questions.slice(0, 10), ...(passage ? { passage } : {}) } : null;
+    return usable.length >= 2 ? { kind: 'quiz', questions: usable.slice(0, 10).map(({ whole: _w, ...q }) => q), ...(passage ? { passage } : {}) } : null;
   }
   if (format === 'cards') {
     const cards = list(j.cards).map((c) => ({ front: whole(c?.front, 400) ?? '', back: tidy(c?.back, 700) })).filter((c) => c.front && c.back);
