@@ -8,7 +8,8 @@ import { beginWork, currentWork, endWork, giveUpReason, noteReading, noteWriting
 import { maxCharsFor, repairCutJson, runawayReason } from './runaway';
 import { writeLessonInPieces } from './lessonWriter';
 import { remoteActive } from '../study/remoteAsk';
-import { SLOW_WRITER_TPS, activeWritingSpeed } from '../atlasTools/speed';
+import { activeModelSpeeds } from '../atlasTools/speed';
+import { planLesson } from './lessonPlan';
 import logger from '../utils/logger';
 import { drillFor, makeDrillSet } from '../study/drills';
 import { makePeriodicQuestions } from '../study/periodicQuiz';
@@ -309,8 +310,8 @@ async function standardsFlags(course: Course, query: string): Promise<string> {
   } catch { return ''; }
 }
 
-/** True when a square is written in pieces: a lesson, on a model that writes slowly here (a server model is fast and is asked once). */
-const writesInPieces = (format: string): boolean => format === 'lesson' && activeWritingSpeed() > 0 && activeWritingSpeed() < SLOW_WRITER_TPS && !remoteActive();
+/** True when a lesson is written in pieces: on a phone model for which one call is too long to trust (lessonPlan.ts weighs the extra reading of each piece). A server model is asked once. */
+const writesInPieces = (format: string): boolean => format === 'lesson' && !remoteActive() && planLesson(activeModelSpeeds()).mode === 'pieces';
 
 /** What writeBody needs to ask the model for one square. */
 interface BodyInput { course: Course; key: string; square: PlannedSquare; asked: PlannedSquare; before: string[]; excerpts: Excerpt[]; bank: string; query: string; rewrite?: Rewrite }
@@ -335,7 +336,7 @@ async function writeBody(input: BodyInput, ctl: JobControl): Promise<SquareConte
     save: (lesson) => useTopics.getState().setContent(course.id, key, withoutSources(lesson, excerpts, bank)),
     discard: () => useTopics.getState().clearContent(course.id, key),
     stopped: ctl.cancelled,
-  }).catch((e) => { if (ctl.cancelled()) throw e; logger.warn(`[LESSON] writing in pieces failed (${String((e as Error)?.message || e).slice(0, 160)}): asking for the whole lesson`); return whole(); }) : await whole();
+  }, activeModelSpeeds()).catch((e) => { if (ctl.cancelled()) throw e; logger.warn(`[LESSON] writing in pieces failed (${String((e as Error)?.message || e).slice(0, 160)}): asking for the whole lesson`); return whole(); }) : await whole();
 }
 
 async function writeSquare(target: { courseId: string; key: string; rewrite?: Rewrite }, ctl: JobControl): Promise<SquareContent> {

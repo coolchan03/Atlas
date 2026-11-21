@@ -67,6 +67,14 @@ export function activeWritingSpeed(): number {
   return id ? Number(useSpeedStats.getState().byModel[id]?.decode) || 0 : 0;
 }
 
+/** How fast the model that does the writing reads (prefill) and writes (decode), tokens a second, as measured on this phone; 0 where nothing is measured. */
+export function activeModelSpeeds(): { decode: number; prefill: number } {
+  const st = useAppStore.getState();
+  const id = st.settings.backgroundModelId && st.downloadedModels.some((m) => m.id === st.settings.backgroundModelId) ? st.settings.backgroundModelId : st.activeModelId;
+  const speed = id ? useSpeedStats.getState().byModel[id] : undefined;
+  return { decode: Number(speed?.decode) || 0, prefill: Number(speed?.prefill) || 0 };
+}
+
 /** Below this writing speed a model counts as slow: work is split into small pieces and asked in the shortest form. */
 export const SLOW_WRITER_TPS = 8;
 
