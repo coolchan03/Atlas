@@ -236,7 +236,9 @@ class LLMService {
         mmProjPath = undefined;
       }
       // Speculative decoding that has been measured slower for this model on this phone is left off (and said so). Switching it on again by hand starts the measuring over.
-      const speed = mtpAttached && !safeMode && settings.useMtp !== false ? useSpecBenefit.getState().decide(useAppStore.getState().activeModelId ?? '') : { off: false } as { off: boolean; note?: string };
+      // The model being loaded, found by its file: the "active model" is only updated after the load, so during it that still names the previous model.
+      const loadingId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
+      const speed = mtpAttached && !safeMode && settings.useMtp !== false && loadingId ? useSpecBenefit.getState().decide(loadingId) : { off: false } as { off: boolean; note?: string };
       if (speed.off && speed.note) notes.push(speed.note);
       const wantsMtp = !safeMode && settings.useMtp !== false && !speed.off;
       const mtpWanted = wantsMtp && mtpAttached;
@@ -271,7 +273,7 @@ class LLMService {
         candidates.push(INFERENCE_BACKENDS.CPU);
         // Measured speed on this phone beats a guess: the backend that wrote fastest for this model in real runs goes first.
         try {
-          const id = useAppStore.getState().activeModelId;
+          const id = loadingId; // not activeModelId: that still names the previous model until this load finishes
           if (id) candidates = preferMeasured(candidates, useTuned.getState().accelerator[id] ?? fastestBackend(useSpeedStats.getState().byConfig, id)?.backend);
         } catch { /* no speed history: keep the default order */ }
       }

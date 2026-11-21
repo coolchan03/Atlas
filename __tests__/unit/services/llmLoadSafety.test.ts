@@ -82,7 +82,8 @@ describe('speculative decoding that is slower on this phone', () => {
   const slow = { on: { decode: 3, samples: 4 }, off: { decode: 5, samples: 4 } };
 
   it('is left out of the load, says why, and is not started', async () => {
-    useAppStore.setState({ activeModelId: 'm1' });
+    // The previous model is still the "active" one while this one loads: the decision must come from the model being loaded.
+    useAppStore.setState({ activeModelId: 'previous', downloadedModels: [{ id: 'm1', filePath: MODEL } as any] });
     useSpecBenefit.setState({ byModel: { m1: slow } });
     let seen: any = null;
     mockedInitLlama.mockImplementation((async (params: any) => { seen = params; return createMockLlamaContext(); }) as any);
@@ -92,8 +93,15 @@ describe('speculative decoding that is slower on this phone', () => {
     expect(llmService.getLoadReport()?.mtp.loaded).toBe(false);
   });
 
+  it('is not decided by the previous model\'s measurements', async () => {
+    useAppStore.setState({ activeModelId: 'm1', downloadedModels: [{ id: 'other', filePath: MODEL } as any] });
+    useSpecBenefit.setState({ byModel: { m1: slow } }); // m1 is slow, but m1 is not what is loading
+    await llmService.loadModel(MODEL, undefined, { draftPath: DRAFT });
+    expect(llmService.getLoadReport()?.notes.join(' ')).not.toMatch(/left off for this model/);
+  });
+
   it('is used when it is not slower', async () => {
-    useAppStore.setState({ activeModelId: 'm1' });
+    useAppStore.setState({ activeModelId: 'previous', downloadedModels: [{ id: 'm1', filePath: MODEL } as any] });
     useSpecBenefit.setState({ byModel: { m1: { on: { decode: 6, samples: 4 }, off: { decode: 5, samples: 4 } } } });
     await llmService.loadModel(MODEL, undefined, { draftPath: DRAFT });
     expect(llmService.getLoadReport()?.notes.join(' ')).not.toMatch(/left off for this model/);
