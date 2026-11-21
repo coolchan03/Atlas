@@ -28,6 +28,8 @@ let jobsInFlight = 0;
 let preemptions = 0;
 /** A job whose model call was stopped for a chat reply is run again, up to this many times, after the reply. */
 const MAX_RESTARTS = 3;
+/** The longest a stopped job waits for the chat reply that stopped it. */
+const AFTER_CHAT_WAIT_MS = 15 * 60_000;
 
 /**
  * A chat reply the person asked for goes before background work. If a background job is writing right now, that call is stopped and the reply
@@ -51,7 +53,8 @@ export async function yieldToChat(): Promise<boolean> {
 export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
   const run = tail.then(async () => {
     for (let attempt = 0; ; attempt += 1) {
-      await waitForChat(opts.maxWaitMs ?? 120_000, opts.shouldStop);
+      // After a chat reply stopped this job, it waits for that reply however long a slow model takes (up to 15 minutes), instead of failing at the usual limit.
+      await waitForChat(attempt > 0 ? Math.max(opts.maxWaitMs ?? 120_000, AFTER_CHAT_WAIT_MS) : opts.maxWaitMs ?? 120_000, opts.shouldStop);
       const mark = preemptions;
       // The screen is held while a job really runs (not while it waits its turn).
       if (jobsInFlight++ === 0) holdScreenAwake('background-ai');

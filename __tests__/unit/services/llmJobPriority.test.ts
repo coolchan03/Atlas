@@ -50,3 +50,20 @@ it('gives up after a few restarts, and says so, rather than returning a cut-off 
   await expect(runBackgroundJob(job)).rejects.toThrow(/needed for chat replies too often/);
   expect(job.mock.calls.length).toBe(4);
 });
+
+it('waits for the chat reply that stopped it for longer than the usual limit, rather than failing', async () => {
+  let calls = 0;
+  let started: () => void = () => undefined;
+  const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+  const job = jest.fn(async () => {
+    calls += 1;
+    if (calls === 1) { state.generating = true; started(); await new Promise((r) => setTimeout(r, 20)); return 'cut off'; }
+    return 'complete';
+  });
+  const result = runBackgroundJob(job, { maxWaitMs: 50 }); // a short usual limit
+  await firstStarted;
+  await yieldToChat();
+  state.generating = true; // the chat reply that took its place is still being written
+  setTimeout(() => { state.generating = false; }, 200); // it ends after the usual limit has passed
+  await expect(result).resolves.toBe('complete');
+});
