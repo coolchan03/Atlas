@@ -33,7 +33,15 @@ const OFFICIAL_NAME = /^(?:fasb|gasb|asc[\s_-]*\d{3}|asu[\s_-]*\d{4}-\d{2}|accou
 /** Names the person (or Atlas, from the first page) marked as the standard itself, wired in by officialDocs.ts so this file stays free of storage. */
 let marked: (name: string) => boolean = (_name) => false;
 export const setOfficialLookup = (fn: (name: string) => boolean): void => { marked = fn; };
-export const isOfficialDocumentName = (name: string): boolean => marked(name) || OFFICIAL_NAME.test(name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim());
+/** Names whose first pages showed a published book or study material (see studyMaterialFromText), wired in by officialDocs.ts. */
+let studyMaterial: (name: string) => boolean = (_name) => false;
+export const setStudyMaterialLookup = (fn: (name: string) => boolean): void => { studyMaterial = fn; };
+/**
+ * A document counts as the standard itself when the person marked it (or its first pages said so), or when its name says so AND its first pages do
+ * not show it to be a published book. The name alone is a weak sign: a textbook called "FASB ASC 842 Guide" is a textbook, whatever it is called.
+ */
+export const isOfficialDocumentName = (name: string): boolean =>
+  marked(name) || (OFFICIAL_NAME.test(name.replace(/\.[A-Za-z0-9]{2,5}$/, '').trim()) && !studyMaterial(name));
 
 /** A web page of a standard-setter, or a document added under a standard's name. Anything else (books, notes, other web pages) is not an authority on its own. */
 export const isOfficialSource = (s: AuthoritySource): boolean => {
