@@ -45,8 +45,6 @@ export async function forceLoadTextModel(onStatus?: (s: string) => void): Promis
 export function switchToModelInBackground(modelId: string): void {
   const st = useAppStore.getState();
   if (!st.downloadedModels.some((m) => m.id === modelId)) return;
-  if (st.loadedTextModelId === modelId || st.activeModelId === modelId) {
-    if (st.loadedTextModelId === modelId) return;
-  }
+  if (st.loadedTextModelId === modelId) return; // already loaded
   ensureTextModel(modelId).catch((e) => logger.warn(`[Atlas] could not switch model: ${String(e?.message || e)}`));
 }

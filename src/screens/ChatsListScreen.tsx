@@ -37,6 +37,7 @@ import { ChatSwipeActions } from '../chats/ChatSwipeActions';
 import { buildChatListRows, type ChatListRow } from './chatListGrouping';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { DuplicateChatsBanner } from '../chats/DuplicateChatsBanner';
+import { formatChatDate } from '../utils/formatChatDate';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -175,21 +176,7 @@ export const ChatsListScreen: React.FC = () => {
   };
 
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    }
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-
-  };
 
 
   const renderChat = ({ item, index, nested = false }: { item: Conversation; index: number; nested?: boolean }) => {
@@ -211,7 +198,7 @@ export const ChatsListScreen: React.FC = () => {
               <Text style={styles.chatTitle} numberOfLines={1}>
                 {item.pinVerifier ? 'Locked conversation' : item.title}
               </Text>
-              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+              <Text style={styles.chatDate}>{formatChatDate(item.updatedAt)}</Text>
             </View>
             {item.pinVerifier ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>

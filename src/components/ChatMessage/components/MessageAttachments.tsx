@@ -129,11 +129,7 @@ export function MessageAttachments({
               };
               const mimeType = ext ? mimeMap[ext] || 'application/octet-stream' : undefined;
               let uri = attachment.uri;
-              if (uri.startsWith('/')) {
-                uri = `file://${uri}`;
-              } else if (!uri.includes('://')) {
-                uri = `file://${uri}`;
-              }
+              if (uri.startsWith('/') || !uri.includes('://')) uri = `file://${uri}`;
               logger.log('[ChatMessage] Opening document:', uri);
               viewDocument({ uri, mimeType, grantPermissions: 'read' }).catch((err: any) => {
                 logger.warn('[ChatMessage] Failed to open document:', err?.message || err);

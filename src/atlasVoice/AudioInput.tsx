@@ -181,7 +181,7 @@ export function AtlasAudioInput(props: any) {
   const doneTickSeen = useRef(doneTick);
   doneTickSeen.current = doneTick;
   useEffect(() => {
-    if (isRecording) { if (failedStarts) setFailedStarts(0); if (recoveryCycles) setRecoveryCycles(0); return undefined; }
+    if (isRecording) { if (failedStarts) setFailedStarts(0); setRecoveryCycles((n) => (n ? 0 : n)); return undefined; }
     const snapshot = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
     if (!shouldStartListening(snapshot)) {
       return undefined; // a stuck microphone is handled by the recovery effect below
@@ -245,7 +245,7 @@ export function AtlasAudioInput(props: any) {
         recoveredStall.current = key;
         const line = '[CALL-RECOVER] speech was not written down in time; dropped that turn';
         logger.warn(line); noteCallTrace(line);
-        onCancelRecording?.();
+        latest.current.onCancelRecording?.(); // the newest one: it is recreated every render and reads the recorder's current state
         setNote('That did not come through. Say it again.');
       }
       if (!stall || stallNoted.current === key) return;

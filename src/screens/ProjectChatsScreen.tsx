@@ -22,24 +22,12 @@ import { isChatUnlocked } from '../stores/encryptedChatStorage';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
+import { formatChatDate } from '../utils/formatChatDate';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectChats'>;
 
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-};
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
@@ -225,7 +213,7 @@ export const ProjectChatsScreen: React.FC = () => {
               <Text style={styles.chatTitle} numberOfLines={1}>
                 {item.pinVerifier && !isChatUnlocked(item.id) ? 'Locked conversation' : item.title}
               </Text>
-              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+              <Text style={styles.chatDate}>{formatChatDate(item.updatedAt)}</Text>
             </View>
             {item.pinVerifier && !isChatUnlocked(item.id) ? <Text style={styles.chatPreview}>PIN required</Text> : lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>

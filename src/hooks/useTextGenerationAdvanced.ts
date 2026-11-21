@@ -37,7 +37,9 @@ export function useTextGenerationAdvanced() {
 
   useEffect(() => {
     if (settings?.nThreads !== 0) return;
-    hardwareService.getRecommendedThreadCount().then(setResolvedThreadCount);
+    let live = true;
+    hardwareService.getRecommendedThreadCount().then((n) => { if (live) setResolvedThreadCount(n); }).catch(() => undefined); // an unreadable count leaves the shown value as it was
+    return () => { live = false; };
   }, [settings?.nThreads]);
 
   const cpuThreadsSliderValue = settings?.nThreads && settings.nThreads > 0 ? settings.nThreads : 1;
