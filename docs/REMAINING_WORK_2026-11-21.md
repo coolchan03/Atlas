@@ -16,6 +16,29 @@ Written at the end of the third pass (PR #14). It is the hand-off list: what the
 3. Android build items in Part 8 need real builds to measure: ARM64-only releases, native C++ caching, compiler caching, Gradle configuration caching, fast dev builds, APK size, build timing diagnostics.
 4. Pull the device log (see `CLAUDE.md`, "Device Logs") for the intro-tune problem (1.2): the briefing trace logs the queue, and it has not been read from a real run.
 
+## Fourth pass (in progress, branch `ccr-e8678227-hs3cud` after PR #14)
+
+Done, with tests, not run on a device:
+
+- 2.10 Judge: a cited passage that says the opposite of the sentence citing it (negation, opposite word, other unit) fails the citation gate at every strictness, whatever the Judge said (`contradictedBy` in `claimText.ts`).
+- 6.4 Error recovery: `logIgnored(what)` (`src/utils/logIgnored.ts`) replaces silent `.catch(() => {})` where a failure changes what is kept or shown (classifier provisioning, KV-cache clearing, stop paths, erasing a protected project's index). A failed `_ready` marker write now fails an image-model download instead of letting the next start delete the folder. About 330 other `.catch(() => {})` sites are best-effort cleanup (unlinking temp files) and were left.
+- 1.1 A call whose speech engine never answers drops that turn after 45 s and listens again.
+- 1.10 The screen stays on for the whole hands-free call (`holdScreenOnly('voice-call')`).
+- 1.11 `DeviceMemoryModule.getLastExitReasons(max)` on Android (ApplicationExitInfo, Android 11+) and iOS (declared, answers `supported: false`), one contract, checked by `deviceMemoryExit.contract.test.ts`. A load cut short because the person closed the app is no longer recorded as a model crash; a real crash records what the system said. The previous exit is written to the app log (kept in every build) at each launch. The app log (`appLog.ts`) was already readable from a Release build ("Share all logs" in About).
+- 1.5 Every background AI call logs how much of its prompt the engine reused from its cache (`[AI] background call ... (N reused from the cache, M read)`). The lesson prompts already share their opening, so reuse should happen; the log is how to confirm it on a phone.
+- 1.12 The Jest leak: `copyDiagnostics.rendered.test.tsx` mounted the About screen, whose update check made a real HTTPS request to GitHub. The network is now answered at the boundary in that test. `--detectOpenHandles` found nothing in `workflows`, `stores`, `skills`; `screens` was still running when this was written.
+- 3.3 / 3.4 Keyword search reads a full-text index of the whole project (SQLite FTS5, switched on in `package.json` under `op-sqlite`, with triggers that keep it in step and a fill for passages stored before it existed). It falls back to reading passages when a build has no FTS5. Meaning-based results now also include passages only the question's own words find (section numbers, names). Protected projects are not indexed this way.
+- Part 5 Search: stored embeddings are kept as 32-bit floats (half the memory) and each vector's length is computed once.
+
+Looked at and left alone, with the reason:
+
+- 3.2 ZIP imports already exist (`packImport.ts`: unpack, manifest check, nested zips, duplicates skipped, PDFs and Office files read).
+- 3.5 Backups already exist and are transactional (validate, snapshot, restore, roll back on failure, a "check this backup" action). The one limit worth changing is the 35 MB cap on an encrypted backup, which needs a multi-part format and is not safe to write without a device.
+- 1.2 Intro tune: the player code (`nativeEpisodeQueue`, `AtlasAudioService`) was read end to end and no defect found. The in-app "What just happened" trace shows whether the tune was queued and reached. The cause needs that trace from a phone.
+- 1.3 / 1.6 Causes of the composer fallback and of Gemma 4 placeholder output need a real trace; the diagnostics for both are in place.
+
+Not done yet: Part 4 (4.1 to 4.10), Part 5 chat rendering and background priorities, Part 7 beyond 7.4, Part 8 (needs builds), Part 9, the version bump and the final code audit.
+
 ## Part 1
 
 | Item | State | What is left |
