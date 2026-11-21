@@ -16,6 +16,8 @@ describe('making a scheduled task from what you say', () => {
     const said = createScheduledTask({ task: 'Read me the top tech news', time: '7am', repeat: 'weekdays', name: 'Tech news' });
     expect(said).toContain('Tech news');
     expect(said).toContain('weekdays at 07:00');
+    expect(said).toMatch(/^Saved the schedule/);
+    expect(said).not.toMatch(/notification/i); // saving a schedule says nothing about whether a notification will appear
     expect(useSchedule.getState().tasks[0]).toMatchObject({ name: 'Tech news', kind: 'prompt', repeat: 'weekdays', hour: 7, minute: 0, enabled: true });
   });
   it('makes a daily briefing task without a prompt, and a weekly one on its day', () => {

@@ -127,8 +127,22 @@ export async function createWebPage(name: string, html: string): Promise<string>
   const res = await writeFile(`${ws}/Sites/${slug}/index.html`, page);
   if (res.startsWith('The user declined')) return res;
   const path = `${ws}/Sites/${slug}/index.html`;
-  try { await Native?.openFile(path); } catch { /* opening is optional */ }
-  return `${res}\nOpened it for preview. Path: ${path}`;
+  return `${res}\n${await tryOpenPreview(path)} Path: ${path}`;
+}
+
+/**
+ * Opens a saved page for preview and says what really happened, apart from the saving. "Opened" only when the phone accepted the request;
+ * otherwise the file is still saved and the sentence says the preview did not open (and why when it is known).
+ */
+export async function tryOpenPreview(path: string): Promise<string> {
+  if (typeof Native?.openFile !== 'function') return 'The file is saved, but this phone could not open a preview (no viewer is available).';
+  try {
+    await Native.openFile(path);
+    return 'The file is saved and a preview was requested.';
+  } catch (e: any) {
+    const why = String(e?.message ?? e ?? '').trim().slice(0, 160);
+    return `The file is saved, but the preview did not open${why ? ` (${why})` : ''}. Open it from the Files screen.`;
+  }
 }
 
 export async function openFile(path: string): Promise<string> {

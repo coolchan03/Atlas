@@ -31,5 +31,6 @@ export function createScheduledTask(args: Record<string, unknown>, now = Date.no
   const name = String(args.name ?? '').trim().slice(0, 60) || (isBriefing ? 'Daily briefing' : prompt.slice(0, 40));
   const timing = { repeat, hour: clock.hour, minute: clock.minute, ...(repeat === 'weekly' ? { weekday } : {}), ...(repeat === 'once' ? { onceAt: nextTimeOfDay(clock.hour, clock.minute, now) } : {}) };
   useSchedule.getState().add({ name, kind: isBriefing ? 'briefing' : 'prompt', prompt: isBriefing ? '' : prompt, ...timing });
-  return `Scheduled "${name}": ${describeTiming({ ...timing, createdAt: now }).toLowerCase()}. The user gets a notification then, and can see or change it in Settings > Scheduled tasks.`;
+  // Only the saving is reported here. Whether a notification will really appear is checked separately (see notificationNote).
+  return `Saved the schedule "${name}": ${describeTiming({ ...timing, createdAt: now }).toLowerCase()}. It can be seen or changed in Settings > Scheduled tasks.`;
 }
