@@ -228,6 +228,24 @@ export function conflictReason(a: string, b: string): string | undefined {
   return undefined;
 }
 
+/**
+ * A cited passage that says the opposite of the sentence citing it ("is deductible" against "is not deductible", "gain" against "loss", 5 km
+ * against 5 miles). Only a passage sentence about the same subject counts, so an unrelated "not" cannot start a dispute. Returns the passage
+ * sentence that disagrees, or undefined. No model is asked: a judge's PASS cannot clear this.
+ */
+export function contradictedBy(claim: string, passages: string[]): string | undefined {
+  const mine = subjectWords(claim);
+  if (mine.length < 3) return undefined;
+  for (const passage of passages) {
+    for (const raw of passage.match(/[^.!?\n]+[.!?]*/g) ?? []) {
+      const sentence = raw.trim();
+      if (sentence.length < 16 || jaccard(mine, subjectWords(sentence)) < 0.6) continue;
+      if (opposes(claim, sentence) || unitConflict(claim, sentence)) return sentence.slice(0, 160);
+    }
+  }
+  return undefined;
+}
+
 /** Is this claim new, a repeat of a known one, or in conflict with one? The closest known claim decides. */
 export function compareClaim(claim: string, known: Array<{ id: string; text: string }>): Comparison {
   let best: { id: string; score: number; text: string } | null = null;

@@ -81,3 +81,33 @@ describe('facts and citations are gates of their own', () => {
     expect(assessReport({ ...ok, judgePass: false, judgeLine: line('FAIL 3/10') }).status).toBe('rejected');
   });
 });
+
+describe('a cited passage that says the opposite', () => {
+  const passage = [{ n: 1, title: 'Guide', kind: 'guide', passage: 'A home office expense is not deductible for an employee. The limit for a business meal is 50 percent.', locator: 'p1' }];
+  const judged = { judgeLine: '1: PASS 10/10', judgePass: true };
+
+  it('disputes the report at every strictness, whatever the judge said', () => {
+    for (const strictness of ['lenient', 'balanced', 'strict'] as const) {
+      const r = assessReport({ text: 'ANSWER: A home office expense is deductible for an employee [1].', sources: passage, strictness, ...judged });
+      expect(r.gates.citations).toBe('fail');
+      expect(r.status).toBe('disputed');
+      expect(r.reasons.join(' ')).toContain('is contradicted by the cited passage');
+    }
+  });
+
+  it('disputes a figure given in a different unit than the passage', () => {
+    const r = assessReport({ text: 'ANSWER: The limit for a business meal is 50 dollars [1].', sources: passage, strictness: 'lenient', ...judged });
+    expect(r.gates.citations).toBe('fail');
+  });
+
+  it('leaves a sentence that agrees with its passage alone', () => {
+    const r = assessReport({ text: 'ANSWER: A home office expense is not deductible for an employee [1].', sources: passage, ...judged });
+    expect(r.gates.citations).not.toBe('fail');
+    expect(r.reasons.join(' ')).not.toContain('contradicted');
+  });
+
+  it('does not treat an unrelated negation in the passage as a contradiction', () => {
+    const r = assessReport({ text: 'ANSWER: The limit for a business meal is 50 percent [1].', sources: passage, ...judged });
+    expect(r.reasons.join(' ')).not.toContain('contradicted');
+  });
+});

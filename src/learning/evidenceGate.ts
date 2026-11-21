@@ -5,7 +5,7 @@
  * deliberately do not pretend to establish that passages entail claims.
  */
 import { gateFromScore, parseDimensions, verdictMatchesScore, type Dimensions, type GateState } from './judgeDimensions';
-import { checkSupport, claimSentences } from './claimText';
+import { checkSupport, claimSentences, contradictedBy } from './claimText';
 import { thresholdsFor, type Strictness, type Thresholds } from './strictness';
 
 export type ClaimStatus = 'candidate' | 'verified' | 'disputed' | 'superseded' | 'rejected';
@@ -93,30 +93,36 @@ export function taxErrorSignals(report: string): string[] {
 }
 
 /** Cited sentences whose cited passages do not contain what the sentence states. Checked by text, not by the model. */
-function unsupportedSentences(text: string, sources: EvidenceSource[]): { checked: number; failed: string[] } {
+function unsupportedSentences(text: string, sources: EvidenceSource[]): { checked: number; failed: string[]; contradicted: string[] } {
   let checked = 0;
   const failed: string[] = [];
+  const contradicted: string[] = [];
   for (const sentence of claimSentences(text)) {
     const cited = citedNumbers(sentence);
     const passages = sources.filter((s) => cited.includes(s.n)).map((s) => s.passage ?? '');
-    const support = checkSupport(sentence.replace(/\[\d+\]/g, ''), passages);
+    const plain = sentence.replace(/\[\d+\]/g, '');
+    const against = contradictedBy(plain, passages);
+    if (against) contradicted.push(`is contradicted by the cited passage ("${against}")`);
+    const support = checkSupport(plain, passages);
     if (support.supported === null) continue;
     checked += 1;
     if (support.supported === false) failed.push(support.missingNumbers.length ? `states ${support.missingNumbers.join(', ')} which the cited passage does not contain` : 'is not found in the cited passage');
   }
-  return { checked, failed };
+  return { checked, failed, contradicted };
 }
 
 /** The citation gate: mapped numbers, the passage text itself, and the judge's own mark. Any failure fails the gate. */
-function citationGate(input: { invalid: number[]; cited: number; support: { checked: number; failed: string[] }; mark: number | undefined; reasons: string[]; limits: Thresholds }): GateState {
+function citationGate(input: { invalid: number[]; cited: number; support: { checked: number; failed: string[]; contradicted: string[] }; mark: number | undefined; reasons: string[]; limits: Thresholds }): GateState {
   const { limits } = input;
   const markState = gateFromScore(input.mark, limits.gateMin);
   input.support.failed.forEach((why) => input.reasons.push(`A cited sentence ${why}`));
+  input.support.contradicted.forEach((why) => input.reasons.push(`A cited sentence ${why}`));
   if (markState === 'fail') input.reasons.push(`Judge rated citations ${input.mark}/10`);
   // Strict: any one problem fails. Looser levels fail only when more than a share of the citations or cited sentences are wrong.
   const invalidFails = input.invalid.length > 0 && input.invalid.length / Math.max(1, input.cited + input.invalid.length) > limits.invalidShare;
   const unsupportedFails = input.support.failed.length > 0 && input.support.failed.length / Math.max(1, input.support.checked) > limits.unsupportedShare;
-  if (invalidFails || unsupportedFails || markState === 'fail') return 'fail';
+  // A passage that says the opposite fails the gate at every strictness: it is not a matter of how many sentences are wrong.
+  if (invalidFails || unsupportedFails || input.support.contradicted.length > 0 || markState === 'fail') return 'fail';
   return input.support.checked > 0 || markState === 'pass' ? 'pass' : 'unknown';
 }
 
