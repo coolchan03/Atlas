@@ -116,7 +116,7 @@ export const TYPICAL_REPLY_TOKENS = 150;
  * With no first-word time recorded it is the writing speed, as before.
  */
 export function wholeReplySpeed(r: { tps: number; firstWordSec: number }): number {
-  if (!(r.tps > 0)) return 0;
+  if (!Number.isFinite(r.tps) || r.tps <= 0) return 0;
   return r.firstWordSec > 0 ? TYPICAL_REPLY_TOKENS / (r.firstWordSec + TYPICAL_REPLY_TOKENS / r.tps) : r.tps;
 }
 
