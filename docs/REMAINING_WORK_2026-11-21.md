@@ -63,6 +63,7 @@ Done, with tests, not run on a device:
 - 9.2 One plain sentence under a slow reply (why, and what is faster).
 - 9.4 Four separate parts of progress on the Learning screen, no blended accuracy.
 - A unit bug found on the way: time to first word is in seconds, and two places divided it by 1000.
+- Audit of this pass (code review plus the gates) found and fixed: indexing and finishing an interrupted library could embed at once, or the same passages; a background job that kept being stopped returned a cut-off answer as if whole (it now fails with a message); the first-word stage recorded zeros; clearing the chat search waited for the debounce; the delay note read overall speed as writing speed; the chat-search cache did not notice a list edited in place; the progress card did not refresh when an exam ended. Not fixed: the progress card does not refresh when a conflict is settled on another screen until the next report or round.
 
 Still not done: 3.4 and 3.5 (size cap), 4.3 per-model independence review, 4.5 residency, 4.7 beyond logging, 5.2 vector index, 5.3 chunking experiments, 7.1 to 7.3 and 7.5, 8.1 multi-architecture schedule, 8.2, 8.5, 8.6, 8.7 reduction, 8.10 bot reviews, 9.5, 9.7, and the causes in 1.2, 1.3, 1.6.
 
