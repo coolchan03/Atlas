@@ -44,8 +44,8 @@ describe('native compiler cache', () => {
     expect(report.run).toMatch(/\|\| true\s*$/);
   });
 
-  it('leaves an ARM64-only release build as it was', () => {
-    expect(named(/Build release APK/).run).toContain('-PreactNativeArchitectures=arm64-v8a');
+  it('builds with the chosen CPU types, which are 64-bit ARM only for an ordinary release (see ciArchitectures.test.ts)', () => {
+    expect(named(/Build release APK/).run).toContain('-PreactNativeArchitectures=${{ steps.abis.outputs.abis }}');
   });
 });
 
