@@ -166,6 +166,41 @@ jobs:
           test -n "$NDK"
           test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
           echo "ATLAS_NDK=$NDK" >> "$GITHUB_ENV"
+      # C/C++ compiler cache. The Gradle cache above holds Gradle's own task outputs; this holds individual compiled objects, so a change to one
+      # native file recompiles that file, not the whole inference engine. ccache keys each object on the source text, the compile flags and the
+      # compiler itself (compared by content, so a new NDK path or timestamp cannot reuse an object built by a different compiler). The cache key
+      # names the NDK and the architecture; a stale object can never be used, it can only miss. Skipped quietly when ccache cannot be installed.
+      - name: Set up the C/C++ compiler cache
+        id: ccache
+        run: |
+          sudo apt-get install -y ccache > /dev/null 2>&1 || true
+          if command -v ccache > /dev/null; then
+            echo "ndk=$(basename "$ATLAS_NDK")" >> "$GITHUB_OUTPUT"
+            {
+              echo "CCACHE_DIR=$HOME/.cache/ccache"
+              echo "CCACHE_MAXSIZE=2G"
+              echo "CCACHE_COMPILERCHECK=content"
+              echo "CCACHE_COMPRESS=1"
+              echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+              echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+            } >> "$GITHUB_ENV"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=No compiler cache::ccache could not be installed, so native code is compiled without it."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Restore the compiler cache
+        if: steps.ccache.outputs.available == 'true'
+        id: ccache-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-arm64-${{ steps.ccache.outputs.ndk }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-arm64-${{ steps.ccache.outputs.ndk }}-
+      - name: Zero the compiler cache counters
+        if: steps.ccache.outputs.available == 'true'
+        run: ccache --zero-stats > /dev/null
       - name: Restore the image engines if their inputs are unchanged
         id: sdcli
         uses: actions/cache/restore@v5
@@ -343,6 +378,32 @@ jobs:
           test -s /tmp/qnn.txt
           if grep -v "libQnnHtp${{ inputs.qnn_chip }}" /tmp/qnn.txt; then echo "::error::another NPU generation is still in the APK"; exit 1; fi
           cat /tmp/qnn.txt
+      # What the build spent its time and bytes on, written to the run's summary page so the next optimisation starts from numbers:
+      # how much native code the compiler cache saved, and what the APK is made of (largest files, and the totals per kind).
+      - name: Report compiler cache use and APK size
+        if: always()
+        run: |
+          {
+            echo "## Build report"
+            if command -v ccache > /dev/null; then
+              echo "### Compiler cache"
+              echo '```'
+              ccache --show-stats 2>/dev/null | head -20 || true
+              echo '```'
+            fi
+            APK=android/app/build/outputs/apk/release/app-release.apk
+            if [ -f "$APK" ]; then
+              echo "### APK: $(du -h "$APK" | cut -f1)"
+              echo "Largest files (compressed size in the APK):"
+              echo '```'
+              unzip -lv "$APK" | awk 'NR>3 && NF>=8 {print $3, $8}' | sort -rn | head -25 | awk '{printf "%8.1f MB  %s\n", $1/1048576, $2}'
+              echo '```'
+              echo "By kind (compressed MB):"
+              echo '```'
+              unzip -lv "$APK" | awk 'NR>3 && NF>=8 { k="other"; if ($8 ~ /^lib\//) {split($8,a,"/"); k="native " a[2]} else if ($8 ~ /^assets\//) k="assets"; else if ($8 ~ /\.dex$/) k="code (dex)"; else if ($8 ~ /^res\//) k="resources"; s[k]+=$3 } END {for (k in s) printf "%8.1f MB  %s\n", s[k]/1048576, k}' | sort -rn
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY" || true
       - name: Upload Gradle task timings
         if: always()
         uses: actions/upload-artifact@v4
@@ -394,6 +455,12 @@ jobs:
             echo "::error title=Release not created::The APK was built, signed and checked, and is saved as the build file Atlas-apk on this run (kept 3 days). Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Fix: Settings > Actions > General > Workflow permissions > Read and write permissions, then re-run this workflow with publish ticked."
             exit 1
           fi
+      - name: Save the compiler cache for the next build
+        if: always() && steps.ccache.outputs.available == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
       - name: Save the image engines for the next build
         if: always() && steps.sdcli.outputs.cache-hit != 'true' && hashFiles('android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so') != ''
         uses: actions/cache/save@v5

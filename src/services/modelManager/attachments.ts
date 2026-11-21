@@ -104,7 +104,7 @@ export function dropAttachment(m: LlamaDownloadedModel, kind: AttachmentKind): {
 }
 
 /** Every file path a model refers to as an attachment, attached or archived. */
-export function attachmentPaths(m: DownloadedModel): string[] {
+function attachmentPaths(m: DownloadedModel): string[] {
   if (m.engine !== 'llama') return [];
   return [m.mmProjPath, m.draftPath, m.archivedAttachments?.vision?.path, m.archivedAttachments?.draft?.path].filter((p): p is string => !!p);
 }

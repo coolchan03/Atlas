@@ -32,6 +32,8 @@ export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
   'atlas-tasks': 'running and failed jobs of this phone, which cannot continue on another phone',
   'atlas-model-speed': 'measured speed of this phone\'s models',
+  'atlas-accel-record': 'what each model measured on each accelerator on this phone (hardware-bound)',
+  'atlas-spec-benefit': 'whether MTP made each model faster on this phone (hardware-bound)',
   'atlas-slow-hint': 'a hint shown once on this phone',
   'atlas-storage-prefs': 'this phone\'s storage choices',
   'atlas-tuned-models': 'settings tuned for this phone\'s hardware',

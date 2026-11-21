@@ -109,3 +109,18 @@ describe('a microphone that never starts', () => {
     jest.dontMock('../../../src/atlasVoice/callLifecycle');
   }, 30000);
 });
+
+describe('a speech engine that never answers', () => {
+  it('has its turn dropped so the call listens again, instead of "writing down" for ever', async () => {
+    jest.resetModules();
+    jest.doMock('../../../src/atlasVoice/callLifecycle', () => ({ ...jest.requireActual('../../../src/atlasVoice/callLifecycle'), TRANSCRIBE_GIVE_UP_MS: 1 }));
+    const { props, view, rtl } = await setup({ handsFree: true, isTranscribing: true });
+    expect(view.queryByText(/Say it again/)).toBeNull();
+    // The stall check runs every 2 s; real timers (setup() cannot run under fake ones).
+    for (let t = 0; t < 2400; t += 200) await rtl.act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+    expect(props.onCancelRecording).toHaveBeenCalledTimes(1);
+    expect(view.queryByText(/Say it again/)).toBeTruthy();
+    view.unmount();
+    jest.dontMock('../../../src/atlasVoice/callLifecycle');
+  }, 30000);
+});

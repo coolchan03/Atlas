@@ -20,7 +20,7 @@ export interface LLMPerformanceStats {
 }
 
 /** One optional part of a loaded model (the picture file, MTP drafting) and whether it is really running. */
-export interface LoadedComponent {
+interface LoadedComponent {
   /** The model has this attached and it is switched on. */
   requested: boolean;
   /** The native engine actually started it. Not assumed from `requested`. */

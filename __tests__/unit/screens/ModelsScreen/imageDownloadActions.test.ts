@@ -197,6 +197,21 @@ describe('imageDownloadActions', () => {
     );
   });
 
+  it('downloadHuggingFaceModel fails (does NOT register) when the _ready marker cannot be written', async () => {
+    // Without the marker the folder is read as half-downloaded and deleted at the next start, so the download must not report success.
+    (RNFS.writeFile as jest.Mock).mockRejectedValueOnce(new Error('No space left on device'));
+    const deps = makeDeps();
+
+    await downloadHuggingFaceModel(makeHFModelInfo(), deps);
+
+    expect(mockAddDownloadedImageModel).not.toHaveBeenCalled();
+    expect(mockStoreApi.setStatus).toHaveBeenCalledWith(
+      'image-multi:test-hf-model',
+      'failed',
+      expect.objectContaining({ message: expect.stringContaining('No space left') }),
+    );
+  });
+
   it('downloadCoreMLMultiFile writes a store entry and registers on success', async () => {
     const deps = makeDeps();
 

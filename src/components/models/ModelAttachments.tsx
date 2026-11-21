@@ -11,6 +11,7 @@ import { useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { modelManager, llmService } from '../../services';
+import { describeSpec } from '../../atlasTools/specBenefit';
 import { attachmentStatus, attachmentMemoryMB, type AttachmentKind } from '../../services/modelManager/attachments';
 import type { LlamaDownloadedModel } from '../../types';
 import type { LoadReport } from '../../services/llmTypes';
@@ -41,10 +42,10 @@ interface Props {
 }
 
 /** One sentence that says what is really running for this part, from the engine's load report rather than from what is attached. */
-export function runtimeLine(kind: AttachmentKind, report: LoadReport | null): string | null {
+export function runtimeLine(kind: AttachmentKind, report: LoadReport | null, speed?: string | null): string | null {
   if (!report) return null;
   const part = kind === 'vision' ? report.vision : report.mtp;
-  if (part.loaded) return part.estimatedMB > 0 ? `Running now, using about ${part.estimatedMB} MB.` : 'Running now.';
+  if (part.loaded) return `${part.estimatedMB > 0 ? `Running now, using about ${part.estimatedMB} MB.` : 'Running now.'}${kind === 'vision' || !speed ? '' : ` ${speed}`}`;
   if (part.skippedBecause) return `Not running: ${part.skippedBecause}.`;
   return null;
 }
@@ -83,7 +84,7 @@ export const ModelAttachments: React.FC<Props> = ({ model, loaded, busy, onAdd, 
         <Text style={[styles.buttonText, a.danger && styles.buttonTextDanger]}>{a.label}</Text>
       </TouchableOpacity>
     );
-    const live = runtimeLine(kind, report);
+    const live = runtimeLine(kind, report, kind === 'vision' ? null : describeSpec(model.id));
     return (
       <View key={kind} style={styles.row} testID={`attachment-${kind}-${model.id}`}>
         <Text style={styles.title}>{KIND_LABEL[kind]}</Text>

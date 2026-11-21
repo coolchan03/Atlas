@@ -76,6 +76,14 @@ export function describePhaseChange(change: { prev: CallPhase; next: CallPhase }
 /** How long a stage may last before the call notes it as a stall (muted and paused are the person's own choices and never stall). */
 const STALL_AFTER_MS: Partial<Record<CallPhase, number>> = { idle: 4000, loading: 60000, transcribing: 30000, generating: 300000, speaking: 600000 };
 
+/** Writing down speech that has not finished after this long is not going to: the call gives up on it so the microphone can open again. */
+export const TRANSCRIBE_GIVE_UP_MS = 45_000;
+
+/** What the call does about a recognizer that never answered: drop that turn (the person is told to say it again) instead of sitting "writing down" forever. Pure. */
+export function stallRecovery(s: CallSnapshot, since: number, limitMs: number = TRANSCRIBE_GIVE_UP_MS): 'cancel-transcription' | null {
+  return callPhase(s) === 'transcribing' && since >= limitMs ? 'cancel-transcription' : null;
+}
+
 /** One line explaining a stage that has lasted too long, with every flag that decided it, or null while it is normal. Pure. */
 export function stallNote(s: CallSnapshot, since: number): string | null {
   const phase = callPhase(s);

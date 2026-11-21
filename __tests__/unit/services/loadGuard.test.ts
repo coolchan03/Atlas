@@ -137,3 +137,48 @@ describe('loadGuard', () => {
     expect(isQuarantined(cfg)).toBe(false);
   });
 });
+
+describe('loadGuard with the system exit record (Android 11 and up)', () => {
+  const { NativeModules } = require('react-native');
+  const exitsOf = (reason: string, at: number, description = '') => ({ supported: true, reasons: [{ at, reason, description, rssKb: 3_000_000 }] });
+  const withExit = (info: unknown) => { NativeModules.DeviceMemoryModule = { getLastExitReasons: jest.fn(async () => info) }; };
+  afterEach(() => { delete NativeModules.DeviceMemoryModule; });
+
+  it('does not call a load a crash when the person closed the app during it', async () => {
+    await enterStage({ ...cfg, stage: 'init' });
+    withExit(exitsOf('USER_REQUESTED', Date.now() + 1000));
+    relaunch();
+    expect(await recoverFromPreviousRun()).toBeNull();
+    expect(isQuarantined(cfg)).toBe(false);
+    expect(JSON.parse(store[KEY]).inFlight).toBeNull(); // and the breadcrumb does not come back at the next launch
+  });
+
+  it('does not trust "the app closed itself" as harmless: a native library calling exit() during a load looks the same', async () => {
+    await enterStage({ ...cfg, stage: 'init' });
+    withExit(exitsOf('EXIT_SELF', Date.now() + 1000));
+    relaunch();
+    expect((await recoverFromPreviousRun())?.stage).toBe('init');
+    expect(isQuarantined(cfg)).toBe(true); // recorded as a crash, so the next load of this exact setup steps down
+  });
+
+  it('records a crash with what the system said, so the summary can name it', async () => {
+    await enterStage({ ...cfg, stage: 'init' });
+    withExit(exitsOf('LOW_MEMORY', Date.now() + 1000));
+    relaunch();
+    const crash = await recoverFromPreviousRun();
+    expect(crash?.exitReason).toMatch(/ran out of memory/);
+    expect(describeLoadHealth().summary).toMatch(/system says Android closed Atlas because the phone ran out of memory/);
+  });
+
+  it('ignores an exit record from before the load began, and a phone that keeps none', async () => {
+    await enterStage({ ...cfg, stage: 'init' });
+    withExit(exitsOf('USER_REQUESTED', Date.now() - 3_600_000));
+    relaunch();
+    expect((await recoverFromPreviousRun())?.stage).toBe('init');
+    await clearCrashHistory();
+    await enterStage({ ...cfg, stage: 'init' });
+    withExit({ supported: false, reasons: [] });
+    relaunch();
+    expect((await recoverFromPreviousRun())?.exitReason).toBeUndefined();
+  });
+});

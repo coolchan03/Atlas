@@ -13,7 +13,8 @@ import { stop as stopSpeech, setEarpieceRoute } from './tts';
 import { BargeInDetector } from './bargeIn';
 import { CALL_END_OF_SPEECH, EndOfSpeechDetector } from './endOfSpeech';
 import { Alert } from 'react-native';
-import { LISTEN_DELAY_MS, RECOVERY_COOLDOWN_MS, START_CHECK_MS, callPhase, describePhaseChange, micFailureNote, noteCallTrace, recoveryStep, shouldStartListening, stallNote, type CallPhase, type CallSnapshot } from './callLifecycle';
+import { holdScreenOnly } from '../atlasTools/runtimePower';
+import { LISTEN_DELAY_MS, RECOVERY_COOLDOWN_MS, START_CHECK_MS, callPhase, describePhaseChange, micFailureNote, noteCallTrace, recoveryStep, shouldStartListening, stallNote, stallRecovery, TRANSCRIBE_GIVE_UP_MS, type CallPhase, type CallSnapshot } from './callLifecycle';
 import { describeTurn, nextTimes, rememberCallTiming, type TurnEvent, type TurnTimes } from './turnTiming';
 import { callTrace } from './callLifecycle';
 import { shareItem } from '../utils/shareItem';
@@ -226,12 +227,27 @@ export function AtlasAudioInput(props: any) {
   const snapshotRef = useRef<CallSnapshot | null>(null);
   snapshotRef.current = { handsFree, muted, paused, voiceAvailable, disabled: !!disabled, isRecording: !!isRecording, isTranscribing: !!isTranscribing, isGenerating: !!isGenerating, isModelLoading: !!isModelLoading, speaking: !!speakingKey, failedStarts };
   const stallNoted = useRef('');
+  const recoveredStall = useRef('');
+  // The phone must not sleep during a call (the speech engine and the microphone stop with the screen): held for the whole call, not only while it speaks.
+  useEffect(() => {
+    if (!handsFree) return undefined;
+    holdScreenOnly('voice-call', true);
+    return () => holdScreenOnly('voice-call', false);
+  }, [handsFree]);
   useEffect(() => {
     if (!handsFree) return undefined;
     const timer = setInterval(() => {
       const snap = snapshotRef.current;
       const stall = snap ? stallNote(snap, Date.now() - lastPhase.current.at) : null;
       const key = `${lastPhase.current.at}`;
+      if (snap && stallRecovery(snap, Date.now() - lastPhase.current.at, TRANSCRIBE_GIVE_UP_MS) && recoveredStall.current !== key) {
+        // The speech engine never answered: drop this turn (clears "writing down") so the microphone can open again.
+        recoveredStall.current = key;
+        const line = '[CALL-RECOVER] speech was not written down in time; dropped that turn';
+        logger.warn(line); noteCallTrace(line);
+        onCancelRecording?.();
+        setNote('That did not come through. Say it again.');
+      }
       if (!stall || stallNoted.current === key) return;
       stallNoted.current = key;
       logger.warn(stall); noteCallTrace(stall);

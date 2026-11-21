@@ -46,4 +46,13 @@ class DeviceMemoryModule: NSObject {
       "lowMemory": false,
     ])
   }
+
+  /// Same contract as Android (`getLastExitReasons`): why previous runs ended. iOS records no such history for an app without a
+  /// crash-reporting service, so this says `supported: false` and the JS side carries on as before. Declared, not missing.
+  @objc
+  func getLastExitReasons(_ max: Int,
+                          resolver resolve: @escaping RCTPromiseResolveBlock,
+                          rejecter reject: @escaping RCTPromiseRejectBlock) {
+    resolve(["supported": false, "reasons": []])
+  }
 }

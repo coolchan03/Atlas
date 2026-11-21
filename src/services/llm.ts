@@ -1,5 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
+import { useAccelRecord } from '../atlasTools/accelRecord';
+import { useSpecBenefit } from '../atlasTools/specBenefit';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -212,6 +214,7 @@ class LLMService {
   }
   async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
     const epoch = this.loadEpoch;
+    const loadBegan = Date.now();
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
@@ -232,7 +235,12 @@ class LLMService {
         notes.push('Safe Model Loading is on: this model runs on the CPU, without the picture file and without MTP drafting.');
         mmProjPath = undefined;
       }
-      const wantsMtp = !safeMode && settings.useMtp !== false;
+      // Speculative decoding that has been measured slower for this model on this phone is left off (and said so). Switching it on again by hand starts the measuring over.
+      // The model being loaded, found by its file: the "active model" is only updated after the load, so during it that still names the previous model.
+      const loadingId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
+      const speed = mtpAttached && !safeMode && settings.useMtp !== false && loadingId ? useSpecBenefit.getState().decide(loadingId) : { off: false } as { off: boolean; note?: string };
+      if (speed.off && speed.note) notes.push(speed.note);
+      const wantsMtp = !safeMode && settings.useMtp !== false && !speed.off;
       const mtpWanted = wantsMtp && mtpAttached;
       if (this.currentModelPath === modelPath && this.requestedBackendAtLoad === requested &&
           (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized) &&
@@ -265,7 +273,7 @@ class LLMService {
         candidates.push(INFERENCE_BACKENDS.CPU);
         // Measured speed on this phone beats a guess: the backend that wrote fastest for this model in real runs goes first.
         try {
-          const id = useAppStore.getState().activeModelId;
+          const id = loadingId; // not activeModelId: that still names the previous model until this load finishes
           if (id) candidates = preferMeasured(candidates, useTuned.getState().accelerator[id] ?? fastestBackend(useSpeedStats.getState().byConfig, id)?.backend);
         } catch { /* no speed history: keep the default order */ }
       }
@@ -435,6 +443,7 @@ class LLMService {
           this.requestedBackendAtLoad = requested;
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
+          useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
             ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
             : undefined;
@@ -453,6 +462,8 @@ class LLMService {
           const message = String(error?.message || error || 'Native load failed');
           if (!refused) {
             await recordLoadFailure({ modelPath, backend, ...attempt, stage, message, nativeTail: recentNativeLog(6) || undefined });
+            // Only a failure of the plainest setup counts against the accelerator: one that also had MTP or pictures switched on may have failed for those, and running out of memory is about the model, not the accelerator.
+            if (!attempt.mtp && !attempt.vision && !/memory|RAM/i.test(message)) useAccelRecord.getState().recordFailure(modelPath, backend);
           }
           // A memory refusal is about the model, not the backend: keep its type so the UI
           // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
@@ -740,7 +751,7 @@ class LLMService {
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
-      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
+      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond, this.mtpActive);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
       const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent, parsedContent: typeof cr?.content === 'string' ? cr.content : undefined };
       // Noise is not an answer. It is reported (with the cause) instead of being shown or saved as one, and the setup is marked so it is not trusted again.

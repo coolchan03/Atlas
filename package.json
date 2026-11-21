@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.233",
+  "version": "0.0.234",
   "private": true,
   "scripts": {
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
@@ -106,7 +106,9 @@
   "engines": {
     "node": ">=20"
   },
-  "op-sqlite": {},
+  "op-sqlite": {
+    "fts5": true
+  },
   "overrides": {
     "react": "19.2.0",
     "markdown-it": "^14.1.1",

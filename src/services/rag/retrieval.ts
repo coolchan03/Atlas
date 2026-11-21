@@ -1,11 +1,12 @@
-import { RagSearchResult, ragDatabase } from './database';
+import { RagSearchResult, StoredEmbedding, ragDatabase } from './database';
 import { isProtectedProject, knowledgeSource } from './knowledgeSource';
 import { embeddingService } from './embedding';
-import { cosineSimilarity } from './vectorMath';
+import { cosineScorer } from './vectorMath';
 import { rankChunks } from './rankChunks';
 import { refScore, sectionRefs } from './sectionRefs';
 import { scopeOf } from './scope';
 import { lexicalRank } from './lexicalRank';
+import { mergeKeywordHits } from './keywordMerge';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */
@@ -34,21 +35,37 @@ interface SearchResult {
 /** How many passages the keyword fallback reads per project. */
 const LEXICAL_POOL = 20000;
 
+/** Passages that match the question's words, from the full-text index; null for a protected project or a build without the index. */
+function keywordCandidates(projectId: string, query: string, limit = KEYWORD_CANDIDATES): RagSearchResult[] | null {
+  if (isProtectedProject(projectId)) return null;
+  return ragDatabase.searchKeywords(projectId, query, limit);
+}
+const KEYWORD_CANDIDATES = 400;
+/** When documents are filtered out afterwards (an exam that excludes some), read more so the allowed ones are not crowded out of the list. */
+const KEYWORD_CANDIDATES_FILTERED = 4000;
+
 /** Options for a search: how many passages, and which documents to look in (by name). */
 interface SearchOptions { topK?: number; include?: (docName: string) => boolean }
 
 /** The stored embeddings of a project, kept in memory until a document is added, removed or switched, so a lesson (many searches in a row) does not read and decode every one each time. Not kept for a protected project, nor for a very large one. */
-const embeddingCache = new Map<string, { version: number; stored: ReturnType<typeof ragDatabase.getEmbeddingsByProject> }>();
+type Embedded = Omit<StoredEmbedding, 'embedding'> & { embedding: ArrayLike<number> };
+const embeddingCache = new Map<string, { version: number; stored: Embedded[] }>();
 const MAX_CACHED = 40000;
 /** Forgets the kept embeddings (for a test that swaps the database under the service). */
 export const resetEmbeddingCache = (): void => embeddingCache.clear();
-function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSource>) {
+function embeddingsOf(projectId: string, source: ReturnType<typeof knowledgeSource>): Embedded[] {
   // No version to compare (or a protected project): read fresh every time.
   if (isProtectedProject(projectId) || typeof ragDatabase.version !== 'number') return source.getEmbeddingsByProject(projectId);
   const hit = embeddingCache.get(projectId);
   if (hit && hit.version === ragDatabase.version) return hit.stored;
   const stored = source.getEmbeddingsByProject(projectId);
-  if (stored.length <= MAX_CACHED) embeddingCache.set(projectId, { version: ragDatabase.version, stored }); else embeddingCache.delete(projectId);
+  // Kept as 32-bit floats (what is stored on disk): half the memory of a list of numbers, and a faster pass over each vector.
+  if (stored.length <= MAX_CACHED) {
+    const compact = stored.map((e): Embedded => ({ ...e, embedding: Float32Array.from(e.embedding) }));
+    embeddingCache.set(projectId, { version: ragDatabase.version, stored: compact });
+    return compact;
+  }
+  embeddingCache.delete(projectId);
   return stored;
 }
 
@@ -68,7 +85,9 @@ class RetrievalService {
   /** Keyword-ranked passages from the project (and its folders): used only when meaning-based search cannot run. */
   private lexical(projectId: string, query: string, { include, topK = 5 }: SearchOptions): { chunks: RagSearchResult[]; kind: 'lexical' | 'none-matching' | 'none-indexed'; partial?: boolean } {
     try {
-      const perProject = scopeOf(projectId).map((id) => knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL));
+      // The full-text index finds the passages that contain the question's words in the whole project; without it (a protected project, or a
+      // build of SQLite without FTS5) the first passages are read and ranked, which can miss later ones (`partial`).
+      const perProject = scopeOf(projectId).map((id) => keywordCandidates(id, query, include ? KEYWORD_CANDIDATES_FILTERED : KEYWORD_CANDIDATES) ?? knowledgeSource(id).getChunksByProject(id, LEXICAL_POOL));
       const partial = perProject.some((rows) => rows.length >= LEXICAL_POOL);
       const pool = perProject.flat().filter((c) => !include || include(c.name));
       if (!pool.length) return { chunks: [], kind: 'none-indexed' };
@@ -122,17 +141,20 @@ class RetrievalService {
       return this.lexical(projectId, query, { include, topK });
     }
 
+    const score = cosineScorer(queryVec);
     const scored = stored.map(entry => ({
       doc_id: entry.doc_id,
       name: entry.name,
       content: entry.content,
       position: entry.position,
-      score: cosineSimilarity(queryVec, entry.embedding),
+      score: score(entry.embedding),
     }));
 
     scored.sort((a, b) => b.score - a.score);
-    // Take extra candidates, then keep the ones that are about the question and spread them over the documents.
-    const ranked = rankChunks(query, scored.slice(0, topK * 3), topK);
+    // Take extra candidates, add what only the question's own words find (a section number, a name), then keep the ones that are
+    // about the question and spread them over the documents.
+    const keyword = scopeOf(projectId).flatMap((id) => keywordCandidates(id, query, include ? KEYWORD_CANDIDATES_FILTERED : topK * 3) ?? []).filter((c) => !include || include(c.name));
+    const ranked = rankChunks(query, mergeKeywordHits(scored.slice(0, topK * 3), keyword, topK * 3), topK);
     return { chunks: ranked, kind: ranked.length ? 'semantic' : 'none-matching' };
   }
 

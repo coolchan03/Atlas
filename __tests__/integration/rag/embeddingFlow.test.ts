@@ -208,7 +208,7 @@ describe('Embedding Flow Integration', () => {
       await ragService.deleteDocument(42);
 
       const deleteCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
+        (c: any[]) => typeof c[0] === 'string' && /^\s*DELETE/.test(c[0])
       );
       expect(deleteCalls.length).toBe(3);
       // Order: embeddings, chunks, document

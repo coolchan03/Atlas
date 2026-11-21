@@ -20,7 +20,7 @@ const COOL_AT = 1;
 /** Android's CRITICAL: components are being shut down, so waiting to be sure would be the wrong call. */
 const IMMEDIATE_AT = 4;
 /** SEVERE must be read this many times in a row (the monitor reads every 30 seconds) before the guard engages: one passing spike is not heat. */
-export const SUSTAINED_READINGS = 2;
+const SUSTAINED_READINGS = 2;
 
 /**
  * Whether answers should be limited. Engaging takes SEVERE on consecutive readings (or CRITICAL at once), so a transient reading never cuts

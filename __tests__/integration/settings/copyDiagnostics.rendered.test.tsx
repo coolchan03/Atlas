@@ -16,6 +16,12 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({ AnimatedListItem:
 import { AboutScreen } from '../../../src/screens/AboutScreen';
 import { rememberCallTiming } from '../../../src/atlasVoice/turnTiming';
 
+// The About screen checks GitHub for a newer build when it opens. The network is the device boundary: answered here, never reached
+// (a real request left an open connection that kept Jest from exiting).
+const realFetch = global.fetch;
+beforeAll(() => { (global as any).fetch = jest.fn(async () => ({ status: 404, ok: false, json: async () => ({}) })); });
+afterAll(() => { (global as any).fetch = realFetch; });
+
 it('copies a summary with the version, device and the last call timing', async () => {
   const copy = jest.spyOn(Clipboard, 'setString').mockImplementation(() => undefined);
   rememberCallTiming('Last turn: sent 0.9 s after you stopped, voice started 2.5 s later');

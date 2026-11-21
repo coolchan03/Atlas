@@ -10,6 +10,7 @@ import { ConversationActionsSection } from './ConversationActionsSection';
 import { AgentChip } from '../AgentChip';
 import { useChatStore } from '../../stores/chatStore';
 import { ChatContextSection } from './ChatContextSection';
+import { ResponseModePicker } from './ResponseModePicker';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { ResearchSettingsSection, type ResearchDepth } from './ResearchSettingsSection';
@@ -200,6 +201,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 </Text>
               </View>
             )}
+            <ResponseModePicker />
             <TextGenerationSection />
           </>
         )}
