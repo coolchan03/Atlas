@@ -740,7 +740,7 @@ class LLMService {
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
-      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond);
+      recordLlamaTimings(cr, this.performanceStats.lastDecodeTokensPerSecond, this.mtpActive);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
       const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent, parsedContent: typeof cr?.content === 'string' ? cr.content : undefined };
       // Noise is not an answer. It is reported (with the cause) instead of being shown or saved as one, and the setup is marked so it is not trusted again.
