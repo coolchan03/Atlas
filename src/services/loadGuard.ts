@@ -122,7 +122,7 @@ export function recoverFromPreviousRun(now: number = Date.now()): Promise<CrashR
         };
         state.crashes[signature] = recovered;
         state.inFlight = null;
-        logger.error(`[LOAD-GUARD] the previous run ended while ${STAGE_LABEL[crumb.stage]} (${crumb.backend}, MTP ${crumb.mtp ? 'on' : 'off'}, pictures ${crumb.vision ? 'on' : 'off'}) — recorded as a crash`);
+        logger.error(`[LOAD-GUARD] the previous run ended while ${STAGE_LABEL[crumb.stage]} (${crumb.backend}, MTP ${crumb.mtp ? 'on' : 'off'}, pictures ${crumb.vision ? 'on' : 'off'}): recorded as a crash`);
       }
       prune(now);
       if (crumb) await persist();
