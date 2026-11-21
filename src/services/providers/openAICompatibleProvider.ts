@@ -118,10 +118,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
       return;
     }
 
-    this.abortController = new AbortController();
+    // A request still running from before (one that timed out or was replaced) is cancelled, not left streaming into the new one.
+    this.abortController?.abort();
+    const controller = new AbortController();
+    this.abortController = controller;
     // Capture signal in closure so abort checks remain valid even after
     // this.abortController is nulled by stopGeneration().
-    const { signal } = this.abortController;
+    const { signal } = controller;
 
     try {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
@@ -220,7 +223,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
       callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
-      this.abortController = null;
+      // Only clear the controller if it is still THIS request's. A request that was cancelled and finished late must not erase the
+      // controller of the newer one, or Stop could no longer cancel it.
+      if (this.abortController === controller) this.abortController = null;
     }
   }
 
