@@ -4,6 +4,7 @@ import { hardwareService } from '../services/hardware';
 import { INFERENCE_BACKENDS, type DownloadedModel } from '../types';
 import { automaticBackendForModel } from '../utils/acceleration';
 import logger from '../utils/logger';
+import { chooseBackend, useAccelRecord } from './accelRecord';
 
 /**
  * Atlas automatic acceleration policy.
@@ -61,7 +62,12 @@ export async function autoPickAccelerationForModel(model: DownloadedModel): Prom
 
   try {
     const capability = await hardwareService.getAccelerationCapability();
-    const target = automaticBackendForModel(capability, model.name, model.quantization);
+    const suggested = automaticBackendForModel(capability, model.name, model.quantization);
+    // The hardware rules suggest; what this model has actually done on this phone corrects it (an accelerator that keeps failing, or a slower one).
+    const available = [INFERENCE_BACKENDS.CPU, ...(capability.hasGpu ? [INFERENCE_BACKENDS.OPENCL] : []), ...(capability.hasNpu ? [INFERENCE_BACKENDS.HTP] : [])] as string[];
+    const choice = chooseBackend({ file: model.filePath, suggested, candidates: available, records: useAccelRecord.getState().byKey });
+    const target = choice.backend as typeof suggested;
+    if (choice.why) logger.log(`[Atlas] Automatic acceleration for ${model.name} adjusted from what this phone has measured: ${choice.why}`);
     if (target === st.settings.inferenceBackend) return;
 
     st.updateSettings({

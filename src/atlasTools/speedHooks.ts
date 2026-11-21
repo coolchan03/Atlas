@@ -1,4 +1,5 @@
-import { recordSpeed } from './speed';
+import { currentBackend, recordSpeed } from './speed';
+import { useAccelRecord } from './accelRecord';
 import { useSpecBenefit } from './specBenefit';
 import { useAppStore } from '../stores/appStore';
 
@@ -24,6 +25,15 @@ export function promptReuseOf(cr: any): PromptReuse | null {
   return { promptTokens: total, processedTokens: processed, reusedTokens: reused };
 }
 
+/** The wait before the first word (the prompt being read) of a reply, kept for the model and accelerator that produced it. */
+function recordFirstWord(promptMs: unknown): void {
+  const ms = Number(promptMs);
+  const app = useAppStore.getState();
+  const file = app.downloadedModels.find((m) => m.id === app.activeModelId)?.filePath;
+  const backend = currentBackend();
+  if (file && backend && Number.isFinite(ms) && ms > 0) useAccelRecord.getState().recordAnswer(file, backend, ms);
+}
+
 /** Feed llama.rn's own timings (completion result) into the per-model speed memory. */
 export function recordLlamaTimings(cr: any, fallbackDecode?: number, drafting?: boolean): void {
   try {
@@ -31,6 +41,7 @@ export function recordLlamaTimings(cr: any, fallbackDecode?: number, drafting?: 
     const t = cr?.timings;
     // A reply of real length, with whether speculative decoding was running, feeds the "does it help on this phone" comparison.
     const decode = t?.predicted_per_second || fallbackDecode;
+    recordFirstWord(t?.prompt_ms);
     if (drafting !== undefined && decode && Number(t?.predicted_n) >= 24) useSpecBenefit.getState().record(useAppStore.getState().activeModelId ?? '', drafting, decode);
     recordSpeed({
       decode: t?.predicted_per_second || fallbackDecode,

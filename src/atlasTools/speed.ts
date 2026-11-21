@@ -148,7 +148,7 @@ const THINK_MULT: Record<string, number> = { low: 1.6, medium: 2.5, high: 4 };
 /** Who says which backend the model is running on. The text engine registers itself (this file must not import it: that would be a cycle). */
 let backendProvider: (() => string | undefined) | null = null;
 export const setBackendProvider = (fn: (() => string | undefined) | null): void => { backendProvider = fn; };
-const currentBackend = (): string | undefined => { try { return backendProvider?.() || undefined; } catch { return undefined; } };
+export const currentBackend = (): string | undefined => { try { return backendProvider?.() || undefined; } catch { return undefined; } };
 
 /** Record a finished generation for the model that's in use now. Never throws. */
 export function recordSpeed(s: { decode?: number; prefill?: number; promptTokens?: number; outLen?: number }): void {

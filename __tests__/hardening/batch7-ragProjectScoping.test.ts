@@ -43,6 +43,7 @@ jest.mock('../../src/services/rag/database', () => ({
           embedding: r.embedding,
         })),
     ),
+    searchKeywords: jest.fn(() => null), // no full-text index in this fake
     getChunksByProject: jest.fn((projectId: string, topK: number) =>
       mockStore
         .filter((r) => r.projectId === projectId)

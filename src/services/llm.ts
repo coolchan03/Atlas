@@ -1,5 +1,6 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { recordLlamaTimings } from '../atlasTools/speedHooks';
+import { useAccelRecord } from '../atlasTools/accelRecord';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -212,6 +213,7 @@ class LLMService {
   }
   async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
     const epoch = this.loadEpoch;
+    const loadBegan = Date.now();
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
@@ -435,6 +437,7 @@ class LLMService {
           this.requestedBackendAtLoad = requested;
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
+          useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
             ? (safeMode ? 'Safe Model Loading is on' : attemptMmProj ? 'the engine could not start it' : backend === INFERENCE_BACKENDS.VULKAN ? 'the Vulkan engine is text only' : 'a crash last time')
             : undefined;
@@ -453,6 +456,7 @@ class LLMService {
           const message = String(error?.message || error || 'Native load failed');
           if (!refused) {
             await recordLoadFailure({ modelPath, backend, ...attempt, stage, message, nativeTail: recentNativeLog(6) || undefined });
+            useAccelRecord.getState().recordFailure(modelPath, backend);
           }
           // A memory refusal is about the model, not the backend: keep its type so the UI
           // can offer "Load Anyway" (wrapping it in a plain Error lost that button).
