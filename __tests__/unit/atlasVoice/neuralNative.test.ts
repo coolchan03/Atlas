@@ -184,3 +184,58 @@ describe('host voices and labels', () => {
 });
 
 export {};
+
+describe('withVoice: the voice a line needs is loaded and used as one step', () => {
+  const profile = { id: 'pocket-tts-mom', sid: 0, referenceId: 'mom-ref' };
+
+  it('loads the borrowed voice, then runs the job with it loaded', async () => {
+    const { neural, native } = load();
+    const order: string[] = [];
+    native.activateClonedVoice.mockImplementation(async () => { order.push('load mom'); return 3; });
+    await neural.withVoice(profile, async () => { order.push('job'); });
+    expect(order).toEqual(['load mom', 'job']);
+  });
+
+  it('another feature asking for its own voice waits until the job is done (the voice cannot change under a line being made)', async () => {
+    const { neural, native } = load();
+    const order: string[] = [];
+    native.activateClonedVoice.mockImplementation(async (id: string) => { order.push(`load ${id}`); return 3; });
+    let finishJob: () => void = () => undefined;
+    const running = neural.withVoice(profile, () => new Promise<void>((resolve) => { order.push('job starts'); finishJob = () => { order.push('job ends'); resolve(); }; }));
+    await new Promise((r) => setImmediate(r));
+    const other = neural.loadVoiceForSpeech('pocket-tts-dad', 0, { referenceId: 'dad-ref' }); // a chat reply in another voice, mid-line
+    await new Promise((r) => setImmediate(r));
+    expect(order).toEqual(['load pocket-tts-mom', 'job starts']); // dad's voice has NOT been loaded under the running job
+    finishJob();
+    await running; await other;
+    expect(order).toEqual(['load pocket-tts-mom', 'job starts', 'job ends', 'load pocket-tts-dad']);
+  });
+
+  it('a line in the saved voice checks what is loaded and puts the saved voice back when a borrowed one is still there', async () => {
+    const { neural, native, store } = load();
+    await neural.selectVoice('piper-amy', 0);
+    native.setNeuralVoice.mockClear();
+    await neural.withVoice(profile, async () => undefined); // a borrowed clone is now loaded
+    native.setNeuralVoice.mockClear();
+    const used: string[] = [];
+    await neural.withVoice(null, async () => { used.push('saved line'); });
+    expect(store.getState().neuralVoice).toBe('piper-amy');
+    expect(native.setNeuralVoice).toHaveBeenCalledWith('piper-amy', expect.anything(), expect.anything()); // loaded again before the line was made
+    expect(used).toEqual(['saved line']);
+  });
+
+  it('a saved voice that is already loaded is not reloaded for every line', async () => {
+    const { neural, native } = load();
+    await neural.selectVoice('piper-amy', 0);
+    native.setNeuralVoice.mockClear();
+    await neural.withVoice(null, async () => undefined);
+    await neural.withVoice(null, async () => undefined);
+    expect(native.setNeuralVoice).not.toHaveBeenCalled();
+  });
+
+  it('a failing job does not block the voice queue for the next one', async () => {
+    const { neural } = load();
+    await expect(neural.withVoice(null, async () => { throw new Error('render failed'); })).rejects.toThrow('render failed');
+    await expect(neural.withVoice(null, async () => 'ok')).resolves.toBe('ok');
+  });
+});

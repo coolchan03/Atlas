@@ -4,6 +4,7 @@
  */
 const mockFiles = new Set<string>();
 const mockEvents: string[] = [];
+let mockLoaded = 'saved';
 jest.mock('react-native-fs', () => ({
   CachesDirectoryPath: '/cache',
   exists: jest.fn(async (p: string) => mockFiles.has(p)),
@@ -15,7 +16,13 @@ jest.mock('react-native-fs', () => ({
 jest.mock('../../../src/atlasVoice/neural', () => ({
   ...jest.requireActual('../../../src/atlasVoice/neural'),
   loadVoiceForSpeech: jest.fn(async (id: string, sid: number, ref?: string) => { mockEvents.push(`load ${id}#${sid}#${ref ?? ''}`); }),
-  restoreSavedVoice: jest.fn(async () => { mockEvents.push('restore'); }),
+  restoreSavedVoice: jest.fn(async () => { mockEvents.push('restore'); mockLoaded = 'saved'; }),
+  // The real withVoice loads what the engine does not already have, then runs the job. This fake keeps the same engine state.
+  withVoice: jest.fn(async (choice: { id: string; sid: number; referenceId?: string } | null, job: () => Promise<unknown>) => {
+    const wanted = choice ? `${choice.id}#${choice.sid}#${choice.referenceId ?? ''}` : 'saved';
+    if (mockLoaded !== wanted) { mockEvents.push(choice ? `load ${wanted}` : 'restore'); mockLoaded = wanted; }
+    return job();
+  }),
 }));
 
 import { NativeModules, Platform } from 'react-native';

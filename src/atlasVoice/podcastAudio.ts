@@ -9,7 +9,7 @@ import RNFS from 'react-native-fs';
 import { sha256 } from 'js-sha256';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { canPreRender, speakAndWait, synthesizeLineToFile } from './tts';
-import { hostVoices, loadVoiceForSpeech, pickedHostVoice, restoreSavedVoice } from './neural';
+import { hostVoices, pickedHostVoice, restoreSavedVoice, withVoice } from './neural';
 import { useVoiceProfiles } from './profiles';
 import { profileCacheKey, profileForKey } from './hostVoiceKeys';
 import { makeJingle, wavBytes, toBase64, jingleSeconds, JINGLE_PEAK, type JingleKind, type JingleVolume } from './jingles';
@@ -107,14 +107,16 @@ function render(ref: { key: string; items: CastLine[]; i: number }, urgent = fal
         if (profile) {
           borrowedVoice = true;
           podNote('log', `[POD] line ${i}: borrowing voice ${profile.voiceId}#${profile.sid} for a host`);
-          await loadVoiceForSpeech(profile.voiceId, profile.sid, profile.referenceId);
         } else if (borrowedVoice) {
-          // A line in an ordinary voice must not be made by the engine a profile left loaded.
           borrowedVoice = false;
-          podNote('log', `[POD] line ${i}: ordinary voice after a borrowed one: putting your saved voice back first`);
-          await restoreSavedVoice();
+          podNote('log', `[POD] line ${i}: ordinary voice after a borrowed one: the saved voice is loaded first`);
         }
-        const out = await synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch });
+        // Load the voice this line needs AND make the line as one step: another feature borrowing the engine in between (a chat reply in an
+        // agent's voice, a reading) can no longer leave this line made by the wrong voice and saved under the right voice's file name.
+        const out = await withVoice(
+          profile ? { id: profile.voiceId, sid: profile.sid, referenceId: profile.referenceId } : null,
+          () => synthesizeLineToFile(items[i].text, { voice: profile ? '' : items[i].voice ?? '', path, pitch: items[i].voice ? 1 : items[i].pitch }),
+        );
         podNote('log', `[POD] line ${i}: rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s (${items[i].text.length} chars, voice "${items[i].voice ?? ''}")`);
         return out;
       } catch (e: any) {

@@ -14,9 +14,9 @@ function load(opts: Opts = {}) {
   });
   const speakAndWait = jest.fn(async () => true);
   jest.doMock('../../../src/atlasVoice/tts', () => ({ canPreRender: () => opts.canPreRender !== false, speakAndWait, synthesizeLineToFile: synth }));
-  const loadVoiceForSpeech = jest.fn(async () => undefined);
+  const loadVoiceForSpeech = jest.fn(async (..._args: unknown[]) => undefined);
   const restoreSavedVoice = jest.fn(async () => undefined);
-  jest.doMock('../../../src/atlasVoice/neural', () => ({ hostVoices: (v: { name: string }[]) => v.map((x) => x.name), pickedHostVoice: () => undefined, loadVoiceForSpeech, restoreSavedVoice }));
+  jest.doMock('../../../src/atlasVoice/neural', () => ({ hostVoices: (v: { name: string }[]) => v.map((x) => x.name), pickedHostVoice: () => undefined, loadVoiceForSpeech, restoreSavedVoice, withVoice: async (choice: { id: string; sid: number; referenceId?: string } | null, job: () => Promise<unknown>) => { if (choice) await loadVoiceForSpeech(choice.id, choice.sid, choice.referenceId); return job(); } }));
   jest.doMock('../../../src/services/audioSessionManager', () => ({ audioSessionManager: { ensurePlayback: async () => undefined } }));
   const sources: any[] = [];
   const contexts: any[] = [];

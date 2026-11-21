@@ -309,6 +309,22 @@ export function loadVoiceForSpeech(id: string, sid: number, recording?: string |
 }
 
 /**
+ * Runs `job` (making a line of speech) with exactly the right voice loaded, and keeps every other voice change waiting until it ends.
+ * `choice` is a borrowed voice (a profile or a clone); null means the person's saved voice. Loading and making the line are ONE step in the
+ * voice queue, so nothing else (a chat reply in an agent's voice, a reading, a preview) can swap the voice between them. The check is against
+ * what the engine really has loaded, not against a note this caller kept about what it asked for. `job` must not itself use the voice queue.
+ */
+export function withVoice<T>(choice: { id: string; sid: number; referenceId?: string; steps?: number } | null, job: () => Promise<T>): Promise<T> {
+  if (choice) voiceEpoch += 1; // a newer request for a voice: a pending "put the saved voice back" must not undo it
+  return serialVoice(async () => {
+    const st = useAtlasVoiceStore.getState();
+    if (choice) await loadNow(choice);
+    else if (st.neuralVoice) await loadNow({ id: st.neuralVoice, sid: st.neuralSid, referenceId: st.neuralReferenceId });
+    return job();
+  });
+}
+
+/**
  * Put the saved voice back after an agent has spoken. If a voice for speech was asked for after this was, that newer request wins
  * and nothing is restored, so stopping one reading never reloads the saved voice underneath the next one.
  */
