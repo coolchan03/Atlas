@@ -31,11 +31,11 @@ describe('the response mode picker', () => {
     expect(screen.getByText(/How it answers: Balanced/)).toBeTruthy();
   });
 
-  it('says Custom when a setting is changed by hand, and keeps the length a person set when going back to Balanced', () => {
+  it('says Custom when a setting is changed by hand, and keeps the length a person set when going back to Balanced', async () => {
     set({ maxTokens: 2048 });
     const screen = render(<ResponseModePicker />);
     fireEvent.press(screen.getByText('Quick'));
-    act(() => set({ maxTokens: 700 })); // dragged the length slider
+    await act(async () => { set({ maxTokens: 700 }); }); // dragged the length slider
     expect(screen.getByText(/How it answers: Custom/)).toBeTruthy();
     fireEvent.press(screen.getByText('Balanced'));
     expect(settings().maxTokens).toBe(700);
