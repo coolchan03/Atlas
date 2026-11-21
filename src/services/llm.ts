@@ -204,7 +204,7 @@ class LLMService {
   }
   /** What the last load really started, for the model card: loaded or not, and roughly what each optional part costs. */
   getLoadReport(): LoadReport | null { return this.loadReport; }
-  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean }): Promise<void> {
+  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
     const epoch = this.loadEpoch;
     const mutex = this.acquireContextMutex();
     try {
@@ -426,11 +426,11 @@ class LLMService {
           const mtpKind: 'file' | 'embedded' | 'none' = draftFile ? 'file' : embeddedOn ? 'embedded' : 'none';
           this.loadReport = {
             safeMode, backend, notes,
-            vision: { requested: visionAttached && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : {}) },
+            vision: { requested: visionAttached && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : opts?.switchedOff?.vision ? { skippedBecause: 'switched off for this model' } : {}) },
             mtp: {
               kind: mtpKind, requested: mtpWanted, loaded: this.mtpActive,
               estimatedMB: this.mtpActive && draftFile ? await this.fileMB(draftFile) : 0,
-              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : 'it could not start' } : {}),
+              ...(mtpAttached && !this.mtpActive ? { skippedBecause: safeMode ? 'Safe Model Loading is on' : !wantsMtp ? 'MTP is switched off' : 'it could not start' } : opts?.switchedOff?.mtp ? { skippedBecause: 'switched off for this model' } : {}),
             },
           };
           return;

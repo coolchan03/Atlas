@@ -312,3 +312,79 @@ describe('doLoadImageModel — backend routing', () => {
     );
   });
 });
+
+describe('optional attachments in the load path', () => {
+  const MM = '/models/m-mmproj-f16.gguf';
+  const DR = '/models/m.mtp-x.gguf';
+  const llama = (extra: any = {}) => ({
+    id: 'model-1', fileName: 'm.gguf', filePath: '/models/m.gguf', engine: 'llama', mmProjPath: MM, mmProjFileName: 'm-mmproj-f16.gguf',
+    isVisionModel: true, mmProjManual: true, draftPath: DR, ...extra,
+  });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedLlm.loadModel.mockResolvedValue(undefined);
+    mockedRNFS.exists.mockResolvedValue(true);
+    mockedRNFS.readDir.mockResolvedValue([{ name: 'm-mmproj-f16.gguf', path: MM, isFile: () => true, size: 600 } as any]);
+  });
+
+  it('a disabled picture file is not started, not scanned for, and its link is NOT cleared', async () => {
+    const ctx = makeCtx({ model: llama({ mmProjDisabled: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: false, audio: false });
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel).toHaveBeenCalledWith('/models/m.gguf', undefined, expect.objectContaining({ switchedOff: { vision: true } }));
+    expect(mockedRNFS.readDir).not.toHaveBeenCalled();
+    const { modelManager } = require('../../../src/services/modelManager');
+    expect(modelManager.clearMmProjLink).not.toHaveBeenCalled();
+    expect(modelManager.saveModelWithMmproj).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['detached', { mmProjPath: undefined, mmProjDetached: true }],
+    ['archived', { mmProjPath: undefined, archivedAttachments: { vision: { path: MM, fileName: 'x', archivedAt: 't' } } }],
+  ])('a %s picture file is not found again by the folder scan', async (_name, extra) => {
+    const ctx = makeCtx({ model: llama(extra) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel).toHaveBeenCalledWith('/models/m.gguf', undefined, expect.any(Object));
+    expect(mockedRNFS.readDir).not.toHaveBeenCalled();
+  });
+
+  it('a disabled MTP file is not handed to the engine; an enabled one is', async () => {
+    let ctx = makeCtx({ model: llama({ draftDisabled: true, mmProjPath: undefined, mmProjDetached: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel.mock.calls[0][2]).not.toHaveProperty('draftPath');
+    expect(mockedLlm.loadModel.mock.calls[0][2]).toMatchObject({ switchedOff: { mtp: true } });
+
+    mockedLlm.loadModel.mockClear();
+    ctx = makeCtx({ model: llama({ mmProjPath: undefined, mmProjDetached: true }) });
+    mockedGetState.mockReturnValue(ctx.store);
+    await doLoadTextModel(ctx);
+    expect(mockedLlm.loadModel.mock.calls[0][2]).toMatchObject({ draftPath: DR });
+  });
+
+  it('an enabled picture file the engine really cannot use still gets its broken link cleared', async () => {
+    const ctx = makeCtx({ model: llama() });
+    mockedGetState.mockReturnValue(ctx.store);
+    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: false, audio: false });
+    await doLoadTextModel(ctx);
+    const { modelManager } = require('../../../src/services/modelManager');
+    expect(modelManager.clearMmProjLink).toHaveBeenCalledWith('model-1');
+  });
+
+  it('a load that times out tells the service to abandon it so it cannot go live later', async () => {
+    jest.useFakeTimers();
+    try {
+      (mockedLlm as any).abandonPendingLoad = jest.fn();
+      mockedLlm.loadModel.mockReturnValue(new Promise(() => {})); // never finishes
+      const ctx = makeCtx({ model: llama({ mmProjPath: undefined, mmProjDetached: true }), timeoutMs: 1000 });
+      mockedGetState.mockReturnValue(ctx.store);
+      const result = doLoadTextModel(ctx);
+      const assertion = expect(result).rejects.toThrow(/timed out/);
+      await jest.advanceTimersByTimeAsync(1500);
+      await assertion;
+      expect((mockedLlm as any).abandonPendingLoad).toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+});

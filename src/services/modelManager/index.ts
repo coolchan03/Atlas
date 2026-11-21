@@ -29,6 +29,10 @@ import {
 } from './download';
 import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
 import { copyFileWithProgress } from './copyFile';
+import {
+  type AttachmentKind, setAttachmentEnabled as applyEnabled, detachAttachment as applyDetach, archiveAttachment as applyArchive,
+  restoreAttachment as applyRestore, dropAttachment, isFileShared, attachmentPath,
+} from './attachments';
 import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
@@ -149,7 +153,11 @@ class ModelManager {
       }
     }
 
-    if (llamaModel?.draftPath && allowed(llamaModel.draftPath)) await RNFS.unlink(llamaModel.draftPath).catch(() => {});
+    if (llamaModel?.draftPath && allowed(llamaModel.draftPath) && !isFileShared(models, llamaModel.draftPath, modelId)) await RNFS.unlink(llamaModel.draftPath).catch(() => {});
+    // Files set aside with Archive go with the model they belonged to, unless another model also uses them.
+    for (const archived of [llamaModel?.archivedAttachments?.vision, llamaModel?.archivedAttachments?.draft]) {
+      if (archived && allowed(archived.path) && !isFileShared(models, archived.path, modelId)) await RNFS.unlink(archived.path).catch(() => {});
+    }
 
     await saveModelsList(models.filter(m => m.id !== modelId));
   }
@@ -409,7 +417,7 @@ class ModelManager {
     const stat = await RNFS.stat(dest);
     const old = target.draftPath;
     const updated = models.map(m => (m.id === modelId && m.engine === 'llama'
-      ? { ...m, draftPath: dest, draftFileName: fileName, draftFileSize: Number(stat.size) } : m));
+      ? { ...m, draftPath: dest, draftFileName: fileName, draftFileSize: Number(stat.size), draftDetached: undefined, draftDisabled: undefined } : m));
     await saveModelsList(updated);
     useAppStore.getState().setDownloadedModels(updated);
     if (old && old !== dest) await RNFS.unlink(old).catch(() => {});
@@ -437,6 +445,64 @@ class ModelManager {
     await saveModelsList(updated);
     useAppStore.getState().setDownloadedModels(updated);
     await RNFS.unlink(old).catch(() => {});
+  }
+
+  /** Apply one change to a GGUF model's record and save it. Returns the old and new record. */
+  private async changeLlama(modelId: string, change: (m: Extract<DownloadedModel, { engine: 'llama' }>) => Extract<DownloadedModel, { engine: 'llama' }>) {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') throw new Error('Attachments can only be managed on GGUF (llama) models.');
+    const next = change(target);
+    const updated = models.map(m => (m.id === modelId ? next : m));
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
+    return { models, before: target, after: next };
+  }
+
+  /** Atlas: Enable or Disable an attached picture/MTP file. Disabled keeps the file but the engine never starts it. */
+  async setAttachmentEnabled(modelId: string, kind: AttachmentKind, enabled: boolean): Promise<void> {
+    await this.changeLlama(modelId, m => applyEnabled(m, kind, enabled));
+  }
+
+  /** Atlas: Detach. The model forgets the file; the file stays on the phone and is not attached again by the folder scan. */
+  async detachAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    await this.changeLlama(modelId, m => applyDetach(m, kind));
+  }
+
+  /** Atlas: Archive. Set the file aside for later; it stays on the phone and is not used. */
+  async archiveAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    await this.changeLlama(modelId, m => applyArchive(m, kind));
+  }
+
+  /** Atlas: Restore an archived file (it comes back enabled). Refuses when the file is gone. */
+  async restoreAttachment(modelId: string, kind: AttachmentKind): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    const archived = target?.engine === 'llama' ? target.archivedAttachments?.[kind] : undefined;
+    if (archived && !(await RNFS.exists(archived.path))) throw new Error(`${archived.fileName} is no longer on this phone, so it cannot be restored.`);
+    await this.changeLlama(modelId, m => applyRestore(m, kind));
+  }
+
+  /**
+   * Atlas: Delete. Removes the model's association and, only when no other model uses the file, the file itself.
+   * Callers confirm with the user first. Returns whether the file was removed or kept for another model.
+   */
+  async deleteAttachment(modelId: string, kind: AttachmentKind): Promise<{ fileRemoved: boolean; keptForOtherModels: boolean }> {
+    let dropped: string | undefined;
+    const { models } = await this.changeLlama(modelId, m => { const r = dropAttachment(m, kind); dropped = r.path; return r.model; });
+    if (!dropped) return { fileRemoved: false, keptForOtherModels: false };
+    if (isFileShared(models, dropped, modelId)) return { fileRemoved: false, keptForOtherModels: true };
+    await RNFS.unlink(dropped).catch(() => {});
+    return { fileRemoved: true, keptForOtherModels: false };
+  }
+
+  /** Atlas: the file this model has attached for a kind, if any (the UI asks whether it is shared before offering Delete). */
+  async isAttachmentShared(modelId: string, kind: AttachmentKind): Promise<boolean> {
+    const models = await this.getDownloadedModels();
+    const target = models.find(m => m.id === modelId);
+    if (!target || target.engine !== 'llama') return false;
+    const path = attachmentPath(target, kind) ?? target.archivedAttachments?.[kind]?.path;
+    return !!path && isFileShared(models, path, modelId);
   }
 
   /** Atlas: move a model (and its vision file) to the SD card folder, or back to the phone. */
@@ -483,7 +549,7 @@ class ModelManager {
 
     const models = await this.getDownloadedModels();
     const updated = models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true, ...(manual ? { mmProjManual: true } : {}) } : m
+      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true, ...(manual ? { mmProjManual: true } : {}), ...(m.engine === 'llama' ? { mmProjDetached: undefined, mmProjDisabled: undefined } : {}) } : m
     );
     await saveModelsList(updated);
     // Also update the in-memory Zustand store so UI reflects the change immediately.

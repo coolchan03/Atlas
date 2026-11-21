@@ -77,6 +77,24 @@ export interface LlamaDownloadedModel extends DownloadedModelBase {
   draftFileSize?: number;
   /** Atlas: the model file has MTP layers built in (a hybrid MTP GGUF), so no separate MTP file is needed. */
   embeddedMtp?: boolean;
+  /** Atlas: the picture file stays attached but is not started (text-only run, no projector memory). */
+  mmProjDisabled?: boolean;
+  /** Atlas: the MTP draft file stays attached but is not started. */
+  draftDisabled?: boolean;
+  /** Atlas: the user removed the picture file from this model; the folder scan must not attach it again. */
+  mmProjDetached?: boolean;
+  /** Atlas: same for the MTP draft file. */
+  draftDetached?: boolean;
+  /** Atlas: attachments set aside for later. The files stay on the phone; the model does not use them. */
+  archivedAttachments?: { vision?: ArchivedAttachment; draft?: ArchivedAttachment };
+}
+
+/** A picture (mmproj) or MTP file that is kept on the phone but not attached to its model. */
+export interface ArchivedAttachment {
+  path: string;
+  fileName: string;
+  fileSize?: number;
+  archivedAt: string;
 }
 
 export interface LiteRTDownloadedModel extends DownloadedModelBase {
