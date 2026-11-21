@@ -125,22 +125,6 @@ describe('RagDatabase', () => {
     });
   });
 
-  describe('hasEmbeddingsForDocument', () => {
-    it('returns true when embeddings exist', async () => {
-      await ragDatabase.ensureReady();
-      mockExecuteSync.mockReturnValue({ rows: [{ count: 5 }] });
-
-      expect(ragDatabase.hasEmbeddingsForDocument(42)).toBe(true);
-    });
-
-    it('returns false when no embeddings', async () => {
-      await ragDatabase.ensureReady();
-      mockExecuteSync.mockReturnValue({ rows: [{ count: 0 }] });
-
-      expect(ragDatabase.hasEmbeddingsForDocument(42)).toBe(false);
-    });
-  });
-
   describe('getChunksByDocument', () => {
     it('returns chunks for a document', async () => {
       await ragDatabase.ensureReady();

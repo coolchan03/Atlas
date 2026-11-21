@@ -185,21 +185,21 @@ class RagDatabase {
     return rows.length > 0 && rows[0].count > 0;
   }
 
-  hasEmbeddingsForDocument(docId: number): boolean {
-    const db = this.getDb();
-    const result = db.executeSync(
-      'SELECT COUNT(*) as count FROM rag_embeddings WHERE doc_id = ?',
-      [docId]
-    );
-    const rows = (result.rows ?? []) as unknown as { count: number }[];
-    return rows.length > 0 && rows[0].count > 0;
-  }
-
   getChunksByDocument(docId: number): { id: number; content: string; position: number }[] {
     const db = this.getDb();
     const result = db.executeSync(
       'SELECT id, content, position FROM rag_chunks WHERE doc_id = ? ORDER BY position',
       [docId]
+    );
+    return (result.rows ?? []) as unknown as { id: number; content: string; position: number }[];
+  }
+
+  /** Passages of a document that have no embedding yet, in order: what an interrupted indexing still has to do. */
+  getUnembeddedChunks(docId: number): { id: number; content: string; position: number }[] {
+    const result = this.getDb().executeSync(
+      `SELECT c.id AS id, c.content AS content, c.position AS position FROM rag_chunks c
+       WHERE c.doc_id = ? AND NOT EXISTS (SELECT 1 FROM rag_embeddings e WHERE e.chunk_rowid = c.id) ORDER BY c.position`,
+      [docId],
     );
     return (result.rows ?? []) as unknown as { id: number; content: string; position: number }[];
   }

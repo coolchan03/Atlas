@@ -85,6 +85,9 @@ async function readAndChunk(args: { fileName: string; filePath: string; attachme
   return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent), note: scanNote(paged) };
 }
 
+/** Passages embedded, and saved, per step. */
+const EMBED_SLICE = 32;
+
 class RagService {
   async ensureReady(): Promise<void> {
     await ragDatabase.ensureReady();
@@ -149,15 +152,8 @@ class RagService {
     onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
     try {
       await embeddingService.load();
-      const texts = chunks.map(c => c.content);
-      const embeddings = await embeddingService.embedBatch(texts);
-      const entries = rowIds.map((rowId, i) => ({
-        chunkRowid: rowId,
-        docId,
-        embedding: embeddings[i],
-      }));
-      ragDatabase.insertEmbeddingsBatch(entries);
-      logger.log(`[RAG] Generated ${embeddings.length} embeddings for ${fileName}`);
+      const done = await this.embedInSlices(docId, chunks.map((c, i) => ({ id: rowIds[i], content: c.content })), onProgress);
+      logger.log(`[RAG] Generated ${done} embeddings for ${fileName}`);
     } catch (err) {
       // A document with zero embeddings is invisible to semantic search and never
       // auto-backfilled — a permanent dead entry. Roll back the just-inserted doc + chunks
@@ -172,29 +168,50 @@ class RagService {
     return docId;
   }
 
+  /**
+   * Embeds passages a slice at a time and saves each slice as soon as it is made, so an indexing that is cut off (the app closed, the phone out of
+   * memory) keeps what it finished and the next run does only the rest. One embedding runs at a time: the engine is not safe to call twice at once.
+   */
+  private async embedInSlices(docId: number, chunks: { id: number; content: string }[], onProgress?: (p: IndexProgress) => void): Promise<number> {
+    let done = 0;
+    for (let at = 0; at < chunks.length; at += EMBED_SLICE) {
+      const slice = chunks.slice(at, at + EMBED_SLICE);
+      const embeddings = await embeddingService.embedBatch(slice.map((c) => c.content));
+      ragDatabase.insertEmbeddingsBatch(slice.map((c, i) => ({ chunkRowid: c.id, docId, embedding: embeddings[i] })));
+      done += slice.length;
+      if (chunks.length > EMBED_SLICE) onProgress?.({ stage: 'embedding', message: `Embedding passages: ${done} of ${chunks.length}` });
+    }
+    return done;
+  }
+
+  private resuming = new Set<string>();
+
+  /**
+   * Finishes the embedding of passages whose indexing was cut off, without waiting for the person to ask. One run per project at a time, and never
+   * while a chat reply is being written (the reply goes first; it is tried again the next time the library is opened). Returns how many passages it embedded.
+   */
+  async resumeIndexing(projectId: string): Promise<number> {
+    if (this.resuming.has(projectId)) return 0;
+    try { if (require('../llm').llmService.isCurrentlyGenerating()) return 0; } catch { /* no engine to ask: carry on */ }
+    this.resuming.add(projectId);
+    try { return await this.backfillEmbeddings(projectId); } finally { this.resuming.delete(projectId); }
+  }
+
   async backfillEmbeddings(projectId: string): Promise<number> {
     await this.ensureReady();
     const docs = ragDatabase.getDocumentsByProject(projectId);
     let total = 0;
 
     for (const doc of docs) {
-      if (ragDatabase.hasEmbeddingsForDocument(doc.id)) continue;
-
-      const chunks = ragDatabase.getChunksByDocument(doc.id);
-      if (chunks.length === 0) continue;
+      // Only the passages still without an embedding: a document whose indexing was cut off carries on where it stopped.
+      const missing = ragDatabase.getUnembeddedChunks(doc.id);
+      if (missing.length === 0) continue;
 
       try {
         await embeddingService.load();
-        const texts = chunks.map(c => c.content);
-        const embeddings = await embeddingService.embedBatch(texts);
-        const entries = chunks.map((chunk, i) => ({
-          chunkRowid: chunk.id,
-          docId: doc.id,
-          embedding: embeddings[i],
-        }));
-        ragDatabase.insertEmbeddingsBatch(entries);
-        total += embeddings.length;
-        logger.log(`[RAG] Backfilled ${embeddings.length} embeddings for ${doc.name}`);
+        const count = await this.embedInSlices(doc.id, missing);
+        total += count;
+        logger.log(`[RAG] Backfilled ${count} embeddings for ${doc.name}`);
       } catch (err) {
         logger.error(`[RAG] Backfill failed for ${doc.name}:`, err);
       }
