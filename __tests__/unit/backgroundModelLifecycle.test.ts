@@ -7,7 +7,7 @@ jest.mock('../../src/services/llm', () => ({ llmService: { isCurrentlyGenerating
 
 import { useAppStore } from '../../src/stores/appStore';
 import { createDownloadedModel } from '../utils/factories';
-import { useBackgroundModelNow, scheduleChatModelRestore } from '../../src/study/backgroundModel';
+import { useBackgroundModelNow as switchToBackgroundModel, scheduleChatModelRestore } from '../../src/study/backgroundModel'; // aliased: the hooks lint rule reads "use..." as a React hook
 
 const { ensureTextModel } = require('../../src/atlasTools/models') as { ensureTextModel: jest.Mock };
 const { llmService } = require('../../src/services/llm') as { llmService: { isCurrentlyGenerating: jest.Mock } };
@@ -24,7 +24,7 @@ afterEach(async () => { await jest.advanceTimersByTimeAsync(200_000); jest.useRe
 describe('loading the background model', () => {
   it('a load that fails puts the chat choice back and leaves nothing to "restore" later', async () => {
     ensureTextModel.mockImplementationOnce(async (id: string) => { useAppStore.getState().setActiveModelId(id); throw new Error('not enough memory'); }); // selected, then failed
-    await expect(useBackgroundModelNow()).rejects.toThrow('not enough memory');
+    await expect(switchToBackgroundModel()).rejects.toThrow('not enough memory');
     expect(useAppStore.getState().activeModelId).toBe('big'); // the person's choice is not left on the background model
     ensureTextModel.mockClear();
     scheduleChatModelRestore();
@@ -33,7 +33,7 @@ describe('loading the background model', () => {
   });
 
   it('a load that works keeps the chat choice and brings the chat model back when work goes quiet', async () => {
-    await useBackgroundModelNow();
+    await switchToBackgroundModel();
     expect(useAppStore.getState().activeModelId).toBe('big');
     useAppStore.setState({ loadedTextModelId: 'small' });
     ensureTextModel.mockClear();
@@ -45,7 +45,7 @@ describe('loading the background model', () => {
 
 describe('putting the chat model back', () => {
   async function switchedToBackground() {
-    await useBackgroundModelNow();
+    await switchToBackgroundModel();
     useAppStore.setState({ loadedTextModelId: 'small' });
     ensureTextModel.mockReset();
   }
@@ -93,7 +93,7 @@ describe('putting the chat model back', () => {
     await switchedToBackground();
     scheduleChatModelRestore();
     await jest.advanceTimersByTimeAsync(30_000);
-    await useBackgroundModelNow(); // more work starts
+    await switchToBackgroundModel(); // more work starts
     await jest.advanceTimersByTimeAsync(30_000);
     expect(ensureTextModel).not.toHaveBeenCalledWith('big');
   });
