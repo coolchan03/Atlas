@@ -92,3 +92,14 @@ describe('a microphone that keeps failing is retried, then reported (the call ne
     expect(micFailureNote(MAX_RECOVERY_CYCLES)).toMatch(/Tap the button/);
   });
 });
+
+describe('stallRecovery', () => {
+  const { stallRecovery, TRANSCRIBE_GIVE_UP_MS } = require('../../../src/atlasVoice/callLifecycle');
+  const base = { handsFree: true, muted: false, paused: false, voiceAvailable: true, disabled: false, isRecording: false, isTranscribing: true, isGenerating: false, isModelLoading: false, speaking: false, failedStarts: 0 };
+  it('drops a transcription that has gone on too long, and only that', () => {
+    expect(stallRecovery(base, TRANSCRIBE_GIVE_UP_MS - 1)).toBeNull();
+    expect(stallRecovery(base, TRANSCRIBE_GIVE_UP_MS)).toBe('cancel-transcription');
+    expect(stallRecovery({ ...base, isTranscribing: false, isGenerating: true }, 10 * TRANSCRIBE_GIVE_UP_MS)).toBeNull();
+    expect(stallRecovery({ ...base, handsFree: false }, 10 * TRANSCRIBE_GIVE_UP_MS)).toBeNull();
+  });
+});
