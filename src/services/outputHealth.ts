@@ -274,6 +274,33 @@ export function describeBadOutput(backend: string, reason: string, explicitChoic
   return parts.join(' ');
 }
 
+/**
+ * Watches a reply while it streams. A reply made of placeholder tokens (`<unused19><pad>...`) is noise, and a model that starts writing it goes on
+ * until the length limit; so it is checked every few tokens and stopped as soon as it is clearly noise. Returns the reason once, else ''. Pure.
+ */
+export function createNoiseWatch(every = 16): { check: (textSoFar: string, tokensSoFar: number) => string } {
+  let next = every;
+  let reason = '';
+  return {
+    check: (text, tokens) => {
+      if (reason) return '';
+      if (tokens < next) return '';
+      next = tokens + every;
+      reason = judgeText(text);
+      return reason;
+    },
+  };
+}
+
+/** What a finished chat reply that turned out to be noise means to the person, and what to do. A reply like this is never shown or saved as an answer. */
+export function describeBadReply(backend: string, reason: string): string {
+  const where = backend === 'cpu' ? 'on the CPU' : `on the ${BACKEND_NAMES[backend] ?? `${backend} accelerator`}`;
+  const advice = backend === 'cpu'
+    ? 'The file on this phone may be damaged or this model build may not be supported by this version of Atlas. Open Settings > About > Test GPU on this model to check the file, or try another copy of the model.'
+    : 'Choose CPU or Automatic for this model, or open Settings > About > Test GPU on this model to see which setting works.';
+  return `The model wrote placeholder symbols instead of words ${where} (${reason}), so no answer was kept. ${advice}`;
+}
+
 export function logOutputReport(check: OutputCheck, setup: Record<string, string | number | undefined>): void {
   const report = formatOutputReport(check, setup);
   if (check.ok) logger.log(`[LLM][OUTPUT-CHECK] ${report}`); else logger.error(`[LLM][OUTPUT-CHECK] ${report}`);
