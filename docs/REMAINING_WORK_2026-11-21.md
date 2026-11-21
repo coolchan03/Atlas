@@ -48,6 +48,24 @@ Looked at and left alone, with the reason:
 
 Not done: 4.2 (full-response ranking across short, medium and long prompts), 4.3 to 4.5, 4.8, 4.10 (per-stage diagnostics), 5.1 (native batching, resumable indexing), 5.3 to 5.6, 3.4 large-library reprocessing, 3.5 backup size cap and multi-part format, 7.1 to 7.3 and 7.5 (needs a phone: 282 heavy text weights are only held from growing by `designWeightRatchet.test.ts`), 8.1 every-20th-version multi-architecture builds, 8.2 native engine artifact reuse, 8.5 fast development builds, 8.6, 8.7 size reduction (measurement added, no reduction made), 8.10 (the review bots have not been read), 9.2, 9.4 to 9.7.
 
+## Fifth pass (version 0.0.235)
+
+Done, with tests, not run on a device:
+
+- 4.2 The speed test ranks by the time to finish a typical reply (first word plus 150 tokens of writing). Only the short prompt feeds this; there is no medium-prompt run.
+- 4.4 Only one speed test at a time; a cancelled or failed one reloads the model that was active.
+- 4.8 A load that shrank the context or gave up the accelerator says so in the load report.
+- 4.10 The support report has a "Where the time went" section: loading, prompt, first word, writing, retrieval, tools. Speech is not in it.
+- 5.1 / 9.6 Indexing embeds and saves 32 passages at a time and resumes where it stopped (`resumeIndexing`, called when a library is opened, never while a chat reply is being written). Not done: native batching (llama.rn embeds one text per call).
+- 5.4 Chat search is debounced and keeps each chat's lowered text.
+- 5.5 Already in place (memoized message rows; only the streaming item re-renders).
+- 5.6 A chat reply stops a writing background job and goes first; the job asks again afterwards (up to 3 times). Before, the chat failed with "Generation already in progress".
+- 9.2 One plain sentence under a slow reply (why, and what is faster).
+- 9.4 Four separate parts of progress on the Learning screen, no blended accuracy.
+- A unit bug found on the way: time to first word is in seconds, and two places divided it by 1000.
+
+Still not done: 3.4 and 3.5 (size cap), 4.3 per-model independence review, 4.5 residency, 4.7 beyond logging, 5.2 vector index, 5.3 chunking experiments, 7.1 to 7.3 and 7.5, 8.1 multi-architecture schedule, 8.2, 8.5, 8.6, 8.7 reduction, 8.10 bot reviews, 9.5, 9.7, and the causes in 1.2, 1.3, 1.6.
+
 ## Part 1
 
 | Item | State | What is left |
