@@ -361,15 +361,16 @@ async function runTuning(modelId: string, onProgress: (p: TuneProgress) => void,
   await restoreMtp(modelId, model, best);
   if (!best) await reloadOriginal(originallyActive);
   if (best) {
-    // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
-    // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
+    // The winner is this model's own: its backend and thread count are kept for it alone (like the cache type, flash attention and batch size), and the
+    // global settings stay as they were, so tuning one model never changes how another loads. An NPU or GPU winner is kept as the model's preferred
+    // backend and the model itself loads on Automatic, which tries that backend first and falls back to the CPU: an explicit backend would make a model
+    // the NPU cannot run fail to load instead of falling back.
     const accelerated = best.option.backend !== INFERENCE_BACKENDS.AUTO && best.option.backend !== INFERENCE_BACKENDS.CPU;
-    useAppStore.getState().updateSettings(accelerated
-      ? { inferenceBackend: INFERENCE_BACKENDS.AUTO, nThreads: best.option.threads }
-      : { inferenceBackend: best.option.backend, nThreads: best.option.threads, backendUserChosen: true } as any);
-    // Cache type, flash attention and batch size are kept for this model only: the other models keep the global ones.
     const kept = memoryOf(best.option.extra);
-    useTuned.getState().setMemory(modelId, Object.keys(kept).length ? { ...kept, from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers } } : undefined);
+    useTuned.getState().setMemory(modelId, {
+      ...kept, nThreads: best.option.threads, inferenceBackend: accelerated ? INFERENCE_BACKENDS.AUTO : String(best.option.backend),
+      from: { cacheType: old.cacheType, flashAttn: old.flashAttn, nBatch: old.nBatch, gpuLayers: old.gpuLayers, nThreads: old.nThreads, inferenceBackend: old.inferenceBackend },
+    });
     useTuned.getState().mark(modelId, accelerated ? String(best.option.backend) : undefined);
     // The speeds measured with the other options are not how this model runs now: store the winner's.
     useSpeedStats.setState((st) => ({ byModel: { ...st.byModel, [modelId]: { ...(st.byModel[modelId] ?? { prefill: 0, outLen: 0, samples: 1 }), decode: best.tps } } }));

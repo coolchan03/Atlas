@@ -221,3 +221,31 @@ describe('RetrievalService', () => {
     });
   });
 });
+
+describe('passages sent once where their windows overlap', () => {
+  const { withoutSharedStart } = require('../../../../src/services/rag/retrieval');
+  const overlap = 'the lessee recognises a lease liability at the present value of the payments';
+
+  it('drops the start of a passage that repeats the end of the one before it', () => {
+    expect(withoutSharedStart(`First part. ${overlap}`, `${overlap} and then the asset.`)).toBe('and then the asset.');
+    expect(withoutSharedStart('Short end.', 'Short end. more')).toBe('Short end. more'); // too short to count as the overlap
+    expect(withoutSharedStart('Entirely different.', 'Unrelated text follows here, long enough to compare.')).toBe('Unrelated text follows here, long enough to compare.');
+  });
+
+  it('compares without the section path a stored passage starts with, and keeps a passage that is only the overlap', () => {
+    const previous = `First part. ${overlap}`;
+    expect(withoutSharedStart(previous, `[Lease > Classification]\n${overlap} and then the asset.`)).toBe('[Lease > Classification]\nand then the asset.');
+    expect(withoutSharedStart(previous, `[Lease]\n${overlap}`)).toBe(`[Lease]\n${overlap}`); // never sent empty
+    expect(withoutSharedStart(previous, overlap)).toBe(overlap);
+  });
+
+  it('shows the shared text once in the prompt, only for neighbouring passages of one document', () => {
+    const text = retrievalService.formatForPrompt({ truncated: false, chunks: [
+      { doc_id: 1, name: 'a.txt', position: 0, content: `First part. ${overlap}`, score: 1 },
+      { doc_id: 1, name: 'a.txt', position: 1, content: `${overlap} and then the asset.`, score: 1 },
+      { doc_id: 2, name: 'b.txt', position: 1, content: `${overlap} elsewhere.`, score: 1 },
+    ] });
+    expect(text.match(/recognises a lease liability/g)).toHaveLength(2); // once for doc 1 (first passage), once for doc 2 (a different document)
+    expect(text).toContain('and then the asset.');
+  });
+});

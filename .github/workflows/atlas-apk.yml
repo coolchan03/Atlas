@@ -20,6 +20,14 @@ on:
         description: 'Lean build for one chip: keep only that NPU generation (V68, V69, V73, V75, V79 or V81; Razr Ultra 2025 = V79). Uploaded as a workflow file only, never published (see docs/native-runtime-inventory.md)'
         type: string
         default: ''
+      all_architectures:
+        description: 'Full build: also build 32-bit ARM, x86 and x86_64 (an ordinary release is 64-bit ARM only; the others are built every 20th build, see scripts/release/choose-architectures.cjs)'
+        type: boolean
+        default: false
+      architecture_every:
+        description: 'Build the other CPU types every this many builds: 20 (default) or 10'
+        type: string
+        default: '20'
       publish:
         description: 'Publish the signed APK on the Releases page (only after every check passes)'
         type: boolean
@@ -143,13 +151,24 @@ jobs:
           node scripts/prepare-llamakt-vulkan.cjs
           node scripts/check-llamakt-vulkan-cmake.cjs
           node scripts/verify-llamakt-gradle.cjs
+      - name: Choose the CPU types to build
+        id: abis
+        run: |
+          changed=""
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.event.before }}" > /dev/null 2>&1 || true
+            changed="$(git diff --name-only "${{ github.event.before }}" HEAD 2>/dev/null | tr '\n' ' ' || true)"
+          fi
+          abis="$(node scripts/release/choose-architectures.cjs "${{ github.run_number }}" "${{ inputs.architecture_every || '20' }}" "${{ inputs.all_architectures == true }}" $changed)"
+          echo "abis=$abis" >> "$GITHUB_OUTPUT"
+          if [ "$abis" = "arm64-v8a" ]; then echo "multiarch=false" >> "$GITHUB_OUTPUT"; else echo "multiarch=true" >> "$GITHUB_OUTPUT"; fi
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
           mkdir -p android/app/libs
           curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
           echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
           # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
-          zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true
+          if [ "${{ steps.abis.outputs.multiarch }}" != "true" ]; then zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true; fi
           ls -la android/app/libs
       - name: Kotlin compile gate (a Kotlin mistake stops the run here, not after the full build)
         working-directory: android
@@ -195,9 +214,9 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/ccache
-          key: ccache-arm64-${{ steps.ccache.outputs.ndk }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}-${{ github.run_id }}
+          key: ccache-${{ steps.abis.outputs.multiarch == 'true' && 'multi' || 'arm64' }}-${{ steps.ccache.outputs.ndk }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}-${{ github.run_id }}
           restore-keys: |
-            ccache-arm64-${{ steps.ccache.outputs.ndk }}-
+            ccache-${{ steps.abis.outputs.multiarch == 'true' && 'multi' || 'arm64' }}-${{ steps.ccache.outputs.ndk }}-
       - name: Zero the compiler cache counters
         if: steps.ccache.outputs.available == 'true'
         run: ccache --zero-stats > /dev/null
@@ -320,7 +339,7 @@ jobs:
           OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleRelease --profile -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasQnnChip=${{ inputs.qnn_chip }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=arm64-v8a --no-daemon 2>&1 | tee ../gradle.log || {
+          ./gradlew assembleRelease --profile -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasQnnChip=${{ inputs.qnn_chip }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=${{ steps.abis.outputs.abis }} --no-daemon 2>&1 | tee ../gradle.log || {
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
@@ -415,12 +434,12 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ steps.abis.outputs.multiarch == 'true' && 'multiarch-' || '' }}${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'schedule'
         with:
           # A shrunk trial build gets its own name so the official-publish workflow (which takes Atlas-apk) can never pick it up.
-          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || 'Atlas-apk' }}
+          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || (steps.abis.outputs.multiarch == 'true' && 'Atlas-apk-MULTIARCH') || 'Atlas-apk' }}
           path: out/*.apk
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
@@ -440,7 +459,9 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish release (stable branch, or a manual run with publish ticked)
-        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets')))
+        # A multi-architecture build is a larger file for old phones and emulators: it is saved as its own build file (Atlas-apk-MULTIARCH) and is
+        # never published as the latest release by a push; only a person who ticks publish on a manual run publishes it.
+        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.abis.outputs.multiarch != 'true' && (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets'))))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

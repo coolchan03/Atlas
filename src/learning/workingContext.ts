@@ -18,13 +18,18 @@ export interface WorkingContext {
   approxTokens: number;
 }
 
+/** The share of the model's context that stored notes and passages may fill in a step. The rest is for the task, the instructions and the reply. */
+export const KNOWLEDGE_SHARE = 0.3;
+/** The most a step is ever given, however large the context: a very long context is for the reply and the passages being studied too. */
+const MAX_KNOWLEDGE_TOKENS = 12000;
+
 /**
  * How many tokens of notes and passages a step may use, from the loaded model's context window (a share of it, never under 200 or over
- * 1800) and halved when the phone is under pressure (low battery, hot). So a small model on a weak phone is never handed a context it cannot
- * hold, and a big model is not flooded.
+ * MAX_KNOWLEDGE_TOKENS) and halved when the phone is under pressure (low battery, hot). So a small model on a weak phone is never handed a
+ * context it cannot hold, and a model with room for more is not held to a fixed small amount (it used to stop at 1800 tokens whatever the context).
  */
 export function budgetFor(contextTokens: number, share: number, pressure = false): number {
-  const base = Math.min(1800, Math.max(200, Math.round((contextTokens || 2048) * share)));
+  const base = Math.min(MAX_KNOWLEDGE_TOKENS, Math.max(200, Math.round((contextTokens || 2048) * share)));
   return pressure ? Math.max(150, Math.round(base / 2)) : base;
 }
 

@@ -123,6 +123,7 @@ function buildBaseGenerationMeta(svc: any): GenerationMeta {
 
   const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo();
   const perf = llmService.getPerformanceStats();
+  const own = withModelMemory(settings, activeModelId ?? undefined);
   return {
     gpu, gpuBackend, gpuLayers,
     modelName,
@@ -130,7 +131,8 @@ function buildBaseGenerationMeta(svc: any): GenerationMeta {
     decodeTokensPerSecond: perf.lastDecodeTokensPerSecond,
     timeToFirstToken: perf.lastTimeToFirstToken,
     tokenCount: perf.lastTokenCount,
-    cacheType: effectiveCacheType(settings.inferenceBackend, withModelMemory(settings, activeModelId ?? undefined).cacheType, llmService.getLoadedModelPath?.() ?? undefined),
+    // The backend and cache this model really loaded with (its own speed-test result over the global settings), so the label matches the run.
+    cacheType: effectiveCacheType(own.inferenceBackend, own.cacheType, llmService.getLoadedModelPath?.() ?? undefined),
     truncated: perf.lastTruncated,
   };
 }

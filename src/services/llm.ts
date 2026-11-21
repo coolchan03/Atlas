@@ -222,7 +222,10 @@ class LLMService {
       await mutex.ready;
       this.assertNotAbandoned(epoch);
       await recoverFromPreviousRun();
-      const settings = useAppStore.getState().settings;
+      // The model being loaded, found by its file: the "active model" is only updated after the load, so during it that still names the previous model.
+      const loadingId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
+      // The backend, threads and memory settings its own speed test kept apply to this model alone (withModelMemory); other models keep the global ones.
+      const settings = withModelMemory(useAppStore.getState().settings, loadingId);
       const safeMode = settings.safeModelLoading === true;
       const notes: string[] = [];
       const requested: InferenceBackend = (opts?.forceCpu || safeMode)
@@ -238,8 +241,6 @@ class LLMService {
         mmProjPath = undefined;
       }
       // Speculative decoding that has been measured slower for this model on this phone is left off (and said so). Switching it on again by hand starts the measuring over.
-      // The model being loaded, found by its file: the "active model" is only updated after the load, so during it that still names the previous model.
-      const loadingId = useAppStore.getState().downloadedModels.find((m) => m.filePath === modelPath)?.id;
       const speed = mtpAttached && !safeMode && settings.useMtp !== false && loadingId ? useSpecBenefit.getState().decide(loadingId) : { off: false } as { off: boolean; note?: string };
       if (speed.off && speed.note) notes.push(speed.note);
       const wantsMtp = !safeMode && settings.useMtp !== false && !speed.off;

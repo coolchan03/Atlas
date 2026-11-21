@@ -48,6 +48,19 @@ Looked at and left alone, with the reason:
 
 Not done: 4.2 (full-response ranking across short, medium and long prompts), 4.3 to 4.5, 4.8, 4.10 (per-stage diagnostics), 5.1 (native batching, resumable indexing), 5.3 to 5.6, 3.4 large-library reprocessing, 3.5 backup size cap and multi-part format, 7.1 to 7.3 and 7.5 (needs a phone: 282 heavy text weights are only held from growing by `designWeightRatchet.test.ts`), 8.1 every-20th-version multi-architecture builds, 8.2 native engine artifact reuse, 8.5 fast development builds, 8.6, 8.7 size reduction (measurement added, no reduction made), 8.10 (the review bots have not been read), 9.2, 9.4 to 9.7.
 
+## Sixth pass (version 0.0.236)
+
+- Teach the AI knowledge budget: 30 percent of the context, ceiling 12000 tokens (was 12 to 20 percent, ceiling 1800).
+- 4.3 A model's speed-test backend and threads are its own (`ModelMemory.nThreads`, `inferenceBackend`); the global settings are not written.
+- 5.2 Semantic search keeps a bounded shortlist (`topByScore`) instead of sorting every passage.
+- 5.3 Heading-sticky chunks, sentence-end windows, shared overlap sent once.
+- 8.1 `scripts/release/choose-architectures.cjs` and the workflow inputs `all_architectures` and `architecture_every`.
+- 8.6 Already in place: the APK workflow reuses a green Core Audit run for the same commit.
+- 8.7 A size ceiling test on bundled assets and native libraries; no reduction made (the full build keeps every NPU generation; the per-chip lean build exists).
+- 9.7 Already organised: basic and advanced controls in the generation settings.
+
+Still not done: 3.5 (35 MB encrypted-backup cap, needs a multi-part format and a native change), 4.5, 4.7 beyond logging, 7.1 to 7.3 and 7.5, 8.2, 8.7 reduction, 9.5, and the causes in 1.2, 1.3, 1.6.
+
 ## Fifth pass (version 0.0.235)
 
 Done, with tests, not run on a device:

@@ -13,6 +13,22 @@ const DEFAULT_CHUNK_SIZE = 500;
 const DEFAULT_OVERLAP = 100;
 const DEFAULT_MIN_CHUNK_LENGTH = 20;
 
+/** Where a window that would end at `end` should really end: just after the last sentence end, else the last space, within the last fifth of the window. */
+export function softEnd(text: string, start: number, end: number): number {
+  if (end >= text.length) return text.length;
+  const floor = end - Math.floor((end - start) * 0.2);
+  for (let i = end; i > floor; i -= 1) if (/[.!?\n]/.test(text[i - 1]) && /\s/.test(text[i] ?? ' ')) return i;
+  for (let i = end; i > floor; i -= 1) if (/\s/.test(text[i - 1])) return i;
+  return end;
+}
+
+/** The next window starts at the start of a word, not in the middle of one (moving on by at most 30 characters; text with no spaces is left as it is). */
+function wordStart(text: string, at: number): number {
+  const limit = Math.min(text.length, at + 30);
+  for (let i = Math.max(1, at); i < limit; i += 1) if (/\s/.test(text[i - 1])) return i;
+  return Math.max(0, at);
+}
+
 function slidingWindowChunks(
   params: { text: string; chunkSize: number; overlap: number; minLength: number },
   chunks: Chunk[], startPosition: number,
@@ -21,11 +37,14 @@ function slidingWindowChunks(
   let pos = startPosition;
   let start = 0;
   while (start < text.length) {
-    const slice = text.slice(start, start + chunkSize);
+    // Windows end at a sentence (or at least a word), so a fact is not cut in half where it can be avoided.
+    const end = softEnd(text, start, start + chunkSize);
+    const slice = text.slice(start, end);
     if (slice.trim().length >= minLength) {
       chunks.push({ content: slice.trim(), position: pos++ });
     }
-    start += chunkSize - overlap;
+    if (end >= text.length) break;
+    start = Math.max(start + 1, wordStart(text, end - overlap));
   }
   return pos;
 }
@@ -52,7 +71,8 @@ export function withSectionContext(text: string, chunks: Chunk[]): Chunk[] {
   if (!heads.length) return chunks;
   let from = 0;
   return chunks.map((c) => {
-    const found = text.indexOf(c.content.slice(0, 80), from);
+    // Found by its first line: a heading is joined to its text with one line break where the document had a blank line, so the whole start would not match.
+    const found = text.indexOf(c.content.split('\n')[0].slice(0, 80), from);
     if (found >= 0) from = found;
     const stack: typeof heads = [];
     for (const h of heads) {
@@ -61,12 +81,45 @@ export function withSectionContext(text: string, chunks: Chunk[]): Chunk[] {
       stack.push(h);
     }
     const path = stack.map((h) => h.title).join(' > ');
-    return path && !/^#{1,6}\s/.test(c.content) ? { ...c, content: `[${path}]\n${c.content}` } : c;
+    if (!path) return c;
+    if (!/^#{1,6}\s/.test(c.content)) return { ...c, content: `[${path}]\n${c.content}` };
+    // A chunk that starts with its own heading (a heading stays with its text): when it sits inside other sections, the path replaces that line
+    // (the path ends with the same title), so the place is shown once. A top-level heading is left as it is.
+    const rest = c.content.slice(c.content.indexOf('\n') + 1);
+    return stack.length > 1 && c.content.includes('\n') && rest.trim() ? { ...c, content: `[${path}]\n${rest}` } : c;
   });
 }
 
 export function chunkDocument(text: string, options?: ChunkOptions): Chunk[] {
   return withSectionContext(text, plainChunks(text, options));
+}
+
+/** A Markdown heading. */
+const isMarkdownHeading = (p: string): boolean => /^#{1,6}\s/.test(p) && !p.includes('\n');
+
+/**
+ * A short title-like line with no sentence ending, such as "Lease classification" or "ASC 842-20-25": two or more words, at least one of them a
+ * word, and followed by a paragraph clearly longer than itself. A one-word reply, a number, a date or a list item is not a title.
+ */
+function isTitleLike(paragraph: string, next: string | undefined): boolean {
+  const p = paragraph.trim();
+  if (!next || p.includes('\n') || p.length > 80 || /[.!?:;,]$/.test(p) || !/^[A-Z0-9\u00A7(]/.test(p)) return false;
+  const words = p.split(/\s+/).filter(Boolean);
+  return words.length >= 2 && /\p{L}{3,}/u.test(p) && next.trim().length >= Math.max(120, p.length * 2);
+}
+
+/** A heading stays with the text it introduces: it is joined to the paragraph after it, so packing never leaves a title at the end of one chunk and its text in the next. */
+export function joinHeadings(paragraphs: string[]): string[] {
+  const list = paragraphs.map((x) => x.trim()).filter(Boolean);
+  const out: string[] = [];
+  let lead = '';
+  list.forEach((p, i) => {
+    if (isMarkdownHeading(p) || isTitleLike(p, list[i + 1])) { lead = lead ? `${lead}\n${p}` : p; return; }
+    out.push(lead ? `${lead}\n${p}` : p);
+    lead = '';
+  });
+  if (lead) out.push(lead);
+  return out;
 }
 
 function plainChunks(text: string, options?: ChunkOptions): Chunk[] {
@@ -76,7 +129,7 @@ function plainChunks(text: string, options?: ChunkOptions): Chunk[] {
 
   if (!text || text.trim().length < minLength) return [];
 
-  const paragraphs = text.split(/\n\n+/);
+  const paragraphs = joinHeadings(text.split(/\n\n+/));
   const chunks: Chunk[] = [];
   let currentChunk = '';
   let position = 0;
