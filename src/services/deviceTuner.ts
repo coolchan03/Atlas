@@ -261,12 +261,24 @@ function keepBatch(deepResults: TuneResult[], chosen: TuneResult): TuneResult {
 }
 
 /** Runs every option on the model, then applies the fastest (or puts the old settings back if cancelled / nothing worked). */
+let tuning: Promise<unknown> | null = null;
+/** True while a speed test is running (only one may: each one loads and unloads the model, so two at once would fight over it). */
+export const isTuning = (): boolean => tuning !== null;
+
 export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean } = {}): Promise<TuneOutcome> {
+  if (tuning) throw new Error('A speed test is already running. Wait for it to finish, or cancel it.');
+  const run = runTuning(modelId, onProgress, opts);
+  tuning = run;
+  try { return await run; } finally { tuning = null; }
+}
+
+async function runTuning(modelId: string, onProgress: (p: TuneProgress) => void, opts: { deep?: boolean }): Promise<TuneOutcome> {
   cancelFlag = false;
   const store = useAppStore.getState();
   const model = store.downloadedModels.find((m) => m.id === modelId);
   if (!model || model.engine !== 'llama') throw new Error('Pick a downloaded GGUF text model to tune.');
   if (llmService.isCurrentlyGenerating()) throw new Error('A chat answer is still being written. Wait for it to finish, then try again.');
+  const originallyActive = store.activeModelId;
   const old = { inferenceBackend: store.settings.inferenceBackend, nThreads: store.settings.nThreads, backendUserChosen: store.settings.backendUserChosen, cacheType: store.settings.cacheType, flashAttn: store.settings.flashAttn, nBatch: store.settings.nBatch, gpuLayers: store.settings.gpuLayers };
   // What an earlier test saved for this model would hide the settings being timed, so it is set aside until the new result is known.
   const earlierMemory = useTuned.getState().memory[modelId];
@@ -338,6 +350,11 @@ export async function tuneDevice(modelId: string, onProgress: (p: TuneProgress) 
   }
   const best = cancelFlag ? null : chosen;
   await restoreMtp(modelId, model, best);
+  // Nothing won, or it was cancelled: the last trial's model is still loaded with the trial's settings. Put back the model that was active (with the
+  // settings it had), so no stale context or unexpected model is left running.
+  if (!best && originallyActive) {
+    try { await activeModelService.unloadTextModel(true); await activeModelService.loadTextModel(originallyActive); } catch (e) { logger.warn(`[TUNE] could not reload the model that was active before the test: ${String((e as Error)?.message || e)}`); }
+  }
   if (best) {
     // An NPU or GPU winner is kept as the model's preferred backend and the setting goes back to Automatic: an explicit global
     // backend would make every other model (one with pictures, one the NPU cannot run) fail to load instead of falling back.
