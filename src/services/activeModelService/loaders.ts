@@ -191,11 +191,13 @@ function mtpOptions(model: DownloadedModel): { draftPath?: string; embeddedMtp?:
 }
 
 /** The attached parts the user has switched off for this model, so the load report can say why they are not running. */
-function switchedOffParts(model: LlamaDownloadedModel): { vision?: boolean; mtp?: boolean } {
-  return {
+function switchedOffOption(model: LlamaDownloadedModel): { switchedOff?: { vision?: boolean; mtp?: boolean } } {
+  const switchedOff = {
     ...(model.mmProjPath && model.mmProjDisabled ? { vision: true } : {}),
     ...(model.draftPath && model.draftDisabled ? { mtp: true } : {}),
   };
+  // Left out entirely when nothing is switched off, so a model with no disabled parts loads exactly as it always did.
+  return Object.keys(switchedOff).length ? { switchedOff } : {};
 }
 
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
@@ -241,7 +243,7 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     await beginLoad('llama', ctx.modelId);
     try {
       await Promise.race([
-        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), switchedOff: switchedOffParts(ctx.model) }),
+        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), ...switchedOffOption(ctx.model) }),
         timeoutPromise,
       ]);
     } finally {
