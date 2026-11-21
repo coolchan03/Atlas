@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const CEILING = 282;
+const CEILING = 281;
 const HEAVY = /fontWeight:\s*['"](?:bold|[5-9]00)['"]/g;
 
 function walk(dir: string, out: string[] = []): string[] {

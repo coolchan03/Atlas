@@ -98,3 +98,15 @@ it('puts the symbols before the title: checkmark, then book, then "Teach the AI"
   const list = order(rtl.render(React.createElement(LearningListScreen)).toJSON());
   expect(list.indexOf('learning-reliability-dashboard')).toBeLessThan(list.indexOf('Teach the AI'));
 });
+
+it('shows progress as four separate parts, with no overall score', () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { LearningScreen } = require('../../../src/screens/LearningScreen');
+  const view = rtl.render(React.createElement(LearningScreen));
+  const card = view.getByTestId('learning-progress');
+  for (const title of ['Checked knowledge', 'Claims that disagree', 'Practice', 'Exam']) expect(rtl.within(card).getByText(title)).toBeTruthy();
+  expect(rtl.within(card).getByText('No exam taken yet.')).toBeTruthy();
+  expect(rtl.within(card).queryByText(/overall/i)).toBeNull();
+});

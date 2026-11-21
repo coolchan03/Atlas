@@ -46,11 +46,22 @@ import { budgetFor, buildWorkingContext } from './workingContext';
 import { applicationPrompt, applicationQuestions, keyFor } from './applicationQuestions';
 import { approvedCards, cardNotes, loadCards } from './knowledgeCards';
 import { batchStruggled, diagnoseMiss, isStruggling, nextNotesBoost, restudyQuestion, restudyQuestionFor, REST_DAYS } from './struggle';
+import { progressSections, type ProgressSection } from './progressSummary';
 import { EXAM_MODES, ExamStore, runExam, type Answerer, type ExamMetrics, type SecondOpinion } from './exams';
 
 const mastery = new MasteryStore(learningKnowledgeDb);
 const memory = new MemoryLedger(learningKnowledgeDb);
 export const exams = new ExamStore(learningKnowledgeDb);
+
+/** The four separate parts of progress for one agent, from the stored claims, practice records and exam history (see progressSummary.ts). */
+export function learningProgress(agentId: string): ProgressSection[] {
+  return progressSections({
+    claims: safely(() => { const c = learningKnowledgeDb.getReliabilitySnapshot().counts; return { verified: c.verified, candidate: c.candidate, disputed: c.disputed }; }, { verified: 0, candidate: 0, disputed: 0 }),
+    openConflicts: safely(() => learningKnowledgeDb.openContradictions(100).length, 0),
+    practice: safely(() => mastery.summary(agentId), { tracked: 0, due: 0, mastered: 0, averageStrength: 0 }),
+    exams: safely(() => exams.history(40), []),
+  });
+}
 /** The ledger is optional storage: if it is unavailable the cycle still runs, with what it has. */
 const safely = <T,>(job: () => T, fallback: T): T => { try { return job(); } catch (e) { logger.log(`[Learning] ledger unavailable: ${String(e)}`); return fallback; } };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { shareItem } from '../utils/shareItem';
 import { StyleSheet, Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +19,8 @@ import { refineTask } from '../learning/refineTask';
 import { DEFAULT_STRICTNESS, STRICTNESS_OPTIONS } from '../learning/strictness';
 import { startTalkChat } from '../learning/talk';
 import { askAsReport } from '../learning/askReport';
-import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, discardSession, sessionProposal, newRound, learningLoad } from '../learning/engine';
+import { startLearning, stopLearning, isLearning, onLearningStatus, auditNow, keepSession, discardSession, sessionProposal, newRound, learningLoad, learningProgress } from '../learning/engine';
+import { LearningProgressCard } from '../components/LearningProgressCard';
 import { SessionReviewSheet } from '../components/SessionReviewSheet';
 import { ModelChips } from '../components/ModelChips';
 import { QuestionImport } from './learningReliability/QuestionImport';
@@ -72,6 +73,8 @@ export const LearningScreen: React.FC = () => {
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
   const clearAgent = useLearningStore((s) => s.clearAgent);
   const [running, setRunning] = useState(isLearning());
+  // Read from the ledger when something that changes it has (a report, a round, the run starting or stopping), not on every redraw.
+  const progress = useMemo(() => learningProgress(agentId), [agentId, st?.totalReports, st?.round, running]); // eslint-disable-line react-hooks/exhaustive-deps
   const [reviewing, setReviewing] = useState(false);
   const [statusText, setStatusText] = useState(isLearning() ? 'Running' : 'Idle');
   const phase = phaseOf(statusText, isLearning());
@@ -263,6 +266,7 @@ export const LearningScreen: React.FC = () => {
         <Text style={styles.counts} testID="learn-load">
           {(() => { const l = learningLoad(); return `Context ${l.contextTokens} tokens · room for stored knowledge ~${l.knowledgeTokens}${l.pressure ? ' (halved: saving power)' : ''}`; })()}
         </Text>
+        <LearningProgressCard sections={progress} />
         <Text style={styles.counts}>
           Round {st?.round ?? 0} · {count('answered')} legacy judge approvals (unverified) · {count('uncertain')} awaiting verification · {count('approved')} to study · {count('rejected')} rejected{count('failed') ? ` · ${count('failed')} failed` : ''} · reports {st?.totalReports ?? 0}
         </Text>

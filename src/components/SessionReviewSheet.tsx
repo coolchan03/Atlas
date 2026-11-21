@@ -71,7 +71,7 @@ const createStyles = (colors: ThemeColors) => ({
   sheet: { maxHeight: '85%' as const, backgroundColor: colors.surface, borderTopLeftRadius: SPACING.lg, borderTopRightRadius: SPACING.lg, padding: SPACING.lg },
   title: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.xs },
   note: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginBottom: SPACING.sm },
-  heading: { ...TYPOGRAPHY.bodySmall, fontWeight: '600' as const, color: colors.text, marginTop: SPACING.md, marginBottom: SPACING.xs },
+  heading: { ...TYPOGRAPHY.bodySmall, color: colors.text, marginTop: SPACING.md, marginBottom: SPACING.xs },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: SPACING.sm, gap: SPACING.md },
   text: { ...TYPOGRAPHY.bodySmall, color: colors.text, flex: 1 },
