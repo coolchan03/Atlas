@@ -164,8 +164,8 @@ describe('Preview a fun fact (rendered)', () => {
   });
 
   it('is disabled while looking, so a second press cannot start a second lookup', async () => {
-    let finish: (r: any) => void = () => undefined;
-    const attempt = jest.spyOn(funFact, 'funFactAttempt').mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    let finish: (r: unknown) => void = (_r) => undefined;
+    const attempt = jest.spyOn(funFact, 'funFactAttempt').mockImplementation(() => new Promise((resolve) => { finish = resolve as (r: unknown) => void; }));
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const screen = renderScreen();
     await act(async () => { fireEvent.press(screen.getByTestId('brief-fact-preview')); });
