@@ -35,7 +35,7 @@ function multilingualId(): string | null {
 }
 
 /** True when a Whisper model that understands more than English (the ".en" models do not) is on the phone. */
-function hasMultilingualWhisper(): boolean {
+export function hasMultilingualWhisper(): boolean {
   return multilingualId() !== null;
 }
 
@@ -84,7 +84,7 @@ async function listenWithWhisper(code: string, o: ListenOptions): Promise<Listen
     try {
       const { path } = await audioRecorderService.stopRecording();
       o.onTranscribing?.();
-      resolve(await whisperService.transcribeFile(path, { language: whisperLanguage(code) }));
+      resolve(await whisperService.transcribeFile(path, { language: code ? whisperLanguage(code) : 'auto' })); // no code: Whisper recognises the language itself
     } catch (e: any) {
       reject(e instanceof Error ? e : new Error(String(e)));
     }

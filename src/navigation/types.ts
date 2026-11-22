@@ -22,6 +22,7 @@ export type RootStackParamList = {
   OfflineLibrary: undefined;
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
+  Translator: undefined;
   Study: { projectId: string; openAt?: number };
   Practice: { projectId: string; topic?: string };
   Planner: undefined;
