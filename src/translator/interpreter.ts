@@ -8,6 +8,7 @@
  * turn was translated into.
  */
 import { speakInAndWait, stop as stopSpeech } from '../atlasVoice/tts';
+import { holdScreenOnly } from '../atlasTools/runtimePower';
 import { hasMultilingualWhisper, listenInLanguage } from '../language/listenTurn';
 import { SpeechCancelled } from '../services/systemSpeech';
 import type { Listening } from '../language/listenTurn';
@@ -37,7 +38,8 @@ export interface Interpreter {
   say: (text: string) => Promise<void>;
 }
 
-export interface InterpreterOptions { a: string; b: string; bothWays: boolean; speak: boolean }
+/** `speak` is read each time a translation is ready, so switching it on or off never restarts the session. */
+export interface InterpreterOptions { a: string; b: string; bothWays: boolean; speak: () => boolean }
 
 export function createInterpreter(opts: InterpreterOptions): Interpreter {
   const A: TranslatorLanguage = languageFor(opts.a);
@@ -63,9 +65,10 @@ export function createInterpreter(opts: InterpreterOptions): Interpreter {
       said = await translateText(text, A, B);
     }
     if (mine !== run) return null;
+    if (!said.trim()) return toSide; // the AI sent back nothing to say
     const to = toSide === 'A' ? A : B;
     set({ lines: [...st.lines, { id: `line-${++seq}`, heard: text, said, toCode: to.code }] });
-    if (opts.speak && said) {
+    if (opts.speak() && said) {
       set({ phase: 'speaking' });
       await speakInAndWait(said, to.code, { messageId: 'interpreter' });
     }
@@ -73,14 +76,15 @@ export function createInterpreter(opts: InterpreterOptions): Interpreter {
   }
 
   async function loop(mine: number): Promise<void> {
-    // The language to listen in: both ways with Whisper recognises it by itself (''), otherwise A, then whichever side the last turn went to.
+    // The language to listen in: both ways with Whisper recognises it by itself, otherwise A, then whichever side the last turn went to.
     let next: 'A' | 'B' = 'A';
     const autoDetect = opts.bothWays && hasMultilingualWhisper();
     while (mine === run) {
       try {
         set({ phase: 'listening', partial: '', error: null });
-        const session = await listenInLanguage(autoDetect ? '' : (next === 'A' ? A : B).code, {
+        const session = await listenInLanguage((next === 'A' ? A : B).code, {
           keepTextModel: true,
+          autoDetect,
           onPartial: (partial) => { if (mine === run) set({ partial }); },
           onTranscribing: () => { if (mine === run) set({ phase: 'transcribing' }); },
         });
@@ -89,7 +93,7 @@ export function createInterpreter(opts: InterpreterOptions): Interpreter {
         const heard = (await session.result).trim();
         listening = null;
         if (mine !== run) return;
-        if (!heard) continue; // silence: listen again
+        if (!heard) { await new Promise((r) => setTimeout(r, 300)); continue; } // silence: listen again, without spinning
         const went = await interpret(heard, next, mine);
         if (mine !== run) return;
         // After A spoke and it went to B, B is expected to answer: the next turn listens in B (and the other way round).
@@ -110,13 +114,18 @@ export function createInterpreter(opts: InterpreterOptions): Interpreter {
       if (st.running) return;
       const mine = ++run;
       set({ running: true, error: null, typing: false });
-      void loop(mine).finally(() => { if (mine === run && st.running) set({ running: false, phase: 'idle' }); });
+      holdScreenOnly('translator', true); // listening for a while: the display stays on
+      void loop(mine).finally(() => {
+        if (mine === run) holdScreenOnly('translator', false);
+        if (mine === run && st.running) set({ running: false, phase: 'idle' });
+      });
     },
     stop: () => {
       run += 1;
       try { listening?.cancel(); } catch { /* already finished */ }
       listening = null;
       stopSpeech();
+      holdScreenOnly('translator', false);
       set({ running: false, phase: 'idle', partial: '' });
     },
     say: async (text) => {

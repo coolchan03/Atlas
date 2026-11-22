@@ -456,7 +456,7 @@ class LLMService {
           this.requestedBackendAtLoad = requested;
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
-          this.pendingProjector = deferredProjector ?? null;
+          this.pendingProjector = deferredProjector && backend !== INFERENCE_BACKENDS.VULKAN ? deferredProjector : null; // the Vulkan engine is text only: nothing to keep ready
           useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
           noteStage('loading', Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
@@ -637,6 +637,16 @@ class LLMService {
   }
 
   /**
+   * Before a request that has pictures in it: attaches the vision file kept ready by an on-demand load, or starts its quiet spell over when it is
+   * already attached. A picture the model cannot open is an error: answering as if it had been seen would be made up.
+   */
+  private async useVisionForPictures(hasImages: boolean): Promise<void> {
+    if (!hasImages || !this.pendingProjector) return;
+    if (this.multimodalInitialized) { this.armVisionIdleRelease(); return; }
+    if (!(await this.attachPendingVision())) throw new Error('The picture file could not be opened (the phone may be short of memory). Close other apps, or turn off "Picture file only when needed" and load the model again.');
+  }
+
+  /**
    * Attaches the vision file kept ready by an on-demand load, the first time a picture is used. The same crash breadcrumb as the load itself is
    * set around the native step, so a phone that runs out of memory here is remembered and not retried the same way. Returns whether vision is on.
    */
@@ -774,8 +784,7 @@ class LLMService {
     const completionWork = (async () => {
       const managed = await this.dropMissingImageAttachments(await this.manageContextWindow(messages));
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
-      if (hasImages && !this.multimodalInitialized && this.pendingProjector) await this.attachPendingVision();
-      else if (hasImages && this.pendingProjector) this.armVisionIdleRelease(); // another picture: the quiet spell starts over
+      await this.useVisionForPictures(hasImages);
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
       logger.log('[LLM] Generation mode:', this.hasVisionInputs(managed) ? 'VISION' : 'TEXT-ONLY');
       const oaiMessages = this.convertToOAIMessages(managed);
@@ -841,6 +850,7 @@ class LLMService {
       // A caller must explicitly select CPU (or an auto-fallback policy) first.
       throw new Error('Tools are not available on the Vulkan GPU engine (llama.kt has no tool calling). Switch the text backend setting to OpenCL, Automatic or CPU to use tools. Atlas does not change your choice by itself.');
     }
+    await this.useVisionForPictures(messages.some((m) => m.attachments?.some((a) => a.type === 'image')));
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),

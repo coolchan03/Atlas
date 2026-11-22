@@ -34,7 +34,7 @@ export const TranslatorScreen: React.FC = () => {
         {MODES.map((m) => {
           const on = m.id === mode;
           return (
-            <TouchableOpacity key={m.id} style={styles.mode} onPress={() => set({ mode: m.id, ...(m.id !== 'text' && !from ? { from: 'en-US' } : {}) })} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={m.label} testID={`translator-mode-${m.id}`}>
+            <TouchableOpacity key={m.id} style={styles.mode} onPress={() => set({ mode: m.id, ...(m.id !== 'text' && !from ? { from: to === 'en-US' ? 'es-ES' : 'en-US' } : {}) })} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={m.label} testID={`translator-mode-${m.id}`}>
               <Icon name={m.icon} size={20} color={on ? colors.primary : colors.textSecondary} />
               <Text style={{ color: on ? colors.primary : colors.textSecondary, ...TYPOGRAPHY.meta }}>{m.label}</Text>
             </TouchableOpacity>

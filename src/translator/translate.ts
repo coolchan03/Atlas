@@ -46,7 +46,7 @@ export function cleanTranslation(raw: string): string {
 /** The reply of a conversation turn: which side it was translated into, and the translation. */
 export function parseDirected(raw: string): { to: 'A' | 'B' | null; text: string } {
   const t = cleanTranslation(raw);
-  const m = /^TO\s*:\s*([AB])\b[ \t]*[\n:.-]*\s*([\s\S]*)$/i.exec(t);
+  const m = /^TO\s*:\s*([AB])\b[ \t]*\n?([\s\S]*)$/i.exec(t);
   return m ? { to: m[1].toUpperCase() as 'A' | 'B', text: cleanTranslation(m[2]) } : { to: null, text: t };
 }
 

@@ -41,6 +41,7 @@ describe('reading the answers', () => {
     expect(parseDirected('TO: B\nHola, ¿cómo estás?')).toEqual({ to: 'B', text: 'Hola, ¿cómo estás?' });
     expect(parseDirected('to: a Where is the station?')).toEqual({ to: 'A', text: 'Where is the station?' });
     expect(parseDirected('Just a translation')).toEqual({ to: null, text: 'Just a translation' });
+    expect(parseDirected('TO: B\n...y entonces se fue')).toEqual({ to: 'B', text: '...y entonces se fue' }); // the translation's own first marks stay
   });
   it('reads a picture: the text found and its translation, or that there was none', () => {
     expect(parsePicture('ORIGINAL:\nSalida\nTRANSLATION:\nExit')).toEqual({ found: true, original: 'Salida', translation: 'Exit' });

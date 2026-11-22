@@ -39,4 +39,16 @@ it('translates typed text into the chosen language, keeps it in the recent list,
   expect(useTranslator.getState().from).toBeNull();
   rtl.fireEvent.press(view.getByTestId('translator-swap'));
   expect(useTranslator.getState().to).toBe('en-US');
+
+  // "Translate this back" moves the translation into the box and swaps the languages.
+  useTranslator.setState({ from: 'en-US', to: 'es-ES' });
+  rtl.fireEvent.changeText(view.getByTestId('translator-input'), 'Where is the station?');
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('translator-go')); });
+  await rtl.waitFor(() => expect(view.getByTestId('translator-result')).toBeTruthy());
+  rtl.fireEvent.press(view.getByTestId('translator-back'));
+  expect(view.getByTestId('translator-input').props.value).toBe('¿Dónde está la estación?');
+  expect(useTranslator.getState()).toMatchObject({ from: 'es-ES', to: 'en-US' });
+  expect(view.queryByTestId('translator-result')).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('translator-clear-input'));
+  expect(view.getByTestId('translator-input').props.value).toBe('');
 });

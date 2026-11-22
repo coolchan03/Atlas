@@ -7,6 +7,8 @@ import { Button } from '../components/Button';
 import { languageFor } from './languages';
 import { createInterpreter, type InterpreterState } from './interpreter';
 import { useTranslator } from './store';
+import { useMissingVoice } from './useMissingVoice';
+import { hasMultilingualWhisper } from '../language/listenTurn';
 
 const PHASE_TEXT: Record<InterpreterState['phase'], string> = { idle: 'Stopped', listening: 'Listening...', transcribing: 'Writing down what was said...', translating: 'Translating...', speaking: 'Speaking...' };
 
@@ -19,10 +21,16 @@ export function LivePanel({ bothWays }: { bothWays: boolean }) {
   const { from, to, speak, set } = useTranslator();
   const a = from ?? 'en-US';
   // A new session when the languages, direction or speaking choice change; the effect below stops the one it replaces.
-  const session = React.useMemo(() => createInterpreter({ a, b: to, bothWays, speak }), [a, to, bothWays, speak]);
+  // `speak` is read through a ref, so flipping that switch does not end the session or clear what was said so far.
+  const speakNow = React.useRef(speak);
+  speakNow.current = speak;
+  const session = React.useMemo(() => createInterpreter({ a, b: to, bothWays, speak: () => speakNow.current }), [a, to, bothWays]);
   const state = React.useSyncExternalStore(session.subscribe, session.state);
   React.useEffect(() => () => session.stop(), [session]);
   const [typed, setTyped] = React.useState('');
+  const lastLine = state.lines[state.lines.length - 1];
+  const voiceNote = useMissingVoice(languageFor(lastLine?.toCode ?? to).name);
+  const sameLanguage = a === to;
 
   return (
     <View style={styles.gap} testID={bothWays ? 'translator-conversation' : 'translator-interpreter'}>
@@ -31,6 +39,13 @@ export function LivePanel({ bothWays }: { bothWays: boolean }) {
           ? `Two people take turns. Whoever speaks ${languageFor(a).name} is translated into ${languageFor(to).name}, and the other way round.`
           : `Listens to someone speaking ${languageFor(a).name} and says it in ${languageFor(to).name}.`}
       </Text>
+      {bothWays && (
+        <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }} testID="translator-listen-note">
+          {hasMultilingualWhisper()
+            ? 'The language of each turn is recognised automatically.'
+            : 'Without a multilingual transcription model, Atlas listens in each language in turn: after one person speaks, it listens for the other. Download a multilingual model in Settings to let either person speak at any time.'}
+        </Text>
+      )}
       <View style={styles.rowBetween}>
         <Text style={{ color: colors.text, ...TYPOGRAPHY.body }}>Say the translation aloud</Text>
         <Switch value={speak} onValueChange={(v) => set({ speak: v })} testID="translator-speak-switch" />
@@ -40,8 +55,11 @@ export function LivePanel({ bothWays }: { bothWays: boolean }) {
         onPress={() => (state.running ? session.stop() : session.start())}
         variant={state.running ? 'outline' : 'primary'}
         icon={<Icon name={state.running ? 'square' : 'mic'} size={18} color={state.running ? colors.primary : colors.background} />}
+        disabled={!state.running && sameLanguage}
         testID="translator-live-toggle"
       />
+      {sameLanguage && !state.running && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }} testID="translator-same-language">Pick two different languages to start.</Text>}
+      {!!voiceNote && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }} testID="translator-voice-note">{voiceNote}</Text>}
       <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }} testID="translator-live-phase">{PHASE_TEXT[state.phase]}</Text>
       {!!state.partial && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }}>{state.partial}</Text>}
       {!!state.error && <Text style={{ color: colors.error, ...TYPOGRAPHY.bodySmall }} testID="translator-live-error">{state.error}</Text>}

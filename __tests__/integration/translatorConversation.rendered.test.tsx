@@ -40,6 +40,10 @@ it('conversation mode listens in the first language, translates what it heard in
   expect(view.getByText('¿Dónde está la estación?')).toBeTruthy();
   expect(mockLocales[0]).toBe('es-ES'); // the first turn listens in the first language
   await rtl.waitFor(() => expect(mockLocales[1]).toBe('en-US')); // it was translated into B, so the other person answers next, in B
+  // Switching the spoken translation on does not end the session or clear what was said.
+  await rtl.act(async () => { rtl.fireEvent(view.getByTestId('translator-speak-switch'), 'valueChange', true); });
+  expect(view.getByText('Where is the station?')).toBeTruthy();
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('translator-live-toggle')); });
   expect(view.getByTestId('translator-live-phase').props.children).toBe('Stopped');
+  expect(view.getByText('Where is the station?')).toBeTruthy(); // the lines stay after stopping
 });

@@ -2292,7 +2292,8 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
       await llmService.loadModel('/models/test.gguf', '/models/mmproj.gguf', { deferVision: true });
       const picture = [{ id: 'm1', role: 'user' as const, content: 'What is this?', timestamp: Date.now(), attachments: [{ id: 'a1', type: 'image' as const, uri: 'file:///photo.jpg' }] }];
-      await llmService.generateResponse(picture as any);
+      // The first picture is an error (answering as if it had been seen would be made up); the file is then forgotten, so the next request is not delayed by another try.
+      await expect(llmService.generateResponse(picture as any)).rejects.toThrow(/picture file could not be opened/);
       await llmService.generateResponse(picture as any);
       expect(initMultimodal).toHaveBeenCalledTimes(1);
       expect(llmService.supportsVision()).toBe(false);

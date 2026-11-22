@@ -32,6 +32,8 @@ export function CameraPanel() {
       await audioSessionManager.deactivate(); // the camera and the speech session collide on iOS; a no-op on Android
       const opts = { mediaType: 'photo' as const, quality: 0.8 as const, maxWidth: 1600, maxHeight: 1600 };
       const result = source === 'camera' ? await launchCamera(opts) : await launchImageLibrary(opts);
+      if (result.errorCode === 'permission') { setError(source === 'camera' ? 'Atlas needs permission to use the camera. Allow it in the phone\'s app settings.' : 'Atlas needs permission to read your pictures. Allow it in the phone\'s app settings.'); return; }
+      if (result.errorCode) { setError(result.errorMessage || 'The picture could not be opened.'); return; }
       const first = result.assets?.[0];
       if (first) await run(first);
     } catch { /* the picker reports its own problems */ } finally { audioSessionManager.ensurePlayback().catch(() => undefined); }
