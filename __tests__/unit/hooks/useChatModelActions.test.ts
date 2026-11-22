@@ -28,6 +28,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
     getMultimodalSupport: jest.fn(),
+    supportsVision: jest.fn(function (this: any) { return !!this.getMultimodalSupport?.()?.vision; }),
     getLoadedModelPath: jest.fn(),
     stopGeneration: jest.fn(),
     isModelLoaded: jest.fn(),

@@ -13,6 +13,7 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(() => false),
     getMultimodalSupport: jest.fn(() => null),
+    supportsVision: jest.fn(function (this: any) { return !!this.getMultimodalSupport?.()?.vision; }),
     supportsToolCalling: jest.fn(() => false),
     supportsThinking: jest.fn(() => false),
   },

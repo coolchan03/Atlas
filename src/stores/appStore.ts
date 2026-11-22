@@ -94,6 +94,8 @@ type AppSettings = {
   backendUserChosen?: boolean;
   /** Run one tiny silent reply after a model loads so a GPU backend does its one-time setup early (off by default). */
   warmUpAfterLoad?: boolean;
+  /** Load a vision model without its picture file and attach it when a picture is first used (and release it after a quiet spell). Off by default: the picture file loads with the model. */
+  visionOnDemand?: boolean;
   /** Use a model's attached MTP file to draft tokens (on unless set to false). */
   useMtp?: boolean;
   /** Safe Model Loading: load every model on the CPU with no MTP drafting and no picture file. Nothing is deleted; turn it off to go back. */

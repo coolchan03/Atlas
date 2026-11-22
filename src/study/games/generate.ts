@@ -367,6 +367,6 @@ export async function tutorTurn(sources: Source[], goal: string, history: { role
   await require('../../atlasTools/models').ensureTextModel(null);
   const messages = [{ id: 's', role: 'system', content: system, timestamp: 0 }, ...history.map((m, i) => ({ id: `h${i}`, role: m.role, content: m.content, timestamp: i + 1 }))];
   if (history.length === 0) messages.push({ id: 'start', role: 'user', content: 'Start the lesson with your first question.', timestamp: 1 });
-  const out: string = await runBackgroundJob(() => llmService.generateResponse(messages, { disableThinking: true }));
+  const out: string = await runBackgroundJob(() => llmService.generateResponse(messages, { disableThinking: true }), { label: 'Study tutor reply' });
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }

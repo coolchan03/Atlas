@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localUniqueId } from '../utils/uniqueId';
+import { loadedModelName } from './aiStatus';
 
 export type TaskType = 'import' | 'zip' | 'index' | 'transcribe' | 'audio' | 'download' | 'learning' | 'other';
 type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
@@ -25,6 +26,8 @@ export interface Task {
   error?: string; retryable?: boolean;
   startedAt: number; updatedAt: number;
   cancelRequested?: boolean;
+  /** The model that was loaded when a job that uses the AI started. */
+  model?: string;
 }
 
 /** Jobs that need a lot of memory never run together. Other types may run alongside one of these. */
@@ -70,7 +73,9 @@ export const useTasks = create<State>()(persist((set, get) => ({
     const id = localUniqueId('task');
     const now = Date.now();
     const status: TaskStatus = canStartNow(get().tasks, t.type) ? 'running' : 'queued';
-    set((s) => ({ tasks: [{ id, ...t, status, startedAt: now, updatedAt: now }, ...s.tasks] }));
+    // Jobs that use the AI say which model they started with (others, such as an import, do not use the chat model).
+    const model = t.type === 'learning' || t.type === 'other' ? loadedModelName() : undefined;
+    set((s) => ({ tasks: [{ id, ...t, ...(model ? { model } : {}), status, startedAt: now, updatedAt: now }, ...s.tasks] }));
     return id;
   },
   update: (id, patch) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id && isActive(t) ? touch(t, patch) : t)) })),

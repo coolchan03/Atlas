@@ -70,6 +70,7 @@ jest.mock('../../../src/services/llm', () => ({
     supportsToolCalling: jest.fn(() => false),
     supportsThinking: jest.fn(() => false),
     getMultimodalSupport: jest.fn(() => null),
+    supportsVision: jest.fn(function (this: any) { return !!this.getMultimodalSupport?.()?.vision; }),
     isGemma4Model: jest.fn(() => false),
     isThinkingEnabled: jest.fn(() => false),
     stopGeneration: jest.fn(),

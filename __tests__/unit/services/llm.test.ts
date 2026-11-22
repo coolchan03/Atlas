@@ -2252,6 +2252,54 @@ describe('LLMService', () => {
     });
   });
 
+  describe('vision file only when needed', () => {
+    it('loads without the picture file, attaches it at the first picture, attaches it again after it was released, and forgets it on unload', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const initMultimodal = jest.fn(() => Promise.resolve(true));
+      const releaseMultimodal = jest.fn(() => Promise.resolve());
+      const ctx = createMockLlamaContext({ initMultimodal, releaseMultimodal, getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: true, audio: false })) });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf', '/models/mmproj.gguf', { deferVision: true });
+
+      expect(initMultimodal).not.toHaveBeenCalled(); // the model loaded without it
+      expect(llmService.supportsVision()).toBe(true); // but it can take pictures: the file is kept ready
+      expect(llmService.getLoadReport()?.vision).toMatchObject({ requested: true, loaded: false, skippedBecause: 'it is loaded when a picture is used' });
+
+      const picture = [{ id: 'm1', role: 'user' as const, content: 'What is this?', timestamp: Date.now(), attachments: [{ id: 'a1', type: 'image' as const, uri: 'file:///photo.jpg' }] }];
+      await llmService.generateResponse([createUserMessage('Hello')]);
+      expect(initMultimodal).not.toHaveBeenCalled(); // a text chat never loads it
+
+      await llmService.generateResponse(picture as any);
+      expect(initMultimodal).toHaveBeenCalledTimes(1);
+      expect(initMultimodal).toHaveBeenCalledWith(expect.objectContaining({ path: '/models/mmproj.gguf' }));
+      await llmService.generateResponse(picture as any);
+      expect(initMultimodal).toHaveBeenCalledTimes(1); // already attached
+
+      await (llmService as any).releaseIdleVision(); // a quiet spell passed
+      expect(releaseMultimodal).toHaveBeenCalledTimes(1);
+      expect(llmService.supportsVision()).toBe(true); // still able to: it attaches again at the next picture
+      await llmService.generateResponse(picture as any);
+      expect(initMultimodal).toHaveBeenCalledTimes(2);
+
+      await llmService.unloadModel();
+      expect(llmService.supportsVision()).toBe(false);
+    });
+
+    it('does not keep a picture file that will not start, so the next picture is not delayed by another try', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const initMultimodal = jest.fn(() => Promise.resolve(false));
+      const ctx = createMockLlamaContext({ initMultimodal });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf', '/models/mmproj.gguf', { deferVision: true });
+      const picture = [{ id: 'm1', role: 'user' as const, content: 'What is this?', timestamp: Date.now(), attachments: [{ id: 'a1', type: 'image' as const, uri: 'file:///photo.jpg' }] }];
+      // The first picture is an error (answering as if it had been seen would be made up); the file is then forgotten, so the next request is not delayed by another try.
+      await expect(llmService.generateResponse(picture as any)).rejects.toThrow(/picture file could not be opened/);
+      await llmService.generateResponse(picture as any);
+      expect(initMultimodal).toHaveBeenCalledTimes(1);
+      expect(llmService.supportsVision()).toBe(false);
+    });
+  });
+
   // ========================================================================
   // unloadModel — while generating
   // ========================================================================

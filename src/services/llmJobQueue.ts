@@ -7,6 +7,7 @@
  */
 import { asBackground } from './backgroundWork';
 import { holdScreenAwake, releaseScreenAwake } from '../atlasTools/runtimePower';
+import { aiActivity } from './aiActivity';
 
 let tail: Promise<unknown> = Promise.resolve();
 
@@ -50,7 +51,9 @@ export async function yieldToChat(): Promise<boolean> {
  * Runs one background model job at a time. A job must be a single model call (with the work to prepare it), so that asking again after a chat reply
  * stopped it repeats nothing but that call: every caller today wraps exactly that.
  */
-export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean } = {}): Promise<T> {
+export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: number; shouldStop?: () => boolean; /** Said in the Task center while this job runs, e.g. "Writing a briefing script". */ label?: string } = {}): Promise<T> {
+  aiActivity.queued();
+  let began = false;
   const run = tail.then(async () => {
     for (let attempt = 0; ; attempt += 1) {
       // After a chat reply stopped this job, it waits for that reply however long a slow model takes (up to 15 minutes), instead of failing at the usual limit.
@@ -58,6 +61,8 @@ export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: n
       const mark = preemptions;
       // The screen is held while a job really runs (not while it waits its turn).
       if (jobsInFlight++ === 0) holdScreenAwake('background-ai');
+      aiActivity.began(opts.label ?? 'Background AI work', !began);
+      began = true;
       try {
         const result = await asBackground(job);
         // Stopped for a chat reply: whatever came back is a cut-off answer, not the job's result, so it is asked again after the reply.
@@ -66,10 +71,12 @@ export function runBackgroundJob<T>(job: () => Promise<T>, opts: { maxWaitMs?: n
       } catch (error) {
         if (preemptions === mark || attempt >= MAX_RESTARTS) throw error;
         // a stopped call may reject: that is the stop, not a failure of the job, so it is asked again
-      } finally { if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); }
+      } finally { aiActivity.ended(); if (--jobsInFlight === 0) releaseScreenAwake('background-ai'); }
     }
   });
   tail = run.catch(() => undefined);
+  // A job that never got to run (it gave up waiting for a chat reply) is no longer waiting.
+  run.catch(() => { if (!began) aiActivity.dropped(); });
   return run;
 }
 

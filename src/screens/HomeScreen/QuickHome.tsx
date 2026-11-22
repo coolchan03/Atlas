@@ -42,6 +42,7 @@ const destinations: Destination[] = [
   { key: 'maps', label: 'Maps', hint: 'Offline maps and saved places, no internet needed', icon: 'map', screen: 'Maps', optional: true, ...TILE.blue },
   { key: 'planner', label: 'Planner', hint: 'Exam dates, topics and a day-by-day study schedule', icon: 'calendar', screen: 'Planner', optional: true, ...TILE.amber },
   { key: 'workspace', label: 'Workspace', hint: 'Your files and Atlas documents', icon: 'folder', tab: 'ProjectsTab', optional: true, ...TILE.green },
+  { key: 'translator', label: 'Translator', hint: 'Translate text, speech, a conversation or a picture, on the phone', icon: 'repeat', screen: 'Translator', optional: true, ...TILE.blue },
   { key: 'phrases', label: 'Phrases', hint: 'Useful phrases for travel or emergencies', icon: 'message-square', screen: 'Phrases', optional: true, ...TILE.violet },
   { key: 'practice', label: 'Practice', hint: 'Quiz yourself on a knowledge base project', icon: 'check-square', screen: 'Knowledge', optional: true, ...TILE.teal },
   { key: 'emergency', label: 'Emergency', hint: 'Offline emergency cards and first aid', icon: 'alert-triangle', screen: 'Emergency', optional: true, ...TILE.red },

@@ -20,6 +20,8 @@ export interface ListenOptions {
   onPartial?: (text: string) => void;
   /** Whisper is writing down what was said (after the person stopped). */
   onTranscribing?: () => void;
+  /** Let Whisper recognise the language itself (the interpreter's two-way mode); the phone's recognizer still needs `code`. */
+  autoDetect?: boolean;
 }
 
 /** Whisper's language code for a course language ("es-ES" -> "es"). */
@@ -35,7 +37,7 @@ function multilingualId(): string | null {
 }
 
 /** True when a Whisper model that understands more than English (the ".en" models do not) is on the phone. */
-function hasMultilingualWhisper(): boolean {
+export function hasMultilingualWhisper(): boolean {
   return multilingualId() !== null;
 }
 
@@ -84,7 +86,7 @@ async function listenWithWhisper(code: string, o: ListenOptions): Promise<Listen
     try {
       const { path } = await audioRecorderService.stopRecording();
       o.onTranscribing?.();
-      resolve(await whisperService.transcribeFile(path, { language: whisperLanguage(code) }));
+      resolve(await whisperService.transcribeFile(path, { language: o.autoDetect ? 'auto' : whisperLanguage(code) }));
     } catch (e: any) {
       reject(e instanceof Error ? e : new Error(String(e)));
     }

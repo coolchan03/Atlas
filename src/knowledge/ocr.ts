@@ -20,5 +20,5 @@ export async function ocrPage(pdfPath: string, pageIndex: number): Promise<strin
     const msg = { id: localUniqueId('ocr'), role: 'user' as const, content: PROMPT, timestamp: Date.now(), attachments: [{ id: localUniqueId('img'), type: 'image' as const, uri, mimeType: 'image/png' }] };
     const out: string = await llmService.generateResponse([msg], { disableThinking: true });
     return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  }, { maxWaitMs: 10 * 60_000 });
+  }, { maxWaitMs: 10 * 60_000, label: 'Reading a scanned page' });
 }

@@ -185,7 +185,7 @@ export function activeTextCapabilities(i: {
     liteRTLoaded: liteRTService.isModelLoaded(),
     llama: {
       loaded: llmService.isModelLoaded(),
-      vision: llmService.getMultimodalSupport()?.vision ?? false,
+      vision: llmService.supportsVision(), // running, or kept ready to attach when a picture is used
       audio: false,
       tools: llmService.supportsToolCalling(),
       thinking: llmService.supportsThinking(),

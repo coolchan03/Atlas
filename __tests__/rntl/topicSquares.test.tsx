@@ -123,3 +123,30 @@ describe('the other kinds of square', () => {
     expect(lesson.getByTestId('quickcheck-answer')).toBeTruthy();
   });
 });
+
+describe('a lesson is easier to read', () => {
+  const lesson = { kind: 'lesson' as const, sections: [
+    { heading: 'Debit', text: 'A **debit** is the left side.', example: 'Cash goes up on the left.' },
+    { heading: 'Credit', text: 'A credit is the right side.' },
+  ], keyPoints: ['Debit is left'] };
+
+  it('numbers the sections of a lesson with several, and not a lesson with one', () => {
+    const view = render(<SquareView onDone={jest.fn()} content={lesson} />);
+    expect(view.getByTestId('lesson-step-1')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
+    const plain = render(<SquareView onDone={jest.fn()} content={{ kind: 'lesson', sections: [{ heading: 'One', text: 'Just text.' }], keyPoints: [] }} />);
+    expect(plain.queryByTestId('lesson-step-1')).toBeNull();
+  });
+
+  it('opens the reading options and shows the choice made', () => {
+    const view = render(<SquareView onDone={jest.fn()} content={lesson} />);
+    expect(view.queryByTestId('reading-panel')).toBeNull();
+    fireEvent.press(view.getByTestId('reading-toggle'));
+    fireEvent.press(view.getByTestId('reading-size-large'));
+    fireEvent.press(view.getByTestId('reading-font-book'));
+    expect(view.getByTestId('reading-size-large').props.accessibilityState.selected).toBe(true);
+    expect(view.getByTestId('reading-size-normal').props.accessibilityState.selected).toBe(false);
+    expect(view.getByTestId('reading-font-book').props.accessibilityState.selected).toBe(true);
+    expect(view.getByTestId('square-lesson')).toBeTruthy();
+  });
+});

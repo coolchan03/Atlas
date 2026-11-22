@@ -17,6 +17,7 @@ import {
   KvCacheTypeToggle,
   ModelLoadingModeSelector,
   WarmUpToggle,
+  VisionOnDemandToggle,
   MtpToggle,
   SafeModelLoadingToggle,
   TrimToolsToggle,
@@ -54,6 +55,7 @@ export const TextGenerationAdvanced: React.FC = () => {
       <KvCacheTypeToggle />
       <ModelLoadingModeSelector />
       <WarmUpToggle />
+      <VisionOnDemandToggle />
       <MtpToggle />
       <SafeModelLoadingToggle />
       <TrimToolsToggle />
