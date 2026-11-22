@@ -123,3 +123,34 @@ describe('the other kinds of square', () => {
     expect(lesson.getByTestId('quickcheck-answer')).toBeTruthy();
   });
 });
+
+describe('a lesson is easier to read', () => {
+  const lesson = { kind: 'lesson' as const, sections: [
+    { heading: 'Debit', text: 'A **debit** is the left side.\n\nTip: Check that both sides add up before you post.', example: 'Warning: Cash goes up on the left.' },
+    { heading: 'Credit', text: 'A credit is the right side.' },
+  ], keyPoints: ['Debit is left'] };
+
+  it('draws labelled paragraphs as callouts, numbers the sections, and leaves plain lessons alone', () => {
+    const view = render(<SquareView onDone={jest.fn()} content={lesson} />);
+    expect(view.getByTestId('callout-tip')).toBeTruthy();
+    expect(view.getByTestId('callout-warning')).toBeTruthy();
+    expect(view.getByTestId('lesson-step-1')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
+    const plain = render(<SquareView onDone={jest.fn()} content={{ kind: 'lesson', sections: [{ heading: 'One', text: 'Just text.' }], keyPoints: [] }} />);
+    expect(plain.queryByTestId('callout-tip')).toBeNull();
+    expect(plain.queryByTestId('lesson-step-1')).toBeNull();
+  });
+
+  it('opens the reading options and shows the choice made', () => {
+    const view = render(<SquareView onDone={jest.fn()} content={lesson} />);
+    expect(view.queryByTestId('reading-panel')).toBeNull();
+    fireEvent.press(view.getByTestId('reading-toggle'));
+    fireEvent.press(view.getByTestId('reading-size-large'));
+    fireEvent.press(view.getByTestId('reading-font-book'));
+    expect(view.getByTestId('reading-size-large').props.accessibilityState.selected).toBe(true);
+    expect(view.getByTestId('reading-size-normal').props.accessibilityState.selected).toBe(false);
+    expect(view.getByTestId('reading-font-book').props.accessibilityState.selected).toBe(true);
+    // The lesson is still there and still draws its callouts at the new size.
+    expect(view.getByTestId('callout-tip')).toBeTruthy();
+  });
+});

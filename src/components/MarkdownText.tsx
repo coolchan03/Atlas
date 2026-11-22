@@ -177,14 +177,16 @@ const copyRules = {
 interface MarkdownTextProps {
   children: string;
   dimmed?: boolean;
+  /** Bold words are drawn in the accent colour (a lesson's key terms), not only heavier. */
+  accentTerms?: boolean;
 }
 
-export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
+export function MarkdownText({ children, dimmed, accentTerms }: MarkdownTextProps) {
   const { colors } = useTheme();
   const fit = useTablePrefs((s) => s.fit);
   const markdownStyles = useMemo(
-    () => createMarkdownStyles(colors, dimmed, fit),
-    [colors, dimmed, fit],
+    () => createMarkdownStyles(colors, { dimmed, fit, accentTerms }),
+    [colors, dimmed, fit, accentTerms],
   );
 
   const handleLinkPress = useCallback((url: string) => {
@@ -205,7 +207,8 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   );
 }
 
-function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean, fit = true) {
+function createMarkdownStyles(colors: ThemeColors, opts: { dimmed?: boolean; fit?: boolean; accentTerms?: boolean } = {}) {
+  const { dimmed, fit = true, accentTerms = false } = opts;
   const textColor = dimmed ? colors.textSecondary : colors.text;
 
   return {
@@ -243,6 +246,7 @@ function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean, fit = true)
     },
     strong: {
       fontWeight: '700' as const,
+      ...(accentTerms ? { color: colors.primary } : {}),
     },
     em: {
       fontStyle: 'italic' as const,

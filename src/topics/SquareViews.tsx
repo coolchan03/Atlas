@@ -10,6 +10,8 @@ import { gradeAnswer } from './service';
 import { starsForShare, type SquareContent } from './formats';
 import { Answer } from '../components/ExerciseAnswer';
 import { PeriodicView } from './PeriodicView';
+import { LessonText, ReadingControls, ReadingScope } from './LessonReading';
+import { tint } from './lessonCallouts';
 import { check, useExerciseStore, type Verdict } from '../study/exercises';
 import { JournalEntryEditor, newJournalRows } from './JournalEntryEditor';
 import { isJournalTask, journalToText, type JournalRow } from './journal';
@@ -40,38 +42,47 @@ function LessonView({ content, onDone }: ViewProps<'lesson'>) {
   const t = useText();
   const { colors } = t;
   /** A block title with its icon, so the end of a lesson (mistakes, key points) reads as parts and not as more text. */
-  const blockTitle = (icon: string, label: string) => (
-    <View style={styles.titleRow}><Icon name={icon} size={16} color={colors.primary} /><Text style={t.head}>{label}</Text></View>
+  const blockTitle = (icon: string, label: string, color: string) => (
+    <View style={styles.titleRow}><Icon name={icon} size={16} color={color} /><Text style={t.head}>{label}</Text></View>
   );
+  /** A box with a coloured bar and a faint tint of the same colour: each kind of block has its own, so the parts can be told apart at a glance. */
+  const kind = (color: string) => [styles.box, styles.kind, { borderColor: colors.border, borderLeftColor: color, backgroundColor: tint(color, 0.07) }];
+  const total = content.sections.length;
   return (
-    <View style={styles.gap} testID="square-lesson">
-      {content.sections.map((s, i) => (
-        <View key={i} style={[styles.gap, styles.section]}>
-          {!!s.heading && <View style={[styles.sectionHead, { borderLeftColor: colors.primary }]}><Text style={t.head}>{s.heading}</Text></View>}
-          <MarkdownText>{s.text}</MarkdownText>
-          {!!s.example && (
-            <View style={[styles.example, t.card]}>
-              <Text style={[t.meta, styles.exampleLabel]}>EXAMPLE</Text>
-              <MarkdownText>{s.example}</MarkdownText>
+    <ReadingScope>
+      <View style={styles.gap} testID="square-lesson">
+        <ReadingControls />
+        {content.sections.map((s, i) => (
+          <View key={i} style={[styles.gap, styles.section]}>
+            <View style={[styles.sectionHead, { borderLeftColor: colors.primary }]}>
+              {total > 1 && <Text style={t.meta} testID={`lesson-step-${i + 1}`}>{`${i + 1} of ${total}`}</Text>}
+              {!!s.heading && <Text style={t.head}>{s.heading}</Text>}
             </View>
-          )}
-        </View>
-      ))}
-      {!!content.commonMistakes?.length && (
-        <View style={[styles.box, t.card]} testID="lesson-mistakes">
-          {blockTitle('alert-triangle', 'Common mistakes')}
-          <MarkdownText>{content.commonMistakes.map((k) => `- ${k}`).join('\n')}</MarkdownText>
-        </View>
-      )}
-      {!!content.quickCheck && <QuickCheck q={content.quickCheck.q} a={content.quickCheck.a} />}
-      {!!content.keyPoints.length && (
-        <View style={[styles.box, t.card]}>
-          {blockTitle('check-circle', 'Key points')}
-          <MarkdownText>{content.keyPoints.map((k) => `- ${k}`).join('\n')}</MarkdownText>
-        </View>
-      )}
-      <Button title="Got it" onPress={() => onDone(3)} testID="lesson-done" />
-    </View>
+            <LessonText text={s.text} />
+            {!!s.example && (
+              <View style={[styles.example, styles.kind, { borderColor: colors.border, borderLeftColor: colors.primaryLight, backgroundColor: tint(colors.primaryLight, 0.08) }]}>
+                <Text style={[t.meta, styles.exampleLabel]}>EXAMPLE</Text>
+                <LessonText text={s.example} />
+              </View>
+            )}
+          </View>
+        ))}
+        {!!content.commonMistakes?.length && (
+          <View style={kind(colors.error)} testID="lesson-mistakes">
+            {blockTitle('alert-triangle', 'Common mistakes', colors.error)}
+            <MarkdownText accentTerms>{content.commonMistakes.map((k) => `- ${k}`).join('\n')}</MarkdownText>
+          </View>
+        )}
+        {!!content.quickCheck && <QuickCheck q={content.quickCheck.q} a={content.quickCheck.a} />}
+        {!!content.keyPoints.length && (
+          <View style={kind(colors.success)}>
+            {blockTitle('check-circle', 'Key points', colors.success)}
+            <MarkdownText accentTerms>{content.keyPoints.map((k) => `- ${k}`).join('\n')}</MarkdownText>
+          </View>
+        )}
+        <Button title="Got it" onPress={() => onDone(3)} testID="lesson-done" />
+      </View>
+    </ReadingScope>
   );
 }
 
@@ -614,6 +625,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   box: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
   example: { borderWidth: 1, borderRadius: 8, padding: 10, gap: 4 },
+  kind: { borderLeftWidth: 3 },
   exampleLabel: { letterSpacing: 1 },
   section: { marginTop: 6 },
   sectionHead: { borderLeftWidth: 3, paddingLeft: 10 },

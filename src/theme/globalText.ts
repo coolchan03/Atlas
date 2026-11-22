@@ -56,6 +56,25 @@ export function adjustTextStyle(style: unknown, a: TextAppearance, nested = fals
   return out;
 }
 
+/** How text inside a reading area (a lesson) looks on top of the app-wide choice: a size multiplier, a line-spacing multiplier and, optionally, its own font. */
+export interface ReadingLook { scale: number; spacing: number; family?: string }
+export const ReadingContext = React.createContext<ReadingLook | null>(null);
+
+/** The style a text in a reading area should render with, given the style it already has under the app's appearance. Pure. */
+export function readingTextStyle(style: unknown, r: ReadingLook, where: { appearance: TextAppearance; nested: boolean }): unknown {
+  const { appearance: a, nested } = where;
+  const flat = (StyleSheet.flatten(style as any) ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...flat };
+  const family = flat.fontFamily;
+  const isText = family === undefined || (typeof family === 'string' && TEXT_FAMILIES.has(family));
+  if (r.family && !nested && (family === undefined || (typeof family === 'string' && (FOLLOWS_FONT.has(family) || family === a.body || family === a.heading)))) out.fontFamily = r.family;
+  if (!isText) return out; // an icon keeps its size
+  if (typeof flat.fontSize === 'number' && r.scale !== 1) out.fontSize = Math.round(flat.fontSize * r.scale);
+  if (typeof flat.lineHeight === 'number') out.lineHeight = Math.round(flat.lineHeight * r.scale * r.spacing);
+  else if (!nested && r.spacing !== 1 && typeof out.fontSize === 'number') out.lineHeight = Math.round(out.fontSize * 1.4 * r.spacing);
+  return out;
+}
+
 /** React Native modules whose default export is the component, patched in place. Literal paths: Metro needs them. */
 const TEXT_MODULE_COUNT = 2;
 function reactNativeTextModules(): any[] {
@@ -74,7 +93,10 @@ function withTextAppearance<P extends { style?: unknown }>(Original: React.Compo
   const Wrapped = function TextWithAppearance(props: P) {
     const a = useSyncExternalStore(subscribe, snapshot);
     const nested = !!React.useContext(ancestorContext());
-    return React.createElement(Original as React.ComponentType<any>, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a, nested) });
+    const reading = React.useContext(ReadingContext);
+    if (!reading) return React.createElement(Original as React.ComponentType<any>, a.key === NEUTRAL.key ? props : { ...props, style: adjustTextStyle(props.style, a, nested) });
+    const base = a.key === NEUTRAL.key ? props.style : adjustTextStyle(props.style, a, nested);
+    return React.createElement(Original as React.ComponentType<any>, { ...props, style: readingTextStyle(base, reading, { appearance: a, nested }) });
   };
   Object.assign(Wrapped, Original); // statics such as TextInput.State
   (Wrapped as any).displayName = (Original as any).displayName ?? 'Text';
