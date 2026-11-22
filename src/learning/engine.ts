@@ -124,7 +124,7 @@ async function ask(system: string, user: string, role: Role): Promise<string> {
   const u = fitPrompt(user, Math.max(800, maxChars - system.length));
   const out = await llmService.generateResponse([msg('system', system), msg('user', u)], { disableThinking: true });
   return clean(out);
-  }, { maxWaitMs: 30 * 60_000, shouldStop: () => stopRequested });
+  }, { maxWaitMs: 30 * 60_000, shouldStop: () => stopRequested, label: 'Teach the AI' });
 }
 
 // ------------------------------------------------------------------ research

@@ -5,8 +5,30 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { displayTitle, isActive, progressPercent, useTasks, type Task } from './taskRegistry';
+import { readAiStatus } from './aiStatus';
+import { useAiActivity } from '../services/aiActivity';
 
 const LABEL: Record<Task['status'], string> = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', cancelled: 'Cancelled', interrupted: 'Interrupted' };
+
+/** Which model is loaded, how it is running, and what the AI is doing right now (a background job, a chat reply, or nothing). Refreshed every couple of seconds while the screen is open. */
+function AiNowCard() {
+  const { colors } = useTheme();
+  useAiActivity(); // a job starting or ending shows at once; the timer below catches a chat reply, which the queue does not report
+  const [, tick] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => { const id = setInterval(tick, 2000); return () => clearInterval(id); }, []);
+  const status = readAiStatus();
+  return (
+    <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="ai-now">
+      <View style={styles.row}>
+        <Icon name="cpu" size={18} color={colors.primary} />
+        <Text style={[styles.title, { color: colors.text }]}>AI right now</Text>
+      </View>
+      <Text style={{ color: colors.textSecondary }} testID="ai-now-model">Model: {status.model}</Text>
+      {!!status.runningOn && <Text style={{ color: colors.textSecondary }} testID="ai-now-running-on">Running on: {status.runningOn}</Text>}
+      <Text style={{ color: colors.textSecondary }} testID="ai-now-doing">Doing: {status.now}</Text>
+    </View>
+  );
+}
 
 /** Running, waiting, finished and failed work in one place, with Cancel, Retry and Dismiss. Failed jobs stay until dismissed. */
 export const TaskCenterScreen: React.FC = () => {
@@ -22,6 +44,7 @@ export const TaskCenterScreen: React.FC = () => {
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Task center" />
       <ScrollView contentContainerStyle={styles.body}>
+        <AiNowCard />
         {tasks.length === 0 && <Text style={{ color: colors.textSecondary }} testID="tasks-empty">Nothing is running. Imports, downloads and other long jobs appear here while they work, and stay here if they fail.</Text>}
         {tasks.map((t) => {
           const pct = progressPercent(t);
@@ -34,6 +57,7 @@ export const TaskCenterScreen: React.FC = () => {
               <Text style={{ color: colors.textSecondary }} testID={`task-status-${t.id}`}>
                 {LABEL[t.status]}{t.stage ? `: ${t.stage}` : ''}{pct !== null ? ` (${pct}%)` : ''}
               </Text>
+              {!!t.model && <Text style={{ color: colors.textMuted }} testID={`task-model-${t.id}`}>Model: {t.model}</Text>}
               {!!t.error && <Text style={{ color: colors.textSecondary }}>{t.error}</Text>}
               <View style={styles.row}>
                 {isActive(t) && !t.cancelRequested && action('Cancel', () => cancel(t.id), `task-cancel-${t.id}`)}

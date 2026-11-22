@@ -30,5 +30,5 @@ export function modelAsker(shouldStop?: () => boolean): Ask {
     const msg = (role: 'system' | 'user', content: string) => ({ id: localUniqueId(role), role, content, timestamp: Date.now() });
     const out = await llmService.generateResponse([msg('system', system), msg('user', u)], { disableThinking: true });
     return out.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '').trim();
-  }, { maxWaitMs: 30 * 60_000, shouldStop });
+  }, { maxWaitMs: 30 * 60_000, shouldStop, label: 'Working on your documents' });
 }
