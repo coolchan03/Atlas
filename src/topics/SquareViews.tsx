@@ -11,7 +11,7 @@ import { starsForShare, type SquareContent } from './formats';
 import { Answer } from '../components/ExerciseAnswer';
 import { PeriodicView } from './PeriodicView';
 import { LessonText, ReadingControls, ReadingScope } from './LessonReading';
-import { tint } from './lessonCallouts';
+import { tint } from './tint';
 import { check, useExerciseStore, type Verdict } from '../study/exercises';
 import { JournalEntryEditor, newJournalRows } from './JournalEntryEditor';
 import { isJournalTask, journalToText, type JournalRow } from './journal';

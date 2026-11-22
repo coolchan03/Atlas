@@ -5,7 +5,7 @@ import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { MarkdownText } from '../components/MarkdownText';
 import { ReadingContext } from '../theme/globalText';
-import { splitCallouts, tint, type CalloutKind } from './lessonCallouts';
+import { tint } from './tint';
 import { READING_FONTS, READING_SIZES, READING_SPACINGS, useReadingLook, useReadingPrefs } from './readingPrefs';
 
 /** Wraps a lesson so the reader's own size, spacing and font apply to every piece of text inside it. */
@@ -14,33 +14,9 @@ export function ReadingScope({ children }: { children: React.ReactNode }) {
   return <ReadingContext.Provider value={look}>{children}</ReadingContext.Provider>;
 }
 
-const CALLOUT_ICON: Record<CalloutKind, string> = { definition: 'book-open', tip: 'zap', warning: 'alert-triangle', note: 'info' };
-
-/** The colour of each kind of callout, from the theme so it suits every palette. */
-export function calloutColor(kind: CalloutKind, colors: ReturnType<typeof useTheme>['colors']): string {
-  return kind === 'definition' ? colors.primary : kind === 'tip' ? colors.success : kind === 'warning' ? colors.error : colors.textSecondary;
-}
-
-/** A lesson section's text: ordinary markdown with key terms in the accent colour, and labelled paragraphs drawn as boxes. */
+/** A lesson section's text: markdown with key terms (bold words) in the accent colour. */
 export function LessonText({ text }: { text: string }) {
-  const { colors } = useTheme();
-  return (
-    <>
-      {splitCallouts(text).map((piece, i) => {
-        if (piece.kind === 'text') return <MarkdownText key={i} accentTerms>{piece.text}</MarkdownText>;
-        const color = calloutColor(piece.callout, colors);
-        return (
-          <View key={i} style={[styles.callout, { borderLeftColor: color, backgroundColor: tint(color, 0.1) }]} testID={`callout-${piece.callout}`}>
-            <View style={styles.calloutHead}>
-              <Icon name={CALLOUT_ICON[piece.callout]} size={14} color={color} />
-              <Text style={[styles.calloutLabel, { color }]}>{piece.label.toUpperCase()}</Text>
-            </View>
-            <MarkdownText accentTerms>{piece.text}</MarkdownText>
-          </View>
-        );
-      })}
-    </>
-  );
+  return <MarkdownText accentTerms>{text}</MarkdownText>;
 }
 
 /** "Aa" at the top of a lesson: opens the size, spacing and font choices for reading lessons. */
@@ -83,9 +59,6 @@ export function ReadingControls() {
 }
 
 const styles = StyleSheet.create({
-  callout: { borderLeftWidth: 3, borderRadius: 6, padding: SPACING.sm, gap: 4 },
-  calloutHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  calloutLabel: { ...TYPOGRAPHY.meta, letterSpacing: 1 },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end', paddingVertical: 4 },
   panel: { borderWidth: 1, borderRadius: 10, padding: SPACING.sm, gap: SPACING.sm },
   chipRow: { gap: 4 },
