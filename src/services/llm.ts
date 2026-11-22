@@ -12,6 +12,8 @@ import { acceleratorCandidates, preferMeasured, requireGpuLayers } from './accel
 import type { InferenceBackend } from '../types';
 import RNFS from 'react-native-fs';
 import { Message, INFERENCE_BACKENDS } from '../types';
+/** How long the vision file stays attached with no picture in the conversation (on-demand vision only). */
+const VISION_IDLE_MS = 3 * 60_000;
 import { APP_CONFIG } from '../constants';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { useAppStore } from '../stores/appStore';
@@ -74,6 +76,9 @@ class LLMService {
   private activeCompletionPromise: Promise<void> | null = null;
   private multimodalSupport: MultimodalSupport | null = null;
   private multimodalInitialized: boolean = false;
+  /** A vision file kept for later: the model loaded without it (to keep memory free) and it is attached when a picture is first used. */
+  private pendingProjector: string | null = null;
+  private visionIdleTimer: ReturnType<typeof setTimeout> | null = null;
   private performanceStats: LLMPerformanceStats = { lastTokensPerSecond: 0, lastDecodeTokensPerSecond: 0, lastTimeToFirstToken: 0, lastGenerationTime: 0, lastTokenCount: 0 };
   private currentSettings: LLMPerformanceSettings = { nThreads: Platform.OS === 'android' ? 6 : 4, nBatch: 512, contextLength: 2048 };
   private gpuEnabled: boolean = false;
@@ -214,7 +219,7 @@ class LLMService {
   getEmbeddedMtpLayers(): number | null {
     return this.context ? embeddedMtpLayers((this.context as any).model?.metadata) : null;
   }
-  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean } }): Promise<void> {
+  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean }; /** Load without the vision file and attach it when a picture is first used. */ deferVision?: boolean }): Promise<void> {
     const epoch = this.loadEpoch;
     const loadBegan = Date.now();
     const mutex = this.acquireContextMutex();
@@ -234,6 +239,9 @@ class LLMService {
         logger.warn('[LLM] MMProj file not found, disabling vision support');
         mmProjPath = undefined;
       }
+      // On-demand vision: the model loads text-only and the vision file waits (see attachPendingVision). Not with Safe Model Loading, which leaves it out anyway.
+      const deferredProjector = opts?.deferVision && !safeMode && mmProjPath ? mmProjPath : undefined;
+      if (deferredProjector) { mmProjPath = undefined; notes.push('The vision file is loaded when a picture is used, to keep memory free.'); }
       const visionAttached = !!mmProjPath;
       const mtpAttached = !!opts?.draftPath || !!opts?.embeddedMtp;
       if (safeMode) {
@@ -248,7 +256,7 @@ class LLMService {
       if (this.currentModelPath === modelPath && this.requestedBackendAtLoad === requested &&
           (this.context || this.vulkanLoaded) && (!mmProjPath || this.multimodalInitialized) &&
           // A part that is running but has since been switched off must be reloaded away so its memory is freed.
-          (mmProjPath || !this.multimodalInitialized) && (mtpWanted || !this.mtpActive)) return;
+          (mmProjPath || !this.multimodalInitialized || !!deferredProjector) && (mtpWanted || !this.mtpActive)) return;
       if (this.context || this.vulkanLoaded) await this.doUnloadModel();
       this.vulkanFallbackReason = null;
       this.lastOutputCheck = null;
@@ -259,6 +267,7 @@ class LLMService {
       this.requestedBackendAtLoad = null;
       this.mtpActive = false;
       this.loadReport = null;
+      this.clearPendingVision();
 
       const auto = Platform.OS === 'android' && requested === INFERENCE_BACKENDS.AUTO;
       let candidates: InferenceBackend[] = [requested];
@@ -447,6 +456,7 @@ class LLMService {
           this.requestedBackendAtLoad = requested;
           this.acceleratorAttempts = failures;
           await recordLoadSuccess({ modelPath, backend, mtp: attempt.mtp, vision: attempt.vision });
+          this.pendingProjector = deferredProjector ?? null;
           useAccelRecord.getState().recordLoad(modelPath, backend, Date.now() - loadBegan);
           noteStage('loading', Date.now() - loadBegan);
           const visionNote = !this.multimodalInitialized && visionAttached
@@ -455,7 +465,7 @@ class LLMService {
           const mtpKind: 'file' | 'embedded' | 'none' = draftFile ? 'file' : embeddedOn ? 'embedded' : 'none';
           this.loadReport = {
             safeMode, backend, notes,
-            vision: { requested: visionAttached && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : opts?.switchedOff?.vision ? { skippedBecause: 'switched off for this model' } : {}) },
+            vision: { requested: (visionAttached || !!deferredProjector) && !safeMode, loaded: this.multimodalInitialized, estimatedMB: this.multimodalInitialized ? await this.fileMB(attemptMmProj) : 0, ...(visionNote ? { skippedBecause: visionNote } : deferredProjector ? { skippedBecause: 'it is loaded when a picture is used' } : opts?.switchedOff?.vision ? { skippedBecause: 'switched off for this model' } : {}) },
             mtp: {
               kind: mtpKind, requested: mtpWanted, loaded: this.mtpActive,
               estimatedMB: this.mtpActive && draftFile ? await this.fileMB(draftFile) : 0,
@@ -600,7 +610,55 @@ class LLMService {
     this.multimodalSupport = await checkContextMultimodal(this.context); return this.multimodalSupport;
   }
   getMultimodalSupport(): MultimodalSupport | null { return this.multimodalSupport; }
-  supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
+  /** Whether this model can take pictures: its vision file is running, or is kept ready to attach when one is used. */
+  supportsVision(): boolean { return this.multimodalSupport?.vision || this.pendingProjector !== null; }
+
+  private clearPendingVision(): void {
+    this.pendingProjector = null;
+    if (this.visionIdleTimer) { clearTimeout(this.visionIdleTimer); this.visionIdleTimer = null; }
+  }
+
+  /** The vision file comes off again after this long with no picture in the conversation, so its memory is free for the chat. */
+  private armVisionIdleRelease(): void {
+    if (this.visionIdleTimer) clearTimeout(this.visionIdleTimer);
+    this.visionIdleTimer = setTimeout(() => { void this.releaseIdleVision(); }, VISION_IDLE_MS);
+  }
+
+  private async releaseIdleVision(): Promise<void> {
+    if (this.visionIdleTimer) { clearTimeout(this.visionIdleTimer); this.visionIdleTimer = null; }
+    if (!this.pendingProjector || !this.multimodalInitialized || !this.context) return;
+    if (this.isGenerating) { this.armVisionIdleRelease(); return; } // a reply is being written: try again later
+    try {
+      await this.context.releaseMultimodal();
+      this.multimodalInitialized = false;
+      this.multimodalSupport = { vision: false, audio: false };
+      logger.log('[LLM] vision file released after a quiet spell; it is attached again when the next picture is used');
+    } catch (e) { logger.warn('[LLM] vision file could not be released:', e); }
+  }
+
+  /**
+   * Attaches the vision file kept ready by an on-demand load, the first time a picture is used. The same crash breadcrumb as the load itself is
+   * set around the native step, so a phone that runs out of memory here is remembered and not retried the same way. Returns whether vision is on.
+   */
+  private async attachPendingVision(): Promise<boolean> {
+    const path = this.pendingProjector;
+    if (!path || !this.context) return false;
+    if (this.multimodalInitialized) { this.armVisionIdleRelease(); return true; }
+    const began = Date.now();
+    try {
+      await enterStage({ modelPath: this.currentModelPath ?? '', backend: this.selectedBackend, mtp: this.mtpActive, vision: true, stage: 'vision', contextLength: this.currentSettings.contextLength, gpuLayers: this.activeGpuLayers });
+      const ok = await this.initializeMultimodal(path);
+      await leaveStage();
+      logger.log(`[LLM] vision file attached on demand in ${((Date.now() - began) / 1000).toFixed(1)} s: ${ok ? 'ok' : 'the engine could not start it'}`);
+      if (ok) this.armVisionIdleRelease(); else this.pendingProjector = null; // a file that will not start is not tried on every picture
+      return ok;
+    } catch (e) {
+      await leaveStage().catch(() => undefined);
+      logger.warn('[LLM] vision file could not be attached:', e);
+      this.pendingProjector = null;
+      return false;
+    }
+  }
   supportsToolCalling(): boolean { return this.toolCallingSupported; }
   supportsThinking(): boolean { return this.thinkingSupported; }
   isThinkingEnabled(): boolean { return this.thinkingSupported && useAppStore.getState().settings.thinkingEnabled; }
@@ -667,6 +725,7 @@ class LLMService {
       // The context was released above, so the service must forget it even if the wait threw:
       // keeping a released context as "loaded" makes the next generation call into freed native memory.
       useAppStore.getState().setModelMaxContext(null);
+      this.clearPendingVision();
       Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false, mtpActive: false, loadReport: null });
       this.selectedBackend = INFERENCE_BACKENDS.CPU;
       this.requestedBackendAtLoad = null;
@@ -715,6 +774,8 @@ class LLMService {
     const completionWork = (async () => {
       const managed = await this.dropMissingImageAttachments(await this.manageContextWindow(messages));
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
+      if (hasImages && !this.multimodalInitialized && this.pendingProjector) await this.attachPendingVision();
+      else if (hasImages && this.pendingProjector) this.armVisionIdleRelease(); // another picture: the quiet spell starts over
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
       logger.log('[LLM] Generation mode:', this.hasVisionInputs(managed) ? 'VISION' : 'TEXT-ONLY');
       const oaiMessages = this.convertToOAIMessages(managed);

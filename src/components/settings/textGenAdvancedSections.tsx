@@ -283,6 +283,22 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
   );
 };
 
+// ─── Vision file only when needed ─────────────────────────────────────────────
+
+export const VisionOnDemandToggle: React.FC = () => {
+  const { settings, updateSettings } = useAppStore();
+  return (
+    <SegmentedRow<'off' | 'on'>
+      label="Picture file only when needed"
+      description="A model that can see pictures normally loads its picture file with it, which uses extra memory all the time. When this is on the model loads without it, and the file is attached the first time a picture is used (a photo in chat, a scanned page, the Translator camera). That first picture takes a few seconds longer. The file is released after 3 quiet minutes. Takes effect the next time the model loads."
+      options={BOOL_OPTIONS}
+      current={settings.visionOnDemand ? 'on' : 'off'}
+      onSelect={(id) => updateSettings({ visionOnDemand: id === 'on' })}
+      testIdFor={(id) => `vision-on-demand-${id}-button`}
+    />
+  );
+};
+
 // ─── Warm-up after load ───────────────────────────────────────────────────────
 
 export const WarmUpToggle: React.FC = () => {

@@ -221,7 +221,7 @@ export async function ensureModelLoadedFn(
   // reload so it comes back with vision. LiteRT has no separate mmproj, so this never applies.
   const needsVisionRepair = !isLiteRTModel(activeModel)
     && !!activeModel.mmProjPath
-    && !(llmService.getMultimodalSupport()?.vision);
+    && !llmService.supportsVision(); // not running and not kept ready for the first picture
   // ONE readiness predicate for both engines (engines.isModelReady); vision from the single rule.
   if (isModelReady(activeModel) && !needsVisionRepair) {
     deps.setSupportsVision(loadedModelVision(activeModel));

@@ -241,7 +241,7 @@ async function doLoadTextModelOnce(ctx: TextLoadContext): Promise<void> {
     await beginLoad('llama', ctx.modelId);
     try {
       await Promise.race([
-        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), ...switchedOffOption(ctx.model) }),
+        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override, ...mtpOptions(ctx.model), ...switchedOffOption(ctx.model), ...(useAppStore.getState().settings.visionOnDemand ? { deferVision: true } : {}) }),
         timeoutPromise,
       ]);
     } finally {
