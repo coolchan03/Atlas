@@ -89,6 +89,19 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "ai.offgridmobile"
+    // -PatlasSplitAbis=true builds one APK per CPU type (plus a universal one) from the ABIs in reactNativeArchitectures.
+    // Off by default, so ordinary builds are unchanged.
+    def atlasSplitAbis = project.hasProperty('atlasSplitAbis') && project.property('atlasSplitAbis') == 'true'
+    if (atlasSplitAbis) {
+        splits {
+            abi {
+                enable true
+                reset()
+                include(*(project.findProperty('reactNativeArchitectures') ?: 'arm64-v8a').toString().split(',').collect { it.trim() })
+                universalApk true
+            }
+        }
+    }
     defaultConfig {
         applicationId "ai.offgridmobile.atlas"
         // llama.kt (Vulkan text) is built for API 29. The app keeps API 24: the manifest
@@ -101,6 +114,17 @@ android {
         versionCode project.hasProperty('atlasVersionCode') ? project.property('atlasVersionCode').toInteger() : atlasBaseVersionCode + (project.hasProperty('atlasBuild') ? project.property('atlasBuild').toInteger() : 0)
         // CI passes -PatlasBuild=<run number>, so the version shown in the app says which build it is.
         versionName "0.0.240" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
+    }
+    if (atlasSplitAbis) {
+        // Each CPU type needs its own version code (the store and the installer reject two APKs with the same one); a given CPU type always
+        // keeps the same offset, so each device still only ever sees upgrades.
+        def abiOffsets = ['armeabi-v7a': 1, 'arm64-v8a': 2, 'x86': 3, 'x86_64': 4]
+        android.applicationVariants.all { variant ->
+            variant.outputs.each { output ->
+                def abi = output.getFilter(com.android.build.OutputFile.ABI)
+                if (abi != null) output.versionCodeOverride = variant.versionCode + abiOffsets.get(abi, 0)
+            }
+        }
     }
     signingConfigs {
         debug {

@@ -254,6 +254,10 @@ class LocalDreamGeneratorService {
       if (msg.includes('ERR_NO_MODEL') || msg.includes('unloaded') || msg.includes('Pipeline failed')) {
         this.loadedThreads = null;
       }
+      // x86 and 32-bit ARM builds do not carry the native SDXL/FLUX engine; say so in words instead of a native error code.
+      if (error?.code === 'IMAGE_RUNTIME_MISSING' || msg.includes('IMAGE_RUNTIME_MISSING')) {
+        throw new Error('This build of Atlas does not include the image engine for your phone\'s processor. Image generation needs the 64-bit ARM build.');
+      }
       throw error;
     } finally {
       this.generating = false;
