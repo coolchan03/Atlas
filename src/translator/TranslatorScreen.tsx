@@ -11,6 +11,7 @@ import { TextPanel } from './TextPanel';
 import { LivePanel } from './LivePanel';
 import { CameraPanel } from './CameraPanel';
 import { useTranslator, type TranslatorMode } from './store';
+import { useWideLayout } from '../hooks/useWideLayout';
 
 const MODES: Array<{ id: TranslatorMode; label: string; icon: string }> = [
   { id: 'text', label: 'Text', icon: 'type' },
@@ -23,6 +24,8 @@ const MODES: Array<{ id: TranslatorMode; label: string; icon: string }> = [
 export const TranslatorScreen: React.FC = () => {
   const { colors } = useTheme();
   const { mode, from, to, set, swap } = useTranslator();
+  // Wide screens keep the content in a centred column (a tablet gets two panes in text mode, see TextPanel).
+  const wide = useWideLayout(1100);
   const [picking, setPicking] = React.useState<'from' | 'to' | null>(null);
   // Only text mode can recognise the language to translate from; the live modes need to know it to listen.
   const fromLabel = from ? languageFor(from).name : 'Detect language';
@@ -41,7 +44,7 @@ export const TranslatorScreen: React.FC = () => {
           );
         })}
       </View>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.body, wide.column]} keyboardShouldPersistTaps="handled">
         <View style={styles.languages}>
           {showFrom && (
             <>
