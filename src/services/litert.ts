@@ -277,7 +277,7 @@ class LiteRTService {
           onReasoning: () => {},
           onComplete: () => resolve(),
           onError: () => resolve(),
-        });
+        }).catch(() => resolve()); // a rejection must not leave the warm-up waiting forever
       });
       // Clear warmup state so first real message gets a fresh conversation
       this.activeConversationId = null;
