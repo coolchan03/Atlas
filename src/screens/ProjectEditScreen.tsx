@@ -30,7 +30,7 @@ import { FolderPicker } from '../components/FolderPicker';
 import { protectProject, permanentlyUnprotectProject } from '../stores/protectedProjectStorage';
 import { PROJECT_TYPES, isStarterInstructions, projectType, type ProjectKind } from '../projects/projectTypes';
 const BACKGROUNDCOLOR_RGBA_0_0_0_0_5 = 'rgba(0,0,0,0.5)';
-const COLOR_FFF = '#fff';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
   s2: { flex: 1, marginBottom: 0 },

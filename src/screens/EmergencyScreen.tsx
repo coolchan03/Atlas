@@ -10,7 +10,6 @@ import { speak, stop } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { AtlasGames } from '../components/AtlasGames';
 import { AtlasEmergencyTools } from '../components/AtlasEmergencyTools';
-const COLOR_FFF = '#fff';
 const BACKGROUNDCOLOR_1E0202 = '#1E0202';
 const BORDERWIDTH_1 = 1;
 const BORDERWIDTH_0 = 0;
@@ -18,6 +17,7 @@ const BORDERCOLOR_5A0E0E = '#5A0E0E';
 const COLOR_RGBA_255_255_255_0_85 = 'rgba(255,255,255,0.85)';
 const BORDERCOLOR_3F6212 = '#3F6212';
 const BORDERCOLOR_0F766E = '#0F766E';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { fontWeight: '700' },
   s2: { height: 8 },

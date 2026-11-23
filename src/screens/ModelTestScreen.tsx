@@ -18,8 +18,8 @@ import { localUniqueId } from '../utils/uniqueId';
 import { ImageModelTestScreen } from './ImageModelTestScreen';
 import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 import { cancelTuning, tuneDevice, type TuneOutcome, type TuneProgress } from '../services/deviceTuner';
-const COLOR_FFF = '#fff';
 const BORDERCOLOR_D4A017 = '#d4a017';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   deepRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginVertical: SPACING.sm },
   deepText: { flex: 1, ...TYPOGRAPHY.bodySmall },

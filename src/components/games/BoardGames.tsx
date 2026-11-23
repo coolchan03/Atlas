@@ -8,7 +8,6 @@ import { dueItems, nextIntervalLabel, streakFrom, useStudyProgress, type Progres
 import { useStudyStore } from '../../study/engine';
 import { speakAndWait, stop } from '../../atlasVoice/tts';
 import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, ScoreLine, SourceLinks, Title, useGameColors, useRecord, type GameProps } from './kit';
-const COLOR_FFF = '#fff';
 const FONTWEIGHT_800 = '800';
 const FONTWEIGHT_400 = '400';
 const BACKGROUNDCOLOR_1E3A8A = '#1E3A8A';
@@ -98,7 +97,7 @@ export function JeopardyGame({ result, projectId, onOpenSource }: GameProps) {
           {[1, 2, 3, 4].map((n) => (
             <TouchableOpacity key={n} onPress={() => { setPlayers(Array.from({ length: n }, (_, i) => `Player ${i + 1}`)); setScores(Array(n).fill(0)); }}
               style={[literalStyles.s4, { backgroundColor: players.length === n ? colors.primary : colors.surface }]}>
-              <Text style={[{ color: players.length === n ? COLOR_FFF : colors.text }, literalStyles.s5]}>{n}</Text>
+              <Text style={[{ color: players.length === n ? colors.onPrimary : colors.text }, literalStyles.s5]}>{n}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -167,7 +166,7 @@ export function JeopardyGame({ result, projectId, onOpenSource }: GameProps) {
         <View style={literalStyles.s17}>
           {board.map((b, c) => (
             <TouchableOpacity key={b.name} onPress={() => setCol(c)} style={[literalStyles.s18, { backgroundColor: col === c ? colors.primary : colors.surface }]}>
-              <Text style={[{ color: col === c ? COLOR_FFF : colors.text }, literalStyles.s19]}>{b.name}</Text>
+              <Text style={[{ color: col === c ? colors.onPrimary : colors.text }, literalStyles.s19]}>{b.name}</Text>
             </TouchableOpacity>
           ))}
         </View>

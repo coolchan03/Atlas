@@ -11,7 +11,7 @@ import { AtlasPacksSection } from '../components/AtlasPacksSection';
 import {
   useOfflineLibrary, addLibraryFile, removeLibraryFile, searchLibrary, readArticle, libraryAvailable, LibraryHit,
 } from '../atlasTools/offlineLibrary';
-const COLOR_FFF = '#fff';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },

@@ -8,7 +8,6 @@ const BORDERWIDTH_0 = 0;
 const BORDERWIDTH_1 = 1;
 const OPACITY_0_5 = 0.5;
 const OPACITY_1 = 1;
-const COLOR_FFF = '#fff';
 const BORDERLEFTWIDTH_4 = 4;
 const BORDERLEFTWIDTH_0 = 0;
 const literalStyles = StyleSheet.create({
@@ -72,7 +71,7 @@ export function GameButton({ label, onPress, disabled, kind = 'primary', accessi
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       style={[literalStyles.s3, { backgroundColor: primary ? colors.primary : colors.surface, borderWidth: primary ? BORDERWIDTH_0 : BORDERWIDTH_1, borderColor: colors.border, opacity: disabled ? OPACITY_0_5 : OPACITY_1 }]}>
-      <Text style={[{ color: primary ? COLOR_FFF : colors.text }, literalStyles.s4]}>{label}</Text>
+      <Text style={[{ color: primary ? colors.onPrimary : colors.text }, literalStyles.s4]}>{label}</Text>
     </TouchableOpacity>
   );
 }

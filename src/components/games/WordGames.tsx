@@ -7,11 +7,11 @@ import {
   type ClozeItem, type HangmanState, type PairCard,
 } from '../../study/games/logic';
 import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, ScoreLine, SourceLinks, useGameColors, useRecord, type GameProps } from './kit';
-const COLOR_FFF = '#fff';
 const FONTSIZE_15 = 15;
 const FONTSIZE_12 = 12;
 const FONTWEIGHT_700 = '700';
 const FONTWEIGHT_400 = '400';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 },
   s2: { padding: 4 },
@@ -82,7 +82,7 @@ export function PairsGame({ result, projectId, onOpenSource }: GameProps) {
             <View key={c.id} style={[{ width: `${100 / cols}%` }, literalStyles.s2]}>
               <TouchableOpacity onPress={() => tap(c)} accessibilityLabel={shown ? c.text : 'Hidden card'} accessibilityRole="button"
                 style={[literalStyles.s3, { backgroundColor: matched.includes(c.pair) ? `${GOOD}33` : shown ? colors.surface : colors.primary }]}>
-                <Text style={[{ color: shown ? colors.text : COLOR_FFF, fontSize: c.kind === 'term' ? FONTSIZE_15 : FONTSIZE_12, fontWeight: c.kind === 'term' ? FONTWEIGHT_700 : FONTWEIGHT_400 }, literalStyles.s4]}>
+                <Text style={[{ color: shown ? colors.text : colors.onPrimary, fontSize: c.kind === 'term' ? FONTSIZE_15 : FONTSIZE_12, fontWeight: c.kind === 'term' ? FONTWEIGHT_700 : FONTWEIGHT_400 }, literalStyles.s4]}>
                   {shown ? c.text : '?'}
                 </Text>
               </TouchableOpacity>
@@ -140,7 +140,7 @@ export function HangmanGame({ result, projectId, onOpenSource }: GameProps) {
       <View style={literalStyles.s6}>
         {(['hangman', 'guess'] as const).map((m) => (
           <TouchableOpacity key={m} onPress={() => setMode(m)} accessibilityRole="button" style={[literalStyles.s7, { backgroundColor: mode === m ? colors.primary : colors.surface }]}>
-            <Text style={{ color: mode === m ? COLOR_FFF : colors.text }}>{m === 'hangman' ? 'Hangman' : 'Term guess'}</Text>
+            <Text style={{ color: mode === m ? colors.onPrimary : colors.text }}>{m === 'hangman' ? 'Hangman' : 'Term guess'}</Text>
           </TouchableOpacity>
         ))}
       </View>

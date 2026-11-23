@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
 import { PROVIDERS, useSearchSettings, searchWeb } from '../services/tools/webSearchProviders';
-const COLOR_FFF = '#fff';
 const literalStyles = StyleSheet.create({
   s1: { fontSize: 13 },
   s2: { marginTop: 8 },
@@ -39,7 +38,7 @@ export function WebSearchSettings() {
       <View style={st.wrap}>
         {PROVIDERS.map((p) => (
           <TouchableOpacity key={p.id} onPress={() => s.setProvider(p.id)} style={[st.pill, { backgroundColor: p.id === s.provider ? colors.primary : colors.background }]}>
-            <Text style={[{ color: p.id === s.provider ? COLOR_FFF : colors.text }, literalStyles.s1]}>{p.name}</Text>
+            <Text style={[{ color: p.id === s.provider ? colors.onPrimary : colors.text }, literalStyles.s1]}>{p.name}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -72,7 +71,7 @@ export function WebSearchSettings() {
         <Text style={[{ color: colors.textSecondary }, literalStyles.s1]}>Results per search</Text>
         {[3, 5, 8].map((n) => (
           <TouchableOpacity key={n} onPress={() => s.setResults(n)} style={[st.small, { backgroundColor: s.results === n ? colors.primary : colors.background }]}>
-            <Text style={{ color: s.results === n ? COLOR_FFF : colors.text }}>{n}</Text>
+            <Text style={{ color: s.results === n ? colors.onPrimary : colors.text }}>{n}</Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity onPress={runTest} style={[st.test, { borderColor: colors.primary }]} disabled={busy}>

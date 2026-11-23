@@ -11,11 +11,11 @@ import { speakIn, stop, onMissingLanguage } from '../atlasVoice/tts';
 import { ensureTextModel } from '../atlasTools/models';
 import { completeSmallTask } from '../services/engines';
 const BACKGROUNDCOLOR_111 = '#111';
-const COLOR_FFF = '#fff';
 const COLOR_CCC = '#ccc';
 const COLOR_888 = '#888';
 const BACKGROUNDCOLOR_2563EB = '#2563EB';
 const BACKGROUNDCOLOR_333 = '#333';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flex: 1, backgroundColor: BACKGROUNDCOLOR_111 },
   s2: { flex: 1, justifyContent: 'center', padding: 24 },
@@ -125,7 +125,7 @@ export const PhrasesScreen: React.FC = () => {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={literalStyles.s17} contentContainerStyle={literalStyles.s18}>
         {PHRASE_LANGUAGES.map((l) => (
           <TouchableOpacity key={l.code} onPress={() => pickLang(l.code)} style={[literalStyles.s19, { backgroundColor: l.code === code ? BACKGROUNDCOLOR_2563EB : colors.surface }]}>
-            <Text style={{ color: l.code === code ? COLOR_FFF : colors.text }}>{l.name} · {l.native}</Text>
+            <Text style={{ color: l.code === code ? colors.onPrimary : colors.text }}>{l.name} · {l.native}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>

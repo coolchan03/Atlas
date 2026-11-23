@@ -19,7 +19,6 @@ import {
 } from '../atlasMaps/maps';
 import { listingBytes, mapState, roomFor, type MapState } from '../atlasMaps/mapUpdates';
 const BACKGROUNDCOLOR_2A0000 = '#2A0000';
-const COLOR_FFF = '#fff';
 const BACKGROUNDCOLOR_1A0000 = '#1a0000';
 const BACKGROUNDCOLOR_E5E7EB = '#E5E7EB';
 const BACKGROUNDCOLOR_RGBA_120_0_0_0_45 = 'rgba(120,0,0,0.45)';
@@ -27,6 +26,7 @@ const BACKGROUNDCOLOR_RGBA_0_0_0_0_5 = 'rgba(0,0,0,0.5)';
 const BORDERWIDTH_2 = 2;
 const BORDERWIDTH_0 = 0;
 const COLOR_DC2626 = '#DC2626';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   s2: { padding: 6 },
@@ -265,7 +265,7 @@ export const MapsScreen: React.FC = () => {
     <View style={literalStyles.s31}>
       <TouchableOpacity onPress={centerMe} style={[literalStyles.s32, { backgroundColor: follow ? accent : colors.surface }, literalStyles.s33]}>
         <Icon name="navigation" size={18} color={follow ? '#fff' : colors.text} />
-        <Text style={[{ color: follow ? COLOR_FFF : colors.text }, literalStyles.s34]}>Center on me</Text>
+        <Text style={[{ color: follow ? colors.onPrimary : colors.text }, literalStyles.s34]}>Center on me</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => mapCenter ? setNaming({ lat: mapCenter.lat, lon: mapCenter.lon, name: '' }) : Alert.alert('Open a map first')} style={[literalStyles.s32, { backgroundColor: colors.surface }, literalStyles.s33]}>
         <Icon name="plus-circle" size={18} color={colors.text} />

@@ -5,7 +5,6 @@ import { useLowPower, checkBatteryNow, batteryModel } from '../atlasTools/lowPow
 import { useThermal } from '../atlasTools/thermalState';
 import { useAppStore } from '../stores/appStore';
 import { ModelChips } from './ModelChips';
-const COLOR_FFF = '#fff';
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
 });
@@ -49,7 +48,7 @@ export function LowPowerCard() {
           <View style={st.row}>
             {[10, 15, 20, 30, 40].map((n) => (
               <TouchableOpacity key={n} onPress={() => s.set({ threshold: n })} style={[st.pill, { backgroundColor: s.threshold === n ? colors.primary : colors.background }]}>
-                <Text style={{ color: s.threshold === n ? COLOR_FFF : colors.text }}>{n}%</Text>
+                <Text style={{ color: s.threshold === n ? colors.onPrimary : colors.text }}>{n}%</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -57,7 +56,7 @@ export function LowPowerCard() {
           <View style={st.row}>
             {[128, 256, 512].map((n) => (
               <TouchableOpacity key={n} onPress={() => s.set({ maxTokens: n })} style={[st.pill, { backgroundColor: s.maxTokens === n ? colors.primary : colors.background }]}>
-                <Text style={{ color: s.maxTokens === n ? COLOR_FFF : colors.text }}>{n} tokens</Text>
+                <Text style={{ color: s.maxTokens === n ? colors.onPrimary : colors.text }}>{n} tokens</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -39,3 +39,15 @@ export function sanitizeChanged<T>(colors: T, base: T): T {
   }
   return out as T;
 }
+
+/** Relative luminance (WCAG) of a hex colour, 0 (black) to 1 (white). */
+function luminance(hex: string): number {
+  const n = parseInt(safeColor(hex, '#000000').slice(1), 16);
+  const lin = (c: number) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+}
+
+/** The text colour (white or near-black) that reads best on `background`; follows a custom accent, so selected chips stay legible in every theme. */
+export function readableOn(background: string): string {
+  return luminance(background) > 0.4 ? '#1D1A16' : '#FFFFFF';
+}

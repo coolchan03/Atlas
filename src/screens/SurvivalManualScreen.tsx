@@ -14,8 +14,8 @@ import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { prepareMessageForSpeech } from '../utils/messageContent';
 const BACKGROUNDCOLOR_FFF = '#fff';
 const COLOR_888 = '#888';
-const COLOR_FFF = '#fff';
 const COLOR_333 = '#333';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { alignItems: 'center', marginVertical: 10 },
   s2: { backgroundColor: BACKGROUNDCOLOR_FFF, borderRadius: 6 },

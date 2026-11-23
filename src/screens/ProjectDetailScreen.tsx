@@ -29,8 +29,8 @@ import { ProjectPinGate } from '../components/ProjectPinGate';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { useTopics } from '../topics/store';
 import { formatChatDate } from '../utils/formatChatDate';
-const COLOR_FFF = '#fff';
 const COLOR_RGBA_255_255_255_0_85 = 'rgba(255,255,255,0.85)';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 12 },
   s2: { marginLeft: 12, flex: 1 },

@@ -15,8 +15,8 @@ import type { GeneratedImage, ONNXImageModel } from '../types';
 import { imageTestPreset, type ImageTestMode } from '../utils/nativeImageTuning';
 import { isOverridableMemoryError } from '../utils/modelLoadErrors';
 import { getMissingImageSupportGuides, isRunnableNativeModel, imageFamilyDisplay } from '../utils/nativeImageCompatibility';
-const COLOR_FFF = '#fff';
 const COLOR_B78A26 = '#b78a26';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flex: 1 },
   s2: { flexDirection: 'row', alignItems: 'center', padding: 12 },

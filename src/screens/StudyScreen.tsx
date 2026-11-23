@@ -41,7 +41,6 @@ const BORDERLEFTCOLOR_2563EB = '#2563EB';
 const OPACITY_1 = 1;
 const OPACITY_0_55 = 0.55;
 const BACKGROUNDCOLOR_0F172A = '#0F172A';
-const COLOR_FFF = '#fff';
 const FONTSIZE_26 = 26;
 const FONTSIZE_18 = 18;
 const COLOR_CBD5E1 = '#CBD5E1';
@@ -49,6 +48,7 @@ const FONTSIZE_19 = 19;
 const FONTSIZE_15 = 15;
 const WIDTH_33_3 = '33.3%';
 const WIDTH_50 = '50%';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   s2: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6, marginTop: 4 },
@@ -637,7 +637,7 @@ export const StudyScreen: React.FC = () => {
               )}
               {(playing !== null ? [v.slides[playing]] : v.slides).map((s, i) => (
                 <View key={i} style={[card, [{ minHeight: playing !== null ? Math.min(420, width * 0.7) : undefined }, literalStyles.s39, { backgroundColor: playing !== null ? BACKGROUNDCOLOR_0F172A : colors.surface }]]}>
-                  <Text style={[{ color: playing !== null ? COLOR_FFF : colors.text, fontSize: playing !== null ? FONTSIZE_26 : FONTSIZE_18 }, literalStyles.s9]}>{s.title}</Text>
+                  <Text style={[{ color: playing !== null ? colors.onPrimary : colors.text, fontSize: playing !== null ? FONTSIZE_26 : FONTSIZE_18 }, literalStyles.s9]}>{s.title}</Text>
                   {s.bullets.map((b, j) => <Text key={j} style={[{ color: playing !== null ? COLOR_CBD5E1 : colors.textSecondary, fontSize: playing !== null ? FONTSIZE_19 : FONTSIZE_15 }, literalStyles.s40]}>• {b}</Text>)}
                   <SourceChips nums={s.src} sources={v.sources} onOpen={openSource} colors={colors} />
                 </View>
@@ -733,7 +733,7 @@ export const StudyScreen: React.FC = () => {
             <View style={literalStyles.s65}>
               {[3, 5, 10, 15, 20, 30, 45, 60].map((m) => (
                 <TouchableOpacity key={m} onPress={() => setPod((p) => ({ ...p, minutes: m }))} style={[literalStyles.s66, { backgroundColor: pod.minutes === m ? colors.primary : colors.background }]}>
-                  <Text style={[{ color: pod.minutes === m ? COLOR_FFF : colors.text }, literalStyles.s67]}>{m} min</Text>
+                  <Text style={[{ color: pod.minutes === m ? colors.onPrimary : colors.text }, literalStyles.s67]}>{m} min</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -749,7 +749,7 @@ export const StudyScreen: React.FC = () => {
                 <View style={literalStyles.s68}>
                   {([1, 2, 3] as const).filter((n) => n <= Math.min(3, voices.length)).map((n) => (
                     <TouchableOpacity key={n} onPress={() => setPod((p) => ({ ...p, hosts: n }))} style={[literalStyles.s66, { backgroundColor: pod.hosts === n ? colors.primary : colors.background }]}>
-                      <Text style={[{ color: pod.hosts === n ? COLOR_FFF : colors.text }, literalStyles.s67]}>{n === 1 ? 'Solo narrator' : `${n} hosts`}</Text>
+                      <Text style={[{ color: pod.hosts === n ? colors.onPrimary : colors.text }, literalStyles.s67]}>{n === 1 ? 'Solo narrator' : `${n} hosts`}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -761,7 +761,7 @@ export const StudyScreen: React.FC = () => {
             <View style={literalStyles.s65}>
               {([['casual', 'Casual'], ['deep', 'Deep dive'], ['debate', 'Debate'], ['interview', 'Interview'], ['beginner', 'For beginners']] as [PodcastStyle, string][]).map(([k, l]) => (
                 <TouchableOpacity key={k} onPress={() => setPod((p) => ({ ...p, style: k }))} style={[literalStyles.s66, { backgroundColor: pod.style === k ? colors.primary : colors.background }]}>
-                  <Text style={[{ color: pod.style === k ? COLOR_FFF : colors.text }, literalStyles.s67]}>{l}</Text>
+                  <Text style={[{ color: pod.style === k ? colors.onPrimary : colors.text }, literalStyles.s67]}>{l}</Text>
                 </TouchableOpacity>
               ))}
             </View>

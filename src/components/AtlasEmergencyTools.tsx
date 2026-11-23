@@ -21,7 +21,6 @@ const BORDERWIDTH_0 = 0;
 const BORDERWIDTH_1 = 1;
 const OPACITY_0_5 = 0.5;
 const OPACITY_1 = 1;
-const COLOR_FFF = '#fff';
 const BACKGROUNDCOLOR_16A34A33 = '#16A34A33';
 const BACKGROUNDCOLOR_DC262633 = '#DC262633';
 const BACKGROUNDCOLOR_FFF = '#fff';
@@ -142,7 +141,7 @@ function Btn({ label, onPress, primary = true, disabled }: { label: string; onPr
   return (
     <TouchableOpacity onPress={onPress} disabled={disabled} accessibilityRole="button"
       style={[literalStyles.s11, { backgroundColor: primary ? colors.primary : colors.surface, borderWidth: primary ? BORDERWIDTH_0 : BORDERWIDTH_1, borderColor: colors.border, opacity: disabled ? OPACITY_0_5 : OPACITY_1 }]}>
-      <Text style={[{ color: primary ? COLOR_FFF : colors.text }, literalStyles.s12]}>{label}</Text>
+      <Text style={[{ color: primary ? colors.onPrimary : colors.text }, literalStyles.s12]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -280,14 +279,14 @@ function PhrasePractice() {
         {PHRASE_LANGUAGES.map((l) => (
           <TouchableOpacity key={l.code} onPress={() => { setLang(l); setOrder(shuffle(PHRASES_EN.map((_, k) => k))); setI(0); setScore(0); setPicked(null); setShown(false); }}
             style={[literalStyles.s30, { backgroundColor: l.code === lang.code ? colors.primary : colors.surface }]}>
-            <Text style={{ color: l.code === lang.code ? COLOR_FFF : colors.text }}>{l.name}</Text>
+            <Text style={{ color: l.code === lang.code ? colors.onPrimary : colors.text }}>{l.name}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
       <View style={literalStyles.s31}>
         {(['listen', 'recall'] as const).map((m) => (
           <TouchableOpacity key={m} onPress={() => { setMode(m); setPicked(null); setShown(false); }} style={[literalStyles.s32, { backgroundColor: mode === m ? colors.primary : colors.surface }]}>
-            <Text style={{ color: mode === m ? COLOR_FFF : colors.text }}>{m === 'listen' ? 'Listen: pick the meaning' : 'Recall: say it yourself'}</Text>
+            <Text style={{ color: mode === m ? colors.onPrimary : colors.text }}>{m === 'listen' ? 'Listen: pick the meaning' : 'Recall: say it yourself'}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -437,7 +436,7 @@ function Checklists() {
           const done = l.items.filter((i) => i.done).length;
           return (
             <TouchableOpacity key={l.id} onPress={() => setOpen(l.id)} style={[literalStyles.s30, { backgroundColor: l.id === list.id ? colors.primary : colors.surface }]}>
-              <Text style={{ color: l.id === list.id ? COLOR_FFF : colors.text }}>{l.title} {done}/{l.items.length}</Text>
+              <Text style={{ color: l.id === list.id ? colors.onPrimary : colors.text }}>{l.title} {done}/{l.items.length}</Text>
             </TouchableOpacity>
           );
         })}

@@ -6,10 +6,10 @@ import { matchWordSearch, normalizeLearningWord } from '../study/learningGames';
 import { GameFinishContext } from './games/kit';
 const OPACITY_0_5 = 0.5;
 const OPACITY_1 = 1;
-const COLOR_FFF = '#fff';
 const BORDERWIDTH_0_5 = 0.5;
 const BORDERWIDTH_0 = 0;
 const BACKGROUNDCOLOR_22C55E44 = '#22C55E44';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 6 },
   s2: { fontSize: 12 },

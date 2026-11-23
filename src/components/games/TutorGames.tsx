@@ -11,7 +11,6 @@ import { acronymMatches, layoutConceptMap, similarity } from '../../study/games/
 import { useStudyStore } from '../../study/engine';
 import type { LearningTerm } from '../../study/learningGames';
 import { Banner, BAD, Card, Choice, Finished, GameButton, GOOD, SourceLinks, Title, useGameColors, useRecord, type GameProps } from './kit';
-const COLOR_FFF = '#fff';
 const ALIGNSELF_FLEX_END = 'flex-end';
 const ALIGNSELF_FLEX_START = 'flex-start';
 const literalStyles = StyleSheet.create({
@@ -80,7 +79,7 @@ export function FeynmanGame({ result, projectId, onOpenSource }: GameProps) {
       <View style={literalStyles.s2}>
         {concepts.slice(0, 10).map((c) => (
           <TouchableOpacity key={c} onPress={() => { setConcept(c); setGrade(null); setText(''); }} style={[literalStyles.s3, { backgroundColor: concept === c ? colors.primary : colors.surface }]}>
-            <Text style={{ color: concept === c ? COLOR_FFF : colors.text }}>{c}</Text>
+            <Text style={{ color: concept === c ? colors.onPrimary : colors.text }}>{c}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -138,7 +137,7 @@ export function TutorGame({ result }: GameProps) {
       <ScrollView ref={scroll} style={literalStyles.s6} nestedScrollEnabled>
         {history.map((m, i) => (
           <View key={i} style={[{ alignSelf: m.role === 'user' ? ALIGNSELF_FLEX_END : ALIGNSELF_FLEX_START }, literalStyles.s7, { backgroundColor: m.role === 'user' ? colors.primary : colors.surface }, literalStyles.s8]}>
-            <Text style={{ color: m.role === 'user' ? COLOR_FFF : colors.text }}>{m.content}</Text>
+            <Text style={{ color: m.role === 'user' ? colors.onPrimary : colors.text }}>{m.content}</Text>
           </View>
         ))}
         {busy && <Busy label="Tutor is thinking..." />}
@@ -182,7 +181,7 @@ export function LevelsGame({ result, projectId }: GameProps) {
         {LEVELS.map((l, i) => (
           <TouchableOpacity key={l} onPress={() => setLevel(i)} accessibilityRole="button" accessibilityState={{ selected: level === i }}
             style={[literalStyles.s13, { backgroundColor: level === i ? colors.primary : colors.surface }, literalStyles.s14]}>
-            <Text style={[{ color: level === i ? COLOR_FFF : colors.text }, literalStyles.s15]}>{l}</Text>
+            <Text style={[{ color: level === i ? colors.onPrimary : colors.text }, literalStyles.s15]}>{l}</Text>
           </TouchableOpacity>
         ))}
       </View>

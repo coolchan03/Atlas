@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { useAppStore } from '../stores/appStore';
-const COLOR_FFF = '#fff';
 const literalStyles = StyleSheet.create({
   s1: { marginBottom: 4 },
   s2: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, marginRight: 8 },
@@ -28,7 +27,7 @@ export function ModelChips({ value, onChange, colors, emptyLabel = 'Current mode
             onPress={() => onChange(m.id)}
             style={[literalStyles.s2, { backgroundColor: on ? colors.primary : colors.surface }, literalStyles.s3]}
           >
-            <Text numberOfLines={1} style={[{ color: on ? COLOR_FFF : colors.text }, literalStyles.s4]}>{m.name}</Text>
+            <Text numberOfLines={1} style={[{ color: on ? colors.onPrimary : colors.text }, literalStyles.s4]}>{m.name}</Text>
           </TouchableOpacity>
         );
       })}

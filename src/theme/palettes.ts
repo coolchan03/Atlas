@@ -19,6 +19,8 @@ export const COLORS_LIGHT = {
   primary: '#B3620F',
   primaryDark: '#8F4C08',
   primaryLight: '#D98E3A',
+  /** Text on a primary-coloured surface; getTheme recomputes it from the real accent. */
+  onPrimary: '#FFFFFF',
 
   // Backgrounds
   background: '#FBF8F2',
@@ -56,6 +58,7 @@ export const COLORS_DARK = {
   primary: '#F2A93B',
   primaryDark: '#D98E1F',
   primaryLight: '#F8C56E',
+  onPrimary: '#1D1A16',
 
   // Backgrounds
   background: '#0D1321',

@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useProjectStore } from '../stores/projectStore';
 import { isProtectedProjectUnlocked, unlockProject } from '../stores/protectedProjectStorage';
 import { formatWait, pinWaitRemaining, recordPinFailure, recordPinSuccess } from '../services/pinThrottle';
-const COLOR_FFF = '#fff';
+const COLOR_FFF = '#fff'; // text on a fixed-colour bar, not on the themed accent
 const literalStyles = StyleSheet.create({
   s1: { flex: 1, justifyContent: 'center', padding: 28, gap: 14 },
   s2: { fontSize: 24, fontWeight: '700' },
