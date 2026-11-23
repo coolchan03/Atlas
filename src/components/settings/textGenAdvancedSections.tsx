@@ -25,6 +25,7 @@ import { hardwareService } from '../../services/hardware';
 import { isLocalModelLoaded, localGpuInfo } from '../../services/engines';
 import { describeOffload } from '../../services/gpuOffload';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
+import { buildFeature, type BuildFeatureId } from '../../services/buildCapabilities';
 import { recoverFromPreviousRun, describeLoadHealth, clearCrashHistory } from '../../services/loadGuard';
 
 const isAndroid = Platform.OS === 'android';
@@ -113,7 +114,11 @@ export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
   const { gpuLayersEffective } = useTextGenerationAdvanced();
-  const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : ANDROID_BASE_BACKENDS;
+  // An engine whose native library is not in this version of Atlas is shown as missing and cannot be picked.
+  const needs: Partial<Record<InferenceBackend, BuildFeatureId>> = { [INFERENCE_BACKENDS.HTP]: 'npu', [INFERENCE_BACKENDS.OPENCL]: 'openclText', [INFERENCE_BACKENDS.VULKAN]: 'vulkanText' };
+  const gone = (id: InferenceBackend): boolean => { const f = needs[id]; return !!f && !buildFeature(f).available; };
+  const backends: BackendOption[] = (Platform.OS === 'ios' ? IOS_BACKENDS : ANDROID_BASE_BACKENDS)
+    .map((b) => (gone(b.id) ? { ...b, label: `${b.label} (missing)`, desc: buildFeature(needs[b.id] as BuildFeatureId).missing } : b));
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const savedBackend = settings.inferenceBackend ?? defaultBackend;
@@ -127,6 +132,7 @@ export const BackendSelector: React.FC = () => {
       description={backends.find(b => b.id === current)?.desc ?? ''}
       options={backends}
       current={current}
+      isDisabled={gone}
       onSelect={(id) => updateSettings({
         inferenceBackend: id,
         backendUserChosen: true,

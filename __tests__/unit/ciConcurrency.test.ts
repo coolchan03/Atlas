@@ -40,7 +40,11 @@ describe('atlas-apk.yml', () => {
     expect(guard.if).toBe("github.event_name == 'push'");
     expect(steps.indexOf(guard)).toBeLessThan(steps.indexOf(publish));
     expect(publish.if).toContain("steps.head.outputs.stale != 'true'");
-    expect(publish.if).toContain('inputs.publish == true ||'); // explicit choice wins
+    expect(publish.if).toContain("github.event_name == 'push'"); // only an automatic publish is subject to the newest-commit check
+    // A manual publish (publish ticked) is the person's explicit choice: it adds its APKs to the release without that check.
+    const add = steps.find((x) => /^Add this APK to the release/.test(x.name ?? ''));
+    expect(add.if).toContain('inputs.publish == true');
+    expect(add.if).not.toContain('steps.head');
   });
 });
 

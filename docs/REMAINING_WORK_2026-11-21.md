@@ -185,3 +185,9 @@ Not done: embeddings and search speed, chat rendering cost, background-work prio
 - 1.2 Intro tune: cause found from a phone log. The first press of Play (lines not all rendered, so the JS player is used) decoded each file by plain path; the Android release build of react-native-audio-api reads a path with no `file://` as a bundled asset and throws "Failed to resolve asset for android release build". Every tune and line failed, so the show fell back to live speech with long gaps. Resuming from a card used the native queue, which has no such problem, which is why the tune appeared only after that. Fixed in `decode()` in `src/atlasVoice/podcastAudio.ts`.
 - Briefing wording: no clock time in the greeting, outlet named at most once per story and for about half of them, "The report details how..." lead-ins removed, deepening skipped for headline-only stories, fun facts taken from deeper search results and told as obscure details.
 - Learn a topic: lesson prompt asks for bold terms, lists and small tables; section headings, examples, mistakes and key points styled.
+
+## Tenth pass (0.0.241)
+
+- 8.1 changed: a published release now builds every CPU type as its own APK (see `docs/native-runtime-inventory.md`); `choose-architectures.cjs` and the `architecture_every` input are gone. The new workflow has not been run on CI yet at the time of writing this line: the first run is a `test_abis` build of the three reduced CPU types.
+- Features missing on a reduced build are labelled in the app (`buildCapabilities.ts`).
+

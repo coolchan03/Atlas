@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button } from '../components/Button';
+import { speakInAndWait } from '../atlasVoice/tts';
 import { languageFor } from './languages';
 import { createInterpreter, type InterpreterState } from './interpreter';
 import { useTranslator } from './store';
@@ -75,7 +76,7 @@ export function LivePanel({ bothWays }: { bothWays: boolean }) {
         <View key={line.id} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID={`translator-line-${line.id}`}>
           <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>{line.heard}</Text>
           <Text selectable style={{ color: colors.text, ...TYPOGRAPHY.body }}>{line.said}</Text>
-          <TouchableOpacity onPress={() => { void import('../atlasVoice/tts').then((t) => t.speakInAndWait(line.said, line.toCode, { messageId: 'interpreter' })); }} accessibilityRole="button" accessibilityLabel="Say it again" testID={`translator-replay-${line.id}`}>
+          <TouchableOpacity onPress={() => { void speakInAndWait(line.said, line.toCode, { messageId: 'interpreter' }); }} accessibilityRole="button" accessibilityLabel="Say it again" testID={`translator-replay-${line.id}`}>
             <Icon name="volume-2" size={18} color={colors.primary} />
           </TouchableOpacity>
         </View>

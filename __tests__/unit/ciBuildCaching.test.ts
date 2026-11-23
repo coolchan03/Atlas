@@ -9,7 +9,7 @@ const yaml = require('js-yaml');
 
 const root = path.join(__dirname, '../..');
 const wf = yaml.load(fs.readFileSync(path.join(root, '.github/workflows/atlas-apk.yml'), 'utf8'));
-const steps: any[] = wf.jobs[Object.keys(wf.jobs)[0]].steps;
+const steps: any[] = wf.jobs.apk.steps;
 const named = (re: RegExp) => steps.find((s) => re.test(s.name ?? ''));
 
 describe('native compiler cache', () => {
@@ -27,7 +27,7 @@ describe('native compiler cache', () => {
     const setup = named(/Set up the C\/C\+\+ compiler cache/);
     expect(setup.run).toContain('CCACHE_COMPILERCHECK=content');
     const key: string = named(/Restore the compiler cache/).with.key;
-    expect(key).toContain('arm64');
+    expect(key).toContain('matrix.abi'); // a cache for each CPU type
     expect(key).toContain('steps.ccache.outputs.ndk');
     expect(named(/Restore the compiler cache/).with['restore-keys']).toContain('steps.ccache.outputs.ndk');
   });
@@ -44,7 +44,7 @@ describe('native compiler cache', () => {
     expect(report.run).toMatch(/\|\| true\s*$/);
   });
 
-  it('builds with the chosen CPU types, which are 64-bit ARM only for an ordinary release (see ciArchitectures.test.ts)', () => {
+  it('builds with the CPU type of its job (see ciArchitectures.test.ts)', () => {
     expect(named(/Build release APK/).run).toContain('-PreactNativeArchitectures=${{ steps.abis.outputs.abis }}');
   });
 });

@@ -26,7 +26,8 @@ if (hashes[0] !== hashes[1]) throw new Error('Android launcher and splash artwor
 const ids = [...read('FUTURE_RELEASES.md').matchAll(/^\s*- \[ \] \*\*FF-\d\d/gm)];
 if (ids.length !== 9) throw new Error('User-authored nine-item future-feature list is missing or modified.');
 const releaseWorkflow = read('.github/workflows/atlas-apk.yml');
-if (!/assembleRelease[^\n]*-PatlasVulkanEnabled=true/.test(releaseWorkflow) ||
+// The 64-bit ARM APK carries the llama.kt Vulkan engine; the reduced builds (32-bit ARM, x86_64, x86) are built without it and the app marks it missing.
+if (!/assembleRelease[^\n]*-PatlasVulkanEnabled=\$\{\{ steps\.abis\.outputs\.multiarch == 'true' && 'false' \|\| 'true' \}\}/.test(releaseWorkflow) ||
     !releaseWorkflow.includes('lib/arm64-v8a/libllamakt.so'))
   throw new Error('Official APK must build and verify the llama.kt Vulkan text engine.');
 if (read('android/app/build.gradle').includes('.vulkantest'))

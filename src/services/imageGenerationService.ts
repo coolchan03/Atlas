@@ -1,5 +1,6 @@
 /* eslint-disable max-lines, complexity, prefer-template -- Image generation's existing orchestrator owns retries, metadata, and model residency. */
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
+import { buildFeature } from './buildCapabilities';
 import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
@@ -476,6 +477,8 @@ class ImageGenerationService {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
+    const absent = buildFeature('imageGeneration');
+    if (!absent.available) return this._fail(absent.missing); // built without the image engines: say so
     const requestEpoch = ++this.requestEpoch;
     this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request

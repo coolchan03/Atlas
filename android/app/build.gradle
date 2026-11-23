@@ -100,7 +100,7 @@ android {
         def atlasBaseVersionCode = 1804544309
         versionCode project.hasProperty('atlasVersionCode') ? project.property('atlasVersionCode').toInteger() : atlasBaseVersionCode + (project.hasProperty('atlasBuild') ? project.property('atlasBuild').toInteger() : 0)
         // CI passes -PatlasBuild=<run number>, so the version shown in the app says which build it is.
-        versionName "0.0.240" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
+        versionName "0.0.241" + (project.hasProperty('atlasBuild') ? " (build ${project.property('atlasBuild')})" : "")
     }
     signingConfigs {
         debug {
@@ -181,10 +181,14 @@ android {
         // Lean build for one chip (-PatlasQnnChip=V79): leave the other NPU generations out of the APK.
         // Default off, so published builds keep every generation. A lean build only runs the NPU on that chip.
         def leanChip = project.findProperty('atlasQnnChip')
-        if (leanChip) {
-            def others = ['V68', 'V69', 'V73', 'V75', 'V79', 'V81'].findAll { it != leanChip }
-            ignoreAssetsPattern = (['!.svn', '!.git', '!.ds_store', '!*.scc', '.*', '<dir>_*', '!CVS', '!thumbs.db', '!picasa.ini', '!*~'] +
-                others.collect { "libQnnHtp${it}*".toString() }).join(':')
+        // A reduced build (-PatlasNoNpu=true: 32-bit ARM, x86_64 and x86) leaves out every NPU file: only 64-bit ARM phones can use them, and the app
+        // marks the NPU as missing on such a build (see src/services/buildCapabilities.ts).
+        def noNpu = project.findProperty('atlasNoNpu') == 'true'
+        def dropped = []
+        if (leanChip) dropped += ['V68', 'V69', 'V73', 'V75', 'V79', 'V81'].findAll { it != leanChip }.collect { "libQnnHtp${it}*".toString() }
+        if (noNpu) dropped += ['qnnlibs', 'ggml-hexagon']
+        if (!dropped.isEmpty()) {
+            ignoreAssetsPattern = (['!.svn', '!.git', '!.ds_store', '!*.scc', '.*', '<dir>_*', '!CVS', '!thumbs.db', '!picasa.ini', '!*~'] + dropped).join(':')
         }
         // Atlas has no translated screens; keep library strings in English only (resources.arsc shrinks).
         localeFilters += ['en']

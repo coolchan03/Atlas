@@ -21,7 +21,8 @@ export function ensureNativeLogCapture(): void {
   if (started) return;
   started = true;
   try {
-    toggleNativeLog(true);
+    // A build without the on-device engine (32-bit ARM, x86) rejects this; that is not a failure of the app.
+    Promise.resolve(toggleNativeLog(true)).catch((e) => logger.warn('[LLM-NATIVE] native log passthrough is not available in this build', e));
     addNativeLogListener((level: string, text: string) => {
       const line = `${(level || 'info').trim()}: ${(text || '').trim()}`;
       logger.log(`[LLM-NATIVE] ${line}`);

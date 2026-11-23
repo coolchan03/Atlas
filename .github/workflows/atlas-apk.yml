@@ -1,7 +1,8 @@
 name: Build Atlas APK
 
-# Builds an installable Android APK (arm64 phones) on every push to atlas-voice,
-# and publishes it on the Releases page so it can be downloaded on the phone.
+# Builds installable Android APKs, one for each CPU type (64-bit ARM, 32-bit ARM, x86_64 and x86), each in its own job, and publishes them
+# together on one Releases page entry so the right one can be downloaded for each phone or emulator. A test build (no publish ticked) is 64-bit ARM
+# only unless a full build is asked for; a push to atlas-voice builds and publishes 64-bit ARM only.
 on:
   push:
     branches: [atlas-voice, claude/atlas-voice-music-home-widgets]
@@ -21,15 +22,15 @@ on:
         type: string
         default: ''
       all_architectures:
-        description: 'Full build: also build 32-bit ARM, x86 and x86_64 (an ordinary release is 64-bit ARM only; the others are built every 20th build, see scripts/release/choose-architectures.cjs)'
+        description: 'Build every CPU type (64-bit ARM, 32-bit ARM, x86_64, x86) as separate APKs. Always on when publish is ticked; a test build is 64-bit ARM only unless this is ticked'
         type: boolean
         default: false
-      architecture_every:
-        description: 'Build the other CPU types every this many builds: 20 (default) or 10'
+      test_abis:
+        description: 'Build only these CPU types, as a JSON list such as ["x86_64","armeabi-v7a"] (for trying a CPU type without the 64-bit ARM build; leave empty otherwise)'
         type: string
-        default: '20'
+        default: ''
       publish:
-        description: 'Publish the signed APK on the Releases page (only after every check passes)'
+        description: 'Publish the signed APKs, one for each CPU type, on the Releases page (only after every check passes)'
         type: boolean
         default: false
       draft:
@@ -48,12 +49,43 @@ concurrency:
   cancel-in-progress: ${{ !(inputs.publish == true || github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets') }}
 
 jobs:
+  # A published release is made as a draft first so every CPU type's APK can be added to it by its own job; the last job publishes it.
+  prepare:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true && inputs.minify_trial != true && inputs.qnn_chip == ''
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Create the draft release the APKs are added to
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/release/latest-notes.cjs > release-notes.md
+          if ! gh release create atlas-${{ github.run_number }} --draft --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" --notes-file release-notes.md; then
+            echo "::error title=Release not created::Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Set Settings > Actions > General > Workflow permissions to Read and write permissions, then run this again."
+            exit 1
+          fi
+
   apk:
+    name: APK ${{ matrix.abi }}
+    needs: prepare
+    # `prepare` is skipped for a test build; a skipped dependency must not skip the build.
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     permissions:
       contents: write
       actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every CPU type when publishing (or asked for), otherwise 64-bit ARM only. A shrunk or lean trial is always 64-bit ARM only.
+        abi: ${{ fromJSON(inputs.test_abis != '' && inputs.test_abis || (((github.event_name == 'workflow_dispatch' && (inputs.publish == true || inputs.all_architectures == true)) && inputs.minify_trial != true && inputs.qnn_chip == '') && '["arm64-v8a","armeabi-v7a","x86_64","x86"]' || '["arm64-v8a"]')) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -151,24 +183,21 @@ jobs:
           node scripts/prepare-llamakt-vulkan.cjs
           node scripts/check-llamakt-vulkan-cmake.cjs
           node scripts/verify-llamakt-gradle.cjs
-      - name: Choose the CPU types to build
+      - name: Set the CPU type of this job
         id: abis
         run: |
-          changed=""
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ]; then
-            git fetch --no-tags --depth=1 origin "${{ github.event.before }}" > /dev/null 2>&1 || true
-            changed="$(git diff --name-only "${{ github.event.before }}" HEAD 2>/dev/null | tr '\n' ' ' || true)"
-          fi
-          abis="$(node scripts/release/choose-architectures.cjs "${{ github.run_number }}" "${{ inputs.architecture_every || '20' }}" "${{ inputs.all_architectures == true }}" $changed)"
-          echo "abis=$abis" >> "$GITHUB_OUTPUT"
-          if [ "$abis" = "arm64-v8a" ]; then echo "multiarch=false" >> "$GITHUB_OUTPUT"; else echo "multiarch=true" >> "$GITHUB_OUTPUT"; fi
+          echo "abis=${{ matrix.abi }}" >> "$GITHUB_OUTPUT"
+          # Anything but 64-bit ARM is a reduced build: no NPU, GPU engines or image generation (the app labels them as missing).
+          if [ "${{ matrix.abi }}" = "arm64-v8a" ]; then echo "multiarch=false" >> "$GITHUB_OUTPUT"; else echo "multiarch=true" >> "$GITHUB_OUTPUT"; fi
       - name: Get natural-voice engine (sherpa-onnx)
         run: |
           mkdir -p android/app/libs
           curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' -o android/app/libs/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.7/sherpa-onnx-1.13.7.aar
           echo "c4ef49e309f24fcee5c106b8a279481aaecaabb078cd37b2cd6e9a62cc8a73c8  android/app/libs/sherpa-onnx.aar" | sha256sum -c -
-          # phones only need 64-bit ARM: drop the other CPU types to keep the APK small
-          if [ "${{ steps.abis.outputs.multiarch }}" != "true" ]; then zip -q -d android/app/libs/sherpa-onnx.aar 'jni/armeabi-v7a/*' 'jni/x86/*' 'jni/x86_64/*' || true; fi
+          # each APK carries only its own CPU type: drop the others from the voice engine to keep it small
+          for other in arm64-v8a armeabi-v7a x86 x86_64; do
+            if [ "$other" != "${{ matrix.abi }}" ]; then zip -q -d android/app/libs/sherpa-onnx.aar "jni/$other/*" || true; fi
+          done
           ls -la android/app/libs
       - name: Kotlin compile gate (a Kotlin mistake stops the run here, not after the full build)
         working-directory: android
@@ -214,14 +243,15 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ steps.abis.outputs.multiarch == 'true' && 'multi' || 'arm64' }}-${{ steps.ccache.outputs.ndk }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}-${{ github.run_id }}
+          key: ccache-${{ matrix.abi }}-${{ steps.ccache.outputs.ndk }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ steps.abis.outputs.multiarch == 'true' && 'multi' || 'arm64' }}-${{ steps.ccache.outputs.ndk }}-
+            ccache-${{ matrix.abi }}-${{ steps.ccache.outputs.ndk }}-
       - name: Zero the compiler cache counters
         if: steps.ccache.outputs.available == 'true'
         run: ccache --zero-stats > /dev/null
       - name: Restore the image engines if their inputs are unchanged
         id: sdcli
+        if: matrix.abi == 'arm64-v8a'
         uses: actions/cache/restore@v5
         with:
           path: |
@@ -230,7 +260,7 @@ jobs:
           # Inputs: the pinned source commit (e16d26a9), our patches, the OpenCL stub from llama.rn and the build steps below.
           key: sdcli-e16d26a9-${{ hashFiles('android/patches/**', 'node_modules/llama.rn/bin/arm64-v8a/libOpenCL.so') }}-${{ hashFiles('.github/workflows/atlas-apk.yml') }}
       - name: Build native ARM64 diffusion CLI from pinned upstream source
-        if: steps.sdcli.outputs.cache-hit != 'true'
+        if: matrix.abi == 'arm64-v8a' && steps.sdcli.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/atlas-sdcpp
           git -C /tmp/atlas-sdcpp fetch --depth 1 origin e16d26a96a1bf59824d12cc26352aa36c25c2252
@@ -286,7 +316,7 @@ jobs:
           strings android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'ggml_vulkan'
           readelf -d android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli.so | grep -q 'libvulkan.so'
       - name: Build OpenCL ARM64 diffusion CLI from the same pinned source
-        if: steps.sdcli.outputs.cache-hit != 'true'
+        if: matrix.abi == 'arm64-v8a' && steps.sdcli.outputs.cache-hit != 'true'
         run: |
           # A second image engine for Adreno phones whose Vulkan driver rejects the
           # diffusion shaders: same sd-cli, ggml OpenCL backend with Adreno kernels.
@@ -339,7 +369,7 @@ jobs:
           OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleRelease --profile -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasQnnChip=${{ inputs.qnn_chip }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=true -PreactNativeArchitectures=${{ steps.abis.outputs.abis }} --no-daemon 2>&1 | tee ../gradle.log || {
+          ./gradlew assembleRelease --profile -PatlasMinify=${{ inputs.minify_trial == true && 'true' || 'false' }} -PatlasQnnChip=${{ inputs.qnn_chip }} -PatlasBuild=${{ github.run_number }} -PatlasRequireReleaseSigning=true -PatlasVulkanEnabled=${{ steps.abis.outputs.multiarch == 'true' && 'false' || 'true' }} -PatlasNoNpu=${{ steps.abis.outputs.multiarch }} -PreactNativeArchitectures=${{ steps.abis.outputs.abis }} --no-daemon 2>&1 | tee ../gradle.log || {
             grep -E "^e: |error:|What went wrong|Could not|Execution failed|Unresolved|Duplicate|Manifest merger|Attribute |Suggestion|> Task .*FAILED|Caused by" ../gradle.log | grep -v "^w: " | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
@@ -348,6 +378,20 @@ jobs:
           APK=android/app/build/outputs/apk/release/app-release.apk
           test -f "$APK"
           unzip -l "$APK" > apk-contents.txt
+          ABI="${{ matrix.abi }}"
+          if [ "$ABI" != "arm64-v8a" ]; then
+            # A reduced build: only its own CPU type's libraries, the voice engine, the app code. It must not carry another CPU type's libraries.
+            grep -q "lib/$ABI/libonnxruntime.so" apk-contents.txt
+            grep -Eq '^.* classes[0-9]*\.dex$' apk-contents.txt
+            for other in arm64-v8a armeabi-v7a x86 x86_64; do
+              if [ "$other" != "$ABI" ] && grep -q "lib/$other/" apk-contents.txt; then echo "::error::the $ABI APK contains $other libraries"; exit 1; fi
+            done
+            # The on-device AI engine exists for 64-bit ARM and x86_64 only; the app says so in the 32-bit builds.
+            if [ "$ABI" = "x86_64" ]; then grep -q 'lib/x86_64/librnllama' apk-contents.txt; fi
+            # The NPU files are for 64-bit ARM only.
+            if grep -q 'assets/qnnlibs/' apk-contents.txt; then echo "::error::the $ABI APK carries NPU files"; exit 1; fi
+            echo "Verified the $ABI APK (reduced build)."
+          else
           grep -q 'lib/arm64-v8a/librnllama.so' apk-contents.txt
           grep -q 'lib/arm64-v8a/librnllama_v8.so' apk-contents.txt
           grep -q 'lib/arm64-v8a/librnllama_v8_2.so' apk-contents.txt
@@ -361,6 +405,7 @@ jobs:
           node scripts/verify-16kb-alignment.cjs
           node -e "const p=require('./node_modules/llama.rn/package.json'); if(p.version!=='0.13.0-rc.9') { console.error('Unexpected llama.rn version:',p.version); process.exit(1) } console.log('Verified llama.rn',p.version)"
           echo "Verified Atlas release contains the ARM64 llama.rn and llama.kt Vulkan native runtimes."
+          fi
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           # Confirm exact GitHub keystore identity, rejecting other valid certificates.
@@ -434,16 +479,28 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ steps.abis.outputs.multiarch == 'true' && 'multiarch-' || '' }}${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk out/Atlas${{ (inputs.minify_trial == true && '-R8-TRIAL-NOT-FOR-RELEASE-') || (inputs.qnn_chip != '' && format('-LEAN-{0}-', inputs.qnn_chip)) || '-' }}${{ github.run_number }}${{ steps.abis.outputs.multiarch == 'true' && format('-{0}', steps.abis.outputs.abis) || '' }}.apk
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'schedule'
+        if: github.event_name != 'schedule' && matrix.abi == 'arm64-v8a'
         with:
           # A shrunk trial build gets its own name so the official-publish workflow (which takes Atlas-apk) can never pick it up.
-          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || (steps.abis.outputs.multiarch == 'true' && 'Atlas-apk-MULTIARCH') || 'Atlas-apk' }}
+          name: ${{ (inputs.minify_trial == true && 'Atlas-apk-R8-TRIAL') || (inputs.qnn_chip != '' && format('Atlas-apk-LEAN-{0}', inputs.qnn_chip)) || 'Atlas-apk' }}
           path: out/*.apk
           # A published build keeps its APK on the release page; this copy is only for the official-publish
           # workflow. Each APK is about 250 MB and GitHub's free plan includes 500 MB of saved build files.
           retention-days: 3
+      - name: Keep this CPU type's APK as a build file (a test build; a published build puts it on the release)
+        if: github.event_name != 'schedule' && matrix.abi != 'arm64-v8a' && inputs.publish != true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Atlas-apk-${{ matrix.abi }}
+          path: out/*.apk
+          retention-days: 1
+      - name: Add this APK to the release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true && inputs.minify_trial != true && inputs.qnn_chip == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload atlas-${{ github.run_number }} out/*.apk --clobber
       # An automatic publish (a push to a stable branch) is only for the newest commit. If a newer commit has landed while this one was building,
       # this APK is out of date: it stays available as the build file, but is not published as the latest release (the newer commit's own run
       # publishes). A manual run with publish ticked is the person's explicit choice and always publishes.
@@ -458,22 +515,18 @@ jobs:
           else
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Publish release (stable branch, or a manual run with publish ticked)
-        # A multi-architecture build is a larger file for old phones and emulators: it is saved as its own build file (Atlas-apk-MULTIARCH) and is
-        # never published as the latest release by a push; only a person who ticks publish on a manual run publishes it.
-        if: github.event_name != 'schedule' && inputs.minify_trial != true && inputs.qnn_chip == '' && (inputs.publish == true || (steps.abis.outputs.multiarch != 'true' && (steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets'))))
+      - name: Publish release (a push to a stable branch)
+        # A push to a stable branch publishes the 64-bit ARM APK, as before. A manual run with publish ticked publishes every CPU type through the
+        # `prepare`, `Add this APK to the release` and `finish` steps instead.
+        if: github.event_name == 'push' && steps.head.outputs.stale != 'true' && (github.ref == 'refs/heads/atlas-voice' || github.ref == 'refs/heads/claude/atlas-voice-music-home-widgets')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node scripts/release/latest-notes.cjs > release-notes.md
-          # A pre-release or a draft is never marked "latest".
-          kind="--latest"
-          if [ "${{ inputs.prerelease }}" = "true" ]; then kind="--prerelease"; fi
-          if [ "${{ inputs.draft }}" = "true" ]; then kind="$kind --draft"; fi
-          if ! gh release create atlas-${{ github.run_number }} out/*.apk $kind \
+          if ! gh release create atlas-${{ github.run_number }} out/*.apk --latest \
             --target ${{ github.sha }} --title "Atlas build ${{ github.run_number }}" \
             --notes-file release-notes.md; then
-            echo "::error title=Release not created::The APK was built, signed and checked, and is saved as the build file Atlas-apk on this run (kept 3 days). Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Fix: Settings > Actions > General > Workflow permissions > Read and write permissions, then re-run this workflow with publish ticked."
+            echo "::error title=Release not created::The APK was built, signed and checked, and is saved as the build file Atlas-apk on this run (kept 3 days). Creating the release was refused (HTTP 403 means this repository gives workflows read-only access). Set Settings > Actions > General > Workflow permissions to Read and write permissions, then re-run this job."
             exit 1
           fi
       - name: Save the compiler cache for the next build
@@ -483,7 +536,7 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
       - name: Save the image engines for the next build
-        if: always() && steps.sdcli.outputs.cache-hit != 'true' && hashFiles('android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so') != ''
+        if: always() && matrix.abi == 'arm64-v8a' && steps.sdcli.outputs.cache-hit != 'true' && hashFiles('android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so') != ''
         uses: actions/cache/save@v5
         with:
           path: |
@@ -491,10 +544,41 @@ jobs:
             android/app/src/main/jniLibs/arm64-v8a/libatlas_sdcli_opencl.so
           key: ${{ steps.sdcli.outputs.cache-primary-key }}
       - name: Save the Gradle caches for the next build
-        if: always()
+        if: always() && matrix.abi == 'arm64-v8a'
         uses: actions/cache/save@v5
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}
+
+  # Publishes the draft release once the APKs are on it. The 64-bit ARM APK is required (it is the one for phones); another CPU type that failed is
+  # named and left off, and can be added by re-running its job.
+  finish:
+    needs: [prepare, apk]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: atlas-${{ github.run_number }}
+        run: |
+          set -uo pipefail
+          assets="$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name')"
+          echo "Assets on the release:"; echo "$assets"
+          if ! echo "$assets" | grep -q "^Atlas-${{ github.run_number }}\.apk$"; then
+            echo "::error title=Not published::The 64-bit ARM APK is not on the release, so it stays a draft. Re-run the failed job, then run this again."
+            exit 1
+          fi
+          for abi in armeabi-v7a x86_64 x86; do
+            echo "$assets" | grep -q "^Atlas-${{ github.run_number }}-$abi\.apk$" || echo "::warning title=Missing APK::The $abi APK is not on the release (its job did not finish). Re-run that job to add it."
+          done
+          kind="--latest"
+          if [ "${{ inputs.prerelease }}" = "true" ]; then kind="--prerelease"; fi
+          if [ "${{ inputs.draft }}" = "true" ]; then echo "The release stays a draft, as asked."; exit 0; fi
+          gh release edit "$TAG" -R "$REPO" --draft=false $kind

@@ -42,3 +42,16 @@ What this shows, not decides:
 
 ## Lean build for one chip
 Run `Build Atlas APK` with `qnn_chip` set to V68, V69, V73, V75, V79 or V81 (Razr Ultra 2025: V79). The other generations' `libQnnHtp*` files are left out of the APK through the asset ignore pattern, and the run checks that. Expected saving: about 40 MB compressed. Such a build is uploaded as a workflow file only, and its NPU only works on that chip generation.
+
+## One APK for each CPU type
+A published release holds one signed APK for each of arm64-v8a, armeabi-v7a, x86_64 and x86 (`.github/workflows/atlas-apk.yml`: a job for each CPU type, then a last job that publishes the release). What each contains, from the pieces the build uses:
+
+| CPU type | llama.rn engine (on-device AI) | NPU / OpenCL / Vulkan text | Image generation | Natural voices | Whisper | LiteRT |
+|---|---|---|---|---|---|---|
+| arm64-v8a | seven prebuilt variants | yes | yes | yes | yes | yes |
+| x86_64 | `librnllama.so`, `librnllama_x86_64.so` (CPU) | no | no | yes | yes | not checked |
+| armeabi-v7a | none (llama.rn is not built for 32-bit) | no | no | yes | yes | not checked |
+| x86 | none | no | no | yes | no (whisper.rn has no x86 build) | not checked |
+
+The app does not rely on this table: `src/services/buildCapabilities.ts` reads the libraries the APK really contains (`getConstants().buildInfo` of `DeviceMemoryModule`) and marks a feature missing when its library is not there. The reduced builds also leave out the NPU assets (`-PatlasNoNpu=true`).
+

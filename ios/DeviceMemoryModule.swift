@@ -13,6 +13,15 @@ class DeviceMemoryModule: NSObject {
     return false
   }
 
+  /// What this build was made for. iOS builds are always 64-bit ARM and carry their native code inside the app binary, so there is no
+  /// library list: the JS side treats an iOS build as having everything the platform offers. Same contract as Android:
+  /// constants.buildInfo = { abi, nativeLibs }.
+  @objc
+  func constantsToExport() -> [AnyHashable: Any]! {
+    let info: [String: Any] = ["abi": "arm64", "nativeLibs": [String]()]
+    return ["buildInfo": info]
+  }
+
   @objc
   func getMemoryInfo(_ resolve: @escaping RCTPromiseResolveBlock,
                      rejecter reject: @escaping RCTPromiseRejectBlock) {
