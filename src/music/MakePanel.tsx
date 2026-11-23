@@ -9,13 +9,14 @@ import { AMBIENT, type AmbientKind } from './ambient';
 import { instrumentsOf } from './simple';
 import { PRESETS } from './presets';
 
-export type Maker = 'ai' | 'quick' | 'noise';
+export type Maker = 'ai' | 'quick' | 'noise' | 'own';
 type SoundChoice = 'synth' | 'soundfont';
 
 const MAKERS: SelectOption[] = [
   { id: 'ai', label: 'AI composer', hint: 'Writes a score on your phone; takes a minute or two' },
   { id: 'quick', label: 'Quick tune (no AI)', hint: 'The built-in composer, at once' },
   { id: 'noise', label: 'Background noise', hint: 'Rain, ocean, white noise and more: not music' },
+  { id: 'own', label: 'Make my own', hint: 'Start from a blank page or a preset, then write the notes' },
 ];
 const ENERGIES: SelectOption[] = [{ id: 'calm', label: 'Calm' }, { id: 'medium', label: 'Medium' }, { id: 'lively', label: 'Lively' }];
 const LENGTHS: SelectOption[] = [{ id: '30', label: '30 seconds' }, { id: '60', label: '1 minute' }, { id: '90', label: '90 seconds' }];
@@ -29,6 +30,7 @@ export interface MakeChoices {
 
 /** What the "Make it" button says for each way of making music. */
 const makeLabel = (maker: Maker): string => (maker === 'ai' ? 'Compose with AI' : maker === 'quick' ? 'Make a quick tune' : 'Make the sound');
+const OWN_OPTIONS: SelectOption[] = PRESETS.map((p) => ({ id: p.id, label: p.label, hint: p.hint }));
 
 /**
  * The one place to say what to make: what it should be like (words), and drop-downs for the style, how lively, how long, who makes it,
@@ -39,7 +41,8 @@ export function MakePanel({ choices, onChange, soundfontName, busy, onMake, onSu
 }) {
   const { colors } = useTheme();
   const { maker, mood } = choices;
-  const music = maker !== 'noise';
+  const own = maker === 'own';
+  const music = maker !== 'noise' && !own;
   const ai = maker === 'ai';
   const soundOptions: SelectOption[] = [
     { id: 'synth', label: 'Built-in synthesiser', hint: 'Always available' },
@@ -65,12 +68,13 @@ export function MakePanel({ choices, onChange, soundfontName, busy, onMake, onSu
           <Text style={[styles.hint, { color: colors.textMuted }]} testID="music-plays">{STYLES[mood].label} plays: {instrumentsOf(mood)}.</Text>
         </>
       )}
-      {!music && <Select label="Noise" options={NOISE_OPTIONS} value={choices.noise} onChange={(id) => onChange({ noise: id as AmbientKind })} disabled={busy} testID="music-noise" />}
+      {own && <Select label="Start from" options={OWN_OPTIONS} onChange={onOwn} disabled={busy} summary="A blank page or a preset, then write the notes" testID="music-own" />}
+      {maker === 'noise' && <Select label="Noise" options={NOISE_OPTIONS} value={choices.noise} onChange={(id) => onChange({ noise: id as AmbientKind })} disabled={busy} testID="music-noise" />}
+      {!own && (
       <TouchableOpacity onPress={onMake} disabled={busy} testID={ai ? 'music-ai-composer' : maker === 'quick' ? 'music-quick' : 'music-noise-make'} accessibilityRole="button"
         style={[styles.make, { backgroundColor: colors.primary }, busy && styles.busy]}>
         {busy ? <ActivityIndicator color={colors.background} /> : <Text style={{ color: colors.background }}>{makeLabel(maker)}</Text>}
-      </TouchableOpacity>
-      <Select label="Make my own music" options={PRESETS.map((p) => ({ id: p.id, label: p.label, hint: p.hint }))} onChange={onOwn} disabled={busy} summary="Start from a blank page or a preset, then write the notes" testID="music-own" />
+      </TouchableOpacity>)}
       <View style={styles.links}>
         {music && <TouchableOpacity onPress={onSurprise} disabled={busy} testID="music-surprise"><Text style={{ color: colors.primary }}>Surprise me</Text></TouchableOpacity>}
         <TouchableOpacity onPress={onImport} disabled={busy} testID="music-import-midi" accessibilityLabel="Import a MIDI file"><Text style={{ color: colors.primary }}>Import MIDI</Text></TouchableOpacity>
