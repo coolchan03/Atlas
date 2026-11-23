@@ -27,16 +27,13 @@ function sliceEnd(text: string, from: number): number {
 
 export async function sealBackup(text: string, password: string, crypto: PortableCrypto): Promise<string> {
   if (text.length <= SLICE_CHARS) return crypto.encryptPortableBackup(text, password);
-  const slices: string[] = [];
-  for (let from = 0; from < text.length;) {
-    const end = sliceEnd(text, from);
-    slices.push(text.slice(from, end));
-    from = end;
-  }
+  // Only where each slice starts is kept; a slice's text is cut out when its turn comes, so the text is never held twice over.
+  const starts: number[] = [];
+  for (let from = 0; from < text.length; from = sliceEnd(text, from)) starts.push(from);
   const sealed: string[] = [];
-  for (let i = 0; i < slices.length; i += 1) {
-    sealed.push(await crypto.encryptPortableBackup(`${i + 1}/${slices.length}\n${slices[i]}`, password));
-    slices[i] = '';
+  for (let i = 0; i < starts.length; i += 1) {
+    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
+    sealed.push(await crypto.encryptPortableBackup(`${i + 1}/${starts.length}\n${text.slice(starts[i], end)}`, password));
   }
   return SEALED_V2 + sealed.join('\n');
 }
