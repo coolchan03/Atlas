@@ -79,7 +79,7 @@ export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
     } }));
   return {
     id: `custom-${h.id}`, title: h.madeByAi ? `${h.title} (made by the AI)` : h.title, summary: h.summary || 'A helper you made.',
-    input: { help: h.help || 'Paste or type what this helper should work on.', minChars: 1, fields: parsed.fields,
+    input: { help: h.help || 'Paste or type what this helper should work on.', minChars: parsed.steps.some((x) => x.kind === 'ai') ? 1 : 0, fields: parsed.fields,
       make: (t, f) => ({ text: t, fields: f, fieldLabels: parsed.fields.map((x) => x.label), answers: [], outputs: [], calcs: [], values: {} }) },
     steps: [...steps,
       { kind: 'confirm', id: 'review', title: 'Review', summary: (ctx) => [ctx.calcs.join('\n'), ctx.outputs[ctx.outputs.length - 1]].filter(Boolean).join('\n\n') },

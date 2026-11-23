@@ -5,6 +5,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button } from '../components';
 import { Shell } from './WorkflowViews';
 import { parseSteps, useCustomHelpers, type CustomHelper } from './customHelpers';
+import { EXAMPLE_HELPERS } from './exampleHelpers';
+import { Select } from '../components/Select';
 
 const CALC_EXAMPLE = 'calc: Total | {Price} * {Qty}';
 const EXAMPLE = 'field: Tone | Friendly, Formal\nfield: Names to include\nask: Keep it short? | Yes, No\nai: Write the reply in that tone, using the names.\nai: Check the reply for anything missing and fix it.';
@@ -42,6 +44,8 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   return (
     <Shell title={helper ? 'Edit helper' : 'Make your own helper'} onBack={onClose}>
       <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line. Each line starts with field: (asked first), ask: (a choice part-way, with choices after a |) ai: (an instruction for the AI) or calc: (an exact calculation, for example {CALC_EXAMPLE}). The last result is shown for your approval, then saved as a note.</Text>
+      {!helper && <Select label="Start from an example" options={EXAMPLE_HELPERS.map((x) => ({ id: x.id, label: x.title, hint: x.summary }))} summary="Split the bill, loan payment, recipe scaler..." testID="helper-example"
+        onChange={(id) => { const x = EXAMPLE_HELPERS.find((e) => e.id === id); if (x) { setTitle(x.title); setSummary(x.summary); setHelp(x.help); setSteps(x.steps); } }} />}
       {input({ value: title, set: setTitle, placeholder: 'Name, for example: Reply writer', testID: 'helper-title' })}
       {input({ value: summary, set: setSummary, placeholder: 'One line about what it does (optional)', testID: 'helper-summary' })}
       {input({ value: help, set: setHelp, placeholder: 'What to paste or type when it starts (optional)', testID: 'helper-help' })}
