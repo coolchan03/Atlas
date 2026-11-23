@@ -16,6 +16,7 @@ import type { ProjectBackupFile } from './projectBackupFiles';
 import { rehydrateStores } from './storeRegistry';
 import { keepThisDevice } from './deviceSettings';
 import { useBackupReminder } from './backupReminder';
+import { isSealedBackup, openBackup, sealBackup } from './backupParts';
 
 /**
  * Backup = every saved app setting in one JSON file: agents and their lessons, projects,
@@ -66,8 +67,13 @@ export function lockedChatsNotOpen(): number {
   } catch { return 0; }
 }
 
+/** Largest backup written, in MB. A password backup is sealed in slices (backupParts.ts), so it can hold far more than a plain one. */
+const EXPORT_LIMIT_MB = { plain: 50, encrypted: 120 };
+/** Largest backup file read, in MB. A sealed file is about a third bigger than the text inside it. */
+const IMPORT_LIMIT_MB = { plain: 50, encrypted: 170 };
+
 function assertBackupSize(bytes: number, encrypted: boolean): void {
-  const limitMb = encrypted ? 35 : 50;
+  const limitMb = encrypted ? EXPORT_LIMIT_MB.encrypted : EXPORT_LIMIT_MB.plain;
   if (bytes <= limitMb * 1024 * 1024) return;
   const kind = encrypted ? 'password-protected' : 'plain';
   const hint = encrypted ? ' or leave out some project files' : '';
@@ -132,7 +138,7 @@ export async function exportBackup(password?: string): Promise<string | null> {
   // UTF-8 may occupy more bytes than the JavaScript string length.
   const bytes = unescape(encodeURIComponent(backupJson)).length;
   assertBackupSize(bytes, !!password);
-  const output = password ? await portableCrypto().encryptPortableBackup(backupJson, password) : backupJson;
+  const output = password ? await sealBackup(backupJson, password, portableCrypto()) : backupJson;
   await RNFS.writeFile(path, output, 'utf8');
   try {
     const [res] = await saveDocuments({ sourceUris: [`file://${path}`], mimeType: password ? 'application/octet-stream' : 'application/json', fileName: name, copy: true });
@@ -150,15 +156,20 @@ export async function pickBackupText(password?: string): Promise<{ text: string;
   if (!files?.length) return null;
   const local = await resolvePickedFileUri(files[0].uri, files[0].name || 'backup.json');
   const stat = await RNFS.stat(local.replace(/^file:\/\//, ''));
-  // Never parse unbounded attacker-controlled JSON into the app's memory.
+  // Never parse unbounded attacker-controlled JSON into the app's memory. A file named like a password backup may be bigger, but is
+  // held to the plain limit again once it is read and turns out not to be one.
   const bytes = Number(stat.size);
-  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > 50 * 1024 * 1024)
-    throw new Error('Backup size is invalid or exceeds the 50 MB import limit.');
+  const sealedName = /\.atlasbackup$/i.test(files[0].name || '');
+  const limitMb = sealedName ? IMPORT_LIMIT_MB.encrypted : IMPORT_LIMIT_MB.plain;
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > limitMb * 1024 * 1024)
+    throw new Error(`Backup size is invalid or exceeds the ${limitMb} MB import limit.`);
   const text = await RNFS.readFile(local.replace(/^file:\/\//, ''), 'utf8');
-  const encrypted = text.startsWith('atlasbackup:v1:');
+  const encrypted = isSealedBackup(text);
+  if (!encrypted && bytes > IMPORT_LIMIT_MB.plain * 1024 * 1024)
+    throw new Error(`Backup size is invalid or exceeds the ${IMPORT_LIMIT_MB.plain} MB import limit.`);
   if (encrypted && !password) throw new Error('This encrypted backup requires its password.');
   if (!encrypted && password) throw new Error('Selected backup is not encrypted.');
-  return { text: encrypted ? await portableCrypto().decryptPortableBackup(text, password!) : text, encrypted };
+  return { text: encrypted ? await openBackup(text, password!, portableCrypto()) : text, encrypted };
 }
 
 async function readPortableBackup(password?: string): Promise<{ data: any; encrypted: boolean } | null> {
