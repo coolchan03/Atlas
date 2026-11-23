@@ -265,7 +265,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
   {
     id: 'make_helper', name: 'make_helper', displayName: 'Make a multi-step helper', icon: 'list',
-    description: "Make a reusable multi-step helper for the user, when they ask for a repeatable job (for example 'a reply writer', 'a meeting recap', 'a study plan from notes'). A helper is a name plus step lines, one per line: 'field: <label> | <choice>, <choice>' (asked first; leave off the choices for a typed answer), 'ask: <question> | <choice>, <choice>' (a choice part-way) and 'ai: <one instruction>'. Use at least one ai: line and at most 8 lines. It is saved in Multi-step helpers for the user to read and run; it can only use the text and answers the user gives it.",
+    description: "Make a reusable multi-step helper for the user, when they ask for a repeatable job (for example 'a reply writer', 'a meeting recap', 'a study plan from notes'). A helper is a name plus step lines, one per line: 'field: <label> | <choice>, <choice>' (asked first; leave off the choices for a typed answer), 'ask: <question> | <choice>, <choice>' (a choice part-way) 'ai: <one instruction>' and 'calc: <label> | <expression>' (an exact calculation done by code, for example 'calc: Total | {Price} * {Qty}'; {Name} is a field written above it; use it for totals, conversions and splits instead of asking the AI to do arithmetic). Use at least one ai: or calc: line and at most 8 lines. It is saved in Multi-step helpers for the user to read and run; it can only use the text and answers the user gives it.",
     parameters: {
       title: { type: 'string', description: 'Short name, 2 to 5 words', required: true },
       steps: { type: 'string', description: 'The step lines, one per line', required: true },

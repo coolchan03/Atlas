@@ -6,6 +6,7 @@ import { Button } from '../components';
 import { Shell } from './WorkflowViews';
 import { parseSteps, useCustomHelpers, type CustomHelper } from './customHelpers';
 
+const CALC_EXAMPLE = 'calc: Total | {Price} * {Qty}';
 const EXAMPLE = 'field: Tone | Friendly, Formal\nfield: Names to include\nask: Keep it short? | Yes, No\nai: Write the reply in that tone, using the names.\nai: Check the reply for anything missing and fix it.';
 
 /** Write your own multi-step helper: a name and one step per line. The AI can also draft the steps from a plain description. */
@@ -26,9 +27,9 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
     setBusy(true);
     try {
       const reply: string = await require('../study/engine').askModel(
-        'You write the steps of a small multi-step helper. Reply with ONLY lines, each starting with field:, ask: or ai:. field: is a choice or typed answer asked before it starts ("field: Tone | Friendly, Formal"). ask: is a choice asked part-way ("ask: Keep it short? | Yes, No"). ai: is one instruction for the AI. Use at most 3 field lines, 1 ask line and 4 ai lines.',
+        'You write the steps of a small multi-step helper. Reply with ONLY lines, each starting with field:, ask:, ai: or calc:. field: is a choice or typed answer asked before it starts ("field: Tone | Friendly, Formal"). ask: is a choice asked part-way ("ask: Keep it short? | Yes, No"). ai: is one instruction for the AI. calc: is an exact calculation done by code, never by the AI ("calc: Total | {Price} * {Qty} * (1 + {Tax} / 100)"); {Name} is a field written above it. Use at most 3 field lines, 1 ask line, 4 ai lines and 3 calc lines.',
         `The helper should: ${idea.slice(0, 500)}`);
-      const lines = reply.split('\n').map((l) => l.trim()).filter((l) => /^(field|ask|ai)\s*:/i.test(l));
+      const lines = reply.split('\n').map((l) => l.trim()).filter((l) => /^(field|ask|ai|calc)\s*:/i.test(l));
       if (!lines.length) throw new Error('The AI did not write steps in the expected form. Try again or write them yourself.');
       setSteps(lines.join('\n'));
     } catch (e) { Alert.alert('Could not draft the steps', String((e as Error)?.message || e)); } finally { setBusy(false); }
@@ -40,7 +41,7 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   };
   return (
     <Shell title={helper ? 'Edit helper' : 'Make your own helper'} onBack={onClose}>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line. Each line starts with field: (asked first), ask: (a choice part-way, with choices after a |) or ai: (an instruction for the AI). The last AI result is shown for your approval, then saved as a note.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line. Each line starts with field: (asked first), ask: (a choice part-way, with choices after a |) ai: (an instruction for the AI) or calc: (an exact calculation, for example {CALC_EXAMPLE}). The last result is shown for your approval, then saved as a note.</Text>
       {input({ value: title, set: setTitle, placeholder: 'Name, for example: Reply writer', testID: 'helper-title' })}
       {input({ value: summary, set: setSummary, placeholder: 'One line about what it does (optional)', testID: 'helper-summary' })}
       {input({ value: help, set: setHelp, placeholder: 'What to paste or type when it starts (optional)', testID: 'helper-help' })}
