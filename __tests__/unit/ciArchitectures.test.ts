@@ -13,8 +13,27 @@ const steps: any[] = apk.steps;
 const named = (re: RegExp) => steps.find((s) => re.test(s.name ?? ''));
 const ALL = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'];
 
+/** Evaluates the matrix expression the way GitHub does for the cases that matter (an empty input is an empty string, as GitHub reads a missing one). */
+function matrixFor(ctx: { event: string; publish?: boolean; all?: boolean; minify?: boolean; chip?: string; test?: string }): string[] {
+  const inner = (apk.strategy.matrix.abi as string).replace(/^\$\{\{\s*/, '').replace(/\s*\}\}$/, '');
+  const inputs = { publish: ctx.publish ?? false, all_architectures: ctx.all ?? false, minify_trial: ctx.minify ?? false, qnn_chip: ctx.chip ?? '', test_abis: ctx.test ?? '' };
+  // eslint-disable-next-line no-new-func
+  return new Function('fromJSON', 'github', 'inputs', `return ${inner};`)(JSON.parse, { event_name: ctx.event }, inputs);
+}
+
 describe('the CPU types of a build', () => {
   const expr: string = apk.strategy.matrix.abi;
+
+  it('is a valid expression that gives every CPU type for a publish or a full build, and 64-bit ARM only otherwise', () => {
+    expect(matrixFor({ event: 'workflow_dispatch', publish: true })).toEqual(ALL);
+    expect(matrixFor({ event: 'workflow_dispatch', all: true })).toEqual(ALL);
+    expect(matrixFor({ event: 'workflow_dispatch' })).toEqual(['arm64-v8a']); // a test build
+    expect(matrixFor({ event: 'push' })).toEqual(['arm64-v8a']); // a push to a stable branch
+    expect(matrixFor({ event: 'schedule' })).toEqual(['arm64-v8a']);
+    expect(matrixFor({ event: 'workflow_dispatch', publish: true, minify: true })).toEqual(['arm64-v8a']); // a shrunk trial is never published
+    expect(matrixFor({ event: 'workflow_dispatch', publish: true, chip: 'V79' })).toEqual(['arm64-v8a']); // nor a lean build
+    expect(matrixFor({ event: 'workflow_dispatch', test: '["x86_64","x86"]' })).toEqual(['x86_64', 'x86']); // a list given by hand wins
+  });
 
   it('is a job for each CPU type, which does not stop the others when one fails', () => {
     expect(apk.strategy['fail-fast']).toBe(false);

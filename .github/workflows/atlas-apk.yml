@@ -85,7 +85,7 @@ jobs:
       fail-fast: false
       matrix:
         # Every CPU type when publishing (or asked for), otherwise 64-bit ARM only. A shrunk or lean trial is always 64-bit ARM only.
-        abi: ${{ fromJSON(inputs.test_abis != '' && inputs.test_abis || ((github.event_name == 'workflow_dispatch' && (inputs.publish == true || inputs.all_architectures == true)) && inputs.minify_trial != true && inputs.qnn_chip == '') && '["arm64-v8a","armeabi-v7a","x86_64","x86"]' || '["arm64-v8a"]')) }}
+        abi: ${{ fromJSON(inputs.test_abis != '' && inputs.test_abis || (((github.event_name == 'workflow_dispatch' && (inputs.publish == true || inputs.all_architectures == true)) && inputs.minify_trial != true && inputs.qnn_chip == '') && '["arm64-v8a","armeabi-v7a","x86_64","x86"]' || '["arm64-v8a"]')) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
