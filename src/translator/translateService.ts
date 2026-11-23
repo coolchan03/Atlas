@@ -6,6 +6,7 @@ import { runBackgroundJob } from '../services/llmJobQueue';
 import { llmService } from '../services/llm';
 import { ensureTextModel } from '../atlasTools/models';
 import { localUniqueId } from '../utils/uniqueId';
+import { useAppStore } from '../stores/appStore';
 import type { TranslatorLanguage } from './languages';
 import { bothWaysMessages, cleanTranslation, parseDirected, parsePicture, pictureMessages, textMessages } from './translate';
 
@@ -33,4 +34,23 @@ export async function translatePicture(uri: string, mimeType: string | undefined
   const attachment = { id: localUniqueId('img'), type: 'image' as const, uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : `file://${uri}`, mimeType: mimeType ?? 'image/jpeg' };
   const raw = await runBackgroundJob(() => llmService.generateResponse(pictureMessages(attachment, to) as never, { disableThinking: true }), { label: 'Translating a picture', maxWaitMs: 10 * 60_000 });
   return parsePicture(raw);
+}
+
+/** Whether a downloaded model has a vision file attached and switched on (so it can read a picture once it is loaded). */
+const hasVisionFile = (m: { engine?: string; mmProjPath?: string; mmProjDisabled?: boolean }): boolean => m.engine !== 'litert' && !!m.mmProjPath && !m.mmProjDisabled;
+
+/** What the camera needs to say about the model: whether the selected one can see pictures, and which other downloaded ones can. */
+export function visionChoices(): { selectedCanSee: boolean; selectedName: string | null; others: Array<{ id: string; name: string }> } {
+  const st = useAppStore.getState();
+  const selected = st.downloadedModels.find((m) => m.id === st.activeModelId);
+  return {
+    selectedCanSee: !!selected && hasVisionFile(selected as never),
+    selectedName: selected?.name ?? null,
+    others: st.downloadedModels.filter((m) => m.id !== st.activeModelId && hasVisionFile(m as never)).map((m) => ({ id: m.id, name: m.name })),
+  };
+}
+
+/** Loads a model that can see pictures, to use for the camera. */
+export async function loadVisionModel(id: string): Promise<void> {
+  await ensureTextModel(id);
 }

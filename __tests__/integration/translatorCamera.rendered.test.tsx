@@ -15,7 +15,9 @@ it('camera mode says so when the model cannot see pictures, and reads and transl
   const { TranslatorScreen } = require('../../src/translator/TranslatorScreen');
   const { useTranslator } = require('../../src/translator/store');
 
-  useAppStore.setState({ downloadedModels: [{ id: 'm1', name: 'Qwen', fileName: 'q.gguf', filePath: '/m/q.gguf', fileSize: 1, engine: 'llama' }], activeModelId: 'm1', loadedTextModelId: 'm1' });
+  const text = { id: 'm1', name: 'Qwen', fileName: 'q.gguf', filePath: '/m/q.gguf', fileSize: 1, engine: 'llama' };
+  const eyes = { id: 'm2', name: 'LLaVA', fileName: 'l.gguf', filePath: '/m/l.gguf', fileSize: 1, engine: 'llama', mmProjPath: '/m/l-mmproj.gguf' };
+  useAppStore.setState({ downloadedModels: [text, eyes], activeModelId: 'm1', loadedTextModelId: 'm1' });
   jest.spyOn(llmService, 'isModelLoaded').mockReturnValue(true);
   const vision = jest.spyOn(llmService, 'supportsVision').mockReturnValue(false);
   const asked: any[][] = [];
@@ -23,12 +25,21 @@ it('camera mode says so when the model cannot see pictures, and reads and transl
   useTranslator.setState({ mode: 'camera', to: 'en-US' });
 
   const view = rtl.render(React.createElement(TranslatorScreen));
+  // The selected model cannot see pictures, so the screen says so up front and offers the one that can.
+  expect(view.getByTestId('translator-vision-hint')).toBeTruthy();
+  expect(view.getByText(/Qwen cannot see pictures/)).toBeTruthy();
+  const { activeModelService } = require('../../src/services/activeModelService');
+  const load = jest.spyOn(activeModelService, 'loadTextModel').mockResolvedValue(undefined);
+  await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('translator-use-m2')); });
+  expect(load).toHaveBeenCalledWith('m2');
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('translator-take-photo')); });
   await rtl.waitFor(() => expect(view.getByTestId('translator-error')).toBeTruthy());
   expect(view.getByTestId('translator-error').props.children).toMatch(/cannot see pictures/);
   expect(asked).toHaveLength(0);
 
   vision.mockReturnValue(true);
+  rtl.act(() => { useAppStore.setState({ activeModelId: 'm2', loadedTextModelId: 'm2' }); });
+  expect(view.queryByTestId('translator-vision-hint')).toBeNull(); // the selected model can see pictures now
   await rtl.act(async () => { rtl.fireEvent.press(view.getByTestId('translator-take-photo')); });
   await rtl.waitFor(() => expect(view.getByTestId('translator-picture-result')).toBeTruthy());
   expect(view.getByText('Exit')).toBeTruthy();

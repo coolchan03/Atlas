@@ -7,7 +7,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { audioSessionManager } from '../services/audioSessionManager';
 import { Button } from '../components/Button';
 import { languageFor } from './languages';
-import { translatePicture } from './translateService';
+import { loadVisionModel, translatePicture, visionChoices } from './translateService';
+import { useAppStore } from '../stores/appStore';
 import { useTranslator } from './store';
 
 interface Found { original: string; translation: string; found: boolean }
@@ -20,6 +21,14 @@ export function CameraPanel() {
   const [found, setFound] = React.useState<Found | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [switching, setSwitching] = React.useState<string | null>(null);
+  useAppStore((s) => s.activeModelId); // the choices follow the selected model
+  const choices = visionChoices();
+  const switchTo = async (id: string) => {
+    setSwitching(id); setError(null);
+    try { await loadVisionModel(id); } catch (e) { setError(String((e as Error)?.message || e)); }
+    setSwitching(null);
+  };
 
   const run = async (a: Asset) => {
     if (!a.uri) return;
@@ -42,6 +51,17 @@ export function CameraPanel() {
   return (
     <View style={styles.gap} testID="translator-camera">
       <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>Point the camera at a sign, menu or page. Atlas reads the text and translates it into {languageFor(to).name}.</Text>
+      {!choices.selectedCanSee && (
+        <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="translator-vision-hint">
+          <Text style={{ color: colors.text, ...TYPOGRAPHY.bodySmall }}>
+            {choices.selectedName ? `${choices.selectedName} cannot see pictures.` : 'No model is selected.'}
+            {choices.others.length ? ' Use one that can:' : ' Download a model with a vision file (the eye icon in My models) to translate pictures.'}
+          </Text>
+          {choices.others.map((m) => (
+            <Button key={m.id} title={switching === m.id ? `Loading ${m.name}...` : `Use ${m.name}`} variant="outline" size="small" disabled={switching !== null} onPress={() => switchTo(m.id)} testID={`translator-use-${m.id}`} />
+          ))}
+        </View>
+      )}
       <View style={styles.row}>
         <View style={styles.grow}><Button title="Take a photo" onPress={() => pick('camera')} icon={<Icon name="camera" size={18} color={colors.background} />} testID="translator-take-photo" /></View>
         <View style={styles.grow}><Button title="Choose a picture" variant="outline" onPress={() => pick('library')} testID="translator-choose-photo" /></View>
