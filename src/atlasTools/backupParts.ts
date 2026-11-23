@@ -5,10 +5,10 @@
  * backup is. A backup that fits in one slice is still written in the original single-piece format, so older builds can open it.
  * Each slice carries its place ("2/5") inside the encrypted text, so a missing, repeated or swapped slice is found when it is opened.
  */
-export const SEALED_V1 = 'atlasbackup:v1:';
-export const SEALED_V2 = 'atlasbackup:v2:';
+const SEALED_V1 = 'atlasbackup:v1:';
+const SEALED_V2 = 'atlasbackup:v2:';
 /** Characters per slice (up to 12 MB of text once written as UTF-8). */
-export const SLICE_CHARS = 4 * 1024 * 1024;
+const SLICE_CHARS = 4 * 1024 * 1024;
 
 export interface PortableCrypto {
   encryptPortableBackup(text: string, password: string): Promise<string>;
