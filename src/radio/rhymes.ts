@@ -1,9 +1,9 @@
 /**
  * Words that rhyme, in groups. The radio does not ask a tiny model to find rhymes (spelling is not sound, and small models are poor at it):
- * the dice pick the word each line must end with, from these groups, and the model writes the rest of the line. Every word in a group
+ * the dice give each line a few words to end with, from these groups, and the model writes the rest of the line. Every word in a group
  * rhymes with every other, and all are short, common words. A new group is one more string.
  */
-export const RHYME_GROUPS: string[] = [
+const RHYME_GROUPS: string[] = [
   'night light sight bright right flight white tonight',
   'day way say play stay gray away today',
   'sea free tree me be key three see tea knee bee flea',
@@ -76,24 +76,30 @@ export function sureRhyme(a: string, b: string): boolean {
   return g >= 0 && a !== b && GROUPS[g].includes(b);
 }
 
+/** The words in a random order. */
+function shuffled(words: string[], rng: () => number): string[] {
+  const out = [...words];
+  for (let i = out.length - 1; i > 0; i -= 1) { const j = Math.floor(rng() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+}
+
 /**
- * The word each line of a poem must end with. Every rhyme in the scheme gets its own group and no word is used twice, so the poem rhymes
- * the way its form says and does not repeat itself. `scheme` letters: lines with the same letter rhyme; a line with a letter that
- * appears once (the B and D of ABCB, say) is free and gets a word of its own group.
+ * The words each line may end with. Lines that must rhyme (the same letter in a stanza's scheme) draw from one group, and the group is
+ * split between them, so each line has a few words of its own to choose from and no two lines can end in the same word. The model picks
+ * the word that fits its line best; the grammar allows only these words, so the rhyme always holds.
  */
-export function pickEnds(scheme: string, stanzas: number, rng: () => number): string[] {
+export function pickRhymeGroups(scheme: string, stanzas: number, rng: () => number): string[][] {
   const used = new Set<number>();
-  const taken = new Set<string>();
-  const ends: string[] = [];
-  const freshGroup = (): number => { let g = Math.floor(rng() * GROUPS.length); for (let i = 0; i < GROUPS.length && used.has(g); i += 1) g = (g + 1) % GROUPS.length; used.add(g); return g; };
-  const word = (g: number): string => { const pool = GROUPS[g].filter((w) => !taken.has(w)); const w = pool[Math.floor(rng() * pool.length)] ?? GROUPS[g][0]; taken.add(w); return w; };
+  const lines: string[][] = [];
+  const fresh = (): number => { let g = Math.floor(rng() * GROUPS.length); for (let i = 0; i < GROUPS.length && used.has(g); i += 1) g = (g + 1) % GROUPS.length; used.add(g); return g; };
   for (let s = 0; s < stanzas; s += 1) {
-    const byLetter = new Map<string, number>();
-    for (const letter of scheme) {
-      // 'ABCB' shape: letters seen once in the stanza (A and C) rhyme with nothing and take a group each.
-      if (!byLetter.has(letter)) byLetter.set(letter, freshGroup());
-      ends.push(word(byLetter.get(letter) as number));
+    const stanza: string[][] = scheme.split('').map(() => []);
+    for (const letter of new Set(scheme)) {
+      const at = scheme.split('').flatMap((l, i) => (l === letter ? [i] : []));
+      const words = shuffled(GROUPS[fresh()], rng);
+      at.forEach((line, k) => { stanza[line] = words.filter((_, w) => w % at.length === k); });
     }
+    lines.push(...stanza);
   }
-  return ends;
+  return lines;
 }

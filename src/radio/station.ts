@@ -12,7 +12,7 @@ import { chooseSound, diceSound, tuneFor, type AskModel, type Sound } from './so
 import { writePoem } from './writer';
 
 /** A song that is ready to play. `handle` is whatever the player needs to find it again (the saved track). */
-export interface Prepared<H> { show: Show; sound: Sound; title: string; poem: string[] | null; handle: H; voiceText: string | null }
+interface Prepared<H> { show: Show; sound: Sound; title: string; poem: string[] | null; handle: H; voiceText: string | null }
 
 export interface StationDeps<H> {
   ask: AskModel;
@@ -44,7 +44,7 @@ export type StationEvent =
 const titleFor = (show: Show): string => `${show.tone} ${show.genre.label}: ${show.topic.text}`.replace(/^./, (c) => c.toUpperCase());
 
 /** Gets one song ready: the sound, the tune and the poem. A poem that fails its checks is left out; a tune is always made. */
-export async function prepareShow<H>(show: Show, settings: RadioSettings, deps: StationDeps<H>): Promise<Prepared<H>> {
+async function prepareShow<H>(show: Show, settings: RadioSettings, deps: StationDeps<H>): Promise<Prepared<H>> {
   deps.report({ kind: 'preparing', what: 'Choosing the sound' });
   const sound = await chooseSound(show, settings.theme, deps.ask).catch(() => diceSound(show));
   const title = titleFor(show);

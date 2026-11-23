@@ -18,5 +18,3 @@ export function nextUp(show: Show, rng: Random): string {
   const poem = show.withPoem ? ' A poem comes with it.' : '';
   return `${pick(['Up next,', 'Coming up,', 'Next on the station,'], rng)} ${kind}.${poem}`;
 }
-
-export function signOff(name: string): string { return `That was ${name}. Thanks for listening.`; }

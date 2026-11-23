@@ -35,7 +35,10 @@ function report(event: StationEvent): void {
 }
 
 const deps = (): StationDeps<InstrumentalTrack> => ({
-  ask: (system, user, options) => askShaped(system, user, { label: 'Running the AI radio', maxTokens: options?.maxTokens ?? 200, grammar: options?.grammar }),
+  ask: async (system, user, options) => {
+    try { return await askShaped(system, user, { label: 'Running the AI radio', maxTokens: options?.maxTokens ?? 200, grammar: options?.grammar }); }
+    catch (e) { report({ kind: 'problem', message: `The AI could not answer, so the station plays tunes of its own choosing without poems: ${String((e as Error)?.message || e).slice(0, 160)}` }); throw e; }
+  },
   makeTrack: (score) => saveInstrumental(score, { mood: 'ambient', seconds: scoreSeconds(score), by: 'AI radio' }),
   play: (track) => { skipRequested = false; return instrumentalPlayer.play(track); },
   discard: (track) => deleteInstrumentalTrack(track),

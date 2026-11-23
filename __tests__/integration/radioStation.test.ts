@@ -17,7 +17,8 @@ function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?:
     ask: async (system, _user, options) => {
       if (opts.model === 'garbage') return 'I am a tiny model and I like turtles';
       if (options?.grammar?.includes('instruments')) return '{"style":"jazz","instruments":["sax","piano","upright"]}';
-      const ends = [...system.matchAll(/ends with the word "(\w+)"/g)].map((m) => m[1]);
+      // Follows the grammar it is given: one line per rule, ending in the first word that rule allows.
+      const ends = [...(options?.grammar ?? '').matchAll(/^line\d+ ::=.* " " \(("\w+")/gm)].map((m) => m[1].replace(/"/g, ''));
       return ends.map((e, i) => `The little thing number ${i + 1} went to the ${e}`).join('\n');
     },
     makeTrack: async (score) => { const t = { id: made.length, seconds: score.notes.length }; made.push(t); log.push(`tune:${score.title}`); return t; },

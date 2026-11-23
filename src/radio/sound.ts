@@ -13,7 +13,7 @@ import { describeShow, type Show } from './dice';
 
 export interface Sound { style: StyleMood; instruments: Voice[]; by: 'ai' | 'dice' }
 /** What the radio asks of the model: a question, and optionally a grammar the answer must follow and a cap on its length. */
-export interface AskOptions { grammar?: string; maxTokens?: number }
+interface AskOptions { grammar?: string; maxTokens?: number }
 export type AskModel = (system: string, user: string, options?: AskOptions) => Promise<string>;
 
 const MAX_INSTRUMENTS = 4;
@@ -21,24 +21,24 @@ const STYLE_LIST = (Object.keys(STYLES) as StyleMood[]).join(', ');
 const INSTRUMENT_LIST = INSTRUMENTS.map((i) => i.id).join(', ');
 
 /** The answer must be this JSON with a style and instruments from the lists, so a small model cannot answer in any other shape. */
-export function soundGrammar(): string {
+function soundGrammar(): string {
   const styles = (Object.keys(STYLES) as StyleMood[]).map((s) => `"${s}"`).join(' | ');
   const instruments = INSTRUMENTS.map((i) => `"${i.id}"`).join(' | ');
   return [`root ::= "{\\"style\\":\\"" style "\\",\\"instruments\\":[" inst ("," inst){1,3} "]}"`, `style ::= ${styles}`, `inst ::= "\\"" instrument "\\""`, `instrument ::= ${instruments}`].join('\n');
 }
 
-export const SOUND_SYSTEM = `You choose the sound of a radio song. Answer with ONE line of JSON and nothing else: {"style":"<style>","instruments":["<instrument>","<instrument>"]}
+const SOUND_SYSTEM = `You choose the sound of a radio song. Answer with ONE line of JSON and nothing else: {"style":"<style>","instruments":["<instrument>","<instrument>"]}
 Pick the style that fits best from this list: ${STYLE_LIST}
 Pick two to four instruments that fit from this list: ${INSTRUMENT_LIST}
 Example. Song: a calm lullaby about a baby. Answer: {"style":"lullaby","instruments":["harp","musicbox","warmpad"]}`;
 
-export function soundQuestion(show: Show, theme: string): string {
+function soundQuestion(show: Show, theme: string): string {
   const station = theme.trim() ? `Station theme: ${theme.trim().slice(0, 160)}\n` : '';
   return `${station}Song: ${describeShow(show)}. Suggested style: ${show.genre.style}.\nAnswer:`;
 }
 
 /** Reads the model's answer. Unknown styles and instruments are dropped; `style` is null when none was usable. */
-export function parseSound(raw: string): { style: StyleMood | null; instruments: Voice[] } {
+function parseSound(raw: string): { style: StyleMood | null; instruments: Voice[] } {
   const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
   const json = /\{[\s\S]*\}/.exec(text)?.[0];
   let style: StyleMood | null = null;
@@ -72,7 +72,7 @@ export async function chooseSound(show: Show, theme: string, ask: AskModel): Pro
 }
 
 /** The style's spec with the chosen instruments in its band: the first melody instrument leads, the first harmony one holds the chords, the first bass one plays the bass, the rest join in. */
-export function bandFor(style: StyleMood, instruments: Voice[]): { band: ReturnType<typeof specFor>['band']; extras: Extra[] } {
+function bandFor(style: StyleMood, instruments: Voice[]): { band: ReturnType<typeof specFor>['band']; extras: Extra[] } {
   const base = specFor(style);
   const infos = instruments.map((v) => instrumentById(v)).filter((i): i is NonNullable<typeof i> => !!i);
   const lead = infos.find((i) => i.part === 'melody'); const chords = infos.find((i) => i.part === 'harmony'); const low = infos.find((i) => i.part === 'bass');

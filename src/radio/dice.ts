@@ -37,15 +37,17 @@ export interface Show {
 
 export type Random = () => number;
 /** A small seeded random source (mulberry32). */
+/* eslint-disable no-bitwise -- the generator is bit arithmetic */
 export function seeded(seed: number): Random {
   let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+/* eslint-enable no-bitwise */
 
 const pick = <T>(list: readonly T[], rng: Random): T => list[Math.floor(rng() * list.length) % list.length];
 
 /** How much more likely an entry is for this theme: 1 for no match, 6 when a tag or word of the entry appears in the theme. */
-export function themeBoost(theme: string, tags: string[], text = ''): number {
+function themeBoost(theme: string, tags: string[], text = ''): number {
   const t = theme.toLowerCase();
   if (!t.trim()) return 1;
   const words = text.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);

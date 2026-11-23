@@ -1,30 +1,28 @@
 /**
- * Asks the model for a poem and keeps it only if the code's checks pass (poem.ts). The dice choose the word every line ends with (rhymes.ts)
- * and a grammar holds the model to the shape; a tiny model is asked a short, plain question with one worked example, up to a few tries, and when none passes there is no poem for this song,
- * which the radio treats as a normal result.
+ * Asks the model for a poem and keeps it only if the code's checks pass (poem.ts). The dice give every line the words it may end with, from
+ * rhyme groups (rhymes.ts), and a grammar holds the model to the shape. A tiny model is asked a short, plain question with one worked
+ * example, up to a few times; when none passes there is no poem for this song, which the radio treats as a normal result.
  */
 import { describeShow, type Random, type Show } from './dice';
 import { checkPoem, poemGrammar, type PoemCheck } from './poem';
-import { pickEnds } from './rhymes';
+import { pickRhymeGroups } from './rhymes';
 import type { AskModel } from './sound';
 
-export function poemSystem(ends: string[]): string {
-  const total = ends.length;
-  const rules = ends.map((end, i) => `Line ${i + 1} ends with the word "${end}".`).join(' ');
-  return `You write short poems. Reply with only the poem: exactly ${total} lines, no title and no notes. Each line is a short sentence of 5 to 9 words. ${rules} Never repeat a line.
-Example of four lines, ending in door, more, grey, away:
+function poemSystem(lines: number): string {
+  return `You write short poems. Reply with only the poem: exactly ${lines} lines, no title and no notes. Each line is a short sentence of 5 to 9 words that makes sense. Lines that should rhyme end in rhyming words. Never repeat a line.
+Example of four lines:
 The dog sat down beside the door,
 He waited there an hour or more.
 The rain came down, the sky turned grey,
 But still he would not run away.`;
 }
 
-export function poemQuestion(show: Show, theme: string): string {
+function poemQuestion(show: Show, theme: string): string {
   const station = theme.trim() ? ` The poem is for a radio station about ${theme.trim().slice(0, 160)}.` : '';
   return `Write a ${describeShow(show).replace(/ song about /, ' poem about ')}.${station}`;
 }
 
-export const POEM_TRIES = 3;
+const POEM_TRIES = 3;
 
 export interface WrittenPoem { lines: string[]; tries: number }
 
@@ -32,11 +30,11 @@ export interface WrittenPoem { lines: string[]; tries: number }
 export async function writePoem(show: Show, theme: string, model: { ask: AskModel; rng: Random; onTry?: (check: PoemCheck, n: number) => void }): Promise<WrittenPoem | null> {
   const { ask, rng, onTry } = model;
   for (let n = 1; n <= POEM_TRIES; n += 1) {
-    // New end words each try: a word the model could not use is not forced on it again.
-    const ends = pickEnds(show.form.scheme, show.form.stanzas, rng);
+    // New end words each try: a rhyme the model could not use is not forced on it again.
+    const groups = pickRhymeGroups(show.form.scheme, show.form.stanzas, rng);
     let reply: string;
-    try { reply = await ask(poemSystem(ends), poemQuestion(show, theme), { grammar: poemGrammar(ends), maxTokens: 40 * ends.length }); } catch { return null; }
-    const check = checkPoem(reply, show.form, ends);
+    try { reply = await ask(poemSystem(groups.length), poemQuestion(show, theme), { grammar: poemGrammar(groups), maxTokens: 40 * groups.length }); } catch { return null; }
+    const check = checkPoem(reply, show.form);
     if (check.ok) return { lines: check.lines, tries: n };
     onTry?.(check, n);
   }
