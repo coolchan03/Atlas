@@ -71,9 +71,12 @@ const refs = (t: string) => [...new Set([...t.matchAll(/\[(\d{1,2})\]/g)].map((m
 /** One grounded model call for study features (games use it too). */
 /** `progress` hears when the local model starts on the prompt ('reading') and each time output arrives ('writing', with what came). */
 export type AskProgress = (event: 'reading' | 'writing', content: string) => void;
-export async function askModel(system: string, user: string, progress?: AskProgress): Promise<string> { return ask(system, user, progress); }
+export async function askModel(system: string, user: string, progress?: AskProgress): Promise<string> { return ask(system, user, { progress }); }
+/** Holds the answer to a grammar and a length (short, strictly shaped answers from a small model); `label` is what the Task center says while it runs. */
+export async function askShaped(system: string, user: string, shape: { label: string; maxTokens: number; grammar?: string }): Promise<string> { return ask(system, user, { label: shape.label, shape }); }
+interface AskOptions { progress?: AskProgress; label?: string; shape?: { grammar?: string; maxTokens: number } }
 
-async function ask(system: string, user: string, progress?: AskProgress): Promise<string> {
+async function ask(system: string, user: string, { progress, label = 'Writing a script or lesson', shape }: AskOptions = {}): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   const remote = await askRemote(system, user);
   if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -98,10 +101,13 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
   const purpose = system.replace(/\s+/g, ' ').slice(0, 60);
   let out: string;
   try {
-  out = await llmService.generateResponse(
-    [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }],
-    { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
-  );
+  const messages = [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }];
+  out = shape
+    ? await llmService.generateWithMaxTokens(messages, shape.maxTokens, { grammar: shape.grammar })
+    : await llmService.generateResponse(
+      messages,
+      { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
+    );
   } catch (e) {
     logger.warn(`[AI] background call failed after ${((Date.now() - asked) / 1000).toFixed(1)} s (${purpose}): ${String((e as Error)?.message || e).slice(0, 200)}`);
     throw e;
@@ -112,7 +118,7 @@ async function ask(system: string, user: string, progress?: AskProgress): Promis
     logger.log(`[AI] background call (${purpose}): prompt ${system.length + user.length} chars, first word after ${perf.lastTimeToFirstToken.toFixed(1)} s, ${perf.lastTokenCount} tokens at ${perf.lastDecodeTokensPerSecond.toFixed(1)} tok/s, ${((Date.now() - asked) / 1000).toFixed(1)} s in all, reply ${out.length} chars${reuseNote()}`);
   } catch { /* the line is a convenience */ }
   return out.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  }, { label: 'Writing a script or lesson' }).finally(() => { if (onBackground) scheduleChatModelRestore(); }); // also after a failure: the chat model comes back
+  }, { label }).finally(() => { if (onBackground) scheduleChatModelRestore(); }); // also after a failure: the chat model comes back
 }
 
 const LINE_RE = /^\s*(?:[-*•]|\d+[.)])?\s*\**\s*(?:HOST|SPEAKER)?\s*([ABC])\**\s*[:\-–—]\s*\**\s*(.+)$/i;

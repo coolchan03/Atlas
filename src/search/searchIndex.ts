@@ -34,6 +34,7 @@ const DESTINATIONS: Destination[] = [
   { title: 'Offline library', route: 'OfflineLibrary', icon: 'book-open', keywords: 'wikipedia books packs offline reference' },
   { title: 'Survival manual', route: 'SurvivalManual', icon: 'life-buoy', keywords: 'first aid water shelter fire guide' },
   { title: 'Phrase trainer', route: 'Phrases', icon: 'globe', keywords: 'travel phrases translate' },
+  { title: 'AI radio', route: 'Radio', icon: 'radio', keywords: 'radio station music songs poems genre playlist endless dj theme' },
   { title: 'Translator', route: 'Translator', icon: 'repeat', keywords: 'translate translation interpreter interpret conversation language camera sign menu speak' },
   { title: 'Tools', route: 'Tools', icon: 'tool', keywords: 'web search calculator tools enable' },
   { title: 'About Atlas', route: 'About', icon: 'info', keywords: 'version build licence' },

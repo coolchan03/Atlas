@@ -63,6 +63,7 @@ import { AssistantAccessScreen } from '../screens/AssistantAccessScreen';
 import { BackgroundSettingsScreen } from '../screens/BackgroundSettingsScreen';
 import { TaskCenterScreen } from '../tasks/TaskCenterScreen';
 import { TranslatorScreen } from '../translator/TranslatorScreen';
+import { RadioScreen } from '../radio/RadioScreen';
 import { BriefingPaperScreen } from '../screens/BriefingPaperScreen';
 import { useLayoutClass } from '../hooks/useLayoutClass';
 import {
@@ -340,6 +341,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="SurvivalManual" component={SurvivalManualScreen} />
         <RootStack.Screen name="Phrases" component={PhrasesScreen} />
         <RootStack.Screen name="Translator" component={TranslatorScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="Radio" component={RadioScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Study" component={StudyScreen} />
         <RootStack.Screen name="Practice" component={PracticeScreen} />
         <RootStack.Screen name="Planner" component={PlannerScreen} />

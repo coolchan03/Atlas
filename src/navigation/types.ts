@@ -23,6 +23,7 @@ export type RootStackParamList = {
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
   Translator: undefined;
+  Radio: undefined;
   Study: { projectId: string; openAt?: number };
   Practice: { projectId: string; topic?: string };
   Planner: undefined;

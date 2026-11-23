@@ -32,6 +32,7 @@ export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
   'atlas-tasks': 'running and failed jobs of this phone, which cannot continue on another phone',
   'atlas-reading-prefs': 'how this phone shows lessons: text size, line spacing and font',
+  'atlas-radio': 'the AI radio\'s theme and choices on this phone',
   'atlas-translator': 'the Translator\'s chosen languages and recent translations on this phone',
   'atlas-model-speed': 'measured speed of this phone\'s models',
   'atlas-accel-record': 'what each model measured on each accelerator on this phone (hardware-bound)',
