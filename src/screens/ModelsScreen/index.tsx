@@ -14,6 +14,7 @@ import { createStyles } from './styles';
 import { initialFilterState } from './constants';
 import { TextModelsTab } from './TextModelsTab';
 import { ImageModelsTab } from './ImageModelsTab';
+import { MissingFeatureForTab } from '../../components/MissingFeatureNote';
 import { TranscriptionModelsTab } from './TranscriptionModelsTab';
 import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 const literalStyles = StyleSheet.create({
@@ -190,6 +191,9 @@ export const ModelsScreen: React.FC = () => {
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {/* A feature this version of Atlas was built without is said to be missing at the top of the tab that offers it. */}
+      <MissingFeatureForTab tab={vm.activeTab} />
 
       {/* Text Models Tab */}
       {vm.activeTab === 'text' && (

@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
+import { BuildFeaturesCard } from '../components/BuildFeaturesCard';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
@@ -114,6 +115,9 @@ export const DeviceInfoScreen: React.FC = () => {
               <Text style={styles.tierModels}>All models + largest</Text>
             </View>
           </View>
+        </Card>
+        <Card style={styles.section}>
+          <BuildFeaturesCard />
         </Card>
       </ScrollView>
     </SafeAreaView>

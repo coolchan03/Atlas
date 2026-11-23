@@ -10,6 +10,7 @@
  * - onComplete receives fully accumulated content, not an empty string.
  */
 
+import { buildFeature } from './buildCapabilities';
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
 import { recordSpeed } from '../atlasTools/speed';
 import logger from '../utils/logger';
@@ -101,6 +102,8 @@ class LiteRTService {
   // ---------------------------------------------------------------------------
 
   async loadModel(modelPath: string, preferredBackend: LiteRTBackend, opts: { supportsVision?: boolean; supportsAudio?: boolean; maxNumTokens?: number } = {}): Promise<void> {
+    const absent = buildFeature('liteRt');
+    if (!absent.available) throw new Error(absent.missing);
     if (!this.isAvailable()) throw new Error('LiteRT is not available on this platform');
     const { supportsVision = false, supportsAudio = false, maxNumTokens = 4096 } = opts;
     this.configuredMaxTokens = maxNumTokens;

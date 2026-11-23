@@ -4,6 +4,7 @@ import { useAccelRecord } from '../atlasTools/accelRecord';
 import { useSpecBenefit } from '../atlasTools/specBenefit';
 import { noteStage } from '../atlasTools/stageTimes';
 import { loadFallbackNotes } from './fallbackNotes';
+import { buildFeature } from './buildCapabilities';
 import { Platform } from 'react-native';
 import { vulkanEngine, describeVulkanStatus } from './vulkanEngine';
 import { modelLayerTotal, effectiveOffloadedLayers, embeddedMtpLayers } from './gpuOffload';
@@ -220,6 +221,8 @@ class LLMService {
     return this.context ? embeddedMtpLayers((this.context as any).model?.metadata) : null;
   }
   async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean; forceCpu?: boolean; draftPath?: string; embeddedMtp?: boolean; switchedOff?: { vision?: boolean; mtp?: boolean }; /** Load without the vision file and attach it when a picture is first used. */ deferVision?: boolean }): Promise<void> {
+    const absent = buildFeature('localAi');
+    if (!absent.available) throw new Error(absent.missing); // this version of Atlas was built without the on-device engine: say so instead of a native error
     const epoch = this.loadEpoch;
     const loadBegan = Date.now();
     const mutex = this.acquireContextMutex();

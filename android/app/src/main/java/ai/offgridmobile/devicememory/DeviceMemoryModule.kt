@@ -9,6 +9,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import java.io.File
 
 /**
  * Exposes the REAL per-process memory headroom to JS — not a fraction-of-total-RAM
@@ -21,6 +22,22 @@ class DeviceMemoryModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     override fun getName(): String = "DeviceMemoryModule"
+
+    /**
+     * What this APK was built for: the CPU type it runs as and the native libraries it actually contains, read from where Android put them
+     * (nativeLibraryDir ends in the CPU type). The app shows features whose libraries are not there as missing on this build. Same contract as
+     * iOS: constants.buildInfo = { abi, nativeLibs }.
+     */
+    override fun getConstants(): MutableMap<String, Any> {
+        val dir = File(reactApplicationContext.applicationInfo.nativeLibraryDir ?: "")
+        val abi = when (val isa = dir.name) {
+            "arm64" -> "arm64-v8a"
+            "arm" -> "armeabi-v7a"
+            else -> isa
+        }
+        val libs = (dir.list() ?: emptyArray()).sorted()
+        return mutableMapOf("buildInfo" to mapOf("abi" to abi, "nativeLibs" to libs))
+    }
 
     @ReactMethod
     fun getMemoryInfo(promise: Promise) {
