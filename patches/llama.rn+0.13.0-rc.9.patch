@@ -1,0 +1,16 @@
+diff --git a/node_modules/llama.rn/android/build.gradle b/node_modules/llama.rn/android/build.gradle
+index 974aa85..f569d79 100644
+--- a/node_modules/llama.rn/android/build.gradle
++++ b/node_modules/llama.rn/android/build.gradle
+@@ -96,7 +96,10 @@ def getExtOrIntegerDefault(name) {
+ def reactNativeArchitectures() {
+   def value = project.getProperties().get("reactNativeArchitectures")
+   def archs = value ? value.split(",") : ["x86_64", "arm64-v8a"]
+-  return archs.findAll { it != "armeabi-v7a" && it != "x86" } // Not building for 32-bit architectures
++  def supported = archs.findAll { it != "armeabi-v7a" && it != "x86" } // Not building for 32-bit architectures
++  // Atlas: a build for 32-bit CPU types only (shipped without the on-device engine) keeps the requested types. An empty list means "no filter" and
++  // would build every CPU type's engine wrappers for nothing.
++  return supported.isEmpty() ? archs : supported
+ }
+ 
+ // Detect RN Version, ref from:
