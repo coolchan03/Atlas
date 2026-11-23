@@ -28,7 +28,7 @@ class DeviceMemoryModule(reactContext: ReactApplicationContext) :
      * (nativeLibraryDir ends in the CPU type). The app shows features whose libraries are not there as missing on this build. Same contract as
      * iOS: constants.buildInfo = { abi, nativeLibs }.
      */
-    override fun getConstants(): MutableMap<String, Any> {
+    override fun getConstants(): Map<String, Any> {
         val dir = File(reactApplicationContext.applicationInfo.nativeLibraryDir ?: "")
         val abi = when (val isa = dir.name) {
             "arm64" -> "arm64-v8a"
@@ -36,7 +36,7 @@ class DeviceMemoryModule(reactContext: ReactApplicationContext) :
             else -> isa
         }
         val libs = (dir.list() ?: emptyArray()).sorted()
-        return mutableMapOf("buildInfo" to mapOf("abi" to abi, "nativeLibs" to libs))
+        return mapOf("buildInfo" to mapOf("abi" to abi, "nativeLibs" to libs))
     }
 
     @ReactMethod
