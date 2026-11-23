@@ -191,3 +191,10 @@ Not done: embeddings and search speed, chat rendering cost, background-work prio
 - 8.1 changed: a published release now builds every CPU type as its own APK (see `docs/native-runtime-inventory.md`); `choose-architectures.cjs` and the `architecture_every` input are gone. The new workflow has not been run on CI yet at the time of writing this line: the first run is a `test_abis` build of the three reduced CPU types.
 - Features missing on a reduced build are labelled in the app (`buildCapabilities.ts`).
 
+## Eleventh pass (0.0.242)
+
+- 3.5 The 35 MB cap on a password backup is gone: slices (`src/atlasTools/backupParts.ts`), 120 MB written, 170 MB read, single-piece format kept for small backups. Native code unchanged. Not run on a phone: the peak memory of a 120 MB backup (the JSON text, its slices and the written file) is the thing to watch on a low-memory device, and the limit can be lowered in one place (`EXPORT_LIMIT_MB` in `backup.ts`).
+- 7.2 Translator: centred column on wide screens, translation beside the text on a tablet. The other screens that already use `useWideLayout` / `useLayoutClass` were not changed; the full tablet and visual audit (7.1, 7.3, 7.5) still needs a tablet or emulator to look at.
+- 4.5 Looked at, not changed: `estimateModelRam` counts the vision file (`mmProjFileSize`) in the residency size even when it is attached on demand, so a vision model asks for more room than a text-only load needs. Changing it means the attach step in `llm.ts` must ask the residency manager for room first, and an out-of-memory there ends the app, not an error message. Do it with a phone in hand.
+- Tiny models for an AI radio: Supra2.5-Pro-Instruct (65M, Qwen3, GGUF, 54 MB at Q4_K_M, 512-token context) runs in the existing engine; Aurora2-400M-A20M and Quark-150M-128K-Zero are custom architectures with no GGUF and no llama.cpp support, so they do not.
+
