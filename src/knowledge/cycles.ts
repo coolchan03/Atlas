@@ -427,7 +427,8 @@ export async function listCycles(): Promise<Array<{ cycleId: string; dir: string
 
 export async function readReport(dir: string): Promise<CycleReport | null> {
   const text = await readText(cycleFile(dir, 'report.json'));
-  return text ? (JSON.parse(text) as CycleReport) : null;
+  if (!text) return null;
+  try { return JSON.parse(text) as CycleReport; } catch { return null; } // an interrupted write reads as no report
 }
 
 /** An unfinished cycle left by a killed app is closed as interrupted, so it shows what it reached rather than looking alive. */

@@ -26,7 +26,12 @@ async function epubText(path: string): Promise<string> {
 }
 
 async function textPages(path: string, kind: Exclude<BookKind, 'pdf'>): Promise<string[]> {
-  if (await RNFS.exists(sidecar(path))) return JSON.parse(await RNFS.readFile(sidecar(path), 'utf8'));
+  if (await RNFS.exists(sidecar(path))) {
+    try {
+      const cached = JSON.parse(await RNFS.readFile(sidecar(path), 'utf8'));
+      if (Array.isArray(cached) && cached.length && cached.every(p => typeof p === 'string')) return cached;
+    } catch { /* a half-written cache from a killed app is rebuilt below */ }
+  }
   const text = kind === 'epub' ? await epubText(path) : await RNFS.readFile(path, 'utf8');
   const pages = paginateText(text);
   if (!pages.length) throw new Error('There is no readable text in that file.');

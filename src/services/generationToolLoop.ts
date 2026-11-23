@@ -156,6 +156,19 @@ function isToolGrammarError(msg: string): boolean {
  *  callers know a retry would DUPLICATE already-streamed output into the same consumer. */
 type StreamedError = Error & { streamed?: boolean };
 
+
+/** Local models sometimes emit malformed tool-call JSON. A throw inside the completion callback would leave the generation promise unsettled, so bad arguments become an empty object and the tool reports the missing fields itself. */
+function parseToolArguments(raw: unknown): Record<string, any> {
+  if (typeof raw !== 'string') return (raw as Record<string, any>) ?? {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    logger.warn(`[ToolLoop] malformed tool arguments ignored: ${raw.slice(0, 120)}`);
+    return {};
+  }
+}
+
 function remoteGenerateOnce(
   provider: any,
   args: { messages: Message[]; tools: any[]; thinkingEnabled: boolean; onStream?: (data: StreamToken) => void },
@@ -173,12 +186,10 @@ function remoteGenerateOnce(
       onReasoning: (content: string) => { streamed = true; onStream?.({ reasoningContent: content }); },
       onComplete: (result: CompletionResult) => {
         if (result.toolCalls && result.toolCalls.length > 0) {
-          toolCalls = result.toolCalls.map(tc => ({
-            id: tc.id || `call-${Date.now()}`,
+          toolCalls = result.toolCalls.map((tc, index) => ({
+            id: tc.id || `call-${Date.now()}-${index}`,
             name: tc.name,
-            arguments: typeof tc.arguments === 'string'
-              ? JSON.parse(tc.arguments) as Record<string, any>
-              : tc.arguments,
+            arguments: parseToolArguments(tc.arguments),
           }));
         }
         resolve({ fullResponse: result.content, toolCalls });
