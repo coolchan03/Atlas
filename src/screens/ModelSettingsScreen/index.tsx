@@ -14,6 +14,7 @@ import { useLayoutClass } from '../../hooks/useLayoutClass';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import { SystemPromptSection } from './SystemPromptSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
+import { MissingFeatureNote } from '../../components/MissingFeatureNote';
 import { TextGenerationSection } from './TextGenerationSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
@@ -104,6 +105,7 @@ export const ModelSettingsScreen: React.FC = () => {
               color={colors.textMuted}
             />
           </TouchableOpacity>
+          {imageOpen && <MissingFeatureNote feature="imageGeneration" />}
           {imageOpen && <ImageGenerationSection />}
     </>
   );

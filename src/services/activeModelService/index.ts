@@ -1,4 +1,5 @@
 // ActiveModelService — THE ONLY PLACE models should be loaded/unloaded from.
+import { buildFeature } from '../buildCapabilities';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { getActiveEngineService } from '../engines';
@@ -259,6 +260,7 @@ class ActiveModelService {
     timeoutMs: number = 240000,
     opts?: { override?: boolean },
   ): Promise<void> {
+    if (!buildFeature('imageGeneration').available) throw new Error(buildFeature('imageGeneration').missing); // built without the image engines
     await modelResidencyManager.runExclusive(`load:image:${modelId}`, () =>
       this.doLoadImageModelLocked(modelId, timeoutMs, opts),
     );

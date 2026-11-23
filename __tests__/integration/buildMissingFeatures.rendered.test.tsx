@@ -24,6 +24,7 @@ it('a 32-bit ARM build says which features it lacks, in the version card, on the
   // The Models tabs: Text and Image say so; Transcription has what it needs and says nothing.
   const text = rtl.render(React.createElement(MissingFeatureForTab, { tab: 'text' }));
   expect(text.getByTestId('missing-localAi')).toBeTruthy();
+  expect(text.getByTestId('missing-liteRt')).toBeTruthy();
   text.unmount();
   const whisper = rtl.render(React.createElement(MissingFeatureForTab, { tab: 'transcription' }));
   expect(whisper.queryByTestId('missing-whisper')).toBeNull();

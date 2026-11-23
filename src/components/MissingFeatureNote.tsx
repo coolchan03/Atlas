@@ -6,7 +6,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { buildFeature, type BuildFeatureId } from '../services/buildCapabilities';
 
 /** Says a feature is missing from this version of Atlas (because its native library is not in this build) and why. Nothing when the feature is there. */
-function MissingFeatureNote({ feature }: { feature: BuildFeatureId }) {
+export function MissingFeatureNote({ feature }: { feature: BuildFeatureId }) {
   const { colors } = useTheme();
   const f = buildFeature(feature);
   if (f.available) return null;
@@ -21,12 +21,12 @@ function MissingFeatureNote({ feature }: { feature: BuildFeatureId }) {
   );
 }
 
-const TAB_FEATURE: Record<string, BuildFeatureId> = { text: 'localAi', image: 'imageGeneration', voice: 'neuralVoices', transcription: 'whisper' };
+const TAB_FEATURES: Record<string, BuildFeatureId[]> = { text: ['localAi', 'liteRt'], image: ['imageGeneration'], voice: ['neuralVoices'], transcription: ['whisper'] };
 
 /** The note for whichever Models tab is open (nothing for a tab with no native-code feature, or when the feature is there). */
 export function MissingFeatureForTab({ tab }: { tab: string }) {
-  const feature = TAB_FEATURE[tab];
-  return feature ? <MissingFeatureNote feature={feature} /> : null;
+  const features = TAB_FEATURES[tab] ?? [];
+  return <>{features.map((f) => <MissingFeatureNote key={f} feature={f} />)}</>;
 }
 
 const styles = StyleSheet.create({
