@@ -4,14 +4,14 @@ import { runStation, type StationDeps, type StationEvent } from '../../src/radio
 
 interface Track { id: number; seconds: number }
 
-function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?: 'good' | 'garbage'; skipFirstSong?: boolean } = {}) {
+function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?: 'good' | 'garbage'; skipFirstSong?: boolean; request?: string; kept?: number[] } = {}) {
   let clock = 1_000_000;
   const realNow = Date.now;
   Date.now = () => clock;
   const log: string[] = [];
   const events: StationEvent[] = [];
   const made: Track[] = []; const discarded: number[] = [];
-  let stop = false; let plays = 0; let skip = false; let skipped = false;
+  let stop = false; let plays = 0; let skip = false; let skipped = false; let requestTaken = false;
   const deps: StationDeps<Track> = {
     // A fake small model: writes a line for each end word it is told, and picks a style and instruments when asked.
     ask: async (system, _user, options) => {
@@ -30,6 +30,8 @@ function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?:
     wait: async (ms) => { clock += ms; if (plays >= (opts.songs ?? 3)) stop = true; return !stop; },
     skipped: () => skip,
     rng: seeded(7),
+    takeRequest: () => (opts.request && !requestTaken ? ((requestTaken = true), opts.request) : null),
+    isKept: (t) => (opts.kept ?? []).includes(t.id),
     report: (e) => events.push(e),
   };
   const run = () => runStation({ ...DEFAULT_RADIO, ...settings }, deps, () => stop).finally(() => { Date.now = realNow; });
@@ -94,5 +96,26 @@ it('rolls more songs that match a station theme, and never the same genre or top
     previous = show.genre.id;
     history = { genres: [...history.genres, show.genre.id].slice(-3), topics: [...history.topics, show.topic.id].slice(-12), subjects: [...history.subjects, show.subject.id].slice(-12) };
     expect(show.seconds).toBeLessThanOrEqual(DEFAULT_RADIO.maxSongSeconds);
+  }
+});
+
+it('makes the first song about what was asked for, with a poem, and keeps a song the listener chose to keep', async () => {
+  const radio = build({ poemChance: 0 }, { request: 'a lost umbrella', kept: [0], songs: 2 });
+  await radio.run();
+  const first = radio.events.find((e): e is Extract<StationEvent, { kind: 'playing' }> => e.kind === 'playing');
+  expect(first?.show.topic.text).toBe('a lost umbrella');
+  expect(first?.poem).not.toBeNull(); // a request gets a poem even when poems are rare
+  expect(spoken(radio.log)[0]).toMatch(/a lost umbrella/);
+  expect(radio.discarded).not.toContain(0); // song 0 was kept
+  expect(radio.discarded.length).toBe(radio.made.length - 1);
+});
+
+it('rolls only calm genres, tones and tunes when calm songs are asked for', () => {
+  const rng = seeded(3);
+  for (let i = 0; i < 80; i += 1) {
+    const show = rollShow({ ...DEFAULT_RADIO, calmOnly: true }, rng);
+    expect(show.genre.calm).toBe(true);
+    expect(show.energy).toBe('calm');
+    expect(['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious']).toContain(show.tone);
   }
 });

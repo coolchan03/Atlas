@@ -5,7 +5,7 @@
  */
 import type { Energy, StyleMood } from '../music/styles';
 
-export interface Genre { id: string; label: string; style: StyleMood; /** Makes the tune livelier or calmer than the style's own. */ energy?: Energy; /** Instruments to lean on (Music Studio instrument ids). */ lean?: string[]; tags: string[] }
+export interface Genre { id: string; label: string; style: StyleMood; /** Soft enough for "calm songs only" (sleep, reading). */ calm?: boolean; /** Makes the tune livelier or calmer than the style's own. */ energy?: Energy; /** Instruments to lean on (Music Studio instrument ids). */ lean?: string[]; tags: string[] }
 export interface Entry { id: string; text: string; tags: string[] }
 
 export const GENRES: Genre[] = [
@@ -17,19 +17,19 @@ export const GENRES: Genre[] = [
   { id: 'reggae', label: 'reggae', style: 'reggae', tags: ['reggae', 'island', 'beach', 'chill'] },
   { id: 'country', label: 'country', style: 'country', tags: ['country', 'farm', 'truck', 'small town', 'cowboy'] },
   { id: 'blues', label: 'blues', style: 'blues', tags: ['blues', 'sad', 'lonely', 'night'] },
-  { id: 'jazz', label: 'jazz', style: 'jazz', tags: ['jazz', 'smoky', 'night', 'cafe', 'lounge'] },
+  { id: 'jazz', label: 'jazz', style: 'jazz', calm: true, tags: ['jazz', 'smoky', 'night', 'cafe', 'lounge'] },
   { id: 'hiphop', label: 'hip hop', style: 'hiphop', tags: ['hip hop', 'rap', 'beat', 'city'] },
   { id: 'edm', label: 'dance', style: 'edm', energy: 'lively', tags: ['dance', 'club', 'edm', 'party', 'electronic'] },
-  { id: 'lofi', label: 'lo-fi', style: 'lofi', tags: ['lofi', 'chill', 'study', 'rain', 'cozy'] },
-  { id: 'classical', label: 'classical', style: 'classical', tags: ['classical', 'orchestra', 'elegant', 'old'] },
-  { id: 'bossa', label: 'bossa nova', style: 'bossa', tags: ['bossa', 'brazil', 'cafe', 'sunny'] },
+  { id: 'lofi', label: 'lo-fi', style: 'lofi', calm: true, tags: ['lofi', 'chill', 'study', 'rain', 'cozy'] },
+  { id: 'classical', label: 'classical', style: 'classical', calm: true, tags: ['classical', 'orchestra', 'elegant', 'old'] },
+  { id: 'bossa', label: 'bossa nova', style: 'bossa', calm: true, tags: ['bossa', 'brazil', 'cafe', 'sunny'] },
   { id: 'western', label: 'western', style: 'western', tags: ['western', 'cowboy', 'desert', 'saloon'] },
   { id: 'chiptune', label: '8-bit', style: 'chiptune', tags: ['chiptune', 'game', 'arcade', 'robot', 'retro'] },
   { id: 'synthwave', label: 'synthwave', style: 'retro80s', tags: ['80s', 'synth', 'neon', 'retro', 'night drive'] },
   { id: 'surf', label: 'surf rock', style: 'surf', tags: ['surf', 'beach', 'ocean', 'summer', 'sea'] },
-  { id: 'folk', label: 'folk', style: 'campfire', tags: ['folk', 'campfire', 'acoustic', 'forest', 'story'] },
+  { id: 'folk', label: 'folk', style: 'campfire', calm: true, tags: ['folk', 'campfire', 'acoustic', 'forest', 'story'] },
   { id: 'electro', label: 'electronic', style: 'electro', tags: ['electronic', 'synth', 'space', 'robot', 'future'] },
-  { id: 'lullaby', label: 'lullaby', style: 'lullaby', energy: 'calm', tags: ['lullaby', 'sleep', 'calm', 'baby', 'bedtime'] },
+  { id: 'lullaby', label: 'lullaby', style: 'lullaby', calm: true, energy: 'calm', tags: ['lullaby', 'sleep', 'calm', 'baby', 'bedtime'] },
   { id: 'shanty', label: 'sea shanty', style: 'shanty', tags: ['pirate', 'sea', 'ship', 'sailor', 'ocean'] },
   { id: 'spooky', label: 'spooky', style: 'halloween', tags: ['haunted', 'ghost', 'spooky', 'horror', 'night', 'dark'] },
   { id: 'cinematic', label: 'cinematic', style: 'film', tags: ['epic', 'movie', 'hero', 'adventure', 'dramatic'] },
@@ -69,6 +69,8 @@ export const SUBJECTS: Entry[] = [
 
 export const TONES = ['silly', 'tender', 'dramatic', 'deadpan', 'hopeful', 'grumpy', 'dreamy', 'boastful', 'mournful', 'cheerful', 'mysterious', 'playful'] as const;
 export type Tone = typeof TONES[number];
+/** The tones used when only calm songs are wanted. */
+export const CALM_TONES: readonly Tone[] = ['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious'];
 
 /** The shape of a poem: stanzas, lines in each, and which line ends rhyme. */
 export interface Form { id: string; stanzas: number; lines: number; scheme: 'AABB' | 'ABAB' | 'ABCB' | 'AA' }

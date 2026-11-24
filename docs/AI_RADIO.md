@@ -32,6 +32,13 @@ A tiny model only has to **choose** and **fill in**; code holds the rules.
 2. **Poem** (`writer.ts`, `poem.ts`, `rhymes.ts`): rhymes are never left to the model. The dice give each line a few words to end with, taken from curated rhyme groups in `rhymes.ts` (two lines that must rhyme share a group, split between them so they cannot end in the same word). A grammar makes the reply exactly the right number of short lines, each ending in one of its words; the model chooses which fits. The check in `poem.ts` is then run on the result (line count, line length, no repeated line, no unsuitable word, rhymes). A poem that fails is asked for again, up to three times; if none passes, the song plays without one.
 3. **Host** (`announce.ts`): written lines with the dice dropped in ("Up next, a silly punk song about revenge, about my ex-husband. A poem comes with it."). Not model output.
 
+## Extras on the screen
+
+- **Request a song**: type a topic ("a lost umbrella"); the next song is about it and gets a poem unless poems are off. Words the station will not say are refused.
+- **Keep this song**: the song playing is not deleted afterwards and stays in the Music Studio list.
+- **Sleep timer** (15, 30, 60 or 90 minutes): the music fades out over 20 seconds and the station stops. The fade uses the music volume, which is put back as soon as the station stops; if the app were killed in the middle of the 20 seconds the volume would stay lowered (Music Studio has the volume control).
+- **Mood: Calm songs only**: only soft genres (jazz, lo-fi, classical, bossa nova, folk, lullaby), calm tunes and gentle tones.
+
 ## Playing (`station.ts`, `service.ts`)
 
 The next song is made while the current one plays. The host speaks over the start of the song (the music lowers while speech is heard), the poem is read once, 8 to 20 seconds in, in the phone's voice at a steady pitch, and the tune loops until the song's time is up. Stop and Next song end waits at once. Recordings are deleted when they have played. All of the phone's parts (model, recording, player, voice, clock) are passed in, so `__tests__/integration/radioStation.test.ts` runs the whole loop with fakes.

@@ -23,6 +23,12 @@ interface RadioRun {
   reading: boolean;
   problem: string | null;
   songs: number;
+  /** The topic the listener asked for, waiting for the next song. */
+  request: string | null;
+  /** The song playing now was kept: it stays in Music Studio. */
+  kept: boolean;
+  /** When the sleep timer ends the station (milliseconds since 1970), or null. */
+  sleepAt: number | null;
 }
-export const EMPTY_RUN: RadioRun = { on: false, line: '', title: '', about: '', poem: null, reading: false, problem: null, songs: 0 };
+export const EMPTY_RUN: RadioRun = { on: false, line: '', title: '', about: '', poem: null, reading: false, problem: null, songs: 0, request: null, kept: false, sleepAt: null };
 export const useRadioRun = create<RadioRun>(() => EMPTY_RUN);

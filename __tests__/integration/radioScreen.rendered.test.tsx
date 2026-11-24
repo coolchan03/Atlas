@@ -38,4 +38,28 @@ it('lets the theme, name, poems, song length and host be set, and shows the song
   expect(view.getByTestId('radio-poem').props.children).toContain('The ghost of me was doing fine');
   rtl.act(() => { useRadioRun.setState({ ...EMPTY_RUN, problem: 'No model is loaded.' }); });
   expect(view.getByTestId('radio-problem').props.children).toBe('No model is loaded.');
+
+  // Running: ask for a song, keep it, and set the sleep timer (and turn it off again so no timer is left).
+  const { useMusicPlayback } = require('../../src/music/backgroundPlayer');
+  rtl.act(() => { useRadioRun.setState({ ...EMPTY_RUN, on: true, line: 'Playing', title: 'Calm folk: a long nap', about: 'calm folk song' }); });
+  expect(view.getByTestId('radio-keep').props.accessibilityState?.disabled).toBeFalsy();
+  rtl.act(() => { useMusicPlayback.setState({ current: { id: 'track-1', title: 'Calm folk' } }); });
+  rtl.fireEvent.press(view.getByTestId('radio-keep'));
+  expect(useRadioRun.getState().kept).toBe(true);
+  rtl.fireEvent.changeText(view.getByTestId('radio-request'), 'a lost umbrella');
+  rtl.fireEvent.press(view.getByTestId('radio-request-go'));
+  expect(view.getByTestId('radio-request-note').props.children).toBe('Next song: a lost umbrella');
+  rtl.fireEvent.changeText(view.getByTestId('radio-request'), 'a shit song');
+  rtl.fireEvent.press(view.getByTestId('radio-request-go'));
+  expect(useRadioRun.getState().request).toBe('a lost umbrella'); // the unsuitable one was not queued
+  rtl.fireEvent.press(view.getByTestId('radio-sleep'));
+  rtl.fireEvent.press(view.getByTestId('radio-sleep-30'));
+  expect(useRadioRun.getState().sleepAt).toBeGreaterThan(Date.now() + 29 * 60_000);
+  expect(view.getByTestId('radio-sleep-note')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('radio-sleep'));
+  rtl.fireEvent.press(view.getByTestId('radio-sleep-0'));
+  expect(useRadioRun.getState().sleepAt).toBeNull();
+  rtl.fireEvent.press(view.getByTestId('radio-mood'));
+  rtl.fireEvent.press(view.getByTestId('radio-mood-calm'));
+  expect(useRadioSettings.getState().calmOnly).toBe(true);
 });

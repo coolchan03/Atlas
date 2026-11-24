@@ -7,7 +7,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { Button } from '../components/Button';
 import { Select, type SelectOption } from '../components/Select';
 import { useWideLayout } from '../hooks/useWideLayout';
-import { skipSong, startRadio, stopRadio } from './service';
+import { keepSong, requestSong, setSleepTimer, skipSong, startRadio, stopRadio } from './service';
 import { useRadioRun, useRadioSettings } from './store';
 import { GENRES, SUBJECTS, TOPICS } from './tables';
 
@@ -18,6 +18,8 @@ const POEMS: SelectOption[] = [
   { id: '0', label: 'Never', hint: 'Music only' },
 ];
 const LENGTHS: SelectOption[] = [60, 120, 180, 240, 300].map((s) => ({ id: String(s), label: s === 60 ? 'Up to 1 minute' : `Up to ${s / 60} minutes` }));
+const MOODS: SelectOption[] = [{ id: 'any', label: 'Any mood' }, { id: 'calm', label: 'Calm songs only', hint: 'Soft genres and gentle tunes, for sleep or reading' }];
+const SLEEP: SelectOption[] = [{ id: '0', label: 'Off' }, ...[15, 30, 60, 90].map((m) => ({ id: String(m), label: `${m} minutes`, hint: 'The music fades out and the station stops' }))];
 const HOST: SelectOption[] = [{ id: 'on', label: 'Says what is coming up' }, { id: 'off', label: 'Stays quiet' }];
 
 /** The AI radio: say what the station is about, press Start, and it plays songs one after another with a poem read over some of them. */
@@ -27,6 +29,14 @@ export const RadioScreen: React.FC = () => {
   const settings = useRadioSettings();
   const run = useRadioRun();
   const poemId = settings.musicOnly ? '0' : String(settings.poemChance);
+  const [wish, setWish] = React.useState('');
+  const [wishNote, setWishNote] = React.useState('');
+  const [sleep, setSleep] = React.useState('0');
+  const ask = () => {
+    const result = requestSong(wish);
+    setWishNote(result === 'ok' ? 'The next song will be about that.' : result === 'unsuitable' ? 'The station will not play that. Try other words.' : '');
+    if (result === 'ok') setWish('');
+  };
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="AI radio" />
@@ -47,6 +57,7 @@ export const RadioScreen: React.FC = () => {
         <View style={styles.grid}>
           <View style={styles.half}><Select label="Poems" options={POEMS} value={poemId} onChange={(id) => settings.set({ musicOnly: id === '0', ...(id === '0' ? {} : { poemChance: Number(id) }) })} testID="radio-poems" /></View>
           <View style={styles.half}><Select label="Song length" options={LENGTHS} value={String(settings.maxSongSeconds)} onChange={(id) => settings.set({ maxSongSeconds: Number(id) })} testID="radio-length" /></View>
+          <View style={styles.half}><Select label="Mood" options={MOODS} value={settings.calmOnly ? 'calm' : 'any'} onChange={(id) => settings.set({ calmOnly: id === 'calm' })} testID="radio-mood" /></View>
           <View style={styles.half}><Select label="Host" options={HOST} value={settings.host ? 'on' : 'off'} onChange={(id) => settings.set({ host: id === 'on' })} testID="radio-host" /></View>
         </View>
         <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }}>
@@ -56,6 +67,7 @@ export const RadioScreen: React.FC = () => {
           <View style={styles.row}>
             <Button title="Stop" onPress={stopRadio} testID="radio-stop" />
             <Button title="Next song" variant="outline" onPress={skipSong} testID="radio-skip" />
+            <Button title={run.kept ? 'Kept' : 'Keep this song'} variant="outline" onPress={keepSong} disabled={run.kept || !run.title} testID="radio-keep" />
           </View>
         ) : <Button title="Start the radio" onPress={startRadio} testID="radio-start" />}
         {run.on && (
@@ -65,6 +77,19 @@ export const RadioScreen: React.FC = () => {
             {!!run.about && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>{run.about}</Text>}
             {!!run.poem && run.reading && <Text style={{ color: colors.text, ...TYPOGRAPHY.body }} testID="radio-poem">{run.poem.join('\n')}</Text>}
             {!!run.poem && !run.reading && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }}>A poem is coming.</Text>}
+          </View>
+        )}
+        {run.on && (
+          <View style={styles.gap}>
+            <Text style={{ color: colors.text, ...TYPOGRAPHY.body }}>Request a song</Text>
+            <View style={styles.row}>
+              <TextInput value={wish} onChangeText={setWish} maxLength={80} testID="radio-request" placeholder="e.g. a lost umbrella" placeholderTextColor={colors.textMuted}
+                style={[styles.input, styles.grow, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} />
+              <Button title="Ask" variant="outline" onPress={ask} disabled={!wish.trim()} testID="radio-request-go" />
+            </View>
+            {!!(run.request || wishNote) && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }} testID="radio-request-note">{run.request ? `Next song: ${run.request}` : wishNote}</Text>}
+            <Select label="Sleep timer" options={SLEEP} value={sleep} onChange={(id) => { setSleep(id); setSleepTimer(Number(id) || null); }} testID="radio-sleep" />
+            {run.sleepAt !== null && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }} testID="radio-sleep-note">{`The station stops at ${new Date(run.sleepAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`}</Text>}
           </View>
         )}
         {!!run.problem && <Text style={{ color: colors.error, ...TYPOGRAPHY.bodySmall }} testID="radio-problem">{run.problem}</Text>}
@@ -79,6 +104,8 @@ const styles = StyleSheet.create({
   input: { ...TYPOGRAPHY.body, borderWidth: 1, borderRadius: SPACING.sm, padding: SPACING.md, minHeight: 48 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   half: { flexBasis: '48%', flexGrow: 1 },
-  row: { flexDirection: 'row', gap: SPACING.md },
+  row: { flexDirection: 'row', gap: SPACING.md, alignItems: 'center' },
+  grow: { flex: 1 },
+  gap: { gap: SPACING.sm },
   card: { borderWidth: 1, borderRadius: SPACING.md, padding: SPACING.lg, gap: SPACING.sm },
 });

@@ -6,7 +6,7 @@
  */
 import type { Energy } from '../music/styles';
 import { styleFromText } from '../music/simple';
-import { ENERGIES, FORMS, GENRES, MAX_SONG_SECONDS, SONG_SECONDS, SPOTLIGHTS, SUBJECTS, TONES, TOPICS, type Entry, type Form, type Genre, type Tone } from './tables';
+import { CALM_TONES, ENERGIES, FORMS, GENRES, MAX_SONG_SECONDS, SONG_SECONDS, SPOTLIGHTS, SUBJECTS, TONES, TOPICS, type Entry, type Form, type Genre, type Tone } from './tables';
 
 export interface RadioSettings {
   /** What the station is about, in the person's own words ("a haunted lighthouse's late-night station"). Empty means anything. */
@@ -20,8 +20,10 @@ export interface RadioSettings {
   maxSongSeconds: number;
   /** The host says what is coming over the start of each song. */
   host: boolean;
+  /** Soft songs only: calm genres, calm tones, no lively tunes (for sleep or reading). */
+  calmOnly: boolean;
 }
-export const DEFAULT_RADIO: RadioSettings = { theme: '', stationName: 'Atlas Radio', poemChance: 0.4, musicOnly: false, maxSongSeconds: 180, host: true };
+export const DEFAULT_RADIO: RadioSettings = { theme: '', stationName: 'Atlas Radio', poemChance: 0.4, musicOnly: false, maxSongSeconds: 180, host: true, calmOnly: false };
 
 export interface Show {
   genre: Genre; topic: Entry; subject: Entry; tone: Tone; form: Form; energy: Energy;
@@ -74,7 +76,8 @@ export const EMPTY_HISTORY: History = { genres: [], topics: [], subjects: [] };
 export function rollShow(settings: RadioSettings, rng: Random, history: History = EMPTY_HISTORY): Show {
   const themed = styleFromText(settings.theme);
   const pickBy = <T,>(weight: (item: T) => number) => (list: readonly T[]): T => weighted(list, weight, rng);
-  const genre = pickFresh(GENRES, history.genres.slice(-3), pickBy((g) => themeBoost(settings.theme, g.tags, g.label) * (themed && g.style === themed ? 4 : 1)));
+  const genres = settings.calmOnly ? GENRES.filter((g) => g.calm) : GENRES;
+  const genre = pickFresh(genres, history.genres.slice(-3), pickBy((g) => themeBoost(settings.theme, g.tags, g.label) * (themed && g.style === themed ? 4 : 1)));
   const topic = pickFresh(TOPICS, history.topics.slice(-12), pickBy((t) => themeBoost(settings.theme, t.tags, t.text)));
   const subject = pickFresh(SUBJECTS, history.subjects.slice(-12), pickBy((s) => themeBoost(settings.theme, s.tags, s.text)));
   const poemDelay = 8 + Math.floor(rng() * 13);
@@ -83,7 +86,7 @@ export function rollShow(settings: RadioSettings, rng: Random, history: History 
   const seconds = pick(lengths.length ? lengths : [60], rng);
   const spotlight = rng() < 0.5 ? pick(genre.lean ? [...genre.lean] : SPOTLIGHTS, rng) : null;
   return {
-    genre, topic, subject, tone: pick(TONES, rng), form: pick(FORMS, rng), energy: genre.energy ?? pick(ENERGIES, rng),
+    genre, topic, subject, tone: pick(settings.calmOnly ? CALM_TONES : TONES, rng), form: pick(FORMS, rng), energy: settings.calmOnly ? 'calm' : genre.energy ?? pick(ENERGIES, rng),
     seconds, spotlight, withPoem: !settings.musicOnly && rng() < settings.poemChance, poemDelay, seed: Math.floor(rng() * 1e9),
   };
 }

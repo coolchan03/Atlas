@@ -30,6 +30,10 @@ export interface StationDeps<H> {
   /** True once the listener asked to skip the song that is playing. */
   skipped: () => boolean;
   rng: Random;
+  /** A topic the listener asked for (handed over once), or null. */
+  takeRequest: () => string | null;
+  /** True for a recording the listener chose to keep: it is not thrown away. */
+  isKept: (handle: H) => boolean;
   /** Said as the station changes: "Choosing the sound", "Playing ...". */
   report: (event: StationEvent) => void;
 }
@@ -86,10 +90,14 @@ async function playShow<H>(song: Prepared<H>, station: { settings: RadioSettings
 export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H>, stopped: () => boolean): Promise<void> {
   let history: History = EMPTY_HISTORY;
   const roll = (): Show => {
-    const show = rollShow(settings, deps.rng, history);
+    const rolled = rollShow(settings, deps.rng, history);
+    // A request becomes the next song's topic, and it gets a poem unless poems are off.
+    const asked = deps.takeRequest();
+    const show: Show = asked ? { ...rolled, topic: { id: `request-${history.topics.length}`, text: asked, tags: [] }, withPoem: !settings.musicOnly } : rolled;
     history = { genres: [...history.genres, show.genre.id].slice(-6), topics: [...history.topics, show.topic.id].slice(-20), subjects: [...history.subjects, show.subject.id].slice(-20) };
     return show;
   };
+  const discard = async (handle: H): Promise<void> => { if (!deps.isKept(handle)) await deps.discard(handle).catch(() => undefined); };
   let played: Prepared<H> | null = null;
   try {
     let current = await prepareShow(roll(), settings, deps);
@@ -97,9 +105,9 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
       // The next song is made in the background while this one plays.
       const upcoming: Promise<Prepared<H> | null> = prepareShow(roll(), settings, deps).catch((e) => { deps.report({ kind: 'problem', message: String((e as Error)?.message || e) }); return null; });
       const finished = await playShow(current, { settings, deps }, count);
-      if (played) await deps.discard(played.handle).catch(() => undefined);
+      if (played) await discard(played.handle);
       played = current;
-      if (!finished || stopped()) { void upcoming.then((u) => u && deps.discard(u.handle).catch(() => undefined)); break; }
+      if (!finished || stopped()) { void upcoming.then((u) => u && discard(u.handle)); break; }
       const next = await upcoming;
       if (!next) { if (!(await deps.wait(5000))) break; current = await prepareShow(roll(), settings, deps); continue; }
       current = next;
@@ -108,7 +116,7 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
     deps.report({ kind: 'problem', message: String((e as Error)?.message || e) });
   } finally {
     deps.stopSpeaking(); deps.stopMusic();
-    if (played) await deps.discard(played.handle).catch(() => undefined);
+    if (played) await discard(played.handle);
     deps.report({ kind: 'stopped' });
   }
 }

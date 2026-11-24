@@ -11,6 +11,9 @@ export interface PoemCheck { ok: boolean; lines: string[]; problems: string[] }
 const BANNED = /\b(fuck\w*|shit\w*|bitch\w*|cunt|dick|piss\w*|slut\w*|whore|nigg\w*|fag\w*|retard\w*|rape\w*|kill (myself|yourself)|suicide)\b/i;
 const CHATTER = /^(sure|here('| i)s|okay|ok|certainly|title|poem|verse|stanza|chorus|\(|\[|note|this poem|i hope)/i;
 
+/** True when the text has a word the station will not say (a request, a poem line). */
+export const isUnsuitable = (text: string): boolean => BANNED.test(text);
+
 /** The lines of a model's reply: fences, thinking, list marks, quotes, stars and chatter before or after the poem are removed. */
 function readPoemLines(raw: string): string[] {
   const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```[a-z]*/gi, '');
@@ -50,7 +53,7 @@ export function checkPoem(raw: string, form: Form): PoemCheck {
   for (const line of lines) {
     const words = line.split(/\s+/).length;
     if (words < 3 || words > 16 || line.length > 100) problems.push(`a line of ${words} words`);
-    if (BANNED.test(line)) problems.push('unsuitable word');
+    if (isUnsuitable(line)) problems.push('unsuitable word');
     if (/[^\x20-\x7e -ɏ‘’–—]/.test(line)) problems.push('a symbol or emoji');
     const key = line.toLowerCase().replace(/[^a-z ]/g, '');
     if (seen.has(key)) problems.push('a repeated line');
