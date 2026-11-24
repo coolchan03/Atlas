@@ -49,6 +49,7 @@ const destinations: Destination[] = [
   { key: 'formula', label: 'Formula helper', hint: 'Say what you need, paste a few rows, and get a spreadsheet formula that has been tried on them', icon: 'percent', screen: 'Formula', optional: true, ...TILE.green },
   { key: 'asknotes', label: 'Ask my notes', hint: 'Ask what you wrote, said and decided: journal, chats, recordings and trips, with the source of each answer', icon: 'search', screen: 'AskNotes', optional: true, ...TILE.blue },
   { key: 'teachback', label: 'Teach it back', hint: 'Explain what you are learning in your own words and see which key points of the source you missed', icon: 'users', screen: 'TeachBack', optional: true, ...TILE.teal },
+  { key: 'trail', label: 'Trail', hint: 'Record a walk with the GPS, follow it back to the start with no signal, and write a journal page from it', icon: 'navigation', screen: 'Trail', optional: true, ...TILE.teal },
   { key: 'currency', label: 'Currency', hint: 'Convert money. Rates are kept on the phone with their date', icon: 'dollar-sign', screen: 'Currency', optional: true, ...TILE.green },
   { key: 'storm', label: 'Storm watch', hint: 'Is the weather turning? The barometer decides the level and the AI explains it', icon: 'cloud-lightning', screen: 'StormWatch', optional: true, ...TILE.cyan },
   { key: 'radio', label: 'AI radio', hint: 'An endless station: songs of every genre, some with a poem read over them', icon: 'radio', screen: 'Radio', optional: true, ...TILE.violet },

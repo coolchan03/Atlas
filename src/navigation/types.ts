@@ -33,6 +33,7 @@ export type RootStackParamList = {
   Formula: undefined;
   AskNotes: undefined;
   TeachBack: undefined;
+  Trail: undefined;
   Currency: undefined;
   Journal: undefined;
   Trip: undefined;
