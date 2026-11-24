@@ -41,6 +41,14 @@ export const EXAMPLE_HELPERS: ExampleHelper[] = [
     steps: '1. List the decisions that were made, one per line.\n2. List who has to do what, and by when, using only what the text says.\n3. Write a short, friendly email to the group with both lists.',
   },
   {
+    id: 'devils-advocate', title: "Devil's advocate", summary: 'Argues against your decision, then for it, then asks the questions that matter', help: 'Describe the decision or opinion in a few sentences.',
+    steps: '1. Say the decision in one sentence and what it takes for granted.\n2. Give the three strongest arguments against it, one per line.\n3. Give the three strongest arguments for it, one per line.\n4. Ask the two questions whose answers would change the decision most.',
+  },
+  {
+    id: 'weighted-decision', title: 'Weighted decision', summary: 'Scores two options on three things that matter', help: 'Weight is how much it matters (1 to 10). Score each option on each thing (1 to 10). Higher total wins.',
+    steps: 'field: Weight 1\nfield: Weight 2\nfield: Weight 3\nfield: A score 1\nfield: A score 2\nfield: A score 3\nfield: B score 1\nfield: B score 2\nfield: B score 3\ncalc: Option A | {Weight 1} * {A score 1} + {Weight 2} * {A score 2} + {Weight 3} * {A score 3}\ncalc: Option B | {Weight 1} * {B score 1} + {Weight 2} * {B score 2} + {Weight 3} * {B score 3}\ncalc: A ahead by | {Option A} - {Option B}',
+  },
+  {
     id: 'reply-writer', title: 'Reply writer', summary: 'A reply in the tone you choose', help: 'Paste the message you are answering.',
     steps: 'field: Tone | Friendly, Formal, Short\nai: Write a reply to the text in that tone. Do not invent facts, dates or names.',
   },

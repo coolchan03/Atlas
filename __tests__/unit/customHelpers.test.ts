@@ -69,7 +69,7 @@ describe('calc: steps (exact arithmetic done by code)', () => {
 
 it('every example helper in the editor reads without a mistake and has a title, a summary and something to do', () => {
   const { EXAMPLE_HELPERS } = require('../../src/workflows/exampleHelpers');
-  expect(EXAMPLE_HELPERS.length).toBeGreaterThanOrEqual(9);
+  expect(EXAMPLE_HELPERS.length).toBeGreaterThanOrEqual(11);
   for (const x of EXAMPLE_HELPERS) {
     expect({ id: x.id, errors: parseSteps(x.steps).errors }).toEqual({ id: x.id, errors: [] });
     expect(x.title && x.summary && x.help).toBeTruthy();
@@ -86,6 +86,7 @@ it('the temperature and budget examples give the right numbers', async () => {
   expect(await run('temperature', { f0: '100' })).toBe('Fahrenheit: 212\nKelvin: 373.15');
   expect(await run('budget-502030', { f0: '3000' })).toBe('Needs (50%): 1500\nWants (30%): 900\nSavings (20%): 600');
   expect(await run('own-rate', { f0: '100', f1: '0.92' })).toBe('Converted: 92\nBack again: 100');
+  expect(await run('weighted-decision', { f0: '5', f1: '3', f2: '2', f3: '8', f4: '6', f5: '4', f6: '5', f7: '9', f8: '9' })).toBe('Option A: 66\nOption B: 70\nA ahead by: -4');
 });
 
 describe('numbered steps', () => {
