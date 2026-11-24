@@ -42,6 +42,7 @@ const destinations: Destination[] = [
   { key: 'maps', label: 'Maps', hint: 'Offline maps and saved places, no internet needed', icon: 'map', screen: 'Maps', optional: true, ...TILE.blue },
   { key: 'planner', label: 'Planner', hint: 'Exam dates, topics and a day-by-day study schedule', icon: 'calendar', screen: 'Planner', optional: true, ...TILE.amber },
   { key: 'workspace', label: 'Workspace', hint: 'Your files and Atlas documents', icon: 'folder', tab: 'ProjectsTab', optional: true, ...TILE.green },
+  { key: 'askdoc', label: 'Ask a document', hint: 'Pick one long file and ask it questions; each answer says which passages it came from', icon: 'file-text', screen: 'AskDocument', optional: true, ...TILE.blue },
   { key: 'trip', label: 'Trip kit', hint: 'The language and money of a trip, phrases translated for it, and a packing list', icon: 'briefcase', screen: 'Trip', optional: true, ...TILE.teal },
   { key: 'journal', label: 'Journal', hint: 'A private page for each day, with a question to start from and a look back at the week', icon: 'edit-3', screen: 'Journal', optional: true, ...TILE.amber },
   { key: 'currency', label: 'Currency', hint: 'Convert money. Rates are kept on the phone with their date', icon: 'dollar-sign', screen: 'Currency', optional: true, ...TILE.green },

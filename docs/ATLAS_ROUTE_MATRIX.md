@@ -72,6 +72,7 @@ Regenerate with `node scripts/route-matrix.cjs`; rows you filled in are kept.
 | TopicBoard | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | TopicSquare | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Topics | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| AskDocument | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Trip | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Journal | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Currency | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
