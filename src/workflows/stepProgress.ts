@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type StepState = 'waiting' | 'running' | 'done';
+type StepState = 'waiting' | 'running' | 'done';
 export interface ProgressItem { label: string; state: StepState; /** What it is doing now ("Reading part 3 of 9"). */ note?: string }
 
 /**

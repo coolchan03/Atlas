@@ -43,16 +43,6 @@ const workflowFor = (run: AnyRun): Workflow<any> => {
   return wf;
 };
 
-/** Starts a job from the text and extra choices its input asks for. */
-export function startWorkflow(id: string, text: string, fields: Record<string, string> = {}): Promise<AnyRun> {
-  const wf = workflowById(id);
-  if (!wf) return Promise.reject(new Error('This job is not available any more.'));
-  const ctx = wf.input.make(text, fields);
-  // Category choices the person made on earlier statements carry over.
-  if (id === 'accountant') ctx.rules = useWorkflowRuns.getState().rules;
-  return advance(wf, newRun(wf, localUniqueId('wf'), ctx), deps);
-}
-
 /** Starts a job and says at once which run it is, so the screen can show its steps while they run. `done` settles when the job needs the person or has finished. */
 export function beginWorkflow(id: string, text: string, fields: Record<string, string> = {}): { runId: string; done: Promise<AnyRun> } {
   const wf = workflowById(id);

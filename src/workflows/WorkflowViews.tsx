@@ -185,7 +185,6 @@ const styles = StyleSheet.create({
   note: { ...TYPOGRAPHY.bodySmall },
   h: { ...TYPOGRAPHY.h3 },
   card: { marginBottom: SPACING.sm },
-  log: { ...TYPOGRAPHY.bodySmall },
   error: { ...TYPOGRAPHY.body },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   big: { minHeight: 180 },
