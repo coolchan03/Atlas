@@ -7,7 +7,7 @@ const SYSTEM = `You read a person's private journal pages from the last week and
 const label = (mood: number | null): string => MOODS.find((m) => m.value === mood)?.label ?? 'not said';
 
 /** The pages of the last seven days (newest day last) as the text the AI reads. Pure. */
-export function weekText(entries: JournalEntry[], today: string): string {
+function weekText(entries: JournalEntry[], today: string): string {
   const from = new Date(Date.parse(`${today}T12:00:00`) - 6 * 86_400_000);
   const first = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
   return entries.filter((e) => e.day >= first && e.day <= today && e.text).sort((a, b) => a.day.localeCompare(b.day))

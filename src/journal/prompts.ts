@@ -1,5 +1,5 @@
 /** Questions for a journal page. One is chosen for each day (the same all day), and "Another" moves to the next. Plain data, no AI. */
-export const PROMPTS: string[] = [
+const PROMPTS: string[] = [
   'What is one thing that went well today?', 'What is on your mind right now?', 'Who did you talk to today, and how did it feel?', 'What are you looking forward to this week?',
   'What was hard today, and what helped?', 'What did you learn today?', 'Describe a small moment you want to remember.', 'What are you grateful for today?',
   'What would make tomorrow a good day?', 'What did you do for your body today?', 'What is something you keep putting off? What is the smallest first step?', 'What made you laugh recently?',

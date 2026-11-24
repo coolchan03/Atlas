@@ -106,7 +106,7 @@ export const TripScreen: React.FC = () => {
             {trip.packing.map((p) => (
               <TouchableOpacity key={p.id} onPress={() => store.togglePack(trip.id, p.id)} onLongPress={() => store.removePack(trip.id, p.id)} style={styles.pack} accessibilityRole="checkbox" accessibilityState={{ checked: p.done }} testID={`trip-pack-${p.id}`}>
                 <Icon name={p.done ? 'check-square' : 'square'} size={18} color={p.done ? colors.primary : colors.textMuted} />
-                <Text style={{ color: p.done ? colors.textMuted : colors.text, ...TYPOGRAPHY.body, textDecorationLine: p.done ? 'line-through' : 'none' }}>{p.text}</Text>
+                <Text style={[{ color: p.done ? colors.textMuted : colors.text, ...TYPOGRAPHY.body }, p.done && styles.struck]}>{p.text}</Text>
               </TouchableOpacity>
             ))}
             <View style={styles.row}>
@@ -133,5 +133,6 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, alignItems: 'center' },
   chip: { flexDirection: 'row', gap: SPACING.xs, alignItems: 'center', borderWidth: 1, borderRadius: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, minHeight: 44 },
   card: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, borderWidth: 1, borderRadius: SPACING.md, padding: SPACING.md },
+  struck: { textDecorationLine: 'line-through' },
   pack: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm, minHeight: 44 },
 });

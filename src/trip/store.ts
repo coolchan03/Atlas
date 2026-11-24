@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface TripPhrase { id: string; text: string; translation: string }
-export interface PackItem { id: string; text: string; done: boolean }
+interface TripPhrase { id: string; text: string; translation: string }
+interface PackItem { id: string; text: string; done: boolean }
 /** One trip: where it goes (the language spoken and the money used), the phrases translated for it and what to pack. */
 export interface Trip { id: string; name: string; language: string; currency: string; home: string; phrases: TripPhrase[]; packing: PackItem[] }
 

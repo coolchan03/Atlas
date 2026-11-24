@@ -204,4 +204,7 @@ Not done: embeddings and search speed, chat rendering cost, background-work prio
 - 1.2, 1.3, 1.6 and 7.5 need a device (a log, a trace, a look at the screens), as before.
 - AI radio (`src/radio/`, `docs/AI_RADIO.md`): built and tested with fakes; not run on a phone. Open: how fast the chosen model writes on the phone, whether the station keeps going with the screen off, how the voice sounds over the music, and a Backup entry for its settings (they are listed as not backed up). Tiny models: LFM2-350M recommended, Supra2.5 65M the fast option; Aurora2 and Quark cannot be loaded.
 - Music Studio: Make my own moved into the Made by drop-down. Helpers: examples and calc: steps.
+- Currency (`src/currency/`), Journal (`src/journal/`), Trip kit (`src/trip/`), Search by meaning (`src/search/askWhere.ts`), radio extras: built and tested with fakes; none run on a phone. Journal and trips are in backups (`atlas-journal`, `atlas-trips`); currency rates and radio settings are not.
+- Search by meaning: the right screen was first for 14 of 16 test requests with the app's MiniLM embedding model (a 350M chat model under a grammar got 7). It embeds the 38 screen descriptions on first use (the test used the 36 that existed then) (a second or two on a phone, not measured) and keeps them while the app runs. Open: screens the index does not list cannot be found (only 38 of the app's routes are in it).
+- Journal text is kept like the other stores (not encrypted on the phone); the weekly look back is written by the phone's own engine only.
 
