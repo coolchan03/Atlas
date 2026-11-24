@@ -41,6 +41,8 @@ const TRIGGERS: Record<string, RegExp> = {
   my_location: /\b(where am i|location|gps|near|nearby|how far|direction|which way|camp|car|waypoint|coordinates|altitude)\b/i,
   learned_knowledge: /./, // kept whenever it is switched on: only the talk chat with a learning AI switches it on
   standards_check: /\b(fasb|asu|asc\s*\d{3}|gaap|accounting standards?|standard update|codification|ifrs|out ?of ?date|outdated|latest (rule|standard|guidance)|new (rule|standard)|textbook)\b/i,
+  source_updates: /\b(updates?|updated|newer|newest|latest|new version|amend(?:ed|ment)?|supersed(?:ed|es)|still (?:good )?law|overrul(?:ed|ing)|revers(?:ed|al)|out ?of ?date|outdated|current|look for|check (?:for|if|whether))\b/i,
+  add_source: /\b(add|save|include|put|import)\b.{0,40}\b(project|source|document|page|it|that|this|them)\b/i,
   drug_label: /\b(medicine|medication|drug|dose|dosage|ibuprofen|acetaminophen|tylenol|advil|aspirin|antibiotic|side effects?|interact(s|ion|ions)?|prescription|over[- ]the[- ]counter|otc|mg)\b/i,
   make_music: /\b(music|song|tune|melody|compose|composer|instrumental|soundtrack|beat|jingle|lullaby|ambient|jazz|lo-?fi|play me|background (music|sound))\b/i,
   list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,

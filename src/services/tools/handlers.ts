@@ -12,6 +12,7 @@ import * as DT from '../../atlasTools/deviceTools';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
 import { arg, requireString, EMPTY_WRITE } from './toolArgs';
 import { braveSearch } from './braveSearch';
+import { addSource, findUpdates } from '../../standards/updates';
 export { braveSearch };
 import { forceHttps, isBlockedUrl } from './urlSafety';
 import { evaluateExpression } from '../../utils/arithmetic';
@@ -136,12 +137,10 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: question');
       return require('../../learning/askLearned').askLearned(q, call.context?.projectId);
     }
-    case 'standards_check': {
-      const topic = requireString(call, 'topic');
-      if (!topic) throw new Error('Missing required parameter: topic');
-      const { standardsCheck } = require('../../standards/lookup');
-      return standardsCheck(topic, async (q: string) => (await searchWeb(q, braveSearch)).results);
-    }
+    case 'standards_check':
+    case 'source_updates':
+    case 'add_source':
+      return handleStandardsTool(call);
     case 'drug_label': {
       const name = requireString(call, 'name');
       if (!name) throw new Error('Missing required parameter: name');
@@ -388,6 +387,37 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   return result.chunks
     .map((c: RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
     .join('\n\n---\n\n');
+}
+
+/** The names of the enabled documents in a project (empty outside a project), for comparing a found page with what is held. */
+async function heldDocumentNames(projectId?: string): Promise<string[]> {
+  if (!projectId) return [];
+  const docs = await require('../rag').ragService.getDocumentsInScope(projectId); // NOSONAR
+  return docs.filter((d: { enabled?: boolean }) => d.enabled).map((d: { name: string }) => d.name);
+}
+
+/** The tools that look at the standard-setters' and the government's own sites: the latest accounting standards, newer tax sources, and adding one to the project. */
+async function handleStandardsTool(call: ToolCall): Promise<string> {
+  const web = async (q: string) => (await searchWeb(q, braveSearch)).results;
+  if (call.name === 'standards_check') {
+    const topic = requireString(call, 'topic');
+    if (!topic) throw new Error('Missing required parameter: topic');
+    return require('../../standards/lookup').standardsCheck(topic, web); // NOSONAR
+  }
+  const projectId = call.context?.projectId;
+  const held = await heldDocumentNames(projectId);
+  if (call.name === 'source_updates') {
+    const source = requireString(call, 'source');
+    if (!source) throw new Error('Missing required parameter: source');
+    return findUpdates(source, held, web);
+  }
+  const url = requireString(call, 'url');
+  if (!url) throw new Error('Missing required parameter: url');
+  if (!projectId) return 'This chat is not in a project, so there is nowhere to add the source.';
+  return addSource(url, {
+    held, confirm: DT.confirm, fetchPage: (u) => handleReadUrl(u, 120000, call.signal),
+    save: async (name, text) => { await require('../rag').ragService.saveProjectNote({ projectId, name, text, mode: 'replace' }); }, // NOSONAR
+  });
 }
 
 async function handleUpdateProjectDocument(p: { name: string; content: string; mode?: string; projectId?: string; signal?: AbortSignal }): Promise<string> {
