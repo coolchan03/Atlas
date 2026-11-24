@@ -37,9 +37,19 @@ const DESTINATIONS: Destination[] = [
   { title: 'Currency converter', route: 'Currency', icon: 'dollar-sign', keywords: 'money exchange rate dollars euros convert travel currency' },
   { title: 'AI radio', route: 'Radio', icon: 'radio', keywords: 'radio station music songs poems genre playlist endless dj theme' },
   { title: 'Translator', route: 'Translator', icon: 'repeat', keywords: 'translate translation interpreter interpret conversation language camera sign menu speak' },
+  { title: 'Learn a topic', route: 'Topics', icon: 'grid', keywords: 'lessons quiz exercises course study exam prep topic teach me' },
+  { title: 'Knowledge base', route: 'Knowledge', icon: 'book-open', keywords: 'documents pdf notes ask my files practice questions' },
+  { title: 'Planner', route: 'Planner', icon: 'calendar', keywords: 'exam dates study schedule day by day plan' },
+  { title: 'Multi-step helpers', route: 'Workflows', icon: 'list', keywords: 'helper workflow steps bank statement recipe split bill calculator reply writer' },
+  { title: 'Scheduled tasks', route: 'Schedule', icon: 'clock', keywords: 'schedule remind later repeat daily task alarm' },
+  { title: 'Atlas tools', route: 'AtlasHub', icon: 'compass', keywords: 'hub maps phrases compass off-grid emergency survival' },
+  { title: 'Sensors', route: 'Sensors', icon: 'cpu', keywords: 'gps pressure light motion accelerometer sensors phone' },
   { title: 'Tools', route: 'Tools', icon: 'tool', keywords: 'web search calculator tools enable' },
   { title: 'About Atlas', route: 'About', icon: 'info', keywords: 'version build licence' },
 ];
+
+/** The screens the search can open, for the AI that picks one (askWhere.ts). */
+export const listDestinations = (): Array<{ title: string; route: string; params?: object; icon: string; keywords: string }> => DESTINATIONS;
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 
