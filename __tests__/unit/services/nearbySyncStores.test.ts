@@ -70,8 +70,9 @@ describe('journal, trips and helpers', () => {
     const j = JSON.parse(combine('atlas-journal', { remoteNewer: false,
       local: st({ entries: [page('2026-11-01', 'mine, early', 1), page('2026-11-02', 'only here', 5)] }),
       remote: st({ entries: [page('2026-11-01', 'theirs, later', 9), page('2026-11-03', 'only there', 6)] }) }));
-    expect(j.state.entries.map((e: { day: string; text: string }) => `${e.day}:${e.text}`).sort())
-      .toEqual(['2026-11-01:theirs, later', '2026-11-02:only here', '2026-11-03:only there']);
+    // Newest day first, as the journal screen expects, wherever each page came from.
+    expect(j.state.entries.map((e: { day: string; text: string }) => `${e.day}:${e.text}`))
+      .toEqual(['2026-11-03:only there', '2026-11-02:only here', '2026-11-01:theirs, later']);
     const t = JSON.parse(combine('atlas-trips', { local: st({ trips: [{ id: 'a' }], activeId: 'a' }), remote: st({ trips: [{ id: 'b' }], activeId: 'b' }) }));
     expect(t.state.trips.map((x: { id: string }) => x.id).sort()).toEqual(['a', 'b']);
     expect(t.state.activeId).toBe('a');

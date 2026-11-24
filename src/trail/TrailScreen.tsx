@@ -28,6 +28,9 @@ export const TrailScreen: React.FC = () => {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState('');
 
+  React.useEffect(() => { useTrails.getState().settleStale(); }, []);
+  const [, tick] = React.useState(0);
+  React.useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
   // The GPS runs while this screen is open; each position goes to the trail being recorded.
   React.useEffect(() => {
     let alive = true; let stopGps: (() => void) | undefined;

@@ -63,4 +63,11 @@ it('records a walk (ignoring poor fixes), leads the way back, and writes a journ
   rtl.fireEvent.press(view.getByTestId(`trail-journal-${trail.id}`));
   expect(useJournal.getState().entries[0].text).toMatch(/^Ridge loop\./);
   expect(useJournal.getState().entries[0].day).toBe(dayKey(new Date(useTrails.getState().trails[0].endedAt)));
+
+  // A recording left running when Atlas closed is ended at its last point, so a later position adds no line across the gap.
+  rtl.act(() => { useTrails.setState({ activeId: null }); useTrails.getState().start('Left on', Date.now() - 5 * 3_600_000); });
+  const stale = useTrails.getState().trails[0];
+  rtl.act(() => { useTrails.getState().settleStale(); });
+  expect(useTrails.getState().activeId).toBeNull();
+  expect(useTrails.getState().trails.find((t: { id: string }) => t.id === stale.id).endedAt).toBe(stale.startedAt);
 });

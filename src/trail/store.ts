@@ -16,6 +16,8 @@ interface TrailState {
   start: (name: string, now?: number) => string;
   fix: (f: { lat: number; lon: number; accuracy: number; altitude: number; time: number }) => void;
   stop: (now?: number) => void;
+  /** Ends a recording left running when Atlas closed (no new point for an hour), dated at its last point, so a later position does not draw a line across the gap. */
+  settleStale: (now?: number) => void;
   setPage: (id: string, page: string) => void;
   remove: (id: string) => void;
 }
@@ -36,6 +38,12 @@ export const useTrails = create<TrailState>()(persist((set) => ({
     return { trails: s.trails.map((t) => (t.id === s.activeId ? { ...t, points: addFix(t.points, f) } : t)) };
   }),
   stop: (now = Date.now()) => set((s) => ({ activeId: null, trails: s.trails.map((t) => (t.id === s.activeId ? { ...t, endedAt: now } : t)) })),
+  settleStale: (now = Date.now()) => set((s) => {
+    const t = s.trails.find((x) => x.id === s.activeId);
+    if (!t) return s;
+    const last = t.points.length ? t.points[t.points.length - 1].t : t.startedAt;
+    return now - last < 3_600_000 ? s : { activeId: null, trails: s.trails.map((x) => (x.id === t.id ? { ...x, endedAt: last } : x)) };
+  }),
   setPage: (id, page) => set((s) => ({ trails: s.trails.map((t) => (t.id === id ? { ...t, page } : t)) })),
   remove: (id) => set((s) => ({ trails: s.trails.filter((t) => t.id !== id), activeId: s.activeId === id ? null : s.activeId })),
 }), { name: 'atlas-trails', version: 1, storage: createJSONStorage(() => AsyncStorage), partialize: (s) => ({ trails: s.trails, activeId: s.activeId }) }));

@@ -26,7 +26,7 @@ function tokens(source: string): Token[] {
     const word = /^[a-z]+/i.exec(source.slice(i));
     if (word) {
       const fn = word[0].toLowerCase();
-      if (!FUNCTIONS[fn]) throw new Error(`"${word[0]}" is not a function (use round, min, max, abs or sqrt).`);
+      if (!Object.hasOwn(FUNCTIONS, fn)) throw new Error(`"${word[0]}" is not a function (use round, min, max, abs or sqrt).`);
       out.push({ t: 'fn', v: fn }); i += word[0].length; continue;
     }
     if ('+-*/%^(),'.includes(c)) { out.push({ t: 'op', v: c }); i += 1; continue; }
