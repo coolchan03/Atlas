@@ -119,8 +119,12 @@ describe('a long job in many steps does not overwhelm the model', () => {
     const lines = Array.from({ length: 10 }, (_, i) => `${i + 1}. Do part ${i + 1} of the job.`).join('\n');
     const wf = toWorkflow({ id: 'long', title: 'Long', summary: '', help: '', steps: lines, createdAt: 1 });
     const prompts: string[] = [];
-    const ask = async (_s: string, u: string) => { prompts.push(u); return `RESULT-${prompts.length} ${'detail '.repeat(300)}`; };
-    const text = `START ${'word '.repeat(8000)} END`; // about 40,000 characters
+    const parts: string[] = [];
+    const ask = async (system: string, u: string) => {
+      if (/You read one part/.test(system)) { parts.push(u); return 'a short note'; }
+      prompts.push(u); return `RESULT-${prompts.length} ${'detail '.repeat(300)}`;
+    };
+    const text = `START ${'word '.repeat(8000)} END`; // about 40,000 characters, read in parts first
     await advance(wf, newRun(wf, 'r', wf.input.make(text, {})), { ask });
     const budget = stepBudget(4096);
     expect(prompts).toHaveLength(10);
@@ -130,8 +134,9 @@ describe('a long job in many steps does not overwhelm the model', () => {
       if (i > 0) expect(p).toContain(`RESULT-${i} `); // the latest result is there
       if (i > 2 && i < 6) expect(/Step 1 \(short\): ([^\n]*)/.exec(p)?.[1].length).toBeLessThanOrEqual(160); // an old result is cut to its first words
     });
-    expect(prompts[9]).toMatch(/START/); // the beginning and the end of a long text are both kept
-    expect(prompts[9]).toMatch(/END/);
+    expect(parts.length).toBeGreaterThan(5); // the long text was read in parts, none left out
+    parts.forEach((p) => expect(p.length).toBeLessThanOrEqual(budget));
+    prompts.forEach((p) => expect(p).toMatch(/Part 1:\na short note/)); // every step works from the notes
   });
 
   it('gives a small context window a small budget and a big one a bigger one', () => {
@@ -140,4 +145,22 @@ describe('a long job in many steps does not overwhelm the model', () => {
     expect(stepBudget(4096)).toBe(5461);
     expect(stepBudget(32768)).toBe(12000);
   });
+});
+
+it('a helper given a long text reads it in parts once, then every step works from the notes', async () => {
+  const wf = toWorkflow({ id: 'p', title: 'Recap', summary: '', help: '', steps: '1. List the decisions.\n2. Write a short email.', createdAt: 1 });
+  const partCalls: string[] = []; const stepCalls: string[] = [];
+  const ask = async (system: string, user: string) => {
+    if (/You read one part/.test(system)) { partCalls.push(user); return /DECISION/.test(user) ? 'DECISION: ship Friday' : 'This part is about filler.'; }
+    stepCalls.push(user); return `answer ${stepCalls.length}`;
+  };
+  const text = `${'filler sentence. '.repeat(2000)}DECISION: ship Friday. ${'more filler. '.repeat(2000)}`;
+  const run = await advance(wf, newRun(wf, 'r', wf.input.make(text, {})), { ask });
+  expect(partCalls.length).toBeGreaterThan(5);
+  expect(partCalls[0]).toMatch(/Job: Recap: List the decisions\. Write a short email\./);
+  expect(stepCalls).toHaveLength(2);
+  expect(stepCalls[0]).toMatch(/DECISION: ship Friday/);
+  expect(stepCalls[0]).not.toMatch(/filler sentence/);
+  expect(stepCalls[1]).toMatch(/Result of the step before:\nanswer 1/);
+  expect(run.waiting?.summary).toBe('answer 2');
 });

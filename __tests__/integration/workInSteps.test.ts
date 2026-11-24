@@ -7,27 +7,36 @@ import { relevantTools } from '../../src/services/tools/relevantTools';
 import { workInSteps } from '../../src/workflows/autoSteps';
 
 describe('work_in_steps', () => {
-  it('plans the job, does each step alone with the latest result handed on, and gives the last result back with the steps listed', async () => {
+  it('reads a long text in parts first, plans the job, does each step alone from the notes with the latest result handed on, and gives the last result back with the steps listed', async () => {
     const { executeToolCall } = require('../../src/services/tools');
-    mockShaped.mockResolvedValueOnce('1. List the decisions.\n2. List who must do what.\n3. Write a short email with both lists.');
-    const prompts: string[] = [];
-    mockAsk.mockImplementation(async (_s: string, u: string) => { prompts.push(u); return `answer ${prompts.length}`; });
-    const long = `NOTES ${'we talked about the plan. '.repeat(1500)} END`;
+    const calls: Array<{ user: string; label: string }> = [];
+    mockShaped.mockImplementation(async (_system: string, user: string, shape: { label: string; grammar?: string }) => {
+      if (shape.grammar) return '1. List the decisions.\n2. List who must do what.\n3. Write a short email with both lists.'; // the plan
+      calls.push({ user, label: shape.label });
+      if (/^Job:/.test(user)) return /DECISION: ship on Friday/.test(user) ? 'DECISION: ship on Friday' : 'This part is about the plan.'; // a part of the text: notes
+      return `answer ${calls.filter((c) => !/^Job:/.test(c.user)).length}`; // a step
+    });
+    const middle = 'DECISION: ship on Friday. ';
+    const long = `NOTES ${'we talked about the plan. '.repeat(1500)}${middle}${'and then about lunch. '.repeat(1500)} END`;
 
     const result = await executeToolCall({ id: 't1', name: 'work_in_steps', arguments: { job: 'turn the meeting notes into an email', text: long } });
     expect(result.error).toBeUndefined();
     expect(result.content).toMatch(/Done in 3 steps:\n1\. List the decisions\.\n2\. List who must do what\.\n3\. Write a short email with both lists\./);
     expect(result.content).toMatch(/Final result:\nanswer 3/);
-    expect(prompts).toHaveLength(3);
-    prompts.forEach((p, i) => { expect(p.length).toBeLessThan(5800); if (i > 0) expect(p).toContain(`Result of the step before:\nanswer ${i}`); });
-    expect(prompts[0]).toMatch(/NOTES/);
-    expect(prompts[0]).toMatch(/END/); // the long text is shortened in the middle, both ends stay
-    expect(mockShaped.mock.calls[0][2].grammar).toMatch(/root ::= "1\. "/);
+    const parts = calls.filter((c) => /^Job:/.test(c.user));
+    const steps = calls.filter((c) => !/^Job:/.test(c.user));
+    expect(parts.length).toBeGreaterThan(8); // about 100,000 characters read in parts of a few thousand
+    expect(parts[0].label).toMatch(/^Reading part 1 of /);
+    expect(steps.map((c) => c.label)).toEqual(['Step 1 of 3', 'Step 2 of 3', 'Step 3 of 3']);
+    parts.forEach((p) => expect(p.user.length).toBeLessThan(5000));
+    steps.forEach((p, i) => { expect(p.user.length).toBeLessThan(5800); if (i > 0) expect(p.user).toContain(`Result of the step before:\nanswer ${i}`); });
+    expect(steps[0].user).toMatch(/DECISION: ship on Friday/); // from the middle of the text: it was read, not cut away
+    expect(steps[0].user).not.toMatch(/we talked about the plan/); // the steps work from the notes, not the raw text
   });
 
   it('refuses a plan that is not at least two steps, and an empty answer for a step, with the step named', async () => {
-    mockShaped.mockResolvedValueOnce('1. First, a long enough step.\n2. Second, a long enough step.');
-    mockAsk.mockResolvedValueOnce('first result').mockResolvedValueOnce('   ');
+    mockShaped.mockReset();
+    mockShaped.mockResolvedValueOnce('1. First, a long enough step.\n2. Second, a long enough step.').mockResolvedValueOnce('first result').mockResolvedValueOnce('   ');
     await expect(workInSteps('a job', 'some text')).rejects.toThrow('The AI gave no answer for the step "Second, a long enough step."');
   });
 
@@ -35,6 +44,7 @@ describe('work_in_steps', () => {
     const { executeToolCall } = require('../../src/services/tools');
     const missing = await executeToolCall({ id: 't2', name: 'work_in_steps', arguments: {} });
     expect(missing.error).toMatch(/job/);
+    mockShaped.mockReset();
     mockShaped.mockResolvedValueOnce('1. Only one step.');
     const bad = await executeToolCall({ id: 't3', name: 'work_in_steps', arguments: { job: 'do something big' } });
     expect(bad.error).toMatch(/did not write usable steps/);

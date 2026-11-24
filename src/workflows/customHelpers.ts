@@ -12,6 +12,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { InputField, Workflow } from './engine';
 import { compileCalc, readNumber, showNumber } from './calc';
+import { digestText, fitsWhole } from './longText';
 import { currentStepBudget, STEP_SYSTEM, stepPrompt } from './stepPrompt';
 
 export interface CustomHelper { id: string; title: string; summary: string; help: string; steps: string; createdAt: number; /** Made by the chat AI (make_helper), so the list can say so. */ madeByAi?: boolean }
@@ -64,7 +65,7 @@ function parseCalcLine(rest: string, lineNo: number, out: ParsedSteps): void {
   out.steps.push({ kind: 'calc', text: rest.slice(0, 200), label, expression });
 }
 
-interface Ctx { text: string; fields: Record<string, string>; fieldLabels: string[]; answers: string[]; outputs: string[]; /** Results of calc: steps, as "Label: value" lines, and the same as numbers for the calcs after them. */ calcs: string[]; values: Record<string, number>; note?: string }
+interface Ctx { /** The text of a long input, read in parts and written down as notes, once, for the steps to work from. */ digest?: string; text: string; fields: Record<string, string>; fieldLabels: string[]; answers: string[]; outputs: string[]; /** Results of calc: steps, as "Label: value" lines, and the same as numbers for the calcs after them. */ calcs: string[]; values: Record<string, number>; note?: string }
 
 /** Turns a written helper into a workflow the engine can run. */
 export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
@@ -75,11 +76,14 @@ export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
     ? { kind: 'ask' as const, id: `ask${i}`, title: s.text, questions: () => [{ id: 'q', text: s.text, options: s.options }], apply: (ctx, a) => ({ answers: [...ctx.answers, `${s.text} ${a.q ?? ''}`] }) }
     : { kind: 'model' as const, id: `ai${i}`, title: s.text.slice(0, 50), run: async (ctx, ask) => {
       const known = [...ctx.fieldLabels.map((label, k) => `${label}: ${ctx.fields[`f${k}`] ?? ''}`), ...ctx.answers, ...ctx.calcs].filter(Boolean).join('\n');
+      // A text too long for one prompt is read in parts first (once); every step then works from the notes.
+      const budget = currentStepBudget();
+      const digest = ctx.digest ?? (fitsWhole(ctx.text, budget) ? undefined : await digestText(jobOf(h.title, parsed.steps), ctx.text, { budget, ask: (system, user) => ask(system, user) }));
       const reply = await ask(STEP_SYSTEM,
-        stepPrompt({ instruction: s.text, text: ctx.text, known, results: ctx.outputs, budget: currentStepBudget() }));
+        stepPrompt({ instruction: s.text, text: digest ?? ctx.text, known, results: ctx.outputs, budget }));
       const result = reply.trim().slice(0, 6000);
       if (!result) throw new Error('The AI gave no answer. Try again.');
-      return { outputs: [...ctx.outputs, result] };
+      return { outputs: [...ctx.outputs, result], ...(digest ? { digest } : {}) };
     } }));
   return {
     id: `custom-${h.id}`, title: h.madeByAi ? `${h.title} (made by the AI)` : h.title, summary: h.summary || 'A helper you made.',
@@ -124,3 +128,6 @@ function noteFor(title: string, ctx: Ctx): string {
   const results = ctx.outputs.map((o, i) => (many ? `## Step ${i + 1}\n${o}` : o)).join('\n\n');
   return `# ${title}\n\n${sums}${results}\n`;
 }
+
+/** What a helper is for, in a line, for the notes made from a long text: its name and its instructions. */
+const jobOf = (title: string, steps: ParsedStep[]): string => `${title}: ${steps.flatMap((x) => (x.kind === 'ai' ? [x.text] : [])).join(' ')}`.slice(0, 400);
