@@ -41,6 +41,9 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 import { buildDeepResearchBrief, cancelDeepResearch, ResearchCancelledError } from '../../services/deepResearch';
+import { answerInSteps } from '../../workflows/answerInSteps';
+import { cancelWorkInSteps, StepsCancelledError } from '../../workflows/autoSteps';
+import { wantsSteps } from '../../workflows/bigRequest';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
@@ -511,8 +514,24 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     }
     researchInFlight = false;
   }
-  // A message longer than the model can hold is read in parts and shown to the model as notes (the saved message is unchanged).
-  if (!deps.activeModelInfo?.isRemote && useAppStore.getState().settings.readLongInParts !== false && llmService.isModelLoaded()) {
+  // A message that asks for several things, or is long next to the model's memory, is done in small steps first and the model writes its
+  // answer from that work (the saved message is unchanged). Otherwise a message longer than the model can hold is read in parts as notes.
+  const localReady = !deps.activeModelInfo?.isRemote && llmService.isModelLoaded();
+  const contextTokens = llmService.getPerformanceSettings?.()?.contextLength || useAppStore.getState().settings.contextLength || 4096;
+  let stepsDone = false;
+  if (localReady && !deps.researchMode && useAppStore.getState().settings.autoSteps !== false && wantsSteps(researchMessage, contextTokens)) {
+    try {
+      const stepped = await answerInSteps(researchMessage, {
+        onStatus: (status) => deps.setResearchStatus?.(status),
+        addNote: (content) => deps.addMessage(targetConversationId, { role: 'assistant', content, isSystemInfo: true } as any),
+      });
+      if (stepped) { researchMessage = stepped; stepsDone = true; }
+    } catch (e) {
+      if (e instanceof StepsCancelledError) { generationSession.end('stopped'); generationService.drainQueue(); return; }
+      throw e;
+    }
+  }
+  if (!stepsDone && localReady && useAppStore.getState().settings.readLongInParts !== false) {
     researchMessage = await condenseLongMessage(researchMessage, deps);
   }
   // Offline research already contains the selected document excerpts; do not inject them twice.
@@ -525,7 +544,8 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   basePrompt = callHook<string>(HOOKS.audioAugmentPrompt, basePrompt) ?? basePrompt;
 
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const activeTools = enabledTools;
+  // The steps tool is not offered for a turn that was already done in steps.
+  const activeTools = stepsDone ? enabledTools.filter((t) => t !== 'work_in_steps') : enabledTools;
   // Text hint only when the LOCAL engine lacks native tool-calling (llama without Jinja); LiteRT
   // and remote pass tools natively, so injecting a hint would double-inject. localToolSupport is
   // the engine-registry answer — no engine === 'litert' branch here.
@@ -720,6 +740,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
 }
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'setResearchStatus'>): Promise<void> {
   cancelDeepResearch();
+  cancelWorkInSteps();
   deps.setResearchStatus?.(null);
   generationSession.end('stopped');
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise

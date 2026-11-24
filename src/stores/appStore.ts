@@ -122,6 +122,8 @@ type AppSettings = {
   showLessonsUsed?: boolean;
   /** Read a message that is longer than the model's memory in parts, and answer from notes. Unset counts as on. */
   readLongInParts?: boolean;
+  /** Do a message that asks for several things, or is long next to the model's memory, in small steps before answering. Unset counts as on. */
+  autoSteps?: boolean;
   /** Turn documents (HTML, Word, PowerPoint, Excel, EPUB, CSV, PDF text) into Markdown for the AI. Unset counts as on. */
   convertToMarkdown?: boolean;
   /** Theme, accent color, font and text size (see theme/appearance). */

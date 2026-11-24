@@ -4,6 +4,8 @@
  * earlier in the chat (a follow-up like "and tomorrow?" needs the same tool again). Tools it knows nothing about (added by
  * servers) are always kept: they are routed separately. A message that needs no tool sends none of the built-in ones.
  */
+import { severalParts } from '../../workflows/bigRequest';
+
 const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|today|tonight|now|current|price|cost|score|weather|forecast|search|look up|find out|google|http|www\.|\.com)\b/i;
 
 /**
@@ -13,13 +15,6 @@ const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|to
 const WHO = String.raw`(?![Mm]e\b|[Uu]s\b|[Yy]ou\b|[Ii]t\b|[Bb]ack\b)(?:my|mum|mom|dad|him|her|them|his|their|our|the (?:landlord|doctor|dentist|school|office|boss|team|plumber|bank)|\d|\+|[A-Z][a-z]+)`;
 const REACH_VERB = new RegExp(String.raw`\b(?:[Tt]ext|[Ss][Mm][Ss]|[Ee]-?mail|[Mm]essage|[Dd][Mm]|[Cc]all|[Pp]hone|[Dd]ial|[Rr]ing|[Tt]ell|[Rr]eply to|[Rr]espond to)\s+${WHO}`);
 const SEND_MESSAGE = /\b(?:send|write|draft)\s+(?:a |an |my |the )?(?:quick |short )?(?:text|sms|e-?mail|message)\b/i;
-/** A message that asks for several things, or is long enough that doing it all at once would crowd a small model. */
-function severalParts(message: string): boolean {
-  if (message.length > 900 || /\b(step by step|in steps|one at a time)\b/i.test(message)) return true;
-  const asks = message.match(/\b(summari[sz]e|list|write|make|compare|explain|translate|extract|rewrite|create|check|draft|plan|find|calculate)\b/gi) ?? [];
-  return asks.length >= 3 || /\b(and then|after that|then|finally)\b[^.]*\b(summari[sz]e|list|write|make|compare|explain|translate|extract|rewrite|create|draft|plan)\b/i.test(message) && asks.length >= 2;
-}
-
 function reachesSomeone(message: string): boolean {
   return SEND_MESSAGE.test(message) || REACH_VERB.test(message);
 }

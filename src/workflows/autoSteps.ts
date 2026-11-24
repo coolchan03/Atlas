@@ -13,6 +13,13 @@ import type { SkillResource } from '../skills/parseSkill';
 import { currentStepBudget, STEP_SYSTEM, stepPrompt } from './stepPrompt';
 
 const MAX_RESULT_CHARS = 6000;
+
+/** Thrown when the person pressed Stop while a job was being done in steps. */
+export class StepsCancelledError extends Error { constructor() { super('Stopped'); this.name = 'StepsCancelledError'; } }
+let cancelled = false;
+/** Stops the job being done in steps: it ends before its next model call. */
+export function cancelWorkInSteps(): void { cancelled = true; }
+const check = (): void => { if (cancelled) throw new StepsCancelledError(); };
 /** The longest one step may write, in tokens. */
 const STEP_TOKENS = 900;
 /** The longest a part's notes may be, in tokens. */
@@ -24,6 +31,7 @@ const NOTES_TOKENS = 350;
  * (stepProgress.ts).
  */
 export async function workInSteps(job: string, text: string, skill?: { summary: string; steps: string[]; resources?: SkillResource[] }): Promise<string> {
+  cancelled = false;
   const progress = useStepProgress.getState();
   const budget = currentStepBudget();
   progress.begin(['Plan the steps']);
@@ -38,17 +46,19 @@ export async function workInSteps(job: string, text: string, skill?: { summary: 
     progress.begin([...(reads ? ['Read the text in parts'] : []), ...steps]);
     const notes = await digestText(job, material, {
       budget,
-      ask: (system, user, label) => { progress.mark(0, 'running', label); return askShaped(system, user, { label, maxTokens: NOTES_TOKENS }); },
+      ask: (system, user, label) => { check(); progress.mark(0, 'running', label); return askShaped(system, user, { label, maxTokens: NOTES_TOKENS }); },
     });
     if (reads) progress.mark(0, 'done');
     const results: string[] = [];
     for (let i = 0; i < steps.length; i += 1) {
       const label = `Step ${i + 1} of ${steps.length}`;
+      check();
       progress.mark(i + offset, 'running', label);
       const references = skill?.resources?.length ? relevantReferences(`${steps[i]} ${job} ${skill.summary}`, skill.resources, Math.round(budget * 0.25)) : [];
       const prompt = stepPrompt({ instruction: steps[i], text: notes, known: '', results, budget, references });
       const reply = (await askShaped(STEP_SYSTEM, prompt, { label, maxTokens: STEP_TOKENS })).trim();
       if (!reply) throw new Error(`The AI gave no answer for the step "${steps[i]}".`);
+      check();
       results.push(reply.slice(0, MAX_RESULT_CHARS));
       progress.mark(i + offset, 'done');
     }
